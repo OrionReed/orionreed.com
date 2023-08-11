@@ -1,34 +1,33 @@
-import {
-  Box,
-  Text,
-  createStyles,
-  Container,
-  Group,
-  Title,
-  Anchor,
-} from '@mantine/core'
-
+import { Box, createStyles, Container, Group, Anchor } from '@mantine/core'
 const useStyles = createStyles((theme) => ({
-  navlink: {
+  home: {
     color: theme.black,
     fontFamily: theme.headings.fontFamily,
     fontSize: '1.2em',
-    fontWeight: 700,
+    fontWeight: 800,
+  },
+  link: {
+    color: theme.black,
+    fontFamily: theme.headings.fontFamily,
+    fontSize: '1.2em',
+    fontWeight: 400,
   },
 }))
-export function Header() {
+export function Header({ dark }: { dark?: boolean }) {
   const { classes } = useStyles()
-
   return (
-    <Box bg="red" py="2rem" mb="1rem">
-      <Container size="md">
-        <Group position="apart">
-          <Title>Orion Reed</Title>
-          <Group>
-            <Anchor className={classes.navlink}>Posts</Anchor>
-            <Anchor className={classes.navlink}>Stream</Anchor>
-            <Anchor className={classes.navlink}>Contact</Anchor>
-          </Group>
+    <Box bg={dark ? 'red' : ''} py="2rem">
+      <Container size="40em">
+        <Group align="end">
+          <Anchor href="/" className={classes.home}>
+            orion reed
+          </Anchor>
+          <Anchor href="/posts" className={classes.link}>
+            posts
+          </Anchor>
+          <Anchor href="/stream" className={classes.link}>
+            stream
+          </Anchor>
         </Group>
       </Container>
     </Box>

@@ -1,6 +1,7 @@
 ---
-title: Objects as Reference (WIP)
-author: Orion Reed
+title: "Objects as Reference"
+date: 2023-01-11
+location: Devon, UK
 ---
 
 **NOTE TO READERS.** This draft is not intended to resemble a complete paper but is a sketch of what one might look like. The goal at this stage is to start discussions, find conceptual issues or major omissions, and discover relevant research. Perhaps most importantly, I'm interested in hearing how *your work* could benefit from this line of research. Any feedback will help move towards more salient, compelling and useful answers.

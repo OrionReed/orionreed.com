@@ -7,7 +7,12 @@
 		"allowJs": true,
 		"checkJs": true,
 		"jsx": "react-jsx",
-		"jsxImportSource": "preact"
+		"jsxImportSource": "preact",
+		"baseUrl": ".",
+		"types": ["vite/client"],
+		"paths": {
+      "@/*": ["src/*"]
+    },
 	},
 	"include": ["node_modules/vite/client.d.ts", "**/*"]
 }

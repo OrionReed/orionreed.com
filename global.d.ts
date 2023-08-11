@@ -1,2 +1,4 @@
-// global.d.ts
-/// <reference types="vite-plugin-md-to-html/types" />
+declare module '*.md' {
+  const value: string // markdown is just a string
+  export default value
+}

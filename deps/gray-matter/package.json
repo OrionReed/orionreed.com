@@ -1,0 +1,77 @@
+{
+  "name": "gray-matter",
+  "version": "4.0.3",
+  "author": "Jon Schlinkert (https://github.com/jonschlinkert)",
+  "license": "MIT",
+  "files": [
+    "gray-matter.d.ts",
+    "index.js",
+    "lib"
+  ],
+  "main": "index.js",
+  "engines": {
+    "node": ">=6.0"
+  },
+  "scripts": {
+    "test": "mocha"
+  },
+  "dependencies": {
+    "js-yaml": "^3.13.1",
+    "kind-of": "^6.0.2",
+    "section-matter": "^1.0.0",
+    "strip-bom-string": "^1.0.0"
+  },
+  "devDependencies": {
+    "ansi-green": "^0.1.1",
+    "benchmarked": "^2.0.0",
+    "coffeescript": "^2.2.3",
+    "delimiter-regex": "^2.0.0",
+    "extend-shallow": "^3.0.2",
+    "front-matter": "^2.3.0",
+    "gulp-format-md": "^1.0.0",
+    "minimist": "^1.2.0",
+    "mocha": "^6.1.4",
+    "toml": "^2.3.3",
+    "vinyl": "^2.1.0",
+    "write": "^1.0.3"
+  },
+  "browser": {
+    "fs": false
+  },
+  "typings": "gray-matter.d.ts",
+  "eslintConfig": {
+    "rules": {
+      "no-console": 0
+    }
+  },
+  "verb": {
+    "toc": false,
+    "layout": "default",
+    "tasks": [
+      "readme"
+    ],
+    "plugins": [
+      "gulp-format-md"
+    ],
+    "helpers": {
+      "examples": "./examples/helper.js"
+    },
+    "lint": {
+      "reflinks": true
+    },
+    "related": {
+      "list": [
+        "assemble",
+        "metalsmith",
+        "verb"
+      ]
+    },
+    "reflinks": [
+      "coffe-script",
+      "generate",
+      "js-yaml",
+      "toml",
+      "update"
+    ]
+  }
+}

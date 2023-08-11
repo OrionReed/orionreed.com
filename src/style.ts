@@ -1,4 +1,3 @@
-import { Title } from '@mantine/core'
 export const style = {
   fontFamily: 'Alegreya, serif',
   headings: {
@@ -15,12 +14,4 @@ export const style = {
   },
   black: '#24292e',
   primaryColor: 'red',
-  // components: {
-  //   Title: {
-  //     // margin: '0rem',
-  //     styles: {
-  //       root: { margin: '0rem', border: '1px solid blue' },
-  //     },
-  //   },
-  // },
 }

@@ -11,14 +11,20 @@
 		"@emotion/react": "^11.11.1",
 		"@mantine/core": "^6.0.19",
 		"@mantine/hooks": "^6.0.19",
+		"date-fns": "^2.30.0",
+		"gray-matter": "file:deps/gray-matter",
+		"jsonlines": "^0.1.1",
 		"preact": "^10.13.1",
 		"preact-iso": "^2.3.1",
-		"preact-render-to-string": "^6.2.1"
+		"reading-time-estimator": "^1.9.0"
 	},
 	"devDependencies": {
+		"@esbuild-plugins/node-globals-polyfill": "^0.2.3",
 		"@preact/preset-vite": "^2.5.0",
+		"@types/node": "^20.4.9",
+		"glob": "^10.3.3",
+		"markdown-to-jsx": "^7.3.2",
 		"typescript": "^5.1.6",
-		"vite": "^4.4.9",
-		"vite-plugin-md-to-html": "^0.0.18"
+		"vite": "^4.4.9"
 	}
 }
