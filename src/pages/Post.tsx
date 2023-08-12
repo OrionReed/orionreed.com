@@ -12,7 +12,7 @@ import { readingTime } from 'reading-time-estimator'
 import { Header } from '@/components/Header'
 import { useRoute } from 'preact-iso'
 import { useState, useEffect } from 'preact/hooks'
-import { format } from 'date-fns'
+import { friendlyDate } from '@/utils'
 
 const useStyles = createStyles((theme) => ({
   title: {
@@ -31,12 +31,6 @@ const useStyles = createStyles((theme) => ({
     fontWeight: 500,
   },
 }))
-
-function friendlyDate(dateString: string): string {
-  const inputDate = new Date(dateString)
-  const formattedDate = format(inputDate, 'do MMM yyyy')
-  return formattedDate
-}
 
 async function getPost(name: string) {
   const response = await fetch(`${name}.md?raw`)

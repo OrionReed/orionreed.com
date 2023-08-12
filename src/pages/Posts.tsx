@@ -8,19 +8,13 @@ import {
   useMantineTheme,
   createStyles,
 } from '@mantine/core'
-import { format } from 'date-fns'
+import { friendlyDate, getJsonl } from '@/utils'
 import { useEffect, useState } from 'preact/hooks'
 
-function friendlyDate(dateString: string): string {
-  const inputDate = new Date(dateString)
-  return format(inputDate, 'do MMM yyyy')
-}
-
-async function getPosts() {
-  const response = await fetch('posts.jsonl')
-  return await (await response.text()).split('\n').map((post) => {
-    return JSON.parse(post)
-  })
+type Post = {
+  slug: string
+  title: string
+  date: string
 }
 
 const useStyles = createStyles((theme) => ({
@@ -59,16 +53,10 @@ function Frame({ children }) {
   )
 }
 
-type Post = {
-  slug: string
-  title: string
-  date: string
-}
-
 export function Posts() {
   const [posts, setPost] = useState<Array<Post>>(null)
   useEffect(() => {
-    getPosts().then(setPost)
+    getJsonl('posts.jsonl').then(setPost)
   }, [])
 
   if (!posts) {
