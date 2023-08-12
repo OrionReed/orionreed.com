@@ -16,9 +16,9 @@ export function App() {
       <Box mb="xl">
         <Router>
           <Home path="/" />
-          <Posts path="/posts" />
-          <Post path="/posts/:title" />
-          <Stream path="/stream" />
+          <Posts path="/posts(/?)" />
+          <Post path="/posts/:title(/?)" />
+          <Stream path="/stream(/?)" />
           <NotFound default />
         </Router>
       </Box>
