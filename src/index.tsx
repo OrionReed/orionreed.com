@@ -18,8 +18,11 @@ export function App() {
           <Router>
             <Route path="/" component={Home} />
             <Route path="/posts" component={Posts} />
+            <Route path="/posts/" component={Posts} />
             <Route path="/posts/:title" component={Post} />
+            <Route path="/posts/:title/" component={Post} />
             <Route path="/stream" component={Stream} />
+            <Route path="/stream/" component={Stream} />
             <Route default component={NotFound} />
           </Router>
         </LocationProvider>
