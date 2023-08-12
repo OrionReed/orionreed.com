@@ -1,5 +1,5 @@
 # .github/workflows/publish.yml
-name: Generate a build and push to another branch
+name: Generate build on branch
 
 on:
   push:
