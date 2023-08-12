@@ -14,4 +14,28 @@ export const style = {
   },
   black: '#24292e',
   primaryColor: 'red',
+  components: {
+    Anchor: {
+      styles: (theme, { variant }) => ({
+        root: {
+          color: theme.black,
+          textDecoration: 'underline',
+          textUnderlineOffset: '0.15rem',
+          textDecorationThickness: '0.15rem',
+          textDecorationColor: theme.colors.dark[1],
+          '&:hover': {
+            textDecorationThickness: '0.15rem',
+            textDecorationColor: theme.black,
+          },
+        },
+      }),
+    },
+    Text: {
+      styles: (theme, { variant }) => ({
+        root: {
+          marginBottom: '0.6rem',
+        },
+      }),
+    },
+  },
 }

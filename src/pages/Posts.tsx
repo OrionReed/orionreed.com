@@ -6,6 +6,7 @@ import {
   Text,
   Anchor,
   useMantineTheme,
+  createStyles,
 } from '@mantine/core'
 import { format } from 'date-fns'
 import { useEffect, useState } from 'preact/hooks'
@@ -22,10 +23,20 @@ async function getPosts() {
   })
 }
 
-function PostListItem({ slug, title, date }) {
+const useStyles = createStyles((theme) => ({
+  index: {
+    fontFamily: 'monospace',
+  },
+}))
+
+function PostListItem({ slug, title, date, index }) {
+  const { classes } = useStyles()
   const black = useMantineTheme().black
   return (
     <Group>
+      <Text color="dimmed" className={classes.index}>
+        {`${index}`.padStart(3, '0')}
+      </Text>
       <Anchor href={`posts/${slug}`} color={black}>
         {title}
       </Anchor>
@@ -41,7 +52,7 @@ function Frame({ children }) {
     <>
       <Header />
       <Container size="40em">
-        <Title>Posts</Title>
+        <Title>2023</Title>
         {children}
       </Container>
     </>
@@ -69,12 +80,13 @@ export function Posts() {
   } else {
     return (
       <Frame>
-        {posts.map((post) => {
+        {posts.map((post, index, array) => {
           return (
             <PostListItem
               slug={post.slug}
               title={post.title}
               date={post.date}
+              index={array.length - 1 - index}
             />
           )
         })}

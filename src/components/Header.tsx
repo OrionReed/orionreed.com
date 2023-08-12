@@ -5,12 +5,18 @@ const useStyles = createStyles((theme) => ({
     fontFamily: theme.headings.fontFamily,
     fontSize: '1.2em',
     fontWeight: 800,
+    '&:not(:hover)': {
+      textDecoration: 'none',
+    },
   },
   link: {
     color: theme.black,
     fontFamily: theme.headings.fontFamily,
     fontSize: '1.2em',
     fontWeight: 400,
+    '&:not(:hover)': {
+      textDecoration: 'none',
+    },
   },
 }))
 export function Header({ dark }: { dark?: boolean }) {

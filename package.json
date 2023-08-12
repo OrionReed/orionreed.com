@@ -22,6 +22,7 @@
 		"@esbuild-plugins/node-globals-polyfill": "^0.2.3",
 		"@preact/preset-vite": "^2.5.0",
 		"@types/node": "^20.4.9",
+		"front-matter": "^4.0.2",
 		"glob": "^10.3.3",
 		"markdown-to-jsx": "^7.3.2",
 		"typescript": "^5.1.6",

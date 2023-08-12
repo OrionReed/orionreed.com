@@ -2,6 +2,7 @@
   "name": "gray-matter",
   "version": "4.0.3",
   "author": "Jon Schlinkert (https://github.com/jonschlinkert)",
+  "type":"module",
   "license": "MIT",
   "files": [
     "gray-matter.d.ts",
