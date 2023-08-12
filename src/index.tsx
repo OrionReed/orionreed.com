@@ -27,13 +27,13 @@ export function App() {
   return (
     <MantineProvider withGlobalStyles withNormalizeCSS theme={theme}>
       <Box mb="xl">
-        <SubfolderRouter>
+        <Router>
           <Home path="/" />
           <Posts path="/posts" />
           <Post path="/posts/:title" />
           <Stream path="/stream" />
           <NotFound default />
-        </SubfolderRouter>
+        </Router>
       </Box>
     </MantineProvider>
   )
