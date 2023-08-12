@@ -1,6 +1,6 @@
 import 'preact/debug'
 import { render } from 'preact'
-import Router from 'preact-router'
+import Router, { RouterProps } from 'preact-router'
 import { Home } from '@/pages/Home'
 import { Posts } from '@/pages/Posts'
 import Post from '@/pages/Post'
@@ -10,17 +10,30 @@ import { MantineProvider } from '@mantine/styles'
 import { Box } from '@mantine/core'
 import { theme } from '@/theme'
 
+const MY_FOLDER = '/orionreed'
+class SubfolderRouter extends Router {
+  render(props: RouterProps, state: any) {
+    if (state.url.indexOf(MY_FOLDER) === 0) {
+      state = {
+        ...state,
+        url: state.url.substr(MY_FOLDER.length),
+      }
+    }
+    return super.render(props, state)
+  }
+}
+
 export function App() {
   return (
     <MantineProvider withGlobalStyles withNormalizeCSS theme={theme}>
       <Box mb="xl">
-        <Router>
+        <SubfolderRouter>
           <Home path="/" />
           <Posts path="/posts" />
           <Post path="/posts/:title" />
           <Stream path="/stream" />
           <NotFound default />
-        </Router>
+        </SubfolderRouter>
       </Box>
     </MantineProvider>
   )
