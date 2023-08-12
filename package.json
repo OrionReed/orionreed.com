@@ -18,7 +18,7 @@
 		"jsonlines": "^0.1.1",
 		"minisearch": "^6.1.0",
 		"preact": "^10.13.1",
-		"preact-iso": "^2.3.1",
+		"preact-router": "^4.1.2",
 		"reading-time-estimator": "^1.9.0"
 	},
 	"devDependencies": {

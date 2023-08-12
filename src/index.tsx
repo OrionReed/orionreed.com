@@ -1,6 +1,6 @@
 import 'preact/debug'
 import { render } from 'preact'
-import { LocationProvider, Router, Route } from 'preact-iso'
+import Router from 'preact-router'
 import { Home } from '@/pages/Home'
 import { Posts } from '@/pages/Posts'
 import Post from '@/pages/Post'
@@ -14,18 +14,13 @@ export function App() {
   return (
     <MantineProvider withGlobalStyles withNormalizeCSS theme={theme}>
       <Box mb="xl">
-        <LocationProvider>
-          <Router>
-            <Route path="/" component={Home} />
-            <Route path="/posts" component={Posts} />
-            <Route path="/posts/" component={Posts} />
-            <Route path="/posts/:title" component={Post} />
-            <Route path="/posts/:title/" component={Post} />
-            <Route path="/stream" component={Stream} />
-            <Route path="/stream/" component={Stream} />
-            <Route default component={NotFound} />
-          </Router>
-        </LocationProvider>
+        <Router>
+          <Home path="/" />
+          <Posts path="/posts" />
+          <Post path="/posts/:title" />
+          <Stream path="/stream" />
+          <NotFound default />
+        </Router>
       </Box>
     </MantineProvider>
   )
