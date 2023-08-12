@@ -10,7 +10,7 @@ import Markdown from 'markdown-to-jsx'
 import matter from 'gray-matter'
 import { readingTime } from 'reading-time-estimator'
 import { Header } from '@/components/Header'
-import { useRoute } from 'preact-iso'
+import { getCurrentUrl } from 'preact-router'
 import { useState, useEffect } from 'preact/hooks'
 import { friendlyDate } from '@/utils'
 
@@ -38,7 +38,9 @@ async function getPost(name: string) {
 }
 
 export default function Post() {
-  const current = useRoute().params.title
+  const current = getCurrentUrl().split('/')[2]
+  console.log(current)
+
   const [post, setPost] = useState(null)
   const { classes } = useStyles()
 
