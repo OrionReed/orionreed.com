@@ -1,19 +1,32 @@
 import {
   Group,
   Text,
-  useMantineTheme,
   Container,
   Stack,
   Flex,
   createStyles,
-  Divider,
+  Title,
+  TextInput,
 } from '@mantine/core'
-import { format } from 'date-fns'
-import { useEffect, useState } from 'preact/hooks'
 import { Header } from '@/components/Header'
 import Markdown from 'markdown-to-jsx'
+import MiniSearch from 'minisearch'
+import { signal } from '@preact/signals'
+import { friendlyDate, getJsonl } from '@/utils'
+
+const search = signal('')
 
 const margin = '0.3em'
+const streamItems = await getJsonl('stream.jsonl')
+const miniSearch = new MiniSearch({
+  fields: ['text'], // fields to index for full-text search
+  storeFields: ['date', 'text'], // fields to return with search results
+  searchOptions: {
+    fuzzy: 0.2,
+    prefix: true,
+  },
+})
+miniSearch.addAll(streamItems)
 
 const useStyles = createStyles((theme) => ({
   group: {
@@ -23,7 +36,7 @@ const useStyles = createStyles((theme) => ({
   },
   item: {
     flexWrap: 'nowrap',
-    '& :first-child': {
+    '& :first-of-type': {
       marginTop: 0,
     },
     '& p': {
@@ -54,23 +67,18 @@ const useStyles = createStyles((theme) => ({
     marginRight: '0.2em',
     whiteSpace: 'nowrap',
   },
+  search: {
+    fontFamily: theme.headings.fontFamily,
+    // border: `1px solid red`,
+    fontSize: '4em',
+    '& :focus': {
+      border: `1px solid ${theme.black}`,
+    },
+  },
 }))
-
-function friendlyDate(dateString: string): string {
-  const inputDate = new Date(dateString)
-  return format(inputDate, 'do MMM yyyy')
-}
-
-async function getStream() {
-  const response = await fetch('stream.jsonl')
-  return await (await response.text()).split('\n').map((post) => {
-    return JSON.parse(post)
-  })
-}
 
 function StreamItem({ date, markdown }) {
   const { classes } = useStyles()
-  const black = useMantineTheme().black
   return (
     <Group className={classes.item} align="start">
       <Text color="dimmed" className={classes.date}>
@@ -83,34 +91,49 @@ function StreamItem({ date, markdown }) {
   )
 }
 
+type StreamItem = {
+  date: string
+  markdown: string
+}
+
+function Search() {
+  const { classes } = useStyles()
+  return (
+    <TextInput
+      onInput={(event) => {
+        search.value = event.target.value
+      }}
+      my="sm"
+      className={classes.search}
+      placeholder="Search"
+    />
+  )
+}
+
 export default function Stream() {
   const { classes } = useStyles()
-  const [stream, setPost] = useState<Array<object>>(null)
-  useEffect(() => {
-    getStream().then(setPost)
-  }, [])
+  console.log(search.value)
+  const results = !search.value ? streamItems : miniSearch.search(search.value)
+  console.log(results)
 
-  if (!stream) {
-    return <Text>Loading stream...</Text>
-  } else {
-    return (
-      <>
-        <Header />
-        <Container size="40em" className={classes.group}>
-          <Text>
-            This <b>stream</b> is a place for me to think out loud and to share
-            as I learn. It's not a place for well-formed ideas or for things I'm
-            sure about. It's a place to explore, to be wrong, and to trust the
-            reader (and myself) that this is okay.
-          </Text>
-          <Divider my="lg" />
-          <Stack>
-            {stream.map((s) => {
-              return <StreamItem markdown={s.markdown} date={s.date} />
-            })}
-          </Stack>
-        </Container>
-      </>
-    )
-  }
+  return (
+    <>
+      <Header />
+      <Container size="40em" className={classes.group}>
+        <Title order={2}>What is this?</Title>
+        <Text>
+          This <b>stream</b> is a place for me to think out loud and to share as
+          I learn. It's not a place for well-formed ideas or for things I'm sure
+          about. It's a place to explore, to be wrong, and to trust the reader
+          (and myself) that this is okay.
+        </Text>
+        <Search />
+        <Stack>
+          {results.map((s) => {
+            return <StreamItem markdown={s.text} date={s.date} />
+          })}
+        </Stack>
+      </Container>
+    </>
+  )
 }
