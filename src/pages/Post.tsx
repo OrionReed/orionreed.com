@@ -46,7 +46,7 @@ export default function Post() {
 
   useEffect(() => {
     if (current) {
-      getPost(current).then(setPost)
+      getPost(`/posts_md/${current}`).then(setPost)
     }
   }, [current])
 

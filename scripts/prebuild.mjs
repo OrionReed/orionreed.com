@@ -4,7 +4,7 @@ import fm from 'front-matter';
 
 
 function loadPosts() {
-  const posts_dir = 'public/posts/';
+  const posts_dir = 'public/posts_md/';
   const posts = glob.sync(`${posts_dir}*.md`).map((file) => {
     const content = fs.readFileSync(file, 'utf8');
     const slug = file.replace(`${posts_dir}`, '').replace('.md', '');
@@ -15,7 +15,7 @@ function loadPosts() {
 }
 
 function loadStream() {
-  const streams_dir = 'public/stream/';
+  const streams_dir = 'public/stream_md/';
   const posts = glob.sync(`${streams_dir}*.md`).map((file) => {
     const content = fs.readFileSync(file, 'utf8');
     const md = fm(content)
