@@ -5,7 +5,7 @@
 	"scripts": {
 		"dev": "vite",
 		"prebuild": "node scripts/prebuild.mjs",
-		"build": "node scripts/prebuild.mjs && vite build && cp jekyll_config.yml dist/_config.yml",
+		"build": "node scripts/prebuild.mjs && vite build",
 		"preview": "vite preview"
 	},
 	"dependencies": {
