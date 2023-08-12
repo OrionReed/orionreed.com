@@ -5,7 +5,7 @@
 	"scripts": {
 		"dev": "vite",
 		"prebuild": "node scripts/prebuild.mjs",
-		"build": "node scripts/prebuild.mjs && vite build",
+		"build": "node scripts/prebuild.mjs && vite build && cp dist/index.html dist/404.html",
 		"preview": "vite preview"
 	},
 	"dependencies": {
