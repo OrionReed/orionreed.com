@@ -11,12 +11,15 @@ import { Box } from '@mantine/core'
 import { theme } from '@/theme'
 
 const MY_FOLDER = '/orionreed'
-class SubfolderRouter extends Router {
+class BaseRouter extends Router {
   render(props: RouterProps, state: any) {
-    if (state.url.indexOf(MY_FOLDER) === 0) {
+    if (state.url.indexOf('/orionreed') === 0) {
+      console.log('state', state)
+      console.log('state.url', state.url)
+
       state = {
         ...state,
-        url: state.url.substr(MY_FOLDER.length),
+        url: state.url.substr('/orionreed'.length),
       }
     }
     return super.render(props, state)
@@ -27,13 +30,13 @@ export function App() {
   return (
     <MantineProvider withGlobalStyles withNormalizeCSS theme={theme}>
       <Box mb="xl">
-        <SubfolderRouter>
+        <BaseRouter>
           <Home path="/" />
           <Posts path="/posts" />
           <Post path="/posts/:title" />
           <Stream path="/stream" />
           <NotFound default />
-        </SubfolderRouter>
+        </BaseRouter>
       </Box>
     </MantineProvider>
   )
