@@ -7,6 +7,7 @@ import {
   createStyles,
   Title,
   TextInput,
+  Anchor,
 } from '@mantine/core'
 import { Header } from '@/components/Header'
 import Markdown from 'markdown-to-jsx'
@@ -16,7 +17,6 @@ import { friendlyDate, getJsonl } from '@/utils'
 
 const search = signal('')
 
-const margin = '0.3em'
 const streamItems = await getJsonl('stream.jsonl')
 const miniSearch = new MiniSearch({
   fields: ['text'], // fields to index for full-text search
@@ -28,31 +28,22 @@ const miniSearch = new MiniSearch({
 })
 miniSearch.addAll(streamItems)
 
+const heading = { fontSize: '1.2em', marginBottom: 0 }
+const margin = '0.3em'
+const marginY = { marginTop: margin, marginBottom: margin }
 const useStyles = createStyles((theme) => ({
-  group: {
-    color: theme.black,
-    lineHeight: '1.4em',
-    fontFamily: theme.headings.fontFamily,
-  },
+  group: {},
   item: {
+    color: theme.black,
+    fontFamily: theme.headings.fontFamily,
+    lineHeight: '1.2em',
     flexWrap: 'nowrap',
+    fontSize: '0.85em',
     '& :first-of-type': {
       marginTop: 0,
     },
-    '& p': {
-      marginTop: margin,
-      marginBottom: margin,
-    },
-    '& pre': {
-      marginTop: margin,
-      marginBottom: margin,
-    },
-    '& ul': {
-      marginTop: margin,
-      marginBottom: margin,
-      paddingLeft: '1.4em',
-    },
-
+    '& p': marginY,
+    '& ul': { ...marginY, marginLeft: '0em', paddingLeft: '1em' },
     '& blockquote': {
       marginTop: '0.8em',
       marginBottom: '0.8em',
@@ -60,32 +51,57 @@ const useStyles = createStyles((theme) => ({
       paddingLeft: '1em',
       borderLeft: `0.25em solid ${theme.colors.gray[3]}`,
     },
+    '& h1': heading,
+    '& h2': heading,
+    '& h3': heading,
+    '& h4': heading,
+    '& h5': heading,
+    '& h6': heading,
+    '& code': {
+      fontFamily: theme.fontFamilyMonospace,
+      background: theme.colors.gray[1],
+      borderRadius: theme.radius.sm,
+      paddingLeft: '0.2em',
+      paddingRight: '0.2em',
+      fontSize: '0.8em',
+    },
+    '& pre': {
+      background: theme.colors.gray[1],
+      padding: theme.spacing.sm,
+      borderRadius: theme.radius.sm,
+    },
   },
   date: {
-    fontFamily: theme.headings.fontFamily,
-
+    fontFamily: theme.fontFamilyMonospace,
+    fontSize: '0.8em',
     marginRight: '0.2em',
     whiteSpace: 'nowrap',
   },
   search: {
-    fontFamily: theme.headings.fontFamily,
-    // border: `1px solid red`,
-    fontSize: '4em',
-    '& :focus': {
-      border: `1px solid ${theme.black}`,
+    '& input': {
+      ':focus': {
+        border: `1px solid ${theme.colors.gray[4]}`,
+      },
+      fontFamily: theme.headings.fontFamily,
+      fontWeight: 500,
     },
   },
 }))
+const markdownOptions = {
+  overrides: {
+    a: Anchor,
+  },
+}
 
 function StreamItem({ date, markdown }) {
   const { classes } = useStyles()
   return (
     <Group className={classes.item} align="start">
       <Text color="dimmed" className={classes.date}>
-        {friendlyDate(date)}
+        {friendlyDate(date, 'dd/MMM/yyyy')}
       </Text>
       <Flex>
-        <Markdown>{markdown}</Markdown>
+        <Markdown options={markdownOptions}>{markdown}</Markdown>
       </Flex>
     </Group>
   )
@@ -104,17 +120,17 @@ function Search() {
         search.value = event.target.value
       }}
       my="sm"
+      size="md"
+      variant="filled"
+      placeholder="Search..."
       className={classes.search}
-      placeholder="Search"
     />
   )
 }
 
 export default function Stream() {
   const { classes } = useStyles()
-  console.log(search.value)
   const results = !search.value ? streamItems : miniSearch.search(search.value)
-  console.log(results)
 
   return (
     <>

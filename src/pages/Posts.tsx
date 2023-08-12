@@ -9,7 +9,8 @@ import {
   createStyles,
 } from '@mantine/core'
 import { friendlyDate, getJsonl } from '@/utils'
-import { useEffect, useState } from 'preact/hooks'
+
+const posts = await getJsonl('posts.jsonl')
 
 type Post = {
   slug: string
@@ -54,31 +55,18 @@ function Frame({ children }) {
 }
 
 export function Posts() {
-  const [posts, setPost] = useState<Array<Post>>(null)
-  useEffect(() => {
-    getJsonl('posts.jsonl').then(setPost)
-  }, [])
-
-  if (!posts) {
-    return (
-      <Frame>
-        <Text>Loading posts...</Text>
-      </Frame>
-    )
-  } else {
-    return (
-      <Frame>
-        {posts.map((post, index, array) => {
-          return (
-            <PostListItem
-              slug={post.slug}
-              title={post.title}
-              date={post.date}
-              index={array.length - 1 - index}
-            />
-          )
-        })}
-      </Frame>
-    )
-  }
+  return (
+    <Frame>
+      {posts.map((post, index, array) => {
+        return (
+          <PostListItem
+            slug={post.slug}
+            title={post.title}
+            date={post.date}
+            index={array.length - 1 - index}
+          />
+        )
+      })}
+    </Frame>
+  )
 }

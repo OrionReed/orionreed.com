@@ -2,9 +2,9 @@ import {glob} from 'glob';
 import fs from 'fs';
 import fm from 'front-matter';
 
-const posts_dir = 'public/posts/';
 
-function loadStrings() {
+function loadPosts() {
+  const posts_dir = 'public/posts/';
   const posts = glob.sync(`${posts_dir}*.md`).map((file) => {
     const content = fs.readFileSync(file, 'utf8');
     const slug = file.replace(`${posts_dir}`, '').replace('.md', '');
@@ -14,8 +14,25 @@ function loadStrings() {
   return posts.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
-function saveStrings(posts) {
-  fs.writeFileSync('public/posts.jsonl', posts.map((post) => JSON.stringify(post)).join('\n'));
+function loadStream() {
+  const streams_dir = 'public/stream/';
+  const posts = glob.sync(`${streams_dir}*.md`).map((file) => {
+    const content = fs.readFileSync(file, 'utf8');
+    const md = fm(content)
+    const { date } = md.attributes;
+    const text = md.body;
+    return { date, text };
+  });
+  posts.sort((a, b) => new Date(a.date) - new Date(b.date))
+  posts.forEach((post, i) => {
+    post.id = i;
+  })
+  return posts
 }
 
-saveStrings(loadStrings());
+function saveJsonl(entries, file) {
+  fs.writeFileSync(file, entries.map((e) => JSON.stringify(e)).join('\n'));
+}
+
+saveJsonl(loadPosts(), 'public/posts.jsonl');
+saveJsonl(loadStream(), 'public/stream.jsonl');

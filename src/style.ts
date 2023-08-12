@@ -1,7 +1,8 @@
 export const style = {
   fontFamily: 'Alegreya, serif',
+  fontFamilyMonospace: 'IBM Plex Mono, monospace',
   headings: {
-    fontFamily: ['Alegreya Sans'],
+    fontFamily: ['Alegreya Sans, sans-serif'],
     fontWeight: 700,
   },
   lineHeight: 1.5,
