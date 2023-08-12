@@ -1,4 +1,4 @@
-export const style = {
+export const theme = {
   fontFamily: 'Alegreya, serif',
   fontFamilyMonospace: 'IBM Plex Mono, monospace',
   headings: {

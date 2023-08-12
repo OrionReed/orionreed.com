@@ -7,7 +7,7 @@ export function friendlyDate(dateString: string, format_str?: string): string {
 
 export async function getJsonl(file: string) {
   const response = await fetch(file)
-  return await (await response.text()).split('\n').map((post) => {
+  return (await response.text()).split('\n').map((post) => {
     return JSON.parse(post)
   })
 }

@@ -1,3 +1,4 @@
+import 'preact/debug'
 import { render } from 'preact'
 import { LocationProvider, Router, Route } from 'preact-iso'
 import { Home } from '@/pages/Home'
@@ -7,12 +8,11 @@ import Stream from '@/pages/Stream'
 import { NotFound } from '@/pages/404'
 import { MantineProvider } from '@mantine/styles'
 import { Box } from '@mantine/core'
-import { Header } from '@/components/Header'
-import { style } from '@/style'
+import { theme } from '@/theme'
 
 export function App() {
   return (
-    <MantineProvider withGlobalStyles withNormalizeCSS theme={style}>
+    <MantineProvider withGlobalStyles withNormalizeCSS theme={theme}>
       <Box mb="xl">
         <LocationProvider>
           <Router>
