@@ -10,7 +10,7 @@ import {
 } from '@mantine/core'
 import { friendlyDate, getJsonl } from '@/utils'
 
-const posts = await getJsonl('posts.jsonl')
+const posts = await getJsonl('/posts.jsonl')
 
 type Post = {
   slug: string
@@ -20,7 +20,14 @@ type Post = {
 
 const useStyles = createStyles((theme) => ({
   index: {
-    fontFamily: 'monospace',
+    fontFamily: theme.fontFamilyMonospace,
+    fontSize: '0.85em',
+    alignSelf: 'flex-end',
+  },
+  date: {
+    fontFamily: theme.fontFamilyMonospace,
+    fontSize: '0.85em',
+    alignSelf: 'flex-end',
   },
 }))
 
@@ -35,8 +42,8 @@ function PostListItem({ slug, title, date, index }) {
       <Anchor href={`posts/${slug}`} color={black}>
         {title}
       </Anchor>
-      <Text color="dimmed" fs="italic">
-        {friendlyDate(date)}
+      <Text color="dimmed" fs="italic" className={classes.date}>
+        {friendlyDate(date, 'dd/MMM/yyyy')}
       </Text>
     </Group>
   )

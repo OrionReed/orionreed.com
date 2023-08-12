@@ -17,7 +17,7 @@ import { friendlyDate, getJsonl } from '@/utils'
 
 const search = signal('')
 
-const streamItems = await getJsonl('stream.jsonl')
+const streamItems = await getJsonl('/stream.jsonl')
 const miniSearch = new MiniSearch({
   fields: ['text'], // fields to index for full-text search
   storeFields: ['date', 'text'], // fields to return with search results
@@ -131,7 +131,6 @@ function Search() {
 export default function Stream() {
   const { classes } = useStyles()
   const results = !search.value ? streamItems : miniSearch.search(search.value)
-
   return (
     <>
       <Header />
