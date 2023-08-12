@@ -10,7 +10,7 @@ import { MantineProvider } from '@mantine/styles'
 import { Box } from '@mantine/core'
 import { theme } from '@/theme'
 
-const MY_FOLDER = '/orionreed'
+const MY_FOLDER = '/orionreed.github.io'
 class SubfolderRouter extends Router {
   render(props: RouterProps, state: any) {
     if (state.url.indexOf(MY_FOLDER) === 0) {
