@@ -4,16 +4,18 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "vite build",
+		"build": "node scripts/prebuild.mjs && vite build",
 		"preview": "vite preview"
 	},
 	"dependencies": {
 		"@emotion/react": "^11.11.1",
 		"@mantine/core": "^6.0.19",
 		"@mantine/hooks": "^6.0.19",
+		"@preact/signals": "^1.2.1",
 		"date-fns": "^2.30.0",
 		"gray-matter": "file:deps/gray-matter",
 		"jsonlines": "^0.1.1",
+		"minisearch": "^6.1.0",
 		"preact": "^10.13.1",
 		"preact-iso": "^2.3.1",
 		"reading-time-estimator": "^1.9.0"
