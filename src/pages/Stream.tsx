@@ -23,7 +23,7 @@ const miniSearch = new MiniSearch({
   fields: ['text'], // fields to index for full-text search
   storeFields: ['date', 'text'], // fields to return with search results
   searchOptions: {
-    fuzzy: 0.2,
+    fuzzy: 0.1,
     prefix: true,
   },
 })
@@ -132,9 +132,9 @@ function Search() {
 export default function Stream() {
   useTitle('Stream')
   const { classes } = useStyles()
-  const results = !search.value ? streamItems : miniSearch.search(search.value)
-  console.log(search.value)
-  console.log(results)
+  const results = !search.value
+    ? streamItems
+    : miniSearch.search(search.value).sort((a, b) => (a.date > b.date ? 1 : -1))
 
   return (
     <>
