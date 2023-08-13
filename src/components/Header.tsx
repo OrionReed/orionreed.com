@@ -26,7 +26,7 @@ export function Header({ dark }: { dark?: boolean }) {
       <Container size="40em">
         <Group align="end">
           <Anchor href="/" className={classes.home}>
-            orion reed 2
+            orion reed
           </Anchor>
           <Anchor href="/posts" className={classes.link}>
             posts
