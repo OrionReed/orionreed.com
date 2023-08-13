@@ -7,12 +7,13 @@ import {
   Group,
 } from '@mantine/core'
 import Markdown from 'markdown-to-jsx'
-import matter from 'gray-matter'
+import fm from 'front-matter'
 import { readingTime } from 'reading-time-estimator'
 import { Header } from '@/components/Header'
 import { getCurrentUrl } from 'preact-router'
 import { useState, useEffect } from 'preact/hooks'
 import { friendlyDate } from '@/utils'
+import { useTitle } from '@/hooks/useTitle'
 
 const useStyles = createStyles((theme) => ({
   title: {
@@ -34,7 +35,7 @@ const useStyles = createStyles((theme) => ({
 
 async function getPost(name: string) {
   const response = await fetch(`${name}.md?raw`)
-  return matter(await response.text())
+  return fm(await response.text())
 }
 
 export default function Post() {
@@ -57,16 +58,17 @@ export default function Post() {
       </>
     )
   } else {
-    const readTime = readingTime(post.content).text
-    const date = friendlyDate(post.data.date)
-    const location = post.data.location
+    useTitle(post.attributes.title)
+    const readTime = readingTime(post.body).text
+    const date = friendlyDate(post.attributes.date)
+    const location = post.attributes.location
     return (
       <>
         <Header dark />
         <Box mb="lg" bg="red" py="lg">
           <Container size="40em">
-            <Text className={classes.title}>{post.data.title}</Text>
-            <Text className={classes.subtitle}>{post.data.subtitle}</Text>
+            <Text className={classes.title}>{post.attributes.title}</Text>
+            <Text className={classes.subtitle}>{post.attributes.subtitle}</Text>
             <Group position="apart">
               <Text className={classes.info}>{date}</Text>
               <Text className={classes.info}>{location}</Text>
@@ -76,7 +78,7 @@ export default function Post() {
         </Box>
         <Container size="40em">
           <TypographyStylesProvider>
-            <Markdown>{post.content}</Markdown>
+            <Markdown>{post.body}</Markdown>
           </TypographyStylesProvider>
         </Container>
       </>
