@@ -14,6 +14,7 @@ import Markdown from 'markdown-to-jsx'
 import MiniSearch from 'minisearch'
 import { signal } from '@preact/signals'
 import { friendlyDate, getJsonl } from '@/utils'
+import { useTitle } from '@/hooks/useTitle'
 
 const search = signal('')
 
@@ -129,8 +130,12 @@ function Search() {
 }
 
 export default function Stream() {
+  useTitle('Stream')
   const { classes } = useStyles()
   const results = !search.value ? streamItems : miniSearch.search(search.value)
+  console.log(search.value)
+  console.log(results)
+
   return (
     <>
       <Header />

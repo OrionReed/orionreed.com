@@ -9,24 +9,19 @@ import {
   createStyles,
 } from '@mantine/core'
 import { friendlyDate, getJsonl } from '@/utils'
+import { useTitle } from '@/hooks/useTitle'
 
 const posts = await getJsonl('/posts.jsonl')
-
-type Post = {
-  slug: string
-  title: string
-  date: string
-}
 
 const useStyles = createStyles((theme) => ({
   index: {
     fontFamily: theme.fontFamilyMonospace,
-    fontSize: '0.85em',
+    fontSize: '0.75em',
     alignSelf: 'flex-end',
   },
   date: {
     fontFamily: theme.fontFamilyMonospace,
-    fontSize: '0.85em',
+    fontSize: '0.75em',
     alignSelf: 'flex-end',
   },
 }))
@@ -39,11 +34,11 @@ function PostListItem({ slug, title, date, index }) {
       <Text color="dimmed" className={classes.index}>
         {`${index}`.padStart(3, '0')}
       </Text>
-      <Anchor href={`posts/${slug}`} color={black}>
+      <Anchor href={`posts/${slug}`} td="none" color={black}>
         {title}
       </Anchor>
       <Text color="dimmed" fs="italic" className={classes.date}>
-        {friendlyDate(date, 'dd/MMM/yyyy')}
+        {friendlyDate(date, 'MMM dd')}
       </Text>
     </Group>
   )
@@ -62,6 +57,7 @@ function Frame({ children }) {
 }
 
 export function Posts() {
+  useTitle('Posts')
   return (
     <Frame>
       {posts.map((post, index, array) => {

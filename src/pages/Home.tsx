@@ -1,7 +1,9 @@
 import { Header } from '@/components/Header'
+import { useTitle } from '@/hooks/useTitle'
 import { Container, Text, Title, Anchor, Space } from '@mantine/core'
 
 export function Home() {
+  useTitle('Home')
   return (
     <>
       <Header />
