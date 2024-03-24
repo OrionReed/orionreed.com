@@ -1,0 +1,5 @@
+{
+  "buildCommand": "yarn build",
+  "framework": "eleventy",
+  "outputDirectory": "dist"
+}

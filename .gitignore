@@ -1,5 +1,7 @@
 dist/
 .DS_Store
+bun.lockb
+yarn.lock
 
 # Logs
 
