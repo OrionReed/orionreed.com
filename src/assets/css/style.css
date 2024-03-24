@@ -50,3 +50,15 @@ ul {
     color: rgba(0, 0, 0, 0.322);
   }
 }
+
+@media (max-width: 600px) {
+  body {
+    padding: 2em;
+  }
+  header {
+    margin-bottom: 1em;
+  }
+  ul {
+    list-style-position: inside;
+  }
+}
