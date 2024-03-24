@@ -1,35 +1,18 @@
 {
-	"name": "example",
-	"private": true,
+	"name": "orionreed",
+	"version": "1.0.0",
+	"description": "Orion Reed's personal website",
+	"main": "index.js",
 	"type": "module",
 	"scripts": {
-		"dev": "vite",
-		"prebuild": "node scripts/prebuild.mjs",
-		"build": "node scripts/prebuild.mjs && vite build",
-		"preview": "vite preview"
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"dev": "npx @11ty/eleventy --serve",
+		"build": "npx @11ty/eleventy"
 	},
-	"dependencies": {
-		"@emotion/react": "^11.11.1",
-		"@mantine/core": "^6.0.19",
-		"@mantine/hooks": "^6.0.19",
-		"@preact/signals": "^1.2.1",
-		"date-fns": "^2.30.0",
-		"jsonlines": "^0.1.1",
-		"minisearch": "^6.1.0",
-		"preact": "^10.13.1",
-		"preact-router": "^4.1.2",
-		"react-router-dom": "^6.15.0",
-		"reading-time-estimator": "^1.9.0"
-	},
+	"keywords": [],
+	"author": "Orion Reed",
+	"license": "ISC",
 	"devDependencies": {
-		"@esbuild-plugins/node-globals-polyfill": "^0.2.3",
-		"@preact/preset-vite": "^2.5.0",
-		"@types/node": "^20.4.9",
-		"front-matter": "^4.0.2",
-		"glob": "^10.3.3",
-		"markdown-to-jsx": "^7.3.2",
-		"typescript": "^5.1.6",
-		"vite": "^4.4.9",
-		"vite-plugin-top-level-await": "^1.3.1"
+		"@11ty/eleventy": "3.0.0-alpha.5"
 	}
 }
