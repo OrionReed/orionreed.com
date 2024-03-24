@@ -1,11 +1,18 @@
 {
-  "name": "underlay",
-  "module": "index.ts",
-  "type": "module",
-  "devDependencies": {
-    "bun-types": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
-  }
+	"name": "orionreed",
+	"version": "1.0.0",
+	"description": "Orion Reed's personal website",
+	"main": "index.js",
+	"type": "module",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"dev": "npx @11ty/eleventy --serve",
+		"build": "npx @11ty/eleventy"
+	},
+	"keywords": [],
+	"author": "Orion Reed",
+	"license": "ISC",
+	"devDependencies": {
+		"@11ty/eleventy": "3.0.0-alpha.5"
+	}
 }

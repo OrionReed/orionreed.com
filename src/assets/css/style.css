@@ -1,0 +1,54 @@
+@import url("reset.css");
+
+body {
+  max-width: 60em;
+  margin: 0 auto;
+  padding-left: 4em;
+  padding-right: 4em;
+  padding-top: 3em;
+  padding-bottom: 3em;
+  font-family: "Recursive";
+  font-variation-settings: "MONO" 1;
+  font-variation-settings: "CASL" 1;
+  color: #24292e;
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin-top: 1em;
+}
+
+header {
+  margin-bottom: 2em;
+  font-size: 1.5em;
+  font-variation-settings: "MONO" 1;
+  font-variation-settings: "CASL" 1;
+  /* display: flex; */
+  /* justify-content: space-between; */
+}
+
+i {
+  font-variation-settings: "slnt" -15;
+}
+
+p {
+  font-family: Recursive;
+  margin-top: 0;
+  margin-bottom: 0.6em;
+  font-size: 1.1em;
+  font-variation-settings: "wght" 350;
+}
+.dinkus {
+  display: block;
+  text-align: center;
+  font-size: 1em;
+  margin-top: 2em;
+  margin-bottom: 0em;
+}
+ul {
+  padding-left: 0;
+  list-style: decimal-leading-zero;
+  & li::marker {
+    color: rgba(0, 0, 0, 0.322);
+  }
+}
