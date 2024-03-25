@@ -1,8 +1,8 @@
 import { TLUnknownShape, useEditor } from "@tldraw/tldraw";
 import { useEffect } from "react";
-import { usePhysicsSimulation } from "../simulation";
+import { usePhysicsSimulation } from "./simulation";
 
-export const SimControls = ({ shapes }: { shapes: TLUnknownShape[] }) => {
+export const SimController = ({ shapes }: { shapes: TLUnknownShape[] }) => {
 	const editor = useEditor();
 
 	useEffect(() => {

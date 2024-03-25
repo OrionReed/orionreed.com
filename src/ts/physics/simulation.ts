@@ -9,6 +9,8 @@ type BodyWithShapeData = RAPIER.RigidBody & {
 };
 type RigidbodyLookup = { [key: TLShapeId]: RAPIER.RigidBody };
 
+const START_DELAY = 1500;
+
 export class PhysicsWorld {
   private editor: Editor;
   private world: RAPIER.World;
@@ -28,6 +30,7 @@ export class PhysicsWorld {
   public start() {
     this.world = new RAPIER.World(GRAVITY);
 
+    // setTimeout(() => {
     this.addShapes(this.editor.getCurrentPageShapes());
 
     const simLoop = () => {
@@ -38,6 +41,7 @@ export class PhysicsWorld {
     };
     simLoop();
     return () => cancelAnimationFrame(this.animFrame);
+    // }, START_DELAY);
   };
 
   public stop() {
@@ -55,6 +59,7 @@ export class PhysicsWorld {
       }
 
       switch (shape.type) {
+        case "html":
         case "geo":
         case "image":
         case "video":
@@ -72,12 +77,12 @@ export class PhysicsWorld {
   }
 
   createShape(shape: TLGeoShape | TLDrawShape) {
-    if (shape.props.dash === "dashed") return; // Skip dashed shapes
-    if (isRigidbody(shape.props.color)) {
-      const gravity = getGravityFromColor(shape.props.color)
-      const rb = this.createRigidbody(shape, gravity);
+    console.log('creating shape');
+    if (!shape.meta.fixed) {
+      const rb = this.createRigidbody(shape, 1);
       this.createCollider(shape, rb);
-    } else {
+    }
+    else {
       this.createCollider(shape);
     }
   }
@@ -379,7 +384,6 @@ export function usePhysicsSimulation(editor: Editor, enabled: boolean) {
   useEffect(() => {
     if (enabled) {
       sim.current.start();
-      editor.selectNone();
       return () => sim.current.stop();
     }
   }, [enabled, sim]);

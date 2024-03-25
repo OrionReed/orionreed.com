@@ -23,7 +23,7 @@ export class HTMLShapeUtil extends ShapeUtil<HTMLShape> {
   }
 
   component(shape: HTMLShape) {
-    return <div dangerouslySetInnerHTML={{ __html: shape.props.html }} style={{ margin: 0 }} ></div>
+    return <div dangerouslySetInnerHTML={{ __html: shape.props.html }}></div>
   }
 
   indicator(shape: HTMLShape) {
