@@ -30,8 +30,8 @@ export function Default() {
 
       <h1>Get in touch</h1>
       <p>
-        I am on Twitter as <a href="https://twitter.com/OrionReedOne">@OrionReedOne</a>,
-        Mastodon as <a href="https://hci.social/@orion">@orion@hci.social</a> and GitHub <a href="https://github.com/orionreed">@orionreed</a>. You can also shoot me an email <a href="mailto:me@orionreed.com">me@orionreed.com</a>
+        I am on Twitter <a href="https://twitter.com/OrionReedOne">@OrionReedOne</a>,
+        Mastodon <a href="https://hci.social/@orion">@orion@hci.social</a> and GitHub <a href="https://github.com/orionreed">@orionreed</a>. You can also shoot me an email <a href="mailto:me@orionreed.com">me@orionreed.com</a>
       </p>
 
       <span className="dinkus">***</span>
