@@ -6,13 +6,13 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "tsc && vite build --base=./",
-		"preview": "vite preview"
+		"preview": "tsc && vite build --base=./ && vite preview"
 	},
 	"keywords": [],
 	"author": "Orion Reed",
 	"license": "ISC",
 	"dependencies": {
-		"@dimforge/rapier2d": "latest",
+		"@dimforge/rapier2d": "^0.11.2",
 		"@tldraw/tldraw": "2.0.2",
 		"react": "^18.2.0",
 		"react-dom": "^18.2.0",

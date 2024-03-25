@@ -9,6 +9,10 @@ export default defineConfig({
     wasm(),
     topLevelAwait()
   ],
+  build: {
+    sourcemap: true, // Enable source maps for production
+  },
+  publicDir: 'src/public',
   resolve: {
     alias: {
       '@': '/src',

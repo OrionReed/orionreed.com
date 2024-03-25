@@ -2,13 +2,13 @@ import "@tldraw/tldraw/tldraw.css";
 import "@/css/style.css"
 import React, { } from "react";
 import ReactDOM from "react-dom/client";
-import { Default } from "@/ts/components/Default";
-import { Canvas } from "@/ts/components/Canvas";
-import { Toggle } from "@/ts/components/Toggle";
-import { usePhysics } from "@/ts/hooks/usePhysics.ts"
+import { Default } from "@/components/Default";
+import { Canvas } from "@/components/Canvas";
+import { Toggle } from "@/components/Toggle";
+import { usePhysics } from "@/hooks/usePhysics"
 import { createShapes } from "@/utils";
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import { Contact } from "@/ts/components/Contact.tsx";
+import { Contact } from "@/components/Contact";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
 

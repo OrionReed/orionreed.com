@@ -9,7 +9,7 @@ type BodyWithShapeData = RAPIER.RigidBody & {
 };
 type RigidbodyLookup = { [key: TLShapeId]: RAPIER.RigidBody };
 
-const START_DELAY = 1500;
+const START_DELAY = 500;
 
 export class PhysicsWorld {
   private editor: Editor;
@@ -30,7 +30,6 @@ export class PhysicsWorld {
   public start() {
     this.world = new RAPIER.World(GRAVITY);
 
-    // setTimeout(() => {
     this.addShapes(this.editor.getCurrentPageShapes());
 
     const simLoop = () => {
@@ -41,7 +40,6 @@ export class PhysicsWorld {
     };
     simLoop();
     return () => cancelAnimationFrame(this.animFrame);
-    // }, START_DELAY);
   };
 
   public stop() {
@@ -77,7 +75,6 @@ export class PhysicsWorld {
   }
 
   createShape(shape: TLGeoShape | TLDrawShape) {
-    console.log('creating shape');
     if (!shape.meta.fixed) {
       const rb = this.createRigidbody(shape, 1);
       this.createCollider(shape, rb);
@@ -383,7 +380,7 @@ export function usePhysicsSimulation(editor: Editor, enabled: boolean) {
 
   useEffect(() => {
     if (enabled) {
-      sim.current.start();
+      setTimeout(() => sim.current.start(), START_DELAY);
       return () => sim.current.stop();
     }
   }, [enabled, sim]);
