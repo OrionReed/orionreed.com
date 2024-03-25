@@ -9,4 +9,9 @@ export default defineConfig({
     wasm(),
     topLevelAwait()
   ],
+  resolve: {
+    alias: {
+      '@': '/src',
+    },
+  },
 })

@@ -1,16 +1,14 @@
-import { createShapeId, TLUiComponents } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
-import "./css/style.css"
-import React, { useEffect, useState } from "react";
+import "@/css/style.css"
+import React, { } from "react";
 import ReactDOM from "react-dom/client";
-import { HTMLShape } from "./ts/shapes/HTMLShapeUtil";
-import { Default } from "./ts/components/Default";
-import { Canvas } from "./ts/components/Canvas";
-import { Toggle } from "./ts/components/Toggle";
-import { usePhysics } from "./ts/hooks/usePhysics.ts"
-import { createShapes } from "./utils";
+import { Default } from "@/ts/components/Default";
+import { Canvas } from "@/ts/components/Canvas";
+import { Toggle } from "@/ts/components/Toggle";
+import { usePhysics } from "@/ts/hooks/usePhysics.ts"
+import { createShapes } from "@/utils";
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import { Contact } from "./ts/components/Contact.tsx";
+import { Contact } from "@/ts/components/Contact.tsx";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
 

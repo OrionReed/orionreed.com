@@ -1,5 +1,10 @@
 {
   "compilerOptions": {
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"],
+      "src/*": ["./src/*"],
+    },
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
@@ -21,5 +26,6 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
+  
   "references": [{ "path": "./tsconfig.node.json" }]
 }
