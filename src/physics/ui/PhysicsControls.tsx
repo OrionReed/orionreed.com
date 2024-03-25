@@ -1,7 +1,7 @@
 import { track, useEditor } from "@tldraw/tldraw";
 import { useEffect, useState } from "react";
 import { usePhysicsSimulation } from "../simulation";
-import "../../css/physics-ui.css";
+// import "../../css/physics-ui.css";
 
 export const SimControls = track(() => {
 	const editor = useEditor();
