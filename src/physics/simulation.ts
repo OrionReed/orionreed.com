@@ -9,8 +9,6 @@ type BodyWithShapeData = RAPIER.RigidBody & {
 };
 type RigidbodyLookup = { [key: TLShapeId]: RAPIER.RigidBody };
 
-const START_DELAY = 500;
-
 export class PhysicsWorld {
   private editor: Editor;
   private world: RAPIER.World;
@@ -30,8 +28,6 @@ export class PhysicsWorld {
   public start() {
     this.world = new RAPIER.World(GRAVITY);
 
-    this.addShapes(this.editor.getCurrentPageShapes());
-
     const simLoop = () => {
       this.world.step();
       this.updateCharacterControllers();
@@ -50,7 +46,10 @@ export class PhysicsWorld {
   }
 
   public addShapes(shapes: TLShape[]) {
+    console.log('adding shapesss');
+
     for (const shape of shapes) {
+      console.log('shape');
       if ('color' in shape.props && shape.props.color === "violet") {
         this.createCharacter(shape as TLGeoShape);
         continue;
@@ -152,8 +151,9 @@ export class PhysicsWorld {
     const rigidbody = this.createRigidbody(drawShape);
     const drawnGeo = this.editor.getShapeGeometry(drawShape);
     const verts = drawnGeo.vertices;
-    const isRb =
-      "color" in drawShape.props && isRigidbody(drawShape.props.color);
+    // const isRb =
+    //   "color" in drawShape.props && isRigidbody(drawShape.props.color);
+    const isRb = true;
     verts.forEach((point) => {
       if (isRb) this.createColliderAtPoint(point, drawShape, rigidbody);
       else this.createColliderAtPoint(point, drawShape);
@@ -375,15 +375,12 @@ export class PhysicsWorld {
   }
 }
 
-export function usePhysicsSimulation(editor: Editor, enabled: boolean) {
+export function usePhysicsSimulation(editor: Editor) {
   const sim = useRef<PhysicsWorld>(new PhysicsWorld(editor));
 
   useEffect(() => {
-    if (enabled) {
-      setTimeout(() => sim.current.start(), START_DELAY);
-      return () => sim.current.stop();
-    }
-  }, [enabled, sim]);
+    sim.current.start()
+  }, []);
 
   useEffect(() => {
     sim.current.setEditor(editor);
@@ -392,5 +389,10 @@ export function usePhysicsSimulation(editor: Editor, enabled: boolean) {
   // Return any values or functions that the UI components might need
   return {
     addShapes: (shapes: TLShape[]) => sim.current.addShapes(shapes),
+    destroy: () => {
+      sim.current.stop()
+      sim.current = new PhysicsWorld(editor); // Replace with a new instance
+      sim.current.start()
+    }
   };
 }

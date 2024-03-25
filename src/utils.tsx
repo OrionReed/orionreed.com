@@ -13,13 +13,15 @@ export function createShapes(elementsInfo: any) {
     }
   }));
 
+  const extend = 150;
+
   shapes.push({
     id: createShapeId(),
     type: 'geo',
-    x: 0,
+    x: -extend,
     y: window.innerHeight,
     props: {
-      w: window.innerWidth,
+      w: window.innerWidth + (extend * 2),
       h: 50,
       color: 'grey',
       fill: 'solid'

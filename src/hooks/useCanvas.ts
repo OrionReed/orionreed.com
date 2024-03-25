@@ -9,33 +9,39 @@ interface ElementInfo {
   html: string;
 }
 
-export function usePhysics() {
-  const [isPhysicsEnabled, setIsPhysicsEnabled] = useState(false);
+export function useCanvas() {
+  const [isCanvasEnabled, setIsCanvasEnabled] = useState(false);
   const [elementsInfo, setElementsInfo] = useState<ElementInfo[]>([]);
-  const [fadeClass, setFadeClass] = useState('');
 
   useEffect(() => {
-    const togglePhysics = async () => {
-      if (!isPhysicsEnabled) {
+    const toggleCanvas = async () => {
+      if (!isCanvasEnabled) {
         const info = await gatherElementsInfo();
         setElementsInfo(info);
-        setIsPhysicsEnabled(true);
-        setFadeClass('fade-out');
+        setIsCanvasEnabled(true);
+        document.getElementById('toggle-physics')?.classList.remove('hidden');
       } else {
-        setIsPhysicsEnabled(false);
         setElementsInfo([]);
-        setFadeClass('');
+        setIsCanvasEnabled(false);
+        document.getElementById('toggle-physics')?.classList.add('hidden');
       }
     };
+    // const enableCanvas = async () => {
+    //   const info = await gatherElementsInfo();
+    //   setElementsInfo(info);
+    //   setIsCanvasEnabled(true);
+    // };
 
-    window.addEventListener('togglePhysicsEvent', togglePhysics);
+    window.addEventListener('toggleCanvasEvent', toggleCanvas);
+    // window.addEventListener('togglePhysicsEvent', enableCanvas);
 
     return () => {
-      window.removeEventListener('togglePhysicsEvent', togglePhysics);
+      window.removeEventListener('toggleCanvasEvent', toggleCanvas);
+      // window.removeEventListener('togglePhysicsEvent', enableCanvas);
     };
-  }, [isPhysicsEnabled]);
+  }, [isCanvasEnabled]);
 
-  return { isPhysicsEnabled, elementsInfo, fadeClass };
+  return { isCanvasEnabled, elementsInfo };
 }
 
 async function gatherElementsInfo() {

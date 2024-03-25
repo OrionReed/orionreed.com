@@ -1,11 +1,11 @@
 import "@tldraw/tldraw/tldraw.css";
 import "@/css/style.css"
-import React, { } from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { Default } from "@/components/Default";
 import { Canvas } from "@/components/Canvas";
 import { Toggle } from "@/components/Toggle";
-import { usePhysics } from "@/hooks/usePhysics"
+import { useCanvas } from "@/hooks/useCanvas"
 import { createShapes } from "@/utils";
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Contact } from "@/components/Contact";
@@ -28,12 +28,26 @@ function App() {
 };
 
 function Home() {
-	const { isPhysicsEnabled, elementsInfo, fadeClass } = usePhysics();
+	const { isCanvasEnabled, elementsInfo } = useCanvas();
 	const shapes = createShapes(elementsInfo)
+	const [isEditorMounted, setIsEditorMounted] = useState(false);
+
+	useEffect(() => {
+		const handleEditorDidMount = () => {
+			setIsEditorMounted(true);
+		};
+
+		window.addEventListener('editorDidMountEvent', handleEditorDidMount);
+
+		return () => {
+			window.removeEventListener('editorDidMountEvent', handleEditorDidMount);
+		};
+	}, []);
+
 	return (
 		<><Toggle />
-			<div style={{ zIndex: 999999 }} className={`default-component ${fadeClass}`}>
+			<div style={{ zIndex: 999999 }} className={`${isCanvasEnabled && isEditorMounted ? 'transparent' : ''}`}>
 				{<Default />}
 			</div>
-			{isPhysicsEnabled && elementsInfo.length > 0 ? <Canvas shapes={shapes} /> : null}</>)
+			{isCanvasEnabled && elementsInfo.length > 0 ? <Canvas shapes={shapes} /> : null}</>)
 }

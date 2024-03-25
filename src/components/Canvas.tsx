@@ -29,6 +29,9 @@ export function Canvas({ shapes }: { shapes: TLShape[]; }) {
       <Tldraw
         components={components}
         shapeUtils={[HTMLShapeUtil]}
+        onMount={() => {
+          window.dispatchEvent(new CustomEvent('editorDidMountEvent'));
+        }}
       >
         <SimController shapes={shapes} />
       </Tldraw>
