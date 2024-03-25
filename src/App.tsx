@@ -1,10 +1,12 @@
-import { atom, createShapeId, createTLUser, setUserPreferences, StoreSnapshot, Tldraw, TLGeoShape, TLInstance, TLRecord, TLShape, TLUiComponents, TLUnknownShape, TLUserPreferences, track, useEditor } from "@tldraw/tldraw";
+import { createShapeId, Tldraw, TLGeoShape, TLShape, TLUiComponents } from "@tldraw/tldraw";
 import "@tldraw/tldraw/tldraw.css";
+import "./css/style.css"
 import { SimControls } from "./physics/ui/PhysicsControls";
 import { uiOverrides } from "./physics/ui/overrides";
 import { Helmet, HelmetProvider } from "react-helmet-async";
-import React, { Suspense, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
+import { HTMLShapeUtil, HTMLShape } from "./HTMLShapeUtil";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
 
@@ -53,58 +55,51 @@ function App() {
 
 	// Function to gather elements info asynchronously
 	async function gatherElementsInfo() {
-		const rootElement = document.getElementById('root');
+		const rootElement = document.getElementsByTagName('main')[0];
 		const info: any[] = [];
 		if (rootElement) {
 			for (const child of rootElement.children) {
+				if (['BUTTON'].includes(child.tagName)) continue
 				const rect = child.getBoundingClientRect();
 				let w = rect.width
-				if (!['P', 'UL'].includes(child.tagName)) {
-					w = measureElementTextWidth(child);
-				}
-				console.log(w)
+				// if (!['P', 'UL'].includes(child.tagName)) {
+				// 	w = measureElementTextWidth(child);
+				// }
+				// console.log(w)
 				info.push({
 					tagName: child.tagName,
-					position: { x: rect.left, y: rect.top },
-					dimensions: { width: w, height: rect.height },
+					x: rect.left,
+					y: rect.top,
+					w: w,
+					h: rect.height,
+					html: child.outerHTML
 				});
 			};
 		}
-		// Example usage
-		// const element = document.getElementById('yourElementId'); // Replace 'yourElementId' with the actual ID
-		// if (element) {
-		// 	console.log(`Text width: ${textWidth}px`);
-		// }
-		// console.log(info.length);
-		// console.log(info);
-
 		return info;
 	}
 
-	const shapes: TLGeoShape[] = elementsInfo.map((element, index) => ({
+	const shapes: HTMLShape[] = elementsInfo.map((element) => ({
 		id: createShapeId(),
-		type: 'geo',
-		x: element.position.x,
-		y: element.position.y,
+		type: 'html',
+		x: element.x,
+		y: element.y,
 		props: {
-			geo: "rectangle",
-			w: element.dimensions.width,
-			h: element.dimensions.height,
-			fill: 'solid',
-			color: 'green'
+			w: element.w,
+			h: element.h,
+			html: element.html,
 		}
 	}))
 
 	shapes.push({
 		id: createShapeId(),
-		type: 'geo',
+		type: 'html',
 		x: 0,
 		y: window.innerHeight,
 		props: {
-			geo: "rectangle",
 			w: window.innerWidth,
 			h: 20,
-			fill: 'solid'
+			html: "FOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO"
 		}
 	})
 
@@ -120,10 +115,10 @@ function App() {
 
 function Default() {
 	return (
-		<>
-			<Helmet>
+		<main>
+			{/* <Helmet>
 				<link rel="stylesheet" href="src/css/default.css" />
-			</Helmet>
+			</Helmet> */}
 			<header>
 				Orion Reed
 			</header>
@@ -175,7 +170,7 @@ function Default() {
 					href="https://blog.block.science/objects-as-reference-toward-robust-first-principles-of-digital-organization/">Objects
 					as Reference: Toward Robust First Principles of Digital Organization</a></li>
 			</ul>
-		</>
+		</main>
 	);
 }
 
@@ -183,12 +178,13 @@ function Canvas({ shapes }: { shapes: TLShape[] }) {
 
 	return (
 		<div className="tldraw__editor">
-			<Helmet>
+			{/* <Helmet>
 				<link rel="stylesheet" href="src/css/tldraw.css" />
-			</Helmet>
+			</Helmet> */}
 			<Tldraw
 				overrides={uiOverrides}
 				components={components}
+				shapeUtils={[HTMLShapeUtil]}
 			>
 				<SimControls shapes={shapes} />
 			</Tldraw>
@@ -199,9 +195,9 @@ function Canvas({ shapes }: { shapes: TLShape[] }) {
 function Toggle() {
 	return (
 		<>
-			<Helmet>
+			{/* <Helmet>
 				<link rel="stylesheet" href="src/css/toggle.css" />
-			</Helmet>
+			</Helmet> */}
 			<button id="toggle-physics" onClick={() => window.dispatchEvent(new CustomEvent('togglePhysicsEvent'))}>
 				<img src="src/assets/gravity.svg" alt="Toggle Physics" />
 			</button>
