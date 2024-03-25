@@ -25,7 +25,6 @@ function App() {
 					<Route path="/card/contact" element={<Contact />} />
 				</Routes>
 			</BrowserRouter>
-			<Analytics />
 		</React.StrictMode>
 	);
 };
