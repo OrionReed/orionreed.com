@@ -1,10 +1,14 @@
-import { Rectangle2d, TLBaseShape } from '@tldraw/tldraw';
+import { Rectangle2d, resizeBox, TLBaseShape, TLOnResizeHandler } from '@tldraw/tldraw';
 import { HTMLContainer, ShapeUtil } from 'tldraw'
 
 export type HTMLShape = TLBaseShape<'html', { w: number; h: number, html: string }>
 
 export class HTMLShapeUtil extends ShapeUtil<HTMLShape> {
   static override type = 'html' as const
+  override canBind = () => true
+  override canEdit = () => false
+  override canResize = () => true
+  override isAspectRatioLocked = () => false
 
   getDefaultProps(): HTMLShape['props'] {
     return {
@@ -12,6 +16,10 @@ export class HTMLShapeUtil extends ShapeUtil<HTMLShape> {
       h: 100,
       html: "<div></div>"
     }
+  }
+
+  override onResize: TLOnResizeHandler<any> = (shape, info) => {
+    return resizeBox(shape, info)
   }
 
   getGeometry(shape: IHTMLShape) {
@@ -24,6 +32,7 @@ export class HTMLShapeUtil extends ShapeUtil<HTMLShape> {
 
   component(shape: HTMLShape) {
     return <div dangerouslySetInnerHTML={{ __html: shape.props.html }}></div>
+
   }
 
   indicator(shape: HTMLShape) {
