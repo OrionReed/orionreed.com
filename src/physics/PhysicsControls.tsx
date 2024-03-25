@@ -7,6 +7,17 @@ export const SimController = ({ shapes }: { shapes: TLUnknownShape[] }) => {
 	const [isPhysicsActive, setIsPhysicsActive] = useState(false);
 	const { addShapes, destroy } = usePhysicsSimulation(editor);
 
+	const morphShapesDOM = () => {
+		const cam = editor.getCamera()
+		editor.setCamera({ x: cam.x, y: cam.y, z: 1 }, { duration: 200, easing: (t) => t * t })
+		for (const shape of editor.getCurrentPageShapes()) {
+			if (!shape.meta.DOMOrigin) continue;
+			const x = shape.meta.DOMOrigin.x - cam.x;
+			const y = shape.meta.DOMOrigin.y - cam.y;
+			editor.animateShape({ id: shape.id, type: shape.type, x: x, y: y, rotation: 0 }, { duration: 200, easing: (t: number) => { return -(Math.cos(Math.PI * t) - 1) / 2; } })
+		}
+	}
+
 	useEffect(() => {
 		editor.createShapes(shapes)
 		return () => { editor.deleteShapes(editor.getCurrentPageShapes()) }
@@ -18,6 +29,7 @@ export const SimController = ({ shapes }: { shapes: TLUnknownShape[] }) => {
 				if (currentIsPhysicsActive) {
 					console.log('destroy');
 					destroy();
+					morphShapesDOM()
 					return false;
 				} else {
 					console.log('activate');

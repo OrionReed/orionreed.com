@@ -10,6 +10,13 @@ export function createShapes(elementsInfo: any) {
       w: element.w,
       h: element.h,
       html: element.html,
+    },
+    meta: {
+      DOMOrigin:
+      {
+        x: element.x,
+        y: element.y
+      }
     }
   }));
 
