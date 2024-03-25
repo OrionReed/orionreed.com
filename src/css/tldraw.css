@@ -26,5 +26,9 @@ html,
 }
 
 .tl-background {
-	background-color: transparent !important;
+	background-color: transparent;
+}
+
+.tlui-debug-panel {
+	display: none;
 }

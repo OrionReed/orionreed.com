@@ -28,7 +28,7 @@ export class PhysicsWorld {
   public start() {
     this.world = new RAPIER.World(GRAVITY);
 
-    this.addShapes(this.editor.getSelectedShapes());
+    this.addShapes(this.editor.getCurrentPageShapes());
 
     const simLoop = () => {
       this.world.step();
