@@ -1,5 +1,5 @@
 {
   "buildCommand": "yarn build",
-  "framework": "eleventy",
+  "framework": "vite",
   "outputDirectory": "dist"
 }
