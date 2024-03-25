@@ -22,7 +22,7 @@ export class HTMLShapeUtil extends ShapeUtil<HTMLShape> {
     return resizeBox(shape, info)
   }
 
-  getGeometry(shape: IHTMLShape) {
+  getGeometry(shape: HTMLShape) {
     return new Rectangle2d({
       width: shape.props.w,
       height: shape.props.h,

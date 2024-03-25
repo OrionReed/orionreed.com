@@ -1,5 +1,3 @@
-import React from "react";
-
 export function Default() {
   return (
     <main>
@@ -24,9 +22,9 @@ export function Default() {
 
       <h1>My work</h1>
       <p>
-        Alongside my independent work I am a researcher at <a href="https://block.science/">Block Science</a> building
-        <i>knowledge organisation infrastructure</i> and at <a href="https://economicspace.agency/">ECSA</a> working on
-        <i>computational media</i>. I am also part of the nascent <a href="https://libcomp.org/">Liberatory Computing</a>
+        Alongside my independent work I am a researcher at <a href="https://block.science/">Block Science</a> building{' '}
+        <i>knowledge organisation infrastructure</i> and at <a href="https://economicspace.agency/">ECSA</a> working on{' '}
+        <i>computational media</i>. I am also part of the nascent <a href="https://libcomp.org/">Liberatory Computing</a>{' '}
         collective and a co-organiser of the <a href="https://canvasprotocol.org/">OCWG</a>.
       </p>
 
@@ -42,7 +40,7 @@ export function Default() {
       <h1>Talks</h1>
       <ul>
         <li><a
-          href="objects/causal-islands-integration-domain.pdf">Spatial
+          href="artifact/causal-islands-integration-domain.pdf">Spatial
           Canvases: Towards an Integration Domain for HCI @ Causal Islands LA</a></li>
         <li><a
           href="https://www.youtube.com/watch?v=-q-kk-NMFbA">Knowledge Organisation Infrastructure Demo @ NPC

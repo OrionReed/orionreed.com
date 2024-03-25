@@ -64,6 +64,14 @@ p {
   font-size: 1.1em;
   font-variation-settings: "wght" 350;
 }
+
+a {
+  text-decoration: none;
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 .dinkus {
   display: block;
   text-align: center;
