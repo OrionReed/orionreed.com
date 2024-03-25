@@ -11,7 +11,7 @@ export const SimController = ({ shapes }: { shapes: TLUnknownShape[] }) => {
 	}, []);
 
 
-	const { addShapes } = usePhysicsSimulation(editor, false);
+	const { addShapes } = usePhysicsSimulation(editor, true);
 
 	return (<></>);
 };
