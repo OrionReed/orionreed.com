@@ -4,7 +4,6 @@ html,
 body {
   padding: 0;
   margin: 0;
-  overscroll-behavior: none;
   touch-action: none;
   min-height: 100vh;
   min-height: -webkit-fill-available;
@@ -13,6 +12,7 @@ body {
 }
 
 .tldraw__editor {
+  overscroll-behavior: none;
   position: fixed;
   inset: 0px;
   overflow: hidden;
@@ -102,7 +102,7 @@ ul {
 }
 
 @media (max-width: 600px) {
-  body {
+  main {
     padding: 2em;
   }
   header {
@@ -130,4 +130,17 @@ ul {
   & p {
     font-size: 1.1rem;
   }
+}
+
+.fade-out {
+  opacity: 0 !important;
+  transition: opacity 1s ease-in-out;
+  /* visibility: hidden; */
+  /* display: none; */
+}
+
+.fade-in {
+  opacity: 1;
+  transition: opacity 0.5s ease-in-out;
+  /* visibility: visible; */
 }

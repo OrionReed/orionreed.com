@@ -16,15 +16,15 @@ const components: TLUiComponents = {
 	PageMenu: null,
 	NavigationPanel: null,
 	DebugMenu: null,
+	ContextMenu: null,
+	ActionsMenu: null,
+	QuickActions: null,
+	MainMenu: null,
 	MenuPanel: null,
-	// ContextMenu: null,
-	// ActionsMenu: null,
 	// ZoomMenu: null,
-	// MainMenu: null,
 	// Minimap: null,
 	// Toolbar: null,
 	// KeyboardShortcutsDialog: null,
-	// QuickActions: null,
 	// HelperButtons: null,
 	// SharePanel: null,
 	// TopPanel: null,
@@ -33,6 +33,7 @@ const components: TLUiComponents = {
 function App() {
 	const [isPhysicsEnabled, setIsPhysicsEnabled] = useState(false);
 	const [elementsInfo, setElementsInfo] = useState<any[]>([]);
+	const [fadeClass, setFadeClass] = useState(''); // State to control the fade class
 
 	useEffect(() => {
 		const togglePhysics = async () => {
@@ -40,9 +41,12 @@ function App() {
 				const info = await gatherElementsInfo();
 				setElementsInfo(info);
 				setIsPhysicsEnabled(true); // Enable physics only after gathering info
+				setFadeClass('fade-out'); // Start fading out the Default component
+				// setTimeout(() => setFadeClass('fade-in'), 500); // Wait for fade-out to complete before fading in Canvas
 			} else {
 				setIsPhysicsEnabled(false);
 				setElementsInfo([]); // Reset elements info when disabling physics
+				setFadeClass(''); // Reset fade class to show Default component normally
 			}
 		};
 
@@ -107,7 +111,10 @@ function App() {
 		<React.StrictMode>
 			<HelmetProvider>
 				<Toggle />
-				{isPhysicsEnabled && elementsInfo.length > 0 ? <Canvas shapes={shapes} /> : <Default />}
+				<div style={{ zIndex: 999999 }} className={`default-component ${fadeClass}`}>
+					{<Default />}
+				</div>
+				{isPhysicsEnabled && elementsInfo.length > 0 ? <Canvas shapes={shapes} /> : null}
 			</HelmetProvider>
 		</React.StrictMode>
 	);
