@@ -84,10 +84,9 @@ p a {
   margin-bottom: 0em;
 }
 
-ul {
+ol {
   padding-left: 0;
   font-size: 1rem;
-  list-style: decimal-leading-zero;
   & li::marker {
     color: rgba(0, 0, 0, 0.322);
   }
@@ -134,7 +133,7 @@ ul {
   header {
     margin-bottom: 1em;
   }
-  ul {
+  ol {
     list-style-position: inside;
   }
 }
@@ -147,9 +146,11 @@ ul {
   p,
   span,
   header,
-  ul {
+  ul,
+  ol {
     margin: 0;
   }
+
   & header {
     font-size: 1.5rem;
   }

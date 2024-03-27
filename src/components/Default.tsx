@@ -37,20 +37,35 @@ export function Default() {
       <span className="dinkus">***</span>
 
       <h1>Talks</h1>
-      <ul>
+      <ol reversed>
         <li><a
           href="artifact/causal-islands-integration-domain.pdf">Spatial
           Canvases: Towards an Integration Domain for HCI @ Causal Islands LA</a></li>
         <li><a
           href="https://www.youtube.com/watch?v=-q-kk-NMFbA">Knowledge Organisation Infrastructure Demo @ NPC
           Denver</a></li>
-      </ul>
+      </ol>
       <h1>Writing</h1>
-      <ul>
+      <ol reversed>
         <li><a
           href="https://blog.block.science/objects-as-reference-toward-robust-first-principles-of-digital-organization/">Objects
           as Reference: Toward Robust First Principles of Digital Organization</a></li>
-      </ul>
+      </ol>
+      <h1>Things I made recently</h1>
+      <ol reversed>
+        <li><a
+          href="https://twitter.com/OrionReedOne/status/1772934478421188620">Tiny 3D HTML/DOM viewer (you can paste it into your console)</a>
+        </li>
+        <li><a
+          href="https://twitter.com/OrionReedOne/status/1772271156373905465">DOM to canvas translation (it's that button in the top right of this page)</a>
+        </li>
+        <li><a
+          href="https://github.com/OrionReed/tldraw-graph-layout">Constraint-based graph layout in tldraw</a>
+        </li>
+        <li><a
+          href="https://github.com/OrionReed/tldraw-physics">Physics in tldraw</a>
+        </li>
+      </ol>
     </main>
   );
 }

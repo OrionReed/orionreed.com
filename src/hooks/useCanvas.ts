@@ -52,7 +52,7 @@ async function gatherElementsInfo() {
       if (['BUTTON'].includes(child.tagName)) continue;
       const rect = child.getBoundingClientRect();
       let w = rect.width;
-      if (!['P', 'UL'].includes(child.tagName)) {
+      if (!['P', 'UL', 'OL'].includes(child.tagName)) {
         w = measureElementTextWidth(child as HTMLElement);
       }
       // Check if the element is centered
