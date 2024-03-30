@@ -1,5 +1,5 @@
-import { Rectangle2d, resizeBox, TLBaseShape, TLOnResizeHandler } from '@tldraw/tldraw';
-import { HTMLContainer, ShapeUtil } from 'tldraw'
+import { Rectangle2d, resizeBox, TLBaseShape, TLOnBeforeUpdateHandler, TLOnResizeHandler } from '@tldraw/tldraw';
+import { ShapeUtil } from 'tldraw'
 
 export type HTMLShape = TLBaseShape<'html', { w: number; h: number, html: string }>
 
@@ -18,7 +18,26 @@ export class HTMLShapeUtil extends ShapeUtil<HTMLShape> {
     }
   }
 
-  override onResize: TLOnResizeHandler<any> = (shape, info) => {
+  override onTranslate: TLOnBeforeUpdateHandler<HTMLShape> = (prev, next) => {
+    if (prev.x !== next.x || prev.y !== next.y) {
+      this.editor.bringToFront([next.id]);
+    }
+  }
+
+  override onResize: TLOnResizeHandler<HTMLShape> = (shape: HTMLShape, info) => {
+    const element = document.getElementById(shape.id);
+    if (!element || !element.parentElement) return resizeBox(shape, info);
+    const { width, height } = element.parentElement.getBoundingClientRect();
+    if (element) {
+      console.log(element);
+
+      const isOverflowing = element.scrollWidth > width || element.scrollHeight > height;
+      if (isOverflowing) {
+        element.parentElement?.classList.add('overflowing');
+      } else {
+        element.parentElement?.classList.remove('overflowing');
+      }
+    }
     return resizeBox(shape, info)
   }
 
@@ -31,7 +50,7 @@ export class HTMLShapeUtil extends ShapeUtil<HTMLShape> {
   }
 
   component(shape: HTMLShape) {
-    return <div dangerouslySetInnerHTML={{ __html: shape.props.html }}></div>
+    return <div id={shape.id} dangerouslySetInnerHTML={{ __html: shape.props.html }} />
 
   }
 
