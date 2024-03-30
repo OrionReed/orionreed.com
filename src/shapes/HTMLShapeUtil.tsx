@@ -29,8 +29,6 @@ export class HTMLShapeUtil extends ShapeUtil<HTMLShape> {
     if (!element || !element.parentElement) return resizeBox(shape, info);
     const { width, height } = element.parentElement.getBoundingClientRect();
     if (element) {
-      console.log(element);
-
       const isOverflowing = element.scrollWidth > width || element.scrollHeight > height;
       if (isOverflowing) {
         element.parentElement?.classList.add('overflowing');

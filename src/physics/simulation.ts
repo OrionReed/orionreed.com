@@ -46,10 +46,7 @@ export class PhysicsWorld {
   }
 
   public addShapes(shapes: TLShape[]) {
-    console.log('adding shapesss');
-
     for (const shape of shapes) {
-      console.log('shape');
       if ('color' in shape.props && shape.props.color === "violet") {
         this.createCharacter(shape as TLGeoShape);
         continue;
