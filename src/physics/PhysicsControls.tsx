@@ -1,4 +1,4 @@
-import { TLUnknownShape, useEditor } from "@tldraw/tldraw";
+import { Editor, TLUnknownShape, createShapeId, useEditor } from "@tldraw/tldraw";
 import { useEffect, useState } from "react";
 import { usePhysicsSimulation } from "./simulation";
 
@@ -16,13 +16,11 @@ export const SimController = ({ shapes }: { shapes: TLUnknownShape[] }) => {
 		const togglePhysics = () => {
 			setIsPhysicsActive((currentIsPhysicsActive) => {
 				if (currentIsPhysicsActive) {
-					console.log('destroy');
 					destroy();
 					return false;
-				} else {
-					console.log('activate');
-					return true;
 				}
+				createFloor(editor);
+				return true;
 			});
 		};
 
@@ -36,8 +34,6 @@ export const SimController = ({ shapes }: { shapes: TLUnknownShape[] }) => {
 
 	useEffect(() => {
 		if (isPhysicsActive) {
-			console.log('adding shapes');
-
 			addShapes(editor.getCurrentPageShapes()); // Activate physics simulation
 		} else {
 			destroy(); // Deactivate physics simulation
@@ -46,3 +42,25 @@ export const SimController = ({ shapes }: { shapes: TLUnknownShape[] }) => {
 
 	return (<></>);
 };
+
+function createFloor(editor: Editor) {
+
+	const viewBounds = editor.getViewportPageBounds();
+
+	editor.createShape({
+		id: createShapeId(),
+		type: 'geo',
+		x: viewBounds.minX,
+		y: viewBounds.maxY,
+		props: {
+			w: viewBounds.width,
+			h: 50,
+			color: 'grey',
+			fill: 'solid'
+		},
+		meta: {
+			fixed: true
+		}
+	});
+}
+

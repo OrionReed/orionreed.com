@@ -19,25 +19,18 @@ export function useCanvas() {
         const info = await gatherElementsInfo();
         setElementsInfo(info);
         setIsCanvasEnabled(true);
-        document.getElementById('toggle-physics')?.classList.remove('hidden');
+        document.body.classList.add('canvas-mode');
       } else {
         setElementsInfo([]);
         setIsCanvasEnabled(false);
-        document.getElementById('toggle-physics')?.classList.add('hidden');
+        document.body.classList.remove('canvas-mode');
       }
     };
-    // const enableCanvas = async () => {
-    //   const info = await gatherElementsInfo();
-    //   setElementsInfo(info);
-    //   setIsCanvasEnabled(true);
-    // };
 
     window.addEventListener('toggleCanvasEvent', toggleCanvas);
-    // window.addEventListener('togglePhysicsEvent', enableCanvas);
 
     return () => {
       window.removeEventListener('toggleCanvasEvent', toggleCanvas);
-      // window.removeEventListener('togglePhysicsEvent', enableCanvas);
     };
   }, [isCanvasEnabled]);
 
