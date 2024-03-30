@@ -117,6 +117,10 @@ ol {
   &:hover {
     opacity: 1;
   }
+  & img {
+    width: 40px;
+    height: 40px;
+  }
 }
 #toggle-canvas {
   top: 10px;

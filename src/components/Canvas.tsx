@@ -1,4 +1,4 @@
-import { Tldraw, TLShape, TLUiComponents } from "@tldraw/tldraw";
+import { Editor, Tldraw, TLShape, TLUiComponents } from "@tldraw/tldraw";
 import { SimController } from "@/physics/PhysicsControls";
 import { HTMLShapeUtil } from "@/shapes/HTMLShapeUtil";
 
@@ -22,8 +22,9 @@ export function Canvas({ shapes }: { shapes: TLShape[]; }) {
       <Tldraw
         components={components}
         shapeUtils={[HTMLShapeUtil]}
-        onMount={() => {
+        onMount={(editor: Editor) => {
           window.dispatchEvent(new CustomEvent('editorDidMountEvent'));
+          editor.user.updateUserPreferences({ isDarkMode: false })
         }}
       >
         <SimController shapes={shapes} />
