@@ -7,8 +7,13 @@ body {
   min-height: 100vh;
   min-height: -webkit-fill-available;
   height: 100%;
-  /* touch-action: none; */
-  /* font-family: "Inter", sans-serif; */
+}
+
+.canvas-mode {
+  overflow: hidden;
+  & #toggle-physics {
+    display: block;
+  }
 }
 
 .tldraw__editor {
@@ -94,11 +99,11 @@ ol {
 
 #toggle-physics,
 #toggle-canvas {
-  position: absolute;
-  z-index: 99999;
+  position: fixed;
+  z-index: 999;
   right: 10px;
-  width: 50px;
-  height: 50px;
+  width: 40px;
+  height: 40px;
   background: none;
   border: none;
   cursor: pointer;
@@ -106,24 +111,13 @@ ol {
   &:hover {
     opacity: 1;
   }
-  & img {
-    width: 100%;
-    height: 100%;
-  }
 }
 #toggle-canvas {
   top: 10px;
-  & img {
-    width: 50%;
-    height: 50%;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-  }
 }
 #toggle-physics {
   top: 60px;
+  display: none;
 }
 
 @media (max-width: 600px) {
@@ -162,8 +156,4 @@ ol {
 .transparent {
   opacity: 0 !important;
   transition: opacity 0.25s ease-in-out;
-}
-
-.hidden {
-  display: none;
 }

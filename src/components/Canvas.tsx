@@ -13,13 +13,6 @@ const components: TLUiComponents = {
   QuickActions: null,
   MainMenu: null,
   MenuPanel: null,
-  // ZoomMenu: null,
-  // Minimap: null,
-  // Toolbar: null,
-  // KeyboardShortcutsDialog: null,
-  // HelperButtons: null,
-  // SharePanel: null,
-  // TopPanel: null,
 }
 
 export function Canvas({ shapes }: { shapes: TLShape[]; }) {
