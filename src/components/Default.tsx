@@ -39,8 +39,14 @@ export function Default() {
       <h1>Talks</h1>
       <ol reversed>
         <li><a
-          href="artifact/causal-islands-integration-domain.pdf">Spatial
-          Canvases: Towards an Integration Domain for HCI @ Causal Islands LA</a></li>
+          href="https://www.youtube.com/watch?v=csGNVaB83Rk">Spatial
+          Canvases: Towards an Integration Domain for HCI @ TfT Rocks 2024</a>
+          <p>
+            <small>
+              <a href="artifact/tft-rocks-integration-domain.pdf">See the slides here.</a> This talk was originally presented at Causal Islands LA (older slides <a href="artifact/causal-islands-integration-domain.pdf">here)</a>
+            </small>
+          </p>
+        </li>
         <li><a
           href="https://www.youtube.com/watch?v=-q-kk-NMFbA">Knowledge Organisation Infrastructure Demo @ NPC
           Denver</a></li>
