@@ -23,9 +23,8 @@ export function Default() {
       <h1>My work</h1>
       <p>
         Alongside my independent work I am a researcher at <a href="https://block.science/">Block Science</a> building{' '}
-        <i>knowledge organisation infrastructure</i> and at <a href="https://economicspace.agency/">ECSA</a> working on{' '}
-        <i>computational media</i>. I am also part of the nascent <a href="https://libcomp.org/">Liberatory Computing</a>{' '}
-        collective and a co-organiser of the <a href="https://canvasprotocol.org/">OCWG</a>.
+        <i>knowledge organisation infrastructure</i> and an engineer-in-residence at <a href="https://tldraw.com">tldraw</a>. I am also part of the nascent <a href="https://libcomp.org/">Liberatory Computing</a>{' '}
+        collective, occasional collaborator with <a href="https://economicspace.agency/">ECSA</a> and a co-organiser of the <a href="https://canvasprotocol.org/">OCWG</a>.
       </p>
 
       <h1>Get in touch</h1>

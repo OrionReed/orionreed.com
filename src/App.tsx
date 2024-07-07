@@ -10,6 +10,7 @@ import { useCanvas } from "@/hooks/useCanvas"
 import { createShapes } from "@/utils";
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Contact } from "@/components/Contact";
+import { Post } from '@/components/Post';
 inject();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
@@ -23,6 +24,7 @@ function App() {
 				<Routes>
 					<Route path="/" element={<Home />} />
 					<Route path="/card/contact" element={<Contact />} />
+					<Route path="/posts/:slug" element={<Post />} />
 				</Routes>
 			</BrowserRouter>
 		</React.StrictMode>
