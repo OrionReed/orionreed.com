@@ -1,4 +1,4 @@
-import { markdownPlugin } from './src/utils/markdownPlugin';
+import { markdownPlugin } from './build/markdownPlugin';
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import wasm from "vite-plugin-wasm";
