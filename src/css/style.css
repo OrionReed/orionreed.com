@@ -9,35 +9,10 @@ body {
   height: 100%;
 }
 
-.canvas-mode {
-  overflow: hidden;
-  & #toggle-physics {
-    display: block;
-  }
+video {
+  width: 100%;
+  height: auto;
 }
-
-.tldraw__editor {
-  overscroll-behavior: none;
-  position: fixed;
-  inset: 0px;
-  overflow: hidden;
-}
-
-.tl-background {
-  background-color: transparent;
-}
-
-.tlui-debug-panel {
-  display: none;
-}
-
-.overflowing {
-  box-shadow: 0 0px 16px rgba(0, 0, 0, 0.15);
-  overflow: hidden;
-  background-color: white;
-}
-
-/* Non-tldraw stuff */
 
 main {
   max-width: 60em;
@@ -53,8 +28,19 @@ main {
 }
 
 h1 {
+  font-size: 2rem;
+}
+h2 {
   font-size: 1.5rem;
-  margin-top: 1em;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin-top: 0;
+  margin-bottom: 0.5em;
 }
 
 header {
@@ -68,12 +54,56 @@ i {
   font-variation-settings: "slnt" -15;
 }
 
+code {
+  background-color: #38424c;
+  width: 100%;
+  color: white;
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+}
+
+blockquote {
+  margin: -1em;
+  padding: 1em;
+  background-color: #f1f1f1;
+  margin-top: 1em;
+  margin-bottom: 1em;
+  border-radius: 4px;
+  & p {
+    font-variation-settings: "CASL" 1;
+    margin: 0;
+  }
+}
+
 p {
   font-family: Recursive;
   margin-top: 0;
-  margin-bottom: 0.6em;
+  margin-bottom: 1.5em;
   font-size: 1.1em;
   font-variation-settings: "wght" 350;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  margin-bottom: 1em;
+  font-variation-settings: "mono" 1;
+  font-variation-settings: "casl" 0;
+  th,
+  td {
+    padding: 0.5em;
+    border: 1px solid #ddd;
+  }
+
+  th {
+    background-color: #f4f4f4;
+    font-weight: bold;
+  }
+
+  tr:nth-child(even) {
+    background-color: #f9f9f9;
+  }
 }
 
 a {
@@ -124,7 +154,8 @@ p a {
   margin-bottom: 0em;
 }
 
-ol {
+ol,
+ul {
   padding-left: 0;
   font-size: 1rem;
   & li::marker {
@@ -132,6 +163,19 @@ ol {
   }
 }
 
+@media (max-width: 600px) {
+  main {
+    padding: 2em;
+  }
+  header {
+    margin-bottom: 1em;
+  }
+  ol {
+    list-style-position: inside;
+  }
+}
+
+/* CANVAS SHENANIGANS */
 #toggle-physics,
 #toggle-canvas {
   position: fixed;
@@ -159,18 +203,6 @@ ol {
   display: none;
 }
 
-@media (max-width: 600px) {
-  main {
-    padding: 2em;
-  }
-  header {
-    margin-bottom: 1em;
-  }
-  ol {
-    list-style-position: inside;
-  }
-}
-
 .tl-html-layer {
   font-family: "Recursive";
   font-variation-settings: "MONO" 1;
@@ -195,4 +227,32 @@ ol {
 .transparent {
   opacity: 0 !important;
   transition: opacity 0.25s ease-in-out;
+}
+
+.canvas-mode {
+  overflow: hidden;
+  & #toggle-physics {
+    display: block;
+  }
+}
+
+.tldraw__editor {
+  overscroll-behavior: none;
+  position: fixed;
+  inset: 0px;
+  overflow: hidden;
+}
+
+.tl-background {
+  background-color: transparent;
+}
+
+.tlui-debug-panel {
+  display: none;
+}
+
+.overflowing {
+  box-shadow: 0 0px 16px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  background-color: white;
 }

@@ -22,6 +22,9 @@ export function Post() {
 
   return (
     <main>
+      <header>
+        <a href="/" style={{ textDecoration: 'none' }}>Orion Reed</a>
+      </header>
       <h1>{post.title}</h1>
       <div dangerouslySetInnerHTML={{ __html: post.html }} />
     </main>

@@ -4,7 +4,7 @@ export function Default() {
       <header>
         Orion Reed
       </header>
-      <h1>Hello! 👋</h1>
+      <h2>Hello! 👋</h2>
       <p>
         My research investigates the intersection of computing, human-system
         interfaces, and emancipatory politics. I am interested in the
@@ -20,14 +20,14 @@ export function Default() {
         and computational artifacts.
       </p>
 
-      <h1>My work</h1>
+      <h2>My work</h2>
       <p>
         Alongside my independent work I am a researcher at <a href="https://block.science/">Block Science</a> building{' '}
         <i>knowledge organisation infrastructure</i> and an engineer-in-residence at <a href="https://tldraw.com">tldraw</a>. I am also part of the nascent <a href="https://libcomp.org/">Liberatory Computing</a>{' '}
         collective, occasional collaborator with <a href="https://economicspace.agency/">ECSA</a> and a co-organiser of the <a href="https://canvasprotocol.org/">OCWG</a>.
       </p>
 
-      <h1>Get in touch</h1>
+      <h2>Get in touch</h2>
       <p>
         I am on Twitter <a href="https://twitter.com/OrionReedOne">@OrionReedOne</a>,
         Mastodon <a href="https://hci.social/@orion">@orion@hci.social</a> and GitHub <a href="https://github.com/orionreed">@orionreed</a>. You can also shoot me an email <a href="mailto:me@orionreed.com">me@orionreed.com</a>
@@ -35,28 +35,23 @@ export function Default() {
 
       <span className="dinkus">***</span>
 
-      <h1>Talks</h1>
+      <h2>Talks</h2>
       <ol reversed>
         <li><a
           href="https://www.youtube.com/watch?v=csGNVaB83Rk">Spatial
-          Canvases: Towards an Integration Domain for HCI @ TfT Rocks 2024</a>
-          <p>
-            <small>
-              <a href="artifact/tft-rocks-integration-domain.pdf">See the slides here.</a> This talk was originally presented at Causal Islands LA (older slides <a href="artifact/causal-islands-integration-domain.pdf">here)</a>
-            </small>
-          </p>
+          Canvases: Towards an Integration Domain for HCI @ TfT Rocks 2024</a> (<a href="artifact/tft-rocks-integration-domain.pdf">slides</a>)
         </li>
         <li><a
           href="https://www.youtube.com/watch?v=-q-kk-NMFbA">Knowledge Organisation Infrastructure Demo @ NPC
           Denver</a></li>
       </ol>
-      <h1>Writing</h1>
+      <h2>Writing</h2>
       <ol reversed>
         <li><a
           href="https://blog.block.science/objects-as-reference-toward-robust-first-principles-of-digital-organization/">Objects
           as Reference: Toward Robust First Principles of Digital Organization</a></li>
       </ol>
-      <h1>Things I made recently</h1>
+      <h2>Things I made recently</h2>
       <ol reversed>
         <li><a
           href="https://twitter.com/OrionReedOne/status/1772934478421188620">Tiny 3D HTML/DOM viewer (you can paste it into your console)</a>
