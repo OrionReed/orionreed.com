@@ -15,7 +15,7 @@ export default defineConfig({
     viteStaticCopy({
       targets: [
         {
-          src: 'src/posts/!(*.md)', // Copy all files except .md files
+          src: 'src/posts/**/*',
           dest: 'posts'
         }
       ]
@@ -24,6 +24,7 @@ export default defineConfig({
   build: {
     sourcemap: true,
   },
+  base: '/',
   publicDir: 'src/public',
   resolve: {
     alias: {

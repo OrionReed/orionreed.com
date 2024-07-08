@@ -5,8 +5,8 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "tsc && vite build --base=./",
-		"preview": "tsc && vite build --base=./ && vite preview"
+		"build": "tsc && vite build",
+		"preview": "tsc && vite build && vite preview"
 	},
 	"keywords": [],
 	"author": "Orion Reed",
