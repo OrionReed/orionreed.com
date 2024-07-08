@@ -54,6 +54,14 @@ i {
   font-variation-settings: "slnt" -15;
 }
 
+pre > code {
+  width: 100%;
+  padding: 1em;
+  display: block;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
 code {
   background-color: #e4e9ee;
   width: 100%;

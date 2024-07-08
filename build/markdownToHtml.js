@@ -29,7 +29,7 @@ md.renderer.rules.image = (tokens, idx, options, env, self) => {
 	const formattedSrc = `/posts/${postName}/${src}`;
 
 	if (src.endsWith(".mp4") || src.endsWith(".mov")) {
-		return `<video controls>
+		return `<video controls loop autoplay>
               <source src="${formattedSrc}" type="video/mp4">
             </video>`;
 	}

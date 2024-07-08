@@ -1,77 +1,110 @@
 ---
-title: 'Scoped Propagators'
+title: Scoped Propagators
 ---
 
-Scoped propagators are ... canvas environment implementation ... liveness ... debugging ... quick DIY tools ... lorem pretium tincidunt lacus. Nulla gravida orci a odio. Nullam varius, turpis et commodo pharetra, est eros bibendum elit, nec luctus magna felis sollicitudin mauris.
+> a work-in-progress
 
-An early work-in-progress 
+Graphs, as a model of computation and as a means of interaction and authorship, have found success in specific domains such as shader programming and signal processing. In these systems, computation is often expressed on nodes of specific types, with edges representing the flow of information. This is a powerful and general-purpose model, but it incentivises a closed-world environment where both node and edge types are decided at design-time. By choosing an alternate topology where computation is represented by edges, the incentive for a closed environment dissapears.
 
-As you can see in the examples above, scoped propagators can be used to add interactivity (e.g. buttons and sliders), constrain behaviour (layout constraints), add dynamic behaviour (lerp smoothing), create small utilitites, like homebrewed tools, and can combine these abilities to create more complex systems (a shark game with score counter, on/off switch, constrained joystick controls, and follower behaviour) all with 9 quite terse arrows.
+I present *Scoped Propagators (SPs)*, a programming model designed to be embedded within existing environments and user interfaces. By representing computation as mappings between nodes along edges, SPs make it possible to add behaviour and interactivity to environments which were not designed with liveness in mind. I demonstrate an implementation of the SP model in an infinite canvas environment, where users can create arrows between arbitrary shapes and define SPs as Javascript object literals on these arrows.
 
-#### NOTES/PHRASES:
-- liveness/interactivity
-- diagrammatic specification
-- pure functions
-- without escape
-- adding behaviour in-situ, with the same tools and affordances as the rest of the environment (its just arrows)
-- bridging between systems (governance system example)
+![examples](examples.mp4)
 
-## Definition
-A scoped propagator is formed of a function which takes a *source* and *target* node and returns an updated *target* node, and a scope which defines some subset of events to listen to. We could express this more succinctly, though just as informally:
+## Introduction
+A scoped propagator is formed of a function which takes a *source* and *target* node and returns an partial update to the *target* node, and a scope which defines some subset of events which trigger propagation. 
 
-$$
-{
-f(a, b) \mapsto b'
-}
-$$
-$$
-{
-S \subseteq \text{Events}
-}
-$$
+the Scoped Propagator model is based on two key insights:
+1. by representing computation as mappings between nodes along edges, you do not need to know at design-time what node types exist.
+2. by scoping the propagation to events, you can augment nodes with interactive behaviour suitable for the environment in which SPs have been embedded.
 
-For debugging purposes to allow side effects in propagators, allowing arbitrary JS execution.
+Below are the four event scopes which are currently implemented, which I have found to be appropriate and useful for an infinite canvas environment.
 
-Below are the four event scopes which are currently implemented. While I found these appropriate and useful for adding liveness to a canvas environment, part of the value of *scopes* is that they can be domain-specific.
-
-| Scope | Conditions |
+| Scope | Firing Condition |
 |----------|----------|
-| change   | Properties of the source node change   | 
+| change (default)  | Properties of the source node change | 
 | click | A source node is clicked   | 
 | tick    | A tick (frame render) event fires   | 
-| geo    | A node changes whose bounds overlap the target   | 
+| geo    | A node changes whose bounds overlap the target   |
 
-## Applications
-...
+The syntax for SPs in this implementation is a *scope* followed by a *JS object literal*:
+```
+scope { property1: value1, property2: value2 }
+```
+Each propagator is passed the *source* and *target* nodes (named "from" and "to" for brevity) which can be accessed like so:
+```
+click {x: from.x + 10, rotation: to.rotation + 1 }
+```
+The propagator above will, when the source is clicked, set the targets `x` value to be 10 units greater than the source, and increment the targets rotation. Here is an example of this basic idea:
 
-#### Debugging
-... inspection video
+![intro](intro.mp4)
 
-#### Automation
-reducing repetetive tasks, etc.
-... prop update tool, multiple versions DAG
+## Examples
 
-## Prior Work
+By passing the target as well as the source node, it makes it trivial to create toggles and counters. We can do this by creating an arrow from a node *to itself* and getting a value from either the source or target nodes (which are now the same).
+
+Note that by allowing nodes from `self -> self` we do not have to worry about the layout of nodes, as the arrow will move wherever the node moves. This is in contrast to, for example, needing to move a button node alongside the node of interest, or have some suitable grouping primitive available.
+
+![buttons](buttons.mp4)
+
+This is already sufficient for many primitive constraint-based layouts, with the caveat that constraints do not, without the addition of a backwards propagator, work in both directions.
+
+![constraints](constraints.mp4)
+
+Being able to take a property from one node, transform it, and set the property of another node to that value, is useful not just for adding behaviour but also for debugging. Here we are formatting the full properties of one node and setting the text property of the target whenever the source updates.
+
+![inspection](inspection.mp4)
+
+If we wish to create dynamic behaviours as a function of time, we can use an appropriate scope such as `tick` and pass a readonly `deltaTime` value to these propagators. Which here we are using to implement a classic linear interpolation equation.
+
+Note that, as with all of the examples, 100% of the behaviour is encoded in the text of the arrows. This creates a kind of diagrammatic specification of behaviour, where all behaviours could be re-created from a static screenshot.
+
+![lerp](lerp.mp4)
+
+While pure functions make reasoning about a system of SPs easier, we may in practice want to allow side effects. Here we have extended the syntax to support arbitrary Javascript:
+
+```
+scope () {
+  /* arbitrary JS can be executed in this function body */
+
+  // optional return:
+  return { /* update */ }
+}
+```
+
+This is useful if we want to, for example, create utilities or DIY tools out of existing nodes, such as this "paintbrush" which creates a new shape at the top-left corner whenever the brush is not overlapping with another shape.
+
+![tools](tools.mp4)
+
+Scoped Propagators are interesting in part because of their ability to cross the boundaries of otherwise siloed systems and to do so without the use of an escape hatch — all additional behaviour happens in situ, in the same environment as the interface elements, not from editing source code.
+
+Here is an example of a petri net (left box) which is being mapped to a chart primitive (right box). By merit of knowing some specifics of both systems, an author can create a mapping from one to the other without any explicit relationship existing prior to the creation of the propagator (here mapping the number of tokens in a box to the height of a rectangle in a chart)
+
+>NOTE: the syntax here is slightly older and not consistent with the other examples.
+
+![bridging systems](bridging.mov)
+
+Let's now combine some of these examples to create something less trivial. In this example, we have:
+- a joystick (constrained to a box)
+- fish movement controlled by the joystick, based on the red circles position relative to the center of the joystick box
+- a shark with a fish follow behaviour
+- an on/off toggle
+- a dead state, which resets the score, and swaps the fish image source to a dead fish
+- a score counter which increments over time for as long as the fish is alive
+
+This small game consists of nine relatively terse arrows, propagating between nodes of different types. Propagators were also used to build the game, as it was unclear if or how I could change an image source url until I used a propagator to inspect the internal state of the image and discovered the property to change.
+
+![game](game.mp4)
+
+## Prior Work & Open Questions
 Scoped Propagators are related to [**propagator networks**](https://dspace.mit.edu/handle/1721.1/54635) but differ in three key ways: 
 - propagation happens along *edges* instead of *nodes*
 - stateful cells are replaced with schematised nodes, and
 - propagation is limited to a subset of events.
+- propagator networks have several advantages as a general-purpose model...
 
-Propagator networks have several advantages as a general-purpose model...
-
-## Future Work & Open Questions
+Qs:
 - function reuse, access to scope
 - handling of side effects
 - handling cycles
 - SISO is easy, but what about MIMO?
 - application to other graph-shaped systems, like graph databases
-
-vids:
-![intro](intro.mp4)
-![buttons](buttons.mp4)
-![constraints](constraints.mp4)
-![lerp](lerp.mp4)
-![tools](tools.mp4)
-![inspection](inspection.mp4)
-![game](game.mp4)
-![bridging systems](bridging.mov)
