@@ -1,5 +1,11 @@
 {
   "buildCommand": "yarn build",
   "framework": "vite",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/posts/(.*)",
+      "destination": "/posts/$1"
+    }
+  ]
 }
