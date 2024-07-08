@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/posts/(.*)",
-      "destination": "/posts/$1"
+      "destination": "/"
     }
   ]
 }
