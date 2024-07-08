@@ -17,7 +17,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
 
 function App() {
 
-
 	return (
 		<React.StrictMode>
 			<BrowserRouter>

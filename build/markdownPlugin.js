@@ -10,8 +10,8 @@ export const markdownPlugin = {
 			const { data, content } = matter(code);
 			const filename = path.basename(id, ".md");
 			const html = markdownToHtml(filename, content);
-			const htmlString = JSON.stringify({ html });
-			return `export default ${htmlString};`;
+			return `export const html = ${JSON.stringify(html)}; 
+			export const data = ${JSON.stringify(data)};`;
 		}
 	},
 };

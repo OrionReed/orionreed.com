@@ -48,6 +48,8 @@ export function Default() {
       <h2>Writing</h2>
       <ol reversed>
         <li><a
+          href="/posts/scoped-propagators">Scoped Propagators: A programming model for spatial canvases</a></li>
+        <li><a
           href="https://blog.block.science/objects-as-reference-toward-robust-first-principles-of-digital-organization/">Objects
           as Reference: Toward Robust First Principles of Digital Organization</a></li>
       </ol>

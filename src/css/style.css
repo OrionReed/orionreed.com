@@ -55,11 +55,16 @@ i {
 }
 
 code {
-  background-color: #38424c;
+  background-color: #e4e9ee;
   width: 100%;
-  color: white;
+  color: #38424c;
   padding: 0.2em 0.4em;
   border-radius: 4px;
+}
+
+b,
+strong {
+  font-variation-settings: "wght" 600;
 }
 
 blockquote {
@@ -157,10 +162,16 @@ p a {
 ol,
 ul {
   padding-left: 0;
+  margin-top: 0;
   font-size: 1rem;
   & li::marker {
     color: rgba(0, 0, 0, 0.322);
   }
+}
+
+img {
+  display: block;
+  margin: 0 auto;
 }
 
 @media (max-width: 600px) {
@@ -173,6 +184,33 @@ ul {
   ol {
     list-style-position: inside;
   }
+}
+
+/* Some conditional spacing */
+table:not(:has(+ p)) {
+  margin-bottom: 2em;
+}
+
+p:has(+ ul) {
+  margin-bottom: 0.5em;
+}
+p:has(+ ol) {
+  margin-bottom: 0.5em;
+}
+
+.loading {
+  font-family: "Recursive";
+  font-variation-settings: "CASL" 1;
+  font-size: 1rem;
+  text-align: center;
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: #f1f1f1;
+  border: 1px solid #c0c9d1;
+  padding: 0.5em;
+  border-radius: 4px;
 }
 
 /* CANVAS SHENANIGANS */
