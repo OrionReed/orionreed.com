@@ -2,10 +2,10 @@
 title: Scoped Propagators
 ---
 
-> work-in-progress
+> this research is a work-in-progress (play with the [live demo](https://orionreed.github.io/scoped-propagators/))
 
 ## Abstract
-Graphs, as a model of computation and as a means of interaction and authorship, have found success in specific domains such as shader programming and signal processing. In these systems, computation is often expressed on nodes of specific types, with edges representing the flow of information. This is a powerful and general-purpose model, but it incentivises a closed-world environment where both node and edge types are decided at design-time. By choosing an alternate topology where computation is represented by edges, the incentive for a closed environment is reduced.
+Graphs, as a model of computation and as a means of interaction and authorship, have found success in specific domains such as shader programming and signal processing. In these systems, computation is often expressed on nodes of specific types, with edges representing the flow of information. This is a powerful and general-purpose model, but is typically a closed-world environment where both node and edge types are decided at design-time. By choosing an alternate topology where computation is represented by edges, the incentive for a closed environment is reduced.
 
 I present *Scoped Propagators (SPs)*, a programming model designed to be embedded within existing environments and user interfaces. By representing computation as mappings between nodes along edges, SPs make it possible to add behaviour and interactivity to environments which were not designed with liveness in mind. I demonstrate an implementation of the SP model in an infinite canvas environment, where users can create arrows between arbitrary shapes and define SPs as Javascript object literals on these arrows.
 
