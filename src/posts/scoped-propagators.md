@@ -2,9 +2,10 @@
 title: Scoped Propagators
 ---
 
-> a work-in-progress
+> work-in-progress
 
-Graphs, as a model of computation and as a means of interaction and authorship, have found success in specific domains such as shader programming and signal processing. In these systems, computation is often expressed on nodes of specific types, with edges representing the flow of information. This is a powerful and general-purpose model, but it incentivises a closed-world environment where both node and edge types are decided at design-time. By choosing an alternate topology where computation is represented by edges, the incentive for a closed environment dissapears.
+## Abstract
+Graphs, as a model of computation and as a means of interaction and authorship, have found success in specific domains such as shader programming and signal processing. In these systems, computation is often expressed on nodes of specific types, with edges representing the flow of information. This is a powerful and general-purpose model, but it incentivises a closed-world environment where both node and edge types are decided at design-time. By choosing an alternate topology where computation is represented by edges, the incentive for a closed environment is reduced.
 
 I present *Scoped Propagators (SPs)*, a programming model designed to be embedded within existing environments and user interfaces. By representing computation as mappings between nodes along edges, SPs make it possible to add behaviour and interactivity to environments which were not designed with liveness in mind. I demonstrate an implementation of the SP model in an infinite canvas environment, where users can create arrows between arbitrary shapes and define SPs as Javascript object literals on these arrows.
 
@@ -38,7 +39,7 @@ The propagator above will, when the source is clicked, set the targets `x` value
 
 ![intro](intro.mp4)
 
-## Examples
+## Demonstration
 
 By passing the target as well as the source node, it makes it trivial to create toggles and counters. We can do this by creating an arrow from a node *to itself* and getting a value from either the source or target nodes (which are now the same).
 
@@ -95,16 +96,17 @@ This small game consists of nine relatively terse arrows, propagating between no
 
 ![game](game.mp4)
 
-## Prior Work & Open Questions
-Scoped Propagators are related to [**propagator networks**](https://dspace.mit.edu/handle/1721.1/54635) but differ in three key ways: 
+## Prior Work
+Scoped Propagators are related to [Propagator Networks](https://dspace.mit.edu/handle/1721.1/54635) but differ in three key ways: 
 - propagation happens along *edges* instead of *nodes*
-- stateful cells are replaced with schematised nodes, and
-- propagation is limited to a subset of events.
-- propagator networks have several advantages as a general-purpose model...
+- propagation is only fired when to a scope condition is met.
+- instead of stateful *cell nodes* and *propagator nodes*, all nodes can be stateful and can be of an arbitrary type
 
-Qs:
-- function reuse, access to scope
-- handling of side effects
-- handling cycles
-- SISO is easy, but what about MIMO?
-- application to other graph-shaped systems, like graph databases
+This is also not the first application of propagators to infinite canvas environments, [Dennis Hansen](https://x.com/dennizor/status/1793389346881417323) built an implementation of propagator networks in tldraw, [Holograph](https://www.holograph.so), and motivated the use of the term "propagator" in this model.
+
+## Open Questions
+Many questions about this model have yet to be answered including questions of *function reuse*, modelling of *side-effects*, handling of *multi-input-multi-output* propagation (which is trivial in traditional propagator networks), and applications to other domains such as graph-databases.
+
+This model has not yet been formalised, and while the propagators themselves can be simply expressed as a function $f(a,b) \mapsto b'$, I have not yet found an appropriate way to express *scopes* and the relationship between the two. 
+
+These questions, along with formalisation of the model and an examination of real-world usage is left to future work.

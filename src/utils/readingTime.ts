@@ -1,7 +1,7 @@
 export const calcReadingTime = (text: string): string => {
   if (!text) return "∞ min read";
 
-  const wordsPerMinute = 200;
+  const wordsPerMinute = 300;
   const wordCount = text.split(/\s+/).length;
   const minutes = Math.ceil(wordCount / wordsPerMinute);
 
