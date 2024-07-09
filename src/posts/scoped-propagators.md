@@ -76,9 +76,9 @@ This is useful if we want to, for example, create utilities or DIY tools out of 
 
 ![tools](tools.mp4)
 
-Scoped Propagators are interesting in part because of their ability to cross the boundaries of otherwise siloed systems and to do so without the use of an escape hatch — all additional behaviour happens in situ, in the same environment as the interface elements, not from editing source code.
+Scoped Propagators are interesting in part because of their ability to cross the boundaries of otherwise siloed systems and to do so without the use of an escape hatch — all additional behaviour happens in-situ, in the same environment as the interface elements, not from editing source code.
 
-Here is an example of a petri net (left box) which is being mapped to a chart primitive (right box). By merit of knowing some specifics of both systems, an author can create a mapping from one to the other without any explicit relationship existing prior to the creation of the propagator (here mapping the number of tokens in a box to the height of a rectangle in a chart)
+Here is an example of a Petri Net (left box) which is being mapped to a chart primitive (right box). By merit of knowing some specifics of both systems, an author can create a mapping from one to the other without any explicit relationship existing prior to the creation of the propagator (here mapping the number of tokens in a box to the height of a rectangle in a chart)
 
 >NOTE: the syntax here is slightly older and not consistent with the other examples.
 
@@ -92,7 +92,7 @@ Let's now combine some of these examples to create something less trivial. In th
 - a dead state, which resets the score, and swaps the fish image source to a dead fish
 - a score counter which increments over time for as long as the fish is alive
 
-This small game consists of nine relatively terse arrows, propagating between nodes of different types. Propagators were also used to build the game, as it was unclear if or how I could change an image source url until I used a propagator to inspect the internal state of the image and discovered the property to change.
+This small game consists of nine relatively terse arrows, propagating between nodes of different types. Propagators were also used to build the game, as it was unclear if or how I could change an image source URL until I used a propagator to inspect the internal state of the image and discovered the property to change.
 
 ![game](game.mp4)
 
@@ -102,10 +102,10 @@ Scoped Propagators are related to [Propagator Networks](https://dspace.mit.edu/h
 - propagation is only fired when to a scope condition is met.
 - instead of stateful *cell nodes* and *propagator nodes*, all nodes can be stateful and can be of an arbitrary type
 
-This is also not the first application of propagators to infinite canvas environments, [Dennis Hansen](https://x.com/dennizor/status/1793389346881417323) built an implementation of propagator networks in tldraw, [Holograph](https://www.holograph.so), and motivated the use of the term "propagator" in this model.
+This is also not the first application of propagators to infinite canvas environments, [Dennis Hansen](https://x.com/dennizor/status/1793389346881417323) built [Holograph](https://www.holograph.so), an implementation of propagator networks in [tldraw](https://tldraw.com), and motivated the use of the term "propagator" in this model.
 
 ## Open Questions
-Many questions about this model have yet to be answered including questions of *function reuse*, modelling of *side-effects*, handling of *multi-input-multi-output* propagation (which is trivial in traditional propagator networks), and applications to other domains such as graph-databases.
+Many questions about this model have yet to be answered including questions of *function reuse*, modeling of *side-effects*, handling of *multi-input-multi-output* propagation (which is trivial in traditional propagator networks), and applications to other domains such as graph-databases.
 
 This model has not yet been formalised, and while the propagators themselves can be simply expressed as a function $f(a,b) \mapsto b'$, I have not yet found an appropriate way to express *scopes* and the relationship between the two. 
 
