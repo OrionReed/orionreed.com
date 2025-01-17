@@ -57,6 +57,11 @@ export function Default() {
             Knowledge Organisation Infrastructure Demo @ NPC Denver
           </a>
         </li>
+        <li>
+          <a href="https://www.youtube.com/watch?v=z3v7qj6PxME">
+            Demos @ SPC Demo Night
+          </a>
+        </li>
       </ol>
       <h2>Writing</h2>
       <ol reversed>
@@ -69,6 +74,19 @@ export function Default() {
           <a href="https://blog.block.science/objects-as-reference-toward-robust-first-principles-of-digital-organization/">
             Objects as Reference: Toward Robust First Principles of Digital
             Organization
+          </a>
+        </li>
+      </ol>
+      <h2>Other Appearances</h2>
+      <ol reversed>
+        <li>
+          <a href="https://iil.is/openlab/86">
+            Malleable Interfaces @ Intelligent Instruments Lab
+          </a>
+        </li>
+        <li>
+          <a href="https://warpcast.com/vaporware/0x35825f23">
+            Vaporware Podcast Ep. 5
           </a>
         </li>
       </ol>
