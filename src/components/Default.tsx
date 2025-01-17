@@ -46,6 +46,11 @@ export function Default() {
       <h2>Talks</h2>
       <ol reversed>
         <li>
+          <a href="https://www.youtube.com/live/4GOeYylCMJI?si=doHwIImFAVXefCV8&t=29591">
+            Scoped Propagators @ ACM SPLASH/LIVE
+          </a>
+        </li>
+        <li>
           <a href="https://www.youtube.com/watch?v=csGNVaB83Rk">
             Spatial Canvases: Towards an Integration Domain for HCI @ TfT Rocks
             2024
