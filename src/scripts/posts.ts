@@ -4,7 +4,10 @@ import matter from "gray-matter";
 import { markdownToHtml } from "./mdToHtml";
 
 const POSTS_DIR = "src/posts";
-const OUTPUT_DIR = "posts";
+const OUTPUT_DIR = process.env.POSTS_OUTPUT_DIR || "dist/posts";
+
+// Add a lock to prevent multiple simultaneous generations
+let isGenerating = false;
 
 interface Post {
   postName: string;
@@ -78,15 +81,35 @@ async function generatePostHtml(filename: string): Promise<Post> {
 }
 
 async function generatePosts(): Promise<void> {
+  // If already generating, wait for it to complete
+  if (isGenerating) {
+    console.log("Post generation already in progress, skipping...");
+    return;
+  }
+
   try {
+    isGenerating = true;
+    console.log("Starting post generation...");
+    console.log("Posts directory:", POSTS_DIR);
+    console.log("Output directory:", OUTPUT_DIR);
+
     // Ensure output directory exists
     await ensureDir(OUTPUT_DIR);
+    console.log("Output directory ensured");
 
     // Get all markdown files
     const files = await fs.readdir(POSTS_DIR);
+    console.log("Found files:", files);
     const markdownFiles = files.filter((f: string) => f.endsWith(".md"));
+    console.log("Markdown files:", markdownFiles);
+
+    if (markdownFiles.length === 0) {
+      console.log("No markdown files found to process");
+      return;
+    }
 
     // Generate HTML for each post
+    console.log("Generating HTML for posts...");
     const posts = await Promise.all(
       markdownFiles.map((filename: string) => generatePostHtml(filename))
     );
@@ -136,12 +159,15 @@ async function generatePosts(): Promise<void> {
   } catch (error) {
     console.error("Error generating posts:", error);
     process.exit(1);
+  } finally {
+    isGenerating = false;
   }
 }
 
-// Run if called directly
+// Only run immediately if this file is being run directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  generatePosts();
+  console.log("Script starting...");
+  generatePosts().catch(console.error);
 }
 
 export { generatePosts };

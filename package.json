@@ -5,7 +5,8 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "vite-node src/scripts/posts.ts"
+		"build": "vite build",
+		"preview": "vite preview"
 	},
 	"keywords": [],
 	"author": "Orion Reed",
@@ -20,6 +21,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "1.4.1",
 		"@types/node": "^20.11.24",
+		"ts-node": "^10.9.2",
 		"typescript": "^5.0.2",
 		"vite": "^5.3.3",
 		"vite-node": "^1.3.1"
