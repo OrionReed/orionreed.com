@@ -10,6 +10,7 @@ import {
 import { join, extname, basename } from "path";
 import matter from "gray-matter";
 import { marked } from "marked";
+import markedKatex from "marked-katex-extension";
 
 const POSTS_DIR = "src/posts";
 const DIST_DIR = "dist";
@@ -53,6 +54,9 @@ function generatePostHTML(post: PostData): string {
     />
     <link rel="stylesheet" href="/css/reset.css" />
     <link rel="stylesheet" href="/css/style.css" />
+    
+    <!-- KaTeX for LaTeX rendering -->
+    <link rel="stylesheet" href="/node_modules/katex/dist/katex.min.css" />
 
     <!-- Social Meta Tags -->
     <meta
@@ -109,7 +113,13 @@ function processMarkdownFile(filePath: string): PostData {
   const slug = basename(filePath, ".md");
   const title = frontmatter.title || slug;
 
-  // Configure marked to handle media files properly
+  // Configure marked to handle media files and LaTeX
+  marked.use(
+    markedKatex({
+      throwOnError: false,
+    })
+  );
+
   marked.use({
     renderer: {
       image(href: string, title: string | null, text: string) {
