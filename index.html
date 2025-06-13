@@ -12,8 +12,41 @@
       href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..1000,0..1,0..1,0..1&display=swap"
       rel="stylesheet"
     />
+    <link
+      rel="preload"
+      href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..1000,0..1,0..1,0..1&display=swap"
+      as="style"
+    />
     <link rel="stylesheet" href="/css/reset.css" />
     <link rel="stylesheet" href="/css/style.css" />
+
+    <!-- Register service worker -->
+    <script>
+      if ("serviceWorker" in navigator) {
+        // If we're not on the homepage and the service worker isn't registered yet,
+        // register it and reload to let it handle the route
+        if (
+          window.location.pathname !== "/" &&
+          !navigator.serviceWorker.controller
+        ) {
+          navigator.serviceWorker.register("/sw.js").then(() => {
+            window.location.reload();
+          });
+        } else {
+          // Normal registration for homepage or when already registered
+          navigator.serviceWorker.register("/sw.js").catch((err) => {
+            console.error("ServiceWorker registration failed:", err);
+            if (err instanceof Error) {
+              console.error("Error name:", err.name);
+              console.error("Error message:", err.message);
+              console.error("Error stack:", err.stack);
+            }
+          });
+        }
+      } else {
+        console.warn("Service workers not supported");
+      }
+    </script>
 
     <!-- Social Meta Tags -->
     <meta
