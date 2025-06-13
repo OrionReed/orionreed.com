@@ -2,10 +2,14 @@
 
 // Import marked from CDN since we can't use npm modules in a plain JS service worker
 importScripts('https://cdn.jsdelivr.net/npm/marked/marked.min.js');
-
+importScripts('https://cdn.jsdelivr.net/npm/gray-matter@4.0.3/dist/gray-matter.min.js');
 
 // Transform markdown to HTML
 async function transformPost(content, slug) {
+  // Parse frontmatter and get title
+  const { content: markdownContent, data: frontmatter } = matter(content);
+  const title = frontmatter.title || slug;
+
   // Configure marked to always use absolute paths for media
   marked.use({
     renderer: {
@@ -24,7 +28,7 @@ async function transformPost(content, slug) {
     }
   });
 
-  const html = marked.parse(content);
+  const html = marked.parse(markdownContent);
 
   // Wrap the content in the expected structure with fonts
   return `
@@ -33,7 +37,7 @@ async function transformPost(content, slug) {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${slug}</title>
+    <title>${title}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -48,6 +52,7 @@ async function transformPost(content, slug) {
       <main>
         <header>
           <a href="/" style="text-decoration: none;">Orion Reed</a>
+          <h1>${title}</h1>
         </header>
         ${html}
       </main>
