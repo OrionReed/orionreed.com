@@ -20,34 +20,85 @@ interface PostData {
   title: string;
   content: string;
   frontmatter: any;
+  readingTime: number;
+}
+
+function calculateReadingTime(content: string): number {
+  // Strip HTML tags and count words
+  const textContent = content.replace(/<[^>]*>/g, "");
+  const wordCount = textContent.trim().split(/\s+/).length;
+  // Average reading speed is ~250 words per minute (faster assumption)
+  return Math.ceil(wordCount / 250);
 }
 
 function generatePostHTML(post: PostData): string {
   return `<!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${post.title}</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${post.title} - Orion Reed</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=4" />
+    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico?v=4" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..1000,0..1,0..1,0..1&display=swap&font-display=swap"
+      href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..1000,0..1,0..1,0..1&display=swap"
       rel="stylesheet"
+    />
+    <link
+      rel="preload"
+      href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..1000,0..1,0..1,0..1&display=swap"
+      as="style"
     />
     <link rel="stylesheet" href="/css/reset.css" />
     <link rel="stylesheet" href="/css/style.css" />
+
+    <!-- Social Meta Tags -->
+    <meta
+      name="description"
+      content="${post.frontmatter.description || post.title}"
+    />
+    <meta property="og:url" content="https://orionreed.com/posts/${
+      post.slug
+    }/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="${post.title}" />
+    <meta
+      property="og:description"
+      content="${post.frontmatter.description || post.title}"
+    />
+    <meta property="og:image" content="/website-embed.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta property="twitter:domain" content="orionreed.com" />
+    <meta property="twitter:url" content="https://orionreed.com/posts/${
+      post.slug
+    }/" />
+    <meta name="twitter:title" content="${post.title}" />
+    <meta
+      name="twitter:description"
+      content="${post.frontmatter.description || post.title}"
+    />
+    <meta name="twitter:image" content="/website-embed.png" />
+
+    <!-- Analytics -->
+    <script
+      data-goatcounter="https://orion.goatcounter.com/count"
+      async
+      src="//gc.zgo.at/count.js"
+    ></script>
   </head>
   <body>
-    <div id="root">
-      <main>
-        <header>
-          <a href="/" style="text-decoration: none;">Orion Reed</a>
-          <h1>${post.title}</h1>
-        </header>
-        ${post.content}
-      </main>
-    </div>
+    <main>
+      <header>
+        <a href="/" style="text-decoration: none;">Orion Reed</a>
+      </header>
+      <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1rem;">
+        <h1>${post.title}</h1>
+        <span style="color: #999;">${post.readingTime} min read</span>
+      </div>
+      ${post.content}
+    </main>
   </body>
 </html>`;
 }
@@ -82,12 +133,14 @@ function processMarkdownFile(filePath: string): PostData {
   });
 
   const htmlContent = marked.parse(markdownContent) as string;
+  const readingTime = calculateReadingTime(htmlContent);
 
   return {
     slug,
     title,
     content: htmlContent,
     frontmatter,
+    readingTime,
   };
 }
 
