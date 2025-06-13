@@ -5,18 +5,13 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "vite build",
+		"build": "vite build && vite-node scripts/build.ts",
 		"preview": "vite preview"
 	},
-	"keywords": [],
 	"author": "Orion Reed",
 	"license": "ISC",
 	"dependencies": {
-		"@types/markdown-it": "^14.1.1",
-		"@vercel/analytics": "^1.2.2",
 		"gray-matter": "^4.0.3",
-		"markdown-it": "^14.1.0",
-		"markdown-it-latex2img": "^0.0.6",
 		"marked": "^12.0.0"
 	},
 	"devDependencies": {
