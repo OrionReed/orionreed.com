@@ -1,34 +1,23 @@
-import { markdownPlugin } from './build/markdownPlugin';
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import wasm from "vite-plugin-wasm";
-import topLevelAwait from "vite-plugin-top-level-await";
-import { viteStaticCopy } from 'vite-plugin-static-copy';
-
+import { defineConfig } from "vite";
+import { buildPosts } from "./scripts/build";
+import mkcert from "vite-plugin-mkcert";
 
 export default defineConfig({
   plugins: [
-    react(),
-    wasm(),
-    topLevelAwait(),
-    markdownPlugin,
-    viteStaticCopy({
-      targets: [
-        {
-          src: 'src/posts/',
-          dest: '.'
-        }
-      ]
-    })
-  ],
-  build: {
-    sourcemap: true,
-  },
-  base: '/',
-  publicDir: 'src/public',
-  resolve: {
-    alias: {
-      '@': '/src',
+    mkcert(),
+    {
+      name: "posts-watcher",
+      configureServer(server) {
+        server.watcher.add("src/posts/**/*");
+        server.watcher.on("change", (file) => {
+          if (file.includes("src/posts/")) {
+            buildPosts();
+            server.ws.send({
+              type: "full-reload",
+            });
+          }
+        });
+      },
     },
-  },
-})
+  ],
+});

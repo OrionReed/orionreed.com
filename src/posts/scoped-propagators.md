@@ -5,43 +5,50 @@ title: Scoped Propagators
 > this research is a work-in-progress (play with the [live demo](https://orionreed.github.io/scoped-propagators/))
 
 ## Abstract
+
 Graphs, as a model of computation and as a means of interaction and authorship, have found success in specific domains such as shader programming and signal processing. In these systems, computation is often expressed on nodes of specific types, with edges representing the flow of information. This is a powerful and general-purpose model, but is typically a closed-world environment where both node and edge types are decided at design-time. By choosing an alternate topology where computation is represented by edges, the incentive for a closed environment is reduced.
 
-I present *Scoped Propagators (SPs)*, a programming model designed to be embedded within existing environments and user interfaces. By representing computation as mappings between nodes along edges, SPs make it possible to add behaviour and interactivity to environments which were not designed with liveness in mind. I demonstrate an implementation of the SP model in an infinite canvas environment, where users can create arrows between arbitrary shapes and define SPs as Javascript object literals on these arrows.
+I present _Scoped Propagators (SPs)_, a programming model designed to be embedded within existing environments and user interfaces. By representing computation as mappings between nodes along edges, SPs make it possible to add behaviour and interactivity to environments which were not designed with liveness in mind. I demonstrate an implementation of the SP model in an infinite canvas environment, where users can create arrows between arbitrary shapes and define SPs as Javascript object literals on these arrows.
 
 ![examples](examples.mp4)
 
 ## Introduction
-A scoped propagator is formed of a function which takes a *source* and *target* node and returns an partial update to the *target* node, and a scope which defines some subset of events which trigger propagation. 
+
+A scoped propagator is formed of a function which takes a _source_ and _target_ node and returns an partial update to the _target_ node, and a scope which defines some subset of events which trigger propagation.
 
 the Scoped Propagator model is based on two key insights:
+
 1. by representing computation as mappings between nodes along edges, you do not need to know at design-time what node types exist.
 2. by scoping the propagation to events, you can augment nodes with interactive behaviour suitable for the environment in which SPs have been embedded.
 
 Below are the four event scopes which are currently implemented, which I have found to be appropriate and useful for an infinite canvas environment.
 
-| Scope | Firing Condition |
-|----------|----------|
-| change (default)  | Properties of the source node change | 
-| click | A source node is clicked   | 
-| tick    | A tick (frame render) event fires   | 
-| geo    | A node changes whose bounds overlap the target   |
+| Scope            | Firing Condition                               |
+| ---------------- | ---------------------------------------------- |
+| change (default) | Properties of the source node change           |
+| click            | A source node is clicked                       |
+| tick             | A tick (frame render) event fires              |
+| geo              | A node changes whose bounds overlap the target |
 
-The syntax for SPs in this implementation is a *scope* followed by a *JS object literal*:
+The syntax for SPs in this implementation is a _scope_ followed by a _JS object literal_:
+
 ```
 scope { property1: value1, property2: value2 }
 ```
-Each propagator is passed the *source* and *target* nodes (named "from" and "to" for brevity) which can be accessed like so:
+
+Each propagator is passed the _source_ and _target_ nodes (named "from" and "to" for brevity) which can be accessed like so:
+
 ```
 click {x: from.x + 10, rotation: to.rotation + 1 }
 ```
+
 The propagator above will, when the source is clicked, set the targets `x` value to be 10 units greater than the source, and increment the targets rotation. Here is an example of this basic idea:
 
 ![intro](intro.mp4)
 
 ## Demonstration
 
-By passing the target as well as the source node, it makes it trivial to create toggles and counters. We can do this by creating an arrow from a node *to itself* and getting a value from either the source or target nodes (which are now the same).
+By passing the target as well as the source node, it makes it trivial to create toggles and counters. We can do this by creating an arrow from a node _to itself_ and getting a value from either the source or target nodes (which are now the same).
 
 Note that by allowing nodes from `self -> self` we do not have to worry about the layout of nodes, as the arrow will move wherever the node moves. This is in contrast to, for example, needing to move a button node alongside the node of interest, or have some suitable grouping primitive available.
 
@@ -80,11 +87,12 @@ Scoped Propagators are interesting in part because of their ability to cross the
 
 Here is an example of a Petri Net (left box) which is being mapped to a chart primitive (right box). By merit of knowing some specifics of both systems, an author can create a mapping from one to the other without any explicit relationship existing prior to the creation of the propagator (here mapping the number of tokens in a box to the height of a rectangle in a chart)
 
->NOTE: the syntax here is slightly older and not consistent with the other examples.
+> NOTE: the syntax here is slightly older and not consistent with the other examples.
 
 ![bridging systems](bridging.mov)
 
 Let's now combine some of these examples to create something less trivial. In this example, we have:
+
 - a joystick (constrained to a box)
 - fish movement controlled by the joystick, based on the red circles position relative to the center of the joystick box
 - a shark with a fish follow behaviour
@@ -97,16 +105,19 @@ This small game consists of nine relatively terse arrows, propagating between no
 ![game](game.mp4)
 
 ## Prior Work
-Scoped Propagators are related to [Propagator Networks](https://dspace.mit.edu/handle/1721.1/54635) but differ in three key ways: 
-- propagation happens along *edges* instead of *nodes*
+
+Scoped Propagators are related to [Propagator Networks](https://dspace.mit.edu/handle/1721.1/54635) but differ in three key ways:
+
+- propagation happens along _edges_ instead of _nodes_
 - propagation is only fired when to a scope condition is met.
-- instead of stateful *cell nodes* and *propagator nodes*, all nodes can be stateful and can be of an arbitrary type
+- instead of stateful _cell nodes_ and _propagator nodes_, all nodes can be stateful and can be of an arbitrary type
 
 This is also not the first application of propagators to infinite canvas environments, [Dennis Hansen](https://x.com/dennizor/status/1793389346881417323) built [Holograph](https://www.holograph.so), an implementation of propagator networks in [tldraw](https://tldraw.com), and motivated the use of the term "propagator" in this model.
 
 ## Open Questions
-Many questions about this model have yet to be answered including questions of *function reuse*, modeling of *side-effects*, handling of *multi-input-multi-output* propagation (which is trivial in traditional propagator networks), and applications to other domains such as graph-databases.
 
-This model has not yet been formalised, and while the propagators themselves can be simply expressed as a function $f(a,b) \mapsto b'$, I have not yet found an appropriate way to express *scopes* and the relationship between the two. 
+Many questions about this model have yet to be answered including questions of _function reuse_, modeling of _side-effects_, handling of _multi-input-multi-output_ propagation (which is trivial in traditional propagator networks), and applications to other domains such as graph-databases.
+
+This model has not yet been formalised, and while the propagators themselves can be simply expressed as a function $f(a,b) \mapsto b'$, I have not yet found an appropriate way to express _scopes_ and the relationship between the two.
 
 These questions, along with formalisation of the model and an examination of real-world usage is left to future work.

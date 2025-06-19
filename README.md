@@ -1,3 +1,1 @@
-A website.
-
-Do `yarn dev`
+a website.

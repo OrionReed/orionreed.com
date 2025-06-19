@@ -3,6 +3,9 @@ dist/
 bun.lockb
 yarn.lock
 
+# Generated posts
+/posts
+
 # Logs
 
 logs
