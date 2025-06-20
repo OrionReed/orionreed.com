@@ -1,5 +1,48 @@
 @import url("reset.css");
 
+/* New Computer Modern Font Faces */
+@font-face {
+  font-family: 'New CM';
+  src: url('/NewCMMono10-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'New CM';
+  src: url('/NewCMMono10-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'New CM';
+  src: url('/NewCMMono10-Book.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'New CM';
+  src: url('/NewCMMono10-Italic.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'New CM';
+  src: url('/NewCMMono10-BoldOblique.otf') format('opentype');
+  font-weight: 700;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'New CM';
+  src: url('/NewCMMono10-BookItalic.otf') format('opentype');
+  font-weight: 300;
+  font-style: italic;
+}
+
 html,
 body {
   padding: 0;
@@ -204,4 +247,153 @@ p:has(+ ul) {
 }
 p:has(+ ol) {
   margin-bottom: 0.5em;
+}
+
+/* Font Toggle Text */
+.font-toggle-btn {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: 'New CM', monospace;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: rgba(36, 41, 46, 0.5);
+  transition: all 0.2s ease;
+  z-index: 1000;
+}
+
+.font-toggle-btn:hover {
+  color: rgba(36, 41, 46, 0.7);
+}
+
+/* When in 2020s mode, use Recursive with max funkiness */
+.cm-mono-font .font-toggle-btn {
+  font-family: 'Recursive';
+  font-variation-settings: "CASL" 1, "slnt" -15, "CRSV" 1;
+}
+
+/* Font switching classes - 1960s Computer Science Paper Style */
+.cm-mono-font main {
+  font-family: 'New CM', monospace;
+  max-width: 50em;
+  font-size: 1.1em;
+  line-height: 1.4;
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+.cm-mono-font p {
+  font-family: 'New CM', monospace;
+  font-size: 1.2em;
+  line-height: 1.5;
+  text-align: justify;
+  text-justify: inter-word;
+  margin-bottom: 1.2em;
+}
+
+.cm-mono-font header {
+  font-family: 'New CM', monospace;
+  font-weight: 700;
+}
+
+.cm-mono-font h1,
+.cm-mono-font h2,
+.cm-mono-font h3,
+.cm-mono-font h4,
+.cm-mono-font h5,
+.cm-mono-font h6 {
+  font-family: 'New CM', monospace;
+  font-weight: 700;
+}
+
+.cm-mono-font blockquote {
+  font-style: italic;
+}
+
+.cm-mono-font blockquote p {
+  font-family: 'New CM', monospace;
+  font-style: italic;
+  margin: 0;
+}
+
+.cm-mono-font a {
+  font-family: 'New CM', monospace;
+  text-decoration: underline;
+  color: #333;
+}
+
+.cm-mono-font table {
+  font-family: 'New CM', monospace;
+}
+
+.cm-mono-font table,
+.cm-mono-font table th,
+.cm-mono-font table td {
+  border-color: #000;
+}
+
+.cm-mono-font pre {
+  background-color: #f5f5f5;
+  border: 1px solid #000;
+  margin: 1em 0;
+  padding: 1em;
+  overflow-x: auto;
+}
+
+.cm-mono-font code {
+  font-family: 'New CM', monospace;
+  background-color: #f5f5f5;
+  border: 1px solid #000;
+  letter-spacing: 0.02em;
+}
+
+.cm-mono-font pre > code {
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.9em;
+  line-height: 1.4;
+  display: block;
+  width: 100%;
+}
+
+.cm-mono-font li {
+  font-family: 'New CM', monospace;
+  margin-bottom: 0.5em;
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+.cm-mono-font ol,
+.cm-mono-font ul {
+  font-family: 'New CM', monospace;
+}
+
+/* Disable font variations when using CM Mono */
+.cm-mono-font * {
+  font-variation-settings: normal !important;
+}
+
+@media (max-width: 600px) {
+  .font-toggle-btn {
+    display: none;
+  }
+  
+  .cm-mono-font main {
+    max-width: none;
+    font-size: 1em;
+  }
+  
+  .cm-mono-font p {
+    font-size: 1.1em;
+    text-align: left;
+  }
+  
+  .cm-mono-font li {
+    text-align: left;
+  }
 }

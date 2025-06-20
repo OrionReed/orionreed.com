@@ -102,7 +102,44 @@ function generatePostHTML(post: PostData): string {
         <span style="color: #999;">${post.readingTime} min read</span>
       </div>
       ${post.content}
+      
+      <!-- Font Toggle Button -->
+      <button class="font-toggle-btn" id="font-toggle" title="Switch to 1960s style">
+        1960s
+      </button>
     </main>
+    
+    <script>
+      // Font toggle functionality
+      (function() {
+        const toggleBtn = document.getElementById('font-toggle');
+        const body = document.body;
+        
+        // Check localStorage for saved preference
+        const savedFont = localStorage.getItem('font-preference');
+        if (savedFont === 'cm-mono') {
+          body.classList.add('cm-mono-font');
+          toggleBtn.textContent = '2020s';
+          toggleBtn.title = 'Switch to 2020s style';
+        }
+        
+        toggleBtn.addEventListener('click', function() {
+          if (body.classList.contains('cm-mono-font')) {
+            // Switch to Recursive (2020s)
+            body.classList.remove('cm-mono-font');
+            toggleBtn.textContent = '1960s';
+            toggleBtn.title = 'Switch to 1960s style';
+            localStorage.setItem('font-preference', 'recursive');
+          } else {
+            // Switch to CM Mono (1960s)
+            body.classList.add('cm-mono-font');
+            toggleBtn.textContent = '2020s';
+            toggleBtn.title = 'Switch to 2020s style';
+            localStorage.setItem('font-preference', 'cm-mono');
+          }
+        });
+      })();
+    </script>
   </body>
 </html>`;
 }
