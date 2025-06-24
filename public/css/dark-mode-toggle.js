@@ -20,21 +20,20 @@ class DarkModeToggle extends HTMLElement {
         }
         
         .toggle-button {
-          background: var(--bg-color, #ffffff);
-          border: 1px solid var(--border-color, #ddd);
-          border-radius: 50%;
+          background: none;
+          border: none;
           width: 40px;
           height: 40px;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.3s ease;
+          transition: opacity 0.3s ease;
+          opacity: 0.6;
         }
 
         .toggle-button:hover {
-          transform: scale(1.05);
-          border-color: var(--text-color, #24292e);
+          opacity: 1;
         }
 
         .icon {
