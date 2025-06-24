@@ -55,6 +55,16 @@ function generatePostHTML(post: PostData): string {
     <link rel="stylesheet" href="/css/reset.css" />
     <link rel="stylesheet" href="/css/style.css" />
     
+    <!-- Prevent flash of unstyled content by applying theme immediately -->
+    <script>
+      (function() {
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+
     <!-- KaTeX for LaTeX rendering -->
     <link rel="stylesheet" href="/node_modules/katex/dist/katex.min.css" />
 
@@ -93,6 +103,7 @@ function generatePostHTML(post: PostData): string {
     ></script>
   </head>
   <body>
+    <dark-mode-toggle></dark-mode-toggle>
     <main>
       <header>
         <a href="/" style="text-decoration: none;">Orion Reed</a>
@@ -103,6 +114,7 @@ function generatePostHTML(post: PostData): string {
       </div>
       ${post.content}
     </main>
+    <script src="/css/dark-mode-toggle.js"></script>
   </body>
 </html>`;
 }

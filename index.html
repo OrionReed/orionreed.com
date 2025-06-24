@@ -20,6 +20,18 @@
     <link rel="stylesheet" href="/css/reset.css" />
     <link rel="stylesheet" href="/css/style.css" />
 
+    <!-- Prevent flash of unstyled content by applying theme immediately -->
+    <script>
+      (function () {
+        const savedTheme = localStorage.getItem("theme");
+        const prefersDark = window.matchMedia(
+          "(prefers-color-scheme: dark)"
+        ).matches;
+        const theme = savedTheme || (prefersDark ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
+
     <!-- Social Meta Tags -->
     <meta
       name="description"
@@ -51,6 +63,7 @@
     ></script>
   </head>
   <body>
+    <dark-mode-toggle></dark-mode-toggle>
     <main>
       <header>Orion Reed</header>
       <h2>Hello! 👋</h2>
@@ -207,5 +220,6 @@
         </li>
       </ol>
     </main>
+    <script src="/css/dark-mode-toggle.js"></script>
   </body>
 </html>

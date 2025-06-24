@@ -1,0 +1,50 @@
+/* Dark Mode CSS Variables */
+
+:root {
+  --bg-color: #ffffff;
+  --text-color: #24292e;
+  --text-secondary: #999;
+  --code-bg: #e4e9ee;
+  --code-text: #38424c;
+  --blockquote-bg: #f1f1f1;
+  --table-border: #ddd;
+  --table-header-bg: #f4f4f4;
+  --table-stripe-bg: #f9f9f9;
+  --border-color: #ddd;
+}
+
+[data-theme="dark"] {
+  --bg-color: #0d1117;
+  --text-color: #f0f6fc;
+  --text-secondary: #7c8b9b;
+  --code-bg: #161b22;
+  --code-text: #e6edf3;
+  --blockquote-bg: #161b22;
+  --table-border: #30363d;
+  --table-header-bg: #21262d;
+  --table-stripe-bg: #161b22;
+  --border-color: #30363d;
+}
+
+/* Apply theme variables to base elements */
+html,
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Position the dark mode toggle */
+dark-mode-toggle {
+  position: fixed;
+  top: 2rem;
+  right: 2rem;
+  z-index: 1000;
+}
+
+@media (max-width: 600px) {
+  dark-mode-toggle {
+    top: 1rem;
+    right: 1rem;
+  }
+} 

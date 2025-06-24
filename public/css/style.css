@@ -1,4 +1,5 @@
 @import url("reset.css");
+@import url("dark-mode.css");
 
 /* New Computer Modern Font Faces */
 @font-face {
@@ -67,7 +68,7 @@ main {
   font-family: "Recursive";
   font-variation-settings: "MONO" 1;
   font-variation-settings: "CASL" 1;
-  color: #24292e;
+  color: var(--text-color);
 }
 
 h1 {
@@ -106,9 +107,9 @@ pre > code {
 }
 
 code {
-  background-color: #e4e9ee;
+  background-color: var(--code-bg);
   width: 100%;
-  color: #38424c;
+  color: var(--code-text);
   padding: 0.2em 0.4em;
   border-radius: 4px;
 }
@@ -121,7 +122,7 @@ strong {
 blockquote {
   margin: -1em;
   padding: 1em;
-  background-color: #f1f1f1;
+  background-color: var(--blockquote-bg);
   margin-top: 1em;
   margin-bottom: 1em;
   border-radius: 4px;
@@ -149,16 +150,16 @@ table {
   th,
   td {
     padding: 0.5em;
-    border: 1px solid #ddd;
+    border: 1px solid var(--table-border);
   }
 
   th {
-    background-color: #f4f4f4;
+    background-color: var(--table-header-bg);
     font-weight: bold;
   }
 
   tr:nth-child(even) {
-    background-color: #f9f9f9;
+    background-color: var(--table-stripe-bg);
   }
 }
 

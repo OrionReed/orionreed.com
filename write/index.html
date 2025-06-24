@@ -15,6 +15,18 @@
     <link rel="stylesheet" href="/css/reset.css" />
     <link rel="stylesheet" href="/css/style.css" />
 
+    <!-- Prevent flash of unstyled content by applying theme immediately -->
+    <script>
+      (function () {
+        const savedTheme = localStorage.getItem("theme");
+        const prefersDark = window.matchMedia(
+          "(prefers-color-scheme: dark)"
+        ).matches;
+        const theme = savedTheme || (prefersDark ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
+
     <!-- KaTeX for LaTeX rendering -->
     <link rel="stylesheet" href="/node_modules/katex/dist/katex.min.css" />
 
@@ -120,6 +132,7 @@
     </style>
   </head>
   <body>
+    <dark-mode-toggle></dark-mode-toggle>
     <div class="toolbar">
       <a href="/" style="text-decoration: none; font-weight: 600"
         >← Orion Reed</a
@@ -160,5 +173,6 @@ Example:
     </div>
 
     <script type="module" src="/src/editor.ts"></script>
+    <script src="/css/dark-mode-toggle.js"></script>
   </body>
 </html>
