@@ -2,9 +2,7 @@
 title: Scoped Propagators
 ---
 
-> UPDATE: this work was presented at [LIVE](https://www.youtube.com/live/4GOeYylCMJI?t=29591s) and research has continued as [event propagators](https://folkjs.org/canvas/propagators/event-propagators.html)
-
-> Play with the [live demo](https://orionreed.github.io/scoped-propagators/)
+> [live demo](https://orionreed.github.io/scoped-propagators/) | [talk @ LIVE/SPLASH](https://www.youtube.com/live/4GOeYylCMJI?t=29591s) | [folkjs event propagators](https://folkjs.org/canvas/propagators/event-propagators.html)
 
 ## Abstract
 

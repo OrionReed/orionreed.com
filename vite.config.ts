@@ -8,7 +8,7 @@ export default defineConfig({
     {
       name: "posts-watcher",
       configureServer(server) {
-        server.watcher.add("src/posts/**/*");
+        server.watcher.add("/src/posts/**/*");
         server.watcher.on("change", (file) => {
           if (file.includes("src/posts/")) {
             buildPosts();
