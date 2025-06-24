@@ -59,8 +59,7 @@ function generatePostHTML(post: PostData): string {
     <script>
       (function() {
         const savedTheme = localStorage.getItem('theme');
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+        const theme = savedTheme || 'light';
         document.documentElement.setAttribute('data-theme', theme);
       })();
     </script>
