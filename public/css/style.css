@@ -217,7 +217,7 @@ ul {
   margin-top: 0;
   font-size: 1rem;
   & li::marker {
-    color: rgba(0, 0, 0, 0.322);
+    color: var(--text-secondary);
   }
 }
 
