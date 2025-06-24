@@ -164,44 +164,15 @@ table {
 }
 
 a {
-  font-variation-settings: "CASL" 0;
+  font-variation-settings: "CASL" 0, "wght" 400;
+  transition: font-variation-settings 0.2s ease;
+  
   &:hover {
-    animation: casl-forward 0.2s ease forwards;
-  }
-  &:not(:hover) {
-    /* text-decoration: none; */
-    animation: casl-reverse 0.2s ease backwards;
+    font-variation-settings: "CASL" 1, "wght" 600;
   }
 }
 
-@keyframes casl-forward {
-  from {
-    font-variation-settings:
-      "CASL" 0,
-      "wght" 400;
-  }
-  to {
-    font-variation-settings:
-      "CASL" 1,
-      "wght" 600;
-  }
-}
-@keyframes casl-reverse {
-  from {
-    font-variation-settings:
-      "CASL" 1,
-      "wght" 600;
-  }
-  to {
-    font-variation-settings:
-      "CASL" 0,
-      "wght" 400;
-  }
-}
 
-p a {
-  text-decoration: underline;
-}
 
 .dinkus {
   display: block;
@@ -218,6 +189,12 @@ ul {
   font-size: 1rem;
   & li::marker {
     color: var(--text-secondary);
+  }
+  & a {
+    text-decoration: none;
+    &:hover {
+      text-decoration: underline;
+    }
   }
 }
 
