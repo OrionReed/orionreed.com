@@ -14,16 +14,16 @@
 }
 
 [data-theme="dark"] {
-  --bg-color: #0d1117;
-  --text-color: #f0f6fc;
-  --text-secondary: #7c8b9b;
-  --code-bg: #161b22;
-  --code-text: #e6edf3;
-  --blockquote-bg: #161b22;
-  --table-border: #30363d;
-  --table-header-bg: #21262d;
-  --table-stripe-bg: #161b22;
-  --border-color: #30363d;
+  --bg-color: #151820;
+  --text-color: #e9ecf0;
+  --text-secondary: #8a939e;
+  --code-bg: #1f242c;
+  --code-text: #d6dae0;
+  --blockquote-bg: #1f242c;
+  --table-border: #363c45;
+  --table-header-bg: #282e36;
+  --table-stripe-bg: #1f242c;
+  --border-color: #363c45;
 }
 
 /* Apply theme variables to base elements */
