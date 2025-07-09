@@ -66,7 +66,6 @@ main {
   padding-top: 3em;
   padding-bottom: 3em;
   font-family: "Recursive";
-  font-variation-settings: "MONO" 1;
   font-variation-settings: "CASL" 1;
   color: var(--text-color);
 }
@@ -90,7 +89,6 @@ h6 {
 header {
   margin-bottom: 2em;
   font-size: 1.5rem;
-  font-variation-settings: "MONO" 1;
   font-variation-settings: "CASL" 1;
 }
 
@@ -133,7 +131,6 @@ blockquote {
 }
 
 p {
-  font-family: Recursive;
   margin-top: 0;
   margin-bottom: 1.5em;
   font-size: 1.1em;
@@ -145,7 +142,6 @@ table {
   border-collapse: collapse;
   text-align: left;
   margin-bottom: 1em;
-  font-variation-settings: "mono" 1;
   font-variation-settings: "casl" 0;
   th,
   td {
@@ -230,20 +226,8 @@ p:has(+ ol) {
 /* Post media styling */
 .post img,
 .post video {
-  width: calc(100% + 4rem);
-  margin-left: -2rem;
-  margin-right: -2rem;
   border-radius: 4px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   display: block;
   max-width: none;
-}
-
-@media (max-width: 768px) {
-  .post img,
-  .post video {
-    width: 100%;
-    margin-left: 0;
-    margin-right: 0;
-  }
 }
