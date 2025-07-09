@@ -125,11 +125,22 @@ function generatePostHTML(
         <a href="/" style="text-decoration: none;">Orion Reed</a>
       </header>
       <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1rem;">
-        <h1>${post.title}</h1>
+        <h1 style="margin: 0;">${post.title}</h1>
         <span style="color: #999; font-size: 0.9em;">
           ${dateStr ? `${dateStr} • ` : ""}${post.readingTime} min read
         </span>
       </div>
+      <style>
+        @media (max-width: 767px) {
+          .post header + div {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+          }
+          .post header + div span {
+            margin-top: 0.5rem;
+          }
+        }
+      </style>
       ${post.content}
     </main>
     <script src="/css/dark-mode-toggle.js"></script>

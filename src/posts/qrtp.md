@@ -9,13 +9,14 @@ Back in March I was exploring the feasability of doing WebRTC handshakes over le
 
 This post is also part of my recent transition into [full-time applied & independent research](https://bsky.app/profile/orionreed.com/post/3lt5jj4hfjc2j), so expect to see more posts in the future!
 
-<md-quote>In one of the key scenes in Alfonso Cuaron's 2006 film Children of
-Men, Clive Owen's character, Theo, visits a friend at Battersea
-Power Station, which is now some combination of government
-building and private collection. Cultural treasures
+<md-quote source="Mark Fisher, Capitalist Realism" href="foo.com">In one of the key scenes in Alfonso Cuaron's 2006 film Children of
+Men, Clive Owen's character, Theo, visits a friend at **Battersea
+Power Station**, which is now some combination of government
+building and private _collection_. Cultural treasures
 Michelangelo's David, Picasso's Guernica, Pink Floyd's inflatable
 pig - are preserved in a building that is itself a refurbished
-heritage artifact</md-quote>
+heritage artifact
+</md-quote>
 
 ## Chunks, Headers, Acks (QRTP-A)
 
