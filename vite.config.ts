@@ -8,12 +8,14 @@ export default defineConfig({
   },
   build: {
     minify: false,
+    target: "esnext",
     rollupOptions: {
       input: {
         main: "index.html",
         elements: "src/elements/index.ts",
       },
       output: {
+        format: "es",
         entryFileNames: (chunkInfo) => {
           if (chunkInfo.name === "elements") {
             return "js/elements.js";
@@ -29,6 +31,9 @@ export default defineConfig({
         },
       },
     },
+  },
+  esbuild: {
+    keepNames: true,
   },
   plugins: [
     mkcert(),
