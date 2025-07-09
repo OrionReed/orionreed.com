@@ -33,6 +33,15 @@ function calculateReadingTime(content: string): number {
 }
 
 function generatePostHTML(post: PostData): string {
+  // Format date if available
+  const dateStr = post.frontmatter.date
+    ? new Date(post.frontmatter.date).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : null;
+
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -103,13 +112,15 @@ function generatePostHTML(post: PostData): string {
   </head>
   <body>
     <dark-mode-toggle></dark-mode-toggle>
-    <main>
+    <main class="post">
       <header>
         <a href="/" style="text-decoration: none;">Orion Reed</a>
       </header>
       <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1rem;">
         <h1>${post.title}</h1>
-        <span style="color: #999;">${post.readingTime} min read</span>
+        <span style="color: #999; font-size: 0.9em;">
+          ${dateStr ? `${dateStr} • ` : ""}${post.readingTime} min read
+        </span>
       </div>
       ${post.content}
     </main>

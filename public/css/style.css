@@ -226,3 +226,24 @@ p:has(+ ul) {
 p:has(+ ol) {
   margin-bottom: 0.5em;
 }
+
+/* Post media styling */
+.post img,
+.post video {
+  width: calc(100% + 4rem);
+  margin-left: -2rem;
+  margin-right: -2rem;
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  display: block;
+  max-width: none;
+}
+
+@media (max-width: 768px) {
+  .post img,
+  .post video {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+}

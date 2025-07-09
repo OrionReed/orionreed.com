@@ -1,5 +1,6 @@
 ---
 title: Scoped Propagators
+date: 2024-07-08
 ---
 
 > [live demo](https://orionreed.github.io/scoped-propagators/) | [talk @ LIVE/SPLASH](https://www.youtube.com/live/4GOeYylCMJI?t=29591s) | [folkjs event propagators](https://folkjs.org/canvas/propagators/event-propagators.html)

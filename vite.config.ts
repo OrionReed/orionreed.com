@@ -3,6 +3,9 @@ import { buildPosts } from "./scripts/build";
 import mkcert from "vite-plugin-mkcert";
 
 export default defineConfig({
+  server: {
+    port: 5555,
+  },
   plugins: [
     mkcert(),
     {
