@@ -125,6 +125,7 @@ function generatePostHTML(post: PostData): string {
       ${post.content}
     </main>
     <script src="/css/dark-mode-toggle.js"></script>
+    <script type="module" src="/src/elements/index.ts"></script>
   </body>
 </html>`;
 }

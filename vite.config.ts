@@ -12,8 +12,9 @@ export default defineConfig({
       name: "posts-watcher",
       configureServer(server) {
         server.watcher.add("/src/posts/**/*");
+        server.watcher.add("/src/elements/**/*");
         server.watcher.on("change", (file) => {
-          if (file.includes("src/posts/")) {
+          if (file.includes("src/posts/") || file.includes("src/elements/")) {
             buildPosts();
             server.ws.send({
               type: "full-reload",
