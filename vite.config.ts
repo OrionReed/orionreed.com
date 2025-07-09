@@ -7,6 +7,7 @@ export default defineConfig({
     port: 5555,
   },
   build: {
+    minify: false,
     rollupOptions: {
       input: {
         main: "index.html",
