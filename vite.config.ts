@@ -6,6 +6,29 @@ export default defineConfig({
   server: {
     port: 5555,
   },
+  build: {
+    rollupOptions: {
+      input: {
+        main: "index.html",
+        elements: "src/elements/index.ts",
+      },
+      output: {
+        entryFileNames: (chunkInfo) => {
+          if (chunkInfo.name === "elements") {
+            return "js/elements.js";
+          }
+          return "js/[name]-[hash].js";
+        },
+        chunkFileNames: "js/[name]-[hash].js",
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name?.endsWith(".css")) {
+            return "css/[name]-[hash][extname]";
+          }
+          return "assets/[name]-[hash][extname]";
+        },
+      },
+    },
+  },
   plugins: [
     mkcert(),
     {

@@ -32,7 +32,10 @@ function calculateReadingTime(content: string): number {
   return Math.ceil(wordCount / 250);
 }
 
-function generatePostHTML(post: PostData): string {
+function generatePostHTML(
+  post: PostData,
+  isProduction: boolean = false
+): string {
   // Format date if available
   const dateStr = post.frontmatter.date
     ? new Date(post.frontmatter.date).toLocaleDateString("en-US", {
@@ -41,6 +44,11 @@ function generatePostHTML(post: PostData): string {
         day: "numeric",
       })
     : null;
+
+  // Use different script paths for dev vs production
+  const elementsScript = isProduction
+    ? "/js/elements.js"
+    : "/src/elements/index.ts";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -125,7 +133,7 @@ function generatePostHTML(post: PostData): string {
       ${post.content}
     </main>
     <script src="/css/dark-mode-toggle.js"></script>
-    <script type="module" src="/src/elements/index.ts"></script>
+    <script type="module" src="${elementsScript}"></script>
   </body>
 </html>`;
 }
@@ -233,7 +241,8 @@ export function buildPosts() {
     markdownFiles.forEach((file) => {
       const filePath = join(POSTS_DIR, file);
       const post = processMarkdownFile(filePath);
-      const html = generatePostHTML(post);
+      const isProduction = outputDir === DIST_DIR;
+      const html = generatePostHTML(post, isProduction);
 
       // Create directory for the post
       const postDir = join(outputDir, "posts", post.slug);

@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "vite build && vite-node scripts/build.ts",
+		"build": "vite-node scripts/build.ts && vite build && vite-node scripts/build.ts",
 		"preview": "vite preview"
 	},
 	"author": "Orion Reed",
