@@ -18,6 +18,16 @@ pig - are preserved in a building that is itself a refurbished
 heritage artifact
 </md-quote>
 
+Here's some more text for testing and now here is a codec
+
+<md-codec width='20rem'>
+'QRTP': a
+chunk index: a
+chunks total: a
+'ack' hash: a
+chunk data: 8
+</md-codec>
+
 ## Chunks, Headers, Acks (QRTP-A)
 
 QR transfer with chunks and acks, bidirectional between 2 devices
