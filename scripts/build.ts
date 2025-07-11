@@ -124,7 +124,7 @@ function generatePostHTML(
       (function() {
         const savedTheme = localStorage.getItem('theme');
         const theme = savedTheme || 'light';
-        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.style.colorScheme = theme === 'dark' ? 'dark' : 'light';
       })();
     </script>
 
@@ -190,7 +190,6 @@ function generatePostHTML(
       </style>
       ${contentWithoutScripts}
     </main>
-    <script src="/css/dark-mode-toggle.js"></script>
     <script type="module" src="${elementsScript}"></script>
     ${deferredScripts}
   </body>
@@ -212,6 +211,11 @@ function processMarkdownFile(filePath: string): PostData {
 
   marked.use({
     renderer: {
+      code(code: string, language?: string) {
+        // Convert code blocks to md-syntax elements
+        const lang = language ? ` lang="${language}"` : "";
+        return `<md-syntax${lang}>${code}</md-syntax>`;
+      },
       image(href: string, title: string | null, text: string) {
         const mediaPath = href.startsWith("/")
           ? href

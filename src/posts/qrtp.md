@@ -3,8 +3,6 @@ title: QR Transfer Protocols
 date: 2025-07-08
 ---
 
-## Introduction
-
 Back in March I was exploring the feasability of doing WebRTC handshakes over less common but readily available transports. I explored MQTT, BitTorrent, Audio, and QR Codes. The silliness of using QR codes for data transfer seemed to strike a chord with some [people on Twitter](https://x.com/OrionReedOne/status/1901383095648927881) so I figured I should write down how this worked and the improvements I found along the way.
 
 This post is also part of my recent transition into [full-time applied & independent research](https://bsky.app/profile/orionreed.com/post/3lt5jj4hfjc2j), so expect to see more posts in the future!
@@ -40,21 +38,29 @@ chunk data: 8
 
 the little ts codec util and the mess of doing it by hand
 
+<md-syntax lang="ts">
+const foo = 1;
+type Foo = {con: string, bar: boolean}
+</md-syntax>
+
+code block
+
+```ts
+const foo = 1;
+type Foo = { con: string; bar: boolean };
+```
+
 ## Backchannels & Flood Fill (QRTB-B)
 
 QR transfer with audio backchannel
 
 <md-group>
-  <div style="text-align: center;">
-    <md-cell-circle cells='60' width='0.2' id="protocol-v1">
-      1-way
-    </md-cell-circle>
-  </div>
-  <div style="text-align: center;">
-    <md-cell-circle cells='60' width='0.2' id="protocol-v2">
-      with backchannel
-    </md-cell-circle>
-  </div>
+  <md-cell-circle cells='60' width='0.2' id="protocol-v1">
+    1-way
+  </md-cell-circle>
+  <md-cell-circle cells='60' width='0.2' id="protocol-v2">
+    with backchannel
+  </md-cell-circle>
 </md-group>
 
 ## Fountain Codes (QRTB-C)
@@ -514,15 +520,4 @@ const protocolV2 = new QRTPProtocol(circleV2, {
 protocolV1.runProtocol();
 protocolV2.runProtocol();
 
-// Listen for theme changes to refresh colors immediately
-const observer = new MutationObserver(() => {
-  protocolV1.refreshAllColors();
-  protocolV2.refreshAllColors();
-});
-
-// Watch for changes to the data-theme attribute
-observer.observe(document.documentElement, {
-  attributes: true,
-  attributeFilter: ['data-theme']
-});
 </script>

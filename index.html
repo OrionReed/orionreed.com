@@ -26,6 +26,8 @@
         const savedTheme = localStorage.getItem("theme");
         const theme = savedTheme || "light";
         document.documentElement.setAttribute("data-theme", theme);
+        document.documentElement.style.colorScheme =
+          theme === "dark" ? "dark" : "light";
       })();
     </script>
 
@@ -215,6 +217,6 @@
         </li>
       </ol>
     </main>
-    <script src="/css/dark-mode-toggle.js"></script>
+    <script type="module" src="/src/elements/index.ts"></script>
   </body>
 </html>

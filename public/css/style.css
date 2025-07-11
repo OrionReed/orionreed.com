@@ -1,5 +1,6 @@
 @import url("reset.css");
-@import url("dark-mode.css");
+@import url("color.css");
+@import url("md-syntax.css");
 
 /* New Computer Modern Font Faces */
 @font-face {

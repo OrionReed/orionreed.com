@@ -25,10 +25,7 @@ export class BaseElement extends HTMLElement {
   }
 
   static define(): void {
-    customElements.define(
-      this.tagName,
-      this as unknown as CustomElementConstructor
-    );
+    customElements.define(this.tagName, this);
   }
 
   private initializeStyles(): void {

@@ -33,13 +33,13 @@ Below are the four event scopes which are currently implemented, which I have fo
 
 The syntax for SPs in this implementation is a _scope_ followed by a _JS object literal_:
 
-```
+```js
 scope { property1: value1, property2: value2 }
 ```
 
 Each propagator is passed the _source_ and _target_ nodes (named "from" and "to" for brevity) which can be accessed like so:
 
-```
+```ts
 click {x: from.x + 10, rotation: to.rotation + 1 }
 ```
 
@@ -71,7 +71,7 @@ Note that, as with all of the examples, 100% of the behaviour is encoded in the 
 
 While pure functions make reasoning about a system of SPs easier, we may in practice want to allow side effects. Here we have extended the syntax to support arbitrary Javascript:
 
-```
+```ts
 scope () {
   /* arbitrary JS can be executed in this function body */
 
