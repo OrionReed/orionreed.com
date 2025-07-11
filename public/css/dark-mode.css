@@ -11,6 +11,14 @@
   --table-header-bg: #f4f4f4;
   --table-stripe-bg: #f9f9f9;
   --border-color: #ddd;
+  
+  /* Animation colors for light mode */
+  --color-black: #000000;
+  --color-green: #22c55e;
+  --color-orange: #f59e0b;
+  --color-blue: #3b82f6;
+  --color-gray: #9ca3af;
+  --color-white: #ffffff;
 }
 
 [data-theme="dark"] {
@@ -24,6 +32,14 @@
   --table-header-bg: #282e36;
   --table-stripe-bg: #1f242c;
   --border-color: #363c45;
+  
+  /* Animation colors for dark mode */
+  --color-black: #f8fafc;
+  --color-green: #16a34a;
+  --color-orange: #ea580c;
+  --color-blue: #2563eb;
+  --color-gray: #64748b;
+  --color-white: #f1f5f9;
 }
 
 /* Apply theme variables to base elements */

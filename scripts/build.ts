@@ -32,6 +32,28 @@ function calculateReadingTime(content: string): number {
   return Math.ceil(wordCount / 250);
 }
 
+function extractAndDeferScripts(htmlContent: string): {
+  content: string;
+  scripts: string[];
+} {
+  const scripts: string[] = [];
+  const scriptRegex = /<script(?:\s[^>]*)?>[\s\S]*?<\/script>/gi;
+
+  const contentWithoutScripts = htmlContent.replace(scriptRegex, (match) => {
+    // Extract script content
+    const scriptContent = match.replace(
+      /<script(?:\s[^>]*)?>|<\/script>/gi,
+      ""
+    );
+    if (scriptContent.trim()) {
+      scripts.push(scriptContent.trim());
+    }
+    return ""; // Remove the script tag
+  });
+
+  return { content: contentWithoutScripts, scripts };
+}
+
 function generatePostHTML(
   post: PostData,
   isProduction: boolean = false
@@ -49,6 +71,37 @@ function generatePostHTML(
   const elementsScript = isProduction
     ? "/js/elements.js"
     : "/src/elements/index.ts";
+
+  // Extract inline scripts and defer them
+  const { content: contentWithoutScripts, scripts } = extractAndDeferScripts(
+    post.content
+  );
+
+  // Create deferred script execution
+  const deferredScripts =
+    scripts.length > 0
+      ? `
+    <script type="module">
+      // Wait for all custom elements to be defined
+      await Promise.all([
+        customElements.whenDefined('md-quote'),
+        customElements.whenDefined('md-codec'),
+        customElements.whenDefined('md-cell-circle')
+      ]);
+      
+      // Execute extracted scripts
+      ${scripts
+        .map(
+          (script) => `
+        (async () => {
+          ${script}
+        })();
+      `
+        )
+        .join("\n")}
+    </script>
+  `
+      : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -141,10 +194,11 @@ function generatePostHTML(
           }
         }
       </style>
-      ${post.content}
+      ${contentWithoutScripts}
     </main>
     <script src="/css/dark-mode-toggle.js"></script>
     <script type="module" src="${elementsScript}"></script>
+    ${deferredScripts}
   </body>
 </html>`;
 }
