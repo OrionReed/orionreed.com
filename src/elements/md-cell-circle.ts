@@ -9,7 +9,6 @@ export class MdCellCircle extends BaseElement {
   @attr() cells?: string;
   @attr() size?: string;
   @attr() width?: string;
-  @attr() filled?: string;
 
   private cellStates: Map<number, CellState> = new Map();
 
@@ -95,38 +94,6 @@ export class MdCellCircle extends BaseElement {
     if (!this.cellStates) return { filled: false };
     const state = this.cellStates.get(index);
     return { filled: state?.filled || false, color: state?.color };
-  }
-
-  private parseFilled(): Map<number, string> {
-    const filledMap = new Map<number, string>();
-
-    if (!this.filled) return filledMap;
-
-    const parts = this.filled.split(",").map((part) => part.trim());
-
-    for (const part of parts) {
-      const colonIndex = part.indexOf(":");
-
-      if (colonIndex === -1) {
-        // Just index, use default fill color
-        const index = parseInt(part, 10);
-        if (!isNaN(index)) {
-          filledMap.set(
-            index,
-            "color-mix(in srgb, var(--text-color) 20%, transparent)"
-          );
-        }
-      } else {
-        // Index with color
-        const index = parseInt(part.slice(0, colonIndex), 10);
-        const color = part.slice(colonIndex + 1);
-        if (!isNaN(index) && color) {
-          filledMap.set(index, color);
-        }
-      }
-    }
-
-    return filledMap;
   }
 
   private polarToCartesian(
@@ -222,8 +189,7 @@ export class MdCellCircle extends BaseElement {
     const widthRatio = parseFloat(this.width || "0.3");
 
     // Merge programmatic state with attribute-based state
-    const attributeFilled = this.parseFilled();
-    const allFilled = new Map([...attributeFilled]);
+    const allFilled = new Map();
 
     // Programmatic state overrides attribute state
     if (this.cellStates) {
