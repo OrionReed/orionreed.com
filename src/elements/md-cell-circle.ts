@@ -67,7 +67,6 @@ export class MdCellCircle extends BaseElement {
   setCell(index: number, color?: string): void {
     if (index < 0 || index >= this.cellCount) return;
 
-    if (!this.cellStates) this.cellStates = new Map();
     this.cellStates.set(index, {
       filled: true,
       color: color || "color-mix(in srgb, var(--text-color) 20%, transparent)",
@@ -79,19 +78,16 @@ export class MdCellCircle extends BaseElement {
   clearCell(index: number): void {
     if (index < 0 || index >= this.cellCount) return;
 
-    if (!this.cellStates) this.cellStates = new Map();
     this.cellStates.delete(index);
     this.render();
   }
 
   clearAll(): void {
-    if (!this.cellStates) this.cellStates = new Map();
     this.cellStates.clear();
     this.render();
   }
 
   getCellState(index: number): { filled: boolean; color?: string } {
-    if (!this.cellStates) return { filled: false };
     const state = this.cellStates.get(index);
     return { filled: state?.filled || false, color: state?.color };
   }
@@ -192,15 +188,13 @@ export class MdCellCircle extends BaseElement {
     const allFilled = new Map();
 
     // Programmatic state overrides attribute state
-    if (this.cellStates) {
-      for (const [index, state] of this.cellStates) {
-        if (state.filled) {
-          allFilled.set(
-            index,
-            state.color ||
-              "color-mix(in srgb, var(--text-color) 20%, transparent)"
-          );
-        }
+    for (const [index, state] of this.cellStates) {
+      if (state.filled) {
+        allFilled.set(
+          index,
+          state.color ||
+            "color-mix(in srgb, var(--text-color) 20%, transparent)"
+        );
       }
     }
 

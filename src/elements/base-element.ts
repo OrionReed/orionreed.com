@@ -7,6 +7,9 @@ export class BaseElement extends HTMLElement {
     super();
     this.shadow = this.attachShadow({ mode: "open" });
     this.initializeStyles();
+  }
+
+  connectedCallback(): void {
     this.render();
   }
 

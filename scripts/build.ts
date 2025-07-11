@@ -82,12 +82,6 @@ function generatePostHTML(
     scripts.length > 0
       ? `
     <script type="module">
-      // Wait for all custom elements to be defined
-      await Promise.all([
-        customElements.whenDefined('md-quote'),
-        customElements.whenDefined('md-codec'),
-        customElements.whenDefined('md-cell-circle')
-      ]);
       
       // Execute extracted scripts
       ${scripts

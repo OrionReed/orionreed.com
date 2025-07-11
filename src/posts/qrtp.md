@@ -20,6 +20,14 @@ heritage artifact
 
 Here's some more text for testing and now here is a codec
 
+Esse aute laborum reprehenderit mollit proident labore duis aliquip laboris est. Magna laboris officia exercitation id culpa proident deserunt elit fugiat anim elit voluptate enim tempor incididunt. Sunt adipisicing velit quis qui duis. Voluptate ipsum in aute anim esse ipsum.
+
+$$foo$$
+
+## Chunks, Headers, Acks (QRTP-A)
+
+QR transfer with chunks and acks, bidirectional between 2 devices
+
 <md-codec width='20rem'>
 'QRTP': a
 chunk index: a
@@ -28,12 +36,18 @@ chunks total: a
 chunk data: 8
 </md-codec>
 
-Esse aute laborum reprehenderit mollit proident labore duis aliquip laboris est. Magna laboris officia exercitation id culpa proident deserunt elit fugiat anim elit voluptate enim tempor incididunt. Sunt adipisicing velit quis qui duis. Voluptate ipsum in aute anim esse ipsum.
+### A codec tangent
 
-<div style="display: flex; gap: 2rem; align-items: center; justify-content: center; flex-wrap: wrap;">
+the little ts codec util and the mess of doing it by hand
+
+## Backchannels & Flood Fill (QRTB-B)
+
+QR transfer with audio backchannel
+
+<md-group>
   <div style="text-align: center;">
     <md-cell-circle cells='60' width='0.2' id="protocol-v1">
-      no backchannel
+      1-way
     </md-cell-circle>
   </div>
   <div style="text-align: center;">
@@ -41,7 +55,16 @@ Esse aute laborum reprehenderit mollit proident labore duis aliquip laboris est.
       with backchannel
     </md-cell-circle>
   </div>
-</div>
+</md-group>
+
+## Fountain Codes (QRTB-C)
+
+QR transfer with luby transform fountain codes
+
+<md-group>
+  <md-luby-transform top="10" bottom="1" edges="5" qr="5" id="animated-graph">
+  </md-luby-transform>
+</md-group>
 
 <script>
 class QRTPProtocol {
@@ -503,19 +526,3 @@ observer.observe(document.documentElement, {
   attributeFilter: ['data-theme']
 });
 </script>
-
-## Chunks, Headers, Acks (QRTP-A)
-
-QR transfer with chunks and acks, bidirectional between 2 devices
-
-### A codec tangent
-
-the little ts codec util and the mess of doing it by hand
-
-## Backchannels & Flood Fill (QRTB-B)
-
-QR transfer with audio backchannel
-
-## Fountain Codes (QRTB-C)
-
-QR transfer with luby transform fountain codes
