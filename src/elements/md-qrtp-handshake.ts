@@ -39,15 +39,6 @@ export class MdQrtpHandshake extends BaseElement {
       margin: 2rem 0;
       --chunk-width: 80px;
       --chunk-height: 50px;
-      --diagram-width: 600px;
-      --diagram-height: 280px;
-    }
-
-    @media (max-width: 767px) {
-      :host {
-        --diagram-width: 95vw;
-        --diagram-height: 200px;
-      }
     }
 
     .handshake-container {
@@ -59,14 +50,13 @@ export class MdQrtpHandshake extends BaseElement {
     }
 
     .handshake-visualization {
-      position: relative;
-      width: var(--diagram-width);
-      height: var(--diagram-height);
+      width: 100%;
+      max-width: 600px;
     }
 
     .handshake-svg {
       width: 100%;
-      height: 100%;
+      height: auto;
       overflow: visible;
     }
 
