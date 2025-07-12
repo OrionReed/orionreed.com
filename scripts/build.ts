@@ -129,7 +129,7 @@ function generatePostHTML(
     </script>
 
     <!-- KaTeX for LaTeX rendering -->
-    <link rel="stylesheet" href="/node_modules/katex/dist/katex.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" integrity="sha384-GvrOXuhMATgEsSwCs4smul74iXGOixntILdUW9XmUC6+HX0sLNAK3q71HotJqlAn" crossorigin="anonymous">
 
     <!-- Social Meta Tags -->
     <meta
