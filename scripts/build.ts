@@ -25,8 +25,14 @@ interface PostData {
 }
 
 function calculateReadingTime(content: string): number {
-  // Strip HTML tags and count words
-  const textContent = content.replace(/<[^>]*>/g, "");
+  console.log(content);
+  // First remove script tags and their content
+  const contentWithoutScripts = content.replace(
+    /<script(?:\s[^>]*)?>[\s\S]*?<\/script>/gi,
+    ""
+  );
+  // Then strip remaining HTML tags and count words
+  const textContent = contentWithoutScripts.replace(/<[^>]*>/g, "");
   const wordCount = textContent.trim().split(/\s+/).length;
   // Average reading speed is ~250 words per minute (faster assumption)
   return Math.ceil(wordCount / 250);
