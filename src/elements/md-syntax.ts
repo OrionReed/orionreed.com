@@ -147,11 +147,14 @@ export class MdSyntax extends HTMLElement {
     const originalText = this.innerText;
     const trimmedText = originalText.trim();
 
-    if (trimmedText !== originalText) {
-      this.textContent = trimmedText;
+    // Normalize whitespace: replace multiple consecutive empty lines with at most one empty line
+    const normalizedText = trimmedText.replace(/\n\s*\n\s*\n+/g, "\n\n");
+
+    if (normalizedText !== originalText) {
+      this.textContent = normalizedText;
     }
 
-    const tokens = tokenize(trimmedText, this.language);
+    const tokens = tokenize(normalizedText, this.language);
     const firstChild = this.firstChild;
 
     if (!firstChild) return;
