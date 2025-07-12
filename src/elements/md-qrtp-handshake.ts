@@ -43,6 +43,13 @@ export class MdQrtpHandshake extends BaseElement {
       --diagram-height: 280px;
     }
 
+    @media (max-width: 767px) {
+      :host {
+        --diagram-width: 95vw;
+        --diagram-height: 200px;
+      }
+    }
+
     .handshake-container {
       font-family: "New CM", monospace;
       padding: 1rem;
@@ -387,11 +394,13 @@ export class MdQrtpHandshake extends BaseElement {
     const chunkHeight = 50;
     const chunkSpacing = 15;
     const deviceSpacing = 130;
-    const labelWidth = 40;
-    const padding = 40;
+
+    // Use same responsive padding as render method
+    const isMobile = window.innerWidth < 768;
+    const padding = isMobile ? 10 : 40;
 
     // Calculate positions (same as render method)
-    const startX = padding + labelWidth;
+    const startX = padding;
     const deviceAY = padding;
     const deviceBY = deviceAY + chunkHeight + deviceSpacing;
 
@@ -445,23 +454,22 @@ export class MdQrtpHandshake extends BaseElement {
     const deviceSpacing = 130;
     const labelWidth = 40;
 
-    // Calculate total content width
+    // Calculate total content width (excluding labels so they don't affect centering)
     const totalContentWidth =
-      labelWidth +
-      this.totalChunks * (chunkWidth + chunkSpacing) -
-      chunkSpacing;
+      this.totalChunks * (chunkWidth + chunkSpacing) - chunkSpacing;
     const contentHeight = 2 * chunkHeight + deviceSpacing;
 
-    // Add padding around content
-    const padding = 40;
+    // Add padding around content - reduce padding on mobile
+    const isMobile = window.innerWidth < 768;
+    const padding = isMobile ? 10 : 40;
     const viewBoxWidth = totalContentWidth + 2 * padding;
     const viewBoxHeight = contentHeight + 2 * padding;
 
-    // Calculate positions (centered within viewBox)
-    const startX = padding + labelWidth;
+    // Calculate positions (chunks centered, labels positioned separately)
+    const startX = padding;
     const deviceAY = padding;
     const deviceBY = deviceAY + chunkHeight + deviceSpacing;
-    const labelX = padding + labelWidth / 2;
+    const labelX = startX - 25; // Position labels to the left of chunks
 
     let chunksHtml = "";
 

@@ -113,8 +113,8 @@ export class MdLubyTransform extends BaseElement {
   `;
 
   get topCount(): number {
-    // Use 5 source symbols on small devices, 10 on larger devices
-    return window.innerWidth < 768 ? 5 : 10;
+    // Use 7 source symbols on small devices, 10 on larger devices
+    return window.innerWidth < 768 ? 7 : 10;
   }
 
   get edgeCount(): number {
@@ -305,7 +305,7 @@ export class MdLubyTransform extends BaseElement {
   protected render(): void {
     // Make width responsive based on number of symbols
     const isMobile = window.innerWidth < 768;
-    const width = isMobile ? 250 : 400; // Smaller container on mobile
+    const width = isMobile ? 320 : 400; // Slightly larger container on mobile for 7 nodes
     const height = 200;
     const sourceNodeSize = 32; // Even bigger source nodes
     const xorNodeSize = 24;
