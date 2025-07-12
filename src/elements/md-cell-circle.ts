@@ -53,8 +53,8 @@ export class MdCellCircle extends BaseElement {
     }
 
     .circle-sector {
-      stroke: color-mix(in srgb, var(--text-color) 80%, transparent);
-      stroke-width: 0.12rem;
+      stroke: var(--text-color);
+      stroke-width: 0.08rem;
     }
 
     .circle-center-text {
@@ -63,10 +63,10 @@ export class MdCellCircle extends BaseElement {
       left: 50%;
       transform: translate(-50%, -50%);
       text-align: center;
-      font-family: "Recursive", monospace;
-      font-variation-settings: "CASL" 1, "wght" 600;
+      font-family: "New CM", monospace;
       color: var(--text-color);
-      font-size: 0.8em;
+      font-size: 1em;
+      font-weight: bold;
     }
   `;
 

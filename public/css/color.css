@@ -13,12 +13,12 @@
   --border-color: light-dark(#ddd, #363c45);
   
   /* Animation colors */
-  --color-black: light-dark(#000000, #f8fafc);
-  --color-green: light-dark(#22c55e, #16a34a);
-  --color-orange: light-dark(#f59e0b, #ea580c);
-  --color-blue: light-dark(#3b82f6, #2563eb);
-  --color-gray: light-dark(#9ca3af, #64748b);
-  --color-white: light-dark(#ffffff, #f1f5f9);
+  --color-black: light-dark(#000000, #f2f4f5);
+  --color-green: light-dark(#4ade80, #34a853);
+  --color-orange: light-dark(#fb923c, #e67e22);
+  --color-blue: light-dark(#60a5fa, #5294cf);
+  --color-gray: light-dark(#a1a1aa, #6b7280);
+  --color-white: light-dark(#ffffff, #f8fafc);
 }
 
 /* Apply theme variables to base elements */
