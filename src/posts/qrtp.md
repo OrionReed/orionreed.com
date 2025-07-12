@@ -19,9 +19,9 @@ The design I landed on for this is as follows:
 2. Device $B$ receives the first chunk and updates an acknowledgement hash (ack) in the QR header
 3. Device $A$ sees the hash, compares it against its current chunk, and moves to the next
 
-This process is _symmetric_ as neither device has a 'sender' or 'receiver' role and can both send data at any point. This simple protocol upon which things like SDP exchange can be built.
+<md-qrtp-handshake chunks="5" speed="2000"></md-qrtp-handshake>
 
-[INSERT DIAGRAM]
+This process is _symmetric_ as neither device has a 'sender' or 'receiver' role and can both send data at any point. This simple protocol upon which things like SDP exchange can be built.
 
 ### A codec tangent
 
@@ -120,8 +120,6 @@ In other words, you put $K$ chunks in, and out comes an infinite stream of new c
 </md-group>
 
 The first practical fountain codes that are near-optimal was the [Luby Transform](https://en.wikipedia.org/wiki/Luby_transform_code) which is delightfully simple. Luby Transform codes work by creating encoded packets that are random XOR combinations of the original data packets, where the number of packets combined for each encoded packet is chosen from a carefully designed probability distribution. During decoding, you start with any received encoded packet that combines only one original packet (degree-1), recover that original packet immediately, then XOR it out of all other encoded packets that used it - this process creates new degree-1 packets in a cascading effect that continues until all original data is recovered.
-
-[IMPLEMENT THIS](https://github.com/anrosent/LT-code/tree/master/lt)
 
 And so with that [yada yada] we now have upwards of 30KB/s over QR codes in ideal conditions, people can start scanning at any point in time, its reliable and robust, etc. could throw it on a projector to broadcast data...
 
