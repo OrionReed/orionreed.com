@@ -125,7 +125,7 @@ Luby Transform codes (pictured above) work by creating encoded chunks which are 
 
 Fountain codes have some great properties for one-way communication: Many devices can scan the codes at once, and it doesn't matter when each device starts scanning, only that they collect enough encoded chunks. At its highest I saw this approach achieve just over **30 KB/s** but in practice it was usually much slower.
 
-There is a lot more to explore and plenty of improvements I left on the table. The actual implementations are missing several practical necessities like handling of multiple connections or recovering from failure modes. All the same, the results were quite evocative — the fact I can be sat next to someone with another device and be entirely unable to pass data across if the internet goes down is an indictment of computing as it exists today. A more pluralistic computing in which all data transport options are available, including the slow or silly ones, is a world I would very much like to see.
+There is a lot more to explore and plenty of improvements left on the table including practical necessities like handling of multiple connections and addressing failure modes. All the same, the results were quite evocative — the fact I can be sat next to someone with another device and be entirely unable to pass data across if the internet goes down is an indictment of computing as it exists today. A more pluralistic computing in which all data transport options are available, including the slow or silly ones, is a world I would very much like to see.
 
 <script>
 class QRTPProtocol {
