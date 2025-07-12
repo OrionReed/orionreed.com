@@ -25,7 +25,6 @@ interface PostData {
 }
 
 function calculateReadingTime(content: string): number {
-  console.log(content);
   // First remove script tags and their content
   const contentWithoutScripts = content.replace(
     /<script(?:\s[^>]*)?>[\s\S]*?<\/script>/gi,
