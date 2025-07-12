@@ -14,6 +14,7 @@
 		"gray-matter": "^4.0.3",
 		"katex": "^0.16.22",
 		"marked": "^12.0.0",
+		"marked-footnote": "^1.4.0",
 		"marked-katex-extension": "^5.1.4",
 		"prism-esm": "^1.29.0-fix.6"
 	},

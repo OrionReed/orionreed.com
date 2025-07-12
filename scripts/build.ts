@@ -11,6 +11,7 @@ import { join, extname, basename } from "path";
 import matter from "gray-matter";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
+import markedFootnote from "marked-footnote";
 
 const POSTS_DIR = "src/posts";
 const DIST_DIR = "dist";
@@ -208,38 +209,39 @@ function processMarkdownFile(filePath: string): PostData {
   const title = frontmatter.title || slug;
 
   // Configure marked to handle media files and LaTeX
-  marked.use(
-    markedKatex({
-      throwOnError: false,
-    })
-  );
+  marked
+    .use(markedFootnote())
+    .use(
+      markedKatex({
+        throwOnError: false,
+      })
+    )
+    .use({
+      renderer: {
+        code(code: string, language?: string) {
+          // Convert code blocks to md-syntax elements
+          const lang = language ? ` lang="${language}"` : "";
+          return `<md-syntax${lang}>${code}</md-syntax>`;
+        },
+        image(href: string, title: string | null, text: string) {
+          const mediaPath = href.startsWith("/")
+            ? href
+            : `/posts/${slug}/${href}`;
 
-  marked.use({
-    renderer: {
-      code(code: string, language?: string) {
-        // Convert code blocks to md-syntax elements
-        const lang = language ? ` lang="${language}"` : "";
-        return `<md-syntax${lang}>${code}</md-syntax>`;
+          // For video files, use video tag
+          if (mediaPath.match(/\.(mp4|mov)$/i)) {
+            return `<video controls><source src="${mediaPath}" type="video/${
+              mediaPath.endsWith(".mov") ? "quicktime" : "mp4"
+            }">Your browser does not support the video tag.</video>`;
+          }
+
+          // For images, use img tag
+          return `<img src="${mediaPath}" alt="${text || ""}"${
+            title ? ` title="${title}"` : ""
+          }>`;
+        },
       },
-      image(href: string, title: string | null, text: string) {
-        const mediaPath = href.startsWith("/")
-          ? href
-          : `/posts/${slug}/${href}`;
-
-        // For video files, use video tag
-        if (mediaPath.match(/\.(mp4|mov)$/i)) {
-          return `<video controls><source src="${mediaPath}" type="video/${
-            mediaPath.endsWith(".mov") ? "quicktime" : "mp4"
-          }">Your browser does not support the video tag.</video>`;
-        }
-
-        // For images, use img tag
-        return `<img src="${mediaPath}" alt="${text || ""}"${
-          title ? ` title="${title}"` : ""
-        }>`;
-      },
-    },
-  });
+    });
 
   const htmlContent = marked.parse(markdownContent) as string;
   const readingTime = calculateReadingTime(htmlContent);

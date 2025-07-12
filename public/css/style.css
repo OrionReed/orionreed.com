@@ -106,11 +106,17 @@ pre > code {
 }
 
 code {
-  background-color: var(--code-bg);
+  background-color: light-dark(#f6f8fa, #151b23);
   width: 100%;
-  color: var(--code-text);
-  padding: 0.2em 0.4em;
+  color: var(--text-color);
+  
+  padding: 0.1em 0.3em;
   border-radius: 4px;
+  box-sizing: border-box;
+  font-family: "Recursive";
+  font-variation-settings: "MONO" 1;
+  font-weight: 400;
+  border: 1px solid light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.1))
 }
 
 b,
@@ -134,7 +140,7 @@ blockquote {
 p {
   margin-top: 0;
   margin-bottom: 1.5em;
-  font-size: 1.1em;
+  font-size: 1.05rem;
   font-variation-settings: "wght" 350;
 }
 
@@ -231,4 +237,18 @@ p:has(+ ol) {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   display: block;
   max-width: 100%;
+}
+
+/* Markdown / Marked */
+[data-footnote-ref] {
+  font-style: italic;
+  font-variation-settings: "CASL" 1;
+  text-decoration: none;
+}
+[data-footnote-ref]::before {
+  content: '[';
+}
+
+[data-footnote-ref]::after {
+  content: ']';
 }
