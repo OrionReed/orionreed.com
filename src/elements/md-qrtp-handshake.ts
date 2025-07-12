@@ -131,7 +131,7 @@ export class MdQrtpHandshake extends BaseElement {
     return this.speed || 800;
   }
 
-  private generateHash(chunk: number): string {
+  private generateHash(): string {
     const chars = "abcdef0123456789";
     let hash = "";
     for (let i = 0; i < 3; i++) {
@@ -180,7 +180,7 @@ export class MdQrtpHandshake extends BaseElement {
   }
 
   private showFirstAck(firstDevice: "A" | "B", secondDevice: "A" | "B"): void {
-    const hash = this.generateHash(this.currentChunk);
+    const hash = this.generateHash();
 
     // Update first device's ACK
     if (firstDevice === "A") {
@@ -210,7 +210,7 @@ export class MdQrtpHandshake extends BaseElement {
     firstDevice: "A" | "B",
     secondDevice: "A" | "B"
   ): void {
-    const hash = this.generateHash(this.currentChunk);
+    const hash = this.generateHash();
 
     // Update second device's ACK
     if (secondDevice === "A") {
@@ -301,12 +301,7 @@ export class MdQrtpHandshake extends BaseElement {
     this.stopAnimation();
   }
 
-  private renderChunkBox(
-    chunk: ChunkState,
-    x: number,
-    y: number,
-    chunkIndex: number
-  ): string {
+  private renderChunkBox(chunk: ChunkState, x: number, y: number): string {
     const width = 80;
     const height = 50;
     const dataWidth = width * 0.6;
@@ -473,13 +468,13 @@ export class MdQrtpHandshake extends BaseElement {
     // Render Device A chunks
     for (let i = 0; i < this.deviceA.chunks.length; i++) {
       const x = startX + i * (chunkWidth + chunkSpacing);
-      chunksHtml += this.renderChunkBox(this.deviceA.chunks[i], x, deviceAY, i);
+      chunksHtml += this.renderChunkBox(this.deviceA.chunks[i], x, deviceAY);
     }
 
     // Render Device B chunks
     for (let i = 0; i < this.deviceB.chunks.length; i++) {
       const x = startX + i * (chunkWidth + chunkSpacing);
-      chunksHtml += this.renderChunkBox(this.deviceB.chunks[i], x, deviceBY, i);
+      chunksHtml += this.renderChunkBox(this.deviceB.chunks[i], x, deviceBY);
     }
 
     this.shadow.innerHTML = `
