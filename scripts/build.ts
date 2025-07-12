@@ -179,7 +179,7 @@ function generatePostHTML(
       </header>
       <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1rem;">
         <h1 style="margin: 0;">${post.title}</h1>
-        <span style="color: #999; font-size: 0.9em;">
+        <span style="color: var(--text-secondary); font-size: 0.9em;">
           ${dateStr ? `${dateStr} • ` : ""}${post.readingTime} min read
         </span>
       </div>

@@ -3,7 +3,7 @@
 :root {
   --bg-color: light-dark(#ffffff, #17191f);
   --text-color: light-dark(#24292e, #e9ecf0);
-  --text-secondary: light-dark(#999, #8a939e);
+  --text-secondary: light-dark(#999, #7c838b);
   --code-bg: light-dark(#e4e9ee, #1f242c);
   --code-text: light-dark(#38424c, #d6dae0);
   --blockquote-bg: light-dark(#f1f1f1, #1f242c);
