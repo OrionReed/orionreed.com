@@ -20,7 +20,7 @@ md-syntax {
 
 @layer md-syntax-element {
   md-syntax {
-    --prettylights-bg: light-dark(#f6f8fa, #151b23);
+    --prettylights-bg: light-dark(#fbfbfb, #191e24);
     --prettylights-fg: light-dark(#1f2328, #f0f6fc);
     --prettylights-comment: light-dark(#59636e, #9198a1);
     --prettylights-constant: light-dark(#0550ae, #79c0ff);

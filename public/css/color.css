@@ -1,7 +1,7 @@
 /* Native Light/Dark Mode Variables */
 
 :root {
-  --bg-color: light-dark(#ffffff, #151820);
+  --bg-color: light-dark(#ffffff, #17191f);
   --text-color: light-dark(#24292e, #e9ecf0);
   --text-secondary: light-dark(#999, #8a939e);
   --code-bg: light-dark(#e4e9ee, #1f242c);

@@ -1,6 +1,6 @@
 ---
 title: QR Transfer Protocols
-date: 2025-07-08
+date: 2025-07-12
 ---
 
 Back in March I was exploring the feasibility of doing WebRTC handshakes over unusual but readily available transports as part of the [folkjs](https://folkjs.org) project. I explored [MQTT](https://en.wikipedia.org/wiki/MQTT), [BitTorrent](https://en.wikipedia.org/wiki/BitTorrent), audio, and QR Codes. The silliness of using QR codes for data transfer seemed to strike a chord with some [people on Twitter](https://x.com/OrionReedOne/status/1901383095648927881) so I figured I would write down how this worked and the improvements I found along the way.

@@ -98,8 +98,17 @@ export class DarkModeToggle extends BaseElement {
 
   private loadTheme(): void {
     const savedTheme = localStorage.getItem("theme");
-    const theme = savedTheme || "light";
-    this.setTheme(theme);
+
+    if (savedTheme) {
+      this.setTheme(savedTheme);
+    } else {
+      // Use system preference if no saved theme
+      const prefersDark = window.matchMedia(
+        "(prefers-color-scheme: dark)"
+      ).matches;
+      const theme = prefersDark ? "dark" : "light";
+      this.setTheme(theme);
+    }
   }
 
   private toggleTheme(): void {
