@@ -20,12 +20,24 @@ export class MdCellCircle extends BaseElement {
       --circle-width: 0.3;
     }
 
+    @media (max-width: 767px) {
+      :host {
+        margin: 0.5rem 0;
+      }
+    }
+
     .circle-container {
       font-family: "New CM", monospace;
       padding: 1rem;
       display: flex;
       justify-content: center;
       align-items: center;
+    }
+
+    @media (max-width: 767px) {
+      .circle-container {
+        padding: 0.5rem;
+      }
     }
 
     .circle-visualization {

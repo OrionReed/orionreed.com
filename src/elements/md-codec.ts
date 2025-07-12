@@ -13,10 +13,10 @@ export class MdCodec extends BaseElement {
     :host {
       display: block;
       margin: 2rem 0;
-      --codec-border: 0.15rem solid
-        color-mix(in srgb, var(--text-color) 80%, transparent);
+      --codec-border: 1.5px solid var(--text-color);
       --codec-spacing: 0.3rem;
       --codec-height: 4rem;
+      font-weight: bold;
     }
 
     .codec-container {
@@ -39,13 +39,7 @@ export class MdCodec extends BaseElement {
       position: relative;
       border: var(--codec-border);
       border-right: none;
-      color: var(--text-color);
       display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: "Recursive", monospace;
-      font-variation-settings: "CASL" 1, "wght" 700;
-      font-size: 1em;
     }
 
     .codec-part {
@@ -54,15 +48,15 @@ export class MdCodec extends BaseElement {
 
     .codec-part:first-child,
     .codec-part-nested:first-child {
-      border-top-left-radius: 4px;
-      border-bottom-left-radius: 4px;
+      border-top-left-radius: 2px;
+      border-bottom-left-radius: 2px;
     }
 
     .codec-part:last-child,
     .codec-part-nested:last-child {
       border-right: var(--codec-border);
-      border-top-right-radius: 4px;
-      border-bottom-right-radius: 4px;
+      border-top-right-radius: 2px;
+      border-bottom-right-radius: 2px;
     }
 
     .codec-part-nested:first-child {
@@ -80,7 +74,9 @@ export class MdCodec extends BaseElement {
       transform: rotate(-45deg);
       transform-origin: center left;
       white-space: nowrap;
-      font-size: 0.8em;
+      font-family: "New CM", monospace;
+      font-size: 14px;
+      font-weight: bold;
       color: var(--text-color);
       margin-bottom: var(--codec-spacing);
     }

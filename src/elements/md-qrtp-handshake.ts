@@ -99,7 +99,7 @@ export class MdQrtpHandshake extends BaseElement {
 
     .chunk-label {
       font-family: "New CM", monospace;
-      font-size: 12px;
+      font-size: 14px;
       fill: var(--text-color);
       text-anchor: middle;
       dominant-baseline: central;
@@ -107,7 +107,7 @@ export class MdQrtpHandshake extends BaseElement {
 
     .section-label {
       font-family: "New CM", monospace;
-      font-size: 10px;
+      font-size: 12px;
       fill: var(--text-color);
       text-anchor: middle;
       dominant-baseline: central;
@@ -349,12 +349,18 @@ export class MdQrtpHandshake extends BaseElement {
             width="${ackWidth}" height="${height}" rx="2" />
       
       <!-- Labels -->
+      ${
+        chunk.status !== "future"
+          ? `
       <text class="chunk-label ${chunkClass}" 
             x="${x + dataWidth / 2}" y="${y + height / 2 - 5}">
         <tspan font-weight="bold">${
           chunk.data[0]
         }</tspan><tspan font-style="italic">${chunk.data.slice(1)}</tspan>
       </text>
+      `
+          : ""
+      }
       
       <text class="section-label" 
             x="${x + dataWidth / 2}" y="${y + height / 2 + 5}">

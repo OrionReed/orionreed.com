@@ -9,6 +9,13 @@ export class MdGroup extends BaseElement {
       justify-content: center;
       flex-wrap: wrap;
     }
+
+    @media (max-width: 767px) {
+      :host {
+        gap: 0.5rem;
+        margin-bottom: 2rem;
+      }
+    }
   `;
 
   protected render(): void {

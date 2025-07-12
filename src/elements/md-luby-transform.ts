@@ -11,10 +11,6 @@ interface EdgeState {
 }
 
 export class MdLubyTransform extends BaseElement {
-  @attr({ type: "number" }) top?: number;
-  @attr({ type: "number" }) edges?: number;
-  @attr({ type: "number" }) qr?: number;
-
   private edgeStates: Map<string, EdgeState> = new Map();
   private qrCellStates: boolean[] = []; // QR cell states
   private animationInterval?: number;
@@ -117,15 +113,16 @@ export class MdLubyTransform extends BaseElement {
   `;
 
   get topCount(): number {
-    return this.top || 10;
+    // Use 5 source symbols on small devices, 10 on larger devices
+    return window.innerWidth < 768 ? 5 : 10;
   }
 
   get edgeCount(): number {
-    return this.edges || 5;
+    return 5;
   }
 
   get qrGridSize(): number {
-    return this.qr || 5;
+    return 5;
   }
 
   private sampleSolitonApprox(): number {
@@ -306,7 +303,9 @@ export class MdLubyTransform extends BaseElement {
   }
 
   protected render(): void {
-    const width = 400;
+    // Make width responsive based on number of symbols
+    const isMobile = window.innerWidth < 768;
+    const width = isMobile ? 250 : 400; // Smaller container on mobile
     const height = 200;
     const sourceNodeSize = 32; // Even bigger source nodes
     const xorNodeSize = 24;
@@ -357,21 +356,21 @@ export class MdLubyTransform extends BaseElement {
       `;
     }
 
-    // Generate XOR node with plus shape
+    // Generate XOR node with cross extending to circle edges
     const xorCenterX = xorPos.x + xorNodeSize / 2;
     const xorCenterY = xorPos.y;
-    const plusSize = xorNodeSize / 3;
+    const crossSize = xorNodeSize / 2; // Extend to circle edges
 
     const xorNodeHtml = `
       <circle class="xor-node" 
               cx="${xorCenterX}" cy="${xorCenterY}" 
               r="${xorNodeSize / 2}" />
       <line class="plus-line"
-            x1="${xorCenterX - plusSize}" y1="${xorCenterY}"
-            x2="${xorCenterX + plusSize}" y2="${xorCenterY}" />
+            x1="${xorCenterX - crossSize}" y1="${xorCenterY}"
+            x2="${xorCenterX + crossSize}" y2="${xorCenterY}" />
       <line class="plus-line"
-            x1="${xorCenterX}" y1="${xorCenterY - plusSize}"
-            x2="${xorCenterX}" y2="${xorCenterY + plusSize}" />
+            x1="${xorCenterX}" y1="${xorCenterY - crossSize}"
+            x2="${xorCenterX}" y2="${xorCenterY + crossSize}" />
     `;
 
     // Generate edges from sources to XOR edge (only actual source nodes)
