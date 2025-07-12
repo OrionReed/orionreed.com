@@ -64,27 +64,25 @@ Over time this would become one of the most useful utilities for experimenting w
 
 With the help of the `codec` util, the entire QRTP protocol sits at around 80 lines of code depending only on a tiny hash function utility. Suffice to say this is not the most impressive protocol!
 
-### Problems (need better word here)
-
 QRTP was simple and worked well but it was slow. Very slow. It also had the big inconvenience as _bi-directional_ communication that both devices need to see each other at the same time, leading to some quite silly-looking setups.
 
-[INSERT LAPTOP CHATTING IMAGE]
+![QRTP](qrtp.jpg)
 
 ## Audio Backchannels
 
 Next time I revisited QR codes was after exploring _audio_ as a transport, which gave me a new idea.
 
-So what if we sent data over QR in one direction and sent acknowledgements back over audio? I came up with a new plan:
-
 1. Device $A$ splits message into chunks and starts displaying them in rapid succession, not waiting for acknowledgement.
 2. Device $B$ uses a video stream, splitting out frames and scanning their QR code, then backchannels confirmation of received chunks over audio
 3. Device $A$ receives acknowledgement and skips these chunks on the next loop until all chunks are sent.
 
-[INSERT VIDEO OF QRTPB]
+[need to add something here so the text looks nicer lol, idk what]
 
-The bandwidth of audio is _extremely limited_ clocking in at around 7 bytes per second, with chunks being scanned at around 15fps, simply backchannelling a list of chunk indices would be a challenge, as the list of indices to send would rapidly outgrow the rate at which they could be sent. To solve this, we need a way to compress this information as much as possible.
+![qrtpb](backchannel.mp4)
 
 ### Flood fill
+
+The bandwidth of audio is _extremely limited_ clocking in at around 7 bytes per second, with chunks being scanned at around 15fps, simply backchannelling a list of chunk indices would be a challenge, as the list of indices to send would rapidly outgrow the rate at which they could be sent. To solve this, we need a way to compress this information as much as possible.
 
 After a few variations, I landed on a 'circular flood fill' approach. As chunks were seen for a second time, we would treat them as 'seeds' in a ring of chunks and periodically flood outward from those seed points to get the largest range of contiguous received chunks. We'd then send over pairs of numbers to indicate the ranges we had received and would repeat this process if an already-received chunk was observed again. Because audio is an unreliable transport, the flood fill neatly minimizes the data we need to send while maximising the utility of that data, by always acknowledging as many chunks as possible.
 
@@ -107,6 +105,8 @@ The third variation I wanted to explore was _unidirectional_ transfer, getting d
 
 One tempting (need other word) answer to this is **Error Correcting Codes (ECCs)** which add redundancy and allow the message to be reconstructed from malformed bytes or packets. However in our case, ECCs are not very useful because they are designed for malformed data, whereas we have well formed data (QR codes themselves use ECCs) but are missing chunks. What we need is an [erasure code](https://en.wikipedia.org/wiki/Erasure_code) which assumes bit _erasures_, rather than bit _errors_.
 
+To my ~~dismay~~ delight, someone else had already arrived at this idea. I highly recommend Divan's [post](https://divan.dev/posts/fountaincodes/) exploring this same idea in more detail.
+
 **Errors:** You receive corrupted data (wrong bits) but don't know which bits are wrong <br/>
 **Erasures:** You know exactly which data is missing (dropped packets, missing symbols)
 
@@ -114,22 +114,18 @@ As it happens, there is a class of erasure codes called _fountain codes_ (also k
 
 In other words, you put $K$ chunks in, and out comes an infinite stream of new chunks where you only need to receive $K + \varepsilon$ of those chunks in any order, to reproduce the full message. $\varepsilon$ is typically a small percentage of $K$ like 2-5% — they are 'rateless' because the stream is infinite.
 
-To my ~~dismay~~ delight, someone else had already arrived at this idea. I highly recommend Divan's [post](https://divan.dev/posts/fountaincodes/) exploring this same idea in more detail.
-
-The first practical fountain codes that are near-optimal was the [Luby Transform](https://en.wikipedia.org/wiki/Luby_transform_code) which is delightfully simple. Luby Transform codes work by creating encoded packets that are random XOR combinations of the original data packets, where the number of packets combined for each encoded packet is chosen from a carefully designed probability distribution. During decoding, you start with any received encoded packet that combines only one original packet (degree-1), recover that original packet immediately, then XOR it out of all other encoded packets that used it - this process creates new degree-1 packets in a cascading effect that continues until all original data is recovered.
-
 <md-group>
   <md-luby-transform top="10" bottom="1" edges="5" qr="5" id="animated-graph">
   </md-luby-transform>
 </md-group>
 
+The first practical fountain codes that are near-optimal was the [Luby Transform](https://en.wikipedia.org/wiki/Luby_transform_code) which is delightfully simple. Luby Transform codes work by creating encoded packets that are random XOR combinations of the original data packets, where the number of packets combined for each encoded packet is chosen from a carefully designed probability distribution. During decoding, you start with any received encoded packet that combines only one original packet (degree-1), recover that original packet immediately, then XOR it out of all other encoded packets that used it - this process creates new degree-1 packets in a cascading effect that continues until all original data is recovered.
+
 [IMPLEMENT THIS](https://github.com/anrosent/LT-code/tree/master/lt)
 
 And so with that [yada yada] we now have upwards of 30KB/s over QR codes in ideal conditions, people can start scanning at any point in time, its reliable and robust, etc. could throw it on a projector to broadcast data...
 
-All these experiments can be found on folkjs.org
-
-idk what else to say
+All three variations, QRTP-A (Ack), QRTP-B (Backchannel) and QRTP-C (Continuous) are up on the [folkjs](https://folkjs.org) GitHub.
 
 <script>
 class QRTPProtocol {
