@@ -125,7 +125,7 @@ strong {
 }
 
 blockquote {
-  margin: -1em;
+  margin: 0em;
   padding: 1em;
   background-color: var(--blockquote-bg);
   margin-top: 1em;
@@ -213,8 +213,11 @@ img {
   header {
     margin-bottom: 1em;
   }
-  ol {
+  ol, ul {
     list-style-position: inside;
+    /* Add hanging indent for wrapped text */
+    text-indent: -1.2em;
+    padding-left: 1.2em;
   }
 }
 
