@@ -151,7 +151,7 @@ function generatePostHTML(
       property="og:description"
       content="${post.frontmatter.description || post.title}"
     />
-    <meta property="og:image" content="/website-embed.png" />
+    <meta property="og:image" content="https://orionreed.com/website-embed.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta property="twitter:domain" content="orionreed.com" />
     <meta property="twitter:url" content="https://orionreed.com/posts/${
@@ -162,7 +162,7 @@ function generatePostHTML(
       name="twitter:description"
       content="${post.frontmatter.description || post.title}"
     />
-    <meta name="twitter:image" content="/website-embed.png" />
+    <meta name="twitter:image" content="https://orionreed.com/website-embed.png" />
 
     <!-- Analytics -->
     <script
