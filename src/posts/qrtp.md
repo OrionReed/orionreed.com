@@ -4,15 +4,15 @@ description: Offline data transfer using QR codes
 date: 2025-07-12
 ---
 
-Back in March, I was exploring the feasibility of doing WebRTC handshakes over unusual but readily available transports as part of the [folkjs](https://folkjs.org) project. I explored [MQTT](https://en.wikipedia.org/wiki/MQTT), [BitTorrent](https://en.wikipedia.org/wiki/BitTorrent), audio, and QR Codes. The silliness of using QR codes for data transfer seemed to strike a chord with some [people on Twitter](https://x.com/OrionReedOne/status/1901383095648927881) so I figured I would write down how this worked and the improvements I found along the way.
+Back in March, I was exploring the feasibility of doing WebRTC handshakes over _unusual but readily available transports_ as part of the [folkjs](https://folkjs.org) project. I explored [MQTT](https://en.wikipedia.org/wiki/MQTT), [BitTorrent](https://en.wikipedia.org/wiki/BitTorrent), audio, and QR Codes. The silliness of using QR codes for data transfer seemed to strike a chord with some [people on Twitter](https://x.com/OrionReedOne/status/1901383095648927881) so I figured I would write down how this worked and the improvements I found along the way.
 
-I recently transitioned into [full-time research](https://bsky.app/profile/orionreed.com/post/3lt5jj4hfjc2j), so this post is also doubling as a practice round of sorts to get into the habit of writing things down.
+I recently transitioned into [full-time research](https://bsky.app/profile/orionreed.com/post/3lt5jj4hfjc2j), so expect more posts in the future as I get into the habit of writing things down.
 
-## Chunks, Headers, Acks
+## 1. Chunks, Headers, Acks
 
-To establish a WebRTC connection you need to exchange [Session Description Protocol](https://en.wikipedia.org/wiki/Session_Description_Protocol) data. This can be 1-3 KB, depending on your needs. While QR codes can hold almost 3 KB of data, in practice it can be challenging to scan codes this large with your phone. It is _possible_ to reduce the SDP size down to around ~150 bytes, but I didn't know this at the time.
+To establish a WebRTC connection we need to send up to 3 KB[^1] of [SDP](https://en.wikipedia.org/wiki/Session_Description_Protocol) data in both directions, more than is practical for a single QR code. This lead me to the following design:
 
-To use QR codes for WebRTC handshakes we need to send a few kilobytes of data, both directions. One device sends an SDP _offer_ and the other device responds with an _answer_. The design I landed on for this is as follows:
+[^1]: It is _possible_ to reduce the SDP size down to around ~150 bytes, but I didn't know this at the time. I hope to elaborate on this in a future post.
 
 1. Device $A$ splits its message into QR-sized chunks
 2. Device $B$ receives the first chunk and updates an acknowledgement hash (ack) in the QR header
@@ -22,45 +22,11 @@ To use QR codes for WebRTC handshakes we need to send a few kilobytes of data, b
 
 This process is _symmetric_ as neither device has a 'sender' or 'receiver' role and can both send data at any point. This allows simple procedures like SDP exchange to be built on top.
 
-### A codec tangent
-
-While working on the "QR Transfer Protocol" a lot of code existed solely to serialize and deserialize structured data into QR codes. The structure of which looks like this:
-
-<md-codec width='20rem'>
-'QRTP': a
-chunk index: a
-chunks total: a
-'ack' hash: a
-chunk data: 8
-</md-codec>
-
-There are many ways to serialize data, the easiest of which would be to just call `JSON.stringify` and call it a day but this wastes data with unnecessary symbols which matters more as chunk size decreases, resulting in strings which look like this:
-
-```
-{"foobar":true,"zabzob":false,"hash":"abc123","value":1.56}
-```
-
-Compared to a hand-crafted encoding which takes advantage of the known schema, where redundant keys, symbols, and delimiters are removed:
-
-```
-10abc123|1.56
-```
-
-Writing these optimized encodings by hand can be a pain when the layout keeps changing, so I wrote a small `codec.ts` utility with a tiny DSL which infers types and compacts the data as much as possible, removing redundant delimiters, creating smaller alphabets for enums and so on… Existing solutions like [Protobuf](https://en.wikipedia.org/wiki/Protocol_Buffers) are great for some, but I wanted a string I could feasibly debug. [^1]
-
-[^1]: I also didn't want a heavy dependency. If someone knows of a small and robust data packer which uses strings I would love to know about it!
-
-```ts
-const codec = codec("QRTP&lt;index:num&gt;/&lt;total:num&gt;:&lt;ack:text&gt;");
-```
-
-With the help of a [less-than-readable typescript type](https://bsky.app/profile/orionreed.com/post/3lttebefdxk2e), the codec's `encode` and `decode` functions convert objects which match the schema to/from compact strings like "QRTP4/5:abc123".
-
-After splitting out this `codec` utility, the QRTP protocol was a mere 80 lines of code. It was simple and worked well, but it was slow. Very slow. It also required some quite silly-looking setups.
+After [extracting a small encoding utility](/posts/string-codec/) the QRTP protocol was a mere 80 lines of code. It was simple and worked well, but it was slow. Very slow. It also required some quite silly-looking setups.
 
 ![QRTP](qrtp.jpg)
 
-## Audio Backchannels
+## 2. Audio Backchannels
 
 Next time I revisited QR codes was after exploring _audio_ as a transport, which gave me a new idea.
 
@@ -74,13 +40,13 @@ Here's that approach in action. **Careful of volume:**
 
 ### Flood fill
 
-The bandwidth of audio is _extremely limited_ clocking in at around 7 bytes per second, with chunks being scanned at around 15fps, simply backchannelling a list of chunk indices would be a challenge, as the list of indices to send would rapidly outgrow the rate at which they could be sent. To solve this, I needed a way to compress the information as much as possible.
+The bandwidth of audio is _extremely limited_ (clocking in at around 7 bytes per second). With chunks being scanned at around 15fps, simply backchannelling a list of chunk indices would be a challenge, as the list of indices to send would rapidly outgrow the rate at which they could be sent. To solve this, I needed a way to compress the information as much as possible.
 
-After some experimenting I landed on a 'circular flood fill' approach. As chunks were seen for a second time, we would treat them as 'seeds' in a ring of chunks and periodically flood outward from those seed points to get the largest range of contiguous received chunks. We'd then send over pairs of indices to inform the sender which chunks it could skip. Because audio is an unreliable transport, the flood fill neatly minimizes the data needed while maximizing the utility of that data by always acknowledging as many chunks as possible.
+After some experimenting I landed on a 'circular flood fill' approach. As chunks were seen for a second time, we treat them as 'seeds' in a ring of chunks and periodically flood outward from those seed points to get the largest range of contiguous received chunks. We'd then send over pairs of indices to inform the sender which chunks it could skip. Because audio is an unreliable transport, the flood fill neatly minimizes the data needed while maximizing the utility of that data by always acknowledging as many chunks as possible.
 
 You can see this process visually in the sketch below where each chunk has a 30% probability of being received: Green is a received chunk, orange is a re-received chunk.
 
-On the left you can see how the last few chunks take a long time to get transmitted successfully, which gets worse as the number of chunks increases. On the right the flood fill process (blue) reduces redundant transmission and dramatically reduces overall transfer time.
+In the first ring you can see how the last few chunks take a long time to get transmitted successfully, which gets worse as the number of chunks increases. In the second ring the flood fill process (blue) reduces redundant transmission and dramatically reduces overall transfer time.
 
 <md-group>
   <md-cell-circle cells='60' width='0.2' id="protocol-v1">
@@ -91,7 +57,7 @@ On the left you can see how the last few chunks take a long time to get transmit
   </md-cell-circle>
 </md-group>
 
-## Fountain Codes
+## 3. Fountain Codes
 
 The third variation I wanted to explore was _unidirectional_ transfer, getting data from one device to another as fast as possible without any backchannel. As seen with the previous approach, simply rotating round every chunk in a loop is not a scalable approach. The ideal case is some approach where we can continuously broadcast QR codes and not require that _specific_ QR codes are received.
 
@@ -118,6 +84,8 @@ Luby Transform codes (pictured above) work by creating encoded chunks which are 
 Fountain codes have some great properties for one-way communication: Many devices can scan the codes at once, and it doesn't matter when each device starts scanning, only that they collect enough encoded chunks. At its highest I saw this approach achieve just over **30 KB/s** but it was usually much slower.
 
 There is a lot more to explore and plenty of improvements left on the table including practical necessities like handling multiple connections and addressing failure modes. All the same, the results were quite evocative — the fact I can sit next to someone with another device and be entirely unable to pass data across if the internet goes down is an indictment of computing as it exists today. A more pluralistic computing in which all data transport options are available, including the slow or silly ones, is a world I would very much like to see.
+
+> Thanks to [cheerabits](https://chee.party/) for feedback on this post and to [Chris Shank](https://chrisshank.com/) for the discussions during these explorations.
 
 <script>
 class QRTPProtocol {
