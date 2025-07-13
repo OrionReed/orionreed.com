@@ -18,7 +18,7 @@ export class MdLubyTransform extends BaseElement {
   static styles = css`
     :host {
       display: block;
-      margin: 2rem 0;
+      margin: 0rem 0;
       --node-size: 24px;
       --graph-width: 400px;
       --graph-height: 200px;
@@ -305,7 +305,7 @@ export class MdLubyTransform extends BaseElement {
   protected render(): void {
     // Make width responsive based on number of symbols
     const isMobile = window.innerWidth < 768;
-    const width = isMobile ? 320 : 400; // Slightly larger container on mobile for 7 nodes
+    const width = isMobile ? 300 : 400; // Slightly larger container on mobile for 7 nodes
     const height = 200;
     const sourceNodeSize = 32; // Even bigger source nodes
     const xorNodeSize = 24;

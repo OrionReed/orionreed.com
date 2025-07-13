@@ -208,7 +208,7 @@ img {
 
 @media (max-width: 600px) {
   main {
-    padding: 2em;
+    padding: 1.5em;
   }
   header {
     margin-bottom: 1em;
@@ -228,6 +228,9 @@ p:has(+ ul) {
 }
 p:has(+ ol) {
   margin-bottom: 0.5em;
+}
+p:has(+ md-syntax) {
+  margin-bottom: 0em;
 }
 
 /* Post media styling */

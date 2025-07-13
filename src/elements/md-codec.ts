@@ -12,7 +12,7 @@ export class MdCodec extends BaseElement {
   static styles = css`
     :host {
       display: block;
-      margin: 2rem 0;
+      margin: 1rem 0;
       --codec-border: 1.5px solid var(--text-color);
       --codec-spacing: 0.3rem;
       --codec-height: 4rem;
