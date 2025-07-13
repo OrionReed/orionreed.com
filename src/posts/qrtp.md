@@ -85,7 +85,7 @@ Fountain codes have some great properties for one-way communication: Many device
 
 There is a lot more to explore and plenty of improvements left on the table including practical necessities like handling multiple connections and addressing failure modes. All the same, the results were quite evocative — the fact I can sit next to someone with another device and be entirely unable to pass data across if the internet goes down is an indictment of computing as it exists today. A more pluralistic computing in which all data transport options are available, including the slow or silly ones, is a world I would very much like to see.
 
-> Thanks to [cheerabits](https://chee.party/) for feedback on this post and to [Chris Shank](https://chrisshank.com/) for the discussions during these explorations.
+> Thanks to [chee](https://chee.party/) for feedback on this post and to [Chris Shank](https://chrisshank.com/) for the discussions during these explorations.
 
 <script>
 class QRTPProtocol {
