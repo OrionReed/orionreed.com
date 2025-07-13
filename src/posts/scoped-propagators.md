@@ -1,5 +1,6 @@
 ---
 title: Scoped Propagators
+description: A programming model for spatial canvases
 date: 2024-07-08
 ---
 

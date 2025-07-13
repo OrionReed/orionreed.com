@@ -1,5 +1,6 @@
 ---
 title: QR Transfer Protocols
+description: Offline data transfer over QR codes
 date: 2025-07-12
 ---
 
