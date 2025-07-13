@@ -93,8 +93,10 @@ header {
   font-variation-settings: "CASL" 1;
 }
 
-i {
-  font-variation-settings: "slnt" -15;
+i,
+em {
+  font-variation-settings: "slnt" -15, "CRSV" 1, "wght" 350;
+  font-style: italic;
 }
 
 pre > code {
