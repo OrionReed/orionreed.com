@@ -14,7 +14,9 @@ chunks total: a
 chunk data: 8
 </md-codec>
 
-What I needed was a utility for _typed, debuggable, and compact string[^1] encodings_. Using `JSON.stringify` as a baseline, take the following string:
+What I needed was a utility for _typed, debuggable, and compact string[^1] encodings_.
+
+Using `JSON.stringify` as a baseline, take the following string:
 
 [^1]: I wanted a string which I could feasibly debug just by looking at it with my eyes, which ruled out options like [Protobuf](https://en.wikipedia.org/wiki/Protocol_Buffers).
 
