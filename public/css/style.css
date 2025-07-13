@@ -247,7 +247,6 @@ p:has(+ md-syntax) {
 
 /* Markdown / Marked */
 [data-footnote-ref] {
-  font-style: italic;
   font-variation-settings: "CASL" 1;
   text-decoration: none;
 }
