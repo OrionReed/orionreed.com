@@ -20,7 +20,15 @@ To establish a WebRTC connection we need to send up to 3 KB[^1] of [SDP](https:/
 
 <md-qrtp-handshake chunks="5" speed="2000"></md-qrtp-handshake>
 
-This process is _symmetric_ as neither device has a 'sender' or 'receiver' role and can both send data at any point and allows simple procedures like SDP exchange to be built on top.
+This process is _symmetric_ as neither device has a 'sender' or 'receiver' role and can both send data at any point and allows simple procedures like SDP exchange to be built on top. Each device shows a QR code with the following structure:
+
+<md-codec width='20rem'>
+'QRTP': a
+chunk index: a
+chunks total: a
+'ack' hash: a
+chunk data: 8
+</md-codec>
 
 After [extracting a small encoding utility](/posts/string-codec/) the QRTP protocol was a mere 80 lines of code. It was simple and worked well, but it was slow. Very slow. It also required some quite silly-looking setups.
 
