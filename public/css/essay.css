@@ -232,9 +232,12 @@
 
 @media (max-width: 600px) {
   .post.essay {
-    font-size: 1.3rem;
+    font-size: 1.15rem;
+    line-height: 1.65;
+    padding-left: 1em;
+    padding-right: 1em;
   }
   .post.essay .essay-header h1 {
-    font-size: 2rem;
+    font-size: 1.8rem;
   }
 }
