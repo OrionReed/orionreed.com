@@ -1,0 +1,240 @@
+/* Essay style — literary typesetting with EB Garamond
+ *
+ * EB Garamond with font-size-adjust to compensate for its small x-height. */
+
+.post.essay {
+  max-width: 42em;
+  font-family: "EB Garamond", serif;
+  font-size: 1.3rem;
+  line-height: 1.75;
+  letter-spacing: 0.01em;
+  font-size-adjust: 0.48;
+  font-variant-ligatures: common-ligatures discretionary-ligatures;
+  font-variant-numeric: oldstyle-nums proportional-nums;
+  font-feature-settings: "kern" 1;
+  hanging-punctuation: first last;
+}
+
+.post.essay .essay-header {
+  text-align: center;
+  margin-bottom: 3em;
+}
+
+.post.essay .essay-header h1 {
+  font-family: "EB Garamond", serif;
+  font-size: 2.4rem;
+  font-weight: 500;
+  max-width: 14em;
+  margin-left: auto;
+  margin-right: auto;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  margin-bottom: 0.4em;
+  text-wrap: balance;
+}
+
+.post.essay .essay-byline {
+  font-family: "EB Garamond", serif;
+  font-style: italic;
+  font-size: 1.4rem;
+  font-weight: 400;
+  color: var(--text-color);
+  margin-bottom: 0.3em;
+}
+
+.post.essay .essay-byline a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.post.essay .essay-dateline {
+  display: block;
+  font-family: "Recursive", monospace;
+  font-variation-settings: "MONO" 1, "CASL" 0;
+  font-size: 0.78rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin-bottom: 0.8em;
+}
+
+.post.essay h2 {
+  font-family: "EB Garamond", serif;
+  font-size: 1.6em;
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  margin-top: 2em;
+}
+
+.post.essay h3 {
+  font-family: "EB Garamond", serif;
+  font-size: 1.3em;
+  font-weight: 600;
+  margin-top: 1.5em;
+}
+
+.post.essay p {
+  font-size: inherit;
+  font-variation-settings: normal;
+  margin-bottom: 1em;
+}
+
+.post.essay i,
+.post.essay em {
+  font-variation-settings: normal;
+  font-style: italic;
+}
+
+.post.essay b,
+.post.essay strong {
+  font-variation-settings: normal;
+  font-weight: 700;
+}
+
+.post.essay a {
+  font-variation-settings: normal;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  transition: text-decoration-color 0.2s ease;
+}
+.post.essay a:hover {
+  font-variation-settings: normal;
+  text-decoration-color: var(--text-secondary);
+}
+
+.post.essay blockquote {
+  border-left: 2px solid var(--text-secondary);
+  background: none;
+  padding: 0 0 0 1.5em;
+  margin: 1.5em 0;
+  font-style: italic;
+}
+.post.essay blockquote p {
+  font-variation-settings: normal;
+}
+
+.post.essay ol,
+.post.essay ul {
+  font-size: inherit;
+  padding-left: 1.5em;
+}
+
+/* Inline footnote references */
+.post.essay [data-footnote-ref] {
+  font-variation-settings: normal;
+  font-family: "EB Garamond", serif;
+  font-variant-numeric: lining-nums;
+  font-size: 0.75em;
+  vertical-align: super;
+  line-height: 0;
+  text-decoration: none;
+  color: var(--text-color);
+}
+.post.essay [data-footnote-ref]::before {
+  content: "[";
+}
+.post.essay [data-footnote-ref]::after {
+  content: "]";
+}
+
+/* Footnotes section */
+.post.essay .footnotes {
+  margin-top: 4em;
+  padding-top: 0;
+  border-top: none;
+  font-family: "Recursive", monospace;
+  font-variation-settings: "MONO" 1, "CASL" 0;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--text-color);
+}
+
+.post.essay .footnotes::before {
+  content: "";
+  display: block;
+  width: 4em;
+  height: 0;
+  border-top: 1px solid var(--text-secondary);
+  margin: 0 auto 2em;
+  opacity: 0.5;
+}
+
+.post.essay .footnotes .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.post.essay .footnotes ol {
+  list-style: none;
+  counter-reset: fn;
+  padding-left: 0;
+  margin: 0;
+}
+
+.post.essay .footnotes li {
+  counter-increment: fn;
+  position: relative;
+  padding-left: 2em;
+  margin-bottom: 1em;
+}
+
+.post.essay .footnotes li::before {
+  content: counter(fn) ".";
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--text-secondary);
+  font-size: 0.9em;
+}
+
+.post.essay .footnotes li:last-child {
+  margin-bottom: 0;
+}
+
+.post.essay .footnotes p {
+  margin: 0;
+  font-variant-numeric: oldstyle-nums proportional-nums;
+}
+
+.post.essay .footnotes [data-footnote-backref] {
+  text-decoration: none;
+  color: var(--text-color);
+  font-size: 1.1em;
+  margin-left: 0.3em;
+  vertical-align: baseline;
+}
+
+/* Inline code — subtle, no box */
+.post.essay code {
+  font-family: "Recursive", monospace;
+  font-variation-settings: "MONO" 1, "CASL" 0;
+  font-size: 0.82em;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-color);
+}
+
+/* Dinkus separator */
+.post.essay .dinkus {
+  font-family: "EB Garamond", serif;
+  letter-spacing: 0.5em;
+}
+
+@media (max-width: 600px) {
+  .post.essay {
+    font-size: 1.3rem;
+  }
+  .post.essay .essay-header h1 {
+    font-size: 2rem;
+  }
+}

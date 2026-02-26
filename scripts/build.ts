@@ -123,7 +123,13 @@ function generatePostHTML(
       as="style"
     />
     <link rel="stylesheet" href="/css/reset.css" />
-    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/style.css" />${
+      post.frontmatter.style === "essay"
+        ? `
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/css/essay.css" />`
+        : ""
+    }
     
     <!-- Prevent flash of unstyled content by applying theme immediately -->
     <script>
@@ -173,7 +179,13 @@ function generatePostHTML(
   </head>
   <body>
     <dark-mode-toggle></dark-mode-toggle>
-    <main class="post">
+    <main class="post${post.frontmatter.style === "essay" ? " essay" : ""}">
+${post.frontmatter.style === "essay" ? `
+      <div class="essay-header">
+        <h1>${post.title}</h1>
+        <p class="essay-byline"><a href="/">Orion Reed</a></p>
+      </div>
+      <span class="essay-dateline">[${dateStr ? `${dateStr} &middot; ` : ""}${post.readingTime} min read]</span>` : `
       <header>
         <a href="/" style="text-decoration: none;">Orion Reed</a>
       </header>
@@ -193,7 +205,7 @@ function generatePostHTML(
             margin-top: 0.5rem;
           }
         }
-      </style>
+      </style>`}
       ${contentWithoutScripts}
     </main>
     <script type="module" src="${elementsScript}"></script>
