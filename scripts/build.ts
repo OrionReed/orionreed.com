@@ -126,7 +126,7 @@ function generatePostHTML(
     <link rel="stylesheet" href="/css/style.css" />${
       post.frontmatter.style === "essay"
         ? `
-    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&family=Crimson+Pro:ital,wght@1,200..900&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/css/essay.css" />`
         : ""
     }

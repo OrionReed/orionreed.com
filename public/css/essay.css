@@ -1,14 +1,12 @@
-/* Essay style — literary typesetting with EB Garamond
- *
- * EB Garamond with font-size-adjust to compensate for its small x-height. */
+/* Essay style — literary typesetting with Literata */
 
 .post.essay {
   max-width: 42em;
-  font-family: "EB Garamond", serif;
-  font-size: 1.3rem;
-  line-height: 1.75;
-  letter-spacing: 0.01em;
-  font-size-adjust: 0.48;
+  font-family: "Literata", serif;
+  font-optical-sizing: auto;
+  font-size: 1.2rem;
+  line-height: 1.7;
+  letter-spacing: 0;
   font-variant-ligatures: common-ligatures discretionary-ligatures;
   font-variant-numeric: oldstyle-nums proportional-nums;
   font-feature-settings: "kern" 1;
@@ -21,8 +19,7 @@
 }
 
 .post.essay .essay-header h1 {
-  font-family: "EB Garamond", serif;
-  font-size: 2.4rem;
+  font-size: 2.2rem;
   font-weight: 500;
   max-width: 14em;
   margin-left: auto;
@@ -34,10 +31,11 @@
 }
 
 .post.essay .essay-byline {
-  font-family: "EB Garamond", serif;
+  font-family: "Crimson Pro", "Literata", serif;
   font-style: italic;
-  font-size: 1.4rem;
-  font-weight: 400;
+  font-size: 1.35rem;
+  font-weight: 300;
+  font-size-adjust: 0.515;
   color: var(--text-color);
   margin-bottom: 0.3em;
 }
@@ -60,7 +58,6 @@
 }
 
 .post.essay h2 {
-  font-family: "EB Garamond", serif;
   font-size: 1.6em;
   font-weight: 400;
   font-style: italic;
@@ -69,7 +66,6 @@
 }
 
 .post.essay h3 {
-  font-family: "EB Garamond", serif;
   font-size: 1.3em;
   font-weight: 600;
   margin-top: 1.5em;
@@ -84,7 +80,10 @@
 .post.essay i,
 .post.essay em {
   font-variation-settings: normal;
+  font-family: "Crimson Pro", serif;
   font-style: italic;
+  font-weight: 370;
+  font-size-adjust: 0.515;
 }
 
 .post.essay b,
@@ -124,7 +123,6 @@
 /* Inline footnote references */
 .post.essay [data-footnote-ref] {
   font-variation-settings: normal;
-  font-family: "EB Garamond", serif;
   font-variant-numeric: lining-nums;
   font-size: 0.75em;
   vertical-align: super;
@@ -226,7 +224,6 @@
 
 /* Dinkus separator */
 .post.essay .dinkus {
-  font-family: "EB Garamond", serif;
   letter-spacing: 0.5em;
 }
 
