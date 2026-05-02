@@ -2,45 +2,45 @@
 @import url("color.css");
 @import url("md-syntax.css");
 
-/* New Computer Modern Font Faces */
+/* New Computer Modern Font Faces — served via jsDelivr (woff2) */
 @font-face {
   font-family: 'New CM';
-  src: url('/NewCMMono10-Regular.otf') format('opentype');
+  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20Regular.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'New CM';
-  src: url('/NewCMMono10-Bold.otf') format('opentype');
+  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20Bold.woff2') format('woff2');
   font-weight: 700;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'New CM';
-  src: url('/NewCMMono10-Book.otf') format('opentype');
+  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20Book.woff2') format('woff2');
   font-weight: 300;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'New CM';
-  src: url('/NewCMMono10-Italic.otf') format('opentype');
+  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20Italic.woff2') format('woff2');
   font-weight: 400;
   font-style: italic;
 }
 
 @font-face {
   font-family: 'New CM';
-  src: url('/NewCMMono10-BoldOblique.otf') format('opentype');
+  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20BoldOblique.woff2') format('woff2');
   font-weight: 700;
   font-style: italic;
 }
 
 @font-face {
   font-family: 'New CM';
-  src: url('/NewCMMono10-BookItalic.otf') format('opentype');
+  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20BookItalic.woff2') format('woff2');
   font-weight: 300;
   font-style: italic;
 }
@@ -69,6 +69,10 @@ main {
   font-family: "Recursive";
   font-variation-settings: "CASL" 1;
   color: var(--text-color);
+}
+
+.post:not(.essay) {
+  max-width: 54em;
 }
 
 h1 {
