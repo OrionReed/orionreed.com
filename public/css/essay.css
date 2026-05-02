@@ -1,16 +1,26 @@
 /* Essay style — literary typesetting with Literata */
 
 .post.essay {
+  --essay-weight: 350;
+  --essay-italic-weight: calc(var(--essay-weight) - 40);
+
   max-width: 43em;
   font-family: "Literata", serif;
   font-optical-sizing: auto;
   font-size: 1.2rem;
+  font-weight: var(--essay-weight);
   line-height: 1.7;
   letter-spacing: 0;
   font-variant-ligatures: common-ligatures discretionary-ligatures;
   font-variant-numeric: oldstyle-nums proportional-nums;
   font-feature-settings: "kern" 1;
   hanging-punctuation: first last;
+}
+
+
+:root[style*="color-scheme: dark"] .post.essay {
+  --essay-weight: 300;
+  --essay-italic-weight: calc(var(--essay-weight) - 100);
 }
 
 .post.essay .essay-header {
@@ -82,7 +92,7 @@
   font-variation-settings: normal;
   font-family: "Crimson Pro", serif;
   font-style: italic;
-  font-weight: 370;
+  font-weight: var(--essay-italic-weight);
   font-size-adjust: 0.515;
 }
 
@@ -171,31 +181,24 @@
 }
 
 .post.essay .footnotes ol {
-  list-style: none;
-  counter-reset: fn;
-  padding-left: 0;
+  list-style: decimal;
+  padding-left: 1.5em;
   margin: 0;
 }
 
 .post.essay .footnotes li {
-  counter-increment: fn;
-  position: relative;
-  padding-left: 2em;
   margin-bottom: 1em;
-}
-
-.post.essay .footnotes li::before {
-  content: counter(fn) ".";
-  position: absolute;
-  left: 0;
-  top: 0;
-  font-variant-numeric: lining-nums tabular-nums;
-  color: var(--text-secondary);
-  font-size: 0.9em;
+  padding-left: 1em;
 }
 
 .post.essay .footnotes li:last-child {
   margin-bottom: 0;
+}
+
+.post.essay .footnotes li::marker {
+  color: var(--text-secondary);
+  font-variant-numeric: lining-nums tabular-nums;
+  font-size: 0.9em;
 }
 
 .post.essay .footnotes p {
@@ -226,6 +229,7 @@
 .post.essay .dinkus {
   letter-spacing: 0.5em;
 }
+
 
 @media (max-width: 600px) {
   .post.essay {
