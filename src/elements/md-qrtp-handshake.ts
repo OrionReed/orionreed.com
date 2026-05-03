@@ -1,6 +1,6 @@
 import { attr, css } from "./base-element";
 import { Padding, Scene, t, type Shape } from "./draw";
-import { pt } from "./geom";
+import { down, pt, up } from "./geom";
 import * as R from "./rand";
 import { SceneElement } from "./scene-element";
 
@@ -87,7 +87,6 @@ export class MdQrtpHandshake extends SceneElement {
   connectedCallback(): void {
     super.connectedCallback();
 
-    // Main protocol animation
     this.anim.loop(async () => {
       this.initDevices();
       this.render();
@@ -126,21 +125,19 @@ export class MdQrtpHandshake extends SceneElement {
     const deviceGap = 130;
     const pitch = chunkW + chunkGap;
     const unitW = chunkW / 5;
+    const labelLift = 5;
+    const labelDrop = 8;
 
     const rowAY = 0;
     const rowBY = chunkH + deviceGap;
 
-    type SlotPair = {
-      data: Shape;
-      ack: Shape;
-    };
+    type SlotPair = { data: Shape; ack: Shape };
     const slotsA: SlotPair[] = [];
     const slotsB: SlotPair[] = [];
 
     const drawChunk = (chunk: ChunkState, x: number, y: number): SlotPair => {
-      // Each chunk is a 2-cell row (3 units data + 2 units ack = 60/40 split).
-      // The row primitive handles the outer rounded boundary AND the inner
-      // divider with butt caps automatically — no manual divider line.
+      // 2-cell row (3 units data + 2 units ack = 60/40 split). The row
+      // primitive handles the outer boundary AND the inner divider.
       const chunkRow = s.row([{ units: 3 }, { units: 2 }], {
         x,
         y,
@@ -151,22 +148,25 @@ export class MdQrtpHandshake extends SceneElement {
       const ack = chunkRow.slot(1);
 
       if (chunk.status === "current") {
-        s.aside(s.outline(chunkRow, { offset: 4, cap: "round" }));
+        // Highlight box around the active chunk. expand() carries the
+        // corner radius along, so the surrounding rect's gap is uniform
+        // around corners. Aside so the highlight doesn't grow viewBox.
+        s.rect(chunkRow.expand(4), { dashed: true, cap: "round" }).aside();
       }
 
-      const dc = data.edge("center");
-      const ac = ack.edge("center");
+      const dc = data.bounds.center;
+      const ac = ack.bounds.center;
 
       if (chunk.status !== "future") {
         s.label(
-          pt(dc.x, dc.y - 5),
+          up(dc, labelLift),
           t(t(chunk.data[0]).bold(), t(chunk.data.slice(1)).italic()),
         );
       }
-      s.label(pt(dc.x, dc.y + 8), t("data").muted(), { size: 12 });
+      s.label(down(dc, labelDrop), t("data").muted(), { size: 12 });
 
-      if (chunk.ack) s.label(pt(ac.x, ac.y - 5), chunk.ack);
-      s.label(pt(ac.x, ac.y + 8), t("ack").muted(), { size: 12 });
+      if (chunk.ack) s.label(up(ac, labelLift), chunk.ack);
+      s.label(down(ac, labelDrop), t("ack").muted(), { size: 12 });
 
       return { data, ack };
     };
@@ -186,9 +186,11 @@ export class MdQrtpHandshake extends SceneElement {
       const toSlots = arrow.toDevice === "A" ? slotsA : slotsB;
       const fromAck = fromSlots[arrow.fromChunk].ack;
       const toData = toSlots[arrow.toChunk].data;
-      const fromEdge = arrow.fromDevice === "A" ? "bottom" : "top";
-      const toEdge = arrow.toDevice === "A" ? "bottom" : "top";
-      s.arrow(fromAck.edge(fromEdge), toData.edge(toEdge));
+      const fromEdge =
+        arrow.fromDevice === "A" ? fromAck.bounds.bottom : fromAck.bounds.top;
+      const toEdge =
+        arrow.toDevice === "A" ? toData.bounds.bottom : toData.bounds.top;
+      s.arrow(fromEdge, toEdge);
     }
   }
 }

@@ -26,7 +26,7 @@ This process is _symmetric_ as neither device has a 'sender' or 'receiver' role 
 'QRTP': a
 chunk index: a
 chunks total: a
-'ack' hash: a
+ack hash: a
 chunk data: 8
 </md-codec>
 

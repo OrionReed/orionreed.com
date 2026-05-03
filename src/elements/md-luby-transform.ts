@@ -1,6 +1,6 @@
 import { css } from "./base-element";
 import * as R from "./rand";
-import { Padding, Scene, circleShape, rectShape, t } from "./draw";
+import { Padding, Scene, t } from "./draw";
 import { pt } from "./geom";
 import { SceneElement } from "./scene-element";
 
@@ -72,57 +72,34 @@ export class MdLubyTransform extends SceneElement {
     const sourceSize = 32;
     const xorR = 12;
     const qrSize = 24;
-    // yTop is the TOP of the source rects. y=24 matches the original
-    // layout where source center was at y=40 (40 - sourceSize/2).
     const yTop = 24;
     const yXor = 100;
     const yQr = 160;
 
-    // Source positions (center x of each source rect)
     const sourceCx = (i: number): number => {
       if (this.topCount <= 1) return W / 2;
       const span = W - sourceSize;
       return sourceSize / 2 + (i / (this.topCount - 1)) * span;
     };
 
-    const xorCenter = pt(W / 2, yXor);
-    const qrCenter = pt(W / 2, yQr);
-    const qrX = qrCenter.x - qrSize / 2;
-    const qrY = qrCenter.y - qrSize / 2;
-
-    // Virtual shapes used for clipping before the real shapes exist.
-    const xorVirtual = circleShape(xorCenter.x, xorCenter.y, xorR);
-    const qrVirtual = rectShape({ x: qrX, y: qrY, w: qrSize, h: qrSize });
-    const sourceVirtuals = Array.from({ length: this.topCount }, (_, i) => {
-      const cx = sourceCx(i);
-      return rectShape({
-        x: cx - sourceSize / 2,
-        y: yTop,
-        w: sourceSize,
-        h: sourceSize,
-      });
+    // Sources, drawn together with their labels.
+    const sources = Array.from({ length: this.topCount }, (_, i) => {
+      const r = s.rect(
+        sourceCx(i) - sourceSize / 2,
+        yTop,
+        sourceSize,
+        sourceSize,
+      );
+      s.label(
+        r.bounds.center,
+        t("S")
+          .bold()
+          .sub(t(String(i + 1)).italic()),
+        { size: 16 },
+      );
+      return r;
     });
 
-    // ALL connectors first so the actual nodes render ON TOP. This means
-    // shape strokes hide line endpoints — no T-junction smudges anywhere.
-    for (let i = 0; i < this.topCount; i++) {
-      if (!this.edgeStates.get(`s${i}`)) continue;
-      s.line(sourceVirtuals[i].edge("bottom"), xorVirtual, { thin: true });
-    }
-    s.line(xorVirtual, qrVirtual, { thin: true });
-
-    // Source nodes
-    for (let i = 0; i < this.topCount; i++) {
-      const b = sourceVirtuals[i].bounds;
-      s.rect(b.x, b.y, b.w, b.h);
-      s.label(
-        pt(b.x + b.w / 2, b.y + b.h / 2),
-        t("S").bold().sub(t(String(i + 1)).italic()),
-        { size: 16 }
-      );
-    }
-
-    // Dots — aside
     if (this.topCount > 0) {
       const lastCx = sourceCx(this.topCount - 1);
       const dotsX = lastCx + sourceSize / 2 + 6 + sourceSize / 2;
@@ -130,33 +107,33 @@ export class MdLubyTransform extends SceneElement {
     }
 
     // XOR: circle + cross. Cross uses butt cap so it doesn't poke past.
-    s.circle(xorCenter.x, xorCenter.y, xorR);
-    s.line(
-      pt(xorCenter.x - xorR, xorCenter.y),
-      pt(xorCenter.x + xorR, xorCenter.y),
-      { cap: "butt" }
-    );
-    s.line(
-      pt(xorCenter.x, xorCenter.y - xorR),
-      pt(xorCenter.x, xorCenter.y + xorR),
-      { cap: "butt" }
-    );
+    const xor = s.circle(W / 2, yXor, xorR);
+    s.line(xor.bounds.left, xor.bounds.right, { cap: "butt" });
+    s.line(xor.bounds.top, xor.bounds.bottom, { cap: "butt" });
 
     // QR: outer rect + filled cells
-    s.rect(qrX, qrY, qrSize, qrSize);
+    const qr = s.rect(W / 2 - qrSize / 2, yQr - qrSize / 2, qrSize, qrSize);
     const cellSize = qrSize / this.qrGridSize;
     for (let row = 0; row < this.qrGridSize; row++) {
       for (let col = 0; col < this.qrGridSize; col++) {
         if (this.qrCellStates[row * this.qrGridSize + col]) {
           s.rect(
-            qrX + col * cellSize,
-            qrY + row * cellSize,
+            qr.bounds.x + col * cellSize,
+            qr.bounds.y + row * cellSize,
             cellSize,
             cellSize,
-            { fill: true, corner: 0 }
+            { fill: true, corner: 0 },
           );
         }
       }
     }
+
+    // Connectors clip to actual scene nodes — no separate "virtual"
+    // geometry needed; nodes are Shapes too.
+    for (let i = 0; i < this.topCount; i++) {
+      if (!this.edgeStates.get(`s${i}`)) continue;
+      s.line(sources[i].bounds.bottom, xor, { thin: true });
+    }
+    s.line(xor, qr, { thin: true });
   }
 }
