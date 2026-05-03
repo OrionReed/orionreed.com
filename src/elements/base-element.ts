@@ -1,5 +1,8 @@
+import { Anim } from "./anim";
+
 export class BaseElement extends HTMLElement {
   protected shadow: ShadowRoot;
+  protected anim!: Anim;
   private static styleSheets = new Map<string, CSSStyleSheet>();
   static styles?: string;
 
@@ -10,7 +13,12 @@ export class BaseElement extends HTMLElement {
   }
 
   connectedCallback(): void {
+    this.anim = new Anim();
     this.render();
+  }
+
+  disconnectedCallback(): void {
+    this.anim.stop();
   }
 
   static get tagName(): string {

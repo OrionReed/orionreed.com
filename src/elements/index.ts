@@ -7,6 +7,7 @@ import { MdLubyTransform } from "./md-luby-transform";
 import { MdQrtpHandshake } from "./md-qrtp-handshake";
 import { MdGroup } from "./md-group";
 import { MdSyntax } from "./md-syntax";
+import { MdQrtpProtocol } from "./md-qrtp-protocol";
 
 // Define all elements
 DarkModeToggle.define();
@@ -17,3 +18,4 @@ MdLubyTransform.define();
 MdQrtpHandshake.define();
 MdGroup.define();
 MdSyntax.define();
+MdQrtpProtocol.define();

@@ -1,4 +1,5 @@
 import { BaseElement, attr, css } from "./base-element";
+import { rand } from "./anim";
 
 interface ChunkState {
   data: string;
@@ -22,16 +23,9 @@ export class MdQrtpHandshake extends BaseElement {
   @attr({ type: "number" }) chunks?: number;
   @attr({ type: "number" }) speed?: number;
 
-  private deviceA: DeviceState = {
-    chunks: [],
-  };
-
-  private deviceB: DeviceState = {
-    chunks: [],
-  };
-
+  private deviceA: DeviceState = { chunks: [] };
+  private deviceB: DeviceState = { chunks: [] };
   private arrows: Arrow[] = [];
-  private currentChunk = 0;
 
   static styles = css`
     :host {
@@ -137,13 +131,11 @@ export class MdQrtpHandshake extends BaseElement {
     return hash;
   }
 
-  private initializeDevices(): void {
+  private initDevices(): void {
     this.deviceA.chunks = [];
     this.deviceB.chunks = [];
     this.arrows = [];
-    this.currentChunk = 0;
 
-    // Both devices have data chunks
     for (let i = 0; i < this.totalChunks; i++) {
       this.deviceA.chunks.push({
         data: `A${i + 1}`,
@@ -156,147 +148,56 @@ export class MdQrtpHandshake extends BaseElement {
         status: i === 0 ? "current" : "future",
       });
     }
-
-    this.render();
-
-    // Wait a moment before starting the progression
-    setTimeout(() => {
-      this.startChunkCycle();
-    }, 1500);
   }
 
-  private startChunkCycle(): void {
-    // Random device goes first
-    const firstDevice = Math.random() < 0.5 ? "A" : "B";
-    const secondDevice = firstDevice === "A" ? "B" : "A";
-
-    // First device shows ACK after random delay
-    setTimeout(() => {
-      this.showFirstAck(firstDevice, secondDevice);
-    }, Math.random() * 2000 + 500);
-  }
-
-  private showFirstAck(firstDevice: "A" | "B", secondDevice: "A" | "B"): void {
+  private addAck(device: "A" | "B", other: "A" | "B", i: number): string {
     const hash = this.generateHash();
-
-    // Update first device's ACK
-    if (firstDevice === "A") {
-      this.deviceA.chunks[this.currentChunk].ack = hash;
-    } else {
-      this.deviceB.chunks[this.currentChunk].ack = hash;
-    }
-
-    // Create arrow from first device to second device's chunk
+    const state = device === "A" ? this.deviceA : this.deviceB;
+    state.chunks[i].ack = hash;
     this.arrows.push({
-      fromDevice: firstDevice,
-      toDevice: secondDevice,
-      fromChunk: this.currentChunk,
-      toChunk: this.currentChunk,
-      hash: hash,
+      fromDevice: device,
+      toDevice: other,
+      fromChunk: i,
+      toChunk: i,
+      hash,
     });
-
-    this.render();
-
-    // Second device responds and advances
-    setTimeout(() => {
-      this.showSecondAckAndAdvance(firstDevice, secondDevice);
-    }, Math.random() * 1000 + 300);
+    return hash;
   }
 
-  private showSecondAckAndAdvance(
-    firstDevice: "A" | "B",
-    secondDevice: "A" | "B"
-  ): void {
-    const hash = this.generateHash();
-
-    // Update second device's ACK
-    if (secondDevice === "A") {
-      this.deviceA.chunks[this.currentChunk].ack = hash;
-    } else {
-      this.deviceB.chunks[this.currentChunk].ack = hash;
-    }
-
-    // Create arrow from second device to first device's chunk
-    this.arrows.push({
-      fromDevice: secondDevice,
-      toDevice: firstDevice,
-      fromChunk: this.currentChunk,
-      toChunk: this.currentChunk,
-      hash: hash,
-    });
-
-    // Second device advances immediately after showing ACK
-    if (secondDevice === "A") {
-      this.deviceA.chunks[this.currentChunk].status = "past";
-      // Set next chunk as current for A if not at end
-      if (this.currentChunk + 1 < this.totalChunks) {
-        this.deviceA.chunks[this.currentChunk + 1].status = "current";
-      }
-    } else {
-      this.deviceB.chunks[this.currentChunk].status = "past";
-      // Set next chunk as current for B if not at end
-      if (this.currentChunk + 1 < this.totalChunks) {
-        this.deviceB.chunks[this.currentChunk + 1].status = "current";
-      }
-    }
-
-    this.render();
-
-    // First device sees second device's ACK and advances after delay
-    setTimeout(() => {
-      this.firstDeviceAdvance(firstDevice);
-    }, Math.random() * 500 + 200);
-  }
-
-  private firstDeviceAdvance(firstDevice: "A" | "B"): void {
-    // First device advances when it sees the second device's ACK
-    if (firstDevice === "A") {
-      this.deviceA.chunks[this.currentChunk].status = "past";
-      // Set next chunk as current for A if not at end
-      if (this.currentChunk + 1 < this.totalChunks) {
-        this.deviceA.chunks[this.currentChunk + 1].status = "current";
-      }
-    } else {
-      this.deviceB.chunks[this.currentChunk].status = "past";
-      // Set next chunk as current for B if not at end
-      if (this.currentChunk + 1 < this.totalChunks) {
-        this.deviceB.chunks[this.currentChunk + 1].status = "current";
-      }
-    }
-
-    // Move to next chunk
-    this.currentChunk++;
-
-    this.render();
-
-    // Check if we're done, restart if so
-    if (this.currentChunk >= this.totalChunks) {
-      setTimeout(() => {
-        this.initializeDevices();
-      }, 3000);
-    } else {
-      // Continue with next chunk
-      this.startChunkCycle();
-    }
-  }
-
-  private startAnimation(): void {
-    this.initializeDevices();
-    this.render();
-  }
-
-  private stopAnimation(): void {
-    // Animation is handled by timeouts, no interval to clear
+  private advance(device: "A" | "B", i: number): void {
+    const state = device === "A" ? this.deviceA : this.deviceB;
+    state.chunks[i].status = "past";
+    if (i + 1 < this.totalChunks) state.chunks[i + 1].status = "current";
   }
 
   connectedCallback(): void {
     super.connectedCallback();
-    this.startAnimation();
+    this.anim.loop(async () => {
+      this.initDevices();
+      this.render();
+
+      for (let i = 0; i < this.totalChunks; i++) {
+        const first: "A" | "B" = Math.random() < 0.5 ? "A" : "B";
+        const second: "A" | "B" = first === "A" ? "B" : "A";
+
+        await this.anim.wait(() => rand(500, 2500));
+        this.addAck(first, second, i);
+        this.render();
+
+        await this.anim.wait(() => rand(300, 1300));
+        this.addAck(second, first, i);
+        this.advance(second, i);
+        this.render();
+
+        await this.anim.wait(() => rand(200, 700));
+        this.advance(first, i);
+        this.render();
+      }
+
+      await this.anim.wait(3000);
+    });
   }
 
-  disconnectedCallback(): void {
-    this.stopAnimation();
-  }
 
   private renderChunkBox(chunk: ChunkState, x: number, y: number): string {
     const width = 80;
@@ -442,7 +343,6 @@ export class MdQrtpHandshake extends BaseElement {
     const chunkHeight = 50;
     const chunkSpacing = 15;
     const deviceSpacing = 130;
-    const labelWidth = 40;
 
     // Calculate total content width (excluding labels so they don't affect centering)
     const totalContentWidth =
@@ -483,11 +383,11 @@ export class MdQrtpHandshake extends BaseElement {
             
             <!-- Device labels -->
             <text class="device-label" x="${labelX}" y="${
-      deviceAY + chunkHeight / 2
-    }">A</text>
+              deviceAY + chunkHeight / 2
+            }">A</text>
             <text class="device-label" x="${labelX}" y="${
-      deviceBY + chunkHeight / 2
-    }">B</text>
+              deviceBY + chunkHeight / 2
+            }">B</text>
             
             <!-- Chunk boxes -->
             ${chunksHtml}

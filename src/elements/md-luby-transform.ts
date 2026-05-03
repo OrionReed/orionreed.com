@@ -1,9 +1,4 @@
-import { BaseElement, attr, css } from "./base-element";
-
-interface NodeState {
-  filled: boolean;
-  color?: string;
-}
+import { BaseElement, css } from "./base-element";
 
 interface EdgeState {
   visible: boolean;
@@ -12,8 +7,7 @@ interface EdgeState {
 
 export class MdLubyTransform extends BaseElement {
   private edgeStates: Map<string, EdgeState> = new Map();
-  private qrCellStates: boolean[] = []; // QR cell states
-  private animationInterval?: number;
+  private qrCellStates: boolean[] = [];
 
   static styles = css`
     :host {
@@ -189,7 +183,7 @@ export class MdLubyTransform extends BaseElement {
   private getSourcePosition(
     index: number,
     total: number,
-    width: number
+    width: number,
   ): { x: number; y: number } {
     const spacing = total > 1 ? width / (total - 1) : width / 2;
     const x = total > 1 ? index * spacing : width / 2;
@@ -209,7 +203,7 @@ export class MdLubyTransform extends BaseElement {
     centerY: number,
     radius: number,
     fromX: number,
-    fromY: number
+    fromY: number,
   ): { x: number; y: number } {
     const dx = centerX - fromX;
     const dy = centerY - fromY;
@@ -226,42 +220,16 @@ export class MdLubyTransform extends BaseElement {
     };
   }
 
-  private startAnimation(): void {
-    if (this.animationInterval) return; // Already running
-
-    // Initial setup
-    this.setRandomEdges(this.sampleSolitonApprox());
-    this.randomizeQr();
-    this.render();
-
-    // Start animation loop
-    this.animationInterval = window.setInterval(() => {
-      // Sample edge count from soliton distribution
-      const edgeCount = this.sampleSolitonApprox();
-      this.setRandomEdges(edgeCount);
-
-      // Also randomize the QR code
-      this.randomizeQr();
-
-      this.render();
-    }, 500); // Update every second
-  }
-
-  private stopAnimation(): void {
-    if (this.animationInterval) {
-      clearInterval(this.animationInterval);
-      this.animationInterval = undefined;
-    }
-  }
-
   connectedCallback(): void {
     super.connectedCallback();
-    this.startAnimation();
+    this.anim.loop(async () => {
+      this.setRandomEdges(this.sampleSolitonApprox());
+      this.randomizeQr();
+      this.render();
+      await this.anim.wait(500);
+    });
   }
 
-  disconnectedCallback(): void {
-    this.stopAnimation();
-  }
 
   private renderQrCode(): string {
     if (this.qrCellStates.length === 0) return "";
@@ -322,7 +290,7 @@ export class MdLubyTransform extends BaseElement {
       const pos = this.getSourcePosition(
         i,
         this.topCount,
-        width - sourceNodeSize
+        width - sourceNodeSize,
       );
 
       sourceNodesHtml += `
@@ -344,7 +312,7 @@ export class MdLubyTransform extends BaseElement {
       const lastSourcePos = this.getSourcePosition(
         this.topCount - 1,
         this.topCount,
-        width - sourceNodeSize
+        width - sourceNodeSize,
       );
       const dotsX = lastSourcePos.x + sourceNodeSize + 6; // 6px gap after last node
 
@@ -379,7 +347,7 @@ export class MdLubyTransform extends BaseElement {
       const sourcePos = this.getSourcePosition(
         i,
         this.topCount,
-        width - sourceNodeSize
+        width - sourceNodeSize,
       );
       const state = this.getSourceEdgeState(i);
 
@@ -392,7 +360,7 @@ export class MdLubyTransform extends BaseElement {
           xorCenterY,
           xorNodeSize / 2,
           sourceCenterX,
-          sourceCenterY
+          sourceCenterY,
         );
 
         const strokeStyle = state.color ? `stroke="${state.color}"` : "";
