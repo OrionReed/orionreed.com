@@ -1,7 +1,8 @@
-import { BaseElement, attr, css } from "./base-element";
-import { Scene, t, type Shape } from "./draw";
+import { attr, css } from "./base-element";
+import { Padding, Scene, t, type Shape } from "./draw";
 import { pt } from "./geom";
 import * as R from "./rand";
+import { SceneElement } from "./scene-element";
 
 interface ChunkState {
   data: string;
@@ -21,7 +22,7 @@ interface Arrow {
   hash: string;
 }
 
-export class MdQrtpHandshake extends BaseElement {
+export class MdQrtpHandshake extends SceneElement {
   @attr({ type: "number" }) chunks?: number;
   @attr({ type: "number" }) speed?: number;
 
@@ -31,26 +32,8 @@ export class MdQrtpHandshake extends BaseElement {
 
   static styles = css`
     :host {
-      display: block;
+      --scene-max-width: 600px;
       margin: 2rem 0;
-    }
-
-    .container {
-      padding: 1rem;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .vis {
-      width: 100%;
-      max-width: 600px;
-    }
-
-    svg {
-      width: 100%;
-      height: auto;
-      overflow: visible;
     }
   `;
 
@@ -130,11 +113,12 @@ export class MdQrtpHandshake extends BaseElement {
     });
   }
 
-  protected render(): void {
-    if (!this.deviceA.chunks.length || !this.deviceB.chunks.length) {
-      this.shadow.innerHTML = "";
-      return;
-    }
+  protected scenePadding(): Padding {
+    return window.innerWidth < 768 ? 10 : 40;
+  }
+
+  protected draw(s: Scene): void {
+    if (!this.deviceA.chunks.length || !this.deviceB.chunks.length) return;
 
     const chunkW = 80;
     const chunkH = 50;
@@ -143,13 +127,8 @@ export class MdQrtpHandshake extends BaseElement {
     const pitch = chunkW + chunkGap;
     const unitW = chunkW / 5;
 
-    const isMobile = window.innerWidth < 768;
-    const padding = isMobile ? 10 : 40;
-
     const rowAY = 0;
     const rowBY = chunkH + deviceGap;
-
-    const s = new Scene({ padding });
 
     type SlotPair = {
       data: Shape;
@@ -211,14 +190,5 @@ export class MdQrtpHandshake extends BaseElement {
       const toEdge = arrow.toDevice === "A" ? "bottom" : "top";
       s.arrow(fromAck.edge(fromEdge), toData.edge(toEdge));
     }
-
-    this.shadow.innerHTML = `
-      <div class="container">
-        <div class="vis">
-          <svg></svg>
-        </div>
-      </div>
-    `;
-    s.render(this.shadow.querySelector("svg") as SVGSVGElement);
   }
 }

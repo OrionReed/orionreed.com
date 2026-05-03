@@ -1,34 +1,17 @@
-import { BaseElement, css } from "./base-element";
+import { css } from "./base-element";
 import * as R from "./rand";
-import { Scene, circleShape, rectShape, t } from "./draw";
+import { Padding, Scene, circleShape, rectShape, t } from "./draw";
 import { pt } from "./geom";
+import { SceneElement } from "./scene-element";
 
-export class MdLubyTransform extends BaseElement {
+export class MdLubyTransform extends SceneElement {
   private edgeStates: Map<string, boolean> = new Map();
   private qrCellStates: boolean[] = [];
 
   static styles = css`
     :host {
-      display: block;
+      --scene-max-width: 400px;
       margin: 0;
-    }
-
-    .container {
-      padding: 1rem;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    .vis {
-      width: 100%;
-      max-width: 400px;
-    }
-
-    svg {
-      width: 100%;
-      height: auto;
-      overflow: visible;
     }
   `;
 
@@ -77,7 +60,13 @@ export class MdLubyTransform extends BaseElement {
     });
   }
 
-  protected render(): void {
+  // 0 horizontal padding so sources span the full width like the original;
+  // 26 vertical padding restores the original 400x200 viewBox aspect.
+  protected scenePadding(): Padding {
+    return { x: 0, y: 26 };
+  }
+
+  protected draw(s: Scene): void {
     const isMobile = window.innerWidth < 768;
     const W = isMobile ? 300 : 400;
     const sourceSize = 32;
@@ -88,10 +77,6 @@ export class MdLubyTransform extends BaseElement {
     const yTop = 24;
     const yXor = 100;
     const yQr = 160;
-
-    // 0 horizontal padding so sources span the full width like the original;
-    // 26 vertical padding restores the original 400x200 viewBox aspect.
-    const s = new Scene({ padding: { x: 0, y: 26 } });
 
     // Source positions (center x of each source rect)
     const sourceCx = (i: number): number => {
@@ -168,17 +153,10 @@ export class MdLubyTransform extends BaseElement {
             qrY + row * cellSize,
             cellSize,
             cellSize,
-            { solid: true, corner: 0 }
+            { fill: true, corner: 0 }
           );
         }
       }
     }
-
-    this.shadow.innerHTML = `
-      <div class="container">
-        <div class="vis"><svg></svg></div>
-      </div>
-    `;
-    s.render(this.shadow.querySelector("svg") as SVGSVGElement);
   }
 }

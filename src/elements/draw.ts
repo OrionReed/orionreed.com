@@ -28,6 +28,12 @@ const C = {
   gap: 3,
   font: "'New CM', monospace",
   fontSize: 14,
+  /** Approximate character width as a fraction of font-size (used for
+   *  rough label bounds estimation since SVG can't measure text without
+   *  layout). */
+  charWidth: 0.6,
+  /** Relative font size for sub/sup tspans. */
+  subFontSize: "0.75em",
   arrowMarkerId: "draw-arrow",
   // refX=0 anchors the line endpoint at the arrowhead BASE (widest point)
   // so the line never exceeds the arrowhead's width visually. `round`
@@ -36,11 +42,25 @@ const C = {
   arrowMarker: { w: 10, h: 7, refX: 0, refY: 3.5, round: 0.9 },
   /** Default visual gap at each end of an arrow. */
   arrowGap: 4,
+  /** Font size used for arrow labels. */
+  arrowLabelSize: 11,
+  /** Vertical offset of an arrow label above the line midpoint. */
+  arrowLabelOffset: 4,
   /** Opacity used by `muted: true` across all primitives. */
   mutedOpacity: 0.5,
 };
 
 const NSS = 'vector-effect="non-scaling-stroke"';
+
+/** Build the standard stroke attribute string for outlined primitives. */
+function strokeAttrs(weight: number, muted?: boolean): string {
+  const opacity = muted ? ` opacity="${C.mutedOpacity}"` : "";
+  return `stroke="${C.stroke}" stroke-width="${weight}" ${NSS}${opacity}`;
+}
+
+function pickWeight(opts: { thin?: boolean }): number {
+  return opts.thin ? C.thinWeight : C.weight;
+}
 
 // =====================================================================
 // Text — chainable rich text composed of nested styled spans.
@@ -96,8 +116,8 @@ function renderTextNode(node: TextPart): string {
   if (node.style.bold) a.push('font-weight="700"');
   if (node.style.italic) a.push('font-style="italic"');
   if (node.style.muted) a.push(`opacity="${C.mutedOpacity}"`);
-  if (node.style.sub) a.push('baseline-shift="sub" font-size="0.75em"');
-  if (node.style.sup) a.push('baseline-shift="super" font-size="0.75em"');
+  if (node.style.sub) a.push(`baseline-shift="sub" font-size="${C.subFontSize}"`);
+  if (node.style.sup) a.push(`baseline-shift="super" font-size="${C.subFontSize}"`);
   return a.length ? `<tspan ${a.join(" ")}>${inner}</tspan>` : inner;
 }
 
@@ -381,22 +401,68 @@ function circleToSegments(cx: number, cy: number, r: number): Segment[] {
 }
 
 /**
+ * Build a triangle path for the arrowhead with all three corners rounded
+ * by `r`. Each corner is cut back along its two edges by `r`; a quadratic
+ * Bezier with the original sharp vertex as control point smooths the
+ * join. Result is a filled shape with genuinely rounded corners.
+ */
+function buildArrowheadPath(): string {
+  const m = C.arrowMarker;
+  const r = m.round;
+  const v0 = { x: 0, y: 0 };
+  const v1 = { x: m.w, y: m.refY };
+  const v2 = { x: 0, y: m.h };
+  const corner = (v: Point, prev: Point, next: Point) => {
+    const dPrev = Math.sqrt((prev.x - v.x) ** 2 + (prev.y - v.y) ** 2);
+    const dNext = Math.sqrt((next.x - v.x) ** 2 + (next.y - v.y) ** 2);
+    return {
+      approach: {
+        x: v.x + (r * (prev.x - v.x)) / dPrev,
+        y: v.y + (r * (prev.y - v.y)) / dPrev,
+      },
+      depart: {
+        x: v.x + (r * (next.x - v.x)) / dNext,
+        y: v.y + (r * (next.y - v.y)) / dNext,
+      },
+    };
+  };
+  const c0 = corner(v0, v2, v1);
+  const c1 = corner(v1, v0, v2);
+  const c2 = corner(v2, v1, v0);
+  return `M ${c0.depart.x} ${c0.depart.y} L ${c1.approach.x} ${c1.approach.y} Q ${v1.x} ${v1.y} ${c1.depart.x} ${c1.depart.y} L ${c2.approach.x} ${c2.approach.y} Q ${v2.x} ${v2.y} ${c2.depart.x} ${c2.depart.y} L ${c0.approach.x} ${c0.approach.y} Q ${v0.x} ${v0.y} ${c0.depart.x} ${c0.depart.y} Z`;
+}
+
+const ARROWHEAD_PATH = buildArrowheadPath();
+const ARROW_DEFS = `<defs><marker id="${C.arrowMarkerId}" markerWidth="${C.arrowMarker.w}" markerHeight="${C.arrowMarker.h}" refX="${C.arrowMarker.refX}" refY="${C.arrowMarker.refY}" orient="auto" markerUnits="userSpaceOnUse"><path d="${ARROWHEAD_PATH}" fill="${C.stroke}"/></marker></defs>`;
+
+/**
  * Render a sequence of segments as a dashed stroke composed of explicit
  * <path> elements (one per dash). When `cap === "round"`, the dash
- * path-length is shrunk and gap path-length is grown so that the
- * VISUAL dash (including round caps) still measures `C.dash` and the
- * visual gap still measures `C.gap`, with optical compensation
- * (rounded ends look shorter than their mathematical extent).
+ * path-length is shrunk and gap path-length is grown so the VISUAL dash
+ * (including round caps) still measures `C.dash` and the visual gap
+ * still measures `C.gap`, with optical compensation (rounded ends look
+ * shorter than their mathematical extent).
  */
+interface DashRenderOpts {
+  mode: "open" | "closed";
+  /** Stroke attribute string (color, width, NSS, optional opacity). */
+  stroke: string;
+  /** Optional join attribute (e.g. `stroke-linejoin="miter"`). */
+  join?: string;
+  cap?: "butt" | "round";
+  /** Stroke weight; needed to compute optical compensation. Defaults to C.weight. */
+  weight?: number;
+}
+
 function renderDashedSegments(
   segments: Segment[],
-  mode: "open" | "closed",
-  strokeAttrs: string,
-  joinAttr: string,
-  cap: "butt" | "round" = "butt",
-  weight: number = C.weight
+  opts: DashRenderOpts,
 ): string {
   if (segments.length === 0) return "";
+
+  const cap = opts.cap ?? "butt";
+  const weight = opts.weight ?? C.weight;
+  const join = opts.join ?? "";
 
   const segLengths = segments.map(segmentLength);
   const totalLen = segLengths.reduce((a, b) => a + b, 0);
@@ -410,16 +476,16 @@ function renderDashedSegments(
 
   const { dashSize, gapSize, N } = computeDashGeom(
     totalLen,
-    mode,
+    opts.mode,
     dashTarget,
-    gapTarget
+    gapTarget,
   );
 
   if (N === 0) return "";
   if (N === 1) {
     // Solid: draw the entire path as a single SVG path
     const d = pathFromTo(segments, segLengths, 0, totalLen);
-    return `<path d="${d}" fill="none" ${strokeAttrs} ${joinAttr} stroke-linecap="${cap}"/>`;
+    return `<path d="${d}" fill="none" ${opts.stroke} ${join} stroke-linecap="${cap}"/>`;
   }
 
   let svg = "";
@@ -428,7 +494,7 @@ function renderDashedSegments(
     const start = i * period;
     const end = start + dashSize;
     const d = pathFromTo(segments, segLengths, start, end);
-    svg += `<path d="${d}" fill="none" ${strokeAttrs} ${joinAttr} stroke-linecap="${cap}"/>`;
+    svg += `<path d="${d}" fill="none" ${opts.stroke} ${join} stroke-linecap="${cap}"/>`;
   }
   return svg;
 }
@@ -488,32 +554,39 @@ interface SceneEntry {
 // Options — kept small and orthogonal.
 // =====================================================================
 
-export interface RectOpts {
-  dashed?: boolean;
-  /** Filled (no stroke). For outlined+filled, draw a solid then an outline. */
-  solid?: boolean;
+/**
+ * Common options shared by all primitives. `aside` excludes the shape
+ * from scene bounds (so it doesn't affect viewBox auto-centering).
+ * Defaults vary by primitive — connectors and labels are aside by
+ * default; rects, circles, and rows are not.
+ */
+interface CommonOpts {
   muted?: boolean;
   /** Use the thin weight instead of the main weight. */
   thin?: boolean;
+  /** Exclude this shape from scene bounds. */
+  aside?: boolean;
+}
+
+export interface RectOpts extends CommonOpts {
+  dashed?: boolean;
+  /** Render as a filled block (no stroke) instead of an outline. */
+  fill?: boolean;
   /** Override corner radius (default `C.corner`). Pass 0 for square corners. */
   corner?: number;
-  /** Stroke cap on dashed segments. Default "butt". */
+  /** Stroke cap on dashed segments. Default "round". */
   cap?: "butt" | "round";
 }
 
-export interface CircleOpts {
-  solid?: boolean;
-  muted?: boolean;
-  thin?: boolean;
+export interface CircleOpts extends CommonOpts {
+  fill?: boolean;
   dashed?: boolean;
-  /** Stroke cap on dashed segments. Default "butt". */
+  /** Stroke cap on dashed segments. Default "round". */
   cap?: "butt" | "round";
 }
 
-export interface LineOpts {
+export interface LineOpts extends CommonOpts {
   dashed?: boolean;
-  muted?: boolean;
-  thin?: boolean;
   /**
    * Stroke cap. Default: "round" if both endpoints are Points (free pen
    * ends), "butt" if either is a Shape (intersection with another
@@ -522,10 +595,8 @@ export interface LineOpts {
   cap?: "round" | "butt";
 }
 
-export interface PolylineOpts {
+export interface PolylineOpts extends CommonOpts {
   dashed?: boolean;
-  muted?: boolean;
-  thin?: boolean;
   /** Stroke cap at the start and end of the path. Default "round". */
   cap?: "round" | "butt";
   /** How internal corners are joined. Default "miter". */
@@ -541,6 +612,7 @@ export interface ArrowOpts {
    * Default `C.arrowGap`.
    */
   gap?: number;
+  aside?: boolean;
 }
 
 export interface LabelOpts {
@@ -549,12 +621,8 @@ export interface LabelOpts {
   baseline?: "top" | "middle" | "bottom";
   /** Rotation in degrees, around the anchor point. */
   rotate?: number;
-  /**
-   * Whether this label should count towards scene bounds.
-   * Default false — labels are aside by default so the *content*
-   * drives centering, not the labels around it.
-   */
-  bounds?: boolean;
+  /** Exclude this label from scene bounds. Default true (labels are usually decorations). */
+  aside?: boolean;
 }
 
 export interface RowItem {
@@ -567,15 +635,17 @@ export interface RowOpts {
   x: number;
   y: number;
   h: number;
-  unitWidth: number;
-  dashed?: boolean;
+  /** Multiplier for each item's `units` to give its slot width. */
+  unitWidth?: number;
+  /** Total width of the row. If provided, `unitWidth` is computed as `width / totalUnits`. */
+  width?: number;
 }
 
 // =====================================================================
 // Scene — the only class. Owns the entries, computes bounds, renders.
 // =====================================================================
 
-type Padding =
+export type Padding =
   | number
   | {
       x?: number;
@@ -654,21 +724,28 @@ export class Scene {
       clipFrom: (from, pad = 0) =>
         rectEdgeFrom(pad ? expandBounds(bounds, pad) : bounds, from),
     };
-    return this.add(shape, () => {
-      const opacity = opts.muted ? ` opacity="${C.mutedOpacity}"` : "";
-      const weight = opts.thin ? C.thinWeight : C.weight;
-      if (opts.solid) {
-        // Filled blocks have no stroke — adjacent solids tile cleanly.
-        return `<path d="${rrPath(x, y, w, h, corner)}" fill="${C.stroke}"${opacity}/>`;
-      }
-      if (opts.dashed) {
-        // Render each dash as an explicit path along the rect perimeter.
-        const segs = rrToSegments(x, y, w, h, corner);
-        const sw = `stroke="${C.stroke}" stroke-width="${weight}" ${NSS}${opacity}`;
-        return renderDashedSegments(segs, "closed", sw, "", opts.cap ?? "round", weight);
-      }
-      return `<path d="${rrPath(x, y, w, h, corner)}" fill="none" stroke="${C.stroke}" stroke-width="${weight}" ${NSS}${opacity}/>`;
-    });
+    return this.add(
+      shape,
+      () => {
+        if (opts.fill) {
+          // Filled blocks have no stroke — adjacent fills tile cleanly.
+          const opacity = opts.muted ? ` opacity="${C.mutedOpacity}"` : "";
+          return `<path d="${rrPath(x, y, w, h, corner)}" fill="${C.stroke}"${opacity}/>`;
+        }
+        const weight = pickWeight(opts);
+        const sw = strokeAttrs(weight, opts.muted);
+        if (opts.dashed) {
+          return renderDashedSegments(rrToSegments(x, y, w, h, corner), {
+            mode: "closed",
+            stroke: sw,
+            cap: opts.cap ?? "round",
+            weight,
+          });
+        }
+        return `<path d="${rrPath(x, y, w, h, corner)}" fill="none" ${sw}/>`;
+      },
+      opts.aside ?? false,
+    );
   }
 
   circle(cx: number, cy: number, r: number, opts: CircleOpts = {}): Shape {
@@ -678,17 +755,24 @@ export class Scene {
       edge: (dir) => circleEdgeFrom(cx, cy, r, boundsEdge(bounds, dir)),
       clipFrom: (from, pad = 0) => circleEdgeFrom(cx, cy, r + pad, from),
     };
-    return this.add(shape, () => {
-      const fill = opts.solid ? C.stroke : "none";
-      const opacity = opts.muted ? ` opacity="${C.mutedOpacity}"` : "";
-      const weight = opts.thin ? C.thinWeight : C.weight;
-      if (opts.dashed && !opts.solid) {
-        const segs = circleToSegments(cx, cy, r);
-        const sw = `stroke="${C.stroke}" stroke-width="${weight}" ${NSS}${opacity}`;
-        return renderDashedSegments(segs, "closed", sw, "", opts.cap ?? "round", weight);
-      }
-      return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="${C.stroke}" stroke-width="${weight}" ${NSS}${opacity}/>`;
-    });
+    return this.add(
+      shape,
+      () => {
+        const weight = pickWeight(opts);
+        const sw = strokeAttrs(weight, opts.muted);
+        if (opts.dashed && !opts.fill) {
+          return renderDashedSegments(circleToSegments(cx, cy, r), {
+            mode: "closed",
+            stroke: sw,
+            cap: opts.cap ?? "round",
+            weight,
+          });
+        }
+        const fill = opts.fill ? C.stroke : "none";
+        return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" ${sw}/>`;
+      },
+      opts.aside ?? false,
+    );
   }
 
   line(from: Point | Shape, to: Point | Shape, opts: LineOpts = {}): void {
@@ -710,16 +794,19 @@ export class Scene {
     this.add(
       shape,
       () => {
-        const opacity = opts.muted ? ` opacity="${C.mutedOpacity}"` : "";
-        const weight = opts.thin ? C.thinWeight : C.weight;
+        const weight = pickWeight(opts);
+        const sw = strokeAttrs(weight, opts.muted);
         if (opts.dashed) {
-          const segs = lineToSegments(p1, p2);
-          const sw = `stroke="${C.stroke}" stroke-width="${weight}" ${NSS}${opacity}`;
-          return renderDashedSegments(segs, "open", sw, "", cap, weight);
+          return renderDashedSegments(lineToSegments(p1, p2), {
+            mode: "open",
+            stroke: sw,
+            cap,
+            weight,
+          });
         }
-        return `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="${C.stroke}" stroke-width="${weight}" stroke-linecap="${cap}" ${NSS}${opacity}/>`;
+        return `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" ${sw} stroke-linecap="${cap}"/>`;
       },
-      true,
+      opts.aside ?? true,
     );
   }
 
@@ -753,23 +840,20 @@ export class Scene {
     this.add(
       shape,
       () => {
-        const opacity = opts.muted ? ` opacity="${C.mutedOpacity}"` : "";
-        const weight = opts.thin ? C.thinWeight : C.weight;
+        const weight = pickWeight(opts);
+        const sw = strokeAttrs(weight, opts.muted);
         if (opts.dashed) {
-          const segs = polylineToSegments(points);
-          const sw = `stroke="${C.stroke}" stroke-width="${weight}" ${NSS}${opacity}`;
-          return renderDashedSegments(
-            segs,
-            "open",
-            sw,
-            `stroke-linejoin="${join}"`,
+          return renderDashedSegments(polylineToSegments(points), {
+            mode: "open",
+            stroke: sw,
+            join: `stroke-linejoin="${join}"`,
             cap,
             weight,
-          );
+          });
         }
-        return `<path d="${d}" fill="none" stroke="${C.stroke}" stroke-width="${weight}" stroke-linecap="${cap}" stroke-linejoin="${join}" ${NSS}${opacity}/>`;
+        return `<path d="${d}" fill="none" ${sw} stroke-linecap="${cap}" stroke-linejoin="${join}"/>`;
       },
-      true,
+      opts.aside ?? true,
     );
   }
 
@@ -780,7 +864,7 @@ export class Scene {
    * shortened by `pad` along its direction so the arrowhead lands
    * with a clean visual gap.
    */
-  arrow(from: Point | Shape, to: Point | Shape, opts: ArrowOpts = {}): void {
+  arrow(from: Point | Shape, to: Point | Shape, opts: ArrowOpts = {}): Shape {
     const gap = opts.gap ?? C.arrowGap;
     // FROM end uses a round cap. Mathematically the cap extends
     // `weight/2` past the line endpoint, but because rounded shapes
@@ -820,29 +904,33 @@ export class Scene {
       edge: (dir) => boundsEdge(bounds, dir),
       clipFrom: () => p1,
     };
-    this.add(
+    const arrowShape = this.add(
       shape,
       () => {
         // Round cap so the FROM end has a pen-tip; the TO end is hidden
         // behind the arrowhead marker so cap style is invisible there.
-        let svg = `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="${C.stroke}" stroke-width="${C.weight}" stroke-linecap="round" ${NSS} marker-end="url(#${C.arrowMarkerId})"/>`;
-        if (opts.label) {
-          const m = midpoint(p1, p2);
-          svg += `<text x="${m.x}" y="${
-            m.y - 4
-          }" font-family="${C.font}" font-size="11" fill="${
-            C.stroke
-          }" text-anchor="middle">${renderContent(opts.label)}</text>`;
-        }
-        return svg;
+        const sw = strokeAttrs(C.weight);
+        return `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" ${sw} stroke-linecap="round" marker-end="url(#${C.arrowMarkerId})"/>`;
       },
-      true,
+      opts.aside ?? true,
     );
+
+    // Render the optional label as a separate (aside) label entry so it
+    // inherits all of label()'s features (rotation, sizing, bold, etc).
+    if (opts.label) {
+      const m = midpoint(p1, p2);
+      this.label(pt(m.x, m.y - C.arrowLabelOffset), opts.label, {
+        size: C.arrowLabelSize,
+      });
+    }
+
+    return arrowShape;
   }
 
   label(p: Point, content: Content, opts: LabelOpts = {}): Shape {
     const size = opts.size ?? C.fontSize;
     const anchor = opts.anchor ?? "middle";
+    const aside = opts.aside ?? true;
     const baseline =
       opts.baseline === "top"
         ? "hanging"
@@ -854,10 +942,10 @@ export class Scene {
       : "";
 
     // Approximate bounds — labels are aside by default so this only
-    // matters if the caller opts in via { bounds: true }.
+    // matters if the caller opts in via `{ aside: false }`.
     const approxText =
       typeof content === "string" ? content : flattenText(content);
-    const w = size * Math.max(1, approxText.length) * 0.6;
+    const w = size * Math.max(1, approxText.length) * C.charWidth;
     const bounds: Bounds = { x: p.x - w / 2, y: p.y - size / 2, w, h: size };
 
     const shape: Shape = {
@@ -869,7 +957,7 @@ export class Scene {
       shape,
       () =>
         `<text x="${p.x}" y="${p.y}" font-family="${C.font}" font-size="${size}" fill="${C.stroke}" text-anchor="${anchor}" dominant-baseline="${baseline}"${transform}>${renderContent(content)}</text>`,
-      !opts.bounds,
+      aside,
     );
   }
 
@@ -880,8 +968,15 @@ export class Scene {
    */
   row(items: RowItem[], opts: RowOpts): RowShape {
     const totalUnits = items.reduce((s, i) => s + i.units, 0);
-    const totalW = totalUnits * opts.unitWidth;
-    const slotWidths = items.map((i) => i.units * opts.unitWidth);
+    const unitWidth =
+      opts.unitWidth ??
+      (opts.width !== undefined
+        ? opts.width / totalUnits
+        : (() => {
+            throw new Error("row: must provide `unitWidth` or `width`");
+          })());
+    const totalW = totalUnits * unitWidth;
+    const slotWidths = items.map((i) => i.units * unitWidth);
 
     const slotXs: number[] = [];
     let cur = opts.x;
@@ -915,20 +1010,14 @@ export class Scene {
     };
 
     return this.add(shape, () => {
-      const sw = `stroke="${C.stroke}" stroke-width="${C.weight}" ${NSS}`;
+      const sw = strokeAttrs(C.weight);
       // Dashed dividers are "soft" subdivisions and use thin weight so
       // they read as a less-emphatic boundary than the outer or solid
       // dividers (which use the main weight).
-      const swThin = `stroke="${C.stroke}" stroke-width="${C.thinWeight}" ${NSS}`;
+      const swThin = strokeAttrs(C.thinWeight);
 
-      // Outer boundary
-      let svg: string;
-      if (opts.dashed) {
-        const segs = rrToSegments(opts.x, opts.y, totalW, opts.h, C.corner);
-        svg = renderDashedSegments(segs, "closed", sw, "");
-      } else {
-        svg = `<path d="${rrPath(opts.x, opts.y, totalW, opts.h, C.corner)}" fill="none" ${sw}/>`;
-      }
+      // Outer boundary (always solid; dashed outlines are not a row concept)
+      let svg = `<path d="${rrPath(opts.x, opts.y, totalW, opts.h, C.corner)}" fill="none" ${sw}/>`;
       // Inner dividers
       for (let i = 1; i < items.length; i++) {
         const x = slotXs[i];
@@ -936,14 +1025,12 @@ export class Scene {
         const top = pt(x, opts.y);
         const bot = pt(x, opts.y + opts.h);
         if (isDashed) {
-          svg += renderDashedSegments(
-            lineToSegments(top, bot),
-            "open",
-            swThin,
-            "",
-            "round",
-            C.thinWeight,
-          );
+          svg += renderDashedSegments(lineToSegments(top, bot), {
+            mode: "open",
+            stroke: swThin,
+            cap: "round",
+            weight: C.thinWeight,
+          });
         } else {
           svg += `<line x1="${x}" y1="${opts.y}" x2="${x}" y2="${
             opts.y + opts.h
@@ -986,36 +1073,7 @@ export class Scene {
     svgEl.setAttribute("width", String(padded.w));
     svgEl.setAttribute("height", String(padded.h));
 
-    const m = C.arrowMarker;
-    // Build a triangle path with corners rounded by `r`. Each corner is
-    // cut back by `r` along its two edges; a quadratic Bezier with the
-    // original sharp vertex as control point smooths the join. Result
-    // is a filled arrowhead with all three corners genuinely rounded.
-    const r = m.round;
-    const v0 = { x: 0, y: 0 };
-    const v1 = { x: m.w, y: m.refY };
-    const v2 = { x: 0, y: m.h };
-    const corner = (v: Point, prev: Point, next: Point) => {
-      const dPrev = Math.sqrt((prev.x - v.x) ** 2 + (prev.y - v.y) ** 2);
-      const dNext = Math.sqrt((next.x - v.x) ** 2 + (next.y - v.y) ** 2);
-      return {
-        approach: {
-          x: v.x + (r * (prev.x - v.x)) / dPrev,
-          y: v.y + (r * (prev.y - v.y)) / dPrev,
-        },
-        depart: {
-          x: v.x + (r * (next.x - v.x)) / dNext,
-          y: v.y + (r * (next.y - v.y)) / dNext,
-        },
-      };
-    };
-    const c0 = corner(v0, v2, v1);
-    const c1 = corner(v1, v0, v2);
-    const c2 = corner(v2, v1, v0);
-    const arrowD = `M ${c0.depart.x} ${c0.depart.y} L ${c1.approach.x} ${c1.approach.y} Q ${v1.x} ${v1.y} ${c1.depart.x} ${c1.depart.y} L ${c2.approach.x} ${c2.approach.y} Q ${v2.x} ${v2.y} ${c2.depart.x} ${c2.depart.y} L ${c0.approach.x} ${c0.approach.y} Q ${v0.x} ${v0.y} ${c0.depart.x} ${c0.depart.y} Z`;
-    const defs = `<defs><marker id="${C.arrowMarkerId}" markerWidth="${m.w}" markerHeight="${m.h}" refX="${m.refX}" refY="${m.refY}" orient="auto" markerUnits="userSpaceOnUse"><path d="${arrowD}" fill="${C.stroke}"/></marker></defs>`;
-
-    svgEl.innerHTML = defs + this.entries.map((e) => e.render()).join("");
+    svgEl.innerHTML = ARROW_DEFS + this.entries.map((e) => e.render()).join("");
   }
 
   // -----------------------------------------------------------------

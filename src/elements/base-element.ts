@@ -40,11 +40,27 @@ export class BaseElement extends HTMLElement {
     const constructor = this.constructor as typeof BaseElement;
     const className = constructor.name;
 
-    // Create stylesheet from static styles if not already created
-    if (constructor.styles && !BaseElement.styleSheets.has(className)) {
-      const sheet = new CSSStyleSheet();
-      sheet.replaceSync(constructor.styles);
-      BaseElement.styleSheets.set(className, sheet);
+    if (!BaseElement.styleSheets.has(className)) {
+      // Walk the prototype chain and collect each class's OWN `static
+      // styles` (base classes first, subclasses last), so subclass styles
+      // override base styles via the cascade. Lets a subclass extend a
+      // styled base class without manually concatenating CSS.
+      const chain: string[] = [];
+      let proto: any = constructor;
+      while (proto && proto !== HTMLElement && proto !== Object) {
+        if (
+          Object.prototype.hasOwnProperty.call(proto, "styles") &&
+          proto.styles
+        ) {
+          chain.unshift(proto.styles);
+        }
+        proto = Object.getPrototypeOf(proto);
+      }
+      if (chain.length > 0) {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(chain.join("\n"));
+        BaseElement.styleSheets.set(className, sheet);
+      }
     }
 
     const styleSheet = BaseElement.styleSheets.get(className);
