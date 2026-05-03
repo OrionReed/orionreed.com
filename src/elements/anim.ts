@@ -33,6 +33,7 @@ export class Anim {
   private controller = new AbortController();
   private rafIds = new Set<number>();
   private timerIds = new Set<number>();
+  private scopes = new Set<Anim>();
 
   private get aborted(): boolean {
     return this.controller.signal.aborted;
@@ -60,10 +61,7 @@ export class Anim {
 
   // Shared promise setup: abort listener + finish/abort callbacks
   private promise<T>(
-    fn: (
-      finish: (value: T) => void,
-      abort: () => void
-    ) => void
+    fn: (finish: (value: T) => void) => void
   ): Promise<T> {
     if (this.aborted) return Promise.reject(new AbortError());
 
@@ -85,38 +83,33 @@ export class Anim {
 
       this.controller.signal.addEventListener("abort", onAbort, { once: true });
 
-      fn(finish, onAbort);
+      fn(finish);
     });
   }
 
   /**
-   * Wait for a fixed delay, a dynamic delay, or a condition.
+   * Wait for a fixed or dynamic delay.
    *
    *   await anim.wait(500)
-   *   await anim.wait(() => rand(300, 800))   // fn returns number → delay
-   *   await anim.wait(() => this.state.done)  // fn returns truthy → condition
+   *   await anim.wait(() => rand(300, 800))
    */
-  wait(arg: number | (() => number | boolean)): Promise<void> {
+  wait(arg: number | (() => number)): Promise<void> {
     return this.promise<void>((finish) => {
-      const delay = (ms: number) => this.timeout(finish, ms);
+      const ms = typeof arg === "number" ? arg : arg();
+      this.timeout(finish, ms);
+    });
+  }
 
-      if (typeof arg === "number") {
-        delay(arg);
-        return;
-      }
-
-      const result = arg();
-
-      if (typeof result === "number") {
-        delay(result);
-        return;
-      }
-
-      // Condition: poll until truthy
-      if (result) { finish(); return; }
-
+  /**
+   * Wait until a condition becomes truthy. Polls at 50ms intervals.
+   *
+   *   await anim.until(() => this.state.done)
+   */
+  until(condition: () => boolean): Promise<void> {
+    return this.promise<void>((finish) => {
+      if (condition()) { finish(); return; }
       const poll = () => {
-        if ((arg as () => boolean)()) finish();
+        if (condition()) finish();
         else this.timeout(poll, 50);
       };
       this.timeout(poll, 50);
@@ -192,7 +185,23 @@ export class Anim {
   }
 
   /**
-   * Cancel all pending waits, tweens, ticks, and loops immediately.
+   * Create a child Anim scoped to this one's lifetime.
+   * Stopped automatically when the parent is stopped, or independently.
+   *
+   *   const child = this.anim.scope()
+   *   child.loop(async () => { ... })
+   *   child.stop() // stop just this scope
+   *   this.anim.stop() // stops parent and all scopes
+   */
+  scope(): Anim {
+    const child = new Anim();
+    this.scopes.add(child);
+    return child;
+  }
+
+  /**
+   * Cancel all pending operations and reset for reuse.
+   * Also stops and clears all child scopes.
    * Safe to call multiple times.
    */
   stop(): void {
@@ -201,5 +210,8 @@ export class Anim {
     this.timerIds.forEach((id) => clearTimeout(id));
     this.rafIds.clear();
     this.timerIds.clear();
+    this.scopes.forEach((s) => s.stop());
+    this.scopes.clear();
+    this.controller = new AbortController();
   }
 }

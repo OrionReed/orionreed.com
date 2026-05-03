@@ -1,5 +1,4 @@
 import { BaseElement, attr, css } from "./base-element";
-import { Anim } from "./anim";
 import type { MdCellCircle } from "./md-cell-circle";
 
 interface Colors {
@@ -14,7 +13,7 @@ export class MdQrtpProtocol extends BaseElement {
   @attr({ type: "number" }) cells?: number;
   @attr({ type: "boolean" }) backchannel?: boolean;
 
-  private floodAnim = new Anim();
+  private floodAnim = this.anim.scope();
 
   private received = new Set<number>();
   private retransmit = new Set<number>();
@@ -139,9 +138,9 @@ export class MdQrtpProtocol extends BaseElement {
   }
 
   private startFloodFillLoop(): void {
-    this.floodAnim = new Anim();
+    this.floodAnim = this.anim.scope();
     this.floodAnim.loop(async () => {
-      await this.floodAnim.wait(() => this.retransmit.size > 0);
+      await this.floodAnim.until(() => this.retransmit.size > 0);
       await this.floodAnim.wait(800);
       await this.doFloodFill();
       await this.floodAnim.wait(2000);
@@ -190,8 +189,4 @@ export class MdQrtpProtocol extends BaseElement {
     });
   }
 
-  disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this.floodAnim.stop();
-  }
 }
