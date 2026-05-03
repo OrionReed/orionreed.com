@@ -23,10 +23,6 @@ export function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
-export function rand(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
-}
-
 // --- Anim ---
 
 export class Anim {
@@ -60,9 +56,7 @@ export class Anim {
   }
 
   // Shared promise setup: abort listener + finish/abort callbacks
-  private promise<T>(
-    fn: (finish: (value: T) => void) => void
-  ): Promise<T> {
+  private promise<T>(fn: (finish: (value: T) => void) => void): Promise<T> {
     if (this.aborted) return Promise.reject(new AbortError());
 
     return new Promise<T>((resolve, reject) => {
@@ -107,7 +101,10 @@ export class Anim {
    */
   until(condition: () => boolean): Promise<void> {
     return this.promise<void>((finish) => {
-      if (condition()) { finish(); return; }
+      if (condition()) {
+        finish();
+        return;
+      }
       const poll = () => {
         if (condition()) finish();
         else this.timeout(poll, 50);

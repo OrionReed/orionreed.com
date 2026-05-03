@@ -70,7 +70,7 @@ One might think of **Error Correcting Codes (ECCs)** which allow the message to 
 **Errors:** You receive corrupted data (wrong bits) but don't know which bits are wrong <br/>
 **Erasures:** You know exactly which data is missing (dropped packets, missing chunks)
 
-This is where **fountain codes** (also known as _rateless erasure codes_) become invaluable. These erasure codes can generate unlimited encoded chunks from source chunks, where the original source can be recovered from any subset of chunks only slightly larger than the source size. Put simply: input $K$ chunks and get an infinite stream (a _fountain_) of new chunks where any $K\approx K$ encoded chunks can reproduce the original data. [^2]
+This is where **fountain codes** (also known as _rateless erasure codes_) become invaluable. These erasure codes can generate unlimited encoded chunks from source chunks, where the original source can be recovered from any subset of chunks only slightly larger than the source size. Put simply: input $K$ chunks and get an infinite stream (a _fountain_) of new chunks where $\gtrsim K$ encoded chunks can reproduce the original data. [^2]
 
 [^2]: The overhead for Luby Transforms is typically around 10% of $K$
 
@@ -90,4 +90,3 @@ Fountain codes have some great properties for one-way communication: Many device
 There is a lot more to explore and plenty of improvements left on the table including practical necessities like handling multiple connections and addressing failure modes. All the same, the results were quite evocative — the fact I can sit next to someone with another device and be entirely unable to pass data across if the internet goes down is an indictment of computing as it exists today. A more pluralistic computing in which all data transport options are available, including the slow or silly ones, is a world I would very much like to see.
 
 > Thanks to [chee](https://chee.party/) for feedback on this post and to [Chris Shank](https://chrisshank.com/) for the discussions during these explorations.
-
