@@ -9,6 +9,7 @@ import {
   expandBounds,
   isHeading,
   midpoint,
+  polar,
   rectEdgeFrom,
   unionBounds,
 } from "./geom";
@@ -433,6 +434,27 @@ function circleToSegments(cx: number, cy: number, r: number): Segment[] {
   ];
 }
 
+// Pie wedge with a hole. M outer-start → A outer-arc → L inward →
+// A inner-arc-reversed → Z. Sweep flags encode SVG-y-down rotation.
+function annularSectorPath(
+  cx: number,
+  cy: number,
+  rOuter: number,
+  rInner: number,
+  a0: Angle,
+  a1: Angle,
+): string {
+  const span = Math.abs(a1 - a0);
+  const largeArc = span > Math.PI ? 1 : 0;
+  const sweep = a1 > a0 ? 1 : 0;
+  const back = sweep ? 0 : 1;
+  const o0 = polar(cx, cy, rOuter, a0);
+  const o1 = polar(cx, cy, rOuter, a1);
+  const i1 = polar(cx, cy, rInner, a1);
+  const i0 = polar(cx, cy, rInner, a0);
+  return `M ${o0.x},${o0.y} A ${rOuter},${rOuter} 0 ${largeArc} ${sweep} ${o1.x},${o1.y} L ${i1.x},${i1.y} A ${rInner},${rInner} 0 ${largeArc} ${back} ${i0.x},${i0.y} Z`;
+}
+
 // Triangle with all three vertices rounded via quadratic beziers (the
 // sharp corner becomes the control point). Filled shape, genuinely round.
 function buildArrowheadPath(): string {
@@ -626,6 +648,10 @@ export interface CircleOpts extends CommonOpts {
   fill?: Fill;
   dashed?: boolean;
   cap?: "butt" | "round";
+}
+
+export interface AnnularSectorOpts extends CommonOpts {
+  fill?: Fill;
 }
 
 export interface LineOpts extends CommonOpts {
@@ -846,6 +872,38 @@ export class Scene {
     };
     this.entries.push(entry);
     return new CircleNode(inner, entry);
+  }
+
+  // Pie wedge with a hole. Aside by default — typically rendered next to
+  // a containing circle outline that drives viewBox bounds.
+  annularSector(
+    cx: number,
+    cy: number,
+    rOuter: number,
+    rInner: number,
+    a0: Angle,
+    a1: Angle,
+    opts: AnnularSectorOpts = {},
+  ): SceneNode {
+    const d = annularSectorPath(cx, cy, rOuter, rInner, a0, a1);
+    const inner = pointBoundsShape({ x: cx, y: cy }, 2 * rOuter, 2 * rOuter);
+    const entry: SceneEntry = {
+      shape: inner,
+      hidden: false,
+      isAside: true,
+      render: () => {
+        if (opts.fill) {
+          const fill = typeof opts.fill === "string" ? opts.fill : C.stroke;
+          const opacity = opts.muted ? `;opacity:${C.mutedOpacity}` : "";
+          return `<path d="${d}" style="fill:${fill}${opacity}"/>`;
+        }
+        const weight = pickWeight(opts);
+        const sw = strokeAttrs(weight, opts.muted);
+        return `<path d="${d}" fill="none" ${sw}/>`;
+      },
+    };
+    this.entries.push(entry);
+    return new SceneNode(inner, entry);
   }
 
   line(

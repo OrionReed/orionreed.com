@@ -1,20 +1,16 @@
-import { BaseElement, attr, css } from "./base-element";
+import { attr, css } from "./base-element";
 import { grey, ink, stroke } from "./color";
+import type { Fill, Padding, Scene } from "./draw";
+import { polar, pt } from "./geom";
 import * as R from "./rand";
-import type { MdCellCircle } from "./md-cell-circle";
+import { SceneElement } from "./scene-element";
 
-// Mutually exclusive state per cell. Absent (no entry) = not received.
 type CellState = "received" | "retransmit" | "acknowledged";
 
-interface Colors {
-  broadcast: string;
-  received: string;
-  retransmit: string;
-  floodFill: string;
-  acknowledged: string;
-}
-
 const RECEIVE_CHANCE = 0.5;
+const RING_OUTER = 150;
+const RING_WIDTH_RATIO = 0.2;
+const TAU = Math.PI * 2;
 
 const T = {
   broadcastStep: 80,
@@ -26,19 +22,20 @@ const T = {
   betweenFullCycles: 3000,
 };
 
-export class MdQrtpProtocol extends BaseElement {
+export class MdQrtpProtocol extends SceneElement {
   @attr({ type: "number" }) cells?: number;
   @attr({ type: "boolean" }) backchannel?: boolean;
 
   private floodAnim = this.anim.scope();
   private cellState = new Map<number, CellState>();
+  // Transient overlay (e.g. flood-fill blue) that wins over state-based fills.
+  private cellOverrides = new Map<number, Fill>();
   private broadcastIndex = 0;
   private lastBroadcast = -1;
-  private circleEl!: MdCellCircle;
 
   static styles = css`
     :host {
-      display: block;
+      --scene-max-width: 320px;
     }
   `;
 
@@ -46,18 +43,24 @@ export class MdQrtpProtocol extends BaseElement {
     return this.cells ?? 60;
   }
 
-  private getColors(): Colors {
-    return {
-      broadcast: `${stroke}`,
-      received: `${ink("green").mod(0.7)}`,
-      retransmit: `${ink("orange").mod(0.7)}`,
-      floodFill: `${ink("blue").mod(0.7)}`,
-      acknowledged: `${grey.mod(0.7)}`,
-    };
+  protected scenePadding(): Padding {
+    return 8;
+  }
+
+  private cellFill(i: number): Fill | undefined {
+    const override = this.cellOverrides.get(i);
+    if (override !== undefined) return override;
+    if (i === this.lastBroadcast) return `${stroke}`;
+    const state = this.cellState.get(i);
+    if (state === "received") return `${ink("green").mod(0.7)}`;
+    if (state === "retransmit") return `${ink("orange").mod(0.7)}`;
+    if (state === "acknowledged") return `${grey.mod(0.7)}`;
+    return undefined;
   }
 
   private reset(): void {
     this.cellState.clear();
+    this.cellOverrides.clear();
     this.broadcastIndex = 0;
     this.lastBroadcast = -1;
   }
@@ -68,22 +71,6 @@ export class MdQrtpProtocol extends BaseElement {
       if (s === state) result.push(i);
     }
     return result;
-  }
-
-  private restoreCell(i: number): void {
-    const state = this.cellState.get(i);
-    if (state === undefined) {
-      this.circleEl.clearCell(i);
-      return;
-    }
-    this.circleEl.setCell(i, this.getColors()[state]);
-  }
-
-  // Skip the currently-broadcasting cell so it stays the broadcast color.
-  private paintCell(i: number, color?: string): void {
-    if (i === this.lastBroadcast) return;
-    if (color === undefined) this.restoreCell(i);
-    else this.circleEl.setCell(i, color);
   }
 
   private handleReception(i: number): void {
@@ -99,7 +86,6 @@ export class MdQrtpProtocol extends BaseElement {
     const visited = new Set<number>();
     const components: number[][] = [];
     const n = this.cellCount;
-
     for (const seed of this.cellsWithState("retransmit")) {
       if (visited.has(seed)) continue;
       const component: number[] = [];
@@ -123,11 +109,14 @@ export class MdQrtpProtocol extends BaseElement {
 
   private async doFloodFill(): Promise<void> {
     const components = this.buildComponents();
-    const c = this.getColors();
+    const flood = `${ink("blue").mod(0.7)}`;
 
     for (const component of components) {
       for (const cell of component) {
-        this.paintCell(cell, c.floodFill);
+        if (cell !== this.lastBroadcast) {
+          this.cellOverrides.set(cell, flood);
+          this.render();
+        }
         await this.floodAnim.wait(T.floodCellStep);
       }
     }
@@ -146,9 +135,8 @@ export class MdQrtpProtocol extends BaseElement {
       }
     }
 
-    for (const component of components) {
-      for (const cell of component) this.paintCell(cell);
-    }
+    this.cellOverrides.clear();
+    this.render();
   }
 
   private startFloodFillLoop(): void {
@@ -163,12 +151,33 @@ export class MdQrtpProtocol extends BaseElement {
     });
   }
 
-  protected render(): void {
+  protected draw(s: Scene): void {
+    const cx = RING_OUTER;
+    const cy = RING_OUTER;
+    const rOut = RING_OUTER;
+    const rIn = rOut * (1 - RING_WIDTH_RATIO);
+    const N = this.cellCount;
+    const start = -Math.PI / 2;
+
+    // Fills first so the outline strokes paint over their edges.
+    for (let i = 0; i < N; i++) {
+      const fill = this.cellFill(i);
+      if (!fill) continue;
+      const a0 = start + (i * TAU) / N;
+      const a1 = a0 + TAU / N;
+      s.annularSector(cx, cy, rOut, rIn, a0, a1, { fill });
+    }
+
+    s.circle(cx, cy, rOut, { thin: true });
+    s.circle(cx, cy, rIn, { thin: true });
+
+    for (let i = 0; i < N; i++) {
+      const a = start + (i * TAU) / N;
+      s.line(polar(cx, cy, rIn, a), polar(cx, cy, rOut, a), { thin: true });
+    }
+
     const label = this.textContent?.trim() ?? "";
-    this.shadow.innerHTML = `
-      <md-cell-circle cells="${this.cellCount}" width="0.2">${label}</md-cell-circle>
-    `;
-    this.circleEl = this.shadow.querySelector("md-cell-circle") as MdCellCircle;
+    if (label) s.label(pt(cx, cy), label, { bold: true });
   }
 
   connectedCallback(): void {
@@ -186,18 +195,16 @@ export class MdQrtpProtocol extends BaseElement {
         return;
       }
 
-      if (this.lastBroadcast !== -1) this.restoreCell(this.lastBroadcast);
-
-      this.circleEl.setCell(this.broadcastIndex, this.getColors().broadcast);
       this.lastBroadcast = this.broadcastIndex;
       this.handleReception(this.broadcastIndex);
       this.broadcastIndex = (this.broadcastIndex + 1) % this.cellCount;
+      this.render();
 
       if (this.cellState.size === this.cellCount) {
         await this.anim.wait(T.beforeReset);
         this.floodAnim.stop();
         this.reset();
-        this.circleEl.clearAll();
+        this.render();
         await this.anim.wait(T.betweenFullCycles);
         if (this.backchannel) this.startFloodFillLoop();
         return;

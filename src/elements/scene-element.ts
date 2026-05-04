@@ -39,11 +39,16 @@ export abstract class SceneElement extends BaseElement {
   protected render(): void {
     const scene = new Scene({ padding: this.scenePadding() });
     this.draw(scene);
-    this.shadow.innerHTML = `
-      <div class="scene-container">
-        <div class="scene-vis"><svg></svg></div>
-      </div>
-    `;
-    scene.render(this.shadow.querySelector("svg") as SVGSVGElement);
+    // Build the container once; subsequent renders only rewrite the SVG.
+    let svg = this.shadow.querySelector("svg") as SVGSVGElement | null;
+    if (!svg) {
+      this.shadow.innerHTML = `
+        <div class="scene-container">
+          <div class="scene-vis"><svg></svg></div>
+        </div>
+      `;
+      svg = this.shadow.querySelector("svg") as SVGSVGElement;
+    }
+    scene.render(svg);
   }
 }
