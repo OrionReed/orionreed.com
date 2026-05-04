@@ -1,7 +1,8 @@
 // Standard library shapes built on `Shape`. Each is a free function
 // taking positional geometry args + an optional opts bag for styling.
-// Shape gives you transforms, opacity, bounds, and disposal "for free";
-// these factories just bind the geometry-specific SVG attributes.
+// Shape gives you transforms, opacity, bounds, anchors, and disposal
+// "for free"; these factories just bind the geometry-specific SVG
+// attributes.
 
 import { Shape } from "./shape";
 import { effect, type Arg, read, unwrap } from "./signal";
@@ -19,7 +20,10 @@ interface CommonStrokeOpts {
   dashed?: boolean;
   cap?: "butt" | "round" | "square";
   join?: "miter" | "round" | "bevel";
-  opacity?: Arg<number>;
+  /** Initial opacity (set once). For reactive opacity that tracks other
+   *  signals, use `shape.bindOpacity(fn)` after construction; for
+   *  animation, use `fadeIn`/`fadeOut`/`tween(shape.opacity, ...)`. */
+  opacity?: number;
 }
 
 function applyStroke(
@@ -27,26 +31,22 @@ function applyStroke(
   opts: CommonStrokeOpts,
   fillable = false,
 ): void {
-  const stroke = opts.stroke ?? tokens.stroke;
-  const weight = opts.strokeWidth
-    ? () => unwrap(opts.strokeWidth!)
-    : () => (opts.thin ? tokens.thinWeight : tokens.weight);
-
-  s.attr("stroke", () => stroke);
-  s.attr("stroke-width", weight);
-  s.attr("vector-effect", () => NSS);
-  if (opts.cap) s.attr("stroke-linecap", () => opts.cap as string);
-  if (opts.join) s.attr("stroke-linejoin", () => opts.join as string);
-  if (opts.dashed) s.attr("stroke-dasharray", () => "4 3");
-  if (!fillable) s.attr("fill", () => "none");
+  // Stroke color and weight: stroke is always static today; weight may
+  // be reactive via `opts.strokeWidth`.
+  s.attr("stroke", opts.stroke ?? tokens.stroke);
+  if (opts.strokeWidth !== undefined) {
+    s.attr("stroke-width", () => unwrap(opts.strokeWidth!));
+  } else {
+    s.attr("stroke-width", opts.thin ? tokens.thinWeight : tokens.weight);
+  }
+  s.attr("vector-effect", NSS);
+  if (opts.cap) s.attr("stroke-linecap", opts.cap);
+  if (opts.join) s.attr("stroke-linejoin", opts.join);
+  if (opts.dashed) s.attr("stroke-dasharray", "4 3");
+  if (!fillable) s.attr("fill", "none");
 
   if (opts.opacity !== undefined) {
-    const oFn = read(opts.opacity);
-    s.track(
-      effect(() => {
-        s.opacity.value = oFn();
-      }),
-    );
+    s.opacity.value = opts.opacity;
   }
 }
 
@@ -74,7 +74,7 @@ export function line(from: Point, to: Point, opts: LineOpts = {}): LineShape {
   s.attr("y1", from.y);
   s.attr("x2", to.x);
   s.attr("y2", to.y);
-  if (!opts.cap) s.attr("stroke-linecap", () => "round");
+  s.attr("stroke-linecap", opts.cap ?? "round");
   applyStroke(s, opts);
 
   s.setBounds(() => {
@@ -113,15 +113,18 @@ export function rect(
   s.attr("y", () => unwrap(y));
   s.attr("width", () => unwrap(w));
   s.attr("height", () => unwrap(h));
-  const corner = opts.corner ?? tokens.corner;
-  s.attr("rx", () => unwrap(corner));
-  s.attr("ry", () => unwrap(corner));
+  if (opts.corner !== undefined) {
+    s.attr("rx", () => unwrap(opts.corner!));
+    s.attr("ry", () => unwrap(opts.corner!));
+  } else {
+    s.attr("rx", tokens.corner);
+    s.attr("ry", tokens.corner);
+  }
 
   const filled = opts.fill !== undefined;
   applyStroke(s, opts, filled);
   if (filled) {
-    const fill = opts.fill === true ? tokens.stroke : opts.fill!;
-    s.attr("fill", () => fill);
+    s.attr("fill", opts.fill === true ? tokens.stroke : opts.fill!);
   }
 
   s.setBounds(() => bounds(unwrap(x), unwrap(y), unwrap(w), unwrap(h)));
@@ -147,8 +150,7 @@ export function circle(
   const filled = opts.fill !== undefined;
   applyStroke(s, opts, filled);
   if (filled) {
-    const fill = opts.fill === true ? tokens.stroke : opts.fill!;
-    s.attr("fill", () => fill);
+    s.attr("fill", opts.fill === true ? tokens.stroke : opts.fill!);
   }
 
   s.setBounds(() => {
@@ -165,7 +167,8 @@ export interface LabelOpts {
   anchor?: "start" | "middle" | "end";
   baseline?: "top" | "middle" | "bottom";
   bold?: boolean;
-  opacity?: Arg<number>;
+  /** Initial opacity; see CommonStrokeOpts.opacity for animation notes. */
+  opacity?: number;
 }
 
 const baselineMap = {
@@ -185,16 +188,15 @@ export function label(
   const s = new Shape("text");
   s.attr("x", at.x);
   s.attr("y", at.y);
-  s.attr("font-family", () => tokens.font);
+  s.attr("font-family", tokens.font);
   s.attr("font-size", () => unwrap(size));
-  s.attr("fill", () => tokens.stroke);
-  s.attr("text-anchor", () => opts.anchor ?? "middle");
-  s.attr(
-    "dominant-baseline",
-    () => baselineMap[opts.baseline ?? "middle"],
-  );
-  if (opts.bold) s.attr("font-weight", () => 700);
+  s.attr("fill", tokens.stroke);
+  s.attr("text-anchor", opts.anchor ?? "middle");
+  s.attr("dominant-baseline", baselineMap[opts.baseline ?? "middle"]);
+  if (opts.bold) s.attr("font-weight", 700);
 
+  // Reactive content: re-renders the inner tspan tree when content changes.
+  // For static content this runs once.
   s.track(
     effect(() => {
       (s.intrinsic as SVGElement).innerHTML = renderContent(contentR());
@@ -202,12 +204,7 @@ export function label(
   );
 
   if (opts.opacity !== undefined) {
-    const oFn = read(opts.opacity);
-    s.track(
-      effect(() => {
-        s.opacity.value = oFn();
-      }),
-    );
+    s.opacity.value = opts.opacity;
   }
 
   s.setBounds(() => {

@@ -1,5 +1,6 @@
-import { effect, signal, type ReadonlySignal, type Signal } from "./signal";
+import { computed, effect, signal, type ReadonlySignal, type Signal } from "./signal";
 import { bounds, unionBounds, type Bounds, type Vec } from "./bounds";
+import { Point } from "./point";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -56,13 +57,20 @@ export class Shape {
   readonly pivot: Signal<Pivot> = signal<Pivot>(Pivot.CENTER);
   readonly opacity: Signal<number> = signal(1);
 
-  private _bounds: Signal<Bounds> = signal<Bounds>(bounds(0, 0, 0, 0));
-  readonly bounds: ReadonlySignal<Bounds> = this._bounds;
+  /** Bounds memo — driven by `setBounds(fn)`. Lazy: only computes when read. */
+  private _boundsFn: Signal<() => Bounds> = signal<() => Bounds>(() =>
+    bounds(0, 0, 0, 0),
+  );
+  readonly bounds: ReadonlySignal<Bounds> = computed(() =>
+    this._boundsFn.value(),
+  );
 
   protected disposers: (() => void)[] = [];
   private children: Shape[] = [];
   private childrenVersion = signal(0);
-  private boundsDisposer?: () => void;
+
+  // Lazy anchor caches (Point per direction, computed only on first read).
+  private _anchors = new Map<string, Point>();
 
   constructor(intrinsicType?: string) {
     this.el = document.createElementNS(SVG_NS, "g") as SVGGElement;
@@ -71,26 +79,31 @@ export class Shape {
       this.el.appendChild(this.intrinsic);
     }
 
+    // Transform effect: short-circuit when identity so we don't read
+    // bounds (and thus don't force the bounds memo to evaluate).
     this.disposers.push(
       effect(() => {
-        const t = composeTransform(
-          this.translate.value,
-          this.rotate.value,
-          this.scale.value,
-          resolvePivot(this.pivot.value, this._bounds.value),
-        );
-        this.el.setAttribute("transform", t);
+        const t = this.translate.value;
+        const r = this.rotate.value;
+        const sc = this.scale.value;
+        if (t.x === 0 && t.y === 0 && r === 0 && sc.x === 1 && sc.y === 1) {
+          this.el.setAttribute("transform", "");
+          return;
+        }
+        const pivot = resolvePivot(this.pivot.value, this.bounds.value);
+        this.el.setAttribute("transform", composeTransform(t, r, sc, pivot));
       }),
     );
 
+    // Opacity effect on the wrapper. Always set up; user mutates
+    // `shape.opacity.value` (directly or via fadeIn/tween/bindOpacity).
     this.disposers.push(
       effect(() => {
         this.el.setAttribute("opacity", String(this.opacity.value));
       }),
     );
 
-    // Default bounds = union of children. Subclasses with intrinsic
-    // geometry should call `setBounds(...)` to override.
+    // Default bounds = union of children. Subclasses override via setBounds.
     this.setBounds(() => {
       this.childrenVersion.value;
       const bs = this.children.map((c) => c.bounds.value);
@@ -99,42 +112,98 @@ export class Shape {
   }
 
   /**
-   * Bind one SVG attribute reactively. Lands on the intrinsic by
-   * default, or the wrapper if there is no intrinsic. Pass
-   * `target: "wrapper"` to force the `<g>`.
+   * Bind one SVG attribute. Pass a function for reactive bindings (an
+   * effect re-runs whenever its tracked signals change), or a plain
+   * value for one-time set (no effect — saves a closure).
+   *
+   * Lands on the intrinsic by default, or the wrapper if there is no
+   * intrinsic. Pass `target: "wrapper"` to force the `<g>`.
    */
   attr(
     name: string,
-    value: () => string | number,
+    value: string | number | (() => string | number),
     target: "intrinsic" | "wrapper" = "intrinsic",
   ): void {
     const el =
       target === "intrinsic" && this.intrinsic ? this.intrinsic : this.el;
-    this.disposers.push(
-      effect(() => {
-        el.setAttribute(name, String(value()));
-      }),
-    );
+    if (typeof value === "function") {
+      this.disposers.push(
+        effect(() => {
+          el.setAttribute(name, String(value()));
+        }),
+      );
+    } else {
+      el.setAttribute(name, String(value));
+    }
   }
 
-  /** Drive the bounds memo. Replaces any prior bounds source. */
+  /**
+   * Drive the bounds memo with `fn`. Replaces any prior bounds source.
+   * `fn` is called lazily — only when something reads `shape.bounds`.
+   */
   setBounds(fn: () => Bounds): void {
-    if (this.boundsDisposer) {
-      this.boundsDisposer();
-      const i = this.disposers.indexOf(this.boundsDisposer);
-      if (i >= 0) this.disposers.splice(i, 1);
-    }
-    const dispose = effect(() => {
-      this._bounds.value = fn();
-    });
-    this.boundsDisposer = dispose;
-    this.disposers.push(dispose);
+    this._boundsFn.value = fn;
   }
 
   /** Track an arbitrary disposer to run on dispose. */
   track(dispose: () => void): void {
     this.disposers.push(dispose);
   }
+
+  /**
+   * Reactively bind opacity to a function. Writes to `shape.opacity`
+   * each time the function's tracked signals change.
+   *
+   * Note: don't combine with `fadeIn`/`fadeOut`/`tween(shape.opacity, ...)`
+   * on the same shape — they all write to `shape.opacity` and will fight.
+   * For animatable opacity that also depends on outside state, wrap the
+   * shape in a group and bind the group's opacity instead.
+   */
+  bindOpacity(fn: () => number): this {
+    this.track(
+      effect(() => {
+        this.opacity.value = fn();
+      }),
+    );
+    return this;
+  }
+
+  // ── Anchors ─────────────────────────────────────────────────────────
+  // Reactive Points derived from `bounds`. Lazy: each anchor is created
+  // once on first access. Useful for relative positioning:
+  //   s(line(boxA.right, boxB.left));
+
+  /** Arbitrary-position anchor: normalized 0..1 within bounds. */
+  anchor(at: Pivot): Point {
+    const key = `${at.x},${at.y}`;
+    let p = this._anchors.get(key);
+    if (!p) {
+      p = new Point(
+        () => {
+          const b = this.bounds.value;
+          return b.x + at.x * b.w;
+        },
+        () => {
+          const b = this.bounds.value;
+          return b.y + at.y * b.h;
+        },
+      );
+      this._anchors.set(key, p);
+    }
+    return p;
+  }
+
+  get tl(): Point { return this.anchor(Pivot.TL); }
+  get tr(): Point { return this.anchor(Pivot.TR); }
+  get bl(): Point { return this.anchor(Pivot.BL); }
+  get br(): Point { return this.anchor(Pivot.BR); }
+  get top(): Point { return this.anchor(Pivot.TOP); }
+  get bottom(): Point { return this.anchor(Pivot.BOTTOM); }
+  get left(): Point { return this.anchor(Pivot.LEFT); }
+  get right(): Point { return this.anchor(Pivot.RIGHT); }
+  get center(): Point { return this.anchor(Pivot.CENTER); }
+
+  // ── Children ────────────────────────────────────────────────────────
 
   /** Add one or more child shapes. Single arg returns the child;
    *  multi-arg returns the tuple. */

@@ -4,7 +4,8 @@
 // `sig.peek()` runs at the moment the runner picks up this animation,
 // not at construction time.
 
-import { easeOut, type Animator } from "./anim";
+import type { Animator } from "./anim";
+import { easeOut } from "./easings";
 import type { Signal } from "./signal";
 import type { Shape } from "./shape";
 
@@ -95,4 +96,38 @@ export function* withDelay(ms: number, c: Animator): Animator {
  */
 export function* lag(stagger: number, ...children: Animator[]): Animator {
   yield children.map((c, i) => withDelay(i * stagger, c));
+}
+
+/**
+ * Pause each frame until `condition()` returns true. Useful for
+ * waiting on user interaction or a signal threshold:
+ *
+ *   yield* untilSig(() => isHovering.value);
+ */
+export function* untilSig(condition: () => boolean): Animator {
+  while (!condition()) yield;
+}
+
+/**
+ * Run `gen` `n` times in sequence. Each iteration calls `gen()` to get
+ * a fresh generator instance.
+ */
+export function* repeat(n: number, gen: () => Animator): Animator {
+  for (let i = 0; i < n; i++) yield* gen();
+}
+
+/**
+ * Run children in parallel, return as soon as the FIRST one completes.
+ * Frame-only: assumes children only `yield` (one frame) — not numbers
+ * or arrays. Wrap mixed-yield children in their own composer.
+ */
+export function* race(...children: Animator[]): Animator {
+  // Prime each child to its first yield.
+  for (const c of children) c.next();
+  while (true) {
+    const dt: number = yield;
+    for (const c of children) {
+      if (c.next(dt).done) return;
+    }
+  }
 }

@@ -17,7 +17,6 @@ import {
   t,
   Text,
   tween,
-  type Arg,
   type Point,
 } from "../../scene-v2";
 
@@ -34,19 +33,10 @@ function math(base: string, sub?: string): Text {
 
 /** Perpendicular tick at fraction `f` along the segment from→to. Pure
  *  vector math; tracks reactive endpoints automatically. */
-function tick(
-  from: Point,
-  to: Point,
-  f: number,
-  half: number,
-  opts: { opacity?: Arg<number> } = {},
-): Shape {
+function tick(from: Point, to: Point, f: number, half: number): Shape {
   const center = lerp(from, to, f);
   const offset = to.sub(from).normalize().perp().scale(half);
-  return line(center.sub(offset), center.add(offset), {
-    thin: true,
-    opacity: opts.opacity,
-  });
+  return line(center.sub(offset), center.add(offset), { thin: true });
 }
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -78,18 +68,18 @@ export class MdCentering extends Diagram {
     // Axes — visible tip lerps via the channel signal directly.
     s(line(O, lerp(O, xEnd, lineT)));
     const yTip = lerp(xEnd, yEnd, morphT);
-    s(line(O, yTip, { opacity: () => (morphT.value > 0 ? 1 : 0) }));
+    s(line(O, yTip)).bindOpacity(() => (morphT.value > 0 ? 1 : 0));
 
     // Ticks: x at static (O, xEnd) fractions, revealing as line passes;
     // y follows the morphing tip and shows once morph begins.
-    s(...F.map((f) =>
-      tick(O, xEnd, f, 7, {
-        opacity: () => clamp01((lineT.value - f) / 0.06),
-      }),
-    ));
-    s(...F.map((f) =>
-      tick(O, yTip, f, 7, { opacity: () => (morphT.value > 0 ? 1 : 0) }),
-    ));
+    F.forEach((f) =>
+      s(tick(O, xEnd, f, 7)).bindOpacity(() =>
+        clamp01((lineT.value - f) / 0.06),
+      ),
+    );
+    F.forEach((f) =>
+      s(tick(O, yTip, f, 7)).bindOpacity(() => (morphT.value > 0 ? 1 : 0)),
+    );
 
     // Label groups — fade together via parent opacity inheritance.
     const xLabels = s(group());

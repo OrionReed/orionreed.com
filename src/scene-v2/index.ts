@@ -65,11 +65,11 @@ export { Diagram, css } from "./diagram";
 export {
   Anim,
   AbortError,
-  easeOut,
-  easeInOut,
   type Animator,
   type Yieldable,
 } from "./anim";
+
+export { easeOut, easeIn, easeInOut, linear } from "./easings";
 
 export {
   tween,
@@ -79,4 +79,7 @@ export {
   sequence,
   withDelay,
   lag,
+  untilSig,
+  repeat,
+  race,
 } from "./anims";

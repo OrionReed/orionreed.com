@@ -36,14 +36,6 @@ function isAbortError(e: unknown): e is AbortError {
   return e instanceof AbortError;
 }
 
-export function easeOut(t: number): number {
-  return 1 - Math.pow(1 - t, 2);
-}
-
-export function easeInOut(t: number): number {
-  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-}
-
 export type Yieldable = number | undefined | Animator | Yieldable[];
 export type Animator = Generator<Yieldable, void, number>;
 
