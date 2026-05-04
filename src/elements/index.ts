@@ -7,6 +7,7 @@ import { MdGroup } from "./md-group";
 import { MdSyntax } from "./md-syntax";
 import { MdQrtpProtocol } from "./md-qrtp-protocol";
 import { MdCentering } from "./optical-centering/md-centering";
+import { MdAnimDemo } from "./optical-centering/md-anim-demo";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -17,3 +18,4 @@ MdGroup.define();
 MdSyntax.define();
 MdQrtpProtocol.define();
 MdCentering.define();
+MdAnimDemo.define();

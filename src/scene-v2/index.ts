@@ -67,9 +67,16 @@ export {
   AbortError,
   easeOut,
   easeInOut,
-  type TweenDesc,
-  type AnimGen,
+  type Animator,
   type Yieldable,
 } from "./anim";
 
-export { tween, fadeIn, fadeOut } from "./anims";
+export {
+  tween,
+  fadeIn,
+  fadeOut,
+  parallel,
+  sequence,
+  withDelay,
+  lag,
+} from "./anims";

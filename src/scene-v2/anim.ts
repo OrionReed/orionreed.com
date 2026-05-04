@@ -1,15 +1,29 @@
-// v2 Anim. Generator-driven animation runner with cooperative
-// cancellation. Animations compose as generators yielding `Yieldable`s;
-// the runner walks them and dispatches:
-//   - number      → pause in ms
-//   - TweenDesc   → single tween (`{ ms, ease?, step }`)
-//   - Yieldable[] → run all in parallel
-//   - AnimGen     → run a sub-animation (usually reached via `yield*`)
+// v2 Anim — generator-driven animation runner.
 //
-// Animation primitives (tween/fadeIn/fadeOut etc., in `anims.ts`) are
-// generator functions that yield TweenDescs. The runner is what owns
-// the `Anim` instance and frame scheduling, so primitive code never
-// has to thread `anim` through call sites.
+// An animation is a generator that yields per-frame, receives `dt`
+// (ms since last frame) back via `.next(dt)`, and `return`s when done.
+// JS's `yield*` delegation propagates yields up and dt back down, so
+// composing animations is just JS:
+//
+//   function* tween(sig, target, ms, ease?) {
+//     const start = sig.peek();          // lazy: runs at iteration time
+//     let elapsed = 0;
+//     while (elapsed < ms) {
+//       const dt: number = yield;        // wait one frame, get dt back
+//       elapsed += dt;
+//       sig.value = start + (target - start) * (ease?.(...) ?? ...);
+//     }
+//   }
+//
+// Yields can be:
+//   - undefined (bare `yield`) — wait one frame, runner resumes with dt
+//   - number   (`yield 240`)   — pause N ms, runner resumes with 0
+//   - Animator (`yield gen`)   — drive sub-animation to completion
+//   - Yieldable[] (`yield [a, b]`) — run all in parallel
+//
+// `yield* otherGen()` delegates via JS — leaf yields propagate up to
+// the runner and dt flows back down to the leaf. Sub-scripts compose
+// "for free."
 
 export class AbortError extends Error {
   constructor() {
@@ -30,19 +44,10 @@ export function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
-/** A single tween — one frame loop driving `step(t)` for `ms` ms. */
-export interface TweenDesc {
-  ms: number;
-  ease?: (t: number) => number;
-  /** Called per frame with t in [0, 1]. */
-  step: (t: number) => void;
-}
+export type Yieldable = number | undefined | Animator | Yieldable[];
+export type Animator = Generator<Yieldable, void, number>;
 
-export type Yieldable = number | TweenDesc | AnimGen | Yieldable[];
-
-export type AnimGen = Generator<Yieldable, void, unknown>;
-
-function isGenerator(x: unknown): x is AnimGen {
+function isAnimator(x: unknown): x is Animator {
   return (
     x !== null &&
     typeof x === "object" &&
@@ -62,7 +67,6 @@ export class Anim {
     return this.controller.signal.aborted;
   }
 
-  // Tracked rAF/timeout that self-clean from the set on fire.
   private raf(fn: (now: number) => void): void {
     let id = 0;
     id = requestAnimationFrame((now) => {
@@ -86,27 +90,23 @@ export class Anim {
 
     return new Promise<T>((resolve, reject) => {
       let settled = false;
-
       const finish = (value: T) => {
         if (settled) return;
         settled = true;
         this.controller.signal.removeEventListener("abort", onAbort);
         resolve(value);
       };
-
       const onAbort = () => {
         if (settled) return;
         settled = true;
         reject(new AbortError());
       };
-
       this.controller.signal.addEventListener("abort", onAbort, { once: true });
-
       fn(finish);
     });
   }
 
-  /** Pause for `ms`. Public so ad-hoc `await anim.wait(N)` works outside scripts. */
+  /** Pause for `ms`. */
   wait(ms: number): Promise<void> {
     return this.promise<void>((finish) => this.timeout(finish, ms));
   }
@@ -127,7 +127,7 @@ export class Anim {
   }
 
   /** Run a generator animation forever. Swallows AbortError. */
-  async loop(genFn: () => AnimGen): Promise<void> {
+  async loop(genFn: () => Animator): Promise<void> {
     while (!this.aborted) {
       try {
         await this.runGen(genFn());
@@ -139,7 +139,7 @@ export class Anim {
   }
 
   /** Run a generator animation once. Swallows AbortError. */
-  async run(genFn: () => AnimGen): Promise<void> {
+  async run(genFn: () => Animator): Promise<void> {
     try {
       await this.runGen(genFn());
     } catch (e) {
@@ -148,52 +148,71 @@ export class Anim {
     }
   }
 
-  private async runGen(gen: AnimGen): Promise<void> {
-    let next = gen.next();
-    while (!next.done) {
-      try {
-        await this.dispatch(next.value);
-      } catch (e) {
-        // Inject into the generator so try/finally cleanup runs.
+  /** Walk a generator: dispatch each yield, advance with dt or 0. */
+  private async runGen(gen: Animator): Promise<void> {
+    let lastTime = performance.now();
+    let result = gen.next();
+    while (!result.done) {
+      if (this.aborted) {
         try {
-          gen.throw(e);
+          gen.throw(new AbortError());
         } catch {
-          /* secondary cleanup errors are swallowed */
+          /* ignore secondary cleanup errors */
         }
-        throw e;
+        throw new AbortError();
       }
-      next = gen.next();
+      const v = result.value;
+
+      if (typeof v === "number") {
+        if (v > 0) await this.wait(v);
+        result = gen.next(0);
+        lastTime = performance.now();
+      } else if (v === undefined) {
+        await this.frame();
+        const now = performance.now();
+        const dt = now - lastTime;
+        lastTime = now;
+        result = gen.next(dt);
+      } else if (Array.isArray(v)) {
+        await this.dispatchArray(v);
+        result = gen.next(0);
+        lastTime = performance.now();
+      } else {
+        // It's an Animator (sub-generator). Drive it to completion.
+        await this.runGen(v);
+        result = gen.next(0);
+        lastTime = performance.now();
+      }
     }
   }
 
-  private async dispatch(v: Yieldable): Promise<void> {
+  /** Run multiple Yieldables concurrently; resolve when all complete. */
+  private async dispatchArray(items: Yieldable[]): Promise<void> {
+    await Promise.all(items.map((item) => this.dispatchItem(item)));
+  }
+
+  private async dispatchItem(v: Yieldable): Promise<void> {
     if (typeof v === "number") {
       if (v > 0) await this.wait(v);
       return;
     }
-    if (Array.isArray(v)) {
-      await Promise.all(v.map((x) => this.dispatch(x)));
+    if (v === undefined) {
+      await this.frame();
       return;
     }
-    if (isGenerator(v)) {
+    if (Array.isArray(v)) {
+      await this.dispatchArray(v);
+      return;
+    }
+    if (isAnimator(v)) {
       await this.runGen(v);
       return;
     }
-    await this.tweenFrame(v);
   }
 
-  /** Internal raw frame loop driving a TweenDesc to completion. */
-  private tweenFrame(d: TweenDesc): Promise<void> {
-    return this.promise<void>((finish) => {
-      const start = performance.now();
-      const frame = (now: number) => {
-        const t = Math.min((now - start) / d.ms, 1);
-        d.step(d.ease ? d.ease(t) : t);
-        if (t >= 1) finish();
-        else this.raf(frame);
-      };
-      this.raf(frame);
-    });
+  /** Wait one rAF. */
+  private frame(): Promise<void> {
+    return this.promise<void>((finish) => this.raf(() => finish()));
   }
 
   /** Child Anim scoped to this one — stopped when parent stops. */
