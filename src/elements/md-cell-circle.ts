@@ -231,8 +231,10 @@ export class MdCellCircle extends BaseElement {
         endAngle
       );
 
+      // Inline style="fill:…" so var()/calc() colors resolve (the SVG
+      // fill attribute doesn't recurse into CSS functions).
       const fillColor = allFilled.get(i);
-      const fillStyle = fillColor ? `fill="${fillColor}"` : 'fill="none"';
+      const fillStyle = `style="fill: ${fillColor ?? "none"}"`;
 
       sectorsHtml += `
         <path

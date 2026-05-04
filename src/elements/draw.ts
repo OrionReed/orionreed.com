@@ -13,42 +13,27 @@ import {
   unionBounds,
 } from "./geom";
 
-// =====================================================================
-// Render constants — the "1-bit" visual vocabulary.
-// Stroke is non-scaling so weight is in CSS pixels regardless of viewBox.
-// Other constants (corner, dash, fontSize) are in scene units; for best
-// results, choose scene coordinates close to the rendered pixel size.
-// =====================================================================
-
+// Stroke weights are in CSS pixels (non-scaling); other constants are
+// in scene units.
 const C = {
   stroke: "var(--text-color)",
   weight: 2,
-  /** Half-thickness used for softer marks: dashed subdivisions, leaders, etc. */
   thinWeight: 1.5,
   corner: 2,
   dash: 4,
   gap: 3,
   font: "'New CM', monospace",
   fontSize: 14,
-  /** Approximate character width as a fraction of font-size (used for
-   *  rough label bounds estimation since SVG can't measure text without
-   *  layout). */
-  charWidth: 0.6,
-  /** Relative font size for sub/sup tspans. */
+  charWidth: 0.6, // approximate, for rough label bounds (SVG can't measure)
   subFontSize: "0.75em",
   arrowMarkerId: "draw-arrow",
-  // refX=0 anchors the line endpoint at the arrowhead BASE (widest point)
-  // so the line never exceeds the arrowhead's width visually. `round`
-  // is the corner-rounding radius applied to all 3 vertices of the
-  // triangle for an inked-pen feel rather than a perfect geometric tip.
+  // refX=0 anchors the line at the arrowhead BASE (widest point), so the
+  // line never visually exceeds the head. `round` rounds all 3 vertices
+  // for an inked-pen feel.
   arrowMarker: { w: 10, h: 7, refX: 0, refY: 3.5, round: 0.9 },
-  /** Default visual gap at each end of an arrow. */
   arrowGap: 4,
-  /** Font size used for arrow labels. */
   arrowLabelSize: 11,
-  /** Vertical offset of an arrow label above the line midpoint. */
   arrowLabelOffset: 4,
-  /** Opacity used by `muted: true` across all primitives. */
   mutedOpacity: 0.5,
 };
 
@@ -63,9 +48,7 @@ function pickWeight(opts: { thin?: boolean }): number {
   return opts.thin ? C.thinWeight : C.weight;
 }
 
-// =====================================================================
-// Text — chainable rich text composed of nested styled spans.
-// =====================================================================
+// Chainable rich text composed of nested styled spans.
 
 interface TextStyle {
   bold?: boolean;
@@ -131,16 +114,11 @@ function flattenText(node: TextPart): string {
   return node.parts.map(flattenText).join("");
 }
 
-// =====================================================================
-// Shape — pure geometric values. Each carries enough math to derive new
-// shapes (`expand`, `contract`, `translate`) and to find an edge point
-// from an external probe (`edgeFrom`). Render-time fields (corner) live
-// on concrete subtypes where they semantically belong.
-// =====================================================================
+// Pure geometric values. `edgeFrom` returns the boundary point along
+// the ray from the shape's center toward `from`.
 
 export interface Shape {
   readonly bounds: Bounds;
-  /** Boundary point along the line from this shape's center toward `from`. */
   edgeFrom(from: Point): Point;
   expand(by: number): Shape;
   contract(by: number): Shape;
@@ -164,7 +142,6 @@ export interface CircleShape extends Shape {
 }
 
 export interface RowShape extends Shape {
-  /** Geometry of the i-th cell as a Shape (no slot.aside/hide). */
   slot(i: number): RectShape;
 }
 
@@ -223,10 +200,6 @@ function isBounds(x: unknown): x is Bounds {
   );
 }
 
-// =====================================================================
-// Path & dash math — rounded rect + corner-snapping dashed outline.
-// =====================================================================
-
 function rrPath(x: number, y: number, w: number, h: number, r: number): string {
   if (r <= 0) {
     return `M${x},${y} h${w} v${h} h${-w} Z`;
@@ -252,12 +225,8 @@ interface DashGeom {
   N: number;
 }
 
-/**
- * Optical compensation factor for round caps. A round cap mathematically
- * extends `stroke-width / 2` past the path endpoint, but visually a
- * rounded shape looks SHORTER than its mathematical extent. We use this
- * factor (0..1) to subtract less than the full extension. ~0.5 by eye.
- */
+// Round caps mathematically extend by stroke-width/2 but visually read
+// SHORTER than that. This factor (0..1) compensates; 0.5 by eye.
 const ROUND_CAP_OPTICAL = 0.5;
 
 function computeDashGeom(
@@ -298,12 +267,9 @@ function computeDashGeom(
   return { dashSize: origDash, gapSize, N };
 }
 
-// =====================================================================
-// Path Segments — uniform abstraction for walking arbitrary shapes
-// (straight edges or circular arcs) and rendering dash positions as
-// explicit SVG path commands. Avoids browser stroke-dasharray rendering
-// entirely for pixel-perfect control.
-// =====================================================================
+// Uniform abstraction for walking line + arc shapes and rendering dash
+// positions as explicit <path> commands. Sidesteps browser
+// stroke-dasharray quirks for pixel-perfect dashing.
 
 type Segment =
   | { type: "line"; p1: Point; p2: Point }
@@ -467,12 +433,8 @@ function circleToSegments(cx: number, cy: number, r: number): Segment[] {
   ];
 }
 
-/**
- * Build a triangle path for the arrowhead with all three corners rounded
- * by `r`. Each corner is cut back along its two edges by `r`; a quadratic
- * Bezier with the original sharp vertex as control point smooths the
- * join. Result is a filled shape with genuinely rounded corners.
- */
+// Triangle with all three vertices rounded via quadratic beziers (the
+// sharp corner becomes the control point). Filled shape, genuinely round.
 function buildArrowheadPath(): string {
   const m = C.arrowMarker;
   const r = m.round;
@@ -551,11 +513,6 @@ function renderDashedSegments(
   return svg;
 }
 
-// =====================================================================
-// Scene entries & nodes — entries are the internal storage; nodes are
-// the chainable handles returned to user code (Shape + visibility).
-// =====================================================================
-
 interface SceneEntry {
   shape: Shape;
   hidden: boolean;
@@ -563,12 +520,8 @@ interface SceneEntry {
   render(): string;
 }
 
-/**
- * A Shape plus chainable visibility controls. `aside()` excludes the
- * shape from scene bounds (so it doesn't expand the viewBox); `hide()`
- * does that AND skips rendering entirely. Both return `this` for
- * chaining: `s.rect(...).aside()` or `s.rect(...).hide()`.
- */
+// `aside()` excludes from scene bounds (no viewBox expansion); `hide()`
+// does that AND skips render. Both return `this` for chaining.
 class SceneNode<S extends Shape = Shape> implements Shape {
   constructor(
     protected readonly inner: S,
@@ -653,38 +606,31 @@ class RowNode extends SceneNode<RowShape> implements RowShape {
   }
 }
 
-// =====================================================================
-// Options — kept small and orthogonal.
-// =====================================================================
-
 interface CommonOpts {
   muted?: boolean;
-  /** Use the thin weight instead of the main weight. */
   thin?: boolean;
 }
 
+// true → fill with C.stroke. string → fill with that color (e.g. an Ink).
+// false/omitted → no fill.
+export type Fill = boolean | string;
+
 export interface RectOpts extends CommonOpts {
   dashed?: boolean;
-  /** Render as a filled block (no stroke). */
-  fill?: boolean;
-  /** Override corner radius (default `C.corner`, or the shape's own corner). */
+  fill?: Fill;
   corner?: number;
-  /** Stroke cap on dashed segments. Default "round". */
   cap?: "butt" | "round";
 }
 
 export interface CircleOpts extends CommonOpts {
-  fill?: boolean;
+  fill?: Fill;
   dashed?: boolean;
   cap?: "butt" | "round";
 }
 
 export interface LineOpts extends CommonOpts {
   dashed?: boolean;
-  /**
-   * Stroke cap. Default: "round" if both endpoints are Points (free pen
-   * ends), "butt" if either is a Shape (intersection with a boundary).
-   */
+  // Default: "round" for free Point ends, "butt" when intersecting a Shape.
   cap?: "round" | "butt";
 }
 
@@ -696,12 +642,8 @@ export interface PolylineOpts extends CommonOpts {
 
 export interface ArrowOpts {
   label?: Content;
-  /**
-   * Visual gap between the arrow's extent and the source/target. The
-   * library compensates internally for the arrowhead and round-cap
-   * optical extension — you never need to know about either.
-   * Default `C.arrowGap`.
-   */
+  // Visual gap at each end. Internal compensation handles arrowhead width
+  // and round-cap optical bias — caller doesn't need to know about either.
   gap?: number;
 }
 
@@ -709,17 +651,14 @@ export interface LabelOpts {
   size?: number;
   anchor?: "start" | "middle" | "end";
   baseline?: "top" | "middle" | "bottom";
-  /**
-   * Rotation in radians. If omitted and the target point is a Heading,
-   * defaults to `target.angle`. Pass `0` to force horizontal.
-   */
+  // Radians. If omitted and the target is a Heading, defaults to its angle.
   rotate?: Angle;
   bold?: boolean;
 }
 
 export interface RowItem {
   units: number;
-  /** Style of the divider AFTER this item. The last item has no divider. */
+  // Style of the divider AFTER this item. Last item has no divider.
   divider?: "solid" | "dashed";
 }
 
@@ -727,15 +666,9 @@ export interface RowOpts {
   x: number;
   y: number;
   h: number;
-  /** Multiplier for each item's `units`. */
   unitWidth?: number;
-  /** Total width of the row (alternative to `unitWidth`). */
   width?: number;
 }
-
-// =====================================================================
-// Scene — the only class. Owns the entries, computes bounds, renders.
-// =====================================================================
 
 export type Padding =
   | number
@@ -770,10 +703,6 @@ export class Scene {
       this.padRight = p.right ?? p.x ?? 20;
     }
   }
-
-  // -----------------------------------------------------------------
-  // Polymorphic primitives
-  // -----------------------------------------------------------------
 
   rect(x: number, y: number, w: number, h: number, opts?: RectOpts): RectNode;
   rect(b: Bounds, opts?: RectOpts): RectNode;
@@ -831,8 +760,11 @@ export class Scene {
       isAside: false,
       render: () => {
         if (opts.fill) {
-          const opacity = opts.muted ? ` opacity="${C.mutedOpacity}"` : "";
-          return `<path d="${rrPath(x, y, w, h, corner)}" fill="${C.stroke}"${opacity}/>`;
+          const fill = typeof opts.fill === "string" ? opts.fill : C.stroke;
+          // Inline style (not fill="") because SVG attributes don't
+          // recurse var()/calc() inside nested CSS functions.
+          const opacity = opts.muted ? `;opacity:${C.mutedOpacity}` : "";
+          return `<path d="${rrPath(x, y, w, h, corner)}" style="fill:${fill}${opacity}"/>`;
         }
         const weight = pickWeight(opts);
         const sw = strokeAttrs(weight, opts.muted);
@@ -904,8 +836,12 @@ export class Scene {
             weight,
           });
         }
-        const fill = opts.fill ? C.stroke : "none";
-        return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" ${sw}/>`;
+        const fill = opts.fill
+          ? typeof opts.fill === "string"
+            ? opts.fill
+            : C.stroke
+          : "none";
+        return `<circle cx="${cx}" cy="${cy}" r="${r}" style="fill:${fill}" ${sw}/>`;
       },
     };
     this.entries.push(entry);
@@ -949,10 +885,6 @@ export class Scene {
     return new SceneNode(inner, entry);
   }
 
-  /**
-   * Connected line segments through a sequence of points (or a Path).
-   * Drawn as a single SVG path so corners join cleanly.
-   */
   polyline(
     points: readonly Point[] | Path,
     opts: PolylineOpts = {},
@@ -1002,13 +934,8 @@ export class Scene {
     return new SceneNode(inner, entry);
   }
 
-  /**
-   * Arrow between two points or shapes. Endpoints (Point or Shape) are
-   * uniformly inflated by `gap` (plus internal compensation for the
-   * arrowhead and round-cap optical bias) and the arrow is drawn between
-   * the resulting boundary points. Points are treated as zero-radius
-   * circles so the same expand-and-clip logic applies to all inputs.
-   */
+  // Endpoints are treated as zero-radius circles so the same
+  // expand-and-clip logic works for both Point and Shape inputs.
   arrow(
     from: Point | Shape,
     to: Point | Shape,
@@ -1018,14 +945,11 @@ export class Scene {
     const fromShape = isShape(from) ? from : pointAsShape(from);
     const toShape = isShape(to) ? to : pointAsShape(to);
 
-    // FROM end uses a round cap which optically reads SHORTER than its
-    // mathematical extent, so we push out by `gap + weight` (rather than
-    // `gap + weight/2`) to land on a visual gap that feels symmetric to
-    // the arrowhead end.
+    // From end has a round cap that optically reads SHORTER than its
+    // mathematical extent, so push out by gap + weight (not gap + weight/2)
+    // so the visual gap matches the arrowhead end.
     const expandedFrom = fromShape.expand(gap + C.weight);
-    // TO end's arrowhead extends `marker.w` forward of the line endpoint,
-    // so subtracting that plus gap puts the visible tip `gap` units before
-    // the target.
+    // Arrowhead extends marker.w past the line endpoint; subtract that.
     const expandedTo = toShape.expand(gap + C.arrowMarker.w);
 
     const p1 = expandedFrom.edgeFrom(expandedTo.bounds.center);
@@ -1069,9 +993,7 @@ export class Scene {
         : opts.baseline === "bottom"
           ? "alphabetic"
           : "central";
-    // Default rotation: if target carries a tangent angle, use it.
-    const rotateRad =
-      opts.rotate ?? (isHeading(at) ? at.angle : 0);
+    const rotateRad = opts.rotate ?? (isHeading(at) ? at.angle : 0);
     const rotateDeg = (rotateRad * 180) / Math.PI;
     const transform = rotateRad
       ? ` transform="rotate(${rotateDeg} ${at.x} ${at.y})"`
@@ -1097,11 +1019,8 @@ export class Scene {
     return new SceneNode(inner, entry);
   }
 
-  /**
-   * A horizontal row of cells sharing a common boundary.
-   * Outer boundary is one closed rounded path; inner dividers are
-   * separate strokes so junctions render crisply.
-   */
+  // Horizontal row of cells. Outer boundary is one closed rounded path;
+  // inner dividers are separate strokes so corners render crisply.
   row(items: RowItem[], opts: RowOpts): RowNode {
     const totalUnits = items.reduce((s, i) => s + i.units, 0);
     const unitWidth =
@@ -1169,10 +1088,6 @@ export class Scene {
     return new RowNode(inner, entry);
   }
 
-  // -----------------------------------------------------------------
-  // Render
-  // -----------------------------------------------------------------
-
   render(svgEl: SVGSVGElement): void {
     const contentBounds = this.entries
       .filter((e) => !e.hidden && !e.isAside)
@@ -1194,9 +1109,8 @@ export class Scene {
       `${padded.x} ${padded.y} ${padded.w} ${padded.h}`,
     );
     svgEl.setAttribute("preserveAspectRatio", "xMidYMid meet");
-    // Set explicit width/height so the SVG has intrinsic dimensions
-    // matching the viewBox. Otherwise some flex contexts fall back to
-    // the SVG default 300x150 and the diagram renders smaller than authored.
+    // Set explicit width/height so flex contexts don't fall back to
+    // SVG's default 300x150.
     svgEl.setAttribute("width", String(padded.w));
     svgEl.setAttribute("height", String(padded.h));
 
@@ -1208,12 +1122,9 @@ export class Scene {
   }
 }
 
-// =====================================================================
-// Internal helpers — small shape factories used by primitives that
-// don't have a "natural" geometric type (lines, polylines, labels).
-// =====================================================================
+// Shape factories for primitives that don't have a "natural" geometric
+// type (lines, polylines, labels). Bounds-only; expand returns a rect.
 
-/** Bounding box of a 2-point pair. */
 function pointPairShape(p1: Point, p2: Point): Shape {
   const b = bounds(
     Math.min(p1.x, p2.x),

@@ -61,8 +61,7 @@ export class MdCodec extends SceneElement {
   }
 
   protected scenePadding(): Padding {
-    // Top padding accommodates: leader (vertH + diagD) + rotated label
-    // height (~length × char_width / sqrt(2)).
+    // Room for the leader + rotated label height (~length × cw / √2).
     const longestLabel = this.parts.reduce(
       (m, p) => Math.max(m, p.label.length),
       0,
@@ -78,9 +77,7 @@ export class MdCodec extends SceneElement {
   protected draw(s: Scene): void {
     if (this.parts.length === 0) return;
 
-    // Each part is a slot. Divider after a part is dashed when the next
-    // part shares its group ("soft" subdivision), solid otherwise
-    // ("hard" boundary between unrelated regions).
+    // Dashed divider when the next part shares this part's group.
     const items = this.parts.map((p, i): RowItem => {
       const next = this.parts[i + 1];
       const sameGroup =
@@ -105,9 +102,7 @@ export class MdCodec extends SceneElement {
           baseline: "middle",
         });
       } else {
-        // Leader: from cell top, up VERT_H, then diagonal at -45°.
-        // Path tip is a Heading carrying the leader's angle, so the
-        // label rotation is sourced directly from it (no duplication).
+        // Leader's tip is a Heading, so label rotation is auto-sourced.
         const leader = path(slot.bounds.top)
           .up(VERT_H)
           .along(LEADER_ANGLE, DIAG_D);

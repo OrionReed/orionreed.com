@@ -1,6 +1,4 @@
-// Randomness helpers — designed for namespace import:
-//   import * as R from "./rand"
-//   R.float(0, 1), R.shuffle(arr), R.hex(3)
+// Randomness helpers — namespace import: `import * as R from "./rand"`.
 
 /** Random float in [min, max). */
 export function float(min: number, max: number): number {

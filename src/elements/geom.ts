@@ -1,16 +1,10 @@
 // Pure geometry — no rendering, no DOM.
 
-// ============= Types =============
-
 export type Point = { x: number; y: number };
-/** Semantic alias for direction vectors. */
 export type Vec = { x: number; y: number };
-/** Angle in radians. SVG y is down, so 0 = right, π/2 = down, -π/2 = up. */
+// Radians. SVG y is down: 0 = right, π/2 = down, -π/2 = up.
 export type Angle = number;
-/** A point with a tangent direction (e.g. the tip of a Path). */
 export type Heading = Point & { angle: Angle };
-
-// ============= Constructors / converters =============
 
 export const pt = (x: number, y: number): Point => ({ x, y });
 export const vec = (x: number, y: number): Vec => ({ x, y });
@@ -20,16 +14,12 @@ export const heading = (x: number, y: number, angle: Angle): Heading => ({
   angle,
 });
 
-/** Degrees → radians. */
 export const deg = (d: number): Angle => (d * Math.PI) / 180;
-/** Identity, for symmetry / clarity at call sites. */
 export const rad = (r: number): Angle => r;
 
 export function isHeading(p: Point | Heading): p is Heading {
   return typeof (p as Heading).angle === "number";
 }
-
-// ============= Numeric / point utilities =============
 
 export const lerp = (a: number, b: number, t: number): number =>
   a + (b - a) * t;
@@ -41,7 +31,6 @@ export const midpoint = (a: Point, b: Point): Point => lerpPt(a, b, 0.5);
 export const dist = (a: Point, b: Point): number =>
   Math.hypot(b.x - a.x, b.y - a.y);
 
-/** Polar to cartesian. Angle in radians; 0 = right, π/2 = down (SVG). */
 export function polar(
   cx: number,
   cy: number,
@@ -50,8 +39,6 @@ export function polar(
 ): Point {
   return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
 }
-
-// ============= Point operations (immutable) =============
 
 export const offset = (p: Point, dx: number, dy: number): Point => ({
   x: p.x + dx,
@@ -62,7 +49,7 @@ export const down = (p: Point, n: number): Point => ({ x: p.x, y: p.y + n });
 export const left = (p: Point, n: number): Point => ({ x: p.x - n, y: p.y });
 export const right = (p: Point, n: number): Point => ({ x: p.x + n, y: p.y });
 
-/** Step from `p` along `dir` (an angle in radians or a vector) by `dist` units. */
+// `dir` can be an angle in radians or a vector.
 export function along(p: Point, dir: Angle | Vec, dist: number): Point {
   if (typeof dir === "number") {
     return { x: p.x + Math.cos(dir) * dist, y: p.y + Math.sin(dir) * dist };
@@ -71,13 +58,8 @@ export function along(p: Point, dir: Angle | Vec, dist: number): Point {
   return { x: p.x + (dir.x / len) * dist, y: p.y + (dir.y / len) * dist };
 }
 
-// ============= Bounds with named anchors =============
-
-/**
- * Axis-aligned rectangle with cached anchor points. The 4 mid-edges and
- * 4 corners are accessible by name so call sites read like English
- * (`rect.bounds.top`, `row.bounds.center`).
- */
+// AABB with cached anchor points so call sites can read like English
+// (`r.bounds.top`, `row.bounds.center`).
 export interface Bounds {
   readonly x: number;
   readonly y: number;
@@ -136,9 +118,7 @@ export function unionBounds(...bs: Bounds[]): Bounds {
   return bounds(xMin, yMin, xMax - xMin, yMax - yMin);
 }
 
-// ============= Shape edge math =============
-
-/** Point on a circle's edge in the direction of `from`. */
+// Edge point in the direction of `from`.
 export function circleEdgeFrom(
   cx: number,
   cy: number,
@@ -151,7 +131,6 @@ export function circleEdgeFrom(
   return { x: cx + (dx / d) * r, y: cy + (dy / d) * r };
 }
 
-/** Point on a rect's edge along the line from rect center to `from`. */
 export function rectEdgeFrom(b: Bounds, from: Point): Point {
   const cx = b.x + b.w / 2;
   const cy = b.y + b.h / 2;
@@ -167,14 +146,8 @@ export function rectEdgeFrom(b: Bounds, from: Point): Point {
   return { x: cx + dx * t, y: cy + dy * t };
 }
 
-// ============= Path builder =============
-
-/**
- * Fluent point-sequence builder. Each method extends the current end by
- * a relative or absolute step. `tip` returns the last point with the
- * tangent angle of the last segment — pass it to `s.label()` to get
- * label rotation aligned with the path direction "for free".
- */
+// Fluent point-sequence builder. `tip` is the last point + the tangent
+// angle of the last segment (useful for label rotation at path ends).
 export interface Path {
   readonly points: readonly Point[];
   readonly tip: Heading;
@@ -208,27 +181,13 @@ class PathImpl implements Path {
     return new PathImpl([...this.points, p]);
   }
 
-  up(n: number): Path {
-    return this.extend(up(this.last, n));
-  }
-  down(n: number): Path {
-    return this.extend(down(this.last, n));
-  }
-  left(n: number): Path {
-    return this.extend(left(this.last, n));
-  }
-  right(n: number): Path {
-    return this.extend(right(this.last, n));
-  }
-  offset(dx: number, dy: number): Path {
-    return this.extend(offset(this.last, dx, dy));
-  }
-  along(dir: Angle | Vec, d: number): Path {
-    return this.extend(along(this.last, dir, d));
-  }
-  to(p: Point): Path {
-    return this.extend(p);
-  }
+  up = (n: number) => this.extend(up(this.last, n));
+  down = (n: number) => this.extend(down(this.last, n));
+  left = (n: number) => this.extend(left(this.last, n));
+  right = (n: number) => this.extend(right(this.last, n));
+  offset = (dx: number, dy: number) => this.extend(offset(this.last, dx, dy));
+  along = (dir: Angle | Vec, d: number) => this.extend(along(this.last, dir, d));
+  to = (p: Point) => this.extend(p);
 }
 
 export function path(start: Point): Path {

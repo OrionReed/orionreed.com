@@ -136,8 +136,7 @@ export class MdQrtpHandshake extends SceneElement {
     const slotsB: SlotPair[] = [];
 
     const drawChunk = (chunk: ChunkState, x: number, y: number): SlotPair => {
-      // 2-cell row (3 units data + 2 units ack = 60/40 split). The row
-      // primitive handles the outer boundary AND the inner divider.
+      // 60/40 split: 3 units data + 2 units ack.
       const chunkRow = s.row([{ units: 3 }, { units: 2 }], {
         x,
         y,
@@ -148,9 +147,7 @@ export class MdQrtpHandshake extends SceneElement {
       const ack = chunkRow.slot(1);
 
       if (chunk.status === "current") {
-        // Highlight box around the active chunk. expand() carries the
-        // corner radius along, so the surrounding rect's gap is uniform
-        // around corners. Aside so the highlight doesn't grow viewBox.
+        // expand() preserves corner radius so the gap stays uniform.
         s.rect(chunkRow.expand(4), { dashed: true, cap: "round" }).aside();
       }
 

@@ -60,8 +60,7 @@ export class MdLubyTransform extends SceneElement {
     });
   }
 
-  // 0 horizontal padding so sources span the full width like the original;
-  // 26 vertical padding restores the original 400x200 viewBox aspect.
+  // y=26 keeps the original 400×200 aspect; x=0 lets sources span full width.
   protected scenePadding(): Padding {
     return { x: 0, y: 26 };
   }
@@ -82,7 +81,6 @@ export class MdLubyTransform extends SceneElement {
       return sourceSize / 2 + (i / (this.topCount - 1)) * span;
     };
 
-    // Sources, drawn together with their labels.
     const sources = Array.from({ length: this.topCount }, (_, i) => {
       const r = s.rect(
         sourceCx(i) - sourceSize / 2,
@@ -106,12 +104,11 @@ export class MdLubyTransform extends SceneElement {
       s.label(pt(dotsX, yTop + sourceSize / 2), t("..."), { size: 16 });
     }
 
-    // XOR: circle + cross. Cross uses butt cap so it doesn't poke past.
+    // XOR: circle + cross (butt caps so the cross doesn't poke past).
     const xor = s.circle(W / 2, yXor, xorR);
     s.line(xor.bounds.left, xor.bounds.right, { cap: "butt" });
     s.line(xor.bounds.top, xor.bounds.bottom, { cap: "butt" });
 
-    // QR: outer rect + filled cells
     const qr = s.rect(W / 2 - qrSize / 2, yQr - qrSize / 2, qrSize, qrSize);
     const cellSize = qrSize / this.qrGridSize;
     for (let row = 0; row < this.qrGridSize; row++) {
@@ -128,8 +125,6 @@ export class MdLubyTransform extends SceneElement {
       }
     }
 
-    // Connectors clip to actual scene nodes — no separate "virtual"
-    // geometry needed; nodes are Shapes too.
     for (let i = 0; i < this.topCount; i++) {
       if (!this.edgeStates.get(`s${i}`)) continue;
       s.line(sources[i].bounds.bottom, xor, { thin: true });

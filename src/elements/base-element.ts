@@ -41,10 +41,8 @@ export class BaseElement extends HTMLElement {
     const className = constructor.name;
 
     if (!BaseElement.styleSheets.has(className)) {
-      // Walk the prototype chain and collect each class's OWN `static
-      // styles` (base classes first, subclasses last), so subclass styles
-      // override base styles via the cascade. Lets a subclass extend a
-      // styled base class without manually concatenating CSS.
+      // Walk the prototype chain (base first, subclass last) so subclass
+      // styles override base styles via the cascade.
       const chain: string[] = [];
       let proto: any = constructor;
       while (proto && proto !== HTMLElement && proto !== Object) {
@@ -79,38 +77,24 @@ export class BaseElement extends HTMLElement {
     }
   }
 
-  protected render(): void {
-    // Override in subclasses
-  }
+  protected render(): void {}
 }
 
-// Decorator to define attributes on custom elements
+/** Decorator: maps a class field to a typed HTML attribute. */
 export function attr(options: { type?: "string" | "number" | "boolean" } = {}) {
   return function <T extends { constructor: any }>(
     target: T,
     propertyKey: string
   ) {
     const constructor = target.constructor;
-
-    // Initialize attributes array if it doesn't exist
-    if (!constructor._attributes) {
-      constructor._attributes = [];
-    }
-
-    // Add this attribute to the list
+    if (!constructor._attributes) constructor._attributes = [];
     constructor._attributes.push(propertyKey);
 
-    // Create getter for the attribute
     Object.defineProperty(target, propertyKey, {
       get(this: HTMLElement) {
         const value = this.getAttribute(propertyKey);
-
-        if (options.type === "boolean") {
-          return value !== null;
-        } else if (options.type === "number") {
-          return value ? Number(value) : undefined;
-        }
-
+        if (options.type === "boolean") return value !== null;
+        if (options.type === "number") return value ? Number(value) : undefined;
         return value;
       },
       enumerable: true,

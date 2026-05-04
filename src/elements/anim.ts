@@ -9,8 +9,6 @@ function isAbortError(e: unknown): e is AbortError {
   return e instanceof AbortError;
 }
 
-// --- Helpers ---
-
 export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
@@ -23,8 +21,6 @@ export function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
-// --- Anim ---
-
 export class Anim {
   private controller = new AbortController();
   private rafIds = new Set<number>();
@@ -35,7 +31,7 @@ export class Anim {
     return this.controller.signal.aborted;
   }
 
-  // Internal tracked rAF — cleans itself from the set when it fires
+  // Tracked rAF/timeout that self-clean from the set on fire.
   private raf(fn: (now: number) => void): void {
     let id = 0;
     id = requestAnimationFrame((now) => {
@@ -45,7 +41,6 @@ export class Anim {
     this.rafIds.add(id);
   }
 
-  // Internal tracked setTimeout — cleans itself from the set when it fires
   private timeout(fn: () => void, ms: number): void {
     let id = 0;
     id = window.setTimeout(() => {
@@ -55,7 +50,6 @@ export class Anim {
     this.timerIds.add(id);
   }
 
-  // Shared promise setup: abort listener + finish/abort callbacks
   private promise<T>(fn: (finish: (value: T) => void) => void): Promise<T> {
     if (this.aborted) return Promise.reject(new AbortError());
 
@@ -81,12 +75,7 @@ export class Anim {
     });
   }
 
-  /**
-   * Wait for a fixed or dynamic delay.
-   *
-   *   await anim.wait(500)
-   *   await anim.wait(() => rand(300, 800))
-   */
+  /** Fixed or dynamic delay. */
   wait(arg: number | (() => number)): Promise<void> {
     return this.promise<void>((finish) => {
       const ms = typeof arg === "number" ? arg : arg();
@@ -94,11 +83,7 @@ export class Anim {
     });
   }
 
-  /**
-   * Wait until a condition becomes truthy. Polls at 50ms intervals.
-   *
-   *   await anim.until(() => this.state.done)
-   */
+  /** Wait for a condition to become truthy (50ms poll). */
   until(condition: () => boolean): Promise<void> {
     return this.promise<void>((finish) => {
       if (condition()) {
@@ -113,11 +98,7 @@ export class Anim {
     });
   }
 
-  /**
-   * Animate over a fixed duration. t goes from 0 to 1.
-   *
-   *   await anim.tween(500, t => { state.x = lerp(0, 100, easeOut(t)) })
-   */
+  /** Animate over `ms` with t in [0,1]. */
   tween(ms: number, fn: (t: number) => void): Promise<void> {
     return this.promise<void>((finish) => {
       const start = performance.now();
@@ -133,15 +114,7 @@ export class Anim {
     });
   }
 
-  /**
-   * Open-ended rAF loop driven by delta time (seconds). Return true to stop.
-   *
-   *   await anim.tick(dt => {
-   *     state.velocity += 9.8 * dt
-   *     state.y += state.velocity * dt
-   *     return state.y >= floor
-   *   })
-   */
+  /** rAF loop with delta time (seconds). Return true to stop. */
   tick(fn: (dt: number) => boolean): Promise<void> {
     return this.promise<void>((finish) => {
       let last: number | null = null;
@@ -157,19 +130,7 @@ export class Anim {
     });
   }
 
-  /**
-   * Run an async function in a loop until stopped.
-   * Automatically swallows AbortError, re-throws anything else.
-   *
-   *   await anim.loop(async () => {
-   *     state.phase = 'on'
-   *     render()
-   *     await anim.wait(500)
-   *     state.phase = 'off'
-   *     render()
-   *     await anim.wait(() => rand(200, 600))
-   *   })
-   */
+  /** Run `fn` in a loop until stopped. Swallows AbortError. */
   async loop(fn: () => Promise<void>): Promise<void> {
     while (!this.aborted) {
       try {
@@ -181,26 +142,14 @@ export class Anim {
     }
   }
 
-  /**
-   * Create a child Anim scoped to this one's lifetime.
-   * Stopped automatically when the parent is stopped, or independently.
-   *
-   *   const child = this.anim.scope()
-   *   child.loop(async () => { ... })
-   *   child.stop() // stop just this scope
-   *   this.anim.stop() // stops parent and all scopes
-   */
+  /** Child Anim scoped to this one — stopped when parent stops or alone. */
   scope(): Anim {
     const child = new Anim();
     this.scopes.add(child);
     return child;
   }
 
-  /**
-   * Cancel all pending operations and reset for reuse.
-   * Also stops and clears all child scopes.
-   * Safe to call multiple times.
-   */
+  /** Cancel all pending operations and reset for reuse. Idempotent. */
   stop(): void {
     this.controller.abort();
     this.rafIds.forEach((id) => cancelAnimationFrame(id));
