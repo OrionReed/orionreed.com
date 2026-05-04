@@ -3,50 +3,53 @@
 // Shape gives you transforms, opacity, bounds, anchors, and disposal
 // "for free"; these factories just bind the geometry-specific SVG
 // attributes.
+//
+// Every styling slot accepts `Arg<T>` — value, signal, or thunk. So
+// `{ stroke: "red" }`, `{ stroke: themeColor }` (signal), and
+// `{ stroke: () => active.value ? "red" : "gray" }` all work, and the
+// `attr()` machinery wires up effects only when the input is reactive.
 
-import { Pivot, Shape } from "./shape";
+import { Shape, type ShapeOpts } from "./shape";
 import { effect, type Arg, read, unwrap } from "./signal";
 import type { Point } from "./point";
-import { bounds } from "./bounds";
+import { bounds, Pivot } from "./bounds";
 import { renderContent, flattenText, type Content } from "./text";
 import { tokens } from "./tokens";
 
 const NSS = "non-scaling-stroke";
 
-interface CommonStrokeOpts {
-  stroke?: string;
+/** Common style opts shared by stroked + filled shapes. Everything
+ *  reactively bindable — pass a value, signal, or thunk.
+ *
+ *  `fill === true` is sugar for "use the stroke color"; otherwise
+ *  treat as `Arg<string>`. `undefined` means no fill (`fill="none"`). */
+export interface CommonOpts extends ShapeOpts {
+  stroke?: Arg<string>;
   strokeWidth?: Arg<number>;
   thin?: boolean;
   dashed?: boolean;
   cap?: "butt" | "round" | "square";
   join?: "miter" | "round" | "bevel";
-  /** Initial opacity (set once). For reactive opacity that tracks other
-   *  signals, use `shape.bindOpacity(fn)` after construction; for
-   *  animation, use `fadeIn`/`fadeOut`/`tween(shape.opacity, ...)`. */
-  opacity?: number;
+  fill?: Arg<string> | true;
 }
 
-function applyStroke(
-  s: Shape,
-  opts: CommonStrokeOpts,
-  fillable = false,
-): void {
-  // Stroke color and weight: stroke is always static today; weight may
-  // be reactive via `opts.strokeWidth`.
+function applyOpts(s: Shape, opts: CommonOpts): void {
   s.attr("stroke", opts.stroke ?? tokens.stroke);
-  if (opts.strokeWidth !== undefined) {
-    s.attr("stroke-width", () => unwrap(opts.strokeWidth!));
-  } else {
-    s.attr("stroke-width", opts.thin ? tokens.thinWeight : tokens.weight);
-  }
+  s.attr(
+    "stroke-width",
+    opts.strokeWidth ?? (opts.thin ? tokens.thinWeight : tokens.weight),
+  );
   s.attr("vector-effect", NSS);
   if (opts.cap) s.attr("stroke-linecap", opts.cap);
   if (opts.join) s.attr("stroke-linejoin", opts.join);
   if (opts.dashed) s.attr("stroke-dasharray", "4 3");
-  if (!fillable) s.attr("fill", "none");
 
-  if (opts.opacity !== undefined) {
-    s.opacity.value = opts.opacity;
+  if (opts.fill === undefined) {
+    s.attr("fill", "none");
+  } else if (opts.fill === true) {
+    s.attr("fill", tokens.stroke);
+  } else {
+    s.attr("fill", opts.fill);
   }
 }
 
@@ -54,48 +57,42 @@ function applyStroke(
 
 /** Empty container shape — bundles children for transform / opacity
  *  inheritance and shared lifecycle. */
-export function group(): Shape {
-  return new Shape();
+export function group(opts: ShapeOpts = {}): Shape {
+  return new Shape(undefined, undefined, opts);
 }
 
 // ── line ────────────────────────────────────────────────────────────
 
-export interface LineOpts extends CommonStrokeOpts {}
+export interface LineOpts extends CommonOpts {}
 
-export interface LineShape extends Shape {
-  /** Reactive endpoints — exposed for relative positioning. */
-  readonly from: Point;
-  readonly to: Point;
-}
-
-export function line(from: Point, to: Point, opts: LineOpts = {}): LineShape {
-  const s = new Shape("line", () => {
-    const a = from.value;
-    const b = to.value;
-    return bounds(
-      Math.min(a.x, b.x),
-      Math.min(a.y, b.y),
-      Math.abs(b.x - a.x),
-      Math.abs(b.y - a.y),
-    );
-  }) as LineShape;
+export function line(from: Point, to: Point, opts: LineOpts = {}): Shape {
+  const s = new Shape(
+    "line",
+    () => {
+      const a = from.value;
+      const b = to.value;
+      return bounds(
+        Math.min(a.x, b.x),
+        Math.min(a.y, b.y),
+        Math.abs(b.x - a.x),
+        Math.abs(b.y - a.y),
+      );
+    },
+    opts,
+  );
   s.attr("x1", from.x);
   s.attr("y1", from.y);
   s.attr("x2", to.x);
   s.attr("y2", to.y);
   s.attr("stroke-linecap", opts.cap ?? "round");
-  applyStroke(s, opts);
-  Object.defineProperty(s, "from", { value: from });
-  Object.defineProperty(s, "to", { value: to });
+  applyOpts(s, opts);
   return s;
 }
 
 // ── rect ────────────────────────────────────────────────────────────
 
-export interface RectOpts extends CommonStrokeOpts {
+export interface RectOpts extends CommonOpts {
   corner?: Arg<number>;
-  /** `true` → fill with stroke color; string → that color; else no fill. */
-  fill?: string | true;
 }
 
 export function rect(
@@ -105,59 +102,48 @@ export function rect(
   h: Arg<number>,
   opts: RectOpts = {},
 ): Shape {
-  const s = new Shape("rect", () =>
-    bounds(unwrap(x), unwrap(y), unwrap(w), unwrap(h)),
+  const s = new Shape(
+    "rect",
+    () => bounds(unwrap(x), unwrap(y), unwrap(w), unwrap(h)),
+    opts,
   );
   s.attr("x", () => unwrap(x));
   s.attr("y", () => unwrap(y));
   s.attr("width", () => unwrap(w));
   s.attr("height", () => unwrap(h));
-  if (opts.corner !== undefined) {
-    s.attr("rx", () => unwrap(opts.corner!));
-    s.attr("ry", () => unwrap(opts.corner!));
-  } else {
-    s.attr("rx", tokens.corner);
-    s.attr("ry", tokens.corner);
-  }
-
-  const filled = opts.fill !== undefined;
-  applyStroke(s, opts, filled);
-  if (filled) {
-    s.attr("fill", opts.fill === true ? tokens.stroke : opts.fill!);
-  }
+  s.attr("rx", opts.corner ?? tokens.corner);
+  s.attr("ry", opts.corner ?? tokens.corner);
+  applyOpts(s, opts);
   return s;
 }
 
 // ── circle ──────────────────────────────────────────────────────────
 
-export interface CircleOpts extends CommonStrokeOpts {
-  fill?: string | true;
-}
+export interface CircleOpts extends CommonOpts {}
 
 export function circle(
   at: Point,
   r: Arg<number>,
   opts: CircleOpts = {},
 ): Shape {
-  const s = new Shape("circle", () => {
-    const radius = unwrap(r);
-    return bounds(at.x() - radius, at.y() - radius, 2 * radius, 2 * radius);
-  });
+  const s = new Shape(
+    "circle",
+    () => {
+      const radius = unwrap(r);
+      return bounds(at.x() - radius, at.y() - radius, 2 * radius, 2 * radius);
+    },
+    opts,
+  );
   s.attr("cx", at.x);
   s.attr("cy", at.y);
   s.attr("r", () => unwrap(r));
-
-  const filled = opts.fill !== undefined;
-  applyStroke(s, opts, filled);
-  if (filled) {
-    s.attr("fill", opts.fill === true ? tokens.stroke : opts.fill!);
-  }
+  applyOpts(s, opts);
   return s;
 }
 
 // ── label ───────────────────────────────────────────────────────────
 
-export interface LabelOpts {
+export interface LabelOpts extends ShapeOpts {
   size?: Arg<number>;
   /** Where the label's `at` point sits within the label's box, in
    *  normalized 0..1 coords. Pivot.x affects horizontal alignment
@@ -165,11 +151,12 @@ export interface LabelOpts {
    *  Defaults to `Pivot.CENTER`.
    *
    *  SVG only supports start/middle/end and hanging/central/alphabetic,
-   *  so non-corner pivot values snap to the nearest bucket. */
-  pivot?: Pivot;
+   *  so non-corner pivot values snap to the nearest bucket.
+   *
+   *  Note: this is the label's *anchor pivot* (text alignment), not the
+   *  Shape transform pivot (`ShapeOpts.pivot`). */
+  anchor?: Pivot;
   bold?: boolean;
-  /** Initial opacity; see CommonStrokeOpts.opacity for animation notes. */
-  opacity?: number;
 }
 
 function pivotXToTextAnchor(x: number): string {
@@ -186,34 +173,32 @@ export function label(
 ): Shape {
   const contentR = read(content);
   const size = opts.size ?? tokens.fontSize;
-  const pivot = opts.pivot ?? Pivot.CENTER;
+  const anchor = opts.anchor ?? Pivot.CENTER;
 
-  const s = new Shape("text", () => {
-    const text = flattenText(contentR());
-    const fs = unwrap(size);
-    const w = fs * Math.max(1, text.length) * tokens.charWidth;
-    return bounds(at.x() - pivot.x * w, at.y() - pivot.y * fs, w, fs);
-  });
+  const s = new Shape(
+    "text",
+    () => {
+      const text = flattenText(contentR());
+      const fs = unwrap(size);
+      const w = fs * Math.max(1, text.length) * tokens.charWidth;
+      return bounds(at.x() - anchor.x * w, at.y() - anchor.y * fs, w, fs);
+    },
+    opts,
+  );
   s.attr("x", at.x);
   s.attr("y", at.y);
   s.attr("font-family", tokens.font);
-  s.attr("font-size", () => unwrap(size));
+  s.attr("font-size", size);
   s.attr("fill", tokens.stroke);
-  s.attr("text-anchor", pivotXToTextAnchor(pivot.x));
-  s.attr("dominant-baseline", pivotYToBaseline(pivot.y));
+  s.attr("text-anchor", pivotXToTextAnchor(anchor.x));
+  s.attr("dominant-baseline", pivotYToBaseline(anchor.y));
   if (opts.bold) s.attr("font-weight", 700);
 
-  // Reactive content: re-renders the inner tspan tree when content changes.
-  // For static content this runs once.
   s.track(
     effect(() => {
       (s.intrinsic as SVGElement).innerHTML = renderContent(contentR());
     }),
   );
-
-  if (opts.opacity !== undefined) {
-    s.opacity.value = opts.opacity;
-  }
 
   return s;
 }

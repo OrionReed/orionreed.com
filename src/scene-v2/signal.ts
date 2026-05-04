@@ -13,6 +13,7 @@ export {
   type ReadonlySignal,
 } from "@preact/signals-core";
 
+import { signal, effect } from "@preact/signals-core";
 import type { Signal, ReadonlySignal } from "@preact/signals-core";
 
 /**
@@ -21,13 +22,45 @@ import type { Signal, ReadonlySignal } from "@preact/signals-core";
  */
 export type Arg<T> = T | Signal<T> | ReadonlySignal<T> | (() => T);
 
-function isSignal<T>(v: unknown): v is Signal<T> | ReadonlySignal<T> {
+export function isSignal<T>(v: unknown): v is Signal<T> | ReadonlySignal<T> {
   // preact-signals' `peek()` is the most distinctive marker.
   return (
     v !== null &&
     typeof v === "object" &&
     typeof (v as { peek?: unknown }).peek === "function"
   );
+}
+
+/** True if `arg` carries reactive content (signal or thunk). */
+export function isReactive<T>(arg: Arg<T>): boolean {
+  return typeof arg === "function" || isSignal(arg);
+}
+
+/**
+ * Resolve an `Arg<T>` to a `Signal<T>` for use as a shape property.
+ *   - Signal → returned as-is (caller's signal becomes the source of truth).
+ *   - Thunk  → fresh signal driven by an effect; returns a disposer.
+ *   - Value  → fresh signal seeded with that value.
+ *   - undefined → fresh signal seeded with `defaultValue`.
+ *
+ * The disposer (if any) must be tracked by the caller (e.g. via
+ * `shape.track`) so reactive bindings stop with the shape.
+ */
+export function bindArg<T>(
+  arg: Arg<T> | undefined,
+  defaultValue: T,
+): { signal: Signal<T>; dispose?: () => void } {
+  if (arg === undefined) return { signal: signal(defaultValue) };
+  if (isSignal<T>(arg)) return { signal: arg as Signal<T> };
+  if (typeof arg === "function") {
+    const fn = arg as () => T;
+    const s = signal(fn());
+    const dispose = effect(() => {
+      s.value = fn();
+    });
+    return { signal: s, dispose };
+  }
+  return { signal: signal(arg as T) };
 }
 
 /**

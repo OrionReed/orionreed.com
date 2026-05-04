@@ -23,19 +23,20 @@ export {
   type ReadonlySignal,
 } from "./signal";
 
-export { type Arg, read, unwrap } from "./signal";
+export { type Arg, bindArg, isReactive, isSignal, read, unwrap } from "./signal";
 
-export { Point, pt, lerp } from "./point";
+export { Point, pt } from "./point";
 
 export {
   bounds,
   expandBounds,
   unionBounds,
+  Pivot,
   type Bounds,
   type Vec,
 } from "./bounds";
 
-export { Shape, SVG_NS, Pivot } from "./shape";
+export { Shape, SVG_NS, type ShapeOpts } from "./shape";
 
 export {
   line,
@@ -43,7 +44,7 @@ export {
   circle,
   label,
   group,
-  type LineShape,
+  type CommonOpts,
   type LineOpts,
   type RectOpts,
   type CircleOpts,

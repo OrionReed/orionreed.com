@@ -1,34 +1,35 @@
-import { computed, effect, signal, type ReadonlySignal, type Signal } from "./signal";
-import { bounds, unionBounds, type Bounds, type Vec } from "./bounds";
+import {
+  bindArg,
+  computed,
+  effect,
+  isReactive,
+  read,
+  signal,
+  type Arg,
+  type ReadonlySignal,
+  type Signal,
+} from "./signal";
+import { bounds, Pivot, unionBounds, type Bounds, type Vec } from "./bounds";
 import { Point } from "./point";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
 /**
- * Pivot expressed as a normalized coordinate within the shape's bounds:
- * `{ x: 0, y: 0 }` is top-left, `{ x: 1, y: 1 }` is bottom-right,
- * `{ x: 0.5, y: 0.5 }` is center. Off-axis values (e.g. `{ x: 0.25, y: 0.5 }`)
- * are valid — no string-enum gating.
- *
- * The `Pivot` namespace exposes named common values:
- *   `Pivot.TL`, `Pivot.CENTER`, etc.
+ * Construction-time options shared by every shape. Every animatable
+ * property accepts `Arg<T>` (value, signal, or thunk):
+ *   - value   → set once, mutate later via `shape.opacity.value = ...`.
+ *   - signal  → `shape.opacity` IS that signal; the user owns the source
+ *               of truth, animations write through.
+ *   - thunk   → derived; an effect drives the property. Don't also tween
+ *               it (the effect will keep overwriting).
  */
-export interface Pivot {
-  x: number;
-  y: number;
+export interface ShapeOpts {
+  translate?: Arg<Vec>;
+  rotate?: Arg<number>;
+  scale?: Arg<Vec>;
+  pivot?: Arg<Pivot>;
+  opacity?: Arg<number>;
 }
-
-export const Pivot = Object.freeze({
-  TL: { x: 0, y: 0 } as Pivot,
-  TR: { x: 1, y: 0 } as Pivot,
-  BL: { x: 0, y: 1 } as Pivot,
-  BR: { x: 1, y: 1 } as Pivot,
-  TOP: { x: 0.5, y: 0 } as Pivot,
-  BOTTOM: { x: 0.5, y: 1 } as Pivot,
-  LEFT: { x: 0, y: 0.5 } as Pivot,
-  RIGHT: { x: 1, y: 0.5 } as Pivot,
-  CENTER: { x: 0.5, y: 0.5 } as Pivot,
-});
 
 /**
  * Universal scene-graph node. Every shape is wrapped in an SVG `<g>`
@@ -50,12 +51,13 @@ export class Shape {
   /** Optional intrinsic — `<line>`, `<rect>`, etc. */
   readonly intrinsic?: SVGElement;
 
-  /** Animatable common props as plain preact signals. */
-  readonly translate: Signal<Vec> = signal({ x: 0, y: 0 });
-  readonly rotate: Signal<number> = signal(0);
-  readonly scale: Signal<Vec> = signal({ x: 1, y: 1 });
-  readonly pivot: Signal<Pivot> = signal<Pivot>(Pivot.CENTER);
-  readonly opacity: Signal<number> = signal(1);
+  /** Animatable common props as plain preact signals. If the caller
+   *  passed a `Signal<T>` for the property, this IS that signal. */
+  readonly translate: Signal<Vec>;
+  readonly rotate: Signal<number>;
+  readonly scale: Signal<Vec>;
+  readonly pivot: Signal<Pivot>;
+  readonly opacity: Signal<number>;
 
   /** Bounds memo — set at construction via `boundsFn`, or defaults to
    *  the union of children's bounds. Lazy: only computes when read. */
@@ -78,11 +80,32 @@ export class Shape {
   private children: Shape[] = [];
   private childrenVersion = signal(0);
 
-  constructor(intrinsicType?: string, boundsFn?: () => Bounds) {
+  constructor(
+    intrinsicType?: string,
+    boundsFn?: () => Bounds,
+    opts: ShapeOpts = {},
+  ) {
     this.el = document.createElementNS(SVG_NS, "g") as SVGGElement;
     if (intrinsicType) {
       this.intrinsic = document.createElementNS(SVG_NS, intrinsicType);
       this.el.appendChild(this.intrinsic);
+    }
+
+    // Resolve animatable props. Each may be a value, signal, or thunk —
+    // see `bindArg` for semantics. Disposers (from thunk-driven effects)
+    // are tracked so reactive bindings stop with the shape.
+    const tr = bindArg(opts.translate, { x: 0, y: 0 });
+    const ro = bindArg(opts.rotate, 0);
+    const sc = bindArg(opts.scale, { x: 1, y: 1 });
+    const pv = bindArg<Pivot>(opts.pivot, Pivot.CENTER);
+    const op = bindArg(opts.opacity, 1);
+    this.translate = tr.signal;
+    this.rotate = ro.signal;
+    this.scale = sc.signal;
+    this.pivot = pv.signal;
+    this.opacity = op.signal;
+    for (const d of [tr.dispose, ro.dispose, sc.dispose, pv.dispose, op.dispose]) {
+      if (d) this.disposers.push(d);
     }
 
     // Bounds: explicit fn from a shape factory, or the children-union
@@ -125,8 +148,9 @@ export class Shape {
       }),
     );
 
-    // Opacity effect on the wrapper. Always set up; user mutates
-    // `shape.opacity.value` (directly or via fadeIn/tween/bindOpacity).
+    // Opacity effect on the wrapper. Always set up; the underlying
+    // signal is whatever `bindArg` resolved (caller's signal, a
+    // thunk-driven signal, or a fresh one).
     this.disposers.push(
       effect(() => {
         this.el.setAttribute("opacity", String(this.opacity.value));
@@ -135,24 +159,24 @@ export class Shape {
   }
 
   /**
-   * Bind one SVG attribute. Pass a function for reactive bindings (an
-   * effect re-runs whenever its tracked signals change), or a plain
-   * value for one-time set (no effect — saves a closure).
+   * Bind one SVG attribute. Accepts a value (set once, no effect),
+   * a thunk, or a Signal — the last two set up an effect.
    *
    * Lands on the intrinsic by default, or the wrapper if there is no
    * intrinsic. Pass `target: "wrapper"` to force the `<g>`.
    */
   attr(
     name: string,
-    value: string | number | (() => string | number),
+    value: Arg<string | number>,
     target: "intrinsic" | "wrapper" = "intrinsic",
   ): void {
     const el =
       target === "intrinsic" && this.intrinsic ? this.intrinsic : this.el;
-    if (typeof value === "function") {
+    if (isReactive(value)) {
+      const fn = read(value);
       this.disposers.push(
         effect(() => {
-          el.setAttribute(name, String(value()));
+          el.setAttribute(name, String(fn()));
         }),
       );
     } else {
@@ -163,24 +187,6 @@ export class Shape {
   /** Track an arbitrary disposer to run on dispose. */
   track(dispose: () => void): void {
     this.disposers.push(dispose);
-  }
-
-  /**
-   * Reactively bind opacity to a function. Writes to `shape.opacity`
-   * each time the function's tracked signals change.
-   *
-   * Note: don't combine with `fadeIn`/`fadeOut`/`tween(shape.opacity, ...)`
-   * on the same shape — they all write to `shape.opacity` and will fight.
-   * For animatable opacity that also depends on outside state, wrap the
-   * shape in a group and bind the group's opacity instead.
-   */
-  bindOpacity(fn: () => number): this {
-    this.track(
-      effect(() => {
-        this.opacity.value = fn();
-      }),
-    );
-    return this;
   }
 
   /** Arbitrary-position anchor — normalized 0..1 within bounds. The

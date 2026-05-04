@@ -8,7 +8,6 @@ import {
   group,
   label,
   line,
-  lerp,
   Pivot,
   pt,
   rect,
@@ -18,6 +17,7 @@ import {
   t,
   Text,
   tween,
+  type LineOpts,
   type Point,
 } from "../../scene-v2";
 
@@ -34,10 +34,16 @@ function math(base: string, sub?: string): Text {
 
 /** Perpendicular tick at fraction `f` along the segment from→to. Pure
  *  vector math; tracks reactive endpoints automatically. */
-function tick(from: Point, to: Point, f: number, half: number): Shape {
-  const center = lerp(from, to, f);
+function tick(
+  from: Point,
+  to: Point,
+  f: number,
+  half: number,
+  opts: LineOpts = {},
+): Shape {
+  const center = from.lerp(to, f);
   const offset = to.sub(from).normalize().perp().scale(half);
-  return line(center.sub(offset), center.add(offset), { thin: true });
+  return line(center.sub(offset), center.add(offset), { thin: true, ...opts });
 }
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -66,67 +72,63 @@ export class MdCentering extends Diagram {
     const F = [0.2, 0.45, 0.7];
     const subs = ["min", "c", "max"];
 
-    // Axes — visible tip lerps via the channel signal directly.
-    s(line(O, lerp(O, xEnd, lineT)));
-    const yTip = lerp(xEnd, yEnd, morphT);
-    s(line(O, yTip)).bindOpacity(() => (morphT.value > 0 ? 1 : 0));
+    // Axes — visible tip lerps via the channel signal directly. The
+    // y-axis fades in only once the morph kicks off.
+    const yShown = () => (morphT.value > 0 ? 1 : 0);
+    s(line(O, O.lerp(xEnd, lineT)));
+    const yTip = xEnd.lerp(yEnd, morphT);
+    s(line(O, yTip, { opacity: yShown }));
 
     // Ticks: x at static (O, xEnd) fractions, revealing as line passes;
     // y follows the morphing tip and shows once morph begins.
     F.forEach((f) =>
-      s(tick(O, xEnd, f, 7)).bindOpacity(() =>
-        clamp01((lineT.value - f) / 0.06),
-      ),
+      s(tick(O, xEnd, f, 7, {
+        opacity: () => clamp01((lineT.value - f) / 0.06),
+      })),
     );
-    F.forEach((f) =>
-      s(tick(O, yTip, f, 7)).bindOpacity(() => (morphT.value > 0 ? 1 : 0)),
-    );
+    F.forEach((f) => s(tick(O, yTip, f, 7, { opacity: yShown })));
 
     // Label groups — fade together via parent opacity inheritance.
-    const xLabels = s(group());
+    const xLabels = s(group({ opacity: 0 }));
     xLabels.add(...F.map((f, i) =>
-      label(lerp(O, xEnd, f).down(24), math("x", subs[i]), {
+      label(O.lerp(xEnd, f).down(24), math("x", subs[i]), {
         size: 16,
-        pivot: Pivot.TOP,
+        anchor: Pivot.TOP,
       }),
     ));
-    xLabels.opacity.value = 0;
 
-    const yLabels = s(group());
+    const yLabels = s(group({ opacity: 0 }));
     yLabels.add(...F.map((f, i) =>
-      label(lerp(O, yEnd, f).left(14), math("y", subs[i]), {
+      label(O.lerp(yEnd, f).left(14), math("y", subs[i]), {
         size: 16,
-        pivot: Pivot.RIGHT,
+        anchor: Pivot.RIGHT,
       }),
     ));
-    yLabels.opacity.value = 0;
 
     // Box, crosshairs (faint baseline opacity, multiplied by group fade).
-    const xMin = lerp(O, xEnd, F[0]);
-    const xMid = lerp(O, xEnd, F[1]);
-    const xMax = lerp(O, xEnd, F[2]);
-    const yMin = lerp(O, yEnd, F[0]);
-    const yMid = lerp(O, yEnd, F[1]);
-    const yMax = lerp(O, yEnd, F[2]);
+    const xMin = O.lerp(xEnd, F[0]);
+    const xMid = O.lerp(xEnd, F[1]);
+    const xMax = O.lerp(xEnd, F[2]);
+    const yMin = O.lerp(yEnd, F[0]);
+    const yMid = O.lerp(yEnd, F[1]);
+    const yMax = O.lerp(yEnd, F[2]);
     const c = pt(xMid.x, yMid.y);
 
-    const boxGroup = s(group());
+    const boxGroup = s(group({ opacity: 0 }));
     boxGroup.add(
       rect(xMin.x(), yMax.y(), xMax.x() - xMin.x(), yMin.y() - yMax.y(),
         { thin: true, corner: 4, opacity: 0.5 }),
       line(xMid, c, { thin: true, dashed: true, opacity: 0.6 }),
       line(yMid, c, { thin: true, dashed: true, opacity: 0.6 }),
     );
-    boxGroup.opacity.value = 0;
 
-    const centroidGroup = s(group());
+    const centroidGroup = s(group({ opacity: 0 }));
     centroidGroup.add(
       circle(c, 4, { fill: true }),
       label(c.right(10).up(10),
         t("(", math("x", "c"), ", ", math("y", "c"), ")"),
-        { size: 14, pivot: Pivot.BL }),
+        { size: 14, anchor: Pivot.BL }),
     );
-    centroidGroup.opacity.value = 0;
 
     // Animation script — generator runner. `yield* X` delegates to a
     // sub-animation; `yield <ms>` pauses; `yield [a, b]` runs in parallel.

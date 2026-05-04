@@ -19,8 +19,6 @@ export const tokens = {
   charWidth: 0.6,
   /** Sub/sup font size relative to parent. */
   subFontSize: "0.75em",
-  /** Default opacity for muted/secondary visuals. */
-  mutedOpacity: 0.5,
 } as const;
 
 export type Tokens = typeof tokens;

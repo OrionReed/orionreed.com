@@ -3,7 +3,7 @@
 // (mutable) or plain numbers / thunks.
 //
 // Components are thunks `() => number`. Constants and reactive values
-// look the same from outside — `pt(60, 170)` and `lerp(O, xEnd, lineT)`
+// look the same from outside — `pt(60, 170)` and `O.lerp(xEnd, lineT)`
 // both return Point; the runtime difference is whether the thunks read
 // any signals when called inside an effect.
 //
@@ -63,6 +63,15 @@ export class Point {
   dot(p: Point): () => number {
     return () => this.x() * p.x() + this.y() * p.y();
   }
+  /** Linear interpolation toward `b`. Reactive: re-derives when any
+   *  input changes. `t=0` returns this point, `t=1` returns `b`. */
+  lerp(b: Point, t: Arg<number>): Point {
+    const tFn = read(t);
+    return new Point(
+      () => this.x() + (b.x() - this.x()) * tFn(),
+      () => this.y() + (b.y() - this.y()) * tFn(),
+    );
+  }
 
   // ── Layout ops ──────────────────────────────────────────────────
 
@@ -90,16 +99,4 @@ export class Point {
 /** Construct an Point from numbers, signals, or thunks. */
 export function pt(x: Arg<number>, y: Arg<number>): Point {
   return new Point(read(x), read(y));
-}
-
-/**
- * Reactive linear interpolation between two points. The result is a
- * fresh Point that re-derives when any input changes.
- */
-export function lerp(a: Point, b: Point, t: Arg<number>): Point {
-  const tFn = read(t);
-  return new Point(
-    () => a.x() + (b.x() - a.x()) * tFn(),
-    () => a.y() + (b.y() - a.y()) * tFn(),
-  );
 }

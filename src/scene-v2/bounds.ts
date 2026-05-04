@@ -1,7 +1,6 @@
-// Bounds — minimal axis-aligned rectangle for v2. v1's `Bounds` (in
-// `elements/geom.ts`) carries cached anchor points (center/tl/tr/etc.);
-// v2 doesn't need them now that pivots are normalized coords, so we
-// keep this lean.
+// Geometry primitives for v2: bounds, vec, pivot. Kept lean — v1's
+// `Bounds` (in `elements/geom.ts`) carries cached anchor points;
+// v2 doesn't need them now that pivots are normalized coords.
 
 /** Literal 2D vector — used for shape-internal transform values. */
 export interface Vec {
@@ -15,6 +14,28 @@ export interface Bounds {
   readonly w: number;
   readonly h: number;
 }
+
+/**
+ * Pivot — normalized coordinate within a shape's bounds. `{x:0, y:0}`
+ * is top-left, `{x:1, y:1}` bottom-right. Off-axis values are valid
+ * (no string-enum gating). `Pivot` namespace exposes named constants.
+ */
+export interface Pivot {
+  x: number;
+  y: number;
+}
+
+export const Pivot = Object.freeze({
+  TL: { x: 0, y: 0 } as Pivot,
+  TR: { x: 1, y: 0 } as Pivot,
+  BL: { x: 0, y: 1 } as Pivot,
+  BR: { x: 1, y: 1 } as Pivot,
+  TOP: { x: 0.5, y: 0 } as Pivot,
+  BOTTOM: { x: 0.5, y: 1 } as Pivot,
+  LEFT: { x: 0, y: 0.5 } as Pivot,
+  RIGHT: { x: 1, y: 0.5 } as Pivot,
+  CENTER: { x: 0.5, y: 0.5 } as Pivot,
+});
 
 export function bounds(x: number, y: number, w: number, h: number): Bounds {
   return { x, y, w, h };
