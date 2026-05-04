@@ -1,22 +1,33 @@
-import { easeInOut, easeOut } from "../anim";
-import { css } from "../base-element";
 import {
   circle,
+  css,
+  Diagram,
+  easeInOut,
+  easeOut,
   fadeIn,
+  group,
   label,
   line,
   lerp,
-  math,
   pt,
   rect,
   Scene,
-  SceneElement,
-  Shape,
   signal,
+  Shape,
   t,
+  Text,
+  tween,
   type Arg,
-  type RPoint,
+  type Point,
 } from "../../scene-v2";
+
+/** Italic-letter math notation: `math("x", "min")` → italic x with
+ *  italic subscript min. Local helper; will lift if other diagrams
+ *  end up needing the same shorthand. */
+function math(base: string, sub?: string): Text {
+  const b = t(base).italic();
+  return sub ? b.sub(t(sub).italic()) : b;
+}
 
 // ── Local helpers ───────────────────────────────────────────────────
 // Lifted to the lib later if/when a third diagram needs them.
@@ -24,8 +35,8 @@ import {
 /** Perpendicular tick at fraction `f` along the segment from→to. Pure
  *  vector math; tracks reactive endpoints automatically. */
 function tick(
-  from: RPoint,
-  to: RPoint,
+  from: Point,
+  to: Point,
   f: number,
   half: number,
   opts: { opacity?: Arg<number> } = {},
@@ -42,7 +53,7 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 // ── Component ───────────────────────────────────────────────────────
 
-export class MdCentering extends SceneElement {
+export class MdCentering extends Diagram {
   static styles = css`
     :host {
       --scene-max-width: 640px;
@@ -65,44 +76,38 @@ export class MdCentering extends SceneElement {
     const subs = ["min", "c", "max"];
 
     // Axes — visible tip lerps via the channel signal directly.
-    s.line(O, lerp(O, xEnd, lineT));
+    s(line(O, lerp(O, xEnd, lineT)));
     const yTip = lerp(xEnd, yEnd, morphT);
-    s.line(O, yTip, { opacity: () => (morphT.value > 0 ? 1 : 0) });
+    s(line(O, yTip, { opacity: () => (morphT.value > 0 ? 1 : 0) }));
 
     // Ticks: x at static (O, xEnd) fractions, revealing as line passes;
     // y follows the morphing tip and shows once morph begins.
-    F.forEach((f) =>
-      s.add(
-        tick(O, xEnd, f, 7, {
-          opacity: () => clamp01((lineT.value - f) / 0.06),
-        }),
-      ),
-    );
-    F.forEach((f) =>
-      s.add(tick(O, yTip, f, 7, { opacity: () => (morphT.value > 0 ? 1 : 0) })),
-    );
+    s(...F.map((f) =>
+      tick(O, xEnd, f, 7, {
+        opacity: () => clamp01((lineT.value - f) / 0.06),
+      }),
+    ));
+    s(...F.map((f) =>
+      tick(O, yTip, f, 7, { opacity: () => (morphT.value > 0 ? 1 : 0) }),
+    ));
 
     // Label groups — fade together via parent opacity inheritance.
-    const xLabels = s.group();
-    F.forEach((f, i) =>
-      xLabels.add(
-        label(lerp(O, xEnd, f).down(24), math("x", subs[i]), {
-          size: 16,
-          baseline: "top",
-        }),
-      ),
-    );
+    const xLabels = s(group());
+    xLabels.add(...F.map((f, i) =>
+      label(lerp(O, xEnd, f).down(24), math("x", subs[i]), {
+        size: 16,
+        baseline: "top",
+      }),
+    ));
     xLabels.opacity.value = 0;
 
-    const yLabels = s.group();
-    F.forEach((f, i) =>
-      yLabels.add(
-        label(lerp(O, yEnd, f).left(14), math("y", subs[i]), {
-          size: 16,
-          anchor: "end",
-        }),
-      ),
-    );
+    const yLabels = s(group());
+    yLabels.add(...F.map((f, i) =>
+      label(lerp(O, yEnd, f).left(14), math("y", subs[i]), {
+        size: 16,
+        anchor: "end",
+      }),
+    ));
     yLabels.opacity.value = 0;
 
     // Box, crosshairs (faint baseline opacity, multiplied by group fade).
@@ -114,51 +119,44 @@ export class MdCentering extends SceneElement {
     const yMax = lerp(O, yEnd, F[2]);
     const c = pt(xMid.x, yMid.y);
 
-    const boxGroup = s.group();
+    const boxGroup = s(group());
     boxGroup.add(
-      rect(
-        xMin.x(),
-        yMax.y(),
-        xMax.x() - xMin.x(),
-        yMin.y() - yMax.y(),
-        { thin: true, corner: 4, opacity: 0.5 },
-      ),
+      rect(xMin.x(), yMax.y(), xMax.x() - xMin.x(), yMin.y() - yMax.y(),
+        { thin: true, corner: 4, opacity: 0.5 }),
+      line(xMid, c, { thin: true, dashed: true, opacity: 0.6 }),
+      line(yMid, c, { thin: true, dashed: true, opacity: 0.6 }),
     );
-    boxGroup.add(line(xMid, c, { thin: true, dashed: true, opacity: 0.6 }));
-    boxGroup.add(line(yMid, c, { thin: true, dashed: true, opacity: 0.6 }));
     boxGroup.opacity.value = 0;
 
-    const centroidGroup = s.group();
-    centroidGroup.add(circle(c, 4, { fill: true }));
+    const centroidGroup = s(group());
     centroidGroup.add(
-      label(
-        c.right(10).up(10),
+      circle(c, 4, { fill: true }),
+      label(c.right(10).up(10),
         t("(", math("x", "c"), ", ", math("y", "c"), ")"),
-        { size: 14, anchor: "start", baseline: "bottom" },
-      ),
+        { size: 14, anchor: "start", baseline: "bottom" }),
     );
     centroidGroup.opacity.value = 0;
 
-    // Animation script — async/await + reusable Promise helpers.
-    this.anim.loop(async () => {
-      const a = this.anim;
+    // Animation script — generator runner. `yield* X` delegates to a
+    // sub-animation; `yield <ms>` pauses; `yield [a, b]` runs in parallel.
+    this.anim.loop(function* () {
       lineT.value = 0;
       morphT.value = 0;
       [xLabels, yLabels, boxGroup, centroidGroup].forEach(
         (g) => (g.opacity.value = 0),
       );
 
-      await this.tween(lineT, 1, 1100, easeOut);
-      await a.wait(240);
-      await fadeIn(a, xLabels, 450);
-      await a.wait(720);
-      await this.tween(morphT, 1, 1200, easeInOut);
-      await a.wait(240);
-      await fadeIn(a, yLabels, 450);
-      await a.wait(240);
-      await fadeIn(a, boxGroup, 600);
-      await fadeIn(a, centroidGroup, 500);
-      await a.wait(4500);
+      yield* tween(lineT, 1, 1100, easeOut);
+      yield 240;
+      yield* fadeIn(xLabels, 450);
+      yield 720;
+      yield* tween(morphT, 1, 1200, easeInOut);
+      yield 240;
+      yield* fadeIn(yLabels, 450);
+      yield 240;
+      yield* fadeIn(boxGroup, 600);
+      yield* fadeIn(centroidGroup, 500);
+      yield 4500;
     });
   }
 }

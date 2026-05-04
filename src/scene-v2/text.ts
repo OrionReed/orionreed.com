@@ -1,5 +1,7 @@
-// Chainable rich text composed of nested styled spans, ported from v1's
-// draw.ts. Pure values; no DOM. Used by `label()` to set tspan content.
+// Chainable rich text composed of nested styled spans. Pure values;
+// no DOM. Used by `label()` to set tspan content.
+
+import { tokens } from "./tokens";
 
 interface TextStyle {
   bold?: boolean;
@@ -40,9 +42,6 @@ export function t(...parts: TextPart[]): Text {
   return new Text(parts);
 }
 
-const SUB_FONT_SIZE = "0.75em";
-const MUTED_OPACITY = 0.5;
-
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -53,11 +52,11 @@ function renderTextNode(node: TextPart): string {
   const a: string[] = [];
   if (node.style.bold) a.push('font-weight="700"');
   if (node.style.italic) a.push('font-style="italic"');
-  if (node.style.muted) a.push(`opacity="${MUTED_OPACITY}"`);
+  if (node.style.muted) a.push(`opacity="${tokens.mutedOpacity}"`);
   if (node.style.sub)
-    a.push(`baseline-shift="sub" font-size="${SUB_FONT_SIZE}"`);
+    a.push(`baseline-shift="sub" font-size="${tokens.subFontSize}"`);
   if (node.style.sup)
-    a.push(`baseline-shift="super" font-size="${SUB_FONT_SIZE}"`);
+    a.push(`baseline-shift="super" font-size="${tokens.subFontSize}"`);
   return a.length ? `<tspan ${a.join(" ")}>${inner}</tspan>` : inner;
 }
 
@@ -71,13 +70,4 @@ export function flattenText(c: Content): string {
   const walk = (n: TextPart): string =>
     typeof n === "string" ? n : n.parts.map(walk).join("");
   return walk(c);
-}
-
-/**
- * Math notation shorthand: `math("x", "min")` → italic-x with italic
- * subscript-min. Skip the second arg for a plain italic identifier.
- */
-export function math(base: string, sub?: string): Text {
-  const b = t(base).italic();
-  return sub ? b.sub(t(sub).italic()) : b;
 }

@@ -5,20 +5,10 @@
 
 import { Shape } from "./shape";
 import { effect, type Arg, read, unwrap } from "./signal";
-import type { RPoint } from "./rval";
-import { bounds } from "../elements/geom";
+import type { Point } from "./point";
+import { bounds } from "./bounds";
 import { renderContent, flattenText, type Content } from "./text";
-
-// Visual defaults match the v1 microlib so v2 diagrams look identical.
-const DEFAULTS = {
-  stroke: "var(--text-color)",
-  weight: 2,
-  thinWeight: 1.5,
-  font: "'New CM', monospace",
-  fontSize: 14,
-  charWidth: 0.6,
-  corner: 2,
-};
+import { tokens } from "./tokens";
 
 const NSS = "non-scaling-stroke";
 
@@ -37,10 +27,10 @@ function applyStroke(
   opts: CommonStrokeOpts,
   fillable = false,
 ): void {
-  const stroke = opts.stroke ?? DEFAULTS.stroke;
+  const stroke = opts.stroke ?? tokens.stroke;
   const weight = opts.strokeWidth
     ? () => unwrap(opts.strokeWidth!)
-    : () => (opts.thin ? DEFAULTS.thinWeight : DEFAULTS.weight);
+    : () => (opts.thin ? tokens.thinWeight : tokens.weight);
 
   s.attr("stroke", () => stroke);
   s.attr("stroke-width", weight);
@@ -60,17 +50,25 @@ function applyStroke(
   }
 }
 
+// ── group ───────────────────────────────────────────────────────────
+
+/** Empty container shape — bundles children for transform / opacity
+ *  inheritance and shared lifecycle. */
+export function group(): Shape {
+  return new Shape();
+}
+
 // ── line ────────────────────────────────────────────────────────────
 
 export interface LineOpts extends CommonStrokeOpts {}
 
 export interface LineShape extends Shape {
   /** Reactive endpoints — exposed for relative positioning. */
-  readonly from: RPoint;
-  readonly to: RPoint;
+  readonly from: Point;
+  readonly to: Point;
 }
 
-export function line(from: RPoint, to: RPoint, opts: LineOpts = {}): LineShape {
+export function line(from: Point, to: Point, opts: LineOpts = {}): LineShape {
   const s = new Shape("line") as LineShape;
   s.attr("x1", from.x);
   s.attr("y1", from.y);
@@ -115,14 +113,14 @@ export function rect(
   s.attr("y", () => unwrap(y));
   s.attr("width", () => unwrap(w));
   s.attr("height", () => unwrap(h));
-  const corner = opts.corner ?? DEFAULTS.corner;
+  const corner = opts.corner ?? tokens.corner;
   s.attr("rx", () => unwrap(corner));
   s.attr("ry", () => unwrap(corner));
 
   const filled = opts.fill !== undefined;
   applyStroke(s, opts, filled);
   if (filled) {
-    const fill = opts.fill === true ? DEFAULTS.stroke : opts.fill!;
+    const fill = opts.fill === true ? tokens.stroke : opts.fill!;
     s.attr("fill", () => fill);
   }
 
@@ -137,7 +135,7 @@ export interface CircleOpts extends CommonStrokeOpts {
 }
 
 export function circle(
-  at: RPoint,
+  at: Point,
   r: Arg<number>,
   opts: CircleOpts = {},
 ): Shape {
@@ -149,7 +147,7 @@ export function circle(
   const filled = opts.fill !== undefined;
   applyStroke(s, opts, filled);
   if (filled) {
-    const fill = opts.fill === true ? DEFAULTS.stroke : opts.fill!;
+    const fill = opts.fill === true ? tokens.stroke : opts.fill!;
     s.attr("fill", () => fill);
   }
 
@@ -177,19 +175,19 @@ const baselineMap = {
 } as const;
 
 export function label(
-  at: RPoint,
+  at: Point,
   content: Arg<Content>,
   opts: LabelOpts = {},
 ): Shape {
   const contentR = read(content);
-  const size = opts.size ?? DEFAULTS.fontSize;
+  const size = opts.size ?? tokens.fontSize;
 
   const s = new Shape("text");
   s.attr("x", at.x);
   s.attr("y", at.y);
-  s.attr("font-family", () => DEFAULTS.font);
+  s.attr("font-family", () => tokens.font);
   s.attr("font-size", () => unwrap(size));
-  s.attr("fill", () => DEFAULTS.stroke);
+  s.attr("fill", () => tokens.stroke);
   s.attr("text-anchor", () => opts.anchor ?? "middle");
   s.attr(
     "dominant-baseline",
@@ -215,7 +213,7 @@ export function label(
   s.setBounds(() => {
     const text = flattenText(contentR());
     const fs = unwrap(size);
-    const w = fs * Math.max(1, text.length) * DEFAULTS.charWidth;
+    const w = fs * Math.max(1, text.length) * tokens.charWidth;
     return bounds(at.x() - w / 2, at.y() - fs / 2, w, fs);
   });
 

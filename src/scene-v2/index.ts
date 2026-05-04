@@ -3,7 +3,7 @@
 // Mental model:
 //   - Channels are plain `signal(0)` — preact-signals-core directly.
 //     Animate via `this.tween(channel, target, ms, ease)`.
-//   - 2D points use `RPoint` for chainable vector + layout ops.
+//   - 2D points use `Point` for chainable vector + layout ops.
 //     `pt(60, 170)` for static, `lerp(a, b, t)` for derived.
 //   - Shape is the universal node. Wrapper `<g>` holds transform +
 //     opacity; optional intrinsic SVG element + child shapes.
@@ -25,15 +25,24 @@ export {
 
 export { type Arg, read, unwrap } from "./signal";
 
-export { RPoint, pt, lerp } from "./rval";
+export { Point, pt, lerp } from "./point";
 
-export { Shape, SVG_NS, type Pivot, type PivotKey } from "./shape";
+export {
+  bounds,
+  expandBounds,
+  unionBounds,
+  type Bounds,
+  type Vec,
+} from "./bounds";
+
+export { Shape, SVG_NS, Pivot } from "./shape";
 
 export {
   line,
   rect,
   circle,
   label,
+  group,
   type LineShape,
   type LineOpts,
   type RectOpts,
@@ -41,16 +50,26 @@ export {
   type LabelOpts,
 } from "./shapes";
 
-export { Scene } from "./scene";
+export { makeScene, type Scene } from "./scene";
 
 export {
   Text,
   t,
-  math,
   type Content,
   type TextPart,
 } from "./text";
 
-export { SceneElement } from "./scene-element";
+export { tokens, type Tokens } from "./tokens";
 
-export { fadeIn, fadeOut, parallel } from "./anims";
+export { Diagram, css } from "./diagram";
+export {
+  Anim,
+  AbortError,
+  easeOut,
+  easeInOut,
+  type TweenDesc,
+  type AnimGen,
+  type Yieldable,
+} from "./anim";
+
+export { tween, fadeIn, fadeOut } from "./anims";

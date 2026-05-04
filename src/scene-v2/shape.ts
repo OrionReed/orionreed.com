@@ -1,19 +1,33 @@
 import { effect, signal, type ReadonlySignal, type Signal } from "./signal";
-import { bounds, unionBounds, type Bounds, type Point } from "../elements/geom";
+import { bounds, unionBounds, type Bounds, type Vec } from "./bounds";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
-export type PivotKey =
-  | "center"
-  | "tl"
-  | "tr"
-  | "bl"
-  | "br"
-  | "top"
-  | "bottom"
-  | "left"
-  | "right";
-export type Pivot = Point | PivotKey;
+/**
+ * Pivot expressed as a normalized coordinate within the shape's bounds:
+ * `{ x: 0, y: 0 }` is top-left, `{ x: 1, y: 1 }` is bottom-right,
+ * `{ x: 0.5, y: 0.5 }` is center. Off-axis values (e.g. `{ x: 0.25, y: 0.5 }`)
+ * are valid — no string-enum gating.
+ *
+ * The `Pivot` namespace exposes named common values:
+ *   `Pivot.TL`, `Pivot.CENTER`, etc.
+ */
+export interface Pivot {
+  x: number;
+  y: number;
+}
+
+export const Pivot = Object.freeze({
+  TL: { x: 0, y: 0 } as Pivot,
+  TR: { x: 1, y: 0 } as Pivot,
+  BL: { x: 0, y: 1 } as Pivot,
+  BR: { x: 1, y: 1 } as Pivot,
+  TOP: { x: 0.5, y: 0 } as Pivot,
+  BOTTOM: { x: 0.5, y: 1 } as Pivot,
+  LEFT: { x: 0, y: 0.5 } as Pivot,
+  RIGHT: { x: 1, y: 0.5 } as Pivot,
+  CENTER: { x: 0.5, y: 0.5 } as Pivot,
+});
 
 /**
  * Universal scene-graph node. Every shape is wrapped in an SVG `<g>`
@@ -36,10 +50,10 @@ export class Shape {
   readonly intrinsic?: SVGElement;
 
   /** Animatable common props as plain preact signals. */
-  readonly translate: Signal<Point> = signal({ x: 0, y: 0 });
+  readonly translate: Signal<Vec> = signal({ x: 0, y: 0 });
   readonly rotate: Signal<number> = signal(0);
-  readonly scale: Signal<Point> = signal({ x: 1, y: 1 });
-  readonly pivot: Signal<Pivot> = signal<Pivot>("center");
+  readonly scale: Signal<Vec> = signal({ x: 1, y: 1 });
+  readonly pivot: Signal<Pivot> = signal<Pivot>(Pivot.CENTER);
   readonly opacity: Signal<number> = signal(1);
 
   private _bounds: Signal<Bounds> = signal<Bounds>(bounds(0, 0, 0, 0));
@@ -122,19 +136,30 @@ export class Shape {
     this.disposers.push(dispose);
   }
 
-  add<T extends Shape>(child: T): T {
-    this.children.push(child);
-    this.el.appendChild(child.el);
-    this.childrenVersion.value += 1;
-    return child;
+  /** Add one or more child shapes. Single arg returns the child;
+   *  multi-arg returns the tuple. */
+  add<T extends Shape>(child: T): T;
+  add<T extends Shape[]>(...children: T): T;
+  add(...children: Shape[]): Shape | Shape[] {
+    for (const child of children) {
+      this.children.push(child);
+      this.el.appendChild(child.el);
+    }
+    if (children.length > 0) this.childrenVersion.value += 1;
+    return children.length === 1 ? children[0] : children;
   }
 
-  remove(child: Shape): void {
-    const i = this.children.indexOf(child);
-    if (i < 0) return;
-    this.children.splice(i, 1);
-    child.dispose();
-    this.childrenVersion.value += 1;
+  /** Remove and dispose one or more child shapes. */
+  remove(...toRemove: Shape[]): void {
+    let changed = false;
+    for (const child of toRemove) {
+      const i = this.children.indexOf(child);
+      if (i < 0) continue;
+      this.children.splice(i, 1);
+      child.dispose();
+      changed = true;
+    }
+    if (changed) this.childrenVersion.value += 1;
   }
 
   clear(): void {
@@ -152,36 +177,15 @@ export class Shape {
   }
 }
 
-function resolvePivot(pivot: Pivot, b: Bounds): Point {
-  if (typeof pivot !== "string") return pivot;
-  switch (pivot) {
-    case "tl":
-      return { x: b.x, y: b.y };
-    case "tr":
-      return { x: b.x + b.w, y: b.y };
-    case "bl":
-      return { x: b.x, y: b.y + b.h };
-    case "br":
-      return { x: b.x + b.w, y: b.y + b.h };
-    case "top":
-      return { x: b.x + b.w / 2, y: b.y };
-    case "bottom":
-      return { x: b.x + b.w / 2, y: b.y + b.h };
-    case "left":
-      return { x: b.x, y: b.y + b.h / 2 };
-    case "right":
-      return { x: b.x + b.w, y: b.y + b.h / 2 };
-    case "center":
-    default:
-      return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-  }
+function resolvePivot(p: Pivot, b: Bounds): Vec {
+  return { x: b.x + p.x * b.w, y: b.y + p.y * b.h };
 }
 
 function composeTransform(
-  t: Point,
+  t: Vec,
   r: number,
-  s: Point,
-  pivot: Point,
+  s: Vec,
+  pivot: Vec,
 ): string {
   const parts: string[] = [];
   if (t.x !== 0 || t.y !== 0) parts.push(`translate(${t.x} ${t.y})`);

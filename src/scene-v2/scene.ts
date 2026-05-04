@@ -1,72 +1,39 @@
-import { Shape } from "./shape";
-import {
-  line,
-  rect,
-  circle,
-  label,
-  type CircleOpts,
-  type LabelOpts,
-  type LineOpts,
-  type LineShape,
-  type RectOpts,
-} from "./shapes";
-import type { Arg } from "./signal";
-import type { RPoint } from "./rval";
-import type { Content } from "./text";
+import type { Shape } from "./shape";
 
 /**
- * Scene = an SVG root + a `Shape` root group. Provides convenience
- * factory methods that build a shape and add it to the root in one
- * step (`s.line(a, b)` rather than `root.add(line(a, b))`).
+ * Scene is a callable handle to a `<g>` root group inside an SVG.
  *
- * Custom shapes are added via `s.add(myShape)`. Empty groups (for
- * bundling children for unified opacity / lifecycle) via `s.group()`.
+ * - `s(myShape)` — adds a shape to the root, returns it.
+ * - `s(a, b, c)` — adds several at once, returns the tuple.
+ * - `s.view(x, y, w, h)` — set the SVG viewBox.
+ * - `s.svg`, `s.root` — escape hatches.
  */
-export class Scene {
-  constructor(
-    public readonly svg: SVGSVGElement,
-    public readonly root: Shape,
-  ) {}
+export interface Scene {
+  /** Add a single shape; returns it for binding/chaining. */
+  <T extends Shape>(shape: T): T;
+  /** Add several shapes at once; returns them as a tuple. */
+  <T extends Shape[]>(...shapes: T): T;
 
-  /** Set the SVG viewBox + explicit width/height. */
-  view(x: number, y: number, w: number, h: number): void {
-    this.svg.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
-    this.svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-    this.svg.setAttribute("width", String(w));
-    this.svg.setAttribute("height", String(h));
-  }
+  readonly svg: SVGSVGElement;
+  readonly root: Shape;
 
-  /** Add a custom shape to the root. */
-  add<T extends Shape>(shape: T): T {
-    return this.root.add(shape);
-  }
+  view(x: number, y: number, w: number, h: number): void;
+}
 
-  /** Create an empty container shape, added to the root. */
-  group(): Shape {
-    return this.add(new Shape());
-  }
-
-  // Convenience factories — build + add in one call.
-
-  line(from: RPoint, to: RPoint, opts?: LineOpts): LineShape {
-    return this.add(line(from, to, opts));
-  }
-
-  rect(
-    x: Arg<number>,
-    y: Arg<number>,
-    w: Arg<number>,
-    h: Arg<number>,
-    opts?: RectOpts,
-  ): Shape {
-    return this.add(rect(x, y, w, h, opts));
-  }
-
-  circle(at: RPoint, r: Arg<number>, opts?: CircleOpts): Shape {
-    return this.add(circle(at, r, opts));
-  }
-
-  label(at: RPoint, content: Arg<Content>, opts?: LabelOpts): Shape {
-    return this.add(label(at, content, opts));
-  }
+export function makeScene(svg: SVGSVGElement, root: Shape): Scene {
+  const fn = ((...shapes: Shape[]) => {
+    for (const shape of shapes) root.add(shape);
+    return shapes.length === 1 ? shapes[0] : shapes;
+  }) as Scene;
+  Object.assign(fn, {
+    svg,
+    root,
+    view(x: number, y: number, w: number, h: number) {
+      svg.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
+      svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      svg.setAttribute("width", String(w));
+      svg.setAttribute("height", String(h));
+    },
+  });
+  return fn;
 }
