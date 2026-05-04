@@ -1,50 +1,46 @@
 import { easeInOut, easeOut } from "../anim";
 import { css } from "../base-element";
-import { Content, Padding, Scene, SceneSize, t, Text } from "../draw";
-import { down, left, lerpPt, pt, type Point } from "../geom";
-import { SceneElement } from "../scene-element";
+import {
+  circle,
+  fadeIn,
+  label,
+  line,
+  lerp,
+  math,
+  pt,
+  rect,
+  Scene,
+  SceneElement,
+  Shape,
+  signal,
+  t,
+  type Arg,
+  type RPoint,
+} from "../../scene-v2";
 
-// Local helpers — promote to lib only if a third diagram needs them.
+// ── Local helpers ───────────────────────────────────────────────────
+// Lifted to the lib later if/when a third diagram needs them.
 
-interface Segment {
-  from: Point;
-  to: Point;
-  at(f: number): Point;
+/** Perpendicular tick at fraction `f` along the segment from→to. Pure
+ *  vector math; tracks reactive endpoints automatically. */
+function tick(
+  from: RPoint,
+  to: RPoint,
+  f: number,
+  half: number,
+  opts: { opacity?: Arg<number> } = {},
+): Shape {
+  const center = lerp(from, to, f);
+  const offset = to.sub(from).normalize().perp().scale(half);
+  return line(center.sub(offset), center.add(offset), {
+    thin: true,
+    opacity: opts.opacity,
+  });
 }
 
-function seg(from: Point, to: Point): Segment {
-  return { from, to, at: (f) => lerpPt(from, to, f) };
-}
+const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-// Endpoints of a perpendicular tick of `2 * half` length at fraction `f`
-// along `s`. Tick orientation tracks the segment's current direction.
-function tickAt(s: Segment, f: number, half: number): [Point, Point] {
-  const dx = s.to.x - s.from.x;
-  const dy = s.to.y - s.from.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const nx = (-dy / len) * half;
-  const ny = (dx / len) * half;
-  const c = s.at(f);
-  return [pt(c.x - nx, c.y - ny), pt(c.x + nx, c.y + ny)];
-}
-
-function math(base: string, sub?: string): Text {
-  const b = t(base).italic();
-  return sub ? b.sub(t(sub).italic()) : b;
-}
-
-function clamp01(v: number): number {
-  return v < 0 ? 0 : v > 1 ? 1 : v;
-}
-
-const INITIAL = {
-  lineT: 0,
-  labelsO: 0,
-  morphT: 0,
-  yLabelsO: 0,
-  boxO: 0,
-  centroidO: 0,
-};
+// ── Component ───────────────────────────────────────────────────────
 
 export class MdCentering extends SceneElement {
   static styles = css`
@@ -53,149 +49,116 @@ export class MdCentering extends SceneElement {
     }
   `;
 
-  // Origin near the bottom-left so the duplicate has somewhere to sweep
-  // up into. Marks at F.min/F.max are interpolations of the line, not
-  // its endpoints; F.mid is their midpoint.
-  private O = pt(60, 170);
-  private xEnd = pt(570, 170);
-  private yEnd = pt(60, 30);
-  private F = { min: 0.2, mid: 0.45, max: 0.7 };
+  protected setup(s: Scene): void {
+    s.view(-20, -20, 640, 240);
 
-  private state = { ...INITIAL };
+    const lineT = signal(0);
+    const morphT = signal(0);
 
-  protected scenePadding(): Padding {
-    return 20;
-  }
+    // Geometry. Origin near bottom-left so the duplicate has somewhere
+    // to sweep up into. F values are interpolations of the line, not
+    // its endpoints — the marked segment lives inside the line.
+    const O = pt(60, 170);
+    const xEnd = pt(570, 170);
+    const yEnd = pt(60, 30);
+    const F = [0.2, 0.45, 0.7];
+    const subs = ["min", "c", "max"];
 
-  protected sceneSize(): SceneSize {
-    return { w: 600, h: 200 };
-  }
+    // Axes — visible tip lerps via the channel signal directly.
+    s.line(O, lerp(O, xEnd, lineT));
+    const yTip = lerp(xEnd, yEnd, morphT);
+    s.line(O, yTip, { opacity: () => (morphT.value > 0 ? 1 : 0) });
 
-  connectedCallback(): void {
-    super.connectedCallback();
-    const { state } = this;
+    // Ticks: x at static (O, xEnd) fractions, revealing as line passes;
+    // y follows the morphing tip and shows once morph begins.
+    F.forEach((f) =>
+      s.add(
+        tick(O, xEnd, f, 7, {
+          opacity: () => clamp01((lineT.value - f) / 0.06),
+        }),
+      ),
+    );
+    F.forEach((f) =>
+      s.add(tick(O, yTip, f, 7, { opacity: () => (morphT.value > 0 ? 1 : 0) })),
+    );
 
-    // Local closure rather than a SceneElement method, since this whole
-    // pattern goes away once the scene becomes a retained graph (signal
-    // mutations will be the implicit render trigger).
-    const ramp = (
-      ms: number,
-      set: (t: number) => void,
-      ease: (t: number) => number = (t) => t,
-    ) =>
-      this.anim.tween(ms, (t) => {
-        set(ease(t));
-        this.render();
-      });
-
-    this.anim.loop(async () => {
-      Object.assign(state, INITIAL);
-      this.render();
-
-      await ramp(1100, (t) => (state.lineT = t), easeOut);
-      await this.anim.wait(240);
-
-      await ramp(450, (t) => (state.labelsO = t));
-      await this.anim.wait(720);
-
-      // Single morph: duplicate is identical to the x-axis at morphT=0
-      // (overlapping, so invisible) and is the y-axis at morphT=1.
-      // Length and angle change implicitly via endpoint interpolation,
-      // so it can never leave the canvas.
-      await ramp(1200, (t) => (state.morphT = t), easeInOut);
-      await this.anim.wait(240);
-
-      await ramp(450, (t) => (state.yLabelsO = t));
-      await this.anim.wait(240);
-
-      await ramp(600, (t) => (state.boxO = t));
-      await ramp(500, (t) => (state.centroidO = t));
-
-      await this.anim.wait(4500);
-    });
-  }
-
-  protected draw(scene: Scene): void {
-    const { O, xEnd, yEnd, F, state } = this;
-    const FONT = 16;
-    const TICK = 7;
-
-    const x = seg(O, xEnd);
-    const y = seg(O, yEnd);
-    const yMorph = seg(O, lerpPt(xEnd, yEnd, state.morphT));
-    const c = pt(x.at(F.mid).x, y.at(F.mid).y);
-
-    // Bounding box (faint, behind axes).
-    if (state.boxO > 0) {
-      scene.rect(
-        x.at(F.min).x,
-        y.at(F.max).y,
-        (F.max - F.min) * (xEnd.x - O.x),
-        (F.max - F.min) * (O.y - yEnd.y),
-        { thin: true, opacity: state.boxO * 0.5, corner: 4 },
-      );
-    }
-
-    // X-axis (animated tip) + ticks revealing as the tip passes them.
-    scene.line(O, x.at(state.lineT));
-    for (const f of [F.min, F.mid, F.max]) {
-      const o = clamp01((state.lineT - f) / 0.06);
-      if (o > 0) scene.line(...tickAt(x, f, TICK), { thin: true, opacity: o });
-    }
-
-    // Duplicate (overlaps x at morphT=0, becomes y at morphT=1).
-    if (state.morphT > 0) {
-      scene.line(yMorph.from, yMorph.to);
-      for (const f of [F.min, F.mid, F.max]) {
-        scene.line(...tickAt(yMorph, f, TICK), { thin: true });
-      }
-    }
-
-    // Labels.
-    if (state.labelsO > 0) {
-      const xL = (p: Point, content: Content) =>
-        scene.label(p, content, {
-          size: FONT,
-          opacity: state.labelsO,
+    // Label groups — fade together via parent opacity inheritance.
+    const xLabels = s.group();
+    F.forEach((f, i) =>
+      xLabels.add(
+        label(lerp(O, xEnd, f).down(24), math("x", subs[i]), {
+          size: 16,
           baseline: "top",
-        });
-      xL(down(x.at(F.min), 24), math("x", "min"));
-      xL(down(x.at(F.mid), 24), math("x", "c"));
-      xL(down(x.at(F.max), 24), math("x", "max"));
-    }
+        }),
+      ),
+    );
+    xLabels.opacity.value = 0;
 
-    if (state.yLabelsO > 0) {
-      const yL = (p: Point, content: Content) =>
-        scene.label(p, content, {
-          size: FONT,
-          opacity: state.yLabelsO,
+    const yLabels = s.group();
+    F.forEach((f, i) =>
+      yLabels.add(
+        label(lerp(O, yEnd, f).left(14), math("y", subs[i]), {
+          size: 16,
           anchor: "end",
-          baseline: "middle",
-        });
-      yL(left(y.at(F.min), 14), math("y", "min"));
-      yL(left(y.at(F.mid), 14), math("y", "c"));
-      yL(left(y.at(F.max), 14), math("y", "max"));
-    }
+        }),
+      ),
+    );
+    yLabels.opacity.value = 0;
 
-    // Dashed crosshairs from each axis-center mark to the centroid.
-    if (state.boxO > 0) {
-      const dash = { thin: true, dashed: true, opacity: state.boxO * 0.6 };
-      scene.line(x.at(F.mid), c, dash);
-      scene.line(y.at(F.mid), c, dash);
-    }
+    // Box, crosshairs (faint baseline opacity, multiplied by group fade).
+    const xMin = lerp(O, xEnd, F[0]);
+    const xMid = lerp(O, xEnd, F[1]);
+    const xMax = lerp(O, xEnd, F[2]);
+    const yMin = lerp(O, yEnd, F[0]);
+    const yMid = lerp(O, yEnd, F[1]);
+    const yMax = lerp(O, yEnd, F[2]);
+    const c = pt(xMid.x, yMid.y);
 
-    if (state.centroidO > 0) {
-      scene.circle(c.x, c.y, 4, { fill: true, opacity: state.centroidO });
-      scene.label(
-        pt(c.x + 10, c.y - 10),
+    const boxGroup = s.group();
+    boxGroup.add(
+      rect(
+        xMin.x(),
+        yMax.y(),
+        xMax.x() - xMin.x(),
+        yMin.y() - yMax.y(),
+        { thin: true, corner: 4, opacity: 0.5 },
+      ),
+    );
+    boxGroup.add(line(xMid, c, { thin: true, dashed: true, opacity: 0.6 }));
+    boxGroup.add(line(yMid, c, { thin: true, dashed: true, opacity: 0.6 }));
+    boxGroup.opacity.value = 0;
+
+    const centroidGroup = s.group();
+    centroidGroup.add(circle(c, 4, { fill: true }));
+    centroidGroup.add(
+      label(
+        c.right(10).up(10),
         t("(", math("x", "c"), ", ", math("y", "c"), ")"),
-        {
-          size: 14,
-          opacity: state.centroidO,
-          anchor: "start",
-          baseline: "bottom",
-        },
+        { size: 14, anchor: "start", baseline: "bottom" },
+      ),
+    );
+    centroidGroup.opacity.value = 0;
+
+    // Animation script — async/await + reusable Promise helpers.
+    this.anim.loop(async () => {
+      const a = this.anim;
+      lineT.value = 0;
+      morphT.value = 0;
+      [xLabels, yLabels, boxGroup, centroidGroup].forEach(
+        (g) => (g.opacity.value = 0),
       );
-    }
+
+      await this.tween(lineT, 1, 1100, easeOut);
+      await a.wait(240);
+      await fadeIn(a, xLabels, 450);
+      await a.wait(720);
+      await this.tween(morphT, 1, 1200, easeInOut);
+      await a.wait(240);
+      await fadeIn(a, yLabels, 450);
+      await a.wait(240);
+      await fadeIn(a, boxGroup, 600);
+      await fadeIn(a, centroidGroup, 500);
+      await a.wait(4500);
+    });
   }
 }
