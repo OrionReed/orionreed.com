@@ -9,6 +9,7 @@ import {
   label,
   line,
   lerp,
+  Pivot,
   pt,
   rect,
   Scene,
@@ -86,7 +87,7 @@ export class MdCentering extends Diagram {
     xLabels.add(...F.map((f, i) =>
       label(lerp(O, xEnd, f).down(24), math("x", subs[i]), {
         size: 16,
-        baseline: "top",
+        pivot: Pivot.TOP,
       }),
     ));
     xLabels.opacity.value = 0;
@@ -95,7 +96,7 @@ export class MdCentering extends Diagram {
     yLabels.add(...F.map((f, i) =>
       label(lerp(O, yEnd, f).left(14), math("y", subs[i]), {
         size: 16,
-        anchor: "end",
+        pivot: Pivot.RIGHT,
       }),
     ));
     yLabels.opacity.value = 0;
@@ -123,7 +124,7 @@ export class MdCentering extends Diagram {
       circle(c, 4, { fill: true }),
       label(c.right(10).up(10),
         t("(", math("x", "c"), ", ", math("y", "c"), ")"),
-        { size: 14, anchor: "start", baseline: "bottom" }),
+        { size: 14, pivot: Pivot.BL }),
     );
     centroidGroup.opacity.value = 0;
 

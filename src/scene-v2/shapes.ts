@@ -4,7 +4,7 @@
 // "for free"; these factories just bind the geometry-specific SVG
 // attributes.
 
-import { Shape } from "./shape";
+import { Pivot, Shape } from "./shape";
 import { effect, type Arg, read, unwrap } from "./signal";
 import type { Point } from "./point";
 import { bounds } from "./bounds";
@@ -69,15 +69,7 @@ export interface LineShape extends Shape {
 }
 
 export function line(from: Point, to: Point, opts: LineOpts = {}): LineShape {
-  const s = new Shape("line") as LineShape;
-  s.attr("x1", from.x);
-  s.attr("y1", from.y);
-  s.attr("x2", to.x);
-  s.attr("y2", to.y);
-  s.attr("stroke-linecap", opts.cap ?? "round");
-  applyStroke(s, opts);
-
-  s.setBounds(() => {
+  const s = new Shape("line", () => {
     const a = from.value;
     const b = to.value;
     return bounds(
@@ -86,8 +78,13 @@ export function line(from: Point, to: Point, opts: LineOpts = {}): LineShape {
       Math.abs(b.x - a.x),
       Math.abs(b.y - a.y),
     );
-  });
-
+  }) as LineShape;
+  s.attr("x1", from.x);
+  s.attr("y1", from.y);
+  s.attr("x2", to.x);
+  s.attr("y2", to.y);
+  s.attr("stroke-linecap", opts.cap ?? "round");
+  applyStroke(s, opts);
   Object.defineProperty(s, "from", { value: from });
   Object.defineProperty(s, "to", { value: to });
   return s;
@@ -108,7 +105,9 @@ export function rect(
   h: Arg<number>,
   opts: RectOpts = {},
 ): Shape {
-  const s = new Shape("rect");
+  const s = new Shape("rect", () =>
+    bounds(unwrap(x), unwrap(y), unwrap(w), unwrap(h)),
+  );
   s.attr("x", () => unwrap(x));
   s.attr("y", () => unwrap(y));
   s.attr("width", () => unwrap(w));
@@ -126,8 +125,6 @@ export function rect(
   if (filled) {
     s.attr("fill", opts.fill === true ? tokens.stroke : opts.fill!);
   }
-
-  s.setBounds(() => bounds(unwrap(x), unwrap(y), unwrap(w), unwrap(h)));
   return s;
 }
 
@@ -142,7 +139,10 @@ export function circle(
   r: Arg<number>,
   opts: CircleOpts = {},
 ): Shape {
-  const s = new Shape("circle");
+  const s = new Shape("circle", () => {
+    const radius = unwrap(r);
+    return bounds(at.x() - radius, at.y() - radius, 2 * radius, 2 * radius);
+  });
   s.attr("cx", at.x);
   s.attr("cy", at.y);
   s.attr("r", () => unwrap(r));
@@ -152,11 +152,6 @@ export function circle(
   if (filled) {
     s.attr("fill", opts.fill === true ? tokens.stroke : opts.fill!);
   }
-
-  s.setBounds(() => {
-    const radius = unwrap(r);
-    return bounds(at.x() - radius, at.y() - radius, 2 * radius, 2 * radius);
-  });
   return s;
 }
 
@@ -164,18 +159,25 @@ export function circle(
 
 export interface LabelOpts {
   size?: Arg<number>;
-  anchor?: "start" | "middle" | "end";
-  baseline?: "top" | "middle" | "bottom";
+  /** Where the label's `at` point sits within the label's box, in
+   *  normalized 0..1 coords. Pivot.x affects horizontal alignment
+   *  (text-anchor); Pivot.y affects vertical (dominant-baseline).
+   *  Defaults to `Pivot.CENTER`.
+   *
+   *  SVG only supports start/middle/end and hanging/central/alphabetic,
+   *  so non-corner pivot values snap to the nearest bucket. */
+  pivot?: Pivot;
   bold?: boolean;
   /** Initial opacity; see CommonStrokeOpts.opacity for animation notes. */
   opacity?: number;
 }
 
-const baselineMap = {
-  top: "hanging",
-  middle: "central",
-  bottom: "alphabetic",
-} as const;
+function pivotXToTextAnchor(x: number): string {
+  return x <= 0.25 ? "start" : x >= 0.75 ? "end" : "middle";
+}
+function pivotYToBaseline(y: number): string {
+  return y <= 0.25 ? "hanging" : y >= 0.75 ? "alphabetic" : "central";
+}
 
 export function label(
   at: Point,
@@ -184,15 +186,21 @@ export function label(
 ): Shape {
   const contentR = read(content);
   const size = opts.size ?? tokens.fontSize;
+  const pivot = opts.pivot ?? Pivot.CENTER;
 
-  const s = new Shape("text");
+  const s = new Shape("text", () => {
+    const text = flattenText(contentR());
+    const fs = unwrap(size);
+    const w = fs * Math.max(1, text.length) * tokens.charWidth;
+    return bounds(at.x() - pivot.x * w, at.y() - pivot.y * fs, w, fs);
+  });
   s.attr("x", at.x);
   s.attr("y", at.y);
   s.attr("font-family", tokens.font);
   s.attr("font-size", () => unwrap(size));
   s.attr("fill", tokens.stroke);
-  s.attr("text-anchor", opts.anchor ?? "middle");
-  s.attr("dominant-baseline", baselineMap[opts.baseline ?? "middle"]);
+  s.attr("text-anchor", pivotXToTextAnchor(pivot.x));
+  s.attr("dominant-baseline", pivotYToBaseline(pivot.y));
   if (opts.bold) s.attr("font-weight", 700);
 
   // Reactive content: re-renders the inner tspan tree when content changes.
@@ -206,13 +214,6 @@ export function label(
   if (opts.opacity !== undefined) {
     s.opacity.value = opts.opacity;
   }
-
-  s.setBounds(() => {
-    const text = flattenText(contentR());
-    const fs = unwrap(size);
-    const w = fs * Math.max(1, text.length) * tokens.charWidth;
-    return bounds(at.x() - w / 2, at.y() - fs / 2, w, fs);
-  });
 
   return s;
 }

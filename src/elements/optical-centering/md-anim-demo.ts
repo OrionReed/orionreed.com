@@ -10,6 +10,7 @@ import {
   fadeOut,
   label,
   lag,
+  Pivot,
   pt,
   Scene,
   sequence,
@@ -58,13 +59,7 @@ export class MdAnimDemo extends Diagram {
     s.view(0, 0, 600, 280);
 
     const sideLabel = (y: number, name: string) =>
-      s(
-        label(pt(10, y), t(name).muted(), {
-          size: 11,
-          anchor: "start",
-          baseline: "middle",
-        }),
-      );
+      s(label(pt(10, y), t(name).muted(), { size: 11, pivot: Pivot.LEFT }));
 
     // ── Strip A: tween + easing, looping bounce ────────────────────
     sideLabel(35, "tween");

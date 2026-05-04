@@ -57,27 +57,57 @@ export class Shape {
   readonly pivot: Signal<Pivot> = signal<Pivot>(Pivot.CENTER);
   readonly opacity: Signal<number> = signal(1);
 
-  /** Bounds memo — driven by `setBounds(fn)`. Lazy: only computes when read. */
-  private _boundsFn: Signal<() => Bounds> = signal<() => Bounds>(() =>
-    bounds(0, 0, 0, 0),
-  );
-  readonly bounds: ReadonlySignal<Bounds> = computed(() =>
-    this._boundsFn.value(),
-  );
+  /** Bounds memo — set at construction via `boundsFn`, or defaults to
+   *  the union of children's bounds. Lazy: only computes when read. */
+  readonly bounds: ReadonlySignal<Bounds>;
+
+  /** Anchors — reactive Points derived from bounds. Allocated eagerly
+   *  in the constructor; cheap (each is two thunks). Use for relative
+   *  positioning: `s(line(boxA.right, boxB.left))`. */
+  readonly tl: Point;
+  readonly tr: Point;
+  readonly bl: Point;
+  readonly br: Point;
+  readonly top: Point;
+  readonly bottom: Point;
+  readonly left: Point;
+  readonly right: Point;
+  readonly center: Point;
 
   protected disposers: (() => void)[] = [];
   private children: Shape[] = [];
   private childrenVersion = signal(0);
 
-  // Lazy anchor caches (Point per direction, computed only on first read).
-  private _anchors = new Map<string, Point>();
-
-  constructor(intrinsicType?: string) {
+  constructor(intrinsicType?: string, boundsFn?: () => Bounds) {
     this.el = document.createElementNS(SVG_NS, "g") as SVGGElement;
     if (intrinsicType) {
       this.intrinsic = document.createElementNS(SVG_NS, intrinsicType);
       this.el.appendChild(this.intrinsic);
     }
+
+    // Bounds: explicit fn from a shape factory, or the children-union
+    // default (used by groups and any shape with no own geometry).
+    this.bounds = computed(
+      boundsFn ??
+        (() => {
+          this.childrenVersion.value;
+          const bs = this.children.map((c) => c.bounds.value);
+          return bs.length ? unionBounds(...bs) : bounds(0, 0, 0, 0);
+        }),
+    );
+
+    // Anchors. Each is a reactive Point reading from `bounds`. Two
+    // thunks per anchor; total ~18 thunks per shape. Negligible at
+    // diagram scale.
+    this.tl = this.anchor(Pivot.TL);
+    this.tr = this.anchor(Pivot.TR);
+    this.bl = this.anchor(Pivot.BL);
+    this.br = this.anchor(Pivot.BR);
+    this.top = this.anchor(Pivot.TOP);
+    this.bottom = this.anchor(Pivot.BOTTOM);
+    this.left = this.anchor(Pivot.LEFT);
+    this.right = this.anchor(Pivot.RIGHT);
+    this.center = this.anchor(Pivot.CENTER);
 
     // Transform effect: short-circuit when identity so we don't read
     // bounds (and thus don't force the bounds memo to evaluate).
@@ -102,13 +132,6 @@ export class Shape {
         this.el.setAttribute("opacity", String(this.opacity.value));
       }),
     );
-
-    // Default bounds = union of children. Subclasses override via setBounds.
-    this.setBounds(() => {
-      this.childrenVersion.value;
-      const bs = this.children.map((c) => c.bounds.value);
-      return bs.length ? unionBounds(...bs) : bounds(0, 0, 0, 0);
-    });
   }
 
   /**
@@ -137,14 +160,6 @@ export class Shape {
     }
   }
 
-  /**
-   * Drive the bounds memo with `fn`. Replaces any prior bounds source.
-   * `fn` is called lazily — only when something reads `shape.bounds`.
-   */
-  setBounds(fn: () => Bounds): void {
-    this._boundsFn.value = fn;
-  }
-
   /** Track an arbitrary disposer to run on dispose. */
   track(dispose: () => void): void {
     this.disposers.push(dispose);
@@ -168,40 +183,22 @@ export class Shape {
     return this;
   }
 
-  // ── Anchors ─────────────────────────────────────────────────────────
-  // Reactive Points derived from `bounds`. Lazy: each anchor is created
-  // once on first access. Useful for relative positioning:
-  //   s(line(boxA.right, boxB.left));
-
-  /** Arbitrary-position anchor: normalized 0..1 within bounds. */
+  /** Arbitrary-position anchor — normalized 0..1 within bounds. The
+   *  named getters (`tl`, `center`, etc.) cover the common cases; use
+   *  this for off-axis anchors like `{ x: 0.25, y: 0.5 }`. Each call
+   *  allocates a fresh Point (cheap, two thunks). */
   anchor(at: Pivot): Point {
-    const key = `${at.x},${at.y}`;
-    let p = this._anchors.get(key);
-    if (!p) {
-      p = new Point(
-        () => {
-          const b = this.bounds.value;
-          return b.x + at.x * b.w;
-        },
-        () => {
-          const b = this.bounds.value;
-          return b.y + at.y * b.h;
-        },
-      );
-      this._anchors.set(key, p);
-    }
-    return p;
+    return new Point(
+      () => {
+        const b = this.bounds.value;
+        return b.x + at.x * b.w;
+      },
+      () => {
+        const b = this.bounds.value;
+        return b.y + at.y * b.h;
+      },
+    );
   }
-
-  get tl(): Point { return this.anchor(Pivot.TL); }
-  get tr(): Point { return this.anchor(Pivot.TR); }
-  get bl(): Point { return this.anchor(Pivot.BL); }
-  get br(): Point { return this.anchor(Pivot.BR); }
-  get top(): Point { return this.anchor(Pivot.TOP); }
-  get bottom(): Point { return this.anchor(Pivot.BOTTOM); }
-  get left(): Point { return this.anchor(Pivot.LEFT); }
-  get right(): Point { return this.anchor(Pivot.RIGHT); }
-  get center(): Point { return this.anchor(Pivot.CENTER); }
 
   // ── Children ────────────────────────────────────────────────────────
 

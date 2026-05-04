@@ -69,9 +69,10 @@ export {
   type Yieldable,
 } from "./anim";
 
-export { easeOut, easeIn, easeInOut, linear } from "./easings";
-
 export {
+  easeOut,
+  easeIn,
+  easeInOut,
   tween,
   fadeIn,
   fadeOut,

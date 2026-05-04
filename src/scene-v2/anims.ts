@@ -5,9 +5,25 @@
 // not at construction time.
 
 import type { Animator } from "./anim";
-import { easeOut } from "./easings";
 import type { Signal } from "./signal";
 import type { Shape } from "./shape";
+
+// ── Easing functions ────────────────────────────────────────────────
+// Pure `t in [0..1] → t' in [0..1]`. Pass to tween/fadeIn/fadeOut to
+// shape the interpolation curve. Default is `easeOut`. For "no easing,"
+// pass `(t) => t` directly.
+
+export function easeOut(t: number): number {
+  return 1 - Math.pow(1 - t, 2);
+}
+
+export function easeIn(t: number): number {
+  return t * t;
+}
+
+export function easeInOut(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
 
 /**
  * Tween a numeric signal from its current value to `target` over `ms`.
