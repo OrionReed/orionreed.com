@@ -1,8 +1,9 @@
 import { BaseElement, css } from "./base-element";
-import { Padding, Scene } from "./draw";
+import { Padding, Scene, SceneSize } from "./draw";
 
 // Base class for diagrams: subclasses override `draw(scene)` (and
-// optionally `scenePadding()`); shadow DOM and SVG mounting are handled.
+// optionally `scenePadding()` / `sceneSize()`); shadow DOM and SVG
+// mounting are handled.
 export abstract class SceneElement extends BaseElement {
   static styles = css`
     :host {
@@ -36,8 +37,22 @@ export abstract class SceneElement extends BaseElement {
     return 20;
   }
 
+  /**
+   * Override to lock the scene to a fixed coordinate system. Returning
+   * undefined (the default) preserves the auto-fit behavior — viewBox
+   * grows to wrap whatever is drawn, plus padding. Useful for animated
+   * diagrams where shapes appear and disappear and you don't want the
+   * viewBox to jitter.
+   */
+  protected sceneSize(): SceneSize | undefined {
+    return undefined;
+  }
+
   protected render(): void {
-    const scene = new Scene({ padding: this.scenePadding() });
+    const scene = new Scene({
+      padding: this.scenePadding(),
+      size: this.sceneSize(),
+    });
     this.draw(scene);
     // Build the container once; subsequent renders only rewrite the SVG.
     let svg = this.shadow.querySelector("svg") as SVGSVGElement | null;

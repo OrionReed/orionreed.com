@@ -40,9 +40,21 @@ const C = {
 
 const NSS = 'vector-effect="non-scaling-stroke"';
 
-function strokeAttrs(weight: number, muted?: boolean): string {
-  const opacity = muted ? ` opacity="${C.mutedOpacity}"` : "";
-  return `stroke="${C.stroke}" stroke-width="${weight}" ${NSS}${opacity}`;
+// Resolve effective opacity: explicit `opacity` wins over `muted`. Returns
+// undefined when fully opaque so we can omit the attribute.
+function resolveOpacity(opts: {
+  muted?: boolean;
+  opacity?: number;
+}): number | undefined {
+  if (opts.opacity !== undefined) return opts.opacity;
+  if (opts.muted) return C.mutedOpacity;
+  return undefined;
+}
+
+function strokeAttrs(weight: number, opts: CommonOpts = {}): string {
+  const o = resolveOpacity(opts);
+  const opAttr = o !== undefined ? ` opacity="${o}"` : "";
+  return `stroke="${C.stroke}" stroke-width="${weight}" ${NSS}${opAttr}`;
 }
 
 function pickWeight(opts: { thin?: boolean }): number {
@@ -631,6 +643,8 @@ class RowNode extends SceneNode<RowShape> implements RowShape {
 interface CommonOpts {
   muted?: boolean;
   thin?: boolean;
+  /** 0..1. Overrides `muted`. Omit / 1 = fully opaque. */
+  opacity?: number;
 }
 
 // true → fill with C.stroke. string → fill with that color (e.g. an Ink).
@@ -680,6 +694,9 @@ export interface LabelOpts {
   // Radians. If omitted and the target is a Heading, defaults to its angle.
   rotate?: Angle;
   bold?: boolean;
+  muted?: boolean;
+  /** 0..1. Overrides `muted`. Omit / 1 = fully opaque. */
+  opacity?: number;
 }
 
 export interface RowItem {
@@ -707,14 +724,22 @@ export type Padding =
       right?: number;
     };
 
+export interface SceneSize {
+  /** Width of the user coordinate system the caller draws into. */
+  w: number;
+  /** Height of the user coordinate system the caller draws into. */
+  h: number;
+}
+
 export class Scene {
   private entries: SceneEntry[] = [];
   private padTop: number;
   private padBottom: number;
   private padLeft: number;
   private padRight: number;
+  private size?: SceneSize;
 
-  constructor(opts: { padding?: Padding } = {}) {
+  constructor(opts: { padding?: Padding; size?: SceneSize } = {}) {
     if (typeof opts.padding === "number") {
       this.padTop =
         this.padBottom =
@@ -728,6 +753,7 @@ export class Scene {
       this.padLeft = p.left ?? p.x ?? 20;
       this.padRight = p.right ?? p.x ?? 20;
     }
+    this.size = opts.size;
   }
 
   rect(x: number, y: number, w: number, h: number, opts?: RectOpts): RectNode;
@@ -789,11 +815,12 @@ export class Scene {
           const fill = typeof opts.fill === "string" ? opts.fill : C.stroke;
           // Inline style (not fill="") because SVG attributes don't
           // recurse var()/calc() inside nested CSS functions.
-          const opacity = opts.muted ? `;opacity:${C.mutedOpacity}` : "";
+          const o = resolveOpacity(opts);
+          const opacity = o !== undefined ? `;opacity:${o}` : "";
           return `<path d="${rrPath(x, y, w, h, corner)}" style="fill:${fill}${opacity}"/>`;
         }
         const weight = pickWeight(opts);
-        const sw = strokeAttrs(weight, opts.muted);
+        const sw = strokeAttrs(weight, opts);
         if (opts.dashed) {
           return renderDashedSegments(rrToSegments(x, y, w, h, corner), {
             mode: "closed",
@@ -853,7 +880,7 @@ export class Scene {
       isAside: false,
       render: () => {
         const weight = pickWeight(opts);
-        const sw = strokeAttrs(weight, opts.muted);
+        const sw = strokeAttrs(weight, opts);
         if (opts.dashed && !opts.fill) {
           return renderDashedSegments(circleToSegments(cx, cy, r), {
             mode: "closed",
@@ -867,7 +894,9 @@ export class Scene {
             ? opts.fill
             : C.stroke
           : "none";
-        return `<circle cx="${cx}" cy="${cy}" r="${r}" style="fill:${fill}" ${sw}/>`;
+        const o = resolveOpacity(opts);
+        const fillStyle = o !== undefined ? `fill:${fill};opacity:${o}` : `fill:${fill}`;
+        return `<circle cx="${cx}" cy="${cy}" r="${r}" style="${fillStyle}" ${sw}/>`;
       },
     };
     this.entries.push(entry);
@@ -894,11 +923,12 @@ export class Scene {
       render: () => {
         if (opts.fill) {
           const fill = typeof opts.fill === "string" ? opts.fill : C.stroke;
-          const opacity = opts.muted ? `;opacity:${C.mutedOpacity}` : "";
+          const o = resolveOpacity(opts);
+          const opacity = o !== undefined ? `;opacity:${o}` : "";
           return `<path d="${d}" style="fill:${fill}${opacity}"/>`;
         }
         const weight = pickWeight(opts);
-        const sw = strokeAttrs(weight, opts.muted);
+        const sw = strokeAttrs(weight, opts);
         return `<path d="${d}" fill="none" ${sw}/>`;
       },
     };
@@ -927,7 +957,7 @@ export class Scene {
       isAside: true,
       render: () => {
         const weight = pickWeight(opts);
-        const sw = strokeAttrs(weight, opts.muted);
+        const sw = strokeAttrs(weight, opts);
         if (opts.dashed) {
           return renderDashedSegments(lineToSegments(p1, p2), {
             mode: "open",
@@ -975,7 +1005,7 @@ export class Scene {
       isAside: true,
       render: () => {
         const weight = pickWeight(opts);
-        const sw = strokeAttrs(weight, opts.muted);
+        const sw = strokeAttrs(weight, opts);
         if (opts.dashed) {
           return renderDashedSegments(polylineToSegments(pts), {
             mode: "open",
@@ -1066,12 +1096,15 @@ export class Scene {
       ? renderContent(content instanceof Text ? content.bold() : t(content).bold())
       : renderContent(content);
 
+    const o = resolveOpacity(opts);
+    const opacityAttr = o !== undefined ? ` opacity="${o}"` : "";
+
     const entry: SceneEntry = {
       shape: inner,
       hidden: false,
       isAside: true,
       render: () =>
-        `<text x="${at.x}" y="${at.y}" font-family="${C.font}" font-size="${size}" fill="${C.stroke}" text-anchor="${anchor}" dominant-baseline="${baseline}"${transform}>${renderedText}</text>`,
+        `<text x="${at.x}" y="${at.y}" font-family="${C.font}" font-size="${size}" fill="${C.stroke}" text-anchor="${anchor}" dominant-baseline="${baseline}"${transform}${opacityAttr}>${renderedText}</text>`,
     };
     this.entries.push(entry);
     return new SceneNode(inner, entry);
@@ -1147,14 +1180,21 @@ export class Scene {
   }
 
   render(svgEl: SVGSVGElement): void {
-    const contentBounds = this.entries
-      .filter((e) => !e.hidden && !e.isAside)
-      .map((e) => e.shape.bounds);
-
-    const vb =
-      contentBounds.length > 0
-        ? unionBounds(...contentBounds)
-        : bounds(0, 0, 0, 0);
+    // When `size` is set, the viewBox is fixed to [0..w, 0..h] (plus
+    // padding); content positions are caller's responsibility, and the
+    // viewBox no longer jitters as shapes appear/disappear during animation.
+    // When omitted, fall back to auto-fitting the union of non-aside
+    // content bounds.
+    const vb = this.size
+      ? bounds(0, 0, this.size.w, this.size.h)
+      : (() => {
+          const contentBounds = this.entries
+            .filter((e) => !e.hidden && !e.isAside)
+            .map((e) => e.shape.bounds);
+          return contentBounds.length > 0
+            ? unionBounds(...contentBounds)
+            : bounds(0, 0, 0, 0);
+        })();
     const padded = bounds(
       vb.x - this.padLeft,
       vb.y - this.padTop,
