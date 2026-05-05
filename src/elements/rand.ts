@@ -56,15 +56,25 @@ export function chance(probability = 0.5): boolean {
  *  (default 0.5). If fewer than `min` true values land naturally, extra
  *  random positions are flipped on until the count is met. */
 export function bools(count: number, p = 0.5, min = 0): boolean[] {
-  const arr = Array.from({ length: count }, () => Math.random() < p);
-  if (min <= 0) return arr;
-  let trues = arr.reduce((n, v) => n + (v ? 1 : 0), 0);
-  while (trues < min) {
-    const i = Math.floor(Math.random() * count);
-    if (!arr[i]) {
+  const arr = new Array<boolean>(count);
+  const falseIdx: number[] = [];
+  let trues = 0;
+  for (let i = 0; i < count; i++) {
+    if (Math.random() < p) {
       arr[i] = true;
       trues++;
+    } else {
+      arr[i] = false;
+      falseIdx.push(i);
     }
+  }
+  // Partial Fisher-Yates over the false indices to flip exactly the
+  // shortfall — O(count) worst case, no rejection sampling.
+  const need = Math.min(min - trues, falseIdx.length);
+  for (let i = 0; i < need; i++) {
+    const j = i + Math.floor(Math.random() * (falseIdx.length - i));
+    arr[falseIdx[j]] = true;
+    falseIdx[j] = falseIdx[i];
   }
   return arr;
 }
