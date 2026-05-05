@@ -11,6 +11,7 @@ import {
   easeOut,
   group,
   label,
+  lag,
   line,
   pt,
   rect,
@@ -141,8 +142,11 @@ export class MdCentering extends Diagram {
       yield 0.24;
       yield* yLabels.opacity.to(1, 0.45);
       yield 0.24;
-      yield* boxGroup.opacity.to(1, 0.6);
-      yield* centroidGroup.opacity.to(1, 0.5);
+      yield* lag(
+        1,
+        boxGroup.opacity.to(1, 0.6),
+        centroidGroup.opacity.to(1, 0.5),
+      );
       yield 4.5;
     });
   }

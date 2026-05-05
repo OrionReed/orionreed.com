@@ -3,7 +3,7 @@
 // An Animator:
 //   - yields undefined → wait one frame, receives `dt` (seconds) back.
 //   - yields a number → pause that many seconds.
-//   - yields an Animator → delegate.
+//   - yields an Animator/Generator → delegate.
 //   - yields an array → run all in parallel.
 
 import { signal, type Signal } from "./signal";
@@ -24,10 +24,6 @@ export class Anim {
   private controller = new AbortController();
   private timerIds = new Set<number>();
   private scopes = new Set<Anim>();
-
-  // Master-RAF state: one rAF id (0 if none scheduled), the time of
-  // the last fired frame (for dt computation), and the queue of
-  // resolvers waiting on this frame.
   private rafId = 0;
   private lastFrame = 0;
   private waiters: Array<(dt: number) => void> = [];
@@ -80,11 +76,22 @@ export class Anim {
 
   private scheduleFrame(): void {
     if (this.rafId !== 0 || this.aborted) return;
-    this.rafId = requestAnimationFrame((now) => {
+    // If we're entering active animation after a quiet period (no
+    // pending RAF and the clock is older than ~one frame), sync
+    // `lastFrame` to "now" so the upcoming RAF measures a true frame
+    // interval rather than the elapsed pause. Active-animation
+    // re-schedules happen ≪ 32ms after the last RAF — they fall
+    // through and the clock keeps advancing normally.
+    const now = performance.now();
+    if (now - this.lastFrame > 32) this.lastFrame = now;
+    this.rafId = requestAnimationFrame((rafNow) => {
       this.rafId = 0;
       if (this.aborted) return;
-      const dt = this.lastFrame === 0 ? 0 : (now - this.lastFrame) / 1000;
-      this.lastFrame = now;
+      // The clamp is a safety net for genuinely degraded frames
+      // (stutter, backgrounded tab) — not a pause handler. In
+      // healthy animation it's never engaged.
+      const dt = Math.min(rafNow - this.lastFrame, 32) / 1000;
+      this.lastFrame = rafNow;
       // Snapshot — handlers may push fresh waiters for the next frame
       // and we don't want to drain those into this firing.
       const batch = this.waiters;
@@ -198,7 +205,6 @@ export class Anim {
     // Pending frame() promises reject via the abort listener in
     // `promise()`. Drop our reference so they GC promptly.
     this.waiters = [];
-    this.lastFrame = 0;
     this.scopes.forEach((s) => s.stop());
     this.scopes.clear();
     this.controller = new AbortController();
