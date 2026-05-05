@@ -26,6 +26,8 @@ export {
 
 export { Shape, SVG_NS, type ShapeOpts } from "./shape";
 
+export { forEach, type ForEachOptions } from "./list";
+
 export { type Segment, dashedPath } from "./dashed";
 
 export {

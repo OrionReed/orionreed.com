@@ -6,7 +6,6 @@ import { Anim } from "./anim";
 import { observedAttributesOf } from "./attr";
 import { makeScene, type Scene } from "./scene";
 import { Shape, SVG_NS } from "./shape";
-import { effect, untracked } from "./signal";
 import { ensureArrowMarker } from "./shapes/connect";
 
 export const css = String.raw;
@@ -65,47 +64,24 @@ export class Diagram extends HTMLElement {
     this.initializeStyles();
   }
 
-  /** Build the scene graph. Override in subclasses. */
+  /** Build the scene graph. Override in subclasses. Reactivity (Signal,
+   *  computed, forEach) handles all dynamic behavior — `setup` runs
+   *  exactly once per element-connect. */
   protected setup(_scene: Scene): void {}
-
-  /** Optional: return a value that, when it changes, rebuilds the
-   *  diagram (full teardown + re-`setup`).
-   */
-  protected rebuildOn?(): unknown;
-
-  private rebuildEffect: (() => void) | null = null;
 
   connectedCallback(): void {
     if (!this.svg) this.mountSvg();
-
-    const initialize = () => {
-      this.anim.stop();
-      this.scene?.root.dispose();
-      const root = new Shape();
-      this.svg.replaceChildren(root.el);
-      ensureArrowMarker(this.svg);
-      this.scene = makeScene(this.svg, root);
-      this.setup(this.scene);
-      if (this.scene._viewPending) this.scene.fit();
-    };
-
-    if (this.rebuildOn) {
-      const sentinel = Symbol("init");
-      let prev: unknown = sentinel;
-      this.rebuildEffect = effect(() => {
-        const next = this.rebuildOn!();
-        if (Object.is(next, prev)) return;
-        prev = next;
-        untracked(initialize);
-      });
-    } else {
-      initialize();
-    }
+    this.anim.stop();
+    this.scene?.root.dispose();
+    const root = new Shape();
+    this.svg.replaceChildren(root.el);
+    ensureArrowMarker(this.svg);
+    this.scene = makeScene(this.svg, root);
+    this.setup(this.scene);
+    if (this.scene._viewPending) this.scene.fit();
   }
 
   disconnectedCallback(): void {
-    this.rebuildEffect?.();
-    this.rebuildEffect = null;
     this.anim.stop();
     this.scene?.root.dispose();
   }

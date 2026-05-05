@@ -1,5 +1,5 @@
 import { Bounds, aabb, type AABB } from "./bounds";
-import { signal } from "./signal";
+import { effect, signal, toSig, type Arg } from "./signal";
 import type { Shape } from "./shape";
 
 export type Padding =
@@ -20,10 +20,16 @@ export interface Scene {
   readonly svg: SVGSVGElement;
   readonly root: Shape;
 
-  /** Set viewBox explicitly. First call wins. Returns reactive Bounds
-   *  representing the viewBox — use `.center`, `.split`, etc. for
-   *  layout relative to the scene. */
-  view(x: number, y: number, w: number, h: number): Bounds;
+  /** Set viewBox. First call wins. Args may be plain numbers, Signals,
+   *  or thunks — when reactive, the viewBox updates as the values
+   *  change. Returns reactive Bounds representing the viewBox — use
+   *  `.center`, `.split`, etc. for layout relative to the scene. */
+  view(
+    x: Arg<number>,
+    y: Arg<number>,
+    w: Arg<number>,
+    h: Arg<number>,
+  ): Bounds;
   /** Auto-fit viewBox to root bounds + optional padding. First call
    *  wins. Returns reactive Bounds for the resulting viewBox. */
   fit(padding?: Padding): Bounds;
@@ -56,7 +62,14 @@ export function makeScene(svg: SVGSVGElement, root: Shape): Scene {
 
   fn.view = (x, y, w, h) => {
     if (viewSet) return viewBounds;
-    setViewBox(x, y, w, h);
+    const xs = toSig(x);
+    const ys = toSig(y);
+    const ws = toSig(w);
+    const hs = toSig(h);
+    // Reactive: re-emit the viewBox attribute whenever any component
+    // changes. Plain-number args produce a fresh signal that never
+    // changes — equivalent to a static set.
+    effect(() => setViewBox(xs.value, ys.value, ws.value, hs.value));
     viewSet = true;
     return viewBounds;
   };
