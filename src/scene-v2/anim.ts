@@ -18,6 +18,7 @@ export class Anim {
   private controller = new AbortController();
   private rafIds = new Set<number>();
   private timerIds = new Set<number>();
+  private scopes = new Set<Anim>();
 
   private get aborted(): boolean {
     return this.controller.signal.aborted;
@@ -139,13 +140,22 @@ export class Anim {
     }
   }
 
-  /** Cancel pending operations and reset. Idempotent. */
+  /** Child Anim scoped to this one — stopped when the parent stops. */
+  scope(): Anim {
+    const child = new Anim();
+    this.scopes.add(child);
+    return child;
+  }
+
+  /** Cancel pending operations and reset. Idempotent. Cascades to scopes. */
   stop(): void {
     this.controller.abort();
     this.rafIds.forEach((id) => cancelAnimationFrame(id));
     this.timerIds.forEach((id) => clearTimeout(id));
     this.rafIds.clear();
     this.timerIds.clear();
+    this.scopes.forEach((s) => s.stop());
+    this.scopes.clear();
     this.controller = new AbortController();
   }
 }
