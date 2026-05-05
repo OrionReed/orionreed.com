@@ -1,6 +1,6 @@
 import { Shape, type ShapeOpts } from "../shape";
 import { Pivot, aabb } from "../bounds";
-import { read, unwrap, type Arg } from "../signal";
+import { toSig, type Arg } from "../signal";
 import { tokens } from "../tokens";
 import { renderContent, flattenText, type Content } from "../text";
 import type { Point } from "../point";
@@ -23,33 +23,32 @@ export class Label extends Shape {
     content: Arg<Content>,
     opts: LabelOpts = {},
   ) {
-    const contentR = read(content);
-    const size = opts.size ?? tokens.fontSize;
+    const contentSig = toSig(content);
+    const sizeSig = toSig(opts.size ?? tokens.fontSize);
     const a = opts.anchor ?? Pivot.CENTER;
     super(
       "text",
       () => {
-        const text = flattenText(contentR());
-        const fs = unwrap(size);
+        const text = flattenText(contentSig.value);
+        const fs = sizeSig.value;
         const w = fs * Math.max(1, text.length) * tokens.charWidth;
-        return aabb(at.x() - a.x * w, at.y() - a.y * fs, w, fs);
+        return aabb(at.x.value - a.x * w, at.y.value - a.y * fs, w, fs);
       },
       // Default rotation pivot to the anchor — so rotating a label
-      // pivots around its `at` point, not the bounds center. User can
-      // still override via opts.pivot.
+      // pivots around its `at` point, not the bounds center.
       { pivot: a, ...opts },
     );
     this.attr("x", at.x);
     this.attr("y", at.y);
     this.attr("font-family", tokens.font);
-    this.attr("font-size", size);
+    this.attr("font-size", sizeSig);
     this.attr("fill", tokens.stroke);
     this.attr("text-anchor", xAttr(a.x));
     this.attr("dominant-baseline", yAttr(a.y));
     if (opts.bold) this.attr("font-weight", 700);
 
     this.effect(() => {
-      (this.intrinsic as SVGElement).innerHTML = renderContent(contentR());
+      (this.intrinsic as SVGElement).innerHTML = renderContent(contentSig.value);
     });
   }
 }

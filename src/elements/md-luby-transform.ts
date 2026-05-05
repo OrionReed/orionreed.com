@@ -83,7 +83,7 @@ export class MdLubyTransform extends Diagram {
             fill: true,
             corner: 0,
             strokeWidth: 0.1,
-            opacity: () => (cells.value[i] ? 1 : 0),
+            opacity: computed(() => (cells.value[i] ? 1 : 0)),
           }),
         ),
       );
@@ -92,7 +92,7 @@ export class MdLubyTransform extends Diagram {
       s(
         connect(src.bounds.bottom, xor, {
           thin: true,
-          opacity: () => (edges.value[i] ? 1 : 0),
+          opacity: computed(() => (edges.value[i] ? 1 : 0)),
         }),
       ),
     );

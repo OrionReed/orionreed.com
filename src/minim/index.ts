@@ -9,7 +9,7 @@ export {
   Signal,
   type ReadonlySignal,
 } from "./signal";
-export { type Arg, bindArg, isReactive, isSignal, read, unwrap } from "./signal";
+export { type Arg, bindArg } from "./signal";
 
 export { Point, pt } from "./point";
 export { Heading, heading } from "./heading";

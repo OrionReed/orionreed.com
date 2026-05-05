@@ -1,5 +1,5 @@
 // Reactivity is delegated to @preact/signals-core. We re-export what we
-// use and add helpers to normalize the value | signal | thunk pattern.
+// use and add `bindArg` / `toSig` for "value or Signal" construction.
 
 export {
   signal,
@@ -11,44 +11,34 @@ export {
   type ReadonlySignal,
 } from "@preact/signals-core";
 
-import { signal, effect, Signal } from "@preact/signals-core";
+import { signal, Signal } from "@preact/signals-core";
 import type { ReadonlySignal } from "@preact/signals-core";
 
-export type Arg<T> = T | Signal<T> | ReadonlySignal<T> | (() => T);
+/** A value that may be plain or a Signal/ReadonlySignal. For derived
+ *  inputs, wrap in `computed(() => ...)` — that's the one canonical
+ *  way to declare reactive derivation. */
+export type Arg<T> = T | Signal<T> | ReadonlySignal<T>;
 
-export const isSignal = <T>(v: unknown): v is Signal<T> | ReadonlySignal<T> =>
-  v instanceof Signal;
+type ReadOrWrite<T> = Signal<T> | ReadonlySignal<T>;
 
-export const isReactive = <T>(arg: Arg<T>): boolean =>
-  typeof arg === "function" || isSignal(arg);
-
-/** Resolve an `Arg<T>` to a `Signal<T>`. Signal → returned as-is (caller
- *  owns it); thunk → fresh signal driven by an effect; value → fresh
- *  signal seeded. The returned `dispose` (if any) must be tracked. */
-export function bindArg<T>(
-  arg: Arg<T> | undefined,
-  defaultValue: T,
-): { signal: Signal<T>; dispose?: () => void } {
-  if (arg === undefined) return { signal: signal(defaultValue) };
-  if (isSignal<T>(arg)) return { signal: arg as Signal<T> };
-  if (typeof arg === "function") {
-    const fn = arg as () => T;
-    const s = signal(fn());
-    return { signal: s, dispose: effect(() => { s.value = fn(); }) };
-  }
-  return { signal: signal(arg as T) };
+/** Type predicate: true if `v` is a Signal or ReadonlySignal. ReadonlySignal
+ *  is an interface but its runtime carrier is always the Signal class
+ *  (Computed extends Signal), so `instanceof Signal` covers both. */
+function isSig<T>(v: Arg<T>): v is ReadOrWrite<T> {
+  return v instanceof Signal;
 }
 
-/** Normalize an `Arg<T>` to a thunk that tracks signals it reads. */
-export function read<T>(v: Arg<T>): () => T {
-  if (isSignal<T>(v)) return () => v.value;
-  if (typeof v === "function") return v as () => T;
-  return () => v as T;
+/** Resolve an `Arg<T>` to a Signal. Signal/ReadonlySignal returned
+ *  as-is (caller owns the source of truth). Plain value is wrapped
+ *  in a fresh writable signal. */
+export function toSig<T>(arg: Arg<T>): ReadOrWrite<T> {
+  return isSig(arg) ? arg : signal(arg);
 }
 
-/** One-shot read — current value, no tracking. */
-export function unwrap<T>(v: Arg<T>): T {
-  if (isSignal<T>(v)) return v.value;
-  if (typeof v === "function") return (v as () => T)();
-  return v as T;
+/** Like `toSig`, but with a default for `undefined` inputs. Used by
+ *  Shape constructors where every animatable property is optional. */
+export function bindArg<T>(arg: Arg<T> | undefined, defaultValue: T): Signal<T> {
+  if (arg === undefined) return signal(defaultValue);
+  if (isSig(arg)) return arg as Signal<T>;
+  return signal(arg);
 }

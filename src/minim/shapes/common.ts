@@ -1,6 +1,6 @@
 // Shared style opts + applier for stroked/filled shapes.
 
-import { unwrap, type Arg } from "../signal";
+import { computed, toSig, type Arg } from "../signal";
 import type { Shape, ShapeOpts } from "../shape";
 import { tokens } from "../tokens";
 import { dashedPath } from "../dashed";
@@ -41,21 +41,20 @@ export function applyOpts(s: Shape, opts: CommonOpts): void {
  *  shape's `segments()`. Also sets `stroke-linecap` (default round) so
  *  individual dashes have rounded ends. The cap-extension scales with
  *  the stroke width so visible dash/gap stays consistent across thin
- *  and normal weights — round caps add `stroke-width` to each dash's
- *  visible length, so we shrink the math dash and grow the math gap
- *  by that amount. */
+ *  and normal weights. */
 export function setupDashed(s: Shape, opts: CommonOpts, closed: boolean): void {
   if (!opts.dashed) return;
   const cap = opts.cap ?? "round";
   s.attr("stroke-linecap", cap);
 
   const stroke =
-    opts.strokeWidth !== undefined
-      ? unwrap(opts.strokeWidth)
-      : opts.thin ? tokens.thinWeight : tokens.weight;
+    opts.strokeWidth === undefined
+      ? (opts.thin ? tokens.thinWeight : tokens.weight)
+      : toSig(opts.strokeWidth).value;
   const capExt = cap === "round" ? stroke : 0;
 
-  s.attr("d", () =>
-    dashedPath(s.segments(), { closed, capExtension: capExt }),
+  s.attr(
+    "d",
+    computed(() => dashedPath(s.segments(), { closed, capExtension: capExt })),
   );
 }

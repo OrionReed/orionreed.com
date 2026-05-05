@@ -5,6 +5,7 @@ import {
   Scene,
   Text,
   circle,
+  computed,
   css,
   easeInOut,
   easeOut,
@@ -59,7 +60,7 @@ export class MdCentering extends Diagram {
     const xAxis = new Line(O, xEnd); // phantom — full extent
     const yAxis = new Line(O, yEnd); // phantom — full extent (labels, box)
     const yMorph = new Line(O, yTip); // phantom — tracks morph (ticks)
-    const yShown = () => (morphT.value > 0 ? 1 : 0);
+    const yShown = computed(() => (morphT.value > 0 ? 1 : 0));
 
     // Visible axes — animated.
     s(line(O, O.lerp(xEnd, lineT)));
@@ -69,7 +70,7 @@ export class MdCentering extends Diagram {
     F.forEach((f) =>
       s(
         tick(xAxis, f, 7, {
-          opacity: () => clamp01((lineT.value - f) / 0.06),
+          opacity: computed(() => clamp01((lineT.value - f) / 0.06)),
         }),
       ),
     );
@@ -103,11 +104,13 @@ export class MdCentering extends Diagram {
 
     const boxGroup = s(group({ opacity: 0 }));
     boxGroup.add(
-      rect(xMin.x(), yMax.y(), xMax.x() - xMin.x(), yMin.y() - yMax.y(), {
-        thin: true,
-        corner: 4,
-        opacity: 0.5,
-      }),
+      rect(
+        xMin.x,
+        yMax.y,
+        computed(() => xMax.x.value - xMin.x.value),
+        computed(() => yMin.y.value - yMax.y.value),
+        { thin: true, corner: 4, opacity: 0.5 },
+      ),
       line(xMid, c, { thin: true, dashed: true, opacity: 0.6 }),
       line(yMid, c, { thin: true, dashed: true, opacity: 0.6 }),
     );

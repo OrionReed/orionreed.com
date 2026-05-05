@@ -71,7 +71,10 @@ export class Line extends Shape {
       const db = (t.x - b.x) ** 2 + (t.y - b.y) ** 2;
       return da <= db ? a : b;
     });
-    return new Point(() => which.value.x, () => which.value.y);
+    return new Point(
+      computed(() => which.value.x),
+      computed(() => which.value.y),
+    );
   }
 
   override segments(): Segment[] {

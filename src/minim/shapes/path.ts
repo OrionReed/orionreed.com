@@ -2,7 +2,7 @@ import { Shape } from "../shape";
 import { Point, pt } from "../point";
 import { Heading } from "../heading";
 import { aabb } from "../bounds";
-import { read, type Arg } from "../signal";
+import { computed, toSig, type Arg } from "../signal";
 import type { Segment } from "../dashed";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
@@ -49,15 +49,18 @@ export class Path extends Shape {
     // Non-dashed: standard polyline `d`. Dashed: `setupDashed` binds `d`
     // to the segment-by-segment dashed path instead.
     if (!opts.dashed) {
-      this.attr("d", () => {
-        if (points.length === 0) return "";
-        const parts: string[] = [`M ${points[0].x()} ${points[0].y()}`];
-        for (let i = 1; i < points.length; i++) {
-          parts.push(`L ${points[i].x()} ${points[i].y()}`);
-        }
-        if (closed) parts.push("Z");
-        return parts.join(" ");
-      });
+      this.attr(
+        "d",
+        computed(() => {
+          if (points.length === 0) return "";
+          const parts: string[] = [`M ${points[0].x.value} ${points[0].y.value}`];
+          for (let i = 1; i < points.length; i++) {
+            parts.push(`L ${points[i].x.value} ${points[i].y.value}`);
+          }
+          if (closed) parts.push("Z");
+          return parts.join(" ");
+        }),
+      );
     }
     setupDashed(this, opts, closed);
     applyOpts(this, opts);
@@ -119,12 +122,12 @@ export class PathBuilder {
   }
   /** Walk `dist` along direction `angle` (radians, y-down). */
   along(angle: Arg<number>, dist: Arg<number>): PathBuilder {
-    const aFn = read(angle);
-    const dFn = read(dist);
+    const a = toSig(angle);
+    const d = toSig(dist);
     return this.extend(
       this.last.offset(
-        () => Math.cos(aFn()) * dFn(),
-        () => Math.sin(aFn()) * dFn(),
+        computed(() => Math.cos(a.value) * d.value),
+        computed(() => Math.sin(a.value) * d.value),
       ),
     );
   }

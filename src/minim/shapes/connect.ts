@@ -3,7 +3,7 @@
 
 import { Shape, SVG_NS } from "../shape";
 import { Point } from "../point";
-import { read, type Arg } from "../signal";
+import { computed, toSig, type Arg } from "../signal";
 import { tokens } from "../tokens";
 import { Line, type LineOpts } from "./line";
 
@@ -42,17 +42,16 @@ export function arrow(
   const aBase = a instanceof Shape ? a.boundary(b instanceof Shape ? b.bounds.center : b) : a;
   const bBase = b instanceof Shape ? b.boundary(a instanceof Shape ? a.bounds.center : a) : b;
 
-  const gapFn = read(opts.gap ?? ARROW_GAP_DEFAULT);
+  const gapSig = toSig(opts.gap ?? ARROW_GAP_DEFAULT);
   const dir = bBase.sub(aBase).normalize();
 
   // From: push start TOWARD target by gap + weight, so the visible
-  // (round-cap) edge sits gap-ish past the source perimeter. Using
-  // `weight` (not weight/2) overcorrects the round cap optically.
-  const aP = aBase.add(dir.scale(() => gapFn() + tokens.weight));
+  // (round-cap) edge sits gap-ish past the source perimeter.
+  const aP = aBase.add(dir.scale(computed(() => gapSig.value + tokens.weight)));
   // To: pull end BACK toward source by gap + ARROW_W, so the marker
   // tip (which extends ARROW_W past the line end) lands gap-ish before
   // the target perimeter.
-  const bP = bBase.sub(dir.scale(() => gapFn() + ARROW_W));
+  const bP = bBase.sub(dir.scale(computed(() => gapSig.value + ARROW_W)));
 
   const line = new Line(aP, bP, opts);
   line.attr("marker-end", `url(#${ARROW_ID})`);

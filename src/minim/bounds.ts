@@ -1,7 +1,7 @@
 // AABB literal, Bounds rich wrapper, Vec, Pivot.
 
 import { Point } from "./point";
-import { computed, unwrap, type Arg, type ReadonlySignal } from "./signal";
+import { computed, toSig, type Arg, type ReadonlySignal } from "./signal";
 
 /** Axis-aligned bounding box snapshot. */
 export interface AABB {
@@ -75,13 +75,14 @@ export const Pivot = Object.freeze({
   CENTER: { x: 0.5, y: 0.5 } as Pivot,
 });
 
-/** Reactive bounds wrapper: thunks `x()`/`y()`/`w()`/`h()`, lazy anchor
- *  Points, `value` getter for current AABB, `expand(by)` for derived. */
+/** Reactive bounds wrapper: `x`/`y`/`w`/`h` Signals, lazy anchor Points,
+ *  `value` getter for current AABB, derived ops (`expand`, `split`,
+ *  `grid`). */
 export class Bounds {
-  readonly x: () => number;
-  readonly y: () => number;
-  readonly w: () => number;
-  readonly h: () => number;
+  readonly x: ReadonlySignal<number>;
+  readonly y: ReadonlySignal<number>;
+  readonly w: ReadonlySignal<number>;
+  readonly h: ReadonlySignal<number>;
 
   #tl?: Point;
   #tr?: Point;
@@ -94,10 +95,10 @@ export class Bounds {
   #center?: Point;
 
   constructor(private readonly sig: ReadonlySignal<AABB>) {
-    this.x = () => sig.value.x;
-    this.y = () => sig.value.y;
-    this.w = () => sig.value.w;
-    this.h = () => sig.value.h;
+    this.x = computed(() => sig.value.x);
+    this.y = computed(() => sig.value.y);
+    this.w = computed(() => sig.value.w);
+    this.h = computed(() => sig.value.h);
   }
 
   get tl()     { return (this.#tl     ??= this.anchor(Pivot.TL)); }
@@ -113,8 +114,8 @@ export class Bounds {
   /** Anchor at arbitrary normalized coords. Allocates a fresh Point. */
   anchor(at: Pivot): Point {
     return new Point(
-      () => { const b = this.sig.value; return b.x + at.x * b.w; },
-      () => { const b = this.sig.value; return b.y + at.y * b.h; },
+      computed(() => { const b = this.sig.value; return b.x + at.x * b.w; }),
+      computed(() => { const b = this.sig.value; return b.y + at.y * b.h; }),
     );
   }
 
@@ -125,16 +126,12 @@ export class Bounds {
 
   /** Derived bounds inflated by `by`. Reactive in source bounds + `by`. */
   expand(by: Arg<number>): Bounds {
-    return new Bounds(computed(() => expandAABB(this.sig.value, unwrap(by))));
+    const bys = toSig(by);
+    return new Bounds(computed(() => expandAABB(this.sig.value, bys.value)));
   }
 
   /** 2D split into a `rows × cols` grid of reactive child Bounds.
-   *  Sugar over two `split` calls. Returns `[row][col]` (outer y, inner x).
-   *
-   *   const cells = b.grid(5, 5);
-   *   cells[r][c]                 // (r, c)-th cell bounds
-   *   cells.flat().forEach(...)   // iterate in row-major order
-   */
+   *  Sugar over two `split` calls. Returns `[row][col]`. */
   grid(
     rows: number,
     cols: number,
@@ -148,8 +145,7 @@ export class Bounds {
    *   `b.split("x", 3)`           → 3 equal columns
    *   `b.split("x", [3, 2, 2])`   → 3 columns weighted 3:2:2
    *   `b.split("x", 3, { gap: 4 })` → with 4px between
-   *
-   * Each result tracks the parent bounds and the gap reactively. */
+   */
   split(
     axis: "x" | "y",
     parts: number | number[],
@@ -160,11 +156,12 @@ export class Bounds {
     const cumBefore = ratios.map((_, i) =>
       ratios.slice(0, i).reduce((a, b) => a + b, 0),
     );
+    const gapSig = toSig(opts.gap ?? 0);
     return ratios.map((r, i) =>
       new Bounds(
         computed(() => {
           const b = this.sig.value;
-          const gap = unwrap(opts.gap ?? 0);
+          const gap = gapSig.value;
           const gapTotal = gap * (ratios.length - 1);
           if (axis === "x") {
             const free = b.w - gapTotal;

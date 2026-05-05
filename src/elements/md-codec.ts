@@ -78,7 +78,7 @@ export class MdCodec extends Diagram {
     parts.forEach((part, i) => {
       const slot = slots[i];
       const labelW = part.label.length * charWidth;
-      const fitsInside = labelW + 16 < slot.w();
+      const fitsInside = labelW + 16 < slot.w.value;
 
       if (fitsInside) {
         s(label(slot.center, t(part.label).bold(), { size: LABEL_SIZE }));

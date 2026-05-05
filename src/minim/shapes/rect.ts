@@ -1,6 +1,6 @@
 import { Shape } from "../shape";
 import { aabb, Bounds } from "../bounds";
-import { computed, read, unwrap, type Arg } from "../signal";
+import { computed, signal, toSig, type Arg, type Signal, type ReadonlySignal } from "../signal";
 import { tokens } from "../tokens";
 import { Point } from "../point";
 import type { Segment } from "../dashed";
@@ -12,28 +12,42 @@ export interface RectOpts extends CommonOpts {
 
 const HALF_PI = Math.PI / 2;
 
+type NumSig = Signal<number> | ReadonlySignal<number>;
+
 export class Rect extends Shape {
-  readonly corner: Arg<number>;
+  readonly x: NumSig;
+  readonly y: NumSig;
+  readonly w: NumSig;
+  readonly h: NumSig;
+  readonly corner: NumSig;
 
   constructor(
-    readonly x: Arg<number>,
-    readonly y: Arg<number>,
-    readonly w: Arg<number>,
-    readonly h: Arg<number>,
+    x: Arg<number>,
+    y: Arg<number>,
+    w: Arg<number>,
+    h: Arg<number>,
     opts: RectOpts = {},
   ) {
+    const xs = toSig(x);
+    const ys = toSig(y);
+    const ws = toSig(w);
+    const hs = toSig(h);
     const dashed = opts.dashed ?? false;
     super(
       dashed ? "path" : "rect",
-      () => aabb(unwrap(x), unwrap(y), unwrap(w), unwrap(h)),
+      () => aabb(xs.value, ys.value, ws.value, hs.value),
       opts,
     );
-    this.corner = opts.corner ?? tokens.corner;
+    this.x = xs;
+    this.y = ys;
+    this.w = ws;
+    this.h = hs;
+    this.corner = toSig(opts.corner ?? tokens.corner);
     if (!dashed) {
-      this.attr("x", () => unwrap(x));
-      this.attr("y", () => unwrap(y));
-      this.attr("width", () => unwrap(w));
-      this.attr("height", () => unwrap(h));
+      this.attr("x", xs);
+      this.attr("y", ys);
+      this.attr("width", ws);
+      this.attr("height", hs);
       this.attr("rx", this.corner);
       this.attr("ry", this.corner);
     }
@@ -56,56 +70,52 @@ export class Rect extends Shape {
       );
       return { x: cx + dx * k, y: cy + dy * k };
     });
-    return new Point(() => proj.value.x, () => proj.value.y);
+    return new Point(
+      computed(() => proj.value.x),
+      computed(() => proj.value.y),
+    );
   }
 
   /** Concentric outline: returns a new (unmounted) Rect inflated by
    *  `by` on each side, with the corner radius adjusted by the same
-   *  amount so the outer curve stays parallel to the inner.
-   *
-   *    s(r.outline(4, { dashed: true }))   // dashed frame around r
-   *
-   *  Reactive in `this.x/y/w/h/corner` and `by`. Style opts override
-   *  defaults. */
+   *  amount so the outer curve stays parallel to the inner. */
   outline(by: Arg<number>, opts?: RectOpts): Rect {
-    const byFn = read(by);
+    const bys = toSig(by);
     return new Rect(
-      () => unwrap(this.x) - byFn(),
-      () => unwrap(this.y) - byFn(),
-      () => unwrap(this.w) + 2 * byFn(),
-      () => unwrap(this.h) + 2 * byFn(),
-      { corner: () => unwrap(this.corner) + byFn(), ...opts },
+      computed(() => this.x.value - bys.value),
+      computed(() => this.y.value - bys.value),
+      computed(() => this.w.value + 2 * bys.value),
+      computed(() => this.h.value + 2 * bys.value),
+      { corner: computed(() => this.corner.value + bys.value), ...opts },
     );
   }
 
   /** Rounded-rect outline: 4 sides + 4 quarter-arcs at corners. */
   override segments(): Segment[] {
     const b = this.bounds.value;
-    const r = Math.min(unwrap(this.corner), b.w / 2, b.h / 2);
+    const r = Math.min(this.corner.value, b.w / 2, b.h / 2);
     const x = b.x;
     const y = b.y;
     const w = b.w;
     const h = b.h;
+    const p = (px: number, py: number) =>
+      new Point(signal(px), signal(py));
     if (r <= 0) {
-      const tl = new Point(() => x, () => y);
-      const tr = new Point(() => x + w, () => y);
-      const br = new Point(() => x + w, () => y + h);
-      const bl = new Point(() => x, () => y + h);
       return [
-        { type: "line", from: tl, to: tr },
-        { type: "line", from: tr, to: br },
-        { type: "line", from: br, to: bl },
-        { type: "line", from: bl, to: tl },
+        { type: "line", from: p(x, y), to: p(x + w, y) },
+        { type: "line", from: p(x + w, y), to: p(x + w, y + h) },
+        { type: "line", from: p(x + w, y + h), to: p(x, y + h) },
+        { type: "line", from: p(x, y + h), to: p(x, y) },
       ];
     }
     return [
-      { type: "line", from: new Point(() => x + r, () => y), to: new Point(() => x + w - r, () => y) },
+      { type: "line", from: p(x + r, y), to: p(x + w - r, y) },
       { type: "arc", cx: () => x + w - r, cy: () => y + r, r: () => r, a0: () => -HALF_PI, a1: () => 0 },
-      { type: "line", from: new Point(() => x + w, () => y + r), to: new Point(() => x + w, () => y + h - r) },
+      { type: "line", from: p(x + w, y + r), to: p(x + w, y + h - r) },
       { type: "arc", cx: () => x + w - r, cy: () => y + h - r, r: () => r, a0: () => 0, a1: () => HALF_PI },
-      { type: "line", from: new Point(() => x + w - r, () => y + h), to: new Point(() => x + r, () => y + h) },
+      { type: "line", from: p(x + w - r, y + h), to: p(x + r, y + h) },
       { type: "arc", cx: () => x + r, cy: () => y + h - r, r: () => r, a0: () => HALF_PI, a1: () => Math.PI },
-      { type: "line", from: new Point(() => x, () => y + h - r), to: new Point(() => x, () => y + r) },
+      { type: "line", from: p(x, y + h - r), to: p(x, y + r) },
       { type: "arc", cx: () => x + r, cy: () => y + r, r: () => r, a0: () => Math.PI, a1: () => 3 * HALF_PI },
     ];
   }
@@ -115,11 +125,8 @@ export class Rect extends Shape {
  *
  *   rect(x, y, w, h, opts?)        — corner-based (canonical)
  *   rect(b: Bounds, opts?)         — derived from another shape's bounds
- *                                     (e.g. `rect(box.bounds.expand(4), {...})`)
- *   rect(center: Point, w, h, opts?) — centered around a Point. Symmetric
- *                                       with `circle(center, radius)`.
- *
- * All forms are reactive in their inputs. */
+ *   rect(center: Point, w, h, opts?) — centered around a Point.
+ */
 export function rect(b: Bounds, opts?: RectOpts): Rect;
 export function rect(
   center: Point,
@@ -147,11 +154,13 @@ export function rect(
   if (a instanceof Point) {
     const w = b as Arg<number>;
     const h = c as Arg<number>;
+    const ws = toSig(w);
+    const hs = toSig(h);
     return new Rect(
-      () => a.x() - unwrap(w) / 2,
-      () => a.y() - unwrap(h) / 2,
-      w,
-      h,
+      computed(() => a.x.value - ws.value / 2),
+      computed(() => a.y.value - hs.value / 2),
+      ws,
+      hs,
       d as RectOpts | undefined,
     );
   }

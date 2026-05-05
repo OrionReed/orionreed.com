@@ -2,16 +2,18 @@
 // and anywhere geometry needs to "face" a direction.
 
 import { Point, pt } from "./point";
-import { read, type Arg } from "./signal";
+import { computed, toSig, type Arg, type ReadonlySignal } from "./signal";
 
 export class Heading {
   constructor(
     readonly position: Point,
-    readonly tangent: Point,  // unit direction
+    readonly tangent: Point, // unit direction
   ) {}
 
-  /** Reactive thunk; angle in radians (atan2 of tangent, y-down). */
-  angle: () => number = () => Math.atan2(this.tangent.y(), this.tangent.x());
+  /** Angle in radians (atan2 of tangent, y-down). Reactive Signal. */
+  get angle(): ReadonlySignal<number> {
+    return computed(() => Math.atan2(this.tangent.y.value, this.tangent.x.value));
+  }
 
   /** Tangent rotated 90° (y-down: `(x,y) → (-y, x)`). */
   get normal(): Point {
@@ -20,10 +22,13 @@ export class Heading {
 
   /** Heading at `p` facing `angle` (radians). */
   static fromAngle(p: Point, angle: Arg<number>): Heading {
-    const aFn = read(angle);
+    const a = toSig(angle);
     return new Heading(
       p,
-      new Point(() => Math.cos(aFn()), () => Math.sin(aFn())),
+      new Point(
+        computed(() => Math.cos(a.value)),
+        computed(() => Math.sin(a.value)),
+      ),
     );
   }
 }

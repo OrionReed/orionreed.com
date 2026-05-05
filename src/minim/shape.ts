@@ -2,11 +2,9 @@ import {
   bindArg,
   computed,
   effect,
-  isReactive,
-  read,
   signal,
+  Signal,
   type Arg,
-  type Signal,
 } from "./signal";
 import {
   Bounds,
@@ -23,9 +21,8 @@ import type { Segment } from "./dashed";
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** Construction-time options for any Shape. Animatable props accept
- *  `Arg<T>`: a value (set once), a Signal (caller owns it — animations
- *  write through), or a thunk (derived; an effect drives it — don't
- *  also tween it, the effect will fight).
+ *  `Arg<T>`: a value (set once) or a Signal (caller owns it — animations
+ *  write through). For derived inputs, wrap in `computed(() => ...)`.
  *
  *  `aside` excludes this shape from its parent's children-union default
  *  bounds (and so transitively from auto-fit). Its own `bounds` is
@@ -70,16 +67,11 @@ export class Shape {
       this.el.appendChild(this.intrinsic);
     }
 
-    const bind = <T>(arg: Arg<T> | undefined, def: T): Signal<T> => {
-      const r = bindArg(arg, def);
-      if (r.dispose) this.disposers.push(r.dispose);
-      return r.signal;
-    };
-    this.translate = bind(opts.translate, { x: 0, y: 0 });
-    this.rotate = bind(opts.rotate, 0);
-    this.scale = bind(opts.scale, { x: 1, y: 1 });
-    this.pivot = bind<Pivot>(opts.pivot, Pivot.CENTER);
-    this.opacity = bind(opts.opacity, 1);
+    this.translate = bindArg(opts.translate, { x: 0, y: 0 });
+    this.rotate = bindArg(opts.rotate, 0);
+    this.scale = bindArg(opts.scale, { x: 1, y: 1 });
+    this.pivot = bindArg(opts.pivot, Pivot.CENTER);
+    this.opacity = bindArg(opts.opacity, 1);
     this.aside = opts.aside ?? false;
 
     // Bounds: explicit fn from a subclass, else union of non-aside
@@ -123,13 +115,14 @@ export class Shape {
    *  AABB-edge math. Subclasses with tighter geometry override. */
   boundary(toward: Point): Point {
     const proj = computed(() => aabbEdgeFrom(this.bounds.value, toward.value));
-    return new Point(() => proj.value.x, () => proj.value.y);
+    return new Point(
+      computed(() => proj.value.x),
+      computed(() => proj.value.y),
+    );
   }
 
   /** Segments composing this shape's stroke path — used by dashed
-   *  rendering. Default: the bounding rect (4 lines, no corners).
-   *  Subclasses with proper outlines (Line, Path, Circle, Rect with
-   *  rounded corners, ...) override. */
+   *  rendering. Default: the bounding rect (4 lines, no corners). */
   segments(): Segment[] {
     const b = this.bounds.value;
     const tl = pt(b.x, b.y);
@@ -144,8 +137,8 @@ export class Shape {
     ];
   }
 
-  /** Bind one SVG attribute. Static value sets once; thunk or Signal
-   *  sets up a reactive effect. Lands on the intrinsic by default. */
+  /** Bind one SVG attribute. Static value sets once; Signal sets up a
+   *  reactive effect. For derived attrs, pass `computed(() => ...)`. */
   attr(
     name: string,
     value: Arg<string | number>,
@@ -153,9 +146,10 @@ export class Shape {
   ): void {
     const el =
       target === "intrinsic" && this.intrinsic ? this.intrinsic : this.el;
-    if (isReactive(value)) {
-      const fn = read(value);
-      this.disposers.push(effect(() => el.setAttribute(name, String(fn()))));
+    if (value instanceof Signal) {
+      this.disposers.push(
+        effect(() => el.setAttribute(name, String(value.value))),
+      );
     } else {
       el.setAttribute(name, String(value));
     }
