@@ -1,25 +1,63 @@
-// Geometry primitives for v2: bounds, vec, pivot. Kept lean — v1's
-// `Bounds` (in `elements/geom.ts`) carries cached anchor points;
-// v2 doesn't need them now that pivots are normalized coords.
+// AABB literal, Bounds rich wrapper, Vec, Pivot.
 
-/** Literal 2D vector — used for shape-internal transform values. */
-export interface Vec {
-  x: number;
-  y: number;
-}
+import { Point } from "./point";
+import { computed, unwrap, type Arg, type ReadonlySignal } from "./signal";
 
-export interface Bounds {
+/** Axis-aligned bounding box snapshot. */
+export interface AABB {
   readonly x: number;
   readonly y: number;
   readonly w: number;
   readonly h: number;
 }
 
-/**
- * Pivot — normalized coordinate within a shape's bounds. `{x:0, y:0}`
- * is top-left, `{x:1, y:1}` bottom-right. Off-axis values are valid
- * (no string-enum gating). `Pivot` namespace exposes named constants.
- */
+export const aabb = (x: number, y: number, w: number, h: number): AABB =>
+  ({ x, y, w, h });
+
+export const expandAABB = (b: AABB, n: number): AABB =>
+  aabb(b.x - n, b.y - n, b.w + 2 * n, b.h + 2 * n);
+
+export function unionAABB(...bs: AABB[]): AABB {
+  if (bs.length === 0) return aabb(0, 0, 0, 0);
+  let xMin = bs[0].x;
+  let yMin = bs[0].y;
+  let xMax = xMin + bs[0].w;
+  let yMax = yMin + bs[0].h;
+  for (let i = 1; i < bs.length; i++) {
+    const o = bs[i];
+    if (o.x < xMin) xMin = o.x;
+    if (o.y < yMin) yMin = o.y;
+    if (o.x + o.w > xMax) xMax = o.x + o.w;
+    if (o.y + o.h > yMax) yMax = o.y + o.h;
+  }
+  return aabb(xMin, yMin, xMax - xMin, yMax - yMin);
+}
+
+/** Rect-edge math — perimeter point on an AABB facing `toward`. The
+ *  default Shape.boundary uses this; subclasses with tighter analytic
+ *  boundaries (Circle, Rect) override. */
+export function aabbEdgeFrom(
+  b: AABB,
+  toward: { x: number; y: number },
+): { x: number; y: number } {
+  const cx = b.x + b.w / 2;
+  const cy = b.y + b.h / 2;
+  const dx = toward.x - cx;
+  const dy = toward.y - cy;
+  if (dx === 0 && dy === 0) return { x: cx, y: cy };
+  const k = Math.min(
+    dx === 0 ? Infinity : (b.w / 2) / Math.abs(dx),
+    dy === 0 ? Infinity : (b.h / 2) / Math.abs(dy),
+  );
+  return { x: cx + dx * k, y: cy + dy * k };
+}
+
+export interface Vec {
+  x: number;
+  y: number;
+}
+
+/** Normalized 0..1 coord within a shape's bounds. `{0,0}` is top-left. */
 export interface Pivot {
   x: number;
   y: number;
@@ -37,28 +75,56 @@ export const Pivot = Object.freeze({
   CENTER: { x: 0.5, y: 0.5 } as Pivot,
 });
 
-export function bounds(x: number, y: number, w: number, h: number): Bounds {
-  return { x, y, w, h };
-}
+/** Reactive bounds wrapper: thunks `x()`/`y()`/`w()`/`h()`, lazy anchor
+ *  Points, `snap()` for one-shot AABB read, `expand(by)` for derived. */
+export class Bounds {
+  readonly x: () => number;
+  readonly y: () => number;
+  readonly w: () => number;
+  readonly h: () => number;
 
-/** Inflate a bounds by `n` on each side. */
-export function expandBounds(b: Bounds, n: number): Bounds {
-  return bounds(b.x - n, b.y - n, b.w + 2 * n, b.h + 2 * n);
-}
+  #tl?: Point;
+  #tr?: Point;
+  #bl?: Point;
+  #br?: Point;
+  #top?: Point;
+  #bottom?: Point;
+  #left?: Point;
+  #right?: Point;
+  #center?: Point;
 
-/** Smallest bounds enclosing all inputs. Empty input → zero bounds. */
-export function unionBounds(...bs: Bounds[]): Bounds {
-  if (bs.length === 0) return bounds(0, 0, 0, 0);
-  let xMin = bs[0].x;
-  let yMin = bs[0].y;
-  let xMax = xMin + bs[0].w;
-  let yMax = yMin + bs[0].h;
-  for (let i = 1; i < bs.length; i++) {
-    const o = bs[i];
-    if (o.x < xMin) xMin = o.x;
-    if (o.y < yMin) yMin = o.y;
-    if (o.x + o.w > xMax) xMax = o.x + o.w;
-    if (o.y + o.h > yMax) yMax = o.y + o.h;
+  constructor(private readonly sig: ReadonlySignal<AABB>) {
+    this.x = () => sig.value.x;
+    this.y = () => sig.value.y;
+    this.w = () => sig.value.w;
+    this.h = () => sig.value.h;
   }
-  return bounds(xMin, yMin, xMax - xMin, yMax - yMin);
+
+  get tl()     { return (this.#tl     ??= this.anchor(Pivot.TL)); }
+  get tr()     { return (this.#tr     ??= this.anchor(Pivot.TR)); }
+  get bl()     { return (this.#bl     ??= this.anchor(Pivot.BL)); }
+  get br()     { return (this.#br     ??= this.anchor(Pivot.BR)); }
+  get top()    { return (this.#top    ??= this.anchor(Pivot.TOP)); }
+  get bottom() { return (this.#bottom ??= this.anchor(Pivot.BOTTOM)); }
+  get left()   { return (this.#left   ??= this.anchor(Pivot.LEFT)); }
+  get right()  { return (this.#right  ??= this.anchor(Pivot.RIGHT)); }
+  get center() { return (this.#center ??= this.anchor(Pivot.CENTER)); }
+
+  /** Anchor at arbitrary normalized coords. Allocates a fresh Point. */
+  anchor(at: Pivot): Point {
+    return new Point(
+      () => { const b = this.sig.value; return b.x + at.x * b.w; },
+      () => { const b = this.sig.value; return b.y + at.y * b.h; },
+    );
+  }
+
+  /** Current AABB snapshot — non-tracking equivalent of an inner `.value`. */
+  snap(): AABB {
+    return this.sig.value;
+  }
+
+  /** Derived bounds inflated by `by`. Reactive in source bounds + `by`. */
+  expand(by: Arg<number>): Bounds {
+    return new Bounds(computed(() => expandAABB(this.sig.value, unwrap(by))));
+  }
 }

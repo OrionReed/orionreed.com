@@ -1,12 +1,6 @@
-// Diagram = a custom-element scaffold + a `Scene`. Subclasses override
-// `setup(scene)` and build their scene graph there. The base provides:
-//   - shadow DOM with a mounted `<svg>`
-//   - per-class cached stylesheet (Diagram base styles + subclass styles)
-//   - a fresh `Scene` rooted at a `<g>` inside the SVG
-//   - `this.anim` — drive animations via `this.anim.loop(function*() { ... })`
-//
-// No `render()` hook, no per-frame rebuild — shapes are persistent and
-// patch themselves via signal reactivity.
+// Custom-element scaffold + Scene. Subclasses override `setup(scene)`.
+// Shapes are persistent and patch via signal reactivity — no per-frame
+// rebuild, no `render()` hook.
 
 import { Anim } from "./anim";
 import { makeScene, type Scene } from "./scene";
@@ -50,7 +44,6 @@ export class Diagram extends HTMLElement {
     this.initializeStyles();
   }
 
-  /** Build the scene graph. Override in subclasses; default is no-op. */
   protected setup(_scene: Scene): void {}
 
   connectedCallback(): void {
@@ -89,10 +82,8 @@ export class Diagram extends HTMLElement {
     this.shadow.appendChild(container);
   }
 
-  /** Combine Diagram's base styles with the subclass's own static
-   *  `styles`. No deeper inheritance: we expect subclasses to extend
-   *  Diagram directly, not stack intermediate classes that contribute
-   *  styles. Cached per subclass so repeated instances share one sheet. */
+  /** Combine Diagram base styles with subclass styles. Cached per
+   *  subclass — assumes single-level inheritance from Diagram. */
   private initializeStyles(): void {
     const ctor = this.constructor as typeof Diagram;
     const cacheKey = ctor.name;

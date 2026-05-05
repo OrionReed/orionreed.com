@@ -1,54 +1,39 @@
 import {
+  Diagram,
+  Line,
+  Pivot,
+  Scene,
+  Text,
   circle,
   css,
-  Diagram,
   easeInOut,
   easeOut,
   fadeIn,
   group,
   label,
   line,
-  Pivot,
   pt,
   rect,
-  Scene,
   signal,
-  Shape,
   t,
-  Text,
   tween,
   type LineOpts,
-  type Point,
 } from "../../scene-v2";
 
-/** Italic-letter math notation: `math("x", "min")` → italic x with
- *  italic subscript min. Local helper; will lift if other diagrams
- *  end up needing the same shorthand. */
+/** Italic letter with optional italic subscript: `math("x", "min")`. */
 function math(base: string, sub?: string): Text {
   const b = t(base).italic();
   return sub ? b.sub(t(sub).italic()) : b;
 }
 
-// ── Local helpers ───────────────────────────────────────────────────
-// Lifted to the lib later if/when a third diagram needs them.
-
-/** Perpendicular tick at fraction `f` along the segment from→to. Pure
- *  vector math; tracks reactive endpoints automatically. */
-function tick(
-  from: Point,
-  to: Point,
-  f: number,
-  half: number,
-  opts: LineOpts = {},
-): Shape {
-  const center = from.lerp(to, f);
-  const offset = to.sub(from).normalize().perp().scale(half);
-  return line(center.sub(offset), center.add(offset), { thin: true, ...opts });
+/** Perpendicular tick at fraction `t` along `l`, half-length `h`. */
+function tick(l: Line, t: number, h: number, opts: LineOpts = {}): Line {
+  const c = l.at(t);
+  const off = l.normal.scale(h);
+  return line(c.sub(off), c.add(off), { thin: true, ...opts });
 }
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
-
-// ── Component ───────────────────────────────────────────────────────
 
 export class MdCentering extends Diagram {
   static styles = css`
@@ -63,35 +48,37 @@ export class MdCentering extends Diagram {
     const lineT = signal(0);
     const morphT = signal(0);
 
-    // Geometry. Origin near bottom-left so the duplicate has somewhere
-    // to sweep up into. F values are interpolations of the line, not
-    // its endpoints — the marked segment lives inside the line.
+    // Geometry. Origin near bottom-left; full-extent axes are phantom
+    // Lines (never mounted) used as tick references — the visible
+    // axes are separate Lines whose tip lerps via the channel signals.
     const O = pt(60, 170);
     const xEnd = pt(570, 170);
     const yEnd = pt(60, 30);
     const F = [0.2, 0.45, 0.7];
     const subs = ["min", "c", "max"];
 
-    // Axes — visible tip lerps via the channel signal directly. The
-    // y-axis fades in only once the morph kicks off.
-    const yShown = () => (morphT.value > 0 ? 1 : 0);
-    s(line(O, O.lerp(xEnd, lineT)));
     const yTip = xEnd.lerp(yEnd, morphT);
+    const xAxis = new Line(O, xEnd);     // phantom — full extent
+    const yAxis = new Line(O, yEnd);     // phantom — full extent (labels, box)
+    const yMorph = new Line(O, yTip);    // phantom — tracks morph (ticks)
+    const yShown = () => (morphT.value > 0 ? 1 : 0);
+
+    // Visible axes — animated.
+    s(line(O, O.lerp(xEnd, lineT)));
     s(line(O, yTip, { opacity: yShown }));
 
-    // Ticks: x at static (O, xEnd) fractions, revealing as line passes;
-    // y follows the morphing tip and shows once morph begins.
+    // Ticks. Reveal as the line passes them (x); fade in with morph (y).
     F.forEach((f) =>
-      s(tick(O, xEnd, f, 7, {
+      s(tick(xAxis, f, 7, {
         opacity: () => clamp01((lineT.value - f) / 0.06),
       })),
     );
-    F.forEach((f) => s(tick(O, yTip, f, 7, { opacity: yShown })));
+    F.forEach((f) => s(tick(yMorph, f, 7, { opacity: yShown })));
 
     // Label groups — fade together via parent opacity inheritance.
     const xLabels = s(group({ opacity: 0 }));
     xLabels.add(...F.map((f, i) =>
-      label(O.lerp(xEnd, f).down(24), math("x", subs[i]), {
+      label(xAxis.at(f).down(24), math("x", subs[i]), {
         size: 16,
         anchor: Pivot.TOP,
       }),
@@ -99,19 +86,15 @@ export class MdCentering extends Diagram {
 
     const yLabels = s(group({ opacity: 0 }));
     yLabels.add(...F.map((f, i) =>
-      label(O.lerp(yEnd, f).left(14), math("y", subs[i]), {
+      label(yAxis.at(f).left(14), math("y", subs[i]), {
         size: 16,
         anchor: Pivot.RIGHT,
       }),
     ));
 
     // Box, crosshairs (faint baseline opacity, multiplied by group fade).
-    const xMin = O.lerp(xEnd, F[0]);
-    const xMid = O.lerp(xEnd, F[1]);
-    const xMax = O.lerp(xEnd, F[2]);
-    const yMin = O.lerp(yEnd, F[0]);
-    const yMid = O.lerp(yEnd, F[1]);
-    const yMax = O.lerp(yEnd, F[2]);
+    const [xMin, xMid, xMax] = F.map((f) => xAxis.at(f));
+    const [yMin, yMid, yMax] = F.map((f) => yAxis.at(f));
     const c = pt(xMid.x, yMid.y);
 
     const boxGroup = s(group({ opacity: 0 }));
@@ -130,8 +113,7 @@ export class MdCentering extends Diagram {
         { size: 14, anchor: Pivot.BL }),
     );
 
-    // Animation script — generator runner. `yield* X` delegates to a
-    // sub-animation; `yield <ms>` pauses; `yield [a, b]` runs in parallel.
+    // Animation script.
     this.anim.loop(function* () {
       lineT.value = 0;
       morphT.value = 0;

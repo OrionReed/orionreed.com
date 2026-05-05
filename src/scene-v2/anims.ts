@@ -1,35 +1,20 @@
-// Animation primitives as generator functions. Each yields per frame
-// (`yield`) and receives the dt back. Lazy state capture is automatic
-// because generator bodies don't execute until iterated — so
-// `sig.peek()` runs at the moment the runner picks up this animation,
-// not at construction time.
+// Animation primitives. Generators iterate lazily so `sig.peek()` runs
+// when the runner picks them up, not at construction — composition
+// works under any nesting.
 
 import type { Animator } from "./anim";
 import type { Signal } from "./signal";
 import type { Shape } from "./shape";
 
-// ── Easing functions ────────────────────────────────────────────────
-// Pure `t in [0..1] → t' in [0..1]`. Pass to tween/fadeIn/fadeOut to
-// shape the interpolation curve. Default is `easeOut`. For "no easing,"
-// pass `(t) => t` directly.
+// ── Easings ─────────────────────────────────────────────────────────
 
-export function easeOut(t: number): number {
-  return 1 - Math.pow(1 - t, 2);
-}
+export const easeOut = (t: number) => 1 - Math.pow(1 - t, 2);
+export const easeIn = (t: number) => t * t;
+export const easeInOut = (t: number) =>
+  t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
-export function easeIn(t: number): number {
-  return t * t;
-}
+// ── Tweens ──────────────────────────────────────────────────────────
 
-export function easeInOut(t: number): number {
-  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-}
-
-/**
- * Tween a numeric signal from its current value to `target` over `ms`.
- * Start value is captured the first time the runner advances this
- * generator (lazy — composes correctly under any nesting).
- */
 export function* tween(
   sig: Signal<number>,
   target: number,
@@ -44,58 +29,23 @@ export function* tween(
     const t = Math.min(elapsed / ms, 1);
     sig.value = start + (target - start) * ease(t);
   }
-  // Snap to exact target in case the last frame overshot.
   sig.value = target;
 }
 
-/** Fade `shape.opacity` from current value to 1 over `ms`. */
-export function* fadeIn(
-  shape: Shape,
-  ms: number,
-  ease: (t: number) => number = easeOut,
-): Animator {
-  const start = shape.opacity.peek();
-  let elapsed = 0;
-  while (elapsed < ms) {
-    const dt: number = yield;
-    elapsed += dt;
-    const t = Math.min(elapsed / ms, 1);
-    shape.opacity.value = start + (1 - start) * ease(t);
-  }
-  shape.opacity.value = 1;
-}
+export const fadeIn = (s: Shape, ms: number, ease?: (t: number) => number) =>
+  tween(s.opacity, 1, ms, ease);
 
-/** Fade `shape.opacity` from current value to 0 over `ms`. */
-export function* fadeOut(
-  shape: Shape,
-  ms: number,
-  ease: (t: number) => number = easeOut,
-): Animator {
-  const start = shape.opacity.peek();
-  let elapsed = 0;
-  while (elapsed < ms) {
-    const dt: number = yield;
-    elapsed += dt;
-    const t = Math.min(elapsed / ms, 1);
-    shape.opacity.value = start * (1 - ease(t));
-  }
-  shape.opacity.value = 0;
-}
+export const fadeOut = (s: Shape, ms: number, ease?: (t: number) => number) =>
+  tween(s.opacity, 0, ms, ease);
 
-// ── Composers ────────────────────────────────────────────────────────
-// Built directly on JS generator semantics — no special runner
-// support needed. `yield <array>` is the runner's parallel sugar;
-// `yield* gen` delegates serially via the language.
+// ── Composers ───────────────────────────────────────────────────────
 
-/**
- * Run children in parallel; return when all complete. Equivalent to
- * `yield <array>` but as a named verb that composes via `yield*`.
- */
+/** Run children in parallel; complete when all finish. */
 export function* parallel(...children: Animator[]): Animator {
   yield children;
 }
 
-/** Run children one after another. */
+/** Run children sequentially. */
 export function* sequence(...children: Animator[]): Animator {
   for (const c of children) yield* c;
 }
@@ -106,39 +56,24 @@ export function* withDelay(ms: number, c: Animator): Animator {
   yield* c;
 }
 
-/**
- * Run children in parallel, but stagger their starts by `stagger` ms each.
- * `lag(100, a, b, c)` → a starts immediately, b at 100ms, c at 200ms.
- */
+/** Parallel with staggered starts: `lag(100, a, b, c)` → 0, 100, 200ms. */
 export function* lag(stagger: number, ...children: Animator[]): Animator {
   yield children.map((c, i) => withDelay(i * stagger, c));
 }
 
-/**
- * Pause each frame until `condition()` returns true. Useful for
- * waiting on user interaction or a signal threshold:
- *
- *   yield* untilSig(() => isHovering.value);
- */
+/** Pause until `condition()` is true (polled per frame). */
 export function* untilSig(condition: () => boolean): Animator {
   while (!condition()) yield;
 }
 
-/**
- * Run `gen` `n` times in sequence. Each iteration calls `gen()` to get
- * a fresh generator instance.
- */
+/** Sequence `gen()` `n` times. Each call produces a fresh generator. */
 export function* repeat(n: number, gen: () => Animator): Animator {
   for (let i = 0; i < n; i++) yield* gen();
 }
 
-/**
- * Run children in parallel, return as soon as the FIRST one completes.
- * Frame-only: assumes children only `yield` (one frame) — not numbers
- * or arrays. Wrap mixed-yield children in their own composer.
- */
+/** Parallel; complete as soon as the FIRST child finishes. Frame-only
+ *  children (only bare `yield`) — wrap mixed-yield ones in a composer. */
 export function* race(...children: Animator[]): Animator {
-  // Prime each child to its first yield.
   for (const c of children) c.next();
   while (true) {
     const dt: number = yield;

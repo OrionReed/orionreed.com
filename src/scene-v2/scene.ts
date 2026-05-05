@@ -1,17 +1,8 @@
 import type { Shape } from "./shape";
 
-/**
- * Scene is a callable handle to a `<g>` root group inside an SVG.
- *
- * - `s(myShape)` — adds a shape to the root, returns it.
- * - `s(a, b, c)` — adds several at once, returns the tuple.
- * - `s.view(x, y, w, h)` — set the SVG viewBox.
- * - `s.svg`, `s.root` — escape hatches.
- */
+/** Callable handle to a `<g>` root inside an SVG. */
 export interface Scene {
-  /** Add a single shape; returns it for binding/chaining. */
   <T extends Shape>(shape: T): T;
-  /** Add several shapes at once; returns them as a tuple. */
   <T extends Shape[]>(...shapes: T): T;
 
   readonly svg: SVGSVGElement;

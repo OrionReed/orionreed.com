@@ -1,5 +1,5 @@
-// Chainable rich text composed of nested styled spans. Pure values;
-// no DOM. Used by `label()` to set tspan content.
+// Chainable rich text composed of nested styled spans. Pure values
+// (no DOM); rendered to tspan markup by `label()`.
 
 import { tokens } from "./tokens";
 
@@ -13,10 +13,7 @@ interface TextStyle {
 export type TextPart = string | Text;
 
 export class Text {
-  constructor(
-    public parts: TextPart[],
-    public style: TextStyle = {},
-  ) {}
+  constructor(public parts: TextPart[], public style: TextStyle = {}) {}
 
   bold(): Text {
     return new Text(this.parts, { ...this.style, bold: true });
@@ -34,13 +31,10 @@ export class Text {
 
 export type Content = string | Text;
 
-export function t(...parts: TextPart[]): Text {
-  return new Text(parts);
-}
+export const t = (...parts: TextPart[]): Text => new Text(parts);
 
-function escapeXml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+const escapeXml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 function renderTextNode(node: TextPart): string {
   if (typeof node === "string") return escapeXml(node);
@@ -55,11 +49,10 @@ function renderTextNode(node: TextPart): string {
   return a.length ? `<tspan ${a.join(" ")}>${inner}</tspan>` : inner;
 }
 
-export function renderContent(c: Content): string {
-  return typeof c === "string" ? escapeXml(c) : renderTextNode(c);
-}
+export const renderContent = (c: Content): string =>
+  typeof c === "string" ? escapeXml(c) : renderTextNode(c);
 
-/** Plain-text flatten of `c` — useful for approximating label widths. */
+/** Plain-text flatten — for approximating label widths. */
 export function flattenText(c: Content): string {
   if (typeof c === "string") return c;
   const walk = (n: TextPart): string =>

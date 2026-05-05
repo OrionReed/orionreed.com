@@ -1,17 +1,4 @@
-// scene-v2: retained-mode scene graph with @preact/signals-core.
-//
-// Mental model:
-//   - Channels are plain `signal(0)` — preact-signals-core directly.
-//     Animate via `this.tween(channel, target, ms, ease)`.
-//   - 2D points use `Point` for chainable vector + layout ops.
-//     `pt(60, 170)` for static, `lerp(a, b, t)` for derived.
-//   - Shape is the universal node. Wrapper `<g>` holds transform +
-//     opacity; optional intrinsic SVG element + child shapes.
-//     "Group" is `new Shape()` with no intrinsic.
-//   - Scene mounts the SVG and exposes convenience factories
-//     (`s.line`, `s.rect`, `s.group()`, etc.).
-//   - SceneElement is the option-B base — subclass overrides
-//     `setup(scene)` and builds the graph there. No render() calls.
+// scene-v2: retained-mode scene graph on @preact/signals-core.
 
 export {
   signal,
@@ -19,31 +6,37 @@ export {
   effect,
   batch,
   untracked,
-  type Signal,
+  Signal,
   type ReadonlySignal,
 } from "./signal";
-
 export { type Arg, bindArg, isReactive, isSignal, read, unwrap } from "./signal";
 
 export { Point, pt } from "./point";
 
 export {
-  bounds,
-  expandBounds,
-  unionBounds,
+  Bounds,
   Pivot,
-  type Bounds,
+  aabb,
+  aabbEdgeFrom,
+  expandAABB,
+  unionAABB,
+  type AABB,
   type Vec,
 } from "./bounds";
 
 export { Shape, SVG_NS, type ShapeOpts } from "./shape";
 
 export {
+  Line,
   line,
-  rect,
+  Circle,
   circle,
+  Rect,
+  rect,
+  Label,
   label,
   group,
+  applyOpts,
   type CommonOpts,
   type LineOpts,
   type RectOpts,
@@ -53,22 +46,13 @@ export {
 
 export { makeScene, type Scene } from "./scene";
 
-export {
-  Text,
-  t,
-  type Content,
-  type TextPart,
-} from "./text";
+export { Text, t, type Content, type TextPart } from "./text";
 
 export { tokens, type Tokens } from "./tokens";
 
 export { Diagram, css } from "./diagram";
-export {
-  Anim,
-  AbortError,
-  type Animator,
-  type Yieldable,
-} from "./anim";
+
+export { Anim, AbortError, type Animator, type Yieldable } from "./anim";
 
 export {
   easeOut,
