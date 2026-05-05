@@ -1,11 +1,10 @@
 // Generator-driven animation runner.
 //
-// Time is in seconds at the public/yield boundary; the runner converts
-// to ms for browser interop. An Animator:
+// An Animator:
 //   - yields undefined → wait one frame, receives `dt` (seconds) back.
-//   - yields a number  → pause that many seconds.
+//   - yields a number → pause that many seconds.
 //   - yields an Animator → delegate.
-//   - yields an array  → run all in parallel.
+//   - yields an array → run all in parallel.
 
 import { signal, type Signal } from "./signal";
 
@@ -23,21 +22,18 @@ export type Animator = Generator<Yieldable, void, number>;
 
 export class Anim {
   private controller = new AbortController();
-  private rafIds = new Set<number>();
   private timerIds = new Set<number>();
   private scopes = new Set<Anim>();
 
+  // Master-RAF state: one rAF id (0 if none scheduled), the time of
+  // the last fired frame (for dt computation), and the queue of
+  // resolvers waiting on this frame.
+  private rafId = 0;
+  private lastFrame = 0;
+  private waiters: Array<(dt: number) => void> = [];
+
   private get aborted(): boolean {
     return this.controller.signal.aborted;
-  }
-
-  private raf(fn: (now: number) => void): void {
-    let id = 0;
-    id = requestAnimationFrame((now) => {
-      this.rafIds.delete(id);
-      if (!this.aborted) fn(now);
-    });
-    this.rafIds.add(id);
   }
 
   private timeout(fn: () => void, ms: number): void {
@@ -73,8 +69,28 @@ export class Anim {
     return this.promise<void>((finish) => this.timeout(finish, ms));
   }
 
-  private frame(): Promise<void> {
-    return this.promise<void>((finish) => this.raf(() => finish()));
+  /** Resolves on the next animation frame with `dt` (seconds since the
+   *  previous master-RAF firing, or 0 on the very first frame). */
+  private frame(): Promise<number> {
+    return this.promise<number>((finish) => {
+      this.waiters.push(finish);
+      this.scheduleFrame();
+    });
+  }
+
+  private scheduleFrame(): void {
+    if (this.rafId !== 0 || this.aborted) return;
+    this.rafId = requestAnimationFrame((now) => {
+      this.rafId = 0;
+      if (this.aborted) return;
+      const dt = this.lastFrame === 0 ? 0 : (now - this.lastFrame) / 1000;
+      this.lastFrame = now;
+      // Snapshot — handlers may push fresh waiters for the next frame
+      // and we don't want to drain those into this firing.
+      const batch = this.waiters;
+      this.waiters = [];
+      for (const w of batch) w(dt);
+    });
   }
 
   /** Run a generator forever, restarting on completion. Pass a factory
@@ -112,7 +128,6 @@ export class Anim {
   }
 
   private async runGen(gen: Animator): Promise<void> {
-    let lastTime = performance.now();
     let result = gen.next();
     while (!result.done) {
       if (this.aborted) {
@@ -129,22 +144,15 @@ export class Anim {
         // Numeric yield is seconds — convert to ms for setTimeout.
         if (v > 0) await this.wait(v * 1000);
         result = gen.next(0);
-        lastTime = performance.now();
       } else if (v === undefined) {
-        await this.frame();
-        const now = performance.now();
-        // dt to generators is seconds.
-        const dt = (now - lastTime) / 1000;
-        lastTime = now;
+        const dt = await this.frame();
         result = gen.next(dt);
       } else if (Array.isArray(v)) {
         await Promise.all(v.map((item) => this.dispatchItem(item)));
         result = gen.next(0);
-        lastTime = performance.now();
       } else {
         await this.runGen(v);
         result = gen.next(0);
-        lastTime = performance.now();
       }
     }
   }
@@ -181,10 +189,16 @@ export class Anim {
   /** Cancel pending operations and reset. Idempotent. Cascades to scopes. */
   stop(): void {
     this.controller.abort();
-    this.rafIds.forEach((id) => cancelAnimationFrame(id));
+    if (this.rafId !== 0) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = 0;
+    }
     this.timerIds.forEach((id) => clearTimeout(id));
-    this.rafIds.clear();
     this.timerIds.clear();
+    // Pending frame() promises reject via the abort listener in
+    // `promise()`. Drop our reference so they GC promptly.
+    this.waiters = [];
+    this.lastFrame = 0;
     this.scopes.forEach((s) => s.stop());
     this.scopes.clear();
     this.controller = new AbortController();
