@@ -104,7 +104,7 @@ function sampler(points: readonly Point[]) {
  * Sampling: `at(t)`, `tangentAt(t)`, `normalAt(t)`, `angleAt(t)`, `length()`
  * — all reactive, parameterized by arc-length fraction.
  */
-export class Path extends Shape {
+export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   readonly points: readonly Point[];
   readonly closed: boolean;
 
@@ -114,7 +114,7 @@ export class Path extends Shape {
   readonly normalAt: (t: Arg<number>) => Point;
   readonly angleAt: (t: Arg<number>) => ReadonlySignal<number>;
 
-  constructor(arg: readonly Point[] | PathBuilder, opts: PathOpts = {}) {
+  constructor(arg: readonly Point[] | PathBuilder, opts: O = {} as O) {
     const points = arg instanceof PathBuilder ? arg.points : arg;
     const closed = opts.closed ?? false;
 
@@ -132,13 +132,13 @@ export class Path extends Shape {
         }
         return aabb(xMin, yMin, xMax - xMin, yMax - yMin);
       },
+      opts,
       {
         // Default origin: the path's first vertex (consistent with
         // `path.at(0)`). Authors with a richer notion of "the path's
         // center" can override.
         origin: () =>
           points.length > 0 ? points[0].value : { x: 0, y: 0 },
-        ...opts,
       },
     );
 

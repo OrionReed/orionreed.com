@@ -9,7 +9,7 @@ export {
   Signal,
   type ReadonlySignal,
 } from "./signal";
-export { type Arg, bindArg } from "./signal";
+export { type Arg, toSig, type ResolveSig } from "./signal";
 
 export { Point, pt } from "./point";
 
@@ -25,7 +25,16 @@ export {
 
 export { align, arrange, type ArrangeOpts } from "./layout";
 
-export { Shape, SVG_NS, type ShapeOpts, boundsInRoot, boundsIn } from "./shape";
+export {
+  Shape,
+  SVG_NS,
+  type ShapeOpts,
+  type AnyShape,
+  type AnimatableKey,
+  type Writable,
+  boundsInRoot,
+  boundsIn,
+} from "./shape";
 
 export {
   type Matrix2D,

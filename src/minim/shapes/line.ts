@@ -7,11 +7,11 @@ import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface LineOpts extends CommonOpts {}
 
-export class Line extends Shape {
+export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
   constructor(
     readonly from: Point,
     readonly to: Point,
-    opts: LineOpts = {},
+    opts: O = {} as O,
   ) {
     const dashed = opts.dashed ?? false;
     super(
@@ -26,6 +26,7 @@ export class Line extends Shape {
           Math.abs(b.y - a.y),
         );
       },
+      opts,
       {
         // Default origin: the line's midpoint.
         origin: () => {
@@ -33,7 +34,6 @@ export class Line extends Shape {
           const b = to.value;
           return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
         },
-        ...opts,
       },
     );
     if (!dashed) {
@@ -111,5 +111,8 @@ export class Line extends Shape {
   }
 }
 
-export const line = (from: Point, to: Point, opts?: LineOpts) =>
-  new Line(from, to, opts);
+export const line = <const O extends LineOpts>(
+  from: Point,
+  to: Point,
+  opts?: O,
+): Line<O> => new Line<O>(from, to, opts);

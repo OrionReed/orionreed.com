@@ -27,7 +27,7 @@ function math(base: string, sub?: string): Text {
 }
 
 /** Perpendicular tick at fraction `t` along `l`, half-length `h`. */
-function tick(l: Line, t: number, h: number, opts: LineOpts = {}): Line {
+function tick(l: Line, t: number, h: number, opts: LineOpts = {}) {
   const c = l.at(t);
   const off = l.normalAt(t).scale(h);
   return line(c.sub(off), c.add(off), { thin: true, ...opts });

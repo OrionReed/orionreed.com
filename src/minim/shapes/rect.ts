@@ -14,7 +14,7 @@ const HALF_PI = Math.PI / 2;
 
 type NumSig = Signal<number> | ReadonlySignal<number>;
 
-export class Rect extends Shape {
+export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   readonly x: NumSig;
   readonly y: NumSig;
   readonly w: NumSig;
@@ -26,7 +26,7 @@ export class Rect extends Shape {
     y: Arg<number>,
     w: Arg<number>,
     h: Arg<number>,
-    opts: RectOpts = {},
+    opts: O = {} as O,
   ) {
     const xs = toSig(x);
     const ys = toSig(y);
@@ -36,13 +36,13 @@ export class Rect extends Shape {
     super(
       dashed ? "path" : "rect",
       () => aabb(xs.value, ys.value, ws.value, hs.value),
+      opts,
+      // Default origin: bbox center — rotations/scales pivot there.
       {
-        // Default origin: bbox center — rotations/scales pivot there.
         origin: () => ({
           x: xs.value + ws.value / 2,
           y: ys.value + hs.value / 2,
         }),
-        ...opts,
       },
     );
     this.x = xs;
@@ -93,7 +93,10 @@ export class Rect extends Shape {
       computed(() => this.y.value - bys.value),
       computed(() => this.w.value + 2 * bys.value),
       computed(() => this.h.value + 2 * bys.value),
-      { corner: computed(() => this.corner.value + bys.value), ...opts },
+      // Default-typed Rect (writable signals); the corner override is
+      // an internal detail that doesn't need to leak into the return
+      // type's generic narrowing.
+      { corner: computed(() => this.corner.value + bys.value), ...opts } as RectOpts,
     );
   }
 
@@ -133,21 +136,24 @@ export class Rect extends Shape {
  *   rect(x, y, w, h, opts?)        — corner-based (canonical)
  *   rect(b: Bounds, opts?)         — derived from another shape's bounds
  *   rect(center: Point, w, h, opts?) — centered around a Point.
- */
-export function rect(b: Bounds, opts?: RectOpts): Rect;
-export function rect(
+ *
+ *  Generic in `O` so a `computed(...)` passed for an animatable prop
+ *  produces a `ReadonlySignal` field on the returned shape (animations
+ *  on it become a TypeScript error). */
+export function rect<const O extends RectOpts>(b: Bounds, opts?: O): Rect<O>;
+export function rect<const O extends RectOpts>(
   center: Point,
   w: Arg<number>,
   h: Arg<number>,
-  opts?: RectOpts,
-): Rect;
-export function rect(
+  opts?: O,
+): Rect<O>;
+export function rect<const O extends RectOpts>(
   x: Arg<number>,
   y: Arg<number>,
   w: Arg<number>,
   h: Arg<number>,
-  opts?: RectOpts,
-): Rect;
+  opts?: O,
+): Rect<O>;
 export function rect(
   a: Arg<number> | Bounds | Point,
   b?: Arg<number> | RectOpts,

@@ -19,11 +19,11 @@ const xAttr = (x: number) => x <= 0.25 ? "start" : x >= 0.75 ? "end" : "middle";
 const yAttr = (y: number) =>
   y <= 0.25 ? "hanging" : y >= 0.75 ? "alphabetic" : "central";
 
-export class Label extends Shape {
+export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
   constructor(
     readonly at: Point,
     content: Arg<Content>,
-    opts: LabelOpts = {},
+    opts: O = {} as O,
   ) {
     const contentSig = toSig(content);
     const sizeSig = toSig(opts.size ?? tokens.fontSize);
@@ -36,12 +36,12 @@ export class Label extends Shape {
         const w = fs * Math.max(1, text.length) * tokens.charWidth;
         return aabb(at.x.value - a.x * w, at.y.value - a.y * fs, w, fs);
       },
+      opts,
       {
         // Default origin: the `at` point — rotations pivot around the
         // anchor, not the bbox center, so a rotated label hinges on
         // where it was placed.
         origin: () => at.value,
-        ...opts,
       },
     );
     this.attr("x", at.x);
@@ -59,5 +59,8 @@ export class Label extends Shape {
   }
 }
 
-export const label = (at: Point, content: Arg<Content>, opts?: LabelOpts) =>
-  new Label(at, content, opts);
+export const label = <const O extends LabelOpts>(
+  at: Point,
+  content: Arg<Content>,
+  opts?: O,
+): Label<O> => new Label<O>(at, content, opts);

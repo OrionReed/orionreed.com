@@ -1,6 +1,6 @@
 import { Bounds, aabb, type AABB } from "./bounds";
 import { effect, signal, toSig, type Arg } from "./signal";
-import type { Shape } from "./shape";
+import type { AnyShape } from "./shape";
 
 export type Padding =
   | number
@@ -14,11 +14,11 @@ function resolvePadding(p?: Padding) {
 
 /** Callable handle to a `<g>` root inside an SVG. */
 export interface Scene {
-  <T extends Shape>(shape: T): T;
-  <T extends Shape[]>(...shapes: T): T;
+  <T extends AnyShape>(shape: T): T;
+  <T extends AnyShape[]>(...shapes: T): T;
 
   readonly svg: SVGSVGElement;
-  readonly root: Shape;
+  readonly root: AnyShape;
 
   /** Set viewBox. First call wins. Args may be plain numbers, Signals,
    *  or thunks — when reactive, the viewBox updates as the values
@@ -38,12 +38,12 @@ export interface Scene {
   readonly _viewPending: boolean;
 }
 
-export function makeScene(svg: SVGSVGElement, root: Shape): Scene {
+export function makeScene(svg: SVGSVGElement, root: AnyShape): Scene {
   let viewSet = false;
   const viewSig = signal<AABB>(aabb(0, 0, 0, 0));
   const viewBounds = new Bounds(viewSig);
 
-  const fn = ((...shapes: Shape[]) => {
+  const fn = ((...shapes: AnyShape[]) => {
     for (const shape of shapes) root.add(shape);
     return shapes.length === 1 ? shapes[0] : shapes;
   }) as Scene;

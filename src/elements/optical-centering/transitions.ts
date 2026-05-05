@@ -10,18 +10,27 @@
 //   yield* sequence(bounceIn(s), holdFor(1), zoomOut(s));// timeline
 
 import { easeIn, easeInOut, easeOut } from "../../minim";
-import type { Animator, Shape } from "../../minim";
+import type { Animator, Writable } from "../../minim";
+
+// Each helper constrains only the props it animates via `Writable<K>`
+// — leaving other props free to be readonly. e.g. a
+// `group({ translate: computed(...) })` is still a valid `bounceIn`
+// target because bounceIn only touches `scale`/`opacity`.
 
 // ── Intros ───────────────────────────────────────────────────────────
 
 /** Opacity 0 → 1. */
-export function* fadeIn(s: Shape, sec = 0.3): Animator {
+export function* fadeIn(s: Writable<"opacity">, sec = 0.3): Animator {
   s.opacity.value = 0;
   yield* s.opacity.to(1, sec);
 }
 
 /** Translate from `dy` below + fade in. */
-export function* fadeUp(s: Shape, sec = 0.4, dy = 16): Animator {
+export function* fadeUp(
+  s: Writable<"translate" | "opacity">,
+  sec = 0.4,
+  dy = 16,
+): Animator {
   s.translate.value = { x: 0, y: dy };
   s.opacity.value = 0;
   yield [
@@ -32,7 +41,7 @@ export function* fadeUp(s: Shape, sec = 0.4, dy = 16): Animator {
 
 /** Slide in from a side. Distance scales with default 30px. */
 export function* slideIn(
-  s: Shape,
+  s: Writable<"translate" | "opacity">,
   from: "left" | "right" | "top" | "bottom" = "left",
   sec = 0.4,
   dist = 30,
@@ -52,7 +61,7 @@ export function* slideIn(
 }
 
 /** Scale 0 → 1. Pivot from the shape's pivot (default: bounds center). */
-export function* scaleIn(s: Shape, sec = 0.3): Animator {
+export function* scaleIn(s: Writable<"scale" | "opacity">, sec = 0.3): Animator {
   s.scale.value = { x: 0, y: 0 };
   s.opacity.value = 0;
   yield [
@@ -62,7 +71,7 @@ export function* scaleIn(s: Shape, sec = 0.3): Animator {
 }
 
 /** Overshoot-and-settle scale. Classic "bounceIn". */
-export function* bounceIn(s: Shape, sec = 0.5): Animator {
+export function* bounceIn(s: Writable<"scale" | "opacity">, sec = 0.5): Animator {
   s.scale.value = { x: 0, y: 0 };
   s.opacity.value = 0;
   yield [
@@ -74,7 +83,10 @@ export function* bounceIn(s: Shape, sec = 0.5): Animator {
 }
 
 /** Spin in: rotate from -180° to 0°, fade in, scale from 0.5 → 1. */
-export function* spinIn(s: Shape, sec = 0.5): Animator {
+export function* spinIn(
+  s: Writable<"rotate" | "scale" | "opacity">,
+  sec = 0.5,
+): Animator {
   s.rotate.value = -Math.PI;
   s.scale.value = { x: 0.5, y: 0.5 };
   s.opacity.value = 0;
@@ -87,12 +99,12 @@ export function* spinIn(s: Shape, sec = 0.5): Animator {
 
 // ── Outros ───────────────────────────────────────────────────────────
 
-export function* fadeOut(s: Shape, sec = 0.3): Animator {
+export function* fadeOut(s: Writable<"opacity">, sec = 0.3): Animator {
   yield* s.opacity.to(0, sec);
 }
 
 /** Scale to 0 + fade out. Mirror of scaleIn. */
-export function* zoomOut(s: Shape, sec = 0.3): Animator {
+export function* zoomOut(s: Writable<"scale" | "opacity">, sec = 0.3): Animator {
   yield [
     s.scale.to({ x: 0, y: 0 }, sec, easeIn),
     s.opacity.to(0, sec),
@@ -100,7 +112,11 @@ export function* zoomOut(s: Shape, sec = 0.3): Animator {
 }
 
 /** Translate up `dy` + fade out. */
-export function* fadeUpOut(s: Shape, sec = 0.3, dy = 16): Animator {
+export function* fadeUpOut(
+  s: Writable<"translate" | "opacity">,
+  sec = 0.3,
+  dy = 16,
+): Animator {
   yield [
     s.translate.to({ x: 0, y: -dy }, sec, easeIn),
     s.opacity.to(0, sec),
@@ -109,7 +125,7 @@ export function* fadeUpOut(s: Shape, sec = 0.3, dy = 16): Animator {
 
 /** Slide out toward a side. */
 export function* slideOut(
-  s: Shape,
+  s: Writable<"translate" | "opacity">,
   to: "left" | "right" | "top" | "bottom" = "right",
   sec = 0.3,
   dist = 30,

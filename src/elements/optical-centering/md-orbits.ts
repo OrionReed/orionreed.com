@@ -7,7 +7,7 @@
 import {
   Diagram,
   Scene,
-  Shape,
+  type AnyShape,
   circle,
   computed,
   css,
@@ -55,7 +55,7 @@ export class MdOrbits extends Diagram {
     angularMotion(8, sun.rotate);
 
     // Faint dashed orbit ring at radius `r`, parented to `parent`.
-    const orbitRing = (parent: Shape, r: number) => {
+    const orbitRing = (parent: AnyShape, r: number) => {
       parent.add(
         circle(pt(0, 0), r, { thin: true, dashed: true, opacity: 0.2 }),
       );
@@ -64,7 +64,7 @@ export class MdOrbits extends Diagram {
     // A planet at radius `r` from `parent`'s origin, with given size and
     // orbital period (seconds). Optionally spins on its axis (`spin`).
     const planet = (
-      parent: Shape,
+      parent: AnyShape,
       r: number,
       size: number,
       period: number,

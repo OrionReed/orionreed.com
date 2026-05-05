@@ -11,7 +11,9 @@ type NumSig = Signal<number> | ReadonlySignal<number>;
 
 /** Pie wedge with a hole — the region between two radii (rOuter, rInner)
  *  swept between two angles (a0, a1). Useful for ring/dial diagrams. */
-export class AnnularSector extends Shape {
+export class AnnularSector<
+  O extends AnnularSectorOpts = AnnularSectorOpts,
+> extends Shape<O> {
   readonly rOuter: NumSig;
   readonly rInner: NumSig;
   readonly a0: NumSig;
@@ -23,7 +25,7 @@ export class AnnularSector extends Shape {
     rInner: Arg<number>,
     a0: Arg<number>,
     a1: Arg<number>,
-    opts: AnnularSectorOpts = {},
+    opts: O = {} as O,
   ) {
     const ro = toSig(rOuter);
     const ri = toSig(rInner);
@@ -33,11 +35,9 @@ export class AnnularSector extends Shape {
       "path",
       () =>
         aabb(center.x.value - ro.value, center.y.value - ro.value, 2 * ro.value, 2 * ro.value),
-      {
-        // Default origin: the sector's center.
-        origin: () => center.value,
-        ...opts,
-      },
+      opts,
+      // Default origin: the sector's center.
+      { origin: () => center.value },
     );
     this.rOuter = ro;
     this.rInner = ri;
@@ -91,11 +91,12 @@ export class AnnularSector extends Shape {
   }
 }
 
-export const annularSector = (
+export const annularSector = <const O extends AnnularSectorOpts>(
   center: Point,
   rOuter: Arg<number>,
   rInner: Arg<number>,
   a0: Arg<number>,
   a1: Arg<number>,
-  opts?: AnnularSectorOpts,
-) => new AnnularSector(center, rOuter, rInner, a0, a1, opts);
+  opts?: O,
+): AnnularSector<O> =>
+  new AnnularSector<O>(center, rOuter, rInner, a0, a1, opts);

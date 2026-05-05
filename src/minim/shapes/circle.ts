@@ -7,13 +7,13 @@ import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface CircleOpts extends CommonOpts {}
 
-export class Circle extends Shape {
+export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   readonly radius: Signal<number> | ReadonlySignal<number>;
 
   constructor(
     readonly center: Point,
     radius: Arg<number>,
-    opts: CircleOpts = {},
+    opts: O = {} as O,
   ) {
     const r = toSig(radius);
     const dashed = opts.dashed ?? false;
@@ -21,11 +21,10 @@ export class Circle extends Shape {
       dashed ? "path" : "circle",
       () =>
         aabb(center.x.value - r.value, center.y.value - r.value, 2 * r.value, 2 * r.value),
-      {
-        // Default origin: the circle's center — natural rotation pivot.
-        origin: () => center.value,
-        ...opts,
-      },
+      opts,
+      // Default origin tracks center (natural rotation pivot); user
+      // override via `opts.origin` wins.
+      { origin: () => center.value },
     );
     this.radius = r;
     if (!dashed) {
@@ -81,5 +80,8 @@ export class Circle extends Shape {
   }
 }
 
-export const circle = (at: Point, r: Arg<number>, opts?: CircleOpts) =>
-  new Circle(at, r, opts);
+export const circle = <const O extends CircleOpts>(
+  at: Point,
+  r: Arg<number>,
+  opts?: O,
+): Circle<O> => new Circle<O>(at, r, opts);

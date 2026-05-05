@@ -1,7 +1,7 @@
 // Shared style opts + applier for stroked/filled shapes.
 
 import { computed, toSig, type Arg } from "../signal";
-import type { Shape, ShapeOpts } from "../shape";
+import type { AnyShape, ShapeOpts } from "../shape";
 import { tokens } from "../tokens";
 import { dashedPath } from "../dashed";
 
@@ -22,7 +22,7 @@ export interface CommonOpts extends ShapeOpts {
 /** Apply stroke + fill + linecap/join. Does NOT handle dashing —
  *  shapes that support `dashed: true` use `setupDashed()` to bind a
  *  reactive `<path>` `d` from their `segments()`. */
-export function applyOpts(s: Shape, opts: CommonOpts): void {
+export function applyOpts<S extends AnyShape>(s: S, opts: CommonOpts): void {
   s.attr("stroke", opts.stroke ?? tokens.stroke);
   s.attr(
     "stroke-width",
@@ -42,7 +42,11 @@ export function applyOpts(s: Shape, opts: CommonOpts): void {
  *  individual dashes have rounded ends. The cap-extension scales with
  *  the stroke width so visible dash/gap stays consistent across thin
  *  and normal weights. */
-export function setupDashed(s: Shape, opts: CommonOpts, closed: boolean): void {
+export function setupDashed<S extends AnyShape>(
+  s: S,
+  opts: CommonOpts,
+  closed: boolean,
+): void {
   if (!opts.dashed) return;
   const cap = opts.cap ?? "round";
   s.attr("stroke-linecap", cap);
