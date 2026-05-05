@@ -10,7 +10,7 @@ import {
   line,
   pt,
   signal,
-  untilSig,
+  until,
   type Animator,
 } from "../scene-v2";
 import { grey, ink, stroke } from "./color";
@@ -175,7 +175,7 @@ export class MdQrtpProtocol extends Diagram {
 
     const startFloodFillLoop = () => {
       floodAnim.loop(function* () {
-        yield* untilSig(() => cellsWithState("retransmit").length > 0);
+        yield* until(() => cellsWithState("retransmit").length > 0);
         yield T.beforeFlood;
         yield* doFloodFill();
         yield T.betweenCycles;

@@ -6,8 +6,6 @@ import {
   css,
   Diagram,
   easeInOut,
-  fadeIn,
-  fadeOut,
   label,
   lag,
   Pivot,
@@ -15,7 +13,6 @@ import {
   Scene,
   sequence,
   signal,
-  tween,
   type Animator,
   type Content,
   type Signal,
@@ -65,8 +62,7 @@ export class MdAnimDemo extends Diagram {
     const aX = signal(60);
     s(circle(pt(aX, 35), 10, { fill: true }));
     this.anim.loop(function* () {
-      yield* tween(aX, 540, 1000, easeInOut);
-      yield* tween(aX, 60, 1000, easeInOut);
+      yield* aX.to(540, 1000, easeInOut).to(60, 1000, easeInOut);
     });
 
     // ── Strip B: lag stagger + array sugar (parallel) ──────────────
@@ -75,9 +71,9 @@ export class MdAnimDemo extends Diagram {
       s(circle(pt(80 + i * 100, 105), 10, { fill: true, opacity: 0 })),
     );
     this.anim.loop(function* () {
-      yield* lag(120, ...bDots.map((d) => fadeIn(d, 400)));
+      yield* lag(120, ...bDots.map((d) => d.opacity.to(1, 400)));
       yield 500;
-      yield bDots.map((d) => fadeOut(d, 400)); // array = parallel sugar
+      yield bDots.map((d) => d.opacity.to(0, 400)); // array = parallel sugar
       yield 300;
     });
 
@@ -89,8 +85,7 @@ export class MdAnimDemo extends Diagram {
     s(circle(pt(cFollower, 175), 14, { thin: true }));
     // Target oscillates on its own loop.
     this.anim.loop(function* () {
-      yield* tween(cTarget, 520, 1500, easeInOut);
-      yield* tween(cTarget, 80, 1500, easeInOut);
+      yield* cTarget.to(520, 1500, easeInOut).to(80, 1500, easeInOut);
     });
     // Follower runs forever, never settles (target keeps moving).
     this.anim.loop(() => springTo(cFollower, cTarget));

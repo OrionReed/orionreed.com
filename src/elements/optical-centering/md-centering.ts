@@ -8,7 +8,6 @@ import {
   css,
   easeInOut,
   easeOut,
-  fadeIn,
   group,
   label,
   line,
@@ -16,7 +15,6 @@ import {
   rect,
   signal,
   t,
-  tween,
   type LineOpts,
 } from "../../scene-v2";
 
@@ -121,16 +119,16 @@ export class MdCentering extends Diagram {
         (g) => (g.opacity.value = 0),
       );
 
-      yield* tween(lineT, 1, 1100, easeOut);
+      yield* lineT.to(1, 1100, easeOut);
       yield 240;
-      yield* fadeIn(xLabels, 450);
+      yield* xLabels.opacity.to(1, 450);
       yield 720;
-      yield* tween(morphT, 1, 1200, easeInOut);
+      yield* morphT.to(1, 1200, easeInOut);
       yield 240;
-      yield* fadeIn(yLabels, 450);
+      yield* yLabels.opacity.to(1, 450);
       yield 240;
-      yield* fadeIn(boxGroup, 600);
-      yield* fadeIn(centroidGroup, 500);
+      yield* boxGroup.opacity.to(1, 600);
+      yield* centroidGroup.opacity.to(1, 500);
       yield 4500;
     });
   }

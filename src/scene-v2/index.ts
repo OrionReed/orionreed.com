@@ -77,14 +77,14 @@ export {
   easeOut,
   easeIn,
   easeInOut,
-  tween,
-  fadeIn,
-  fadeOut,
-  parallel,
+  all,
   sequence,
-  withDelay,
+  delay,
   lag,
-  untilSig,
+  until,
   repeat,
   race,
 } from "./anims";
+
+// Side-effect import: augments `Signal.prototype` with `.to(...)`.
+export { TweenChain } from "./tween";
