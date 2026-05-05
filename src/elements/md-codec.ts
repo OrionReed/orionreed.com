@@ -9,7 +9,7 @@ import {
   path,
   rect,
   t,
-} from "../scene-v2";
+} from "../minim";
 
 interface CodecPart {
   label: string;

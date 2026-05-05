@@ -10,7 +10,7 @@ import {
   signal,
   t,
   type Signal,
-} from "../scene-v2";
+} from "../minim";
 import * as R from "./rand";
 
 interface ChunkState {
@@ -58,19 +58,23 @@ export class MdQrtpHandshake extends Diagram {
 
         // Dashed outline around the "current" chunk only — concentric
         // outline keeps the corner radius matching the inner rect.
-        s(r.outline(4, {
-          dashed: true,
-          cap: "round",
-          opacity: () => state.value[i].status === "current" ? 1 : 0,
-          aside: true,
-        }));
+        s(
+          r.outline(4, {
+            dashed: true,
+            cap: "round",
+            opacity: () => (state.value[i].status === "current" ? 1 : 0),
+            aside: true,
+          }),
+        );
 
         // Data slot: value (only when not future) + muted "data" tag below.
-        s(label(data.center.up(5), () => {
-          const c = state.value[i];
-          if (c.status === "future") return "";
-          return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
-        }));
+        s(
+          label(data.center.up(5), () => {
+            const c = state.value[i];
+            if (c.status === "future") return "";
+            return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
+          }),
+        );
         s(label(data.center.down(8), t("data").muted(), { size: 12 }));
 
         // Ack slot: hash (when set) + muted "ack" tag below.
@@ -84,17 +88,25 @@ export class MdQrtpHandshake extends Diagram {
     const slotsB = buildRow(chunksB, CHUNK_H + DEVICE_GAP);
 
     s(label(pt(-25, CHUNK_H / 2), t("A").bold(), { size: 18 }));
-    s(label(pt(-25, CHUNK_H + DEVICE_GAP + CHUNK_H / 2), t("B").bold(), { size: 18 }));
+    s(
+      label(pt(-25, CHUNK_H + DEVICE_GAP + CHUNK_H / 2), t("B").bold(), {
+        size: 18,
+      }),
+    );
 
     // 2N pre-built arrows (A→B and B→A per chunk index), gated by
     // whether that ack has been sent.
     for (let i = 0; i < N; i++) {
-      s(arrow(slotsA[i].ack.bottom, slotsB[i].data.top, {
-        opacity: () => arrowsAB.value[i] ? 1 : 0,
-      }));
-      s(arrow(slotsB[i].ack.top, slotsA[i].data.bottom, {
-        opacity: () => arrowsBA.value[i] ? 1 : 0,
-      }));
+      s(
+        arrow(slotsA[i].ack.bottom, slotsB[i].data.top, {
+          opacity: () => (arrowsAB.value[i] ? 1 : 0),
+        }),
+      );
+      s(
+        arrow(slotsB[i].ack.top, slotsA[i].data.bottom, {
+          opacity: () => (arrowsBA.value[i] ? 1 : 0),
+        }),
+      );
     }
 
     // ── Mutation helpers ────────────────────────────────────────────

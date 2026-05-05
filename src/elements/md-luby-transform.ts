@@ -11,7 +11,7 @@ import {
   rect,
   t,
   useViewport,
-} from "../scene-v2";
+} from "../minim";
 import * as R from "./rand";
 
 const QR_GRID = 5;

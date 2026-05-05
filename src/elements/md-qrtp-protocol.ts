@@ -12,7 +12,7 @@ import {
   signal,
   until,
   type Animator,
-} from "../scene-v2";
+} from "../minim";
 import { grey, ink, stroke } from "./color";
 import * as R from "./rand";
 
@@ -58,16 +58,17 @@ export class MdQrtpProtocol extends Diagram {
 
     // Per-cell color: override > broadcast highlight > state-based.
     // Returns null when the cell should be invisible.
-    const cellColor = (i: number) => computed((): string | null => {
-      const ov = cellOverrides.value.get(i);
-      if (ov !== undefined) return ov;
-      if (i === lastBroadcast.value) return stroke.toString();
-      const st = cellState.value.get(i);
-      if (st === "received") return ink("green").mod(0.7).toString();
-      if (st === "retransmit") return ink("orange").mod(0.7).toString();
-      if (st === "acknowledged") return grey.mod(0.7).toString();
-      return null;
-    });
+    const cellColor = (i: number) =>
+      computed((): string | null => {
+        const ov = cellOverrides.value.get(i);
+        if (ov !== undefined) return ov;
+        if (i === lastBroadcast.value) return stroke.toString();
+        const st = cellState.value.get(i);
+        if (st === "received") return ink("green").mod(0.7).toString();
+        if (st === "retransmit") return ink("orange").mod(0.7).toString();
+        if (st === "acknowledged") return grey.mod(0.7).toString();
+        return null;
+      });
     const colors = Array.from({ length: N }, (_, i) => cellColor(i));
 
     // ── Render ──────────────────────────────────────────────────────
@@ -77,18 +78,24 @@ export class MdQrtpProtocol extends Diagram {
     for (let i = 0; i < N; i++) {
       const a0 = start + (i * TAU) / N;
       const a1 = a0 + TAU / N;
-      s(annularSector(center, rOut, rIn, a0, a1, {
-        stroke: "none",
-        fill: () => colors[i].value ?? "transparent",
-        opacity: () => colors[i].value === null ? 0 : 1,
-      }));
+      s(
+        annularSector(center, rOut, rIn, a0, a1, {
+          stroke: "none",
+          fill: () => colors[i].value ?? "transparent",
+          opacity: () => (colors[i].value === null ? 0 : 1),
+        }),
+      );
     }
 
     s(circle(center, rOut, { thin: true }));
     s(circle(center, rIn, { thin: true }));
     for (let i = 0; i < N; i++) {
       const a = start + (i * TAU) / N;
-      s(line(Point.polar(center, rIn, a), Point.polar(center, rOut, a), { thin: true }));
+      s(
+        line(Point.polar(center, rIn, a), Point.polar(center, rOut, a), {
+          thin: true,
+        }),
+      );
     }
 
     if (labelText) s(label(center, labelText, { bold: true }));

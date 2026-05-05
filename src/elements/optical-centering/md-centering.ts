@@ -16,7 +16,7 @@ import {
   signal,
   t,
   type LineOpts,
-} from "../../scene-v2";
+} from "../../minim";
 
 /** Italic letter with optional italic subscript: `math("x", "min")`. */
 function math(base: string, sub?: string): Text {
@@ -56,9 +56,9 @@ export class MdCentering extends Diagram {
     const subs = ["min", "c", "max"];
 
     const yTip = xEnd.lerp(yEnd, morphT);
-    const xAxis = new Line(O, xEnd);     // phantom — full extent
-    const yAxis = new Line(O, yEnd);     // phantom — full extent (labels, box)
-    const yMorph = new Line(O, yTip);    // phantom — tracks morph (ticks)
+    const xAxis = new Line(O, xEnd); // phantom — full extent
+    const yAxis = new Line(O, yEnd); // phantom — full extent (labels, box)
+    const yMorph = new Line(O, yTip); // phantom — tracks morph (ticks)
     const yShown = () => (morphT.value > 0 ? 1 : 0);
 
     // Visible axes — animated.
@@ -67,28 +67,34 @@ export class MdCentering extends Diagram {
 
     // Ticks. Reveal as the line passes them (x); fade in with morph (y).
     F.forEach((f) =>
-      s(tick(xAxis, f, 7, {
-        opacity: () => clamp01((lineT.value - f) / 0.06),
-      })),
+      s(
+        tick(xAxis, f, 7, {
+          opacity: () => clamp01((lineT.value - f) / 0.06),
+        }),
+      ),
     );
     F.forEach((f) => s(tick(yMorph, f, 7, { opacity: yShown })));
 
     // Label groups — fade together via parent opacity inheritance.
     const xLabels = s(group({ opacity: 0 }));
-    xLabels.add(...F.map((f, i) =>
-      label(xAxis.at(f).down(24), math("x", subs[i]), {
-        size: 16,
-        anchor: Pivot.TOP,
-      }),
-    ));
+    xLabels.add(
+      ...F.map((f, i) =>
+        label(xAxis.at(f).down(24), math("x", subs[i]), {
+          size: 16,
+          anchor: Pivot.TOP,
+        }),
+      ),
+    );
 
     const yLabels = s(group({ opacity: 0 }));
-    yLabels.add(...F.map((f, i) =>
-      label(yAxis.at(f).left(14), math("y", subs[i]), {
-        size: 16,
-        anchor: Pivot.RIGHT,
-      }),
-    ));
+    yLabels.add(
+      ...F.map((f, i) =>
+        label(yAxis.at(f).left(14), math("y", subs[i]), {
+          size: 16,
+          anchor: Pivot.RIGHT,
+        }),
+      ),
+    );
 
     // Box, crosshairs (faint baseline opacity, multiplied by group fade).
     const [xMin, xMid, xMax] = F.map((f) => xAxis.at(f));
@@ -97,8 +103,11 @@ export class MdCentering extends Diagram {
 
     const boxGroup = s(group({ opacity: 0 }));
     boxGroup.add(
-      rect(xMin.x(), yMax.y(), xMax.x() - xMin.x(), yMin.y() - yMax.y(),
-        { thin: true, corner: 4, opacity: 0.5 }),
+      rect(xMin.x(), yMax.y(), xMax.x() - xMin.x(), yMin.y() - yMax.y(), {
+        thin: true,
+        corner: 4,
+        opacity: 0.5,
+      }),
       line(xMid, c, { thin: true, dashed: true, opacity: 0.6 }),
       line(yMid, c, { thin: true, dashed: true, opacity: 0.6 }),
     );
@@ -106,9 +115,11 @@ export class MdCentering extends Diagram {
     const centroidGroup = s(group({ opacity: 0 }));
     centroidGroup.add(
       circle(c, 4, { fill: true }),
-      label(c.right(10).up(10),
+      label(
+        c.right(10).up(10),
         t("(", math("x", "c"), ", ", math("y", "c"), ")"),
-        { size: 14, anchor: Pivot.BL }),
+        { size: 14, anchor: Pivot.BL },
+      ),
     );
 
     // Animation script.

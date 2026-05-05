@@ -16,7 +16,7 @@ import {
   type Animator,
   type Content,
   type Signal,
-} from "../../scene-v2";
+} from "../../minim";
 
 // ── Custom generator: spring follow (uses bare `yield;` per frame) ──
 function* springTo(

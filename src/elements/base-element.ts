@@ -1,8 +1,5 @@
-import { Anim } from "./anim";
-
 export class BaseElement extends HTMLElement {
   protected shadow: ShadowRoot;
-  protected anim = new Anim();
   private static styleSheets = new Map<string, CSSStyleSheet>();
   static styles?: string;
 
@@ -13,12 +10,7 @@ export class BaseElement extends HTMLElement {
   }
 
   connectedCallback(): void {
-    this.anim.stop();
     this.render();
-  }
-
-  disconnectedCallback(): void {
-    this.anim.stop();
   }
 
   static get tagName(): string {
@@ -70,7 +62,7 @@ export class BaseElement extends HTMLElement {
   attributeChangedCallback(
     _name: string,
     oldValue: string,
-    newValue: string
+    newValue: string,
   ): void {
     if (oldValue !== newValue) {
       this.render();
@@ -84,7 +76,7 @@ export class BaseElement extends HTMLElement {
 export function attr(options: { type?: "string" | "number" | "boolean" } = {}) {
   return function <T extends { constructor: any }>(
     target: T,
-    propertyKey: string
+    propertyKey: string,
   ) {
     const constructor = target.constructor;
     if (!constructor._attributes) constructor._attributes = [];
