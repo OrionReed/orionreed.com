@@ -127,4 +127,40 @@ export class Bounds {
   expand(by: Arg<number>): Bounds {
     return new Bounds(computed(() => expandAABB(this.sig.value, unwrap(by))));
   }
+
+  /** Split into N reactive child Bounds along an axis.
+   *
+   *   `b.split("x", 3)`           → 3 equal columns
+   *   `b.split("x", [3, 2, 2])`   → 3 columns weighted 3:2:2
+   *   `b.split("x", 3, { gap: 4 })` → with 4px between
+   *
+   * Each result tracks the parent bounds and the gap reactively. */
+  split(
+    axis: "x" | "y",
+    parts: number | number[],
+    opts: { gap?: Arg<number> } = {},
+  ): Bounds[] {
+    const ratios = typeof parts === "number" ? new Array(parts).fill(1) : parts;
+    const total = ratios.reduce((a, b) => a + b, 0);
+    const cumBefore = ratios.map((_, i) =>
+      ratios.slice(0, i).reduce((a, b) => a + b, 0),
+    );
+    return ratios.map((r, i) =>
+      new Bounds(
+        computed(() => {
+          const b = this.sig.value;
+          const gap = unwrap(opts.gap ?? 0);
+          const gapTotal = gap * (ratios.length - 1);
+          if (axis === "x") {
+            const free = b.w - gapTotal;
+            const offset = (cumBefore[i] / total) * free + gap * i;
+            return aabb(b.x + offset, b.y, (r / total) * free, b.h);
+          }
+          const free = b.h - gapTotal;
+          const offset = (cumBefore[i] / total) * free + gap * i;
+          return aabb(b.x, b.y + offset, b.w, (r / total) * free);
+        }),
+      ),
+    );
+  }
 }

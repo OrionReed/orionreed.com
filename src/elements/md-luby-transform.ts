@@ -1,134 +1,132 @@
-import { css } from "./base-element";
+import {
+  Diagram,
+  Scene,
+  circle,
+  connect,
+  css,
+  label,
+  line,
+  pt,
+  rect,
+  signal,
+  t,
+} from "../scene-v2";
 import * as R from "./rand";
-import { Padding, Scene, t } from "./draw";
-import { pt } from "./geom";
-import { SceneElement } from "./scene-element";
 
-export class MdLubyTransform extends SceneElement {
-  private edgeStates: Map<string, boolean> = new Map();
-  private qrCellStates: boolean[] = [];
+const QR_GRID = 5;
+const SOURCE_SIZE = 32;
+const XOR_R = 12;
+const QR_SIZE = 24;
 
-  static styles = css`
-    :host {
-      --scene-max-width: 400px;
-      margin: 0;
-    }
-  `;
+function sampleSolitonApprox(): number {
+  const r = Math.random();
+  if (r < 0.1) return 1;
+  if (r < 0.6) return 2;
+  if (r < 0.75) return 3;
+  if (r < 0.85) return 4;
+  if (r < 0.92) return 5;
+  if (r < 0.96) return 6;
+  if (r < 0.98) return 7;
+  if (r < 0.99) return 8;
+  if (r < 0.995) return 9;
+  return 10;
+}
 
-  get topCount(): number {
-    return window.innerWidth < 768 ? 7 : 10;
-  }
-
-  get qrGridSize(): number {
-    return 5;
-  }
-
-  private sampleSolitonApprox(): number {
-    const r = Math.random();
-    if (r < 0.1) return 1;
-    if (r < 0.6) return 2;
-    if (r < 0.75) return 3;
-    if (r < 0.85) return 4;
-    if (r < 0.92) return 5;
-    if (r < 0.96) return 6;
-    if (r < 0.98) return 7;
-    if (r < 0.99) return 8;
-    if (r < 0.995) return 9;
-    return 10;
-  }
-
-  private randomizeQr(): void {
-    const total = this.qrGridSize * this.qrGridSize;
-    this.qrCellStates = Array.from({ length: total }, () => R.chance());
-  }
-
-  private setRandomEdges(count: number): void {
-    this.edgeStates.clear();
-    if (count <= 0) return;
-    const indices = Array.from({ length: this.topCount }, (_, i) => i);
-    const chosen = R.shuffle(indices).slice(0, Math.min(count, this.topCount));
-    for (const i of chosen) this.edgeStates.set(`s${i}`, true);
-  }
-
-  connectedCallback(): void {
-    super.connectedCallback();
-    this.anim.loop(async () => {
-      this.setRandomEdges(this.sampleSolitonApprox());
-      this.randomizeQr();
-      this.render();
-      await this.anim.wait(500);
-    });
-  }
-
-  // y=26 keeps the original 400×200 aspect; x=0 lets sources span full width.
-  protected scenePadding(): Padding {
-    return { x: 0, y: 26 };
-  }
-
-  protected draw(s: Scene): void {
+export class MdLubyTransform extends Diagram {
+  protected setup(s: Scene): void {
     const isMobile = window.innerWidth < 768;
     const W = isMobile ? 300 : 400;
-    const sourceSize = 32;
-    const xorR = 12;
-    const qrSize = 24;
+    const topCount = isMobile ? 7 : 10;
     const yTop = 24;
     const yXor = 100;
     const yQr = 160;
 
-    const sourceCx = (i: number): number => {
-      if (this.topCount <= 1) return W / 2;
-      const span = W - sourceSize;
-      return sourceSize / 2 + (i / (this.topCount - 1)) * span;
+    const edgeOn = signal<boolean[]>(new Array(topCount).fill(false));
+    const cellOn = signal<boolean[]>(new Array(QR_GRID * QR_GRID).fill(false));
+
+    const sourceCx = (i: number) => {
+      if (topCount <= 1) return W / 2;
+      const span = W - SOURCE_SIZE;
+      return SOURCE_SIZE / 2 + (i / (topCount - 1)) * span;
     };
 
-    const sources = Array.from({ length: this.topCount }, (_, i) => {
-      const r = s.rect(
-        sourceCx(i) - sourceSize / 2,
-        yTop,
-        sourceSize,
-        sourceSize,
+    // Sources — fixed layout, static labels.
+    const sources = Array.from({ length: topCount }, (_, i) => {
+      const r = s(
+        rect(sourceCx(i) - SOURCE_SIZE / 2, yTop, SOURCE_SIZE, SOURCE_SIZE),
       );
-      s.label(
-        r.bounds.center,
-        t("S")
-          .bold()
-          .sub(t(String(i + 1)).italic()),
-        { size: 16 },
+      s(
+        label(
+          r.bounds.center,
+          t("S")
+            .bold()
+            .sub(t(String(i + 1)).italic()),
+          { size: 16 },
+        ),
       );
       return r;
     });
 
-    if (this.topCount > 0) {
-      const lastCx = sourceCx(this.topCount - 1);
-      const dotsX = lastCx + sourceSize / 2 + 6 + sourceSize / 2;
-      s.label(pt(dotsX, yTop + sourceSize / 2), t("..."), { size: 16 });
-    }
+    // Trailing dots.
+    const lastCx = sourceCx(topCount - 1);
+    const dotsX = lastCx + SOURCE_SIZE / 2 + 6 + SOURCE_SIZE / 2;
+    s(label(pt(dotsX, yTop + SOURCE_SIZE / 2), t("..."), { size: 16 }));
 
-    // XOR: circle + cross (butt caps so the cross doesn't poke past).
-    const xor = s.circle(W / 2, yXor, xorR);
-    s.line(xor.bounds.left, xor.bounds.right, { cap: "butt" });
-    s.line(xor.bounds.top, xor.bounds.bottom, { cap: "butt" });
+    // XOR — circle plus a butt-capped cross drawn through it.
+    const xor = s(circle(pt(W / 2, yXor), XOR_R));
+    s(
+      line(xor.bounds.left, xor.bounds.right),
+      line(xor.bounds.top, xor.bounds.bottom),
+    );
 
-    const qr = s.rect(W / 2 - qrSize / 2, yQr - qrSize / 2, qrSize, qrSize);
-    const cellSize = qrSize / this.qrGridSize;
-    for (let row = 0; row < this.qrGridSize; row++) {
-      for (let col = 0; col < this.qrGridSize; col++) {
-        if (this.qrCellStates[row * this.qrGridSize + col]) {
-          s.rect(
-            qr.bounds.x + col * cellSize,
-            qr.bounds.y + row * cellSize,
+    // QR frame + 5×5 cells. Each cell's visibility tracks `cellOn[i]`.
+    const qr = s(
+      rect(W / 2 - QR_SIZE / 2, yQr - QR_SIZE / 2, QR_SIZE, QR_SIZE),
+    );
+    const cellSize = QR_SIZE / QR_GRID;
+    for (let row = 0; row < QR_GRID; row++) {
+      for (let col = 0; col < QR_GRID; col++) {
+        const i = row * QR_GRID + col;
+        s(
+          rect(
+            qr.bounds.x() + col * cellSize,
+            qr.bounds.y() + row * cellSize,
             cellSize,
             cellSize,
-            { fill: true, corner: 0 },
-          );
-        }
+            { fill: true, corner: 0, opacity: () => (cellOn.value[i] ? 1 : 0) },
+          ),
+        );
       }
     }
 
-    for (let i = 0; i < this.topCount; i++) {
-      if (!this.edgeStates.get(`s${i}`)) continue;
-      s.line(sources[i].bounds.bottom, xor, { thin: true });
+    // Source → XOR edges. All topCount built once; visibility tracks `edgeOn[i]`.
+    for (let i = 0; i < topCount; i++) {
+      s(
+        connect(sources[i].bounds.bottom, xor, {
+          thin: true,
+          opacity: () => (edgeOn.value[i] ? 1 : 0),
+        }),
+      );
     }
-    s.line(xor, qr, { thin: true });
+
+    // XOR → QR. Always visible.
+    s(connect(xor, qr, { thin: true }));
+
+    // Animate: every 500ms, randomize edges (soliton-approx count) + QR cells.
+    this.anim.loop(function* () {
+      const count = sampleSolitonApprox();
+      const indices = R.shuffle(
+        Array.from({ length: topCount }, (_, i) => i),
+      ).slice(0, Math.min(count, topCount));
+      const next = new Array(topCount).fill(false);
+      for (const i of indices) next[i] = true;
+      edgeOn.value = next;
+
+      cellOn.value = Array.from({ length: QR_GRID * QR_GRID }, () =>
+        R.chance(),
+      );
+
+      yield 500;
+    });
   }
 }

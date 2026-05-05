@@ -17,20 +17,27 @@ import {
   type AABB,
   type Vec,
 } from "./bounds";
-import { Point } from "./point";
+import { Point, pt } from "./point";
+import type { Segment } from "./dashed";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** Construction-time options for any Shape. Animatable props accept
  *  `Arg<T>`: a value (set once), a Signal (caller owns it — animations
  *  write through), or a thunk (derived; an effect drives it — don't
- *  also tween it, the effect will fight). */
+ *  also tween it, the effect will fight).
+ *
+ *  `aside` excludes this shape from its parent's children-union default
+ *  bounds (and so transitively from auto-fit). Its own `bounds` is
+ *  unaffected — useful for decorative overlays (highlights, halos)
+ *  that shouldn't extend the diagram's natural extent. */
 export interface ShapeOpts {
   translate?: Arg<Vec>;
   rotate?: Arg<number>;
   scale?: Arg<Vec>;
   pivot?: Arg<Pivot>;
   opacity?: Arg<number>;
+  aside?: boolean;
 }
 
 /** Universal scene-graph node. Wraps an SVG `<g>` (transform + opacity
@@ -46,6 +53,7 @@ export class Shape {
   readonly pivot: Signal<Pivot>;
   readonly opacity: Signal<number>;
   readonly bounds: Bounds;
+  readonly aside: boolean;
 
   protected disposers: (() => void)[] = [];
   private children: Shape[] = [];
@@ -72,14 +80,18 @@ export class Shape {
     this.scale = bind(opts.scale, { x: 1, y: 1 });
     this.pivot = bind<Pivot>(opts.pivot, Pivot.CENTER);
     this.opacity = bind(opts.opacity, 1);
+    this.aside = opts.aside ?? false;
 
-    // Bounds: explicit fn from a subclass, else union of children.
+    // Bounds: explicit fn from a subclass, else union of non-aside
+    // children — aside shapes don't contribute to layout/fit.
     this.bounds = new Bounds(
       computed(
         boundsFn ??
           (() => {
             this.childrenVersion.value;
-            const bs = this.children.map((c) => c.bounds.snap());
+            const bs = this.children
+              .filter((c) => !c.aside)
+              .map((c) => c.bounds.snap());
             return bs.length ? unionAABB(...bs) : aabb(0, 0, 0, 0);
           }),
       ),
@@ -112,6 +124,24 @@ export class Shape {
   boundary(toward: Point): Point {
     const proj = computed(() => aabbEdgeFrom(this.bounds.snap(), toward.value));
     return new Point(() => proj.value.x, () => proj.value.y);
+  }
+
+  /** Segments composing this shape's stroke path — used by dashed
+   *  rendering. Default: the bounding rect (4 lines, no corners).
+   *  Subclasses with proper outlines (Line, Path, Circle, Rect with
+   *  rounded corners, ...) override. */
+  segments(): Segment[] {
+    const b = this.bounds.snap();
+    const tl = pt(b.x, b.y);
+    const tr = pt(b.x + b.w, b.y);
+    const br = pt(b.x + b.w, b.y + b.h);
+    const bl = pt(b.x, b.y + b.h);
+    return [
+      { type: "line", from: tl, to: tr },
+      { type: "line", from: tr, to: br },
+      { type: "line", from: br, to: bl },
+      { type: "line", from: bl, to: tl },
+    ];
   }
 
   /** Bind one SVG attribute. Static value sets once; thunk or Signal

@@ -6,6 +6,7 @@ import { tokens } from "./tokens";
 interface TextStyle {
   bold?: boolean;
   italic?: boolean;
+  muted?: boolean;
   sub?: boolean;
   sup?: boolean;
 }
@@ -20,6 +21,9 @@ export class Text {
   }
   italic(): Text {
     return new Text(this.parts, { ...this.style, italic: true });
+  }
+  muted(): Text {
+    return new Text(this.parts, { ...this.style, muted: true });
   }
   sub(...parts: TextPart[]): Text {
     return new Text([this, new Text(parts, { sub: true })]);
@@ -42,6 +46,7 @@ function renderTextNode(node: TextPart): string {
   const a: string[] = [];
   if (node.style.bold) a.push('font-weight="700"');
   if (node.style.italic) a.push('font-style="italic"');
+  if (node.style.muted) a.push(`opacity="${tokens.mutedOpacity}"`);
   if (node.style.sub)
     a.push(`baseline-shift="sub" font-size="${tokens.subFontSize}"`);
   if (node.style.sup)

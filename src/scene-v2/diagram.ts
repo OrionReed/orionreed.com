@@ -3,12 +3,28 @@
 // rebuild, no `render()` hook.
 
 import { Anim } from "./anim";
+import { observedAttributesOf } from "./attr";
 import { makeScene, type Scene } from "./scene";
 import { Shape, SVG_NS } from "./shape";
+import { ensureArrowMarker } from "./shapes/connect";
 
 export const css = String.raw;
 
 export class Diagram extends HTMLElement {
+  static get observedAttributes(): string[] {
+    return observedAttributesOf(this);
+  }
+
+  attributeChangedCallback(_name: string, oldVal: string | null, newVal: string | null): void {
+    if (oldVal === newVal) return;
+    if (this.isConnected && this.svg) {
+      // Re-run setup with new attribute values. Subclasses that want
+      // finer-grained reactivity can override this.
+      this.disconnectedCallback();
+      this.connectedCallback();
+    }
+  }
+
   protected shadow: ShadowRoot;
   protected anim = new Anim();
   protected svg!: SVGSVGElement;
@@ -51,8 +67,11 @@ export class Diagram extends HTMLElement {
     if (!this.svg) this.mountSvg();
     const root = new Shape();
     this.svg.replaceChildren(root.el);
+    ensureArrowMarker(this.svg);
     this.scene = makeScene(this.svg, root);
     this.setup(this.scene);
+    // Default to auto-fit if the subclass didn't set a viewBox explicitly.
+    if (this.scene._viewPending) this.scene.fit();
   }
 
   disconnectedCallback(): void {

@@ -50,6 +50,16 @@ export class Point {
     );
   }
 
+  /** Point at radius `r` and angle `θ` (radians, y-down) from `c`. */
+  static polar(c: Point, r: Arg<number>, angle: Arg<number>): Point {
+    const rFn = read(r);
+    const aFn = read(angle);
+    return new Point(
+      () => c.x() + rFn() * Math.cos(aFn()),
+      () => c.y() + rFn() * Math.sin(aFn()),
+    );
+  }
+
   offset(dx: Arg<number>, dy: Arg<number>): Point {
     const dxFn = read(dx);
     const dyFn = read(dy);

@@ -2,7 +2,8 @@ import { Shape } from "../shape";
 import { Point } from "../point";
 import { aabb } from "../bounds";
 import { computed, type Arg } from "../signal";
-import { applyOpts, type CommonOpts } from "./common";
+import type { Segment } from "../dashed";
+import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface LineOpts extends CommonOpts {}
 
@@ -12,8 +13,9 @@ export class Line extends Shape {
     readonly to: Point,
     opts: LineOpts = {},
   ) {
+    const dashed = opts.dashed ?? false;
     super(
-      "line",
+      dashed ? "path" : "line",
       () => {
         const a = from.value;
         const b = to.value;
@@ -26,11 +28,14 @@ export class Line extends Shape {
       },
       opts,
     );
-    this.attr("x1", from.x);
-    this.attr("y1", from.y);
-    this.attr("x2", to.x);
-    this.attr("y2", to.y);
+    if (!dashed) {
+      this.attr("x1", from.x);
+      this.attr("y1", from.y);
+      this.attr("x2", to.x);
+      this.attr("y2", to.y);
+    }
     this.attr("stroke-linecap", opts.cap ?? "round");
+    setupDashed(this, opts, false);
     applyOpts(this, opts);
   }
 
@@ -67,6 +72,10 @@ export class Line extends Shape {
       return da <= db ? a : b;
     });
     return new Point(() => which.value.x, () => which.value.y);
+  }
+
+  override segments(): Segment[] {
+    return [{ type: "line", from: this.from, to: this.to }];
   }
 }
 
