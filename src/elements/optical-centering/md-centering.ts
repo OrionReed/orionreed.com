@@ -130,17 +130,17 @@ export class MdCentering extends Diagram {
         (g) => (g.opacity.value = 0),
       );
 
-      yield* lineT.to(1, 1100, easeOut);
-      yield 240;
-      yield* xLabels.opacity.to(1, 450);
-      yield 720;
-      yield* morphT.to(1, 1200, easeInOut);
-      yield 240;
-      yield* yLabels.opacity.to(1, 450);
-      yield 240;
-      yield* boxGroup.opacity.to(1, 600);
-      yield* centroidGroup.opacity.to(1, 500);
-      yield 4500;
+      yield* lineT.to(1, 1.1, easeOut);
+      yield 0.24;
+      yield* xLabels.opacity.to(1, 0.45);
+      yield 0.72;
+      yield* morphT.to(1, 1.2, easeInOut);
+      yield 0.24;
+      yield* yLabels.opacity.to(1, 0.45);
+      yield 0.24;
+      yield* boxGroup.opacity.to(1, 0.6);
+      yield* centroidGroup.opacity.to(1, 0.5);
+      yield 4.5;
     });
   }
 }

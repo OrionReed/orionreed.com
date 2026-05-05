@@ -24,13 +24,13 @@ const RING_WIDTH_RATIO = 0.2;
 const TAU = Math.PI * 2;
 
 const T = {
-  broadcastStep: 80,
-  beforeFlood: 800,
-  floodCellStep: 25,
-  afterFlood: 1000,
-  betweenCycles: 2000,
-  beforeReset: 1000,
-  betweenFullCycles: 3000,
+  broadcastStep: 0.08,
+  beforeFlood: 0.8,
+  floodCellStep: 0.025,
+  afterFlood: 1,
+  betweenCycles: 2,
+  beforeReset: 1,
+  betweenFullCycles: 3,
 };
 
 export class MdQrtpProtocol extends Diagram {

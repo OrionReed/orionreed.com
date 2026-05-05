@@ -28,7 +28,7 @@ export class MdLubyTransform extends Diagram {
     const N = isMobile ? 7 : 10;
     const view = s.view(0, 0, W, 200);
 
-    const tick = this.anim.pulse(500);
+    const tick = this.anim.pulse(0.5);
     const cells = computed(() => {
       tick.value;
       return R.bools(QR_GRID * QR_GRID);

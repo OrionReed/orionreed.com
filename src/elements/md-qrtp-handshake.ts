@@ -142,18 +142,18 @@ export class MdQrtpHandshake extends Diagram {
       for (let i = 0; i < N; i++) {
         const [first, second] = R.shuffle(["A", "B"] as const);
 
-        yield R.float(500, 2500);
+        yield R.float(0.5, 2.5);
         addAck(first, i, R.hex(3));
 
-        yield R.float(300, 1300);
+        yield R.float(0.3, 1.3);
         addAck(second, i, R.hex(3));
         advance(second, i);
 
-        yield R.float(200, 700);
+        yield R.float(0.2, 0.7);
         advance(first, i);
       }
 
-      yield 3000;
+      yield 3;
     });
   }
 }

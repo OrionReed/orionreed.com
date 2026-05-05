@@ -1,13 +1,13 @@
-// `Signal.prototype.to(target, ms, ease?)` — the headline animation
+// `Signal.prototype.to(target, sec, ease?)` — the headline animation
 // entry point. Augments `@preact/signals-core`'s Signal class so any
 // numeric or vector signal animates with one method call:
 //
-//   yield* sig.to(target, ms)
-//   yield* sig.to(t1, ms).to(t2, ms)        // sequential, single yield*
-//   yield bDots.map(d => d.opacity.to(0, 400))   // parallel via array
+//   yield* sig.to(target, 0.4)
+//   yield* sig.to(t1, 1).to(t2, 1)              // sequential
+//   yield bDots.map(d => d.opacity.to(0, 0.4))  // parallel via array
 //
-// Subsumes the old `tween`/`fadeIn`/`fadeOut` helpers — `fadeIn(s, ms)`
-// is just `s.opacity.to(1, ms)`.
+// Times are seconds. The runner (anim.ts) converts to ms at the
+// browser interop boundary; users never see ms.
 
 import { Signal } from "@preact/signals-core";
 import type { Animator, Yieldable } from "./anim";
@@ -36,7 +36,7 @@ function lerp<T extends Lerpable>(a: T, b: T, t: number): T {
 
 interface Step<T> {
   target: T;
-  ms: number;
+  sec: number;
   ease?: Easing;
 }
 
@@ -55,8 +55,8 @@ export class TweenChain<T extends Lerpable>
   ) {}
 
   /** Append another tween step on the same signal. */
-  to(target: T, ms: number, ease?: Easing): TweenChain<T> {
-    return new TweenChain(this.sig, [...this.steps, { target, ms, ease }]);
+  to(target: T, sec: number, ease?: Easing): TweenChain<T> {
+    return new TweenChain(this.sig, [...this.steps, { target, sec, ease }]);
   }
 
   /** Repeat the current sequence `n` times. */
@@ -68,7 +68,7 @@ export class TweenChain<T extends Lerpable>
 
   private *run(): Generator<Yieldable, void, number> {
     for (const step of this.steps) {
-      yield* tweenStep(this.sig, step.target, step.ms, step.ease);
+      yield* tweenStep(this.sig, step.target, step.sec, step.ease);
     }
   }
 
@@ -94,15 +94,15 @@ export class TweenChain<T extends Lerpable>
 function* tweenStep<T extends Lerpable>(
   sig: Signal<T>,
   target: T,
-  ms: number,
+  sec: number,
   ease: Easing = easeOut,
 ): Animator {
   const start = sig.peek();
   let elapsed = 0;
-  while (elapsed < ms) {
+  while (elapsed < sec) {
     const dt: number = yield;
     elapsed += dt;
-    const t = Math.min(elapsed / ms, 1);
+    const t = Math.min(elapsed / sec, 1);
     sig.value = lerp(start, target, ease(t));
   }
   sig.value = target;
@@ -112,18 +112,18 @@ function* tweenStep<T extends Lerpable>(
 
 declare module "@preact/signals-core" {
   interface Signal<T> {
-    to(this: Signal<number>, target: number, ms: number, ease?: Easing): TweenChain<number>;
-    to(this: Signal<Vec>, target: Vec, ms: number, ease?: Easing): TweenChain<Vec>;
+    to(this: Signal<number>, target: number, sec: number, ease?: Easing): TweenChain<number>;
+    to(this: Signal<Vec>, target: Vec, sec: number, ease?: Easing): TweenChain<Vec>;
   }
 }
 
 (Signal.prototype as unknown as {
-  to: <T extends Lerpable>(target: T, ms: number, ease?: Easing) => TweenChain<T>;
+  to: <T extends Lerpable>(target: T, sec: number, ease?: Easing) => TweenChain<T>;
 }).to = function <T extends Lerpable>(
   this: Signal<T>,
   target: T,
-  ms: number,
+  sec: number,
   ease?: Easing,
 ): TweenChain<T> {
-  return new TweenChain(this, [{ target, ms, ease }]);
+  return new TweenChain(this, [{ target, sec, ease }]);
 };

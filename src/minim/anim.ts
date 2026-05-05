@@ -1,6 +1,11 @@
-// Generator-driven animation runner. An Animator yields per frame and
-// receives `dt` back. Yieldable: undefined (one frame), number (pause
-// ms), Animator (delegate), or array (parallel).
+// Generator-driven animation runner.
+//
+// Time is in seconds at the public/yield boundary; the runner converts
+// to ms for browser interop. An Animator:
+//   - yields undefined → wait one frame, receives `dt` (seconds) back.
+//   - yields a number  → pause that many seconds.
+//   - yields an Animator → delegate.
+//   - yields an array  → run all in parallel.
 
 import { signal, type Signal } from "./signal";
 
@@ -97,12 +102,12 @@ export class Anim {
     }
   }
 
-  /** Run `fn` every `ms` (after each interval). Convenience over
-   *  `this.loop(function*() { fn(); yield ms })`. */
-  every(ms: number, fn: () => void): Promise<void> {
+  /** Run `fn` every `sec` seconds (after each interval). Convenience
+   *  over `this.loop(function*() { fn(); yield sec })`. */
+  every(sec: number, fn: () => void): Promise<void> {
     return this.loop(function* () {
       fn();
-      yield ms;
+      yield sec;
     });
   }
 
@@ -121,13 +126,15 @@ export class Anim {
       const v = result.value;
 
       if (typeof v === "number") {
-        if (v > 0) await this.wait(v);
+        // Numeric yield is seconds — convert to ms for setTimeout.
+        if (v > 0) await this.wait(v * 1000);
         result = gen.next(0);
         lastTime = performance.now();
       } else if (v === undefined) {
         await this.frame();
         const now = performance.now();
-        const dt = now - lastTime;
+        // dt to generators is seconds.
+        const dt = (now - lastTime) / 1000;
         lastTime = now;
         result = gen.next(dt);
       } else if (Array.isArray(v)) {
@@ -144,7 +151,7 @@ export class Anim {
 
   private async dispatchItem(v: Yieldable): Promise<void> {
     if (typeof v === "number") {
-      if (v > 0) await this.wait(v);
+      if (v > 0) await this.wait(v * 1000);
     } else if (v === undefined) {
       await this.frame();
     } else if (Array.isArray(v)) {
@@ -161,11 +168,11 @@ export class Anim {
     return child;
   }
 
-  /** Periodic tick signal — increments every `ms`. Stops with this Anim. */
-  pulse(ms: number): Signal<number> {
+  /** Periodic tick signal — increments every `sec` seconds. Stops with this Anim. */
+  pulse(sec: number): Signal<number> {
     const sig = signal(0);
     this.loop(function* () {
-      yield ms;
+      yield sec;
       sig.value = sig.peek() + 1;
     });
     return sig;

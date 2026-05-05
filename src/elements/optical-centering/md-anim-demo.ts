@@ -29,7 +29,8 @@ function* springTo(
   while (true) {
     const dt: number = yield;
     const dx = target.value - sig.value;
-    v = (v + dx * k * (dt / 16)) * damping;
+    // dt is in seconds; *60 normalizes to "frame fraction" at 60fps.
+    v = (v + dx * k * (dt * 60)) * damping;
     sig.value += v;
   }
 }
@@ -38,10 +39,10 @@ function* springTo(
 function* setTextFor(
   text: Signal<Content>,
   value: string,
-  ms: number,
+  sec: number,
 ): Animator {
   text.value = value;
-  yield ms;
+  yield sec;
 }
 
 export class MdAnimDemo extends Diagram {
@@ -62,7 +63,7 @@ export class MdAnimDemo extends Diagram {
     const aX = signal(60);
     s(circle(pt(aX, 35), 10, { fill: true }));
     this.anim.loop(function* () {
-      yield* aX.to(540, 1000, easeInOut).to(60, 1000, easeInOut);
+      yield* aX.to(540, 1, easeInOut).to(60, 1, easeInOut);
     });
 
     // ── Strip B: lag stagger + array sugar (parallel) ──────────────
@@ -71,10 +72,10 @@ export class MdAnimDemo extends Diagram {
       s(circle(pt(80 + i * 100, 105), 10, { fill: true, opacity: 0 })),
     );
     this.anim.loop(function* () {
-      yield* lag(120, ...bDots.map((d) => d.opacity.to(1, 400)));
-      yield 500;
-      yield bDots.map((d) => d.opacity.to(0, 400)); // array = parallel sugar
-      yield 300;
+      yield* lag(0.12, ...bDots.map((d) => d.opacity.to(1, 0.4)));
+      yield 0.5;
+      yield bDots.map((d) => d.opacity.to(0, 0.4)); // array = parallel sugar
+      yield 0.3;
     });
 
     // ── Strip C: spring follow (custom generator + concurrent loops) ─
@@ -85,7 +86,7 @@ export class MdAnimDemo extends Diagram {
     s(circle(pt(cFollower, 175), 14, { thin: true }));
     // Target oscillates on its own loop.
     this.anim.loop(function* () {
-      yield* cTarget.to(520, 1500, easeInOut).to(80, 1500, easeInOut);
+      yield* cTarget.to(520, 1.5, easeInOut).to(80, 1.5, easeInOut);
     });
     // Follower runs forever, never settles (target keeps moving).
     this.anim.loop(() => springTo(cFollower, cTarget));
@@ -96,10 +97,10 @@ export class MdAnimDemo extends Diagram {
     s(label(pt(300, 245), dText, { size: 14 }));
     this.anim.loop(function* () {
       yield* sequence(
-        setTextFor(dText, "one", 700),
-        setTextFor(dText, "two", 700),
-        setTextFor(dText, "three", 700),
-        setTextFor(dText, "...", 500),
+        setTextFor(dText, "one", 0.7),
+        setTextFor(dText, "two", 0.7),
+        setTextFor(dText, "three", 0.7),
+        setTextFor(dText, "...", 0.5),
       );
     });
   }

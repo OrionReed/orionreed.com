@@ -26,13 +26,13 @@ export function* sequence(...children: Animator[]): Animator {
   for (const c of children) yield* c;
 }
 
-/** Pause `ms` then run `c`. */
-export function* delay(ms: number, c: Animator): Animator {
-  if (ms > 0) yield ms;
+/** Pause `sec` seconds then run `c`. */
+export function* delay(sec: number, c: Animator): Animator {
+  if (sec > 0) yield sec;
   yield* c;
 }
 
-/** Parallel with staggered starts: `lag(100, a, b, c)` → 0, 100, 200ms. */
+/** Parallel with staggered starts: `lag(0.1, a, b, c)` → 0, 0.1, 0.2 seconds. */
 export function* lag(stagger: number, ...children: Animator[]): Animator {
   yield children.map((c, i) => delay(i * stagger, c));
 }
