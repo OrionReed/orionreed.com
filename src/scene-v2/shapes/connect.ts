@@ -8,6 +8,8 @@ import { tokens } from "../tokens";
 import { Line, type LineOpts } from "./line";
 
 const ARROW_ID = "scene-v2-arrow";
+const ARROW_W = 10;          // marker width — arrowhead extends this far past line end
+const ARROW_GAP_DEFAULT = 4; // standoff between visible line and source/target
 
 /** Draw a line between two shapes (or shape + point). When given a
  *  Shape endpoint, the line meets the shape's analytic boundary. */
@@ -22,29 +24,35 @@ export function connect(
 }
 
 export interface ArrowOpts extends LineOpts {
-  /** Pull endpoints in by `gap` units along the line direction so the
-   *  arrow's stroke doesn't touch the source/target shape strokes. */
+  /** Visible standoff between line and source/target. Treats Point
+   *  endpoints as zero-radius shapes (same gap applies). Default 4. */
   gap?: Arg<number>;
 }
 
-/** Connector with an arrowhead at the second endpoint. */
+/** Arrow from `a` to `b`: line with arrowhead at the `b` end. The tip
+ *  lands at `b`'s boundary (or at the Point), with `gap` standoff;
+ *  the line itself is shortened so the cap doesn't poke past the tip,
+ *  and the start gets a small optical compensation for the round cap
+ *  reading shorter than its mathematical extent. */
 export function arrow(
   a: Shape | Point,
   b: Shape | Point,
   opts: ArrowOpts = {},
 ): Line {
-  let aP = a instanceof Shape ? a.boundary(b instanceof Shape ? b.bounds.center : b) : a;
-  let bP = b instanceof Shape ? b.boundary(a instanceof Shape ? a.bounds.center : a) : b;
+  const aBase = a instanceof Shape ? a.boundary(b instanceof Shape ? b.bounds.center : b) : a;
+  const bBase = b instanceof Shape ? b.boundary(a instanceof Shape ? a.bounds.center : a) : b;
 
-  const gap = opts.gap;
-  if (gap !== undefined) {
-    const gapFn = read(gap);
-    const dir = bP.sub(aP).normalize();
-    const offA = dir.scale(gapFn);
-    const offB = dir.scale(() => -gapFn());
-    aP = aP.add(offA);
-    bP = bP.add(offB);
-  }
+  const gapFn = read(opts.gap ?? ARROW_GAP_DEFAULT);
+  const dir = bBase.sub(aBase).normalize();
+
+  // From: push start TOWARD target by gap + weight, so the visible
+  // (round-cap) edge sits gap-ish past the source perimeter. Using
+  // `weight` (not weight/2) overcorrects the round cap optically.
+  const aP = aBase.add(dir.scale(() => gapFn() + tokens.weight));
+  // To: pull end BACK toward source by gap + ARROW_W, so the marker
+  // tip (which extends ARROW_W past the line end) lands gap-ish before
+  // the target perimeter.
+  const bP = bBase.sub(dir.scale(() => gapFn() + ARROW_W));
 
   const line = new Line(aP, bP, opts);
   line.attr("marker-end", `url(#${ARROW_ID})`);

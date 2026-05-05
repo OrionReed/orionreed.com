@@ -1,8 +1,17 @@
-import { attr, css } from "./base-element";
-import { Padding, Scene, t, type Shape } from "./draw";
-import { down, pt, up } from "./geom";
+import {
+  Diagram,
+  Scene,
+  arrow,
+  attr,
+  label,
+  line,
+  pt,
+  rect,
+  signal,
+  t,
+  type Signal,
+} from "../scene-v2";
 import * as R from "./rand";
-import { SceneElement } from "./scene-element";
 
 interface ChunkState {
   data: string;
@@ -10,184 +19,129 @@ interface ChunkState {
   status: "future" | "current" | "past";
 }
 
-interface DeviceState {
-  chunks: ChunkState[];
+const CHUNK_W = 80;
+const CHUNK_H = 50;
+const CHUNK_GAP = 15;
+const DEVICE_GAP = 130;
+const PITCH = CHUNK_W + CHUNK_GAP;
+
+function initialChunks(prefix: string, n: number): ChunkState[] {
+  return Array.from({ length: n }, (_, i) => ({
+    data: `${prefix}${i + 1}`,
+    ack: "",
+    status: i === 0 ? "current" : "future",
+  }));
 }
 
-interface Arrow {
-  fromDevice: "A" | "B";
-  toDevice: "A" | "B";
-  fromChunk: number;
-  toChunk: number;
-  hash: string;
-}
-
-export class MdQrtpHandshake extends SceneElement {
+export class MdQrtpHandshake extends Diagram {
   @attr({ type: "number" }) chunks?: number;
-  @attr({ type: "number" }) speed?: number;
 
-  private deviceA: DeviceState = { chunks: [] };
-  private deviceB: DeviceState = { chunks: [] };
-  private arrows: Arrow[] = [];
+  protected setup(s: Scene): void {
+    const N = this.chunks ?? 4;
+    const W = N * PITCH - CHUNK_GAP;
+    const H = CHUNK_H * 2 + DEVICE_GAP;
+    s.view(-40, -8, W + 50, H + 16);
 
-  static styles = css`
-    :host {
-      --scene-max-width: 600px;
-      margin: 2rem 0;
+    const chunksA = signal<ChunkState[]>(initialChunks("A", N));
+    const chunksB = signal<ChunkState[]>(initialChunks("B", N));
+    const arrowsAB = signal<string[]>(new Array(N).fill(""));
+    const arrowsBA = signal<string[]>(new Array(N).fill(""));
+
+    // Build one row of N chunks reading from `state`. Returns the
+    // [data, ack] bounds per chunk so arrows can land on them.
+    const buildRow = (state: Signal<ChunkState[]>, y: number) =>
+      Array.from({ length: N }, (_, i) => {
+        const x = i * PITCH;
+        const r = s(rect(x, y, CHUNK_W, CHUNK_H));
+        const [data, ack] = r.bounds.split("x", [3, 2]);
+        s(line(data.tr, data.br, { thin: true }));
+
+        // Dashed outline around the "current" chunk only — concentric
+        // expansion keeps the corner radius matching the inner rect.
+        s(r.expand(4, {
+          dashed: true,
+          cap: "round",
+          opacity: () => state.value[i].status === "current" ? 1 : 0,
+          aside: true,
+        }));
+
+        // Data slot: value (only when not future) + muted "data" tag below.
+        s(label(data.center.up(5), () => {
+          const c = state.value[i];
+          if (c.status === "future") return "";
+          return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
+        }));
+        s(label(data.center.down(8), t("data").muted(), { size: 12 }));
+
+        // Ack slot: hash (when set) + muted "ack" tag below.
+        s(label(ack.center.up(5), () => state.value[i].ack));
+        s(label(ack.center.down(8), t("ack").muted(), { size: 12 }));
+
+        return { data, ack };
+      });
+
+    const slotsA = buildRow(chunksA, 0);
+    const slotsB = buildRow(chunksB, CHUNK_H + DEVICE_GAP);
+
+    s(label(pt(-25, CHUNK_H / 2), t("A").bold(), { size: 18 }));
+    s(label(pt(-25, CHUNK_H + DEVICE_GAP + CHUNK_H / 2), t("B").bold(), { size: 18 }));
+
+    // 2N pre-built arrows (A→B and B→A per chunk index), gated by
+    // whether that ack has been sent.
+    for (let i = 0; i < N; i++) {
+      s(arrow(slotsA[i].ack.bottom, slotsB[i].data.top, {
+        opacity: () => arrowsAB.value[i] ? 1 : 0,
+      }));
+      s(arrow(slotsB[i].ack.top, slotsA[i].data.bottom, {
+        opacity: () => arrowsBA.value[i] ? 1 : 0,
+      }));
     }
-  `;
 
-  get totalChunks(): number {
-    return this.chunks || 4;
-  }
+    // ── Mutation helpers ────────────────────────────────────────────
 
-  get animationSpeed(): number {
-    return this.speed || 800;
-  }
-
-  private initDevices(): void {
-    this.deviceA.chunks = [];
-    this.deviceB.chunks = [];
-    this.arrows = [];
-
-    for (let i = 0; i < this.totalChunks; i++) {
-      this.deviceA.chunks.push({
-        data: `A${i + 1}`,
-        ack: "",
-        status: i === 0 ? "current" : "future",
-      });
-      this.deviceB.chunks.push({
-        data: `B${i + 1}`,
-        ack: "",
-        status: i === 0 ? "current" : "future",
-      });
-    }
-  }
-
-  private addAck(device: "A" | "B", other: "A" | "B", i: number): string {
-    const hash = R.hex(3);
-    const state = device === "A" ? this.deviceA : this.deviceB;
-    state.chunks[i].ack = hash;
-    this.arrows.push({
-      fromDevice: device,
-      toDevice: other,
-      fromChunk: i,
-      toChunk: i,
-      hash,
-    });
-    return hash;
-  }
-
-  private advance(device: "A" | "B", i: number): void {
-    const state = device === "A" ? this.deviceA : this.deviceB;
-    state.chunks[i].status = "past";
-    if (i + 1 < this.totalChunks) state.chunks[i + 1].status = "current";
-  }
-
-  connectedCallback(): void {
-    super.connectedCallback();
-
-    this.anim.loop(async () => {
-      this.initDevices();
-      this.render();
-
-      for (let i = 0; i < this.totalChunks; i++) {
-        const [first, second] = R.shuffle(["A", "B"] as const);
-
-        await this.anim.wait(() => R.float(500, 2500));
-        this.addAck(first, second, i);
-        this.render();
-
-        await this.anim.wait(() => R.float(300, 1300));
-        this.addAck(second, first, i);
-        this.advance(second, i);
-        this.render();
-
-        await this.anim.wait(() => R.float(200, 700));
-        this.advance(first, i);
-        this.render();
-      }
-
-      await this.anim.wait(3000);
-    });
-  }
-
-  protected scenePadding(): Padding {
-    return window.innerWidth < 768 ? 10 : 40;
-  }
-
-  protected draw(s: Scene): void {
-    if (!this.deviceA.chunks.length || !this.deviceB.chunks.length) return;
-
-    const chunkW = 80;
-    const chunkH = 50;
-    const chunkGap = 15;
-    const deviceGap = 130;
-    const pitch = chunkW + chunkGap;
-    const unitW = chunkW / 5;
-    const labelLift = 5;
-    const labelDrop = 8;
-
-    const rowAY = 0;
-    const rowBY = chunkH + deviceGap;
-
-    type SlotPair = { data: Shape; ack: Shape };
-    const slotsA: SlotPair[] = [];
-    const slotsB: SlotPair[] = [];
-
-    const drawChunk = (chunk: ChunkState, x: number, y: number): SlotPair => {
-      // 60/40 split: 3 units data + 2 units ack.
-      const chunkRow = s.row([{ units: 3 }, { units: 2 }], {
-        x,
-        y,
-        h: chunkH,
-        unitWidth: unitW,
-      });
-      const data = chunkRow.slot(0);
-      const ack = chunkRow.slot(1);
-
-      if (chunk.status === "current") {
-        // expand() preserves corner radius so the gap stays uniform.
-        s.rect(chunkRow.expand(4), { dashed: true, cap: "round" }).aside();
-      }
-
-      const dc = data.bounds.center;
-      const ac = ack.bounds.center;
-
-      if (chunk.status !== "future") {
-        s.label(
-          up(dc, labelLift),
-          t(t(chunk.data[0]).bold(), t(chunk.data.slice(1)).italic()),
-        );
-      }
-      s.label(down(dc, labelDrop), t("data").muted(), { size: 12 });
-
-      if (chunk.ack) s.label(up(ac, labelLift), chunk.ack);
-      s.label(down(ac, labelDrop), t("ack").muted(), { size: 12 });
-
-      return { data, ack };
+    const addAck = (device: "A" | "B", i: number, hash: string) => {
+      const sig = device === "A" ? chunksA : chunksB;
+      const arrSig = device === "A" ? arrowsAB : arrowsBA;
+      const next = [...sig.value];
+      next[i] = { ...next[i], ack: hash };
+      sig.value = next;
+      const a = [...arrSig.value];
+      a[i] = hash;
+      arrSig.value = a;
     };
 
-    this.deviceA.chunks.forEach((c, i) =>
-      slotsA.push(drawChunk(c, i * pitch, rowAY)),
-    );
-    this.deviceB.chunks.forEach((c, i) =>
-      slotsB.push(drawChunk(c, i * pitch, rowBY)),
-    );
+    const advance = (device: "A" | "B", i: number) => {
+      const sig = device === "A" ? chunksA : chunksB;
+      const next = [...sig.value];
+      next[i] = { ...next[i], status: "past" };
+      if (i + 1 < N) next[i + 1] = { ...next[i + 1], status: "current" };
+      sig.value = next;
+    };
 
-    s.label(pt(-25, rowAY + chunkH / 2), t("A").bold(), { size: 18 });
-    s.label(pt(-25, rowBY + chunkH / 2), t("B").bold(), { size: 18 });
+    // ── Animation ────────────────────────────────────────────────────
 
-    for (const arrow of this.arrows) {
-      const fromSlots = arrow.fromDevice === "A" ? slotsA : slotsB;
-      const toSlots = arrow.toDevice === "A" ? slotsA : slotsB;
-      const fromAck = fromSlots[arrow.fromChunk].ack;
-      const toData = toSlots[arrow.toChunk].data;
-      const fromEdge =
-        arrow.fromDevice === "A" ? fromAck.bounds.bottom : fromAck.bounds.top;
-      const toEdge =
-        arrow.toDevice === "A" ? toData.bounds.bottom : toData.bounds.top;
-      s.arrow(fromEdge, toEdge);
-    }
+    this.anim.loop(function* () {
+      // Reset for each cycle.
+      chunksA.value = initialChunks("A", N);
+      chunksB.value = initialChunks("B", N);
+      arrowsAB.value = new Array(N).fill("");
+      arrowsBA.value = new Array(N).fill("");
+
+      for (let i = 0; i < N; i++) {
+        const [first, second] = R.shuffle(["A", "B"] as const);
+
+        yield R.float(500, 2500);
+        addAck(first, i, R.hex(3));
+
+        yield R.float(300, 1300);
+        addAck(second, i, R.hex(3));
+        advance(second, i);
+
+        yield R.float(200, 700);
+        advance(first, i);
+      }
+
+      yield 3000;
+    });
   }
 }

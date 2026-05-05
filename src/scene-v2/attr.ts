@@ -8,11 +8,11 @@
 // `BaseElement` wire this up.
 
 export function attr(options: { type?: "string" | "number" | "boolean" } = {}) {
-  return function <T extends { constructor: { _attributes?: string[] } }>(
+  return function <T extends { constructor: unknown }>(
     target: T,
     propertyKey: string,
   ) {
-    const ctor = target.constructor;
+    const ctor = target.constructor as { _attributes?: string[] };
     if (!ctor._attributes) ctor._attributes = [];
     ctor._attributes.push(propertyKey);
 

@@ -1,6 +1,6 @@
 import { Shape } from "../shape";
 import { aabb, Bounds } from "../bounds";
-import { computed, unwrap, type Arg } from "../signal";
+import { computed, read, unwrap, type Arg } from "../signal";
 import { tokens } from "../tokens";
 import { Point } from "../point";
 import type { Segment } from "../dashed";
@@ -57,6 +57,24 @@ export class Rect extends Shape {
       return { x: cx + dx * k, y: cy + dy * k };
     });
     return new Point(() => proj.value.x, () => proj.value.y);
+  }
+
+  /** Concentric expansion: returns a new (unmounted) Rect inflated
+   *  by `by` on each side, with the corner radius adjusted by the
+   *  same amount so the outer curve stays parallel to the inner.
+   *  Useful for outlines: `s(r.expand(4, { dashed: true }))`.
+   *
+   *  Reactive in `this.x/y/w/h/corner` and `by`. Style opts override
+   *  defaults. */
+  expand(by: Arg<number>, opts?: RectOpts): Rect {
+    const byFn = read(by);
+    return new Rect(
+      () => unwrap(this.x) - byFn(),
+      () => unwrap(this.y) - byFn(),
+      () => unwrap(this.w) + 2 * byFn(),
+      () => unwrap(this.h) + 2 * byFn(),
+      { corner: () => unwrap(this.corner) + byFn(), ...opts },
+    );
   }
 
   /** Rounded-rect outline: 4 sides + 4 quarter-arcs at corners. */
