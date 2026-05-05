@@ -3,7 +3,6 @@ import {
   Scene,
   arrow,
   attr,
-  computed,
   label,
   line,
   pt,
@@ -63,26 +62,23 @@ export class MdQrtpHandshake extends Diagram {
           r.outline(4, {
             dashed: true,
             cap: "round",
-            opacity: computed(() => (state.value[i].status === "current" ? 1 : 0)),
+            opacity: () => (state.value[i].status === "current" ? 1 : 0),
             aside: true,
           }),
         );
 
         // Data slot: value (only when not future) + muted "data" tag below.
         s(
-          label(
-            data.center.up(5),
-            computed(() => {
-              const c = state.value[i];
-              if (c.status === "future") return "";
-              return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
-            }),
-          ),
+          label(data.center.up(5), () => {
+            const c = state.value[i];
+            if (c.status === "future") return "";
+            return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
+          }),
         );
         s(label(data.center.down(8), t("data").muted(), { size: 12 }));
 
         // Ack slot: hash (when set) + muted "ack" tag below.
-        s(label(ack.center.up(5), computed(() => state.value[i].ack)));
+        s(label(ack.center.up(5), () => state.value[i].ack));
         s(label(ack.center.down(8), t("ack").muted(), { size: 12 }));
 
         return { data, ack };
@@ -103,12 +99,12 @@ export class MdQrtpHandshake extends Diagram {
     for (let i = 0; i < N; i++) {
       s(
         arrow(slotsA[i].ack.bottom, slotsB[i].data.top, {
-          opacity: computed(() => (arrowsAB.value[i] ? 1 : 0)),
+          opacity: () => (arrowsAB.value[i] ? 1 : 0),
         }),
       );
       s(
         arrow(slotsB[i].ack.top, slotsA[i].data.bottom, {
-          opacity: computed(() => (arrowsBA.value[i] ? 1 : 0)),
+          opacity: () => (arrowsBA.value[i] ? 1 : 0),
         }),
       );
     }

@@ -71,7 +71,7 @@ export class MdCentering extends Diagram {
     F.forEach((f) =>
       s(
         tick(xAxis, f, 7, {
-          opacity: computed(() => clamp01((lineT.value - f) / 0.06)),
+          opacity: () => clamp01((lineT.value - f) / 0.06),
         }),
       ),
     );
@@ -108,8 +108,8 @@ export class MdCentering extends Diagram {
       rect(
         xMin.x,
         yMax.y,
-        computed(() => xMax.x.value - xMin.x.value),
-        computed(() => yMin.y.value - yMax.y.value),
+        () => xMax.x.value - xMin.x.value,
+        () => yMin.y.value - yMax.y.value,
         { thin: true, corner: 4, opacity: 0.5 },
       ),
       line(xMid, c, { thin: true, dashed: true, opacity: 0.6 }),

@@ -11,13 +11,13 @@ export {
   type ReadonlySignal,
 } from "@preact/signals-core";
 
-import { signal, Signal } from "@preact/signals-core";
+import { signal, computed, Signal } from "@preact/signals-core";
 import type { ReadonlySignal } from "@preact/signals-core";
 
-/** A value that may be plain or a Signal/ReadonlySignal. For derived
- *  inputs, wrap in `computed(() => ...)` — that's the one canonical
- *  way to declare reactive derivation. */
-export type Arg<T> = T | Signal<T> | ReadonlySignal<T>;
+/** A value that may be plain, a Signal/ReadonlySignal, or a thunk
+ *  `() => T` (treated as `computed(() => ...)` — exact parity at the
+ *  reactivity level, just shorter at the call site). */
+export type Arg<T> = T | Signal<T> | ReadonlySignal<T> | (() => T);
 
 type ReadOrWrite<T> = Signal<T> | ReadonlySignal<T>;
 
@@ -29,10 +29,12 @@ function isSig<T>(v: Arg<T>): v is ReadOrWrite<T> {
 }
 
 /** Resolve an `Arg<T>` to a Signal. Signal/ReadonlySignal returned
- *  as-is (caller owns the source of truth). Plain value is wrapped
- *  in a fresh writable signal. */
+ *  as-is (caller owns the source of truth). Thunk wrapped in `computed`.
+ *  Plain value wrapped in a fresh writable signal. */
 export function toSig<T>(arg: Arg<T>): ReadOrWrite<T> {
-  return isSig(arg) ? arg : signal(arg);
+  if (isSig(arg)) return arg;
+  if (typeof arg === "function") return computed(arg as () => T);
+  return signal(arg);
 }
 
 /** Like `toSig`, but with a default for `undefined` inputs. Used by
@@ -40,5 +42,6 @@ export function toSig<T>(arg: Arg<T>): ReadOrWrite<T> {
 export function bindArg<T>(arg: Arg<T> | undefined, defaultValue: T): Signal<T> {
   if (arg === undefined) return signal(defaultValue);
   if (isSig(arg)) return arg as Signal<T>;
+  if (typeof arg === "function") return computed(arg as () => T) as Signal<T>;
   return signal(arg);
 }
