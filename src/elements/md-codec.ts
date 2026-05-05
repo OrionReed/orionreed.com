@@ -88,10 +88,10 @@ export class MdCodec extends Diagram {
       const leader = path(slot.top).up(VERT_H).along(LEADER_ANGLE, DIAG_D);
       s(new Path(leader, { thin: true }));
       s(
-        label(leader.tip.position, t(part.label).bold(), {
+        label(leader.at(1), t(part.label).bold(), {
           size: LABEL_SIZE,
           anchor: Pivot.LEFT,
-          rotate: leader.tip.angle,
+          rotate: leader.angleAt(1),
         }),
       );
     });

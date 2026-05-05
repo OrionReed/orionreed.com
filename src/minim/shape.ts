@@ -4,7 +4,9 @@ import {
   effect,
   signal,
   Signal,
+  toSig,
   type Arg,
+  type ReadonlySignal,
 } from "./signal";
 import {
   Bounds,
@@ -53,8 +55,13 @@ export class Shape {
   readonly aside: boolean;
 
   protected disposers: (() => void)[] = [];
-  private children: Shape[] = [];
-  private childrenVersion = signal(0);
+
+  /** Reactive list of children. External code can subscribe to
+   *  structural changes; internal mutation goes through `add`/`remove`/
+   *  `clear`. The list is updated immutably (each mutation writes a new
+   *  array) so reads track via the standard Signal contract. */
+  private readonly _children = signal<readonly Shape[]>([]);
+  readonly children: ReadonlySignal<readonly Shape[]> = this._children;
 
   constructor(
     intrinsicType?: string,
@@ -75,13 +82,14 @@ export class Shape {
     this.aside = opts.aside ?? false;
 
     // Bounds: explicit fn from a subclass, else union of non-aside
-    // children — aside shapes don't contribute to layout/fit.
+    // children — aside shapes don't contribute to layout/fit. Reading
+    // `_children.value` tracks structural changes; reading each child's
+    // `bounds.value` tracks per-child reactivity.
     this.bounds = new Bounds(
       computed(
         boundsFn ??
           (() => {
-            this.childrenVersion.value;
-            const bs = this.children
+            const bs = this._children.value
               .filter((c) => !c.aside)
               .map((c) => c.bounds.value);
             return bs.length ? unionAABB(...bs) : aabb(0, 0, 0, 0);
@@ -137,8 +145,8 @@ export class Shape {
     ];
   }
 
-  /** Bind one SVG attribute. Static value sets once; Signal sets up a
-   *  reactive effect. For derived attrs, pass `computed(() => ...)`. */
+  /** Bind one SVG attribute. Static value sets once; Signal or thunk
+   *  sets up a reactive effect. */
   attr(
     name: string,
     value: Arg<string | number>,
@@ -146,9 +154,10 @@ export class Shape {
   ): void {
     const el =
       target === "intrinsic" && this.intrinsic ? this.intrinsic : this.el;
-    if (value instanceof Signal) {
+    if (value instanceof Signal || typeof value === "function") {
+      const sig = toSig(value);
       this.disposers.push(
-        effect(() => el.setAttribute(name, String(value.value))),
+        effect(() => el.setAttribute(name, String(sig.value))),
       );
     } else {
       el.setAttribute(name, String(value));
@@ -168,35 +177,36 @@ export class Shape {
   add<T extends Shape>(child: T): T;
   add<T extends Shape[]>(...children: T): T;
   add(...children: Shape[]): Shape | Shape[] {
-    for (const child of children) {
-      this.children.push(child);
-      this.el.appendChild(child.el);
+    for (const child of children) this.el.appendChild(child.el);
+    if (children.length > 0) {
+      this._children.value = [...this._children.peek(), ...children];
     }
-    if (children.length > 0) this.childrenVersion.value += 1;
     return children.length === 1 ? children[0] : children;
   }
 
   remove(...toRemove: Shape[]): void {
-    let changed = false;
-    for (const child of toRemove) {
-      const i = this.children.indexOf(child);
-      if (i < 0) continue;
-      this.children.splice(i, 1);
-      child.dispose();
-      changed = true;
+    if (toRemove.length === 0) return;
+    const removeSet = new Set<Shape>(toRemove);
+    const next: Shape[] = [];
+    for (const c of this._children.peek()) {
+      if (removeSet.has(c)) c.dispose();
+      else next.push(c);
     }
-    if (changed) this.childrenVersion.value += 1;
+    if (next.length !== this._children.peek().length) {
+      this._children.value = next;
+    }
   }
 
   clear(): void {
-    this.children.forEach((c) => c.dispose());
-    this.children = [];
-    this.childrenVersion.value += 1;
+    const cs = this._children.peek();
+    if (cs.length === 0) return;
+    cs.forEach((c) => c.dispose());
+    this._children.value = [];
   }
 
   dispose(): void {
-    this.children.forEach((c) => c.dispose());
-    this.children = [];
+    this._children.peek().forEach((c) => c.dispose());
+    this._children.value = [];
     this.disposers.forEach((d) => d());
     this.disposers = [];
     this.el.remove();

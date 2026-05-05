@@ -12,7 +12,6 @@ export {
 export { type Arg, bindArg } from "./signal";
 
 export { Point, pt } from "./point";
-export { Heading, heading } from "./heading";
 
 export {
   Bounds,
