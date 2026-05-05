@@ -1,7 +1,15 @@
-import { attr, css } from "./base-element";
-import { Padding, Scene, t, type RowItem } from "./draw";
-import { deg, path } from "./geom";
-import { SceneElement } from "./scene-element";
+import {
+  Diagram,
+  Path,
+  Pivot,
+  Scene,
+  attr,
+  label,
+  line,
+  path,
+  rect,
+  t,
+} from "../scene-v2";
 
 interface CodecPart {
   label: string;
@@ -15,105 +23,77 @@ const DIAG_D = 14;
 const TOTAL_W = 400;
 const CELL_H = 64;
 const CHAR_FACTOR = 0.55;
-const LEADER_ANGLE = deg(-45);
+const LEADER_ANGLE = -Math.PI / 4;
 
-export class MdCodec extends SceneElement {
+function parseContent(text: string): CodecPart[] {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  return lines.map((raw): CodecPart => {
+    const colon = raw.indexOf(":");
+    if (colon === -1) return { label: raw, unitSize: 1 };
+    const lbl = raw.slice(0, colon).trim();
+    const rest = raw.slice(colon + 1).trim();
+    if (!rest) return { label: lbl, unitSize: 1 };
+    const m = rest.match(
+      /^(?:(\d+)\s+([a-zA-Z])|([a-zA-Z])\s+(\d+)|(\d+)|([a-zA-Z]))$/,
+    );
+    if (!m) return { label: lbl, unitSize: 1 };
+    const [, s1, g1, g2, s2, sOnly, gOnly] = m;
+    const unitSize = parseInt(s1 || s2 || sOnly || "1", 10);
+    const group = g1 || g2 || gOnly || undefined;
+    return { label: lbl, unitSize, group };
+  });
+}
+
+export class MdCodec extends Diagram {
   @attr() width?: string;
 
-  static styles = css`
-    :host {
-      --scene-max-width: 100%;
-    }
-  `;
-
-  private parts: CodecPart[] = [];
-
-  private parseContent(): CodecPart[] {
-    const lines = (this.textContent?.trim() || "")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    return lines.map((line) => {
-      const colonIndex = line.indexOf(":");
-      if (colonIndex === -1) return { label: line, unitSize: 1 };
-
-      const label = line.slice(0, colonIndex).trim();
-      const rest = line.slice(colonIndex + 1).trim();
-      if (!rest) return { label, unitSize: 1 };
-
-      const match = rest.match(
-        /^(?:(\d+)\s+([a-zA-Z])|([a-zA-Z])\s+(\d+)|(\d+)|([a-zA-Z]))$/,
-      );
-      if (!match) return { label, unitSize: 1 };
-
-      const [, size1, group1, group2, size2, sizeOnly, groupOnly] = match;
-      const unitSize = parseInt(size1 || size2 || sizeOnly || "1", 10);
-      const group = group1 || group2 || groupOnly || undefined;
-      return { label, unitSize, group };
-    });
-  }
-
-  protected render(): void {
-    this.parts = this.parseContent();
+  protected setup(s: Scene): void {
     if (this.width) this.style.setProperty("--scene-max-width", this.width);
-    super.render();
-  }
 
-  protected scenePadding(): Padding {
-    // Room for the leader + rotated label height (~length × cw / √2).
-    const longestLabel = this.parts.reduce(
-      (m, p) => Math.max(m, p.label.length),
-      0,
-    );
-    const top =
-      VERT_H +
-      DIAG_D +
-      Math.ceil(longestLabel * LABEL_SIZE * CHAR_FACTOR * 0.71) +
-      12;
-    return { top, bottom: 4, left: 4, right: 4 };
-  }
+    const parts = parseContent(this.textContent?.trim() ?? "");
+    if (parts.length === 0) return;
 
-  protected draw(s: Scene): void {
-    if (this.parts.length === 0) return;
-
-    // Dashed divider when the next part shares this part's group.
-    const items = this.parts.map((p, i): RowItem => {
-      const next = this.parts[i + 1];
-      const sameGroup =
-        next && p.group !== undefined && p.group === next.group;
-      return {
-        units: p.unitSize,
-        divider: sameGroup ? "dashed" : "solid",
-      };
-    });
-
-    const row = s.row(items, { x: 0, y: 0, h: CELL_H, width: TOTAL_W });
     const charWidth = LABEL_SIZE * CHAR_FACTOR;
 
-    this.parts.forEach((part, i) => {
-      const slot = row.slot(i);
+    const row = s(rect(0, 0, TOTAL_W, CELL_H));
+    const slots = row.bounds.split(
+      "x",
+      parts.map((p) => p.unitSize),
+    );
+
+    // Dividers between adjacent slots — dashed when the two parts share
+    // a group (visual grouping), solid otherwise.
+    parts.forEach((part, i) => {
+      if (i === parts.length - 1) return;
+      const next = parts[i + 1];
+      const sameGroup = part.group !== undefined && part.group === next.group;
+      s(line(slots[i].tr, slots[i].br, { thin: true, dashed: sameGroup }));
+    });
+
+    // Labels: inside the slot when they fit, otherwise on a leader path
+    // angled out of the slot's top edge with the label rotated to match.
+    parts.forEach((part, i) => {
+      const slot = slots[i];
       const labelW = part.label.length * charWidth;
-      const fitsInside = labelW + 16 < slot.bounds.w;
+      const fitsInside = labelW + 16 < slot.w();
 
       if (fitsInside) {
-        s.label(slot.bounds.center, t(part.label).bold(), {
-          size: LABEL_SIZE,
-          baseline: "middle",
-        });
-      } else {
-        // Leader's tip is a Heading, so label rotation is auto-sourced.
-        const leader = path(slot.bounds.top)
-          .up(VERT_H)
-          .along(LEADER_ANGLE, DIAG_D);
-
-        s.polyline(leader, { thin: true });
-        s.label(leader.tip, t(part.label).bold(), {
-          size: LABEL_SIZE,
-          anchor: "start",
-          baseline: "middle",
-        });
+        s(label(slot.center, t(part.label).bold(), { size: LABEL_SIZE }));
+        return;
       }
+
+      const leader = path(slot.top).up(VERT_H).along(LEADER_ANGLE, DIAG_D);
+      s(new Path(leader, { thin: true }));
+      s(
+        label(leader.tip.position, t(part.label).bold(), {
+          size: LABEL_SIZE,
+          anchor: Pivot.LEFT,
+          rotate: leader.tip.angle,
+        }),
+      );
     });
   }
 }

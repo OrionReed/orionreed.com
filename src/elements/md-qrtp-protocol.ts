@@ -1,9 +1,20 @@
-import { attr, css } from "./base-element";
+import {
+  Diagram,
+  Point,
+  Scene,
+  annularSector,
+  attr,
+  circle,
+  computed,
+  label,
+  line,
+  pt,
+  signal,
+  untilSig,
+  type Animator,
+} from "../scene-v2";
 import { grey, ink, stroke } from "./color";
-import type { Fill, Padding, Scene } from "./draw";
-import { polar, pt } from "./geom";
 import * as R from "./rand";
-import { SceneElement } from "./scene-element";
 
 type CellState = "received" | "retransmit" | "acknowledged";
 
@@ -22,195 +33,182 @@ const T = {
   betweenFullCycles: 3000,
 };
 
-export class MdQrtpProtocol extends SceneElement {
+export class MdQrtpProtocol extends Diagram {
   @attr({ type: "number" }) cells?: number;
   @attr({ type: "boolean" }) backchannel?: boolean;
 
-  private floodAnim = this.anim.scope();
-  private cellState = new Map<number, CellState>();
-  // Transient overlay (e.g. flood-fill blue) that wins over state-based fills.
-  private cellOverrides = new Map<number, Fill>();
-  private broadcastIndex = 0;
-  private lastBroadcast = -1;
+  protected setup(s: Scene): void {
+    const N = this.cells ?? 60;
+    const backchannel = this.backchannel ?? false;
+    const labelText = this.textContent?.trim() ?? "";
 
-  static styles = css`
-    :host {
-      --scene-max-width: 320px;
-    }
-  `;
-
-  get cellCount(): number {
-    return this.cells ?? 60;
-  }
-
-  protected scenePadding(): Padding {
-    return 8;
-  }
-
-  private cellFill(i: number): Fill | undefined {
-    const override = this.cellOverrides.get(i);
-    if (override !== undefined) return override;
-    if (i === this.lastBroadcast) return `${stroke}`;
-    const state = this.cellState.get(i);
-    if (state === "received") return `${ink("green").mod(0.7)}`;
-    if (state === "retransmit") return `${ink("orange").mod(0.7)}`;
-    if (state === "acknowledged") return `${grey.mod(0.7)}`;
-    return undefined;
-  }
-
-  private reset(): void {
-    this.cellState.clear();
-    this.cellOverrides.clear();
-    this.broadcastIndex = 0;
-    this.lastBroadcast = -1;
-  }
-
-  private cellsWithState(state: CellState): number[] {
-    const result: number[] = [];
-    for (const [i, s] of this.cellState) {
-      if (s === state) result.push(i);
-    }
-    return result;
-  }
-
-  private handleReception(i: number): void {
-    const state = this.cellState.get(i);
-    if (state === "received") {
-      if (R.chance(RECEIVE_CHANCE)) this.cellState.set(i, "retransmit");
-    } else if (state === undefined) {
-      if (R.chance(RECEIVE_CHANCE)) this.cellState.set(i, "received");
-    }
-  }
-
-  private buildComponents(): number[][] {
-    const visited = new Set<number>();
-    const components: number[][] = [];
-    const n = this.cellCount;
-    for (const seed of this.cellsWithState("retransmit")) {
-      if (visited.has(seed)) continue;
-      const component: number[] = [];
-      const queue = [seed];
-      while (queue.length > 0) {
-        const cell = queue.shift()!;
-        if (visited.has(cell)) continue;
-        visited.add(cell);
-        component.push(cell);
-        for (const neighbor of [(cell - 1 + n) % n, (cell + 1) % n]) {
-          // Flood crosses any received-once neighbor (incl. acknowledged).
-          if (!visited.has(neighbor) && this.cellState.has(neighbor)) {
-            queue.push(neighbor);
-          }
-        }
-      }
-      if (component.length > 0) components.push(component);
-    }
-    return components;
-  }
-
-  private async doFloodFill(): Promise<void> {
-    const components = this.buildComponents();
-    const flood = `${ink("blue").mod(0.7)}`;
-
-    for (const component of components) {
-      for (const cell of component) {
-        if (cell !== this.lastBroadcast) {
-          this.cellOverrides.set(cell, flood);
-          this.render();
-        }
-        await this.floodAnim.wait(T.floodCellStep);
-      }
-    }
-
-    await this.floodAnim.wait(T.afterFlood);
-
-    for (const cell of this.cellsWithState("retransmit")) {
-      this.cellState.set(cell, "received");
-    }
-
-    if (this.backchannel) {
-      for (const component of components) {
-        for (const cell of component) {
-          this.cellState.set(cell, "acknowledged");
-        }
-      }
-    }
-
-    this.cellOverrides.clear();
-    this.render();
-  }
-
-  private startFloodFillLoop(): void {
-    this.floodAnim = this.anim.scope();
-    this.floodAnim.loop(async () => {
-      await this.floodAnim.until(
-        () => this.cellsWithState("retransmit").length > 0,
-      );
-      await this.floodAnim.wait(T.beforeFlood);
-      await this.doFloodFill();
-      await this.floodAnim.wait(T.betweenCycles);
-    });
-  }
-
-  protected draw(s: Scene): void {
-    const cx = RING_OUTER;
-    const cy = RING_OUTER;
     const rOut = RING_OUTER;
     const rIn = rOut * (1 - RING_WIDTH_RATIO);
-    const N = this.cellCount;
     const start = -Math.PI / 2;
 
-    // Fills first so the outline strokes paint over their edges.
+    s.view(0, 0, rOut * 2, rOut * 2);
+    const center = pt(rOut, rOut);
+
+    // ── State ───────────────────────────────────────────────────────
+
+    const cellState = signal<Map<number, CellState>>(new Map());
+    const cellOverrides = signal<Map<number, string>>(new Map());
+    const broadcastIndex = signal(0);
+    const lastBroadcast = signal(-1);
+
+    // Per-cell color: override > broadcast highlight > state-based.
+    // Returns null when the cell should be invisible.
+    const cellColor = (i: number) => computed((): string | null => {
+      const ov = cellOverrides.value.get(i);
+      if (ov !== undefined) return ov;
+      if (i === lastBroadcast.value) return stroke.toString();
+      const st = cellState.value.get(i);
+      if (st === "received") return ink("green").mod(0.7).toString();
+      if (st === "retransmit") return ink("orange").mod(0.7).toString();
+      if (st === "acknowledged") return grey.mod(0.7).toString();
+      return null;
+    });
+    const colors = Array.from({ length: N }, (_, i) => cellColor(i));
+
+    // ── Render ──────────────────────────────────────────────────────
+
+    // Cell sectors first (filled), then outline circles + radial dividers
+    // on top so seams between sectors stay clean.
     for (let i = 0; i < N; i++) {
-      const fill = this.cellFill(i);
-      if (!fill) continue;
       const a0 = start + (i * TAU) / N;
       const a1 = a0 + TAU / N;
-      s.annularSector(cx, cy, rOut, rIn, a0, a1, { fill });
+      s(annularSector(center, rOut, rIn, a0, a1, {
+        stroke: "none",
+        fill: () => colors[i].value ?? "transparent",
+        opacity: () => colors[i].value === null ? 0 : 1,
+      }));
     }
 
-    s.circle(cx, cy, rOut, { thin: true });
-    s.circle(cx, cy, rIn, { thin: true });
-
+    s(circle(center, rOut, { thin: true }));
+    s(circle(center, rIn, { thin: true }));
     for (let i = 0; i < N; i++) {
       const a = start + (i * TAU) / N;
-      s.line(polar(cx, cy, rIn, a), polar(cx, cy, rOut, a), { thin: true });
+      s(line(Point.polar(center, rIn, a), Point.polar(center, rOut, a), { thin: true }));
     }
 
-    const label = this.textContent?.trim() ?? "";
-    if (label) s.label(pt(cx, cy), label, { bold: true });
-  }
+    if (labelText) s(label(center, labelText, { bold: true }));
 
-  connectedCallback(): void {
-    super.connectedCallback();
+    // ── Helpers ─────────────────────────────────────────────────────
 
-    this.reset();
-    if (this.backchannel) this.startFloodFillLoop();
+    const cellsWithState = (st: CellState): number[] => {
+      const out: number[] = [];
+      for (const [i, v] of cellState.peek()) if (v === st) out.push(i);
+      return out;
+    };
 
-    this.anim.loop(async () => {
+    const buildComponents = (): number[][] => {
+      const visited = new Set<number>();
+      const components: number[][] = [];
+      for (const seed of cellsWithState("retransmit")) {
+        if (visited.has(seed)) continue;
+        const component: number[] = [];
+        const queue = [seed];
+        while (queue.length > 0) {
+          const c = queue.shift()!;
+          if (visited.has(c)) continue;
+          visited.add(c);
+          component.push(c);
+          for (const nb of [(c - 1 + N) % N, (c + 1) % N]) {
+            // Flood crosses any received-once neighbor (incl. acknowledged).
+            if (!visited.has(nb) && cellState.peek().has(nb)) queue.push(nb);
+          }
+        }
+        if (component.length > 0) components.push(component);
+      }
+      return components;
+    };
+
+    const handleReception = (i: number): void => {
+      const st = cellState.peek().get(i);
+      const next = new Map(cellState.peek());
+      if (st === "received") {
+        if (R.chance(RECEIVE_CHANCE)) next.set(i, "retransmit");
+      } else if (st === undefined) {
+        if (R.chance(RECEIVE_CHANCE)) next.set(i, "received");
+      }
+      cellState.value = next;
+    };
+
+    const reset = () => {
+      cellState.value = new Map();
+      cellOverrides.value = new Map();
+      broadcastIndex.value = 0;
+      lastBroadcast.value = -1;
+    };
+
+    // ── Animation ───────────────────────────────────────────────────
+
+    const floodAnim = this.anim.scope();
+
+    function* doFloodFill(): Animator {
+      const components = buildComponents();
+      const flood = ink("blue").mod(0.7).toString();
+
+      for (const component of components) {
+        for (const cell of component) {
+          if (cell !== lastBroadcast.peek()) {
+            const next = new Map(cellOverrides.peek());
+            next.set(cell, flood);
+            cellOverrides.value = next;
+          }
+          yield T.floodCellStep;
+        }
+      }
+
+      yield T.afterFlood;
+
+      const next = new Map(cellState.peek());
+      for (const c of cellsWithState("retransmit")) next.set(c, "received");
+      if (backchannel) {
+        for (const component of components) {
+          for (const c of component) next.set(c, "acknowledged");
+        }
+      }
+      cellState.value = next;
+      cellOverrides.value = new Map();
+    }
+
+    const startFloodFillLoop = () => {
+      floodAnim.loop(function* () {
+        yield* untilSig(() => cellsWithState("retransmit").length > 0);
+        yield T.beforeFlood;
+        yield* doFloodFill();
+        yield T.betweenCycles;
+      });
+    };
+
+    if (backchannel) startFloodFillLoop();
+
+    this.anim.loop(function* () {
+      // Skip already-acknowledged cells.
       if (
-        this.backchannel &&
-        this.cellState.get(this.broadcastIndex) === "acknowledged"
+        backchannel &&
+        cellState.peek().get(broadcastIndex.peek()) === "acknowledged"
       ) {
-        this.broadcastIndex = (this.broadcastIndex + 1) % this.cellCount;
+        broadcastIndex.value = (broadcastIndex.peek() + 1) % N;
         return;
       }
 
-      this.lastBroadcast = this.broadcastIndex;
-      this.handleReception(this.broadcastIndex);
-      this.broadcastIndex = (this.broadcastIndex + 1) % this.cellCount;
-      this.render();
+      lastBroadcast.value = broadcastIndex.peek();
+      handleReception(broadcastIndex.peek());
+      broadcastIndex.value = (broadcastIndex.peek() + 1) % N;
 
-      if (this.cellState.size === this.cellCount) {
-        await this.anim.wait(T.beforeReset);
-        this.floodAnim.stop();
-        this.reset();
-        this.render();
-        await this.anim.wait(T.betweenFullCycles);
-        if (this.backchannel) this.startFloodFillLoop();
+      // Full cycle complete — reset and (if backchannel) restart flood.
+      if (cellState.peek().size === N) {
+        yield T.beforeReset;
+        floodAnim.stop();
+        reset();
+        yield T.betweenFullCycles;
+        if (backchannel) startFloodFillLoop();
         return;
       }
 
-      await this.anim.wait(T.broadcastStep);
+      yield T.broadcastStep;
     });
   }
 }

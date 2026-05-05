@@ -34,7 +34,10 @@ export class Label extends Shape {
         const w = fs * Math.max(1, text.length) * tokens.charWidth;
         return aabb(at.x() - a.x * w, at.y() - a.y * fs, w, fs);
       },
-      opts,
+      // Default rotation pivot to the anchor — so rotating a label
+      // pivots around its `at` point, not the bounds center. User can
+      // still override via opts.pivot.
+      { pivot: a, ...opts },
     );
     this.attr("x", at.x);
     this.attr("y", at.y);
