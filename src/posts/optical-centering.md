@@ -35,6 +35,10 @@ The problem with our approach is that we have failed to capture the essence of "
 
 <md-anim-demo></md-anim-demo>
 
+<md-transitions></md-transitions>
+
+<md-orbits></md-orbits>
+
 Designers and artists have known for thousands of years that the _perceptual center_ of a shape is not simply derived from its width and height. There are in fact many [optical effects in user interfaces](https://medium.com/design-bridges/optical-effects-9fca82b4cd9a) which are not captured in our programming languages or libraries and which are left to designers to account for.
 
 This is a large part of the value of _icon libraries_ which have been painstakingly designed to feel balanced and consistent in alignment, size, and other attributes.

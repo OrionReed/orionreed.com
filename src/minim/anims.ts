@@ -9,6 +9,10 @@ import type { Animator } from "./anim";
 
 // ── Easings ─────────────────────────────────────────────────────────
 
+/** Constant velocity. Pass to `.to(target, sec, linear)` to opt out of
+ *  the default `easeOut` — useful when an animation is part of an
+ *  ongoing physical motion rather than a settling transition. */
+export const linear = (t: number) => t;
 export const easeOut = (t: number) => 1 - Math.pow(1 - t, 2);
 export const easeIn = (t: number) => t * t;
 export const easeInOut = (t: number) =>

@@ -8,6 +8,8 @@ import { MdSyntax } from "./md-syntax";
 import { MdQrtpProtocol } from "./md-qrtp-protocol";
 import { MdCentering } from "./optical-centering/md-centering";
 import { MdAnimDemo } from "./optical-centering/md-anim-demo";
+import { MdTransitions } from "./optical-centering/md-transitions";
+import { MdOrbits } from "./optical-centering/md-orbits";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -19,3 +21,5 @@ MdSyntax.define();
 MdQrtpProtocol.define();
 MdCentering.define();
 MdAnimDemo.define();
+MdTransitions.define();
+MdOrbits.define();

@@ -74,6 +74,7 @@ export { Diagram, css } from "./diagram";
 export { Anim, AbortError, type Animator, type Yieldable } from "./anim";
 
 export {
+  linear,
   easeOut,
   easeIn,
   easeInOut,
