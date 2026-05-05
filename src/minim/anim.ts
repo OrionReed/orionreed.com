@@ -76,21 +76,23 @@ export class Anim {
 
   private scheduleFrame(): void {
     if (this.rafId !== 0 || this.aborted) return;
-    // If we're entering active animation after a quiet period (no
-    // pending RAF and the clock is older than ~one frame), sync
-    // `lastFrame` to "now" so the upcoming RAF measures a true frame
-    // interval rather than the elapsed pause. Active-animation
-    // re-schedules happen ≪ 32ms after the last RAF — they fall
-    // through and the clock keeps advancing normally.
-    const now = performance.now();
-    if (now - this.lastFrame > 32) this.lastFrame = now;
+    // If we're entering active animation after a quiet period (the
+    // clock is older than ~one frame), drop `lastFrame` to its
+    // sentinel. This expresses that no animation time elapsed during
+    // the pause — the upcoming RAF reports `dt = 0`, and only after
+    // that do real frame intervals start flowing again. Active-flow
+    // re-schedules happen ≪ 32ms after the last RAF and fall through.
+    if (performance.now() - this.lastFrame > 32) this.lastFrame = 0;
     this.rafId = requestAnimationFrame((rafNow) => {
       this.rafId = 0;
       if (this.aborted) return;
-      // The clamp is a safety net for genuinely degraded frames
-      // (stutter, backgrounded tab) — not a pause handler. In
-      // healthy animation it's never engaged.
-      const dt = Math.min(rafNow - this.lastFrame, 32) / 1000;
+      // First frame of an active period: dt=0 (no logical time has
+      // elapsed yet). Subsequent frames: real wall-clock interval,
+      // clamped at ~32ms as a safety net for genuine browser stutter.
+      const dt =
+        this.lastFrame === 0
+          ? 0
+          : Math.min(rafNow - this.lastFrame, 32) / 1000;
       this.lastFrame = rafNow;
       // Snapshot — handlers may push fresh waiters for the next frame
       // and we don't want to drain those into this firing.
