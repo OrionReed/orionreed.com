@@ -1,6 +1,6 @@
 // Shared style opts + applier for stroked/filled shapes.
 
-import type { Arg } from "../signal";
+import { unwrap, type Arg } from "../signal";
 import type { Shape, ShapeOpts } from "../shape";
 import { tokens } from "../tokens";
 import { dashedPath } from "../dashed";
@@ -38,14 +38,23 @@ export function applyOpts(s: Shape, opts: CommonOpts): void {
 }
 
 /** Wire `dashed: true` to a reactive `<path>` `d` computed from the
- *  shape's `segments()`. Caller passes whether the path forms a closed
- *  loop (so the dasher can wrap-around without leaving an end gap).
- *  Shapes that opt in must use `<path>` as their intrinsic when dashed. */
+ *  shape's `segments()`. Also sets `stroke-linecap` (default round) so
+ *  individual dashes have rounded ends. The cap-extension scales with
+ *  the stroke width so visible dash/gap stays consistent across thin
+ *  and normal weights — round caps add `stroke-width` to each dash's
+ *  visible length, so we shrink the math dash and grow the math gap
+ *  by that amount. */
 export function setupDashed(s: Shape, opts: CommonOpts, closed: boolean): void {
   if (!opts.dashed) return;
-  // Round caps optically extend by ~stroke-width/2, but read shorter than
-  // the math says. Approximate with a small constant bump.
-  const capExt = opts.cap === "round" ? 1 : 0;
+  const cap = opts.cap ?? "round";
+  s.attr("stroke-linecap", cap);
+
+  const stroke =
+    opts.strokeWidth !== undefined
+      ? unwrap(opts.strokeWidth)
+      : opts.thin ? tokens.thinWeight : tokens.weight;
+  const capExt = cap === "round" ? stroke : 0;
+
   s.attr("d", () =>
     dashedPath(s.segments(), { closed, capExtension: capExt }),
   );

@@ -4,7 +4,7 @@ import { Heading } from "../heading";
 import { aabb } from "../bounds";
 import { read, type Arg } from "../signal";
 import type { Segment } from "../dashed";
-import { applyOpts, type CommonOpts } from "./common";
+import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface PathOpts extends CommonOpts {
   closed?: boolean;
@@ -46,16 +46,20 @@ export class Path extends Shape {
     this.points = points;
     this.closed = closed;
 
-    this.attr("d", () => {
-      if (points.length === 0) return "";
-      const parts: string[] = [`M ${points[0].x()} ${points[0].y()}`];
-      for (let i = 1; i < points.length; i++) {
-        parts.push(`L ${points[i].x()} ${points[i].y()}`);
-      }
-      if (closed) parts.push("Z");
-      return parts.join(" ");
-    });
-
+    // Non-dashed: standard polyline `d`. Dashed: `setupDashed` binds `d`
+    // to the segment-by-segment dashed path instead.
+    if (!opts.dashed) {
+      this.attr("d", () => {
+        if (points.length === 0) return "";
+        const parts: string[] = [`M ${points[0].x()} ${points[0].y()}`];
+        for (let i = 1; i < points.length; i++) {
+          parts.push(`L ${points[i].x()} ${points[i].y()}`);
+        }
+        if (closed) parts.push("Z");
+        return parts.join(" ");
+      });
+    }
+    setupDashed(this, opts, closed);
     applyOpts(this, opts);
   }
 
