@@ -7,3 +7,4 @@ export { group } from "./group";
 export { Path, PathBuilder, path, type PathOpts } from "./path";
 export { AnnularSector, annularSector, type AnnularSectorOpts } from "./annular-sector";
 export { connect, arrow, ensureArrowMarker, type ArrowOpts } from "./connect";
+export { clipPath } from "./clip";

@@ -2,6 +2,8 @@
 // receives `dt` back. Yieldable: undefined (one frame), number (pause
 // ms), Animator (delegate), or array (parallel).
 
+import { signal, type Signal } from "./signal";
+
 export class AbortError extends Error {
   constructor() {
     super("Anim stopped");
@@ -145,6 +147,16 @@ export class Anim {
     const child = new Anim();
     this.scopes.add(child);
     return child;
+  }
+
+  /** Periodic tick signal — increments every `ms`. Stops with this Anim. */
+  pulse(ms: number): Signal<number> {
+    const sig = signal(0);
+    this.loop(function* () {
+      yield ms;
+      sig.value = sig.peek() + 1;
+    });
+    return sig;
   }
 
   /** Cancel pending operations and reset. Idempotent. Cascades to scopes. */

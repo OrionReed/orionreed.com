@@ -128,6 +128,21 @@ export class Bounds {
     return new Bounds(computed(() => expandAABB(this.sig.value, unwrap(by))));
   }
 
+  /** 2D split into a `rows × cols` grid of reactive child Bounds.
+   *  Sugar over two `split` calls. Returns `[row][col]` (outer y, inner x).
+   *
+   *   const cells = b.grid(5, 5);
+   *   cells[r][c]                 // (r, c)-th cell bounds
+   *   cells.flat().forEach(...)   // iterate in row-major order
+   */
+  grid(
+    rows: number,
+    cols: number,
+    opts: { gap?: Arg<number> } = {},
+  ): Bounds[][] {
+    return this.split("y", rows, opts).map((row) => row.split("x", cols, opts));
+  }
+
   /** Split into N reactive child Bounds along an axis.
    *
    *   `b.split("x", 3)`           → 3 equal columns

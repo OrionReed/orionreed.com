@@ -6,6 +6,7 @@ import { Anim } from "./anim";
 import { observedAttributesOf } from "./attr";
 import { makeScene, type Scene } from "./scene";
 import { Shape, SVG_NS } from "./shape";
+import { effect, untracked } from "./signal";
 import { ensureArrowMarker } from "./shapes/connect";
 
 export const css = String.raw;
@@ -15,7 +16,11 @@ export class Diagram extends HTMLElement {
     return observedAttributesOf(this);
   }
 
-  attributeChangedCallback(_name: string, oldVal: string | null, newVal: string | null): void {
+  attributeChangedCallback(
+    _name: string,
+    oldVal: string | null,
+    newVal: string | null,
+  ): void {
     if (oldVal === newVal) return;
     if (this.isConnected && this.svg) {
       // Re-run setup with new attribute values. Subclasses that want
@@ -60,21 +65,47 @@ export class Diagram extends HTMLElement {
     this.initializeStyles();
   }
 
+  /** Build the scene graph. Override in subclasses. */
   protected setup(_scene: Scene): void {}
 
+  /** Optional: return a value that, when it changes, rebuilds the
+   *  diagram (full teardown + re-`setup`).
+   */
+  protected rebuildOn?(): unknown;
+
+  private rebuildEffect: (() => void) | null = null;
+
   connectedCallback(): void {
-    this.anim.stop();
     if (!this.svg) this.mountSvg();
-    const root = new Shape();
-    this.svg.replaceChildren(root.el);
-    ensureArrowMarker(this.svg);
-    this.scene = makeScene(this.svg, root);
-    this.setup(this.scene);
-    // Default to auto-fit if the subclass didn't set a viewBox explicitly.
-    if (this.scene._viewPending) this.scene.fit();
+
+    const initialize = () => {
+      this.anim.stop();
+      this.scene?.root.dispose();
+      const root = new Shape();
+      this.svg.replaceChildren(root.el);
+      ensureArrowMarker(this.svg);
+      this.scene = makeScene(this.svg, root);
+      this.setup(this.scene);
+      if (this.scene._viewPending) this.scene.fit();
+    };
+
+    if (this.rebuildOn) {
+      const sentinel = Symbol("init");
+      let prev: unknown = sentinel;
+      this.rebuildEffect = effect(() => {
+        const next = this.rebuildOn!();
+        if (Object.is(next, prev)) return;
+        prev = next;
+        untracked(initialize);
+      });
+    } else {
+      initialize();
+    }
   }
 
   disconnectedCallback(): void {
+    this.rebuildEffect?.();
+    this.rebuildEffect = null;
     this.anim.stop();
     this.scene?.root.dispose();
   }

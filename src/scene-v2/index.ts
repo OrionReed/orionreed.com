@@ -46,6 +46,7 @@ export {
   annularSector,
   connect,
   arrow,
+  clipPath,
   applyOpts,
   setupDashed,
   type CommonOpts,
@@ -61,6 +62,8 @@ export {
 export { attr, observedAttributesOf } from "./attr";
 
 export { makeScene, type Scene, type Padding } from "./scene";
+
+export { useViewport } from "./viewport";
 
 export { Text, t, type Content, type TextPart } from "./text";
 

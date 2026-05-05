@@ -51,3 +51,20 @@ export function alphanumeric(length: number): string {
 export function chance(probability = 0.5): boolean {
   return Math.random() < probability;
 }
+
+/** Array of `count` random booleans, each true with probability `p`
+ *  (default 0.5). If fewer than `min` true values land naturally, extra
+ *  random positions are flipped on until the count is met. */
+export function bools(count: number, p = 0.5, min = 0): boolean[] {
+  const arr = Array.from({ length: count }, () => Math.random() < p);
+  if (min <= 0) return arr;
+  let trues = arr.reduce((n, v) => n + (v ? 1 : 0), 0);
+  while (trues < min) {
+    const i = Math.floor(Math.random() * count);
+    if (!arr[i]) {
+      arr[i] = true;
+      trues++;
+    }
+  }
+  return arr;
+}

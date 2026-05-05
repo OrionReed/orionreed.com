@@ -92,7 +92,22 @@ export class Rect extends Shape {
   }
 }
 
+/** Rect factory with three forms:
+ *
+ *   rect(x, y, w, h, opts?)        — corner-based (canonical)
+ *   rect(b: Bounds, opts?)         — derived from another shape's bounds
+ *                                     (e.g. `rect(box.bounds.expand(4), {...})`)
+ *   rect(center: Point, w, h, opts?) — centered around a Point. Symmetric
+ *                                       with `circle(center, radius)`.
+ *
+ * All forms are reactive in their inputs. */
 export function rect(b: Bounds, opts?: RectOpts): Rect;
+export function rect(
+  center: Point,
+  w: Arg<number>,
+  h: Arg<number>,
+  opts?: RectOpts,
+): Rect;
 export function rect(
   x: Arg<number>,
   y: Arg<number>,
@@ -101,14 +116,25 @@ export function rect(
   opts?: RectOpts,
 ): Rect;
 export function rect(
-  a: Arg<number> | Bounds,
+  a: Arg<number> | Bounds | Point,
   b?: Arg<number> | RectOpts,
   c?: Arg<number>,
-  d?: Arg<number>,
+  d?: Arg<number> | RectOpts,
   e?: RectOpts,
 ): Rect {
   if (a instanceof Bounds) {
     return new Rect(a.x, a.y, a.w, a.h, b as RectOpts | undefined);
+  }
+  if (a instanceof Point) {
+    const w = b as Arg<number>;
+    const h = c as Arg<number>;
+    return new Rect(
+      () => a.x() - unwrap(w) / 2,
+      () => a.y() - unwrap(h) / 2,
+      w,
+      h,
+      d as RectOpts | undefined,
+    );
   }
   return new Rect(
     a as Arg<number>,
