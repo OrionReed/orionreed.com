@@ -15,7 +15,6 @@ export { Point, pt } from "./point";
 
 export {
   Bounds,
-  Pivot,
   aabb,
   aabbEdgeFrom,
   expandAABB,
@@ -24,7 +23,22 @@ export {
   type Vec,
 } from "./bounds";
 
-export { Shape, SVG_NS, type ShapeOpts } from "./shape";
+export { align, arrange, type ArrangeOpts } from "./layout";
+
+export { Shape, SVG_NS, type ShapeOpts, boundsInRoot, boundsIn } from "./shape";
+
+export {
+  type Matrix2D,
+  identity as matrixIdentity,
+  fromTranslate,
+  fromRotate,
+  fromScale,
+  multiply as matrixMultiply,
+  invert as matrixInvert,
+  transformPoint,
+  transformAABB,
+  compose as composeMatrix,
+} from "./matrix";
 
 export { forEach, type ForEachOptions } from "./list";
 

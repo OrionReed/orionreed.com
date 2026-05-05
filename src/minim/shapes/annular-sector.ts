@@ -33,7 +33,11 @@ export class AnnularSector extends Shape {
       "path",
       () =>
         aabb(center.x.value - ro.value, center.y.value - ro.value, 2 * ro.value, 2 * ro.value),
-      opts,
+      {
+        // Default origin: the sector's center.
+        origin: () => center.value,
+        ...opts,
+      },
     );
     this.rOuter = ro;
     this.rInner = ri;

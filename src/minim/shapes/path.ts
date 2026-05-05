@@ -132,7 +132,14 @@ export class Path extends Shape {
         }
         return aabb(xMin, yMin, xMax - xMin, yMax - yMin);
       },
-      opts,
+      {
+        // Default origin: the path's first vertex (consistent with
+        // `path.at(0)`). Authors with a richer notion of "the path's
+        // center" can override.
+        origin: () =>
+          points.length > 0 ? points[0].value : { x: 0, y: 0 },
+        ...opts,
+      },
     );
 
     this.points = points;

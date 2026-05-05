@@ -1,5 +1,5 @@
 import { Shape, type ShapeOpts } from "../shape";
-import { Pivot, aabb } from "../bounds";
+import { aabb, type Vec } from "../bounds";
 import { toSig, type Arg } from "../signal";
 import { tokens } from "../tokens";
 import { renderContent, flattenText, type Content } from "../text";
@@ -7,9 +7,11 @@ import type { Point } from "../point";
 
 export interface LabelOpts extends ShapeOpts {
   size?: Arg<number>;
-  /** Where the `at` point sits within the label box (text alignment).
-   *  SVG buckets: x→start/middle/end, y→hanging/central/alphabetic. */
-  anchor?: Pivot;
+  /** Where on the label's own bbox sits at the `at` point. Normalized
+   *  Vec: `{x: 0, y: 0}` puts the label's top-left at `at`,
+   *  `{x: 0.5, y: 0.5}` (default) puts its center there. The `align`
+   *  namespace in `layout.ts` provides named consts for common cases. */
+  align?: Vec;
   bold?: boolean;
 }
 
@@ -25,7 +27,7 @@ export class Label extends Shape {
   ) {
     const contentSig = toSig(content);
     const sizeSig = toSig(opts.size ?? tokens.fontSize);
-    const a = opts.anchor ?? Pivot.CENTER;
+    const a = opts.align ?? { x: 0.5, y: 0.5 };
     super(
       "text",
       () => {
@@ -34,9 +36,13 @@ export class Label extends Shape {
         const w = fs * Math.max(1, text.length) * tokens.charWidth;
         return aabb(at.x.value - a.x * w, at.y.value - a.y * fs, w, fs);
       },
-      // Default rotation pivot to the anchor — so rotating a label
-      // pivots around its `at` point, not the bounds center.
-      { pivot: a, ...opts },
+      {
+        // Default origin: the `at` point — rotations pivot around the
+        // anchor, not the bbox center, so a rotated label hinges on
+        // where it was placed.
+        origin: () => at.value,
+        ...opts,
+      },
     );
     this.attr("x", at.x);
     this.attr("y", at.y);

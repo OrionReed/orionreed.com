@@ -1,9 +1,9 @@
 import {
   Diagram,
   Line,
-  Pivot,
   Scene,
   Text,
+  align,
   circle,
   computed,
   css,
@@ -83,7 +83,7 @@ export class MdCentering extends Diagram {
       ...F.map((f, i) =>
         label(xAxis.at(f).down(24), math("x", subs[i]), {
           size: 16,
-          anchor: Pivot.TOP,
+          align: align.top,
         }),
       ),
     );
@@ -93,7 +93,7 @@ export class MdCentering extends Diagram {
       ...F.map((f, i) =>
         label(yAxis.at(f).left(14), math("y", subs[i]), {
           size: 16,
-          anchor: Pivot.RIGHT,
+          align: align.right,
         }),
       ),
     );
@@ -122,7 +122,7 @@ export class MdCentering extends Diagram {
       label(
         c.right(10).up(10),
         t("(", math("x", "c"), ", ", math("y", "c"), ")"),
-        { size: 14, anchor: Pivot.BL },
+        { size: 14, align: align.bottomLeft },
       ),
     );
 

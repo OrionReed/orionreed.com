@@ -26,7 +26,15 @@ export class Line extends Shape {
           Math.abs(b.y - a.y),
         );
       },
-      opts,
+      {
+        // Default origin: the line's midpoint.
+        origin: () => {
+          const a = from.value;
+          const b = to.value;
+          return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        },
+        ...opts,
+      },
     );
     if (!dashed) {
       this.attr("x1", from.x);

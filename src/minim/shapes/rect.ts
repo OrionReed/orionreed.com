@@ -36,7 +36,14 @@ export class Rect extends Shape {
     super(
       dashed ? "path" : "rect",
       () => aabb(xs.value, ys.value, ws.value, hs.value),
-      opts,
+      {
+        // Default origin: bbox center — rotations/scales pivot there.
+        origin: () => ({
+          x: xs.value + ws.value / 2,
+          y: ys.value + hs.value / 2,
+        }),
+        ...opts,
+      },
     );
     this.x = xs;
     this.y = ys;

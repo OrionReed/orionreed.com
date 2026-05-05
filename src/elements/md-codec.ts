@@ -1,8 +1,8 @@
 import {
   Diagram,
   Path,
-  Pivot,
   Scene,
+  align,
   attr,
   label,
   line,
@@ -90,7 +90,7 @@ export class MdCodec extends Diagram {
       s(
         label(leader.at(1), t(part.label).bold(), {
           size: LABEL_SIZE,
-          anchor: Pivot.LEFT,
+          align: align.left,
           rotate: leader.angleAt(1),
         }),
       );

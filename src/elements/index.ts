@@ -10,6 +10,7 @@ import { MdCentering } from "./optical-centering/md-centering";
 import { MdAnimDemo } from "./optical-centering/md-anim-demo";
 import { MdTransitions } from "./optical-centering/md-transitions";
 import { MdOrbits } from "./optical-centering/md-orbits";
+import { MdLayoutDemo } from "./optical-centering/md-layout-demo";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -23,3 +24,4 @@ MdCentering.define();
 MdAnimDemo.define();
 MdTransitions.define();
 MdOrbits.define();
+MdLayoutDemo.define();

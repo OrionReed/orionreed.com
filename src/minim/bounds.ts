@@ -1,4 +1,4 @@
-// AABB literal, Bounds rich wrapper, Vec, Pivot.
+// AABB literal, Bounds rich wrapper, Vec.
 
 import { Point } from "./point";
 import { computed, toSig, type Arg, type ReadonlySignal } from "./signal";
@@ -57,24 +57,6 @@ export interface Vec {
   y: number;
 }
 
-/** Normalized 0..1 coord within a shape's bounds. `{0,0}` is top-left. */
-export interface Pivot {
-  x: number;
-  y: number;
-}
-
-export const Pivot = Object.freeze({
-  TL: { x: 0, y: 0 } as Pivot,
-  TR: { x: 1, y: 0 } as Pivot,
-  BL: { x: 0, y: 1 } as Pivot,
-  BR: { x: 1, y: 1 } as Pivot,
-  TOP: { x: 0.5, y: 0 } as Pivot,
-  BOTTOM: { x: 0.5, y: 1 } as Pivot,
-  LEFT: { x: 0, y: 0.5 } as Pivot,
-  RIGHT: { x: 1, y: 0.5 } as Pivot,
-  CENTER: { x: 0.5, y: 0.5 } as Pivot,
-});
-
 /** Reactive bounds wrapper: `x`/`y`/`w`/`h` Signals, lazy anchor Points,
  *  `value` getter for current AABB, derived ops (`expand`, `split`,
  *  `grid`). */
@@ -101,21 +83,23 @@ export class Bounds {
     this.h = computed(() => sig.value.h);
   }
 
-  get tl()     { return (this.#tl     ??= this.anchor(Pivot.TL)); }
-  get tr()     { return (this.#tr     ??= this.anchor(Pivot.TR)); }
-  get bl()     { return (this.#bl     ??= this.anchor(Pivot.BL)); }
-  get br()     { return (this.#br     ??= this.anchor(Pivot.BR)); }
-  get top()    { return (this.#top    ??= this.anchor(Pivot.TOP)); }
-  get bottom() { return (this.#bottom ??= this.anchor(Pivot.BOTTOM)); }
-  get left()   { return (this.#left   ??= this.anchor(Pivot.LEFT)); }
-  get right()  { return (this.#right  ??= this.anchor(Pivot.RIGHT)); }
-  get center() { return (this.#center ??= this.anchor(Pivot.CENTER)); }
+  get tl()     { return (this.#tl     ??= this.at(0,   0)); }
+  get tr()     { return (this.#tr     ??= this.at(1,   0)); }
+  get bl()     { return (this.#bl     ??= this.at(0,   1)); }
+  get br()     { return (this.#br     ??= this.at(1,   1)); }
+  get top()    { return (this.#top    ??= this.at(0.5, 0)); }
+  get bottom() { return (this.#bottom ??= this.at(0.5, 1)); }
+  get left()   { return (this.#left   ??= this.at(0,   0.5)); }
+  get right()  { return (this.#right  ??= this.at(1,   0.5)); }
+  get center() { return (this.#center ??= this.at(0.5, 0.5)); }
 
-  /** Anchor at arbitrary normalized coords. Allocates a fresh Point. */
-  anchor(at: Pivot): Point {
+  /** Reactive Point at normalized fraction (u, v) within these bounds.
+   *  `(0, 0)` = top-left, `(1, 1)` = bottom-right. The named getters
+   *  above (`tl`, `center`, etc.) cover the common cases. */
+  at(u: number, v: number): Point {
     return new Point(
-      computed(() => { const b = this.sig.value; return b.x + at.x * b.w; }),
-      computed(() => { const b = this.sig.value; return b.y + at.y * b.h; }),
+      computed(() => { const b = this.sig.value; return b.x + u * b.w; }),
+      computed(() => { const b = this.sig.value; return b.y + v * b.h; }),
     );
   }
 

@@ -21,7 +21,11 @@ export class Circle extends Shape {
       dashed ? "path" : "circle",
       () =>
         aabb(center.x.value - r.value, center.y.value - r.value, 2 * r.value, 2 * r.value),
-      opts,
+      {
+        // Default origin: the circle's center — natural rotation pivot.
+        origin: () => center.value,
+        ...opts,
+      },
     );
     this.radius = r;
     if (!dashed) {

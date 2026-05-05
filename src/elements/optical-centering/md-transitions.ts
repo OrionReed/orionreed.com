@@ -4,7 +4,7 @@
 
 import {
   Diagram,
-  Pivot,
+  align,
   Scene,
   Shape,
   circle,
@@ -90,7 +90,7 @@ export class MdTransitions extends Diagram {
 
     lanes.forEach((lane, laneIdx) => {
       const y = 25 + laneIdx * LANE_GAP;
-      s(label(pt(10, y), lane.name, { size: 12, anchor: Pivot.LEFT, opacity: 0.5 }));
+      s(label(pt(10, y), lane.name, { size: 12, align: align.left, opacity: 0.5 }));
 
       const shapes = Array.from({ length: COUNT }, (_, i) =>
         lane.shape(s, LEFT_PAD + i * stride, y),
