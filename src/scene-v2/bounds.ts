@@ -76,7 +76,7 @@ export const Pivot = Object.freeze({
 });
 
 /** Reactive bounds wrapper: thunks `x()`/`y()`/`w()`/`h()`, lazy anchor
- *  Points, `snap()` for one-shot AABB read, `expand(by)` for derived. */
+ *  Points, `value` getter for current AABB, `expand(by)` for derived. */
 export class Bounds {
   readonly x: () => number;
   readonly y: () => number;
@@ -118,8 +118,8 @@ export class Bounds {
     );
   }
 
-  /** Current AABB snapshot — non-tracking equivalent of an inner `.value`. */
-  snap(): AABB {
+  /** Current AABB snapshot. Tracks inside an effect, like Signal/Point. */
+  get value(): AABB {
     return this.sig.value;
   }
 

@@ -59,6 +59,13 @@ export class TweenChain<T extends Lerpable>
     return new TweenChain(this.sig, [...this.steps, { target, ms, ease }]);
   }
 
+  /** Repeat the current sequence `n` times. */
+  repeat(n: number): TweenChain<T> {
+    const out: Step<T>[] = [];
+    for (let i = 0; i < n; i++) out.push(...this.steps);
+    return new TweenChain(this.sig, out);
+  }
+
   private *run(): Generator<Yieldable, void, number> {
     for (const step of this.steps) {
       yield* tweenStep(this.sig, step.target, step.ms, step.ease);

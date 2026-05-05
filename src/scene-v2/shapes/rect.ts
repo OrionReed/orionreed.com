@@ -43,7 +43,7 @@ export class Rect extends Shape {
 
   override boundary(toward: Point): Point {
     const proj = computed(() => {
-      const b = this.bounds.snap();
+      const b = this.bounds.value;
       const t = toward.value;
       const cx = b.x + b.w / 2;
       const cy = b.y + b.h / 2;
@@ -59,14 +59,15 @@ export class Rect extends Shape {
     return new Point(() => proj.value.x, () => proj.value.y);
   }
 
-  /** Concentric expansion: returns a new (unmounted) Rect inflated
-   *  by `by` on each side, with the corner radius adjusted by the
-   *  same amount so the outer curve stays parallel to the inner.
-   *  Useful for outlines: `s(r.expand(4, { dashed: true }))`.
+  /** Concentric outline: returns a new (unmounted) Rect inflated by
+   *  `by` on each side, with the corner radius adjusted by the same
+   *  amount so the outer curve stays parallel to the inner.
+   *
+   *    s(r.outline(4, { dashed: true }))   // dashed frame around r
    *
    *  Reactive in `this.x/y/w/h/corner` and `by`. Style opts override
    *  defaults. */
-  expand(by: Arg<number>, opts?: RectOpts): Rect {
+  outline(by: Arg<number>, opts?: RectOpts): Rect {
     const byFn = read(by);
     return new Rect(
       () => unwrap(this.x) - byFn(),
@@ -79,7 +80,7 @@ export class Rect extends Shape {
 
   /** Rounded-rect outline: 4 sides + 4 quarter-arcs at corners. */
   override segments(): Segment[] {
-    const b = this.bounds.snap();
+    const b = this.bounds.value;
     const r = Math.min(unwrap(this.corner), b.w / 2, b.h / 2);
     const x = b.x;
     const y = b.y;

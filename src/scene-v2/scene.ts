@@ -64,7 +64,7 @@ export function makeScene(svg: SVGSVGElement, root: Shape): Scene {
   fn.fit = (padding) => {
     if (viewSet) return viewBounds;
     const p = resolvePadding(padding);
-    const b = root.bounds.snap();
+    const b = root.bounds.value;
     setViewBox(
       b.x - p.left,
       b.y - p.top,

@@ -91,7 +91,7 @@ export class Shape {
             this.childrenVersion.value;
             const bs = this.children
               .filter((c) => !c.aside)
-              .map((c) => c.bounds.snap());
+              .map((c) => c.bounds.value);
             return bs.length ? unionAABB(...bs) : aabb(0, 0, 0, 0);
           }),
       ),
@@ -107,7 +107,7 @@ export class Shape {
           this.el.setAttribute("transform", "");
           return;
         }
-        const pivot = resolvePivot(this.pivot.value, this.bounds.snap());
+        const pivot = resolvePivot(this.pivot.value, this.bounds.value);
         this.el.setAttribute("transform", composeTransform(t, r, sc, pivot));
       }),
     );
@@ -122,7 +122,7 @@ export class Shape {
   /** Analytic perimeter point in the direction of `toward`. Default:
    *  AABB-edge math. Subclasses with tighter geometry override. */
   boundary(toward: Point): Point {
-    const proj = computed(() => aabbEdgeFrom(this.bounds.snap(), toward.value));
+    const proj = computed(() => aabbEdgeFrom(this.bounds.value, toward.value));
     return new Point(() => proj.value.x, () => proj.value.y);
   }
 
@@ -131,7 +131,7 @@ export class Shape {
    *  Subclasses with proper outlines (Line, Path, Circle, Rect with
    *  rounded corners, ...) override. */
   segments(): Segment[] {
-    const b = this.bounds.snap();
+    const b = this.bounds.value;
     const tl = pt(b.x, b.y);
     const tr = pt(b.x + b.w, b.y);
     const br = pt(b.x + b.w, b.y + b.h);
@@ -163,6 +163,12 @@ export class Shape {
 
   track(dispose: () => void): void {
     this.disposers.push(dispose);
+  }
+
+  /** Create a tracked effect — the body runs reactively, and the
+   *  effect is torn down with the shape. Sugar for `track(effect(fn))`. */
+  effect(fn: () => void): void {
+    this.disposers.push(effect(fn));
   }
 
   add<T extends Shape>(child: T): T;

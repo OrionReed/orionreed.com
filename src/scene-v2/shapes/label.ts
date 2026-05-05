@@ -1,6 +1,6 @@
 import { Shape, type ShapeOpts } from "../shape";
 import { Pivot, aabb } from "../bounds";
-import { effect, read, unwrap, type Arg } from "../signal";
+import { read, unwrap, type Arg } from "../signal";
 import { tokens } from "../tokens";
 import { renderContent, flattenText, type Content } from "../text";
 import type { Point } from "../point";
@@ -48,11 +48,9 @@ export class Label extends Shape {
     this.attr("dominant-baseline", yAttr(a.y));
     if (opts.bold) this.attr("font-weight", 700);
 
-    this.track(
-      effect(() => {
-        (this.intrinsic as SVGElement).innerHTML = renderContent(contentR());
-      }),
-    );
+    this.effect(() => {
+      (this.intrinsic as SVGElement).innerHTML = renderContent(contentR());
+    });
   }
 }
 

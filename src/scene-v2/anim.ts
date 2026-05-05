@@ -72,7 +72,8 @@ export class Anim {
     return this.promise<void>((finish) => this.raf(() => finish()));
   }
 
-  /** Run a generator forever, restarting on completion. */
+  /** Run a generator forever, restarting on completion. Pass a factory
+   *  (`() => Animator`) so each iteration gets a fresh generator. */
   async loop(genFn: () => Animator): Promise<void> {
     while (!this.aborted) {
       try {
@@ -84,14 +85,25 @@ export class Anim {
     }
   }
 
-  /** Run a generator once. */
-  async run(genFn: () => Animator): Promise<void> {
+  /** Run an animator once. Accepts an Animator directly (e.g.
+   *  `chain.repeat(3)`) or a `() => Animator` factory. */
+  async run(arg: Animator | (() => Animator)): Promise<void> {
+    const gen = typeof arg === "function" ? arg() : arg;
     try {
-      await this.runGen(genFn());
+      await this.runGen(gen);
     } catch (e) {
       if (isAbortError(e)) return;
       throw e;
     }
+  }
+
+  /** Run `fn` every `ms` (after each interval). Convenience over
+   *  `this.loop(function*() { fn(); yield ms })`. */
+  every(ms: number, fn: () => void): Promise<void> {
+    return this.loop(function* () {
+      fn();
+      yield ms;
+    });
   }
 
   private async runGen(gen: Animator): Promise<void> {

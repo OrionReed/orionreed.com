@@ -57,8 +57,8 @@ export class MdQrtpHandshake extends Diagram {
         s(line(data.tr, data.br, { thin: true }));
 
         // Dashed outline around the "current" chunk only — concentric
-        // expansion keeps the corner radius matching the inner rect.
-        s(r.expand(4, {
+        // outline keeps the corner radius matching the inner rect.
+        s(r.outline(4, {
           dashed: true,
           cap: "round",
           opacity: () => state.value[i].status === "current" ? 1 : 0,
