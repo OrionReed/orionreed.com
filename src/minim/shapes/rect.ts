@@ -1,6 +1,6 @@
 import { Shape } from "../shape";
 import { aabb, Bounds } from "../bounds";
-import { computed, signal, toSig, type Arg, type Signal, type ReadonlySignal } from "../signal";
+import { computed, signal, toSig, type Arg, type NumSig } from "../signal";
 import { tokens } from "../tokens";
 import { Point } from "../point";
 import type { Segment } from "../dashed";
@@ -11,8 +11,6 @@ export interface RectOpts extends CommonOpts {
 }
 
 const HALF_PI = Math.PI / 2;
-
-type NumSig = Signal<number> | ReadonlySignal<number>;
 
 export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   readonly x: NumSig;
@@ -37,7 +35,6 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
       dashed ? "path" : "rect",
       () => aabb(xs.value, ys.value, ws.value, hs.value),
       opts,
-      // Default origin: bbox center — rotations/scales pivot there.
       {
         origin: () => ({
           x: xs.value + ws.value / 2,
@@ -83,9 +80,9 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     );
   }
 
-  /** Concentric outline: returns a new (unmounted) Rect inflated by
-   *  `by` on each side, with the corner radius adjusted by the same
-   *  amount so the outer curve stays parallel to the inner. */
+  /** Concentric outline: a new (unmounted) Rect inflated by `by` on
+   *  each side, with corner radius bumped to keep the outer curve
+   *  parallel to the inner. */
   outline(by: Arg<number>, opts?: RectOpts): Rect {
     const bys = toSig(by);
     return new Rect(
@@ -93,9 +90,6 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
       computed(() => this.y.value - bys.value),
       computed(() => this.w.value + 2 * bys.value),
       computed(() => this.h.value + 2 * bys.value),
-      // Default-typed Rect (writable signals); the corner override is
-      // an internal detail that doesn't need to leak into the return
-      // type's generic narrowing.
       { corner: computed(() => this.corner.value + bys.value), ...opts } as RectOpts,
     );
   }
@@ -131,15 +125,12 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   }
 }
 
-/** Rect factory with three forms:
+/** Rect factory, three forms:
  *
- *   rect(x, y, w, h, opts?)        — corner-based (canonical)
- *   rect(b: Bounds, opts?)         — derived from another shape's bounds
- *   rect(center: Point, w, h, opts?) — centered around a Point.
- *
- *  Generic in `O` so a `computed(...)` passed for an animatable prop
- *  produces a `ReadonlySignal` field on the returned shape (animations
- *  on it become a TypeScript error). */
+ *   rect(x, y, w, h, opts?)            — corner-based (canonical)
+ *   rect(b: Bounds, opts?)             — from another shape's bounds
+ *   rect(center: Point, w, h, opts?)   — centered on a Point
+ */
 export function rect<const O extends RectOpts>(b: Bounds, opts?: O): Rect<O>;
 export function rect<const O extends RectOpts>(
   center: Point,

@@ -1,3 +1,6 @@
+// Callable scene handle: `s(shape)` mounts under root, plus
+// `s.view(...)` / `s.fit(...)` to set the SVG viewBox.
+
 import { Bounds, aabb, type AABB } from "./bounds";
 import { effect, signal, toSig, type Arg } from "./signal";
 import type { AnyShape } from "./shape";
@@ -12,7 +15,6 @@ function resolvePadding(p?: Padding) {
   return { top: p.top ?? 0, right: p.right ?? 0, bottom: p.bottom ?? 0, left: p.left ?? 0 };
 }
 
-/** Callable handle to a `<g>` root inside an SVG. */
 export interface Scene {
   <T extends AnyShape>(shape: T): T;
   <T extends AnyShape[]>(...shapes: T): T;
@@ -20,21 +22,19 @@ export interface Scene {
   readonly svg: SVGSVGElement;
   readonly root: AnyShape;
 
-  /** Set viewBox. First call wins. Args may be plain numbers, Signals,
-   *  or thunks — when reactive, the viewBox updates as the values
-   *  change. Returns reactive Bounds representing the viewBox — use
-   *  `.center`, `.split`, etc. for layout relative to the scene. */
+  /** Set viewBox. Reactive in any `Arg<number>` input. First call
+   *  wins; returns Bounds representing the viewBox for layout use. */
   view(
     x: Arg<number>,
     y: Arg<number>,
     w: Arg<number>,
     h: Arg<number>,
   ): Bounds;
-  /** Auto-fit viewBox to root bounds + optional padding. First call
-   *  wins. Returns reactive Bounds for the resulting viewBox. */
+  /** Auto-fit viewBox to root bounds + optional padding. First call wins. */
   fit(padding?: Padding): Bounds;
 
-  /** Internal: true if neither `view()` nor `fit()` has been called. */
+  /** True until `view()` or `fit()` is called — `Diagram` falls back
+   *  to auto-fit if `setup` doesn't set the view explicitly. */
   readonly _viewPending: boolean;
 }
 
@@ -66,9 +66,6 @@ export function makeScene(svg: SVGSVGElement, root: AnyShape): Scene {
     const ys = toSig(y);
     const ws = toSig(w);
     const hs = toSig(h);
-    // Reactive: re-emit the viewBox attribute whenever any component
-    // changes. Plain-number args produce a fresh signal that never
-    // changes — equivalent to a static set.
     effect(() => setViewBox(xs.value, ys.value, ws.value, hs.value));
     viewSet = true;
     return viewBounds;

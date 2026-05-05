@@ -1,13 +1,11 @@
-// 2D affine matrices in SVG/Canvas convention. Plain object struct
-// `{a, b, c, d, e, f}` representing
+// 2D affine matrices in SVG/Canvas convention:
 //
 //   | a c e |
 //   | b d f |
 //   | 0 0 1 |
 //
-// Composition is left-to-right (the SVG `transform="A B C"` order):
-// `multiply(A, B)` produces a matrix that applies A *after* B when
-// transforming a point — i.e. `Mp = A·B·p`.
+// `multiply(A, B)` applies B first then A — i.e. `Mp = A·B·p`,
+// matching SVG's `transform="A B C"` order.
 
 import { aabb, type AABB, type Vec } from "./bounds";
 
@@ -35,7 +33,6 @@ export const fromRotate = (angle: number): Matrix2D => {
 export const isIdentity = (m: Matrix2D): boolean =>
   m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.e === 0 && m.f === 0;
 
-/** `multiply(a, b)` = the matrix that applies `b` first, then `a`. */
 export function multiply(a: Matrix2D, b: Matrix2D): Matrix2D {
   return {
     a: a.a * b.a + a.c * b.b,
@@ -66,8 +63,7 @@ export const transformPoint = (m: Matrix2D, p: Vec): Vec => ({
   y: m.b * p.x + m.d * p.y + m.f,
 });
 
-/** Loose AABB enclosing the four transformed corners of `b`. Returns
- *  `b` unchanged when `m` is the identity. */
+/** Loose AABB enclosing the four transformed corners of `b`. */
 export function transformAABB(m: Matrix2D, b: AABB): AABB {
   if (isIdentity(m)) return b;
   const x0 = b.x;
@@ -89,9 +85,9 @@ export function transformAABB(m: Matrix2D, b: AABB): AABB {
   return aabb(minX, minY, maxX - minX, maxY - minY);
 }
 
-/** Compose a Shape transform: translate × pivoted rotate × pivoted
- *  scale. Equivalent to the SVG transform list
- *  `translate(t) translate(pivot) rotate(r) scale(s) translate(-pivot)`. */
+/** Shape transform: translate × pivoted rotate × pivoted scale.
+ *  Equivalent to `translate(t) translate(pivot) rotate(r) scale(s)
+ *  translate(-pivot)`. */
 export function compose(t: Vec, r: number, s: Vec, pivot: Vec): Matrix2D {
   const hasTrans = t.x !== 0 || t.y !== 0;
   const hasRot = r !== 0;

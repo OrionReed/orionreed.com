@@ -1,4 +1,4 @@
-// scene-v2: retained-mode scene graph on @preact/signals-core.
+// minim — retained-mode scene graph on @preact/signals-core.
 
 export {
   signal,
@@ -9,7 +9,7 @@ export {
   Signal,
   type ReadonlySignal,
 } from "./signal";
-export { type Arg, toSig, type ResolveSig } from "./signal";
+export { type Arg, type NumSig, toSig, type ResolveSig } from "./signal";
 
 export { Point, pt } from "./point";
 

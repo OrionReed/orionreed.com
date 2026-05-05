@@ -11,10 +11,9 @@ export interface PathOpts extends CommonOpts {
 
 const clamp01 = (v: number) => v < 0 ? 0 : v > 1 ? 1 : v;
 
-/** Sampling primitives over a polyline of reactive Points. Pure geometry —
- *  no DOM, no Shape allocation — so PathBuilder can use the same code as
- *  Path without materializing one. Parameter `t` is arc-length fraction
- *  in [0, 1], so `at(0.5)` is the geometric midpoint. */
+/** Pure-geometry sampling over a polyline of reactive Points. Reused
+ *  by both Path and PathBuilder so the latter can compute geometry
+ *  without materializing a Shape. `t` is arc-length fraction [0, 1]. */
 function sampler(points: readonly Point[]) {
   const cumLen = computed(() => {
     const lens = [0];
@@ -26,7 +25,6 @@ function sampler(points: readonly Point[]) {
     return lens;
   });
 
-  // Locate the segment containing arc-length fraction t.
   const locate = (t: number): { i: number; segT: number } => {
     const lens = cumLen.value;
     const total = lens[lens.length - 1] ?? 0;
@@ -93,17 +91,14 @@ function sampler(points: readonly Point[]) {
   return { length, at, tangentAt, normalAt, angleAt };
 }
 
-/**
- * Open or closed polyline through a list of reactive Points.
+/** Open or closed polyline through a list of reactive Points.
  *
- * Construction:
- *   - `new Path([p1, p2, p3], opts?)`        — explicit array
- *   - `new Path(builder, opts?)`             — from a fluent builder
- *   - `path(start).up(8).along(angle, 14)`   — fluent (returns builder)
+ *   new Path([p1, p2, p3], opts?)         — explicit
+ *   new Path(builder, opts?)              — from fluent builder
+ *   path(start).up(8).along(angle, 14)    — fluent (returns builder)
  *
- * Sampling: `at(t)`, `tangentAt(t)`, `normalAt(t)`, `angleAt(t)`, `length()`
- * — all reactive, parameterized by arc-length fraction.
- */
+ *  Reactive sampling: `at(t)`, `tangentAt(t)`, `normalAt(t)`,
+ *  `angleAt(t)`, `length()`. */
 export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   readonly points: readonly Point[];
   readonly closed: boolean;
@@ -134,9 +129,8 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
       },
       opts,
       {
-        // Default origin: the path's first vertex (consistent with
-        // `path.at(0)`). Authors with a richer notion of "the path's
-        // center" can override.
+        // First vertex — consistent with `path.at(0)`. Authors with a
+        // richer "path center" can override.
         origin: () =>
           points.length > 0 ? points[0].value : { x: 0, y: 0 },
       },
@@ -151,8 +145,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
     this.normalAt = s.normalAt;
     this.angleAt = s.angleAt;
 
-    // Non-dashed: standard polyline `d`. Dashed: `setupDashed` binds `d`
-    // to the segment-by-segment dashed path instead.
+    // Dashed paths get their `d` from `setupDashed` instead.
     if (!opts.dashed) {
       this.attr(
         "d",
@@ -187,9 +180,8 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   }
 }
 
-/** Fluent path-data builder. Pure values; no DOM. Pass to `new Path(b)`
- *  to materialize, or use the sampling methods directly to compute
- *  geometry without ever constructing a Path. */
+/** Fluent path-data builder. Pure values; pass to `new Path(b)` to
+ *  materialize, or sample geometry directly via its methods. */
 export class PathBuilder {
   readonly length: () => ReadonlySignal<number>;
   readonly at: (t: Arg<number>) => Point;
@@ -229,7 +221,7 @@ export class PathBuilder {
   offset(dx: Arg<number>, dy: Arg<number>): PathBuilder {
     return this.extend(this.last.offset(dx, dy));
   }
-  /** Walk `dist` along direction `angle` (radians, y-down). */
+  /** Walk `dist` at `angle` (radians, y-down). */
   along(angle: Arg<number>, dist: Arg<number>): PathBuilder {
     const a = toSig(angle);
     const d = toSig(dist);

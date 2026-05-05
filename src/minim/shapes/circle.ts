@@ -1,14 +1,14 @@
 import { Shape } from "../shape";
 import { Point } from "../point";
 import { aabb } from "../bounds";
-import { computed, toSig, type Arg, type Signal, type ReadonlySignal } from "../signal";
+import { computed, toSig, type Arg, type NumSig } from "../signal";
 import { type Segment, TWO_PI } from "../dashed";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface CircleOpts extends CommonOpts {}
 
 export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
-  readonly radius: Signal<number> | ReadonlySignal<number>;
+  readonly radius: NumSig;
 
   constructor(
     readonly center: Point,
@@ -22,8 +22,6 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
       () =>
         aabb(center.x.value - r.value, center.y.value - r.value, 2 * r.value, 2 * r.value),
       opts,
-      // Default origin tracks center (natural rotation pivot); user
-      // override via `opts.origin` wins.
       { origin: () => center.value },
     );
     this.radius = r;
@@ -67,8 +65,8 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
     );
   }
 
-  /** Two half-circle arcs — keeps each arc span ≤ π so SVG `largeArc`
-   *  flag stays unambiguous. */
+  /** Two half-arcs — keeps each span ≤ π so SVG's `largeArc` flag
+   *  stays unambiguous. */
   override segments(): Segment[] {
     const cx = () => this.center.x.value;
     const cy = () => this.center.y.value;

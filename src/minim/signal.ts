@@ -1,5 +1,6 @@
-// Reactivity is delegated to @preact/signals-core. We re-export what we
-// use and add `toSig` for "value or Signal" construction.
+// Reactivity delegated to @preact/signals-core; this module re-exports
+// what minim uses plus the `Arg<T>` / `ResolveSig` / `toSig` trio that
+// drives the "value or Signal or thunk" construction pattern.
 
 export {
   signal,
@@ -14,32 +15,28 @@ export {
 import { signal, computed, Signal } from "@preact/signals-core";
 import type { ReadonlySignal } from "@preact/signals-core";
 
-/** A value that may be plain, a Signal/ReadonlySignal, or a thunk
- *  `() => T` (treated as `computed(() => ...)` — exact parity at the
- *  reactivity level, just shorter at the call site). */
+/** A value, a Signal/ReadonlySignal, or a thunk `() => T` (sugar for
+ *  `computed(() => ...)`). Accepted at every "drive this reactively"
+ *  call site. */
 export type Arg<T> = T | Signal<T> | ReadonlySignal<T> | (() => T);
+
+/** Either side of the read/write split — common across many shape
+ *  fields where the runtime kind depends on what the caller passed. */
+export type NumSig = Signal<number> | ReadonlySignal<number>;
 
 type ReadOrWrite<T> = Signal<T> | ReadonlySignal<T>;
 
-/** Resolve the runtime field type for an `Arg<T>` slot:
+/** Field type for an `Arg<T>` slot:
  *
- *   - `Signal<T>`         → `Signal<T>`         (caller owns it; writable)
- *   - `ReadonlySignal<T>` → `ReadonlySignal<T>` (e.g. `computed(...)`)
- *   - `() => T`           → `ReadonlySignal<T>` (we wrap in computed)
- *   - `T` or `undefined`  → `Signal<T>`         (fresh writable, possibly default-seeded)
- *   - `any`               → `Signal<T> | ReadonlySignal<T>` (the union — so
- *                                                            `Shape<any>` is a valid
- *                                                            supertype of any specific
- *                                                            `Shape<O>`)
+ *   - `Signal<T>`         → `Signal<T>`         (writable)
+ *   - `ReadonlySignal<T>` → `ReadonlySignal<T>`
+ *   - `() => T`           → `ReadonlySignal<T>` (wrapped in computed)
+ *   - `T` or `undefined`  → `Signal<T>`         (fresh writable, default-seeded)
+ *   - `any`               → `Signal<T> | ReadonlySignal<T>`
  *
- *  The `[A] extends [...]` brackets prevent distribution over unions
- *  so a mixed union like `T | Signal<T>` (the constraint shape from
- *  `Arg<T>`) falls through to the `Signal<T>` default rather than
- *  splitting and rejoining. Order matters: `Signal<T>` is tested
- *  first because `ReadonlySignal<T>` is structurally a supertype.
- *  Combining the two readonly producers (ReadonlySignal | thunk) keeps
- *  the table compact. The `IsAny` guard up front widens the result for
- *  the erased-generic case. */
+ *  The `IsAny` guard widens the erased-generic case so `Shape<any>` is
+ *  a valid supertype of any specific `Shape<O>`. The `[A] extends [...]`
+ *  brackets prevent union distribution. */
 type IsAny<A> = 0 extends 1 & A ? true : false;
 export type ResolveSig<A, T> = IsAny<A> extends true
   ? Signal<T> | ReadonlySignal<T>
@@ -49,22 +46,15 @@ export type ResolveSig<A, T> = IsAny<A> extends true
       ? ReadonlySignal<T>
       : Signal<T>;
 
-/** Type predicate: true if `v` is a Signal or ReadonlySignal. ReadonlySignal
- *  is an interface but its runtime carrier is always the Signal class
- *  (Computed extends Signal), so `instanceof Signal` covers both. */
 function isSig<T>(v: Arg<T>): v is ReadOrWrite<T> {
+  // ReadonlySignal is structurally an interface, but the runtime carrier
+  // is always a Signal-class instance (Computed extends Signal).
   return v instanceof Signal;
 }
 
-/** Resolve an `Arg<T>` to a Signal. Two call shapes:
- *
- *   - `toSig(arg)`              — required arg.
- *   - `toSig(arg, fallback)`    — `arg` may be `undefined`, falls back
- *                                  to a fresh writable seeded with `fallback`.
- *
- *  Existing Signal/ReadonlySignal returned as-is (caller owns the source
- *  of truth). Thunks become `computed(...)`. Plain values become a fresh
- *  writable signal. */
+/** Resolve an `Arg<T>` to a Signal-or-ReadonlySignal handle. With a
+ *  `fallback`, an `undefined` arg becomes a fresh writable seeded with
+ *  it. Thunks wrap in `computed`; existing signals pass through. */
 export function toSig<T>(arg: Arg<T>): ReadOrWrite<T>;
 export function toSig<T>(arg: Arg<T> | undefined, fallback: T): ReadOrWrite<T>;
 export function toSig<T>(arg: Arg<T> | undefined, fallback?: T): ReadOrWrite<T> {

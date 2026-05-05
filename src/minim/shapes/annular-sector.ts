@@ -1,16 +1,13 @@
 import { Shape } from "../shape";
 import { Point } from "../point";
 import { aabb } from "../bounds";
-import { computed, toSig, type Arg, type Signal, type ReadonlySignal } from "../signal";
+import { computed, toSig, type Arg, type NumSig } from "../signal";
 import type { Segment } from "../dashed";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface AnnularSectorOpts extends CommonOpts {}
 
-type NumSig = Signal<number> | ReadonlySignal<number>;
-
-/** Pie wedge with a hole — the region between two radii (rOuter, rInner)
- *  swept between two angles (a0, a1). Useful for ring/dial diagrams. */
+/** Pie wedge with a hole — between two radii swept across two angles. */
 export class AnnularSector<
   O extends AnnularSectorOpts = AnnularSectorOpts,
 > extends Shape<O> {
@@ -36,7 +33,6 @@ export class AnnularSector<
       () =>
         aabb(center.x.value - ro.value, center.y.value - ro.value, 2 * ro.value, 2 * ro.value),
       opts,
-      // Default origin: the sector's center.
       { origin: () => center.value },
     );
     this.rOuter = ro;

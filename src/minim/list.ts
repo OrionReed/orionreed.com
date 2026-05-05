@@ -1,22 +1,16 @@
-// Reactive list rendering. `forEach(parent, source, render)` mounts a
-// shape (or shapes) per source item and keeps the parent's children in
-// sync as the source list changes. Stable items (matched by key) are
-// reused — their per-shape state (animations, signals, listeners) is
-// preserved across structural changes. New items render, removed items
-// dispose. Designed so a viewport breakpoint changing the cell count
-// no longer requires tearing down the entire diagram.
+// Reactive list rendering. Mounts shapes per source item and diffs
+// the parent's children as the source changes — stable keys preserve
+// per-shape state (animations, signals, listeners) across structural
+// updates. New items render, removed items dispose.
 
 import { effect, toSig, untracked } from "./signal";
 import type { Arg } from "./signal";
 import type { Shape } from "./shape";
 
 export interface ForEachOptions<T> {
-  /** Stable identity per item. If two items in the same list resolve to
-   *  the same key, behavior is undefined (caller's responsibility to
-   *  pick unique keys). Defaults to the array index — fine for fixed
-   *  position lists, but means "swapping two items" looks like
-   *  "everything was replaced." Provide an explicit key for true
-   *  identity-based reuse. */
+  /** Stable identity per item. Defaults to the array index — fine for
+   *  fixed-position lists, but means swaps look like full replacement.
+   *  Provide a real key for identity-based reuse. */
   key?: (item: T, index: number) => unknown;
 }
 
@@ -26,12 +20,8 @@ interface Entry {
 }
 
 /** Render a shape (or shapes) per item in `source`, mounting under
- *  `parent`. Re-runs only when the *list* changes (new item added,
- *  removed, or replaced by key); per-item reactivity is the render
- *  function's responsibility (use signals from the closure).
- *
- *  Returns a disposer that detaches the effect and disposes every
- *  shape currently rendered. */
+ *  `parent`. Re-runs only on list changes; per-item reactivity is
+ *  the render function's job. Returns a disposer. */
 export function forEach<T>(
   parent: Shape,
   source: Arg<readonly T[]>,
@@ -45,8 +35,8 @@ export function forEach<T>(
 
   const eff = effect(() => {
     const next = sourceSig.value;
-    // Diff under `untracked` so reads of `entries` and writes via
-    // `parent.add`/`remove` don't re-trigger this effect.
+    // Diff in `untracked` so reads of `entries` and add/remove writes
+    // don't re-trigger this effect.
     untracked(() => {
       const prevByKey = new Map<unknown, Entry>();
       for (const e of entries) prevByKey.set(e.key, e);
@@ -67,7 +57,7 @@ export function forEach<T>(
         }
       }
 
-      // Anything left in prevByKey was removed from the source list.
+      // Whatever's left in prevByKey was removed from the source.
       for (const removed of prevByKey.values()) {
         parent.remove(...removed.shapes);
       }

@@ -1,10 +1,8 @@
-// Generator-driven animation runner.
-//
-// An Animator:
-//   - yields undefined → wait one frame, receives `dt` (seconds) back.
-//   - yields a number → pause that many seconds.
-//   - yields an Animator/Generator → delegate.
-//   - yields an array → run all in parallel.
+// Generator-driven animation runner. Yield contract:
+//   undefined        → wait one frame, receive `dt` (seconds).
+//   number           → pause that many seconds.
+//   Animator         → delegate.
+//   Yieldable[]      → run children in parallel.
 
 import { signal, type Signal } from "./signal";
 
@@ -65,8 +63,8 @@ export class Anim {
     return this.promise<void>((finish) => this.timeout(finish, ms));
   }
 
-  /** Resolves on the next animation frame with `dt` (seconds since the
-   *  previous master-RAF firing, or 0 on the very first frame). */
+  /** Resolves on the next animation frame with `dt` in seconds (0 on
+   *  the first frame of an active period). */
   private frame(): Promise<number> {
     return this.promise<number>((finish) => {
       this.waiters.push(finish);
@@ -76,34 +74,27 @@ export class Anim {
 
   private scheduleFrame(): void {
     if (this.rafId !== 0 || this.aborted) return;
-    // If we're entering active animation after a quiet period (the
-    // clock is older than ~one frame), drop `lastFrame` to its
-    // sentinel. This expresses that no animation time elapsed during
-    // the pause — the upcoming RAF reports `dt = 0`, and only after
-    // that do real frame intervals start flowing again. Active-flow
-    // re-schedules happen ≪ 32ms after the last RAF and fall through.
+    // Re-entering after a quiet period (>1 frame stale): reset so the
+    // upcoming RAF reports dt=0 — pauses don't accumulate logical time.
     if (performance.now() - this.lastFrame > 32) this.lastFrame = 0;
     this.rafId = requestAnimationFrame((rafNow) => {
       this.rafId = 0;
       if (this.aborted) return;
-      // First frame of an active period: dt=0 (no logical time has
-      // elapsed yet). Subsequent frames: real wall-clock interval,
-      // clamped at ~32ms as a safety net for genuine browser stutter.
+      // First frame: dt=0. Subsequent frames: wall-clock interval,
+      // clamped at 32ms for stutter recovery.
       const dt =
         this.lastFrame === 0
           ? 0
           : Math.min(rafNow - this.lastFrame, 32) / 1000;
       this.lastFrame = rafNow;
-      // Snapshot — handlers may push fresh waiters for the next frame
-      // and we don't want to drain those into this firing.
+      // Snapshot — handlers may push fresh waiters for the next frame.
       const batch = this.waiters;
       this.waiters = [];
       for (const w of batch) w(dt);
     });
   }
 
-  /** Run a generator forever, restarting on completion. Pass a factory
-   *  (`() => Animator`) so each iteration gets a fresh generator. */
+  /** Run a generator forever, restarting on completion. */
   async loop(genFn: () => Animator): Promise<void> {
     while (!this.aborted) {
       try {
@@ -115,8 +106,7 @@ export class Anim {
     }
   }
 
-  /** Run an animator once. Accepts an Animator directly (e.g.
-   *  `chain.repeat(3)`) or a `() => Animator` factory. */
+  /** Run an animator once. Accepts a generator or a factory. */
   async run(arg: Animator | (() => Animator)): Promise<void> {
     const gen = typeof arg === "function" ? arg() : arg;
     try {
@@ -127,8 +117,7 @@ export class Anim {
     }
   }
 
-  /** Run `fn` every `sec` seconds (after each interval). Convenience
-   *  over `this.loop(function*() { fn(); yield sec })`. */
+  /** Run `fn` every `sec` seconds. */
   every(sec: number, fn: () => void): Promise<void> {
     return this.loop(function* () {
       fn();
@@ -150,7 +139,6 @@ export class Anim {
       const v = result.value;
 
       if (typeof v === "number") {
-        // Numeric yield is seconds — convert to ms for setTimeout.
         if (v > 0) await this.wait(v * 1000);
         result = gen.next(0);
       } else if (v === undefined) {
@@ -195,7 +183,7 @@ export class Anim {
     return sig;
   }
 
-  /** Cancel pending operations and reset. Idempotent. Cascades to scopes. */
+  /** Cancel pending operations. Idempotent; cascades to scopes. */
   stop(): void {
     this.controller.abort();
     if (this.rafId !== 0) {
@@ -204,8 +192,7 @@ export class Anim {
     }
     this.timerIds.forEach((id) => clearTimeout(id));
     this.timerIds.clear();
-    // Pending frame() promises reject via the abort listener in
-    // `promise()`. Drop our reference so they GC promptly.
+    // Pending frame() promises reject via the abort listener.
     this.waiters = [];
     this.scopes.forEach((s) => s.stop());
     this.scopes.clear();

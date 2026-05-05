@@ -1,17 +1,12 @@
-// Animation primitives. Generators iterate lazily so values capture
-// when the runner picks them up, not at construction — composition
-// works under any nesting.
-//
-// Tweens themselves live on `Signal.prototype.to` (see `./tween`);
-// this module is for easings + composers.
+// Easings + composers. Tweens themselves live on `Signal.prototype.to`
+// (see `./tween`).
 
 import type { Animator } from "./anim";
 
 // ── Easings ─────────────────────────────────────────────────────────
 
-/** Constant velocity. Pass to `.to(target, sec, linear)` to opt out of
- *  the default `easeOut` — useful when an animation is part of an
- *  ongoing physical motion rather than a settling transition. */
+/** Constant velocity. Opt out of the default `easeOut` for ongoing
+ *  motion (vs settling transitions). */
 export const linear = (t: number) => t;
 export const easeOut = (t: number) => 1 - Math.pow(1 - t, 2);
 export const easeIn = (t: number) => t * t;
@@ -20,23 +15,23 @@ export const easeInOut = (t: number) =>
 
 // ── Composers ───────────────────────────────────────────────────────
 
-/** Run children in parallel; complete when all finish. */
+/** Run in parallel; complete when all finish. */
 export function* all(...children: Animator[]): Animator {
   yield children;
 }
 
-/** Run children sequentially. */
+/** Run sequentially. */
 export function* sequence(...children: Animator[]): Animator {
   for (const c of children) yield* c;
 }
 
-/** Pause `sec` seconds then run `c`. */
+/** Pause `sec` seconds, then run `c`. */
 export function* delay(sec: number, c: Animator): Animator {
   if (sec > 0) yield sec;
   yield* c;
 }
 
-/** Parallel with staggered starts: `lag(0.1, a, b, c)` → 0, 0.1, 0.2 seconds. */
+/** Parallel with staggered starts: `lag(0.1, a, b, c)` → 0/0.1/0.2s. */
 export function* lag(stagger: number, ...children: Animator[]): Animator {
   yield children.map((c, i) => delay(i * stagger, c));
 }
@@ -46,13 +41,13 @@ export function* until(condition: () => boolean): Animator {
   while (!condition()) yield;
 }
 
-/** Sequence `gen()` `n` times. Each call produces a fresh generator. */
+/** Run `gen()` `n` times in sequence. */
 export function* repeat(n: number, gen: () => Animator): Animator {
   for (let i = 0; i < n; i++) yield* gen();
 }
 
-/** Parallel; complete as soon as the FIRST child finishes. Frame-only
- *  children (only bare `yield`) — wrap mixed-yield ones in a composer. */
+/** Parallel; finishes when the first child does. Children must use
+ *  bare `yield` only — wrap mixed-yield ones in a composer. */
 export function* race(...children: Animator[]): Animator {
   for (const c of children) c.next();
   while (true) {

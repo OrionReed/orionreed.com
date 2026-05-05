@@ -28,7 +28,6 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
       },
       opts,
       {
-        // Default origin: the line's midpoint.
         origin: () => {
           const a = from.value;
           const b = to.value;
@@ -47,15 +46,14 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
     applyOpts(this, opts);
   }
 
-  // Lazily-initialised invariants. Tangent/normal/angle are constant
-  // along a Line, so the `t` argument is accepted for API symmetry with
-  // Path but ignored.
+  // Tangent/normal/angle are constant along a Line, so the `t` arg is
+  // accepted for API symmetry with Path but ignored. Cached lazily.
   #tangent?: Point;
   #normal?: Point;
   #angle?: ReadonlySignal<number>;
   #length?: ReadonlySignal<number>;
 
-  /** Position at fraction `t` along the line (`0` = from, `1` = to). */
+  /** Position at fraction `t` (`0`=from, `1`=to). */
   at(t: Arg<number>): Point {
     if (typeof t === "number") {
       if (t === 0) return this.from;
@@ -64,24 +62,20 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
     return this.from.lerp(this.to, t);
   }
 
-  /** Unit tangent direction (constant — `t` accepted but ignored). */
   tangentAt(_t: Arg<number> = 0): Point {
     return this.#tangent ??= this.to.sub(this.from).normalize();
   }
 
-  /** Tangent rotated 90° (y-down: `(x,y) → (-y, x)`). */
   normalAt(_t: Arg<number> = 0): Point {
     return this.#normal ??= this.tangentAt().perp();
   }
 
-  /** Angle (radians, atan2 of tangent). */
   angleAt(_t: Arg<number> = 0): ReadonlySignal<number> {
     if (this.#angle) return this.#angle;
     const tan = this.tangentAt();
     return this.#angle = computed(() => Math.atan2(tan.y.value, tan.x.value));
   }
 
-  /** Total length, reactive. */
   length(): ReadonlySignal<number> {
     return this.#length ??= computed(() => {
       const a = this.from.value;
@@ -90,7 +84,7 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
     });
   }
 
-  /** Boundary on a line is the closer endpoint to `toward`. */
+  /** Closer endpoint to `toward`. */
   override boundary(toward: Point): Point {
     const which = computed(() => {
       const t = toward.value;

@@ -1,9 +1,8 @@
-// AABB literal, Bounds rich wrapper, Vec.
+// `AABB` (snapshot), `Vec` (literal), `Bounds` (reactive wrapper).
 
 import { Point } from "./point";
 import { computed, toSig, type Arg, type ReadonlySignal } from "./signal";
 
-/** Axis-aligned bounding box snapshot. */
 export interface AABB {
   readonly x: number;
   readonly y: number;
@@ -33,9 +32,8 @@ export function unionAABB(...bs: AABB[]): AABB {
   return aabb(xMin, yMin, xMax - xMin, yMax - yMin);
 }
 
-/** Rect-edge math — perimeter point on an AABB facing `toward`. The
- *  default Shape.boundary uses this; subclasses with tighter analytic
- *  boundaries (Circle, Rect) override. */
+/** Perimeter point on an AABB facing `toward`. Used by the default
+ *  `Shape.boundary`. */
 export function aabbEdgeFrom(
   b: AABB,
   toward: { x: number; y: number },
@@ -57,9 +55,8 @@ export interface Vec {
   y: number;
 }
 
-/** Reactive bounds wrapper: `x`/`y`/`w`/`h` Signals, lazy anchor Points,
- *  `value` getter for current AABB, derived ops (`expand`, `split`,
- *  `grid`). */
+/** Reactive bounds: `x`/`y`/`w`/`h` Signals, lazy anchor Points,
+ *  `value` snapshot, derived ops (`expand`, `split`, `grid`). */
 export class Bounds {
   readonly x: ReadonlySignal<number>;
   readonly y: ReadonlySignal<number>;
@@ -93,9 +90,8 @@ export class Bounds {
   get right()  { return (this.#right  ??= this.at(1,   0.5)); }
   get center() { return (this.#center ??= this.at(0.5, 0.5)); }
 
-  /** Reactive Point at normalized fraction (u, v) within these bounds.
-   *  `(0, 0)` = top-left, `(1, 1)` = bottom-right. The named getters
-   *  above (`tl`, `center`, etc.) cover the common cases. */
+  /** Reactive Point at normalized fraction (u, v): `(0,0)` = top-left,
+   *  `(1,1)` = bottom-right. The named getters cover common cases. */
   at(u: number, v: number): Point {
     return new Point(
       computed(() => { const b = this.sig.value; return b.x + u * b.w; }),
@@ -103,19 +99,18 @@ export class Bounds {
     );
   }
 
-  /** Current AABB snapshot. Tracks inside an effect, like Signal/Point. */
   get value(): AABB {
     return this.sig.value;
   }
 
-  /** Derived bounds inflated by `by`. Reactive in source bounds + `by`. */
+  /** Derived bounds inflated by `by` on each side. */
   expand(by: Arg<number>): Bounds {
     const bys = toSig(by);
     return new Bounds(computed(() => expandAABB(this.sig.value, bys.value)));
   }
 
-  /** 2D split into a `rows × cols` grid of reactive child Bounds.
-   *  Sugar over two `split` calls. Returns `[row][col]`. */
+  /** Two-axis split into a `rows × cols` grid (sugar over `split`).
+   *  Returns `[row][col]`. */
   grid(
     rows: number,
     cols: number,
@@ -126,9 +121,9 @@ export class Bounds {
 
   /** Split into N reactive child Bounds along an axis.
    *
-   *   `b.split("x", 3)`           → 3 equal columns
-   *   `b.split("x", [3, 2, 2])`   → 3 columns weighted 3:2:2
-   *   `b.split("x", 3, { gap: 4 })` → with 4px between
+   *   `b.split("x", 3)`             → 3 equal columns
+   *   `b.split("x", [3, 2, 2])`     → 3 columns weighted 3:2:2
+   *   `b.split("x", 3, { gap: 4 })` → 4px between
    */
   split(
     axis: "x" | "y",

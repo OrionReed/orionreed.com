@@ -1,6 +1,6 @@
-// Custom-element scaffold + Scene. Subclasses override `setup(scene)`.
-// Shapes are persistent and patch via signal reactivity — no per-frame
-// rebuild, no `render()` hook.
+// Custom-element scaffold. Subclasses override `setup(scene)`.
+// Shapes persist; signal reactivity drives all updates — no
+// per-frame rebuild, no `render()` hook.
 
 import { Anim } from "./anim";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
@@ -21,8 +21,6 @@ export class Diagram extends HTMLElement {
     newVal: string | null,
   ): void {
     if (oldVal === newVal) return;
-    // Push the new value into the corresponding signal. Subscribers
-    // update reactively — no rebuild, no animation reset.
     syncAttrSignal(this, name, newVal);
   }
 
@@ -61,9 +59,8 @@ export class Diagram extends HTMLElement {
     this.initializeStyles();
   }
 
-  /** Build the scene graph. Override in subclasses. Reactivity (Signal,
-   *  computed, forEach) handles all dynamic behavior — `setup` runs
-   *  exactly once per element-connect. */
+  /** Build the scene graph. Override in subclasses. Runs once per
+   *  element-connect; reactivity handles dynamic behavior. */
   protected setup(_scene: Scene): void {}
 
   connectedCallback(): void {
@@ -105,8 +102,7 @@ export class Diagram extends HTMLElement {
     this.shadow.appendChild(container);
   }
 
-  /** Combine Diagram base styles with subclass styles. Cached per
-   *  subclass — assumes single-level inheritance from Diagram. */
+  /** Combine base + subclass styles, cached per subclass. */
   private initializeStyles(): void {
     const ctor = this.constructor as typeof Diagram;
     const cacheKey = ctor.name;

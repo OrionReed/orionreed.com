@@ -1,12 +1,9 @@
-// Reactive 2D point. `x` and `y` are Signals — for `pt(60, 170)` they
-// are writable; for derived points (`a.sub(b)`, `a.lerp(b, t)`, etc.)
-// they are computed (read-only). Read with `.value` (tracks if inside
-// an effect) or `.peek()` (never tracks). Write only on root points.
+// Reactive 2D point. `pt(x, y)` produces writable components; derived
+// points (`a.sub(b)`, `a.lerp(b, t)`, etc.) are computed-backed and
+// thus read-only.
 
-import { computed, toSig, type Arg, type Signal, type ReadonlySignal } from "./signal";
+import { computed, toSig, type Arg, type NumSig, type ReadonlySignal } from "./signal";
 import type { Vec } from "./bounds";
-
-type NumSig = Signal<number> | ReadonlySignal<number>;
 
 export class Point {
   constructor(
@@ -14,7 +11,6 @@ export class Point {
     readonly y: NumSig,
   ) {}
 
-  /** `{x, y}` snapshot. Tracks inside an effect. */
   get value(): Vec {
     return { x: this.x.value, y: this.y.value };
   }
@@ -41,7 +37,6 @@ export class Point {
   length(): ReadonlySignal<number> {
     return computed(() => Math.hypot(this.x.value, this.y.value));
   }
-  /** Unit vector. */
   normalize(): Point {
     const len = computed(() => Math.hypot(this.x.value, this.y.value) || 1);
     return new Point(
@@ -59,7 +54,7 @@ export class Point {
   dot(p: Point): ReadonlySignal<number> {
     return computed(() => this.x.value * p.x.value + this.y.value * p.y.value);
   }
-  /** Linear interpolation; `t=0` is this, `t=1` is `b`. */
+  /** Linear interpolation; `t=0` → this, `t=1` → `b`. */
   lerp(b: Point, t: Arg<number>): Point {
     const ts = toSig(t);
     return new Point(

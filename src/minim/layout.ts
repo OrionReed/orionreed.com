@@ -1,27 +1,13 @@
-// Spatial composition primitives — sit on top of the reactive Vec /
-// Point / Bounds machinery. Two flavors:
-//
-//   `align`   — named normalized-Vec constants. Used wherever an API
-//               wants "where on a box" semantics: `Label.align`,
-//               `bounds.at(...)` callsites, `arrange`'s alignment opt.
-//   `arrange` — set translates so a row/column of shapes sits
-//               edge-to-edge with a gap. Reactive on each shape's
-//               local-frame `bounds`, so animating widths reflows.
-//
-// Designed to grow as patterns crystallize. Manim's verb set
-// (`next_to`, `align_to`, `arrange_in_grid`, `move_to`) is the
-// reference for what to crystallize next.
+// Spatial composition primitives. Grows as patterns crystallize;
+// Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to` are the
+// reference points for what to add next.
 
 import type { Vec } from "./bounds";
 import { transformAABB } from "./matrix";
 import type { Shape } from "./shape";
 
-/** Named normalized Vec constants — points on a unit box.
- *
- *  `align.center` = `{x: 0.5, y: 0.5}`. `align.bottomLeft` = `{x: 0, y: 1}`.
- *  Etc. Plain Vec values, no separate type — pass anywhere a `Vec` is
- *  expected (e.g. `Label.align`, `bounds.at(u, v)` you can substitute
- *  `at(...align.tr)` if you like the named look). */
+/** Named normalized-Vec constants — points on a unit box. Plain `Vec`
+ *  values, pass anywhere a `Vec` is expected (e.g. `Label.align`). */
 export const align = {
   topLeft:     { x: 0, y: 0 } as Vec,
   topRight:    { x: 1, y: 0 } as Vec,
@@ -35,27 +21,17 @@ export const align = {
 };
 
 export interface ArrangeOpts {
-  /** Spacing between adjacent shapes' bounding boxes. Default 0. */
+  /** Spacing between adjacent bounding boxes. Default 0. */
   gap?: number;
-  /** Cross-axis alignment of each shape relative to the first shape's
-   *  bounds along the cross axis. `0` = top/left, `0.5` = centered,
-   *  `1` = bottom/right. Default 0 (no cross-axis alignment). */
+  /** Cross-axis alignment vs the first shape: `0` top/left,
+   *  `0.5` centered, `1` bottom/right. Default 0. */
   align?: number;
 }
 
-/** Place `shapes` in a row or column with optional gap. The first
- *  shape stays where it is; each subsequent shape's `translate` is
- *  reactively bound so its bounding box sits `gap` past the previous
- *  shape's bounding box on the chosen axis.
- *
- *  Reactive: animating any shape's intrinsic size or repositioning
- *  the anchor reflows the remainder. Each binding is tracked on the
- *  moved shape so it tears down with the shape.
- *
- *  Implementation note: prev's and anchor's bounds are taken in the
- *  *parent's* frame (via their full transform), so translates on the
- *  anchor or rotations elsewhere cascade correctly. We then write to
- *  cur's translate to position cur's local bounds at the target. */
+/** Place `shapes` in a row or column. The first stays put; the rest
+ *  bind their `translate` reactively so each box sits `gap` past the
+ *  previous on the chosen axis. Reflows when any shape's intrinsic
+ *  size animates or the anchor moves. */
 export function arrange(
   shapes: readonly Shape[],
   axis: "row" | "column",
@@ -69,9 +45,9 @@ export function arrange(
     const prev = shapes[i - 1];
     const cur = shapes[i];
     cur.effect(() => {
-      // Bounds in the parent frame for prev and anchor — accounts for
-      // their translate/rotate/scale. Local bounds for cur (we're
-      // about to write its translate, so we don't compose it in).
+      // Read prev/anchor bounds in the parent frame (so transforms
+      // upstream cascade); cur stays in local frame since we're about
+      // to write its own translate.
       const pAABB = transformAABB(prev.transform.value, prev.bounds.value);
       const aAABB = transformAABB(anchor.transform.value, anchor.bounds.value);
       const cb = cur.bounds.value;

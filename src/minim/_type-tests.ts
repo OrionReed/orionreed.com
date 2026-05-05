@@ -1,10 +1,3 @@
-// Type-honesty smoke tests. NOT RUN AT RUNTIME — exists purely to
-// surface compile errors at known misuse sites. Each `// @ts-expect-error`
-// asserts that TS reports an error at the next statement; if any of
-// those statements *don't* error, `tsc` will flag the unused directive.
-//
-// Delete this file once you trust the types.
-
 import {
   circle,
   rect,
@@ -22,8 +15,10 @@ import { bounceIn, fadeUp } from "../elements/optical-centering/transitions";
 const anim = new Anim();
 
 // Compile-time assertion utilities.
-type Equals<A, B> = (<T>() => T extends A ? 1 : 2) extends
-  (<T>() => T extends B ? 1 : 2) ? true : false;
+type Equals<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : false;
 function assert<_T extends true>(): void {}
 
 function* run(): Animator {
@@ -124,7 +119,9 @@ anim.run(run);
 // Mixed: one prop readonly, others default-writable.
 {
   const g = group({ translate: computed(() => ({ x: 0, y: 0 })) });
-  assert<Equals<typeof g.translate, ReadonlySignal<{ x: number; y: number }>>>();
+  assert<
+    Equals<typeof g.translate, ReadonlySignal<{ x: number; y: number }>>
+  >();
   assert<Equals<typeof g.opacity, Signal<number>>>();
   assert<Equals<typeof g.scale, Signal<{ x: number; y: number }>>>();
 }
@@ -157,8 +154,8 @@ anim.run(run);
   function flashOnce(s: import("./shape").AnyShape) {
     return s.opacity.value;
   }
-  flashOnce(circle(pt(0, 0), 5));                                   // OK
-  flashOnce(group({ opacity: computed(() => 0.5) }));                // OK
+  flashOnce(circle(pt(0, 0), 5)); // OK
+  flashOnce(group({ opacity: computed(() => 0.5) })); // OK
 }
 
 // Pattern C: user wants to accept any shape AND animate. Use the
@@ -171,7 +168,7 @@ anim.run(run);
       yield* s.opacity.to(1, 0.5);
     })();
   }
-  void pulse(circle(pt(0, 0), 5));                                   // OK
+  void pulse(circle(pt(0, 0), 5)); // OK
   void pulse(group({ translate: computed(() => ({ x: 0, y: 0 })) })); // OK — only translate is readonly
   // @ts-expect-error — opacity is readonly here.
   void pulse(group({ opacity: computed(() => 0.5) }));

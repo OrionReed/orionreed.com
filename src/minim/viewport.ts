@@ -1,8 +1,5 @@
-// Global viewport signal — re-evaluates on window resize. Used by
-// diagrams that vary layout by viewport (mobile vs desktop, fluid widths).
-//
-// One listener attached lazily on first call; the signal is shared across
-// all callers in the page.
+// Shared viewport signal — re-emits on window resize. One resize
+// listener, attached lazily on first call.
 
 import { signal, type ReadonlySignal, type Signal } from "./signal";
 

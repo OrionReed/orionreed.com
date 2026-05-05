@@ -7,10 +7,9 @@ import type { Point } from "../point";
 
 export interface LabelOpts extends ShapeOpts {
   size?: Arg<number>;
-  /** Where on the label's own bbox sits at the `at` point. Normalized
-   *  Vec: `{x: 0, y: 0}` puts the label's top-left at `at`,
-   *  `{x: 0.5, y: 0.5}` (default) puts its center there. The `align`
-   *  namespace in `layout.ts` provides named consts for common cases. */
+  /** Which point on the label's bbox sits at the `at` point.
+   *  `{x:0, y:0}` = top-left at `at`, `{x:0.5, y:0.5}` (default) =
+   *  center at `at`. See the `align` namespace for named consts. */
   align?: Vec;
   bold?: boolean;
 }
@@ -37,12 +36,9 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
         return aabb(at.x.value - a.x * w, at.y.value - a.y * fs, w, fs);
       },
       opts,
-      {
-        // Default origin: the `at` point — rotations pivot around the
-        // anchor, not the bbox center, so a rotated label hinges on
-        // where it was placed.
-        origin: () => at.value,
-      },
+      // Origin = the `at` point so rotations hinge there, not on the
+      // bbox center.
+      { origin: () => at.value },
     );
     this.attr("x", at.x);
     this.attr("y", at.y);

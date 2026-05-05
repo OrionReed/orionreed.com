@@ -1,30 +1,39 @@
-// Pixel-perfect dashing — sidesteps `stroke-dasharray` browser quirks
-// and corner artifacts by emitting explicit `<path>` `M`/`L`/`A`
-// commands at computed dash positions. Works uniformly on lines, polylines,
-// arcs, rounded rectangles, circles, and annular sectors.
+// Pixel-perfect dashing. Sidesteps `stroke-dasharray` browser quirks
+// and corner artifacts by emitting explicit `<path>` commands at
+// computed dash positions. Works on lines, polylines, arcs, rounded
+// rects, circles, and other shapes with analytic boundaries.
 
 import type { Point } from "./point";
 
 const TWO_PI = Math.PI * 2;
 
-/** A single component of a stroke path. */
 export type Segment =
   | { type: "line"; from: Point; to: Point }
-  | { type: "arc"; cx: () => number; cy: () => number; r: () => number; a0: () => number; a1: () => number };
+  | {
+      type: "arc";
+      cx: () => number;
+      cy: () => number;
+      r: () => number;
+      a0: () => number;
+      a1: () => number;
+    };
 
-interface AABBSegment {
-  type: "line" | "arc";
-  length: number;
-}
 interface LineEval {
   type: "line";
   length: number;
-  x1: number; y1: number; x2: number; y2: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
 }
 interface ArcEval {
   type: "arc";
   length: number;
-  cx: number; cy: number; r: number; a0: number; a1: number;
+  cx: number;
+  cy: number;
+  r: number;
+  a0: number;
+  a1: number;
 }
 type EvalSeg = LineEval | ArcEval;
 
@@ -37,10 +46,29 @@ function evalSegments(segments: Segment[]): EvalSeg[] {
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const len = Math.hypot(dx, dy);
-      out.push({ type: "line", length: len, x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+      out.push({
+        type: "line",
+        length: len,
+        x1: a.x,
+        y1: a.y,
+        x2: b.x,
+        y2: b.y,
+      });
     } else {
-      const cx = s.cx(), cy = s.cy(), r = s.r(), a0 = s.a0(), a1 = s.a1();
-      out.push({ type: "arc", length: Math.abs(a1 - a0) * r, cx, cy, r, a0, a1 });
+      const cx = s.cx(),
+        cy = s.cy(),
+        r = s.r(),
+        a0 = s.a0(),
+        a1 = s.a1();
+      out.push({
+        type: "arc",
+        length: Math.abs(a1 - a0) * r,
+        cx,
+        cy,
+        r,
+        a0,
+        a1,
+      });
     }
   }
   return out;
@@ -92,11 +120,7 @@ function computeDashGeom(
   return { dashSize: dashTarget, gapSize: gap, N };
 }
 
-function pathFromTo(
-  segs: EvalSeg[],
-  start: number,
-  end: number,
-): string {
+function pathFromTo(segs: EvalSeg[], start: number, end: number): string {
   let i = 0;
   let pos = 0;
   while (i < segs.length && pos + segs[i].length < start) {
@@ -149,16 +173,17 @@ function pathFromTo(
 
 interface DashOpts {
   closed?: boolean;
-  dashSize?: number;  // default 4
-  gapSize?: number;   // default 3
-  capExtension?: number;  // optical compensation for round caps
+  /** Target dash length, default 4. */
+  dashSize?: number;
+  /** Target gap length, default 3. */
+  gapSize?: number;
+  /** Optical compensation for round caps — extends each dash so the
+   *  visible (capped) length matches `dashSize`. */
+  capExtension?: number;
 }
 
-/**
- * Generate SVG path data for a dashed stroke through the given segments.
- * Returns a single `d` string consisting of multiple `M…L…/A…` runs (one
- * per dash). Place the result in a `<path d="…">` with `fill="none"`.
- */
+/** SVG path `d` for a dashed stroke through `segments`. Multiple
+ *  `M…L…/A…` runs, one per dash. Use with `<path fill="none">`. */
 export function dashedPath(segments: Segment[], opts: DashOpts = {}): string {
   const segs = evalSegments(segments);
   if (segs.length === 0) return "";
@@ -169,7 +194,12 @@ export function dashedPath(segments: Segment[], opts: DashOpts = {}): string {
   const gapTarget = (opts.gapSize ?? 3) + ext;
 
   const total = segs.reduce((sum, s) => sum + s.length, 0);
-  const { dashSize, gapSize, N } = computeDashGeom(total, closed, dashTarget, gapTarget);
+  const { dashSize, gapSize, N } = computeDashGeom(
+    total,
+    closed,
+    dashTarget,
+    gapTarget,
+  );
 
   if (N === 0) return "";
   if (N === 1) return pathFromTo(segs, 0, total);

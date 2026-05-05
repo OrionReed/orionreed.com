@@ -1,24 +1,14 @@
 // HTML attributes mapped to reactive Signals on a custom element.
+// The decorated field IS the signal — pass it to animations, computeds,
+// or `forEach` sources directly.
 //
-// Three terse decorators, one per coerce-type. Specify a default to
-// guarantee the field is always defined (the field type drops
-// `| undefined` accordingly):
+//   @attr.str()      declare width: Signal<string | undefined>;
+//   @attr.str("a")   declare mode:  Signal<string>;          // default "a"
+//   @attr.num(4)     declare cells: Signal<number>;          // default 4
+//   @attr.bool()     declare flag:  Signal<boolean>;         // default false
 //
-//   @attr.str()             declare width:  Signal<string | undefined>;
-//   @attr.str("auto")       declare layout: Signal<string>;
-//   @attr.num()             declare chunks: Signal<number | undefined>;
-//   @attr.num(4)            declare cells:  Signal<number>;
-//   @attr.bool()            declare flag:   Signal<boolean>;          // default false
-//   @attr.bool(true)        declare on:     Signal<boolean>;          // default true
-//
-// HTML boolean attributes are presence-based — `<el flag>` is true,
-// absence is false. There's no "missing vs unset" distinction, so
-// `attr.bool` always produces `Signal<boolean>`.
-//
-// The decorated field IS the signal — animations, computeds, and
-// `forEach` sources can take it directly. `Diagram.attributeChanged-
-// Callback` calls `syncAttrSignal` to push new values into the
-// signal, so attribute mutations propagate without rebuilding.
+// `attr.bool` always produces `Signal<boolean>` since HTML boolean
+// attributes are presence-based (no "missing vs unset" distinction).
 
 import { signal, type Signal } from "./signal";
 
@@ -116,9 +106,8 @@ export const attr = { str, num, bool };
 
 // ── Plumbing for Diagram ────────────────────────────────────────────
 
-/** Aggregates `_attributes` arrays across the prototype chain so subclass
- *  registrations include those declared on parent classes. Use as the
- *  body of a class's `static get observedAttributes()`. */
+/** Walk the prototype chain and collect every `_attributes` registration.
+ *  Used by `Diagram.observedAttributes` so subclasses pick up parent decls. */
 export function observedAttributesOf(ctor: Function): string[] {
   const acc: string[] = [];
   let c: any = ctor;
@@ -131,10 +120,9 @@ export function observedAttributesOf(ctor: Function): string[] {
   return acc;
 }
 
-/** Push the new HTML-attribute value into the corresponding signal,
- *  coercing per the declared type and falling back to the registered
- *  default if the attribute was removed. Lazy-creates the signal if
- *  it hasn't been read yet. Called by `Diagram.attributeChangedCallback`. */
+/** Push a new HTML-attribute value into its signal, coercing per the
+ *  declared type. Lazy-creates the signal if unread so far. Called by
+ *  `Diagram.attributeChangedCallback`. */
 export function syncAttrSignal(
   instance: HTMLElement,
   name: string,

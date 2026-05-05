@@ -1,5 +1,5 @@
-// Cross-cutting connector ops. Compose against the universal interface
-// (`shape.boundary`) — no kind dispatch.
+// Connector ops. Use `shape.boundary` so analytic edges work without
+// per-kind dispatch.
 
 import { Shape, SVG_NS } from "../shape";
 import { Point } from "../point";
@@ -7,12 +7,12 @@ import { computed, toSig, type Arg } from "../signal";
 import { tokens } from "../tokens";
 import { Line, type LineOpts } from "./line";
 
-const ARROW_ID = "scene-v2-arrow";
-const ARROW_W = 10;          // marker width — arrowhead extends this far past line end
-const ARROW_GAP_DEFAULT = 4; // standoff between visible line and source/target
+const ARROW_ID = "minim-arrow";
+const ARROW_W = 10;
+const ARROW_GAP_DEFAULT = 4;
 
-/** Draw a line between two shapes (or shape + point). When given a
- *  Shape endpoint, the line meets the shape's analytic boundary. */
+/** Line between two shapes / points. Shape endpoints meet the
+ *  analytic boundary. */
 export function connect(
   a: Shape | Point,
   b: Shape | Point,
@@ -24,16 +24,14 @@ export function connect(
 }
 
 export interface ArrowOpts extends LineOpts {
-  /** Visible standoff between line and source/target. Treats Point
-   *  endpoints as zero-radius shapes (same gap applies). Default 4. */
+  /** Standoff between visible line and source/target. Default 4. */
   gap?: Arg<number>;
 }
 
-/** Arrow from `a` to `b`: line with arrowhead at the `b` end. The tip
- *  lands at `b`'s boundary (or at the Point), with `gap` standoff;
- *  the line itself is shortened so the cap doesn't poke past the tip,
- *  and the start gets a small optical compensation for the round cap
- *  reading shorter than its mathematical extent. */
+/** Arrow from `a` to `b`. The tip lands at `b`'s boundary (less
+ *  `gap`); the line is shortened so the round cap doesn't poke past
+ *  the tip, with a small optical compensation at the start for the
+ *  round cap reading shorter than its mathematical extent. */
 export function arrow(
   a: Shape | Point,
   b: Shape | Point,
@@ -45,12 +43,11 @@ export function arrow(
   const gapSig = toSig(opts.gap ?? ARROW_GAP_DEFAULT);
   const dir = bBase.sub(aBase).normalize();
 
-  // From: push start TOWARD target by gap + weight, so the visible
-  // (round-cap) edge sits gap-ish past the source perimeter.
+  // Start: push toward target by gap + stroke weight (so the round
+  // cap lines up gap-ish past the source perimeter).
   const aP = aBase.add(dir.scale(computed(() => gapSig.value + tokens.weight)));
-  // To: pull end BACK toward source by gap + ARROW_W, so the marker
-  // tip (which extends ARROW_W past the line end) lands gap-ish before
-  // the target perimeter.
+  // End: pull back toward source by gap + ARROW_W (the marker extends
+  // ARROW_W past the line end, so the tip lands gap-ish before target).
   const bP = bBase.sub(dir.scale(computed(() => gapSig.value + ARROW_W)));
 
   const line = new Line(aP, bP, opts);
@@ -76,7 +73,7 @@ export function ensureArrowMarker(svg: SVGSVGElement): void {
   marker.setAttribute("orient", "auto");
   marker.setAttribute("markerUnits", "userSpaceOnUse");
 
-  // Triangle with rounded vertices (quadratic beziers at corners).
+  // Triangle with rounded vertices.
   const r = 0.9;
   const v0 = { x: 0, y: 0 };
   const v1 = { x: 10, y: 3.5 };
