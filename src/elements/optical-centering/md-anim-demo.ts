@@ -74,7 +74,7 @@ export class MdAnimDemo extends Diagram {
     this.anim.loop(function* () {
       yield* lag(0.12, ...bDots.map((d) => d.opacity.to(1, 0.4)));
       yield 0.5;
-      yield bDots.map((d) => d.opacity.to(0, 0.4)); // array = parallel sugar
+      yield bDots.map((d) => d.opacity.to(0, 0.4));
       yield 0.3;
     });
 

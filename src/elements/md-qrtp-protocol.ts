@@ -12,6 +12,7 @@ import {
   signal,
   until,
   type Animator,
+  type Signal,
 } from "../minim";
 import { grey, ink, stroke } from "./color";
 import * as R from "./rand";
@@ -34,12 +35,12 @@ const T = {
 };
 
 export class MdQrtpProtocol extends Diagram {
-  @attr({ type: "number" }) cells?: number;
-  @attr({ type: "boolean" }) backchannel?: boolean;
+  @attr.num(60) declare cells: Signal<number>;
+  @attr.bool() declare backchannel: Signal<boolean>;
 
   protected setup(s: Scene): void {
-    const N = this.cells ?? 60;
-    const backchannel = this.backchannel ?? false;
+    const N = this.cells.value;
+    const backchannel = this.backchannel.value;
     const labelText = this.textContent?.trim() ?? "";
 
     const rOut = RING_OUTER;

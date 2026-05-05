@@ -9,6 +9,7 @@ import {
   path,
   rect,
   t,
+  type Signal,
 } from "../minim";
 
 interface CodecPart {
@@ -48,10 +49,11 @@ function parseContent(text: string): CodecPart[] {
 }
 
 export class MdCodec extends Diagram {
-  @attr() width?: string;
+  @attr.str() declare width: Signal<string | undefined>;
 
   protected setup(s: Scene): void {
-    if (this.width) this.style.setProperty("--scene-max-width", this.width);
+    const w = this.width.value;
+    if (w) this.style.setProperty("--scene-max-width", w);
 
     const parts = parseContent(this.textContent?.trim() ?? "");
     if (parts.length === 0) return;

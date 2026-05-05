@@ -11,6 +11,7 @@ import {
   t,
   type Signal,
 } from "../minim";
+
 import * as R from "./rand";
 
 interface ChunkState {
@@ -34,10 +35,10 @@ function initialChunks(prefix: string, n: number): ChunkState[] {
 }
 
 export class MdQrtpHandshake extends Diagram {
-  @attr({ type: "number" }) chunks?: number;
+  @attr.num(4) declare chunks: Signal<number>;
 
   protected setup(s: Scene): void {
-    const N = this.chunks ?? 4;
+    const N = this.chunks.value;
     const W = N * PITCH - CHUNK_GAP;
     const H = CHUNK_H * 2 + DEVICE_GAP;
     s.view(-40, -8, W + 50, H + 16);

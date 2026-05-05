@@ -3,7 +3,7 @@
 // rebuild, no `render()` hook.
 
 import { Anim } from "./anim";
-import { observedAttributesOf } from "./attr";
+import { observedAttributesOf, syncAttrSignal } from "./attr";
 import { makeScene, type Scene } from "./scene";
 import { Shape, SVG_NS } from "./shape";
 import { ensureArrowMarker } from "./shapes/connect";
@@ -16,17 +16,14 @@ export class Diagram extends HTMLElement {
   }
 
   attributeChangedCallback(
-    _name: string,
+    name: string,
     oldVal: string | null,
     newVal: string | null,
   ): void {
     if (oldVal === newVal) return;
-    if (this.isConnected && this.svg) {
-      // Re-run setup with new attribute values. Subclasses that want
-      // finer-grained reactivity can override this.
-      this.disconnectedCallback();
-      this.connectedCallback();
-    }
+    // Push the new value into the corresponding signal. Subscribers
+    // update reactively — no rebuild, no animation reset.
+    syncAttrSignal(this, name, newVal);
   }
 
   protected shadow: ShadowRoot;
