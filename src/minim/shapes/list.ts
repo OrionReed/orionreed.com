@@ -3,7 +3,7 @@
 // per-shape state (animations, signals, listeners) across structural
 // updates. New items render, removed items dispose.
 
-import { effect, toSig, untracked, type Arg, type Shape } from "../core";
+import { effect, toSig, untracked, type Arg, type AnyShape } from "../core";
 
 export interface ForEachOptions<T> {
   /** Stable identity per item. Defaults to the array index — fine for
@@ -14,16 +14,16 @@ export interface ForEachOptions<T> {
 
 interface Entry {
   key: unknown;
-  shapes: Shape[];
+  shapes: AnyShape[];
 }
 
 /** Render a shape (or shapes) per item in `source`, mounting under
  *  `parent`. Re-runs only on list changes; per-item reactivity is
  *  the render function's job. Returns a disposer. */
 export function forEach<T>(
-  parent: Shape,
+  parent: AnyShape,
   source: Arg<readonly T[]>,
-  render: (item: T, index: number) => Shape | Shape[],
+  render: (item: T, index: number) => AnyShape | AnyShape[],
   options: ForEachOptions<T> = {},
 ): { dispose: () => void } {
   const sourceSig = toSig(source);

@@ -131,6 +131,12 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     defaults: ShapeOpts = {},
   ) {
     this.el = document.createElementNS(SVG_NS, "g") as SVGGElement;
+    // Use CSS transforms (set below) instead of the SVG `transform`
+    // attribute — the GPU-composited path is significantly faster for
+    // large numbers of animating shapes. Pin transform-origin to the
+    // SVG userspace origin so our composed matrix's pivot math stays
+    // correct (browsers vary on the SVG default).
+    this.el.style.transformOrigin = "0 0";
     if (intrinsicType) {
       this.intrinsic = document.createElementNS(SVG_NS, intrinsicType);
       this.el.appendChild(this.intrinsic);
@@ -171,7 +177,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     this.disposers.push(
       effect(() => {
         const m = this.transform.value;
-        this.el.setAttribute("transform", isIdentity(m) ? "" : matrixToString(m));
+        this.el.style.transform = isIdentity(m) ? "" : matrixToString(m);
       }),
       effect(() => {
         this.el.setAttribute("opacity", String(this.opacity.value));
