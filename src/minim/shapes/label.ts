@@ -1,9 +1,14 @@
-import { Shape, type ShapeOpts } from "../shape";
-import { aabb, type Vec } from "../bounds";
-import { toSig, type Arg } from "../signal";
-import { tokens } from "../tokens";
-import { renderContent, flattenText, type Content } from "../text";
-import type { Point } from "../point";
+import {
+  Shape,
+  aabb,
+  toSig,
+  type ShapeOpts,
+  type Vec,
+  type Arg,
+  type Point,
+} from "../core";
+import { tokens } from "./tokens";
+import { renderContent, flattenText, type Content } from "./text";
 
 export interface LabelOpts extends ShapeOpts {
   size?: Arg<number>;

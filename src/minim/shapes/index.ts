@@ -8,3 +8,10 @@ export { Path, PathBuilder, path, type PathOpts } from "./path";
 export { AnnularSector, annularSector, type AnnularSectorOpts } from "./annular-sector";
 export { connect, arrow, ensureArrowMarker, type ArrowOpts } from "./connect";
 export { clipPath } from "./clip";
+
+// Shape-internal utilities (algorithms + visual primitives).
+export { dashedPath } from "./dashed";
+export { tokens, type Tokens } from "./tokens";
+export { Text, t, type Content, type TextPart } from "./text";
+export { align, arrange, type ArrangeOpts } from "./layout";
+export { forEach, type ForEachOptions } from "./list";

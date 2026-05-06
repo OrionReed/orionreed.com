@@ -17,7 +17,6 @@ import {
 } from "../../minim";
 import {
   bounceIn,
-  fadeIn,
   fadeOut,
   fadeUp,
   fadeUpOut,
@@ -26,7 +25,7 @@ import {
   slideOut,
   spinIn,
   zoomOut,
-} from "./transitions";
+} from "../../minim";
 
 const LANES = 5;
 const LANE_GAP = 50;
@@ -48,7 +47,7 @@ export class MdTransitions extends Diagram {
     }
   `;
 
-  protected setup(s: Scene): void {
+  protected scene(s: Scene): void {
     const W = LEFT_PAD + RIGHT_PAD + 360;
     const H = LANES * LANE_GAP + 30;
     s.view(0, 0, W, H);

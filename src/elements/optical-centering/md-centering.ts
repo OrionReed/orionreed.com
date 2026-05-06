@@ -1,6 +1,5 @@
 import {
   Diagram,
-  Line,
   Scene,
   Text,
   align,
@@ -17,6 +16,7 @@ import {
   rect,
   signal,
   t,
+  type Line,
   type LineOpts,
 } from "../../minim";
 
@@ -42,7 +42,7 @@ export class MdCentering extends Diagram {
     }
   `;
 
-  protected setup(s: Scene): void {
+  protected scene(s: Scene): void {
     s.view(-20, -20, 640, 240);
 
     const lineT = signal(0);
@@ -58,9 +58,9 @@ export class MdCentering extends Diagram {
     const subs = ["min", "c", "max"];
 
     const yTip = xEnd.lerp(yEnd, morphT);
-    const xAxis = new Line(O, xEnd); // phantom — full extent
-    const yAxis = new Line(O, yEnd); // phantom — full extent (labels, box)
-    const yMorph = new Line(O, yTip); // phantom — tracks morph (ticks)
+    const xAxis = line(O, xEnd); // phantom — full extent
+    const yAxis = line(O, yEnd); // phantom — full extent (labels, box)
+    const yMorph = line(O, yTip); // phantom — tracks morph (ticks)
     const yShown = computed(() => (morphT.value > 0 ? 1 : 0));
 
     // Visible axes — animated.

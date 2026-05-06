@@ -1,8 +1,13 @@
-import { Shape } from "../shape";
-import { Point } from "../point";
-import { aabb } from "../bounds";
-import { computed, toSig, type Arg, type NumSig } from "../signal";
-import type { Segment } from "../dashed";
+import {
+  Shape,
+  Point,
+  aabb,
+  computed,
+  toSig,
+  type Segment,
+  type Arg,
+  type NumSig,
+} from "../core";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface AnnularSectorOpts extends CommonOpts {}
@@ -31,7 +36,12 @@ export class AnnularSector<
     super(
       "path",
       () =>
-        aabb(center.x.value - ro.value, center.y.value - ro.value, 2 * ro.value, 2 * ro.value),
+        aabb(
+          center.x.value - ro.value,
+          center.y.value - ro.value,
+          2 * ro.value,
+          2 * ro.value,
+        ),
       opts,
       { origin: () => center.value },
     );
@@ -54,10 +64,14 @@ export class AnnularSector<
           const largeArc = span > Math.PI ? 1 : 0;
           const sweep = _a1 > _a0 ? 1 : 0;
           const back = sweep ? 0 : 1;
-          const o0x = cx + _ro * Math.cos(_a0), o0y = cy + _ro * Math.sin(_a0);
-          const o1x = cx + _ro * Math.cos(_a1), o1y = cy + _ro * Math.sin(_a1);
-          const i1x = cx + _ri * Math.cos(_a1), i1y = cy + _ri * Math.sin(_a1);
-          const i0x = cx + _ri * Math.cos(_a0), i0y = cy + _ri * Math.sin(_a0);
+          const o0x = cx + _ro * Math.cos(_a0),
+            o0y = cy + _ro * Math.sin(_a0);
+          const o1x = cx + _ro * Math.cos(_a1),
+            o1y = cy + _ro * Math.sin(_a1);
+          const i1x = cx + _ri * Math.cos(_a1),
+            i1y = cy + _ri * Math.sin(_a1);
+          const i0x = cx + _ri * Math.cos(_a0),
+            i0y = cy + _ri * Math.sin(_a0);
           return `M ${o0x},${o0y} A ${_ro},${_ro} 0 ${largeArc} ${sweep} ${o1x},${o1y} L ${i1x},${i1y} A ${_ri},${_ri} 0 ${largeArc} ${back} ${i0x},${i0y} Z`;
         }),
       );

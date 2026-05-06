@@ -1,78 +1,61 @@
 // minim — retained-mode scene graph on @preact/signals-core.
+// Conceptual layout: (space, time) tuple.
+//   core/    — irreducible foundation (signals, shape graph, math)
+//   shapes/  — concrete visuals + layout + list (space stdlib)
+//   motion/  — easings, composers, transitions (time stdlib)
+//   diagram, attr, viewport — consumer scaffold (this folder)
 
+// ── Core ────────────────────────────────────────────────────────────
 export {
   signal,
   computed,
   effect,
-  batch,
-  untracked,
   Signal,
+  TweenChain,
   type ReadonlySignal,
-} from "./signal";
-export { type Arg, type NumSig, toSig, type ResolveSig } from "./signal";
+  type Arg,
+  type NumSig,
+  type ResolveSig,
+} from "./core/signal";
 
-export { Point, pt } from "./point";
+export { Point, pt } from "./core/point";
 
-export {
-  Bounds,
-  aabb,
-  aabbEdgeFrom,
-  expandAABB,
-  unionAABB,
-  type AABB,
-  type Vec,
-} from "./bounds";
-
-export { align, arrange, type ArrangeOpts } from "./layout";
+export { Bounds, type AABB, type Vec } from "./core/bounds";
 
 export {
   Shape,
-  SVG_NS,
   type ShapeOpts,
   type AnyShape,
   type AnimatableKey,
   type Writable,
+  type Segment,
   boundsInRoot,
   boundsIn,
-} from "./shape";
+} from "./core/shape";
 
+export { makeScene, type Scene } from "./core/scene";
+
+export { Anim, type Animator, type Yieldable } from "./core/anim";
+
+// ── Shapes (space stdlib) ───────────────────────────────────────────
 export {
-  type Matrix2D,
-  identity as matrixIdentity,
-  fromTranslate,
-  fromRotate,
-  fromScale,
-  multiply as matrixMultiply,
-  invert as matrixInvert,
-  transformPoint,
-  transformAABB,
-  compose as composeMatrix,
-} from "./matrix";
-
-export { forEach, type ForEachOptions } from "./list";
-
-export { type Segment, dashedPath } from "./dashed";
-
-export {
-  Line,
   line,
-  Circle,
   circle,
-  Rect,
   rect,
-  Label,
   label,
   group,
   Path,
-  PathBuilder,
   path,
-  AnnularSector,
   annularSector,
   connect,
   arrow,
   clipPath,
-  applyOpts,
-  setupDashed,
+  tokens,
+  Text,
+  t,
+  align,
+  arrange,
+  forEach,
   type CommonOpts,
   type LineOpts,
   type RectOpts,
@@ -81,22 +64,14 @@ export {
   type PathOpts,
   type AnnularSectorOpts,
   type ArrowOpts,
+  type ArrangeOpts,
+  type ForEachOptions,
+  type Content,
 } from "./shapes";
+// Classes exported as types only — construct via lowercase factories.
+export type { Line, Circle, Rect, Label, AnnularSector } from "./shapes";
 
-export { attr, observedAttributesOf } from "./attr";
-
-export { makeScene, type Scene, type Padding } from "./scene";
-
-export { useViewport } from "./viewport";
-
-export { Text, t, type Content, type TextPart } from "./text";
-
-export { tokens, type Tokens } from "./tokens";
-
-export { Diagram, css } from "./diagram";
-
-export { Anim, AbortError, type Animator, type Yieldable } from "./anim";
-
+// ── Motion (time stdlib) ────────────────────────────────────────────
 export {
   linear,
   easeOut,
@@ -109,7 +84,19 @@ export {
   until,
   repeat,
   race,
-} from "./anims";
+  fadeIn,
+  fadeUp,
+  slideIn,
+  scaleIn,
+  bounceIn,
+  spinIn,
+  fadeOut,
+  zoomOut,
+  fadeUpOut,
+  slideOut,
+} from "./motion";
 
-// Side-effect import: augments `Signal.prototype` with `.to(...)`.
-export { TweenChain } from "./tween";
+// ── Consumer scaffold ───────────────────────────────────────────────
+export { Diagram, css } from "./diagram";
+export { attr, observedAttributesOf } from "./attr";
+export { viewport } from "./viewport";

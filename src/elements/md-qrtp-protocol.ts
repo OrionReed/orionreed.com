@@ -38,7 +38,7 @@ export class MdQrtpProtocol extends Diagram {
   @attr.num(60) declare cells: Signal<number>;
   @attr.bool() declare backchannel: Signal<boolean>;
 
-  protected setup(s: Scene): void {
+  protected scene(s: Scene): void {
     const N = this.cells.value;
     const backchannel = this.backchannel.value;
     const labelText = this.textContent?.trim() ?? "";

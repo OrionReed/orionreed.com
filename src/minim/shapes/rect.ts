@@ -1,9 +1,16 @@
-import { Shape } from "../shape";
-import { aabb, Bounds } from "../bounds";
-import { computed, signal, toSig, type Arg, type NumSig } from "../signal";
-import { tokens } from "../tokens";
-import { Point } from "../point";
-import type { Segment } from "../dashed";
+import {
+  Shape,
+  Bounds,
+  Point,
+  aabb,
+  computed,
+  signal,
+  toSig,
+  type Segment,
+  type Arg,
+  type NumSig,
+} from "../core";
+import { tokens } from "./tokens";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface RectOpts extends CommonOpts {

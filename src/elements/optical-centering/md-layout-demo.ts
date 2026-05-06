@@ -35,7 +35,7 @@ export class MdLayoutDemo extends Diagram {
     }
   `;
 
-  protected setup(s: Scene): void {
+  protected scene(s: Scene): void {
     s.view(0, 0, 520, 360);
 
     // ── Top: bounds.at(u, v) + align namespace ──────────────────────

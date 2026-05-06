@@ -37,7 +37,7 @@ function initialChunks(prefix: string, n: number): ChunkState[] {
 export class MdQrtpHandshake extends Diagram {
   @attr.num(4) declare chunks: Signal<number>;
 
-  protected setup(s: Scene): void {
+  protected scene(s: Scene): void {
     const N = this.chunks.value;
     const W = N * PITCH - CHUNK_GAP;
     const H = CHUNK_H * 2 + DEVICE_GAP;

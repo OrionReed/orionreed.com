@@ -1,8 +1,14 @@
-import { Shape } from "../shape";
-import { Point } from "../point";
-import { aabb } from "../bounds";
-import { computed, toSig, type Arg, type NumSig } from "../signal";
-import { type Segment, TWO_PI } from "../dashed";
+import {
+  Shape,
+  Point,
+  aabb,
+  computed,
+  toSig,
+  type Segment,
+  type Arg,
+  type NumSig,
+} from "../core";
+import { TWO_PI } from "./dashed";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface CircleOpts extends CommonOpts {}

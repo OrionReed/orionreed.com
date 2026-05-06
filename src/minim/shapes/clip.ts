@@ -1,8 +1,7 @@
 // `<clipPath>` matching a shape's geometry via `<use href>` — clip
 // follows the source reactively without copying attributes.
 
-import { SVG_NS, type Shape } from "../shape";
-import type { Scene } from "../scene";
+import { SVG_NS, type Shape, type Scene } from "../core";
 
 let nextId = 0;
 

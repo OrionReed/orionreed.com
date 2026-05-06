@@ -12,7 +12,7 @@ import {
   pt,
   rect,
   t,
-  useViewport,
+  viewport,
 } from "../minim";
 import * as R from "./rand";
 
@@ -20,11 +20,11 @@ const QR_GRID = 5;
 const SIZE = 32;
 
 export class MdLubyTransform extends Diagram {
-  protected setup(s: Scene): void {
+  protected scene(s: Scene): void {
     // Reactive layout: viewport breakpoint drives both cell count and
     // viewBox width. Surviving cells keep their animation state across
     // breakpoint flips — no rebuild.
-    const isMobile = computed(() => useViewport().value.w < 768);
+    const isMobile = computed(() => viewport().value.w < 768);
     const W = computed(() => (isMobile.value ? 300 : 400));
     const N = computed(() => (isMobile.value ? 7 : 10));
     const stride = computed(() => (W.value - SIZE) / (N.value - 1));

@@ -8,6 +8,7 @@ import {
   Diagram,
   Scene,
   type AnyShape,
+  bounceIn,
   circle,
   computed,
   css,
@@ -17,8 +18,8 @@ import {
   rect,
   signal,
   type Signal,
+  zoomOut,
 } from "../../minim";
-import { bounceIn, zoomOut } from "./transitions";
 
 export class MdOrbits extends Diagram {
   static styles = css`
@@ -27,7 +28,7 @@ export class MdOrbits extends Diagram {
     }
   `;
 
-  protected setup(s: Scene): void {
+  protected scene(s: Scene): void {
     const W = 400;
     const H = 320;
     s.view(0, 0, W, H);

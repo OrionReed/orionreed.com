@@ -26,9 +26,21 @@ import {
   type Matrix2D,
 } from "./matrix";
 import { Point, pt } from "./point";
-import type { Segment } from "./dashed";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** A stroke segment — line or arc. Used by `Shape.segments()` to drive
+ *  dashed rendering; subclasses override to expose their geometry. */
+export type Segment =
+  | { type: "line"; from: Point; to: Point }
+  | {
+      type: "arc";
+      cx: () => number;
+      cy: () => number;
+      r: () => number;
+      a0: () => number;
+      a1: () => number;
+    };
 
 /** Construction-time options shared by every Shape. Animatable props
  *  accept `Arg<T>` (value / Signal / thunk).

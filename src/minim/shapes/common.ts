@@ -1,9 +1,14 @@
 // Shared style opts + applier for stroked/filled shapes.
 
-import { computed, toSig, type Arg } from "../signal";
-import type { AnyShape, ShapeOpts } from "../shape";
-import { tokens } from "../tokens";
-import { dashedPath } from "../dashed";
+import {
+  computed,
+  toSig,
+  type Arg,
+  type AnyShape,
+  type ShapeOpts,
+} from "../core";
+import { tokens } from "./tokens";
+import { dashedPath } from "./dashed";
 
 const NSS = "non-scaling-stroke";
 

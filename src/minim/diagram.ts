@@ -1,11 +1,8 @@
-// Custom-element scaffold. Subclasses override `setup(scene)`.
-// Shapes persist; signal reactivity drives all updates — no
-// per-frame rebuild, no `render()` hook.
+// Custom-element scaffold. Subclasses override `scene(s)` to build
+// the graph; signal reactivity drives all updates.
 
-import { Anim } from "./anim";
+import { Anim, Shape, SVG_NS, makeScene, type Scene } from "./core";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
-import { makeScene, type Scene } from "./scene";
-import { Shape, SVG_NS } from "./shape";
 import { ensureArrowMarker } from "./shapes/connect";
 
 export const css = String.raw;
@@ -27,7 +24,9 @@ export class Diagram extends HTMLElement {
   protected shadow: ShadowRoot;
   protected anim = new Anim();
   protected svg!: SVGSVGElement;
-  protected scene!: Scene;
+  /** The Scene built in `scene(s)` — accessible from event handlers
+   *  and lifecycle hooks. Same handle that's passed to `scene(s)`. */
+  protected s!: Scene;
 
   private static styleSheets = new Map<string, CSSStyleSheet>();
   static styles = css`
@@ -61,23 +60,23 @@ export class Diagram extends HTMLElement {
 
   /** Build the scene graph. Override in subclasses. Runs once per
    *  element-connect; reactivity handles dynamic behavior. */
-  protected setup(_scene: Scene): void {}
+  protected scene(_s: Scene): void {}
 
   connectedCallback(): void {
     if (!this.svg) this.mountSvg();
     this.anim.stop();
-    this.scene?.root.dispose();
+    this.s?.root.dispose();
     const root = new Shape();
     this.svg.replaceChildren(root.el);
     ensureArrowMarker(this.svg);
-    this.scene = makeScene(this.svg, root);
-    this.setup(this.scene);
-    if (this.scene._viewPending) this.scene.fit();
+    this.s = makeScene(this.svg, root);
+    this.scene(this.s);
+    if (this.s._viewPending) this.s.fit();
   }
 
   disconnectedCallback(): void {
     this.anim.stop();
-    this.scene?.root.dispose();
+    this.s?.root.dispose();
   }
 
   static get tagName(): string {

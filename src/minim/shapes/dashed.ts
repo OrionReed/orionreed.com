@@ -3,20 +3,9 @@
 // computed dash positions. Works on lines, polylines, arcs, rounded
 // rects, circles, and other shapes with analytic boundaries.
 
-import type { Point } from "./point";
+import type { Segment } from "../core";
 
 const TWO_PI = Math.PI * 2;
-
-export type Segment =
-  | { type: "line"; from: Point; to: Point }
-  | {
-      type: "arc";
-      cx: () => number;
-      cy: () => number;
-      r: () => number;
-      a0: () => number;
-      a1: () => number;
-    };
 
 interface LineEval {
   type: "line";

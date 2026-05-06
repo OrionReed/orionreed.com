@@ -1,16 +1,9 @@
 // Compositional enter/exit animations for Shapes. Each is a generator
-// factory: it sets the shape's initial state, then animates to the
-// resting state (intros) or from resting to invisible (outros).
-//
-// All compose with the standard generator combinators:
-//
-//   yield* bounceIn(shape, 0.5);                         // single
-//   yield* lag(0.08, ...shapes.map((s) => fadeUp(s)));   // staggered
-//   yield* all(fadeIn(a), slideIn(b, "left"));           // parallel
-//   yield* sequence(bounceIn(s), holdFor(1), zoomOut(s));// timeline
+// factory: sets the shape's initial state, animates to rest (intros)
+// or from rest to invisible (outros). Compose with `lag`/`all`/`sequence`.
 
-import { easeIn, easeInOut, easeOut } from "../../minim";
-import type { Animator, Writable } from "../../minim";
+import { easeIn, easeInOut, easeOut } from "./easings";
+import type { Animator, Writable } from "../core";
 
 // Each helper constrains only the props it animates via `Writable<K>`
 // — leaving other props free to be readonly. e.g. a

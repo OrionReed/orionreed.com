@@ -10,7 +10,7 @@
 // `attr.bool` always produces `Signal<boolean>` since HTML boolean
 // attributes are presence-based (no "missing vs unset" distinction).
 
-import { signal, type Signal } from "./signal";
+import { signal, type Signal } from "./core";
 
 type AttrType = "string" | "number" | "boolean";
 

@@ -1,8 +1,12 @@
-import { Shape } from "../shape";
-import { Point } from "../point";
-import { aabb } from "../bounds";
-import { computed, type Arg, type ReadonlySignal } from "../signal";
-import type { Segment } from "../dashed";
+import {
+  Shape,
+  Point,
+  aabb,
+  computed,
+  type Segment,
+  type Arg,
+  type ReadonlySignal,
+} from "../core";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface LineOpts extends CommonOpts {}

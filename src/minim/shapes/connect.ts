@@ -1,10 +1,8 @@
 // Connector ops. Use `shape.boundary` so analytic edges work without
 // per-kind dispatch.
 
-import { Shape, SVG_NS } from "../shape";
-import { Point } from "../point";
-import { computed, toSig, type Arg } from "../signal";
-import { tokens } from "../tokens";
+import { Shape, SVG_NS, Point, computed, toSig, type Arg } from "../core";
+import { tokens } from "./tokens";
 import { Line, type LineOpts } from "./line";
 
 const ARROW_ID = "minim-arrow";

@@ -52,7 +52,7 @@ export class MdAnimDemo extends Diagram {
     }
   `;
 
-  protected setup(s: Scene): void {
+  protected scene(s: Scene): void {
     s.view(0, 0, 600, 280);
 
     const sideLabel = (y: number, name: string) =>

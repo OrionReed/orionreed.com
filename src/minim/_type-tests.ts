@@ -10,7 +10,7 @@ import {
   type Animator,
   type ReadonlySignal,
 } from "./index";
-import { bounceIn, fadeUp } from "../elements/optical-centering/transitions";
+import { bounceIn, fadeUp } from "./motion";
 
 const anim = new Anim();
 
@@ -134,7 +134,7 @@ anim.run(run);
 // the litmus test for "is the empty-opts case structurally compatible
 // with the default-opts case?".
 {
-  function highlight(s: import("./shape").Shape) {
+  function highlight(s: import("./core/shape").Shape) {
     s.opacity.value = 0.5;
     return s;
   }
@@ -151,7 +151,7 @@ anim.run(run);
 // Use AnyShape — IsAny widens prop types to the union, so reads work
 // uniformly without narrowing.
 {
-  function flashOnce(s: import("./shape").AnyShape) {
+  function flashOnce(s: import("./core/shape").AnyShape) {
     return s.opacity.value;
   }
   flashOnce(circle(pt(0, 0), 5)); // OK
@@ -162,7 +162,7 @@ anim.run(run);
 // `Writable<K>` utility — only the props the helper touches must be
 // writable. Combinable via union of keys.
 {
-  function pulse(s: import("./shape").Writable<"opacity">): Animator {
+  function pulse(s: import("./core/shape").Writable<"opacity">): Animator {
     return (function* () {
       yield* s.opacity.to(0.3, 0.5);
       yield* s.opacity.to(1, 0.5);
