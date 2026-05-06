@@ -9,8 +9,10 @@ import {
   label,
   line,
   pt,
-  signal,
+  snapshot,
+  store,
   until,
+  when,
   type Animator,
   type Signal,
 } from "../minim";
@@ -51,20 +53,24 @@ export class MdQrtpProtocol extends Diagram {
     const center = pt(rOut, rOut);
 
     // ── State ───────────────────────────────────────────────────────
-
-    const cellState = signal<Map<number, CellState>>(new Map());
-    const cellOverrides = signal<Map<number, string>>(new Map());
-    const broadcastIndex = signal(0);
-    const lastBroadcast = signal(-1);
+    // All four reactive fields live in one `store` — read with plain
+    // property access (tracked inside `computed`, untracked outside),
+    // write with assignment, snapshot the whole record at once.
+    const state = store({
+      cells: new Map<number, CellState>(),
+      overrides: new Map<number, string>(),
+      broadcast: 0,
+      lastBroadcast: -1,
+    });
 
     // Per-cell color: override > broadcast highlight > state-based.
     // Returns null when the cell should be invisible.
     const cellColor = (i: number) =>
       computed((): string | null => {
-        const ov = cellOverrides.value.get(i);
+        const ov = state.overrides.get(i);
         if (ov !== undefined) return ov;
-        if (i === lastBroadcast.value) return stroke.toString();
-        const st = cellState.value.get(i);
+        if (i === state.lastBroadcast) return stroke.toString();
+        const st = state.cells.get(i);
         if (st === "received") return ink("green").mod(0.7).toString();
         if (st === "retransmit") return ink("orange").mod(0.7).toString();
         if (st === "acknowledged") return grey.mod(0.7).toString();
@@ -82,8 +88,8 @@ export class MdQrtpProtocol extends Diagram {
       s(
         annularSector(center, rOut, rIn, a0, a1, {
           stroke: "none",
-          fill: () => colors[i].value ?? "transparent",
-          opacity: () => (colors[i].value === null ? 0 : 1),
+          fill: colors[i].map((c) => c ?? "transparent"),
+          opacity: when(colors[i]),
         }),
       );
     }
@@ -105,7 +111,7 @@ export class MdQrtpProtocol extends Diagram {
 
     const cellsWithState = (st: CellState): number[] => {
       const out: number[] = [];
-      for (const [i, v] of cellState.peek()) if (v === st) out.push(i);
+      for (const [i, v] of state.cells) if (v === st) out.push(i);
       return out;
     };
 
@@ -123,7 +129,7 @@ export class MdQrtpProtocol extends Diagram {
           component.push(c);
           for (const nb of [(c - 1 + N) % N, (c + 1) % N]) {
             // Flood crosses any received-once neighbor (incl. acknowledged).
-            if (!visited.has(nb) && cellState.peek().has(nb)) queue.push(nb);
+            if (!visited.has(nb) && state.cells.has(nb)) queue.push(nb);
           }
         }
         if (component.length > 0) components.push(component);
@@ -132,22 +138,17 @@ export class MdQrtpProtocol extends Diagram {
     };
 
     const handleReception = (i: number): void => {
-      const st = cellState.peek().get(i);
-      const next = new Map(cellState.peek());
+      const st = state.cells.get(i);
+      const next = new Map(state.cells);
       if (st === "received") {
         if (R.chance(RECEIVE_CHANCE)) next.set(i, "retransmit");
       } else if (st === undefined) {
         if (R.chance(RECEIVE_CHANCE)) next.set(i, "received");
       }
-      cellState.value = next;
+      state.cells = next;
     };
 
-    const reset = () => {
-      cellState.value = new Map();
-      cellOverrides.value = new Map();
-      broadcastIndex.value = 0;
-      lastBroadcast.value = -1;
-    };
+    const reset = snapshot(state);
 
     // ── Animation ───────────────────────────────────────────────────
 
@@ -159,10 +160,10 @@ export class MdQrtpProtocol extends Diagram {
 
       for (const component of components) {
         for (const cell of component) {
-          if (cell !== lastBroadcast.peek()) {
-            const next = new Map(cellOverrides.peek());
+          if (cell !== state.lastBroadcast) {
+            const next = new Map(state.overrides);
             next.set(cell, flood);
-            cellOverrides.value = next;
+            state.overrides = next;
           }
           yield T.floodCellStep;
         }
@@ -170,15 +171,15 @@ export class MdQrtpProtocol extends Diagram {
 
       yield T.afterFlood;
 
-      const next = new Map(cellState.peek());
+      const next = new Map(state.cells);
       for (const c of cellsWithState("retransmit")) next.set(c, "received");
       if (backchannel) {
         for (const component of components) {
           for (const c of component) next.set(c, "acknowledged");
         }
       }
-      cellState.value = next;
-      cellOverrides.value = new Map();
+      state.cells = next;
+      state.overrides = new Map();
     }
 
     const startFloodFillLoop = () => {
@@ -194,20 +195,17 @@ export class MdQrtpProtocol extends Diagram {
 
     this.anim.loop(function* () {
       // Skip already-acknowledged cells.
-      if (
-        backchannel &&
-        cellState.peek().get(broadcastIndex.peek()) === "acknowledged"
-      ) {
-        broadcastIndex.value = (broadcastIndex.peek() + 1) % N;
+      if (backchannel && state.cells.get(state.broadcast) === "acknowledged") {
+        state.broadcast = (state.broadcast + 1) % N;
         return;
       }
 
-      lastBroadcast.value = broadcastIndex.peek();
-      handleReception(broadcastIndex.peek());
-      broadcastIndex.value = (broadcastIndex.peek() + 1) % N;
+      state.lastBroadcast = state.broadcast;
+      handleReception(state.broadcast);
+      state.broadcast = (state.broadcast + 1) % N;
 
       // Full cycle complete — reset and (if backchannel) restart flood.
-      if (cellState.peek().size === N) {
+      if (state.cells.size === N) {
         yield T.beforeReset;
         floodAnim.stop();
         reset();

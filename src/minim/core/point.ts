@@ -62,6 +62,19 @@ export class Point {
       computed(() => this.y.value + (b.y.value - this.y.value) * ts.value),
     );
   }
+  /** Reactive midpoint between `this` and `b`. */
+  midpoint(b: Point): Point {
+    return new Point(
+      computed(() => (this.x.value + b.x.value) / 2),
+      computed(() => (this.y.value + b.y.value) / 2),
+    );
+  }
+  /** Euclidean distance to `b` as a reactive scalar. */
+  distance(b: Point): ReadonlySignal<number> {
+    return computed(() =>
+      Math.hypot(this.x.value - b.x.value, this.y.value - b.y.value),
+    );
+  }
 
   /** Point at radius `r` and angle `θ` (radians, y-down) from `c`. */
   static polar(c: Point, r: Arg<number>, angle: Arg<number>): Point {

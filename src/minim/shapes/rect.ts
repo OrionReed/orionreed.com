@@ -136,13 +136,19 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   }
 }
 
-/** Rect factory, three forms:
+/** Rect factory, four forms:
  *
  *   rect(x, y, w, h, opts?)            — corner-based (canonical)
  *   rect(b: Bounds, opts?)             — from another shape's bounds
  *   rect(center: Point, w, h, opts?)   — centered on a Point
+ *   rect(p1: Point, p2: Point, opts?)  — bounded by two corner Points
  */
 export function rect<const O extends RectOpts>(b: Bounds, opts?: O): Rect<O>;
+export function rect<const O extends RectOpts>(
+  p1: Point,
+  p2: Point,
+  opts?: O,
+): Rect<O>;
 export function rect<const O extends RectOpts>(
   center: Point,
   w: Arg<number>,
@@ -158,13 +164,17 @@ export function rect<const O extends RectOpts>(
 ): Rect<O>;
 export function rect(
   a: Arg<number> | Bounds | Point,
-  b?: Arg<number> | RectOpts,
+  b?: Arg<number> | Point | RectOpts,
   c?: Arg<number>,
   d?: Arg<number> | RectOpts,
   e?: RectOpts,
 ): Rect {
   if (a instanceof Bounds) {
     return new Rect(a.x, a.y, a.w, a.h, b as RectOpts | undefined);
+  }
+  if (a instanceof Point && b instanceof Point) {
+    const bb = Bounds.between(a, b);
+    return new Rect(bb.x, bb.y, bb.w, bb.h, c as RectOpts | undefined);
   }
   if (a instanceof Point) {
     const w = b as Arg<number>;

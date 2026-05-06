@@ -17,15 +17,25 @@ interface Entry {
   shapes: AnyShape[];
 }
 
+/** Reactive list rendering result. `at(i)` returns the primary shape
+ *  rendered for the i-th source item (the first if `render` returned
+ *  an array), or `undefined` when out of range. */
+export interface ForEachResult {
+  dispose: () => void;
+  at: (i: number) => AnyShape | undefined;
+  all: (i: number) => readonly AnyShape[] | undefined;
+}
+
 /** Render a shape (or shapes) per item in `source`, mounting under
  *  `parent`. Re-runs only on list changes; per-item reactivity is
- *  the render function's job. Returns a disposer. */
+ *  the render function's job. Returns a disposer plus indexed access
+ *  to the rendered shapes (for cross-layer references). */
 export function forEach<T>(
   parent: AnyShape,
   source: Arg<readonly T[]>,
   render: (item: T, index: number) => AnyShape | AnyShape[],
   options: ForEachOptions<T> = {},
-): { dispose: () => void } {
+): ForEachResult {
   const sourceSig = toSig(source);
   const { key: keyOf } = options;
 
@@ -71,5 +81,7 @@ export function forEach<T>(
       entries = [];
       for (const e of toRemove) parent.remove(...e.shapes);
     },
+    at: (i: number) => entries[i]?.shapes[0],
+    all: (i: number) => entries[i]?.shapes,
   };
 }

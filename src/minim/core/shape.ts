@@ -53,11 +53,21 @@ export type Segment =
  *  `aside` excludes this shape from its parent's children-union bounds
  *  (and transitively from auto-fit) — for decorative overlays that
  *  shouldn't extend the diagram's natural extent. */
+/** Either a Vec-typed `Arg` (value / signal / thunk) or a `Point` —
+ *  Points are auto-unwrapped to a thunk reading `.value`. Lets you
+ *  write `translate: someShape.bounds.center` directly. */
+export type VecArg = Arg<Vec> | Point;
+
+/** Normalize a `VecArg` into the underlying `Arg<Vec>` form, threading
+ *  `Point`s through as `() => point.value` thunks. */
+const vecOpt = (v: VecArg | undefined): Arg<Vec> | undefined =>
+  v instanceof Point ? () => v.value : v;
+
 export interface ShapeOpts {
-  translate?: Arg<Vec>;
+  translate?: VecArg;
   rotate?: Arg<number>;
-  scale?: Arg<Vec>;
-  origin?: Arg<Vec>;
+  scale?: VecArg;
+  origin?: VecArg;
   opacity?: Arg<number>;
   aside?: boolean;
 }
@@ -146,10 +156,10 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     // Cast aligns the field's conditional type with `toSig`'s wider
     // return — runtime is unchanged either way.
     type Cast<K extends keyof ShapeOpts, T> = ResolveSig<Lookup<O, K>, T>;
-    this.translate = toSig(opts.translate ?? defaults.translate, { x: 0, y: 0 }) as Cast<"translate", Vec>;
+    this.translate = toSig(vecOpt(opts.translate) ?? vecOpt(defaults.translate), { x: 0, y: 0 }) as Cast<"translate", Vec>;
     this.rotate = toSig(opts.rotate ?? defaults.rotate, 0) as Cast<"rotate", number>;
-    this.scale = toSig(opts.scale ?? defaults.scale, { x: 1, y: 1 }) as Cast<"scale", Vec>;
-    this.origin = toSig(opts.origin ?? defaults.origin, { x: 0, y: 0 }) as Cast<"origin", Vec>;
+    this.scale = toSig(vecOpt(opts.scale) ?? vecOpt(defaults.scale), { x: 1, y: 1 }) as Cast<"scale", Vec>;
+    this.origin = toSig(vecOpt(opts.origin) ?? vecOpt(defaults.origin), { x: 0, y: 0 }) as Cast<"origin", Vec>;
     this.opacity = toSig(opts.opacity ?? defaults.opacity, 1) as Cast<"opacity", number>;
     this.aside = opts.aside ?? defaults.aside ?? false;
 
@@ -375,4 +385,38 @@ export function boundsIn(
     // shape-local → observer-local = inv(observer→root) ⋅ shape→root
     return transformAABB(multiply(invert(mObs), mShape), shape.bounds.value);
   });
+}
+
+/** Wire `handle` for pointer-drag — every move while pressed calls
+ *  `onDrag(local)` with the current pointer position in `handle`'s
+ *  local coordinate frame. Captures the pointer so drags continue
+ *  outside the handle's bounds. Returns a disposer. */
+export function draggable(
+  handle: AnyShape,
+  onDrag: (local: Vec) => void,
+): () => void {
+  let dragging = false;
+  let pointerId = -1;
+  const offs: Array<() => void> = [];
+  offs.push(handle.on("pointerdown", (e) => {
+    const pe = e as PointerEvent;
+    dragging = true;
+    pointerId = pe.pointerId;
+    handle.el.setPointerCapture(pointerId);
+    onDrag(handle.toLocal(pe));
+  }));
+  offs.push(handle.on("pointermove", (e) => {
+    if (!dragging) return;
+    onDrag(handle.toLocal(e as PointerEvent));
+  }));
+  const stop = () => {
+    if (dragging && pointerId !== -1) {
+      try { handle.el.releasePointerCapture(pointerId); } catch { /* ok */ }
+    }
+    dragging = false;
+    pointerId = -1;
+  };
+  offs.push(handle.on("pointerup", stop));
+  offs.push(handle.on("pointercancel", stop));
+  return () => offs.forEach((d) => d());
 }

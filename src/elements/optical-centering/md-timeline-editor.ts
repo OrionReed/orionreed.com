@@ -1,11 +1,10 @@
 // Mini timeline editor: editable named durations driving a looping
-// animation. Demonstrates the full Step 8/9/10 stack:
+// animation. Demonstrates:
 //
 //   - `timeline({...})` for named, edit-friendly duration signals
 //   - `during(tl[name], fn)` time-blocks parameterized by signal duration
-//   - `shape.on("pointer*", ...)` for drag-to-edit knobs
-//   - `shape.toLocal(evt)` to convert pointer events to scene coords
-//   - `anim.emit/on/until` for click pings + reactive tap counts
+//   - `draggable(knob, fn)` for drag-to-edit knobs
+//   - `anim.emit/on` for click pings + reactive tap counts
 //
 // Drag the knobs below the timeline strip to retime each phase live.
 // Click any of the stage actors to ping (counter increments). The
@@ -19,6 +18,7 @@ import {
   circle,
   computed,
   css,
+  draggable,
   during,
   label,
   line,
@@ -115,41 +115,25 @@ export class MdTimelineEditor extends Diagram {
 
     PHASES.forEach((name, i) => {
       const x0 = 60 + i * (SLIDER_W + SLIDER_GAP);
-      const x1 = x0 + SLIDER_W;
       const sig = tl[name];
 
-      const track = s(line(
+      s(line(
         pt(x0, SLIDER_Y),
-        pt(x1, SLIDER_Y),
+        pt(x0 + SLIDER_W, SLIDER_Y),
         { thin: true, opacity: 0.3, cap: "round" },
       ));
 
-      // Knob position is computed from the duration; user drags to write.
-      const knob = circle(pt(0, 0), 9, {
-        fill: COLORS[i],
-        translate: computed(() => ({
-          x: x0 + (sig.value / MAX_DUR) * SLIDER_W,
-          y: SLIDER_Y,
-        })),
-      });
-
-      let dragging = false;
-      knob.on("pointerdown", (e) => {
-        const ev = e as PointerEvent;
-        dragging = true;
-        knob.el.setPointerCapture(ev.pointerId);
-      });
-      knob.on("pointermove", (e) => {
-        if (!dragging) return;
-        const local = track.toLocal(e as PointerEvent);
+      // Knob center tracks the duration reactively; drag writes back.
+      const knob = s(circle(
+        pt(() => x0 + (sig.value / MAX_DUR) * SLIDER_W, SLIDER_Y),
+        9,
+        { fill: COLORS[i] },
+      ));
+      draggable(knob, (local) => {
         const u = Math.min(Math.max((local.x - x0) / SLIDER_W, 0), 1);
         // Floor at 0.1s so a phase never reaches zero (would freeze the loop).
         sig.value = Math.max(0.1, u * MAX_DUR);
       });
-      const stop = () => { dragging = false; };
-      knob.on("pointerup", stop);
-      knob.on("pointercancel", stop);
-      s(knob);
     });
 
     // ── Stage actors (bottom) — one per phase, clickable for "ping" ──

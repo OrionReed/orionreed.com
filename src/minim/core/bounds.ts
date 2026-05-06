@@ -80,6 +80,37 @@ export class Bounds {
     this.h = computed(() => sig.value.h);
   }
 
+  /** Bounding box of two opposing corners (any orientation). */
+  static between(a: Point, b: Point): Bounds {
+    return new Bounds(
+      computed(() => {
+        const av = a.value;
+        const bv = b.value;
+        const x = Math.min(av.x, bv.x);
+        const y = Math.min(av.y, bv.y);
+        return aabb(x, y, Math.abs(bv.x - av.x), Math.abs(bv.y - av.y));
+      }),
+    );
+  }
+
+  /** Axis-aligned bounding box of any number of points. */
+  static from(...points: Point[]): Bounds {
+    return new Bounds(
+      computed(() => {
+        if (points.length === 0) return aabb(0, 0, 0, 0);
+        let xMin = Infinity, yMin = Infinity, xMax = -Infinity, yMax = -Infinity;
+        for (const p of points) {
+          const v = p.value;
+          if (v.x < xMin) xMin = v.x;
+          if (v.y < yMin) yMin = v.y;
+          if (v.x > xMax) xMax = v.x;
+          if (v.y > yMax) yMax = v.y;
+        }
+        return aabb(xMin, yMin, xMax - xMin, yMax - yMin);
+      }),
+    );
+  }
+
   get tl()     { return (this.#tl     ??= this.at(0,   0)); }
   get tr()     { return (this.#tr     ??= this.at(1,   0)); }
   get bl()     { return (this.#bl     ??= this.at(0,   1)); }

@@ -13,7 +13,6 @@ import {
   Scene,
   align,
   circle,
-  computed,
   css,
   during,
   label,
@@ -35,58 +34,54 @@ export class MdEventDemo extends Diagram {
     const H = 240;
     s.view(0, 0, W, H);
 
-    // ── Editable named durations ──────────────────────────────────────
-    const tl = timeline({
-      intro: 0.7,
-      hold: 1.2,
-      outro: 0.6,
-    });
-    const phases = ["intro", "hold", "outro"] as const;
+    // ── Editable named durations. The phase order is the timeline's
+    //    own key order — no need to re-list the names.
+    const tl = timeline({ intro: 0.7, hold: 1.2, outro: 0.6 });
+    const phases = Object.keys(tl) as Array<keyof typeof tl>;
 
-    // ── Reactive labels ───────────────────────────────────────────────
+    // ── Reactive labels ──────────────────────────────────────────────
     const phaseSig = signal<string>("idle");
     const taps = signal(0);
 
-    // ── Actors: one per phase; click any to emit "step" ──────────────
+    // ── Actors: one per phase; click any to emit "step" ─────────────
     const actors = phases.map((_, i) =>
-      circle(pt(140 + i * 160, H / 2), 30, {
-        fill: true,
-        opacity: 0,
-      }),
+      s(circle(pt(140 + i * 160, H / 2), 30, { fill: true, opacity: 0 })),
     );
-    actors.forEach((c) => {
-      c.on("click", () => this.anim.emit("step"));
-      s(c);
-    });
+    actors.forEach((c) => c.on("click", () => this.anim.emit("step")));
 
     // Per-phase duration label below each actor.
-    phases.forEach((name, i) => {
-      const sig = tl[name];
-      s(label(
-        pt(140 + i * 160, H / 2 + 56),
-        computed(() => `${name}: ${sig.value.toFixed(2)}s`),
-        { size: 11, opacity: 0.6 },
-      ));
-    });
+    phases.forEach((name, i) =>
+      s(
+        label(
+          pt(140 + i * 160, H / 2 + 56),
+          () => `${name}: ${tl[name].value.toFixed(2)}s`,
+          { size: 11, opacity: 0.6 },
+        ),
+      ),
+    );
 
     // Status header + footer.
-    s(label(
-      pt(W / 2, 28),
-      computed(() => `phase: ${phaseSig.value}   ·   taps: ${taps.value}`),
-      { size: 14, opacity: 0.75 },
-    ));
-    s(label(
-      pt(W / 2, H - 16),
-      "click any circle to skip the current phase",
-      { size: 11, opacity: 0.5, align: align.center },
-    ));
+    s(
+      label(
+        pt(W / 2, 28),
+        () => `phase: ${phaseSig.value}   ·   taps: ${taps.value}`,
+        { size: 14, opacity: 0.75 },
+      ),
+    );
+    s(
+      label(pt(W / 2, H - 16), "click any circle to skip the current phase", {
+        size: 11,
+        opacity: 0.5,
+        align: align.center,
+      }),
+    );
 
     // Parallel listener path — counts every "step" event.
     this.anim.on("step", () => {
       taps.value = taps.peek() + 1;
     });
 
-    // ── Animation flow: events × ranges in one generator ─────────────
+    // ── Animation flow: events × ranges in one generator ────────────
     const anim = this.anim;
     anim.loop(function* () {
       for (let i = 0; i < phases.length; i++) {

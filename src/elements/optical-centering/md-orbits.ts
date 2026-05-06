@@ -6,11 +6,11 @@
 
 import {
   Diagram,
+  Point,
   Scene,
   type AnyShape,
   bounceIn,
   circle,
-  computed,
   css,
   group,
   lag,
@@ -29,11 +29,9 @@ export class MdOrbits extends Diagram {
   `;
 
   protected scene(s: Scene): void {
-    const W = 400;
-    const H = 320;
-    s.view(0, 0, W, H);
+    const view = s.view(0, 0, 400, 320);
 
-    const sun = s(group({ translate: { x: W / 2, y: H / 2 } }));
+    const sun = s(group({ translate: view.center }));
     sun.add(circle(pt(0, 0), 12, { fill: true }));
 
     // Continuous angular motion: integrate `omega = 2π/period` per
@@ -73,12 +71,9 @@ export class MdOrbits extends Diagram {
     ) => {
       orbitRing(parent, r);
       const angle = angularMotion(period);
-      const p = group({
-        translate: computed(() => ({
-          x: r * Math.cos(angle.value),
-          y: r * Math.sin(angle.value),
-        })),
-      });
+      // Position relative to parent's local origin via polar coords —
+      // `Point` flows directly into `translate` (no Vec unpacking).
+      const p = group({ translate: Point.polar(pt(0, 0), r, angle) });
       p.add(circle(pt(0, 0), size, { fill: true }));
 
       if (opts.ring) {

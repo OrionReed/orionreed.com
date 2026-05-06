@@ -16,9 +16,11 @@ import {
   Diagram,
   Scene,
   type AnyShape,
+  type Arg,
   type Path,
   type Point,
   circle,
+  computed,
   css,
   label,
   linear,
@@ -26,7 +28,8 @@ import {
   pt,
   rect,
   signal,
-  type Signal,
+  store,
+  toSig,
   tokens,
 } from "../../minim";
 import * as R from "../rand";
@@ -96,9 +99,11 @@ export class MdCircuit extends Diagram {
       return c;
     };
 
-    /** Indicator dot whose fill toggles with a boolean signal. */
-    const lit = (at: Point, on: Signal<boolean>) =>
-      circle(at, 4, { fill: () => (on.value ? tokens.stroke : "transparent") });
+    /** Indicator dot whose fill toggles with a reactive boolean. */
+    const lit = (at: Point, on: Arg<boolean>) =>
+      circle(at, 4, {
+        fill: toSig(on).map((v) => (v ? tokens.stroke : "transparent")),
+      });
 
     // Auto-route, fully reactive so endpoints stick to the visual
     // boundary as shapes pulse:
@@ -127,11 +132,13 @@ export class MdCircuit extends Diagram {
         const end = opts.to ?? b.boundary(aRef);
         w = path(start).to(end);
       } else {
+        // 45° staircase: the bend points sit on the y-midline at the
+        // x where each diagonal leg covers exactly |dy|/2 horizontally.
+        const m = aRef.midpoint(bRef);
         const dirX = bRefV.x > aRefV.x ? 1 : -1;
-        const dyHalf = () => Math.abs(bRef.y.value - aRef.y.value) / 2;
-        const midY = () => (aRef.y.value + bRef.y.value) / 2;
-        const pA = pt(() => aRef.x.value + dirX * dyHalf(), midY);
-        const pB = pt(() => bRef.x.value - dirX * dyHalf(), midY);
+        const halfDy = computed(() => Math.abs(m.y.value - aRef.y.value));
+        const pA = pt(() => aRef.x.value + dirX * halfDy.value, m.y);
+        const pB = pt(() => bRef.x.value - dirX * halfDy.value, m.y);
         const start = opts.from ?? a.boundary(pA);
         const end = opts.to ?? b.boundary(pB);
         w = path(start).to(pA).to(pB).to(end);
@@ -181,28 +188,24 @@ export class MdCircuit extends Diagram {
       anim.on(from, () => pulse(w, () => anim.emit(to)));
 
     /** AND-sync: tokens accumulate from `evA` and `evB`; whenever each
-     *  has ≥1, fire `out` and consume one of each. Pending state is
-     *  visualized by two slot-dots inside the gate. */
+     *  has ≥1, fire `out` and consume one of each. Pending counts live
+     *  in a `store`; the slot-dot visuals derive from those counts —
+     *  no manual mirroring. */
     const andSync = (evA: string, evB: string, out: string, gate: AnyShape) => {
-      const slotA = signal(false);
-      const slotB = signal(false);
-      s(
-        lit(gate.bounds.center.offset(-14, 14), slotA),
-        lit(gate.bounds.center.offset(+14, 14), slotB),
+      const sync = store({ a: 0, b: 0 });
+      gate.add(
+        lit(gate.bounds.center.offset(-14, 14), () => sync.a > 0),
+        lit(gate.bounds.center.offset(+14, 14), () => sync.b > 0),
       );
 
-      let pendingA = 0;
-      let pendingB = 0;
       const settle = () => {
-        const n = Math.min(pendingA, pendingB);
-        pendingA -= n;
-        pendingB -= n;
+        const n = Math.min(sync.a, sync.b);
+        sync.a -= n;
+        sync.b -= n;
         for (let i = 0; i < n; i++) anim.emit(out);
-        slotA.value = pendingA > 0;
-        slotB.value = pendingB > 0;
       };
-      anim.on(evA, () => { pendingA++; settle(); });
-      anim.on(evB, () => { pendingB++; settle(); });
+      anim.on(evA, () => { sync.a++; settle(); });
+      anim.on(evB, () => { sync.b++; settle(); });
     };
 
     /** Hold an arriving event for a randomized interval, then relay. */
@@ -214,7 +217,7 @@ export class MdCircuit extends Diagram {
       gate: AnyShape,
     ) => {
       const holding = signal(false);
-      s(lit(gate.bounds.center.down(6), holding));
+      gate.add(lit(gate.bounds.center.down(6), holding));
       anim.loop(function* () {
         yield* anim.until(from);
         holding.value = true;

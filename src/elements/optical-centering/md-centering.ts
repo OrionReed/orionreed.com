@@ -4,18 +4,18 @@ import {
   Text,
   align,
   circle,
-  computed,
   css,
   easeInOut,
   easeOut,
-  group,
   label,
   lag,
   line,
   pt,
   rect,
   signal,
+  snapshot,
   t,
+  when,
   type Line,
   type LineOpts,
 } from "../../minim";
@@ -45,8 +45,14 @@ export class MdCentering extends Diagram {
   protected scene(s: Scene): void {
     s.view(-20, -20, 640, 240);
 
+    // ── Phase signals — each is the master clock for one stage of the
+    // build-up: 0 = hidden / not-yet-arrived, 1 = fully revealed.
     const lineT = signal(0);
     const morphT = signal(0);
+    const xLabelsT = signal(0);
+    const yLabelsT = signal(0);
+    const boxT = signal(0);
+    const centroidT = signal(0);
 
     // Geometry. Origin near bottom-left; full-extent axes are phantom
     // Lines (never mounted) used as tick references — the visible
@@ -59,11 +65,11 @@ export class MdCentering extends Diagram {
 
     const yTip = xEnd.lerp(yEnd, morphT);
     const xAxis = line(O, xEnd); // phantom — full extent
-    const yAxis = line(O, yEnd); // phantom — full extent (labels, box)
+    const yAxis = line(O, yEnd); // phantom — full extent
     const yMorph = line(O, yTip); // phantom — tracks morph (ticks)
-    const yShown = computed(() => (morphT.value > 0 ? 1 : 0));
+    const yShown = when(morphT);
 
-    // Visible axes — animated.
+    // Visible axes.
     s(line(O, O.lerp(xEnd, lineT)));
     s(line(O, yTip, { opacity: yShown }));
 
@@ -71,82 +77,86 @@ export class MdCentering extends Diagram {
     F.forEach((f) =>
       s(
         tick(xAxis, f, 7, {
-          opacity: () => clamp01((lineT.value - f) / 0.06),
+          opacity: lineT.map((v) => clamp01((v - f) / 0.06)),
         }),
       ),
     );
     F.forEach((f) => s(tick(yMorph, f, 7, { opacity: yShown })));
 
-    // Label groups — fade together via parent opacity inheritance.
-    const xLabels = s(group({ opacity: 0 }));
-    xLabels.add(
-      ...F.map((f, i) =>
+    // Labels — each group of three labels shares one opacity signal,
+    // so a single `.to(1, …)` fades them in together. No SVG group
+    // needed; passing the same Signal as the `opacity` opt is enough.
+    F.forEach((f, i) =>
+      s(
         label(xAxis.at(f).down(24), math("x", subs[i]), {
           size: 16,
           align: align.top,
+          opacity: xLabelsT,
         }),
       ),
     );
-
-    const yLabels = s(group({ opacity: 0 }));
-    yLabels.add(
-      ...F.map((f, i) =>
+    F.forEach((f, i) =>
+      s(
         label(yAxis.at(f).left(14), math("y", subs[i]), {
           size: 16,
           align: align.right,
+          opacity: yLabelsT,
         }),
       ),
     );
 
-    // Box, crosshairs (faint baseline opacity, multiplied by group fade).
+    // Box + crosshairs share `boxT`; centroid + its label share
+    // `centroidT`. Crosshairs blend a faint baseline (0.6) with the
+    // master via `boxT.map(v => v * 0.6)`.
     const [xMin, xMid, xMax] = F.map((f) => xAxis.at(f));
     const [yMin, yMid, yMax] = F.map((f) => yAxis.at(f));
     const c = pt(xMid.x, yMid.y);
 
-    const boxGroup = s(group({ opacity: 0 }));
-    boxGroup.add(
-      rect(
-        xMin.x,
-        yMax.y,
-        () => xMax.x.value - xMin.x.value,
-        () => yMin.y.value - yMax.y.value,
-        { thin: true, corner: 4, opacity: 0.5 },
-      ),
-      line(xMid, c, { thin: true, dashed: true, opacity: 0.6 }),
-      line(yMid, c, { thin: true, dashed: true, opacity: 0.6 }),
+    s(
+      rect(pt(xMin.x, yMax.y), pt(xMax.x, yMin.y), {
+        thin: true,
+        corner: 4,
+        opacity: boxT.map((v) => v * 0.5),
+      }),
+    );
+    s(
+      line(xMid, c, {
+        thin: true,
+        dashed: true,
+        opacity: boxT.map((v) => v * 0.6),
+      }),
+    );
+    s(
+      line(yMid, c, {
+        thin: true,
+        dashed: true,
+        opacity: boxT.map((v) => v * 0.6),
+      }),
     );
 
-    const centroidGroup = s(group({ opacity: 0 }));
-    centroidGroup.add(
-      circle(c, 4, { fill: true }),
+    s(circle(c, 4, { fill: true, opacity: centroidT }));
+    s(
       label(
         c.right(10).up(10),
         t("(", math("x", "c"), ", ", math("y", "c"), ")"),
-        { size: 14, align: align.bottomLeft },
+        { size: 14, align: align.bottomLeft, opacity: centroidT },
       ),
     );
 
-    // Animation script.
+    // Animation script. `snapshot` captures the six phase signals
+    // once; `reset()` restores them at the top of each iteration.
+    const reset = snapshot(lineT, morphT, xLabelsT, yLabelsT, boxT, centroidT);
     this.anim.loop(function* () {
-      lineT.value = 0;
-      morphT.value = 0;
-      [xLabels, yLabels, boxGroup, centroidGroup].forEach(
-        (g) => (g.opacity.value = 0),
-      );
-
+      reset();
       yield* lineT.to(1, 1.1, easeOut);
       yield 0.24;
-      yield* xLabels.opacity.to(1, 0.45);
+      yield* xLabelsT.to(1, 0.45);
       yield 0.72;
       yield* morphT.to(1, 1.2, easeInOut);
       yield 0.24;
-      yield* yLabels.opacity.to(1, 0.45);
+      yield* yLabelsT.to(1, 0.45);
       yield 0.24;
-      yield* lag(
-        1,
-        boxGroup.opacity.to(1, 0.6),
-        centroidGroup.opacity.to(1, 0.5),
-      );
+      yield* lag(1, boxT.to(1, 0.6), centroidT.to(1, 0.5));
       yield 4.5;
     });
   }

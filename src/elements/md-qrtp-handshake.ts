@@ -7,8 +7,10 @@ import {
   line,
   pt,
   rect,
-  signal,
+  snapshot,
+  store,
   t,
+  when,
   type Signal,
 } from "../minim";
 
@@ -43,103 +45,86 @@ export class MdQrtpHandshake extends Diagram {
     const H = CHUNK_H * 2 + DEVICE_GAP;
     s.view(-40, -8, W + 50, H + 16);
 
-    const chunksA = signal<ChunkState[]>(initialChunks("A", N));
-    const chunksB = signal<ChunkState[]>(initialChunks("B", N));
-    const arrowsAB = signal<string[]>(new Array(N).fill(""));
-    const arrowsBA = signal<string[]>(new Array(N).fill(""));
+    // Single source of truth — both rows + arrow visibility derive from
+    // the chunk arrays. Arrows fire iff the corresponding chunk's `ack`
+    // is set.
+    const state = store({
+      A: initialChunks("A", N),
+      B: initialChunks("B", N),
+    });
 
-    // Build one row of N chunks reading from `state`. Returns the
-    // [data, ack] bounds per chunk so arrows can land on them.
-    const buildRow = (state: Signal<ChunkState[]>, y: number) =>
+    // Build one row of N chunks reading from `state[device]`. Returns
+    // the [data, ack] bounds per chunk so arrows can land on them.
+    const buildRow = (device: "A" | "B", y: number) =>
       Array.from({ length: N }, (_, i) => {
-        const x = i * PITCH;
-        const r = s(rect(x, y, CHUNK_W, CHUNK_H));
+        const r = s(rect(i * PITCH, y, CHUNK_W, CHUNK_H));
         const [data, ack] = r.bounds.split("x", [3, 2]);
         s(line(data.tr, data.br, { thin: true }));
 
         // Dashed outline around the "current" chunk only — concentric
         // outline keeps the corner radius matching the inner rect.
-        s(
-          r.outline(4, {
-            dashed: true,
-            cap: "round",
-            opacity: () => (state.value[i].status === "current" ? 1 : 0),
-            aside: true,
-          }),
-        );
+        s(r.outline(4, {
+          dashed: true,
+          cap: "round",
+          opacity: when(() => state[device][i].status === "current"),
+          aside: true,
+        }));
 
-        // Data slot: value (only when not future) + muted "data" tag below.
-        s(
-          label(data.center.up(5), () => {
-            const c = state.value[i];
-            if (c.status === "future") return "";
-            return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
-          }),
-        );
+        // Data slot: value (only when not future) + muted "data" tag.
+        s(label(data.center.up(5), () => {
+          const c = state[device][i];
+          if (c.status === "future") return "";
+          return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
+        }));
         s(label(data.center.down(8), t("data").muted(), { size: 12 }));
 
-        // Ack slot: hash (when set) + muted "ack" tag below.
-        s(label(ack.center.up(5), () => state.value[i].ack));
+        // Ack slot: hash (when set) + muted "ack" tag.
+        s(label(ack.center.up(5), () => state[device][i].ack));
         s(label(ack.center.down(8), t("ack").muted(), { size: 12 }));
 
         return { data, ack };
       });
 
-    const slotsA = buildRow(chunksA, 0);
-    const slotsB = buildRow(chunksB, CHUNK_H + DEVICE_GAP);
+    const slotsA = buildRow("A", 0);
+    const slotsB = buildRow("B", CHUNK_H + DEVICE_GAP);
 
     s(label(pt(-25, CHUNK_H / 2), t("A").bold(), { size: 18 }));
-    s(
-      label(pt(-25, CHUNK_H + DEVICE_GAP + CHUNK_H / 2), t("B").bold(), {
-        size: 18,
-      }),
-    );
+    s(label(pt(-25, CHUNK_H + DEVICE_GAP + CHUNK_H / 2), t("B").bold(), {
+      size: 18,
+    }));
 
-    // 2N pre-built arrows (A→B and B→A per chunk index), gated by
-    // whether that ack has been sent.
+    // 2N pre-built arrows (A→B and B→A per chunk index). Visibility
+    // derives directly from the source chunk's `ack` — no separate
+    // arrows array to keep in sync.
     for (let i = 0; i < N; i++) {
-      s(
-        arrow(slotsA[i].ack.bottom, slotsB[i].data.top, {
-          opacity: () => (arrowsAB.value[i] ? 1 : 0),
-        }),
-      );
-      s(
-        arrow(slotsB[i].ack.top, slotsA[i].data.bottom, {
-          opacity: () => (arrowsBA.value[i] ? 1 : 0),
-        }),
-      );
+      s(arrow(slotsA[i].ack.bottom, slotsB[i].data.top, {
+        opacity: when(() => state.A[i].ack !== ""),
+      }));
+      s(arrow(slotsB[i].ack.top, slotsA[i].data.bottom, {
+        opacity: when(() => state.B[i].ack !== ""),
+      }));
     }
 
     // ── Mutation helpers ────────────────────────────────────────────
 
     const addAck = (device: "A" | "B", i: number, hash: string) => {
-      const sig = device === "A" ? chunksA : chunksB;
-      const arrSig = device === "A" ? arrowsAB : arrowsBA;
-      const next = [...sig.value];
+      const next = [...state[device]];
       next[i] = { ...next[i], ack: hash };
-      sig.value = next;
-      const a = [...arrSig.value];
-      a[i] = hash;
-      arrSig.value = a;
+      state[device] = next;
     };
 
     const advance = (device: "A" | "B", i: number) => {
-      const sig = device === "A" ? chunksA : chunksB;
-      const next = [...sig.value];
+      const next = [...state[device]];
       next[i] = { ...next[i], status: "past" };
       if (i + 1 < N) next[i + 1] = { ...next[i + 1], status: "current" };
-      sig.value = next;
+      state[device] = next;
     };
 
     // ── Animation ────────────────────────────────────────────────────
 
+    const reset = snapshot(state);
     this.anim.loop(function* () {
-      // Reset for each cycle.
-      chunksA.value = initialChunks("A", N);
-      chunksB.value = initialChunks("B", N);
-      arrowsAB.value = new Array(N).fill("");
-      arrowsBA.value = new Array(N).fill("");
-
+      reset();
       for (let i = 0; i < N; i++) {
         const [first, second] = R.shuffle(["A", "B"] as const);
 

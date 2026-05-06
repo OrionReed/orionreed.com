@@ -12,6 +12,11 @@ export {
   effect,
   Signal,
   TweenChain,
+  snapshot,
+  store,
+  toSig,
+  when,
+  type Store,
   type ReadonlySignal,
   type Arg,
   type NumSig,
@@ -29,8 +34,10 @@ export {
   type AnimatableKey,
   type Writable,
   type Segment,
+  type VecArg,
   boundsInRoot,
   boundsIn,
+  draggable,
 } from "./core/shape";
 
 export { makeScene, type Scene } from "./core/scene";

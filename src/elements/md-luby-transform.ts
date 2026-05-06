@@ -13,6 +13,7 @@ import {
   rect,
   t,
   viewport,
+  when,
 } from "../minim";
 import * as R from "./rand";
 
@@ -25,27 +26,22 @@ export class MdLubyTransform extends Diagram {
     // viewBox width. Surviving cells keep their animation state across
     // breakpoint flips — no rebuild.
     const isMobile = computed(() => viewport().value.w < 768);
-    const W = computed(() => (isMobile.value ? 300 : 400));
-    const N = computed(() => (isMobile.value ? 7 : 10));
+    const W = isMobile.map((m) => (m ? 300 : 400));
+    const N = isMobile.map((m) => (m ? 7 : 10));
     const stride = computed(() => (W.value - SIZE) / (N.value - 1));
-    const indices = computed(() => Array.from({ length: N.value }, (_, i) => i));
+    const indices = N.map((n) => Array.from({ length: n }, (_, i) => i));
 
     const view = s.view(0, 0, W, 200);
 
+    // Re-roll the cell pattern and source-edge gating each tick.
     const tick = this.anim.pulse(0.5);
-    const cells = computed(() => {
-      tick.value;
-      return R.bools(QR_GRID * QR_GRID);
-    });
-    const edges = computed(() => {
-      tick.value;
-      // Re-rolled per tick; sized to current N.
-      return R.bools(N.value, 0.3, 1);
-    });
+    const cells = tick.map(() => R.bools(QR_GRID * QR_GRID));
+    const edges = tick.map(() => R.bools(N.value, 0.3, 1));
 
-    // ── Sources (top row) — reactive list ─────────────────────────────
+    // ── Sources (top row) — reactive list. `sources.at(i)` exposes
+    //    the i-th rect for the connection layer to anchor against.
     const sourcesLayer = s(group());
-    forEach(sourcesLayer, indices, (i) => {
+    const sources = forEach(sourcesLayer, indices, (i) => {
       const r = rect(() => i * stride.value, 24, SIZE, SIZE);
       const lbl = label(
         r.bounds.center,
@@ -55,15 +51,16 @@ export class MdLubyTransform extends Diagram {
       return [r, lbl];
     });
 
-    // "..." label trailing the last source — position from math, not
-    // from a shape reference (forEach owns those).
-    s(
-      label(
-        pt(() => (N.value - 1) * stride.value + SIZE + 14, 24 + SIZE / 2),
-        t("..."),
-        { size: 16, aside: true },
+    // "..." trailing the last source — anchored to the last rect's
+    // right edge via `sources.at(N - 1)`, so it tracks N reactively.
+    s(label(
+      pt(
+        () => (sources.at(N.value - 1)?.bounds.right.x.value ?? 0) + 14,
+        24 + SIZE / 2,
       ),
-    );
+      t("..."),
+      { size: 16, aside: true },
+    ));
 
     // ── XOR & QR (static) ─────────────────────────────────────────────
     const xor = s(circle(view.center, 12));
@@ -77,33 +74,24 @@ export class MdLubyTransform extends Diagram {
 
     const cellsLayer = s(group());
     cellsLayer.attr("clip-path", clipPath(s, qr), "wrapper");
-    qr.bounds
-      .grid(QR_GRID, QR_GRID)
-      .flat()
-      .forEach((cellB, i) =>
-        cellsLayer.add(
-          rect(cellB, {
-            fill: true,
-            corner: 0,
-            strokeWidth: 0.1,
-            opacity: () => (cells.value[i] ? 1 : 0),
-          }),
-        ),
-      );
+    qr.bounds.grid(QR_GRID, QR_GRID).flat().forEach((cellB, i) =>
+      cellsLayer.add(rect(cellB, {
+        fill: true,
+        corner: 0,
+        strokeWidth: 0.1,
+        opacity: when(() => cells.value[i]),
+      })),
+    );
 
-    // ── Source → XOR connections — reactive list, drawn last (on top) ──
+    // ── Source → XOR connections — reactive list, drawn last (on top).
+    //    Anchors come from `sources.at(i)`'s rect bounds.
     const connectionsLayer = s(group());
     forEach(connectionsLayer, indices, (i) => {
-      // Bottom-center of source rect at index `i` — derived from math,
-      // not a shape reference, so the connection survives forEach
-      // boundaries.
-      const sourceBottom = pt(
-        () => i * stride.value + SIZE / 2,
-        24 + SIZE,
-      );
-      return connect(sourceBottom, xor, {
+      const src = sources.at(i);
+      if (!src) return [];
+      return connect(src.bounds.bottom, xor, {
         thin: true,
-        opacity: () => (edges.value[i] ? 1 : 0),
+        opacity: when(() => edges.value[i]),
       });
     });
   }
