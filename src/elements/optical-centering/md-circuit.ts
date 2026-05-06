@@ -16,10 +16,8 @@ import {
   Diagram,
   Scene,
   type AnyShape,
-  type PathBuilder,
-  Path,
+  type Path,
   type Point,
-  type Writable,
   circle,
   css,
   label,
@@ -32,13 +30,6 @@ import {
   tokens,
 } from "../../minim";
 import * as R from "../rand";
-
-/** A wire bundles its routed path geometry with the rendered line so
- *  helpers can both animate dots along it and flash its opacity. */
-type Wire = {
-  path: PathBuilder;
-  line: AnyShape & Writable<"opacity">;
-};
 
 export class MdCircuit extends Diagram {
   static styles = css`
@@ -57,8 +48,8 @@ export class MdCircuit extends Diagram {
     const source = (x: number, y: number, lbl: string, ev: string) => {
       const c = circle(pt(x, y), 18);
       s(c, label(c.center, lbl, { size: 13, bold: true }));
-      anim.loop(function* (a) {
-        yield* a.until(ev);
+      anim.loop(function* () {
+        yield* anim.until(ev);
         yield* c.scale.to({ x: 1.4, y: 1.4 }, 0.08).to({ x: 1, y: 1 }, 0.3);
       });
       return c;
@@ -74,11 +65,9 @@ export class MdCircuit extends Diagram {
         label(c.center, () => String(count.value), { size: 13, bold: true }),
         label(c.center.up(30), lbl, { size: 11, opacity: 0.7 }),
       );
-      anim.on(ev, () => {
-        count.value = count.peek() + 1;
-      });
-      anim.loop(function* (a) {
-        yield* a.until(ev);
+      anim.on(ev, () => { count.value = count.peek() + 1; });
+      anim.loop(function* () {
+        yield* anim.until(ev);
         yield* c.scale.to({ x: 1.3, y: 1.3 }, 0.06).to({ x: 1, y: 1 }, 0.3);
       });
       return c;
@@ -107,6 +96,10 @@ export class MdCircuit extends Diagram {
       return c;
     };
 
+    /** Indicator dot whose fill toggles with a boolean signal. */
+    const lit = (at: Point, on: Signal<boolean>) =>
+      circle(at, 4, { fill: () => (on.value ? tokens.stroke : "transparent") });
+
     // Auto-route, fully reactive so endpoints stick to the visual
     // boundary as shapes pulse:
     //
@@ -118,21 +111,21 @@ export class MdCircuit extends Diagram {
     // The reference points (`from`/`to`) default to each shape's bounds
     // center, in which case `src`/`tgt` resolve to the analytic boundary
     // along the 45° ray. Pass an explicit Point (e.g. `AND.bounds.left`)
-    // to anchor the wire to a specific anchor anchor on the shape.
+    // to anchor the wire to a specific edge of the shape.
     const wire = (
       a: AnyShape,
       b: AnyShape,
       opts: { from?: Point; to?: Point } = {},
-    ): Wire => {
+    ) => {
       const aRef = opts.from ?? a.bounds.center;
       const bRef = opts.to ?? b.bounds.center;
       const aRefV = aRef.value;
       const bRefV = bRef.value;
-      let pb: PathBuilder;
+      let w: Path;
       if (aRefV.x === bRefV.x || aRefV.y === bRefV.y) {
         const start = opts.from ?? a.boundary(bRef);
         const end = opts.to ?? b.boundary(aRef);
-        pb = path(start).to(end);
+        w = path(start).to(end);
       } else {
         const dirX = bRefV.x > aRefV.x ? 1 : -1;
         const dyHalf = () => Math.abs(bRef.y.value - aRef.y.value) / 2;
@@ -141,11 +134,11 @@ export class MdCircuit extends Diagram {
         const pB = pt(() => bRef.x.value - dirX * dyHalf(), midY);
         const start = opts.from ?? a.boundary(pA);
         const end = opts.to ?? b.boundary(pB);
-        pb = path(start).to(pA).to(pB).to(end);
+        w = path(start).to(pA).to(pB).to(end);
       }
-      const line = new Path(pb, { opacity: 0.25 });
-      s(line);
-      return { path: pb, line };
+      w.opacity.value = 0.25;
+      s(w);
+      return w;
     };
 
     /** Constant spatial speed (px/sec) for token dots. Long wires
@@ -153,13 +146,13 @@ export class MdCircuit extends Diagram {
      *  motion regardless of routing length. */
     const SPEED = 240;
 
-    /** Send one pulse along `w.path`. The wire's line opacity flashes
-     *  in lockstep — visible "this wire is carrying an event now." */
-    const pulse = (w: Wire, onArrive?: () => void) => {
-      const total = w.path.length().value;
+    /** Send one pulse along `w`. The wire's opacity flashes in lockstep
+     *  — visible "this wire is carrying an event right now." */
+    const pulse = (w: Path, onArrive?: () => void) => {
+      const total = w.length.value;
       const sec = total / SPEED;
       const dist = signal(0);
-      const dot = circle(w.path.atDistance(dist), 5, { fill: true });
+      const dot = circle(w.atDistance(dist), 5, { fill: true });
       s(dot);
       anim.run(function* () {
         yield* dist.to(total, sec, linear);
@@ -167,7 +160,7 @@ export class MdCircuit extends Diagram {
         onArrive?.();
       });
       anim.run(function* () {
-        yield* w.line.opacity.to(0.75, sec * 0.3).to(0.25, sec * 0.7);
+        yield* w.opacity.to(0.75, sec * 0.3).to(0.25, sec * 0.7);
       });
     };
 
@@ -175,16 +168,16 @@ export class MdCircuit extends Diagram {
 
     /** Fire `ev` at random intervals — drives the demo. */
     const ticker = (ev: string, minGap: number, maxGap: number) =>
-      anim.run(function* (a) {
+      anim.run(function* () {
         yield R.float(0.3, minGap);
         while (true) {
-          a.emit(ev);
+          anim.emit(ev);
           yield R.float(minGap, maxGap);
         }
       });
 
     /** When `from` fires, send a pulse along `w`; on arrival fire `to`. */
-    const relay = (from: string, w: Wire, to: string) =>
+    const relay = (from: string, w: Path, to: string) =>
       anim.on(from, () => pulse(w, () => anim.emit(to)));
 
     /** AND-sync: tokens accumulate from `evA` and `evB`; whenever each
@@ -193,11 +186,10 @@ export class MdCircuit extends Diagram {
     const andSync = (evA: string, evB: string, out: string, gate: AnyShape) => {
       const slotA = signal(false);
       const slotB = signal(false);
-      const slotDot = (offsetX: number, sig: Signal<boolean>) =>
-        circle(gate.bounds.center.offset(offsetX, 14), 4, {
-          fill: () => (sig.value ? tokens.stroke : "transparent"),
-        });
-      s(slotDot(-14, slotA), slotDot(14, slotB));
+      s(
+        lit(gate.bounds.center.offset(-14, 14), slotA),
+        lit(gate.bounds.center.offset(+14, 14), slotB),
+      );
 
       let pendingA = 0;
       let pendingB = 0;
@@ -217,33 +209,29 @@ export class MdCircuit extends Diagram {
     const hold = (
       from: string,
       holdRange: [number, number],
-      w: Wire,
+      w: Path,
       out: string,
       gate: AnyShape,
     ) => {
       const holding = signal(false);
-      s(
-        circle(gate.bounds.center.down(6), 4, {
-          fill: () => (holding.value ? tokens.stroke : "transparent"),
-        }),
-      );
-      anim.loop(function* (a) {
-        yield* a.until(from);
+      s(lit(gate.bounds.center.down(6), holding));
+      anim.loop(function* () {
+        yield* anim.until(from);
         holding.value = true;
         yield R.float(holdRange[0], holdRange[1]);
         holding.value = false;
-        pulse(w, () => a.emit(out));
+        pulse(w, () => anim.emit(out));
       });
     };
 
     /** SPLIT — fan one input into N parallel pulses. */
-    const split = (from: string, branches: [Wire, string][]) =>
+    const split = (from: string, branches: [Path, string][]) =>
       anim.on(from, () => {
         for (const [w, out] of branches) pulse(w, () => anim.emit(out));
       });
 
     /** CHOICE — fan one input into ONE randomly-picked branch. */
-    const choose = (from: string, branches: [Wire, string][]) =>
+    const choose = (from: string, branches: [Path, string][]) =>
       anim.on(from, () => {
         const [w, out] = R.pick(branches);
         pulse(w, () => anim.emit(out));

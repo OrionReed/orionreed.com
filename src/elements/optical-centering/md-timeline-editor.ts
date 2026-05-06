@@ -6,7 +6,6 @@
 //   - `shape.on("pointer*", ...)` for drag-to-edit knobs
 //   - `shape.toLocal(evt)` to convert pointer events to scene coords
 //   - `anim.emit/on/until` for click pings + reactive tap counts
-//   - `function* (a)` runner-receives-anim form
 //
 // Drag the knobs below the timeline strip to retime each phase live.
 // Click any of the stage actors to ping (counter increments). The

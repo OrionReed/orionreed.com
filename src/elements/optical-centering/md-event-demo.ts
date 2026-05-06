@@ -87,7 +87,8 @@ export class MdEventDemo extends Diagram {
     });
 
     // ── Animation flow: events × ranges in one generator ─────────────
-    this.anim.loop(function* (a) {
+    const anim = this.anim;
+    anim.loop(function* () {
       for (let i = 0; i < phases.length; i++) {
         const name = phases[i];
         phaseSig.value = name;
@@ -99,7 +100,7 @@ export class MdEventDemo extends Diagram {
           during(tl[name], (t) => {
             actors[i].opacity.value = Math.min(t * 1.6, 1);
           }),
-          a.until("step"),
+          anim.until("step"),
         );
 
         // Snap to fully visible at phase end so a fast skip looks

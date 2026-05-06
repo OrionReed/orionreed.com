@@ -1,6 +1,5 @@
 import {
   Diagram,
-  Path,
   Scene,
   align,
   attr,
@@ -87,8 +86,10 @@ export class MdCodec extends Diagram {
         return;
       }
 
-      const leader = path(slot.top).up(VERT_H).along(LEADER_ANGLE, DIAG_D);
-      s(new Path(leader, { thin: true }));
+      const leader = path(slot.top, { thin: true })
+        .up(VERT_H)
+        .along(LEADER_ANGLE, DIAG_D);
+      s(leader);
       s(
         label(leader.at(1), t(part.label).bold(), {
           size: LABEL_SIZE,

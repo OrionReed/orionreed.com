@@ -69,7 +69,7 @@ export {
   type Content,
 } from "./shapes";
 // Classes exported as types only — construct via lowercase factories.
-export type { Line, Circle, Rect, Label, AnnularSector, PathBuilder } from "./shapes";
+export type { Line, Circle, Rect, Label, AnnularSector } from "./shapes";
 
 // ── Motion (time stdlib) ────────────────────────────────────────────
 export {

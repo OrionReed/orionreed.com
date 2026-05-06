@@ -18,10 +18,6 @@ const isAbortError = (e: unknown): e is AbortError => e instanceof AbortError;
 export type Yieldable = number | undefined | Animator | Yieldable[];
 export type Animator = Generator<Yieldable, void, number>;
 
-/** Factory that receives the running Anim — useful for `yield*
- *  a.until("x")` inside generators without closing over `this.anim`. */
-export type AnimGenFn = (anim: Anim) => Animator;
-
 /** Per-event reactive payload — count increments on each emit. */
 export type EventState = { count: number; data: unknown };
 
@@ -116,12 +112,11 @@ export class Anim {
     });
   }
 
-  /** Run a generator forever, restarting on completion. The factory
-   *  receives this Anim — useful for `yield* a.until(...)` etc. */
-  async loop(genFn: AnimGenFn | (() => Animator)): Promise<void> {
+  /** Run a generator forever, restarting on completion. */
+  async loop(genFn: () => Animator): Promise<void> {
     while (!this.aborted) {
       try {
-        await this.runGen(genFn(this));
+        await this.runGen(genFn());
       } catch (e) {
         if (isAbortError(e)) return;
         throw e;
@@ -129,10 +124,9 @@ export class Anim {
     }
   }
 
-  /** Run an animator once. Accepts a generator directly or a factory.
-   *  Factories receive this Anim. */
-  async run(arg: Animator | AnimGenFn | (() => Animator)): Promise<void> {
-    const gen = typeof arg === "function" ? arg(this) : arg;
+  /** Run an animator once. Accepts a generator directly or a no-arg factory. */
+  async run(arg: Animator | (() => Animator)): Promise<void> {
+    const gen = typeof arg === "function" ? arg() : arg;
     try {
       await this.runGen(gen);
     } catch (e) {
