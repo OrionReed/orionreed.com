@@ -18,7 +18,8 @@ const clamp01 = (v: number) => v < 0 ? 0 : v > 1 ? 1 : v;
 
 /** Pure-geometry sampling over a polyline of reactive Points. Reused
  *  by both Path and PathBuilder so the latter can compute geometry
- *  without materializing a Shape. `t` is arc-length fraction [0, 1]. */
+ *  without materializing a Shape. Sampling is by normalized fraction
+ *  (`at(t)`, `t ∈ [0,1]`) or by arc-length distance (`atDistance(d)`). */
 function sampler(points: readonly Point[]) {
   const cumLen = computed(() => {
     const lens = [0];
@@ -30,11 +31,12 @@ function sampler(points: readonly Point[]) {
     return lens;
   });
 
-  const locate = (t: number): { i: number; segT: number } => {
+  /** Locate by absolute arc-length `d` (px), clamped to [0, total]. */
+  const locateAt = (d: number): { i: number; segT: number } => {
     const lens = cumLen.value;
     const total = lens[lens.length - 1] ?? 0;
     if (points.length < 2 || total === 0) return { i: 0, segT: 0 };
-    const target = clamp01(t) * total;
+    const target = d < 0 ? 0 : d > total ? total : d;
     let i = 1;
     while (i < lens.length - 1 && lens[i] < target) i++;
     const segLen = lens[i] - lens[i - 1];
@@ -48,23 +50,40 @@ function sampler(points: readonly Point[]) {
       return lens[lens.length - 1] ?? 0;
     });
 
+  const sample = (d: ReturnType<typeof toSig<number>>) =>
+    computed(() => {
+      if (points.length === 0) return { x: 0, y: 0 };
+      if (points.length === 1) return points[0].value;
+      const { i, segT } = locateAt(d.value);
+      const a = points[i].value;
+      const b = points[i + 1].value;
+      return { x: a.x + (b.x - a.x) * segT, y: a.y + (b.y - a.y) * segT };
+    });
+
   const at = (t: Arg<number>): Point => {
     if (typeof t === "number" && points.length > 0) {
       if (t === 0) return points[0];
       if (t === 1) return points[points.length - 1];
     }
     const ts = toSig(t);
-    const sample = computed(() => {
-      if (points.length === 0) return { x: 0, y: 0 };
-      if (points.length === 1) return points[0].value;
-      const { i, segT } = locate(ts.value);
-      const a = points[i].value;
-      const b = points[i + 1].value;
-      return { x: a.x + (b.x - a.x) * segT, y: a.y + (b.y - a.y) * segT };
-    });
+    const total = cumLen;
+    const ds = computed(
+      () => clamp01(ts.value) * (total.value[total.value.length - 1] ?? 0),
+    );
+    const s = sample(ds);
     return new Point(
-      computed(() => sample.value.x),
-      computed(() => sample.value.y),
+      computed(() => s.value.x),
+      computed(() => s.value.y),
+    );
+  };
+
+  /** Sample at absolute arc-length distance (px from start). */
+  const atDistance = (d: Arg<number>): Point => {
+    const ds = toSig(d);
+    const s = sample(ds);
+    return new Point(
+      computed(() => s.value.x),
+      computed(() => s.value.y),
     );
   };
 
@@ -72,7 +91,8 @@ function sampler(points: readonly Point[]) {
     const ts = toSig(t);
     const tangent = computed(() => {
       if (points.length < 2) return { x: 1, y: 0 };
-      const { i } = locate(ts.value);
+      const total = cumLen.value[cumLen.value.length - 1] ?? 0;
+      const { i } = locateAt(clamp01(ts.value) * total);
       const a = points[i].value;
       const b = points[i + 1].value;
       const dx = b.x - a.x;
@@ -93,7 +113,7 @@ function sampler(points: readonly Point[]) {
     return computed(() => Math.atan2(tan.y.value, tan.x.value));
   };
 
-  return { length, at, tangentAt, normalAt, angleAt };
+  return { length, at, atDistance, tangentAt, normalAt, angleAt };
 }
 
 /** Open or closed polyline through a list of reactive Points.
@@ -102,14 +122,15 @@ function sampler(points: readonly Point[]) {
  *   new Path(builder, opts?)              — from fluent builder
  *   path(start).up(8).along(angle, 14)    — fluent (returns builder)
  *
- *  Reactive sampling: `at(t)`, `tangentAt(t)`, `normalAt(t)`,
- *  `angleAt(t)`, `length()`. */
+ *  Reactive sampling: `at(t)`, `atDistance(d)`, `tangentAt(t)`,
+ *  `normalAt(t)`, `angleAt(t)`, `length()`. */
 export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   readonly points: readonly Point[];
   readonly closed: boolean;
 
   readonly length: () => ReadonlySignal<number>;
   readonly at: (t: Arg<number>) => Point;
+  readonly atDistance: (d: Arg<number>) => Point;
   readonly tangentAt: (t: Arg<number>) => Point;
   readonly normalAt: (t: Arg<number>) => Point;
   readonly angleAt: (t: Arg<number>) => ReadonlySignal<number>;
@@ -146,6 +167,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
     const s = sampler(points);
     this.length = s.length;
     this.at = s.at;
+    this.atDistance = s.atDistance;
     this.tangentAt = s.tangentAt;
     this.normalAt = s.normalAt;
     this.angleAt = s.angleAt;
@@ -190,6 +212,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
 export class PathBuilder {
   readonly length: () => ReadonlySignal<number>;
   readonly at: (t: Arg<number>) => Point;
+  readonly atDistance: (d: Arg<number>) => Point;
   readonly tangentAt: (t: Arg<number>) => Point;
   readonly normalAt: (t: Arg<number>) => Point;
   readonly angleAt: (t: Arg<number>) => ReadonlySignal<number>;
@@ -198,6 +221,7 @@ export class PathBuilder {
     const s = sampler(points);
     this.length = s.length;
     this.at = s.at;
+    this.atDistance = s.atDistance;
     this.tangentAt = s.tangentAt;
     this.normalAt = s.normalAt;
     this.angleAt = s.angleAt;

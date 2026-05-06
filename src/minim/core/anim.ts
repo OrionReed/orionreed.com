@@ -4,7 +4,7 @@
 //   Animator         → delegate.
 //   Yieldable[]      → run children in parallel.
 
-import { signal, type Signal } from "./signal";
+import { signal, type Signal, type ReadonlySignal } from "./signal";
 
 export class AbortError extends Error {
   constructor() {
@@ -18,6 +18,13 @@ const isAbortError = (e: unknown): e is AbortError => e instanceof AbortError;
 export type Yieldable = number | undefined | Animator | Yieldable[];
 export type Animator = Generator<Yieldable, void, number>;
 
+/** Factory that receives the running Anim — useful for `yield*
+ *  a.until("x")` inside generators without closing over `this.anim`. */
+export type AnimGenFn = (anim: Anim) => Animator;
+
+/** Per-event reactive payload — count increments on each emit. */
+export type EventState = { count: number; data: unknown };
+
 export class Anim {
   private controller = new AbortController();
   private timerIds = new Set<number>();
@@ -25,6 +32,21 @@ export class Anim {
   private rafId = 0;
   private lastFrame = 0;
   private waiters: Array<(dt: number) => void> = [];
+
+  /** Event bus state — shared with parent via `scope()` so events
+   *  flow freely between scopes within a diagram. */
+  private eventSignals: Map<string, Signal<EventState>>;
+  private eventHandlers: Map<string, Set<(data: unknown) => void>>;
+
+  constructor(parent?: Anim) {
+    if (parent) {
+      this.eventSignals = parent.eventSignals;
+      this.eventHandlers = parent.eventHandlers;
+    } else {
+      this.eventSignals = new Map();
+      this.eventHandlers = new Map();
+    }
+  }
 
   private get aborted(): boolean {
     return this.controller.signal.aborted;
@@ -94,11 +116,12 @@ export class Anim {
     });
   }
 
-  /** Run a generator forever, restarting on completion. */
-  async loop(genFn: () => Animator): Promise<void> {
+  /** Run a generator forever, restarting on completion. The factory
+   *  receives this Anim — useful for `yield* a.until(...)` etc. */
+  async loop(genFn: AnimGenFn | (() => Animator)): Promise<void> {
     while (!this.aborted) {
       try {
-        await this.runGen(genFn());
+        await this.runGen(genFn(this));
       } catch (e) {
         if (isAbortError(e)) return;
         throw e;
@@ -106,9 +129,10 @@ export class Anim {
     }
   }
 
-  /** Run an animator once. Accepts a generator or a factory. */
-  async run(arg: Animator | (() => Animator)): Promise<void> {
-    const gen = typeof arg === "function" ? arg() : arg;
+  /** Run an animator once. Accepts a generator directly or a factory.
+   *  Factories receive this Anim. */
+  async run(arg: Animator | AnimGenFn | (() => Animator)): Promise<void> {
+    const gen = typeof arg === "function" ? arg(this) : arg;
     try {
       await this.runGen(gen);
     } catch (e) {
@@ -166,11 +190,55 @@ export class Anim {
     }
   }
 
-  /** Child Anim scoped to this one — stopped when the parent stops. */
+  /** Child Anim scoped to this one — stopped when the parent stops.
+   *  Shares the parent's event bus, so events fire/listen freely
+   *  across scopes within a diagram. */
   scope(): Anim {
-    const child = new Anim();
+    const child = new Anim(this);
     this.scopes.add(child);
     return child;
+  }
+
+  // ── Event bus ───────────────────────────────────────────────────────
+
+  /** Fire a named event with optional data. Notifies callbacks and
+   *  increments the named signal. */
+  emit(name: string, data?: unknown): void {
+    const sig = this.eventSignals.get(name);
+    if (sig) sig.value = { count: sig.peek().count + 1, data };
+    const set = this.eventHandlers.get(name);
+    if (set) for (const fn of set) fn(data);
+  }
+
+  /** Subscribe to a named event. Returns a disposer. */
+  on(name: string, handler: (data: unknown) => void): () => void {
+    let set = this.eventHandlers.get(name);
+    if (!set) {
+      set = new Set();
+      this.eventHandlers.set(name, set);
+    }
+    set.add(handler);
+    return () => {
+      set!.delete(handler);
+    };
+  }
+
+  /** Reactive signal that increments on each emit of `name`,
+   *  carrying the latest payload. Lazy-created on first access. */
+  onSignal(name: string): ReadonlySignal<EventState> {
+    let sig = this.eventSignals.get(name);
+    if (!sig) {
+      sig = signal({ count: 0, data: undefined });
+      this.eventSignals.set(name, sig);
+    }
+    return sig;
+  }
+
+  /** Generator that yields frames until the next emit of `name`. */
+  *until(name: string): Animator {
+    const sig = this.onSignal(name);
+    const start = sig.peek().count;
+    while (sig.value.count === start) yield;
   }
 
   /** Periodic tick signal — increments every `sec` seconds. Stops with this Anim. */

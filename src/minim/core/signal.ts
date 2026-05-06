@@ -89,9 +89,13 @@ function lerp<T extends Lerpable>(a: T, b: T, t: number): T {
   throw new Error("tween: unsupported value type");
 }
 
+/** Duration source for a tween — a fixed `number` of seconds, or a
+ *  reactive `Signal<number>` (read per frame, so live edits propagate). */
+type Duration = number | ReadonlySignal<number>;
+
 interface Step<T> {
   target: T;
-  sec: number;
+  source: Duration;
   ease?: Easing;
 }
 
@@ -107,9 +111,11 @@ export class TweenChain<T extends Lerpable>
     private readonly steps: ReadonlyArray<Step<T>>,
   ) {}
 
-  /** Append another tween step on the same signal. */
-  to(target: T, sec: number, ease?: Easing): TweenChain<T> {
-    return new TweenChain(this.sig, [...this.steps, { target, sec, ease }]);
+  /** Append another tween step on the same signal. `source` may be a
+   *  fixed number of seconds or a `Signal<number>` (e.g. a `timeline()`
+   *  entry) — in the reactive case, edits propagate live. */
+  to(target: T, source: Duration, ease?: Easing): TweenChain<T> {
+    return new TweenChain(this.sig, [...this.steps, { target, source, ease }]);
   }
 
   /** Repeat the current sequence `n` times. */
@@ -121,7 +127,7 @@ export class TweenChain<T extends Lerpable>
 
   private *run(): Generator<Yieldable, void, number> {
     for (const step of this.steps) {
-      yield* tweenStep(this.sig, step.target, step.sec, step.ease);
+      yield* tweenStep(this.sig, step.target, step.source, step.ease);
     }
   }
 
@@ -146,15 +152,17 @@ export class TweenChain<T extends Lerpable>
 function* tweenStep<T extends Lerpable>(
   sig: Signal<T>,
   target: T,
-  sec: number,
+  source: Duration,
   ease: Easing = defaultEase,
 ): Animator {
   const start = sig.peek();
   let elapsed = 0;
-  while (elapsed < sec) {
+  while (true) {
+    const total = typeof source === "number" ? source : source.value;
+    if (elapsed >= total) break;
     const dt: number = yield;
     elapsed += dt;
-    const t = Math.min(elapsed / sec, 1);
+    const t = total > 0 ? Math.min(elapsed / total, 1) : 1;
     sig.value = lerp(start, target, ease(t));
   }
   sig.value = target;
@@ -162,18 +170,18 @@ function* tweenStep<T extends Lerpable>(
 
 declare module "@preact/signals-core" {
   interface Signal<T> {
-    to(this: Signal<number>, target: number, sec: number, ease?: Easing): TweenChain<number>;
-    to(this: Signal<Vec>, target: Vec, sec: number, ease?: Easing): TweenChain<Vec>;
+    to(this: Signal<number>, target: number, source: Duration, ease?: Easing): TweenChain<number>;
+    to(this: Signal<Vec>, target: Vec, source: Duration, ease?: Easing): TweenChain<Vec>;
   }
 }
 
 (Signal.prototype as unknown as {
-  to: <T extends Lerpable>(target: T, sec: number, ease?: Easing) => TweenChain<T>;
+  to: <T extends Lerpable>(target: T, source: Duration, ease?: Easing) => TweenChain<T>;
 }).to = function <T extends Lerpable>(
   this: Signal<T>,
   target: T,
-  sec: number,
+  source: Duration,
   ease?: Easing,
 ): TweenChain<T> {
-  return new TweenChain(this, [{ target, sec, ease }]);
+  return new TweenChain(this, [{ target, source, ease }]);
 };

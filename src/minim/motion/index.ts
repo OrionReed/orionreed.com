@@ -3,11 +3,13 @@ export {
   all,
   sequence,
   delay,
+  during,
   lag,
   until,
   repeat,
   race,
 } from "./compose";
+export { timeline } from "./timeline";
 export {
   fadeIn,
   fadeUp,

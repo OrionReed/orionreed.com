@@ -69,7 +69,7 @@ export {
   type Content,
 } from "./shapes";
 // Classes exported as types only — construct via lowercase factories.
-export type { Line, Circle, Rect, Label, AnnularSector } from "./shapes";
+export type { Line, Circle, Rect, Label, AnnularSector, PathBuilder } from "./shapes";
 
 // ── Motion (time stdlib) ────────────────────────────────────────────
 export {
@@ -80,10 +80,12 @@ export {
   all,
   sequence,
   delay,
+  during,
   lag,
   until,
   repeat,
   race,
+  timeline,
   fadeIn,
   fadeUp,
   slideIn,

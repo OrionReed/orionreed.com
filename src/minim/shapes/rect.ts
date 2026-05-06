@@ -69,15 +69,19 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   override boundary(toward: Point): Point {
     const proj = computed(() => {
       const b = this.bounds.value;
+      const sc = this.scale.value;
       const t = toward.value;
       const cx = b.x + b.w / 2;
       const cy = b.y + b.h / 2;
+      // Scale-aware half-extents — boundary tracks the visual rect.
+      const halfW = (b.w / 2) * sc.x;
+      const halfH = (b.h / 2) * sc.y;
       const dx = t.x - cx;
       const dy = t.y - cy;
       if (dx === 0 && dy === 0) return { x: cx, y: cy };
       const k = Math.min(
-        dx === 0 ? Infinity : (b.w / 2) / Math.abs(dx),
-        dy === 0 ? Infinity : (b.h / 2) / Math.abs(dy),
+        dx === 0 ? Infinity : halfW / Math.abs(dx),
+        dy === 0 ? Infinity : halfH / Math.abs(dy),
       );
       return { x: cx + dx * k, y: cy + dy * k };
     });

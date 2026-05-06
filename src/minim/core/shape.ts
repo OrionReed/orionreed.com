@@ -26,6 +26,7 @@ import {
   type Matrix2D,
 } from "./matrix";
 import { Point, pt } from "./point";
+import type { Animator } from "./anim";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -239,6 +240,63 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   effect(fn: () => void): void {
     this.disposers.push(effect(fn));
   }
+
+  // ── DOM events ──────────────────────────────────────────────────────
+
+  /** Subscribe to a DOM event on this shape's element. Returns a
+   *  disposer that detaches the listener; cleanup is also automatic
+   *  when the shape disposes. */
+  on(
+    name: string,
+    handler: (e: Event) => void,
+    opts?: AddEventListenerOptions,
+  ): () => void {
+    const el = this.el;
+    el.addEventListener(name, handler, opts);
+    const dispose = () => el.removeEventListener(name, handler, opts);
+    this.disposers.push(dispose);
+    return dispose;
+  }
+
+  /** Reactive signal that increments on each emit of `name`, carrying
+   *  the latest event. Lazy: the underlying listener is installed on
+   *  first call (per name). */
+  onSignal(name: string): ReadonlySignal<{ count: number; last: Event | undefined }> {
+    if (!this._eventSignals) this._eventSignals = new Map();
+    const cached = this._eventSignals.get(name);
+    if (cached) return cached;
+    const sig = signal({ count: 0, last: undefined as Event | undefined });
+    this._eventSignals.set(name, sig);
+    this.on(name, (e) => {
+      sig.value = { count: sig.peek().count + 1, last: e };
+    });
+    return sig;
+  }
+
+  /** Generator that yields frames until the next emit of `name`. */
+  *until(name: string): Animator {
+    const sig = this.onSignal(name);
+    const start = sig.peek().count;
+    while (sig.value.count === start) yield;
+  }
+
+  /** Convert client-space coordinates (e.g. `evt.clientX/clientY`) to
+   *  this shape's local frame via `getScreenCTM`. */
+  toLocal(evt: { clientX: number; clientY: number }): Vec {
+    const target = (this.intrinsic ?? this.el) as SVGGraphicsElement;
+    const ctm = target.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+    const inv = ctm.inverse();
+    return {
+      x: evt.clientX * inv.a + evt.clientY * inv.c + inv.e,
+      y: evt.clientX * inv.b + evt.clientY * inv.d + inv.f,
+    };
+  }
+
+  private _eventSignals?: Map<
+    string,
+    Signal<{ count: number; last: Event | undefined }>
+  >;
 
   add<T extends AnyShape>(child: T): T;
   add<T extends AnyShape[]>(...children: T): T;

@@ -61,7 +61,11 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
     const proj = computed(() => {
       const t = toward.value;
       const c = this.center.value;
-      const r = this.radius.value;
+      const sc = this.scale.value;
+      // Visual radius respects the shape's own scale so the boundary
+      // tracks pulses; for non-uniform scale we treat the result as a
+      // circle of the larger axis (close enough for ports/connectors).
+      const r = this.radius.value * Math.max(sc.x, sc.y);
       const len = Math.hypot(t.x - c.x, t.y - c.y) || 1;
       return { x: c.x + (t.x - c.x) / len * r, y: c.y + (t.y - c.y) / len * r };
     });
