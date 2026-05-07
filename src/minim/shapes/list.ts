@@ -3,7 +3,8 @@
 // per-shape state (animations, signals, listeners) across structural
 // updates. New items render, removed items dispose.
 
-import { effect, toSig, untracked, type Arg, type AnyShape } from "../core";
+import { effect, toSig, untracked, type Arg } from "../core";
+import type { AnyShape } from "../scene";
 
 export interface ForEachOptions<T> {
   /** Stable identity per item. Defaults to the array index — fine for

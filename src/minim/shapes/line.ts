@@ -1,12 +1,5 @@
-import {
-  Shape,
-  Point,
-  aabb,
-  computed,
-  type Segment,
-  type Arg,
-  type ReadonlySignal,
-} from "../core";
+import { computed, type Arg, type ReadonlySignal } from "../core";
+import { Shape, Point, aabb, type Segment } from "../scene";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface LineOpts extends CommonOpts {}

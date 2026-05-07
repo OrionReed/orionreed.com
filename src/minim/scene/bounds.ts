@@ -1,8 +1,12 @@
-// `AABB` (snapshot), `Vec` (literal), `Bounds` (reactive wrapper).
+// `AABB` (snapshot) + `Bounds` (reactive wrapper). `Vec` lives in
+// `./vec` so layer-B utilities can reference it without depending on
+// the scene graph.
 
 import { Point } from "./point";
-import { computed, type ReadonlySignal } from "./signal";
-import { toSig, type Arg } from "./arg";
+import { computed, type ReadonlySignal } from "../core/signal";
+import { toSig, type Arg } from "../core/arg";
+
+export type { Vec } from "../core/vec";
 
 export interface AABB {
   readonly x: number;
@@ -49,11 +53,6 @@ export function aabbEdgeFrom(
     dy === 0 ? Infinity : (b.h / 2) / Math.abs(dy),
   );
   return { x: cx + dx * k, y: cy + dy * k };
-}
-
-export interface Vec {
-  x: number;
-  y: number;
 }
 
 /** Reactive bounds: `x`/`y`/`w`/`h` Signals, lazy anchor Points,

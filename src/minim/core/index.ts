@@ -1,6 +1,7 @@
-// Core: the irreducible (space, time) foundation. Self-contained —
-// signal primitive is vendored (see `preact-signal.ts`). Drop this
-// folder into another project to bootstrap a minim-like scene graph.
+// Core: time + reactivity foundation. Layer-A (Anim) is the runtime;
+// layer-B (signals + utilities) is the reactive substrate. Self-contained
+// — the signal primitive is vendored. Pair with `../scene/` for the
+// scene graph; pair with `../shapes/`, `../motion/` for the stdlibs.
 
 export {
   signal,
@@ -24,47 +25,19 @@ export {
   type ResolveSig,
 } from "./arg";
 
+export { type Vec } from "./vec";
+
 export { store, snapshot, type Store } from "./store";
 
-export { Point, pt } from "./point";
-
-export {
-  Bounds,
-  aabb,
-  aabbEdgeFrom,
-  expandAABB,
-  unionAABB,
-  type AABB,
-  type Vec,
-} from "./bounds";
-
-export {
-  Shape,
-  SVG_NS,
-  type ShapeOpts,
-  type AnyShape,
-  type AnimatableKey,
-  type Writable,
-  type Segment,
-  boundsInRoot,
-  boundsIn,
-} from "./shape";
-
-export {
-  type Matrix2D,
-  identity as matrixIdentity,
-  fromTranslate,
-  fromRotate,
-  fromScale,
-  multiply as matrixMultiply,
-  invert as matrixInvert,
-  transformPoint,
-  transformAABB,
-  compose as composeMatrix,
-  isIdentity,
-  toString as matrixToString,
-} from "./matrix";
-
-export { makeScene, type Scene, type Padding } from "./scene";
-
 export { Anim, type Animator, type Yieldable } from "./anim";
+
+export { EventBus, type EventState } from "./events";
+
+export {
+  range,
+  Timeline,
+  timeline,
+  durations,
+  type Ranged,
+  type TimelineEntry,
+} from "./timeline";

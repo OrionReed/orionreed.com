@@ -978,7 +978,7 @@ export {
 // ─────────────────────────────────────────────────────────────────────
 
 import type { Animator, Yieldable } from "./anim";
-import type { Vec } from "./bounds";
+import type { Vec } from "./vec";
 
 /** Easing function: takes normalized time `t ∈ [0,1]`, returns eased
  *  value (typically also in `[0,1]`). */

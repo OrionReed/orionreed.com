@@ -4,7 +4,7 @@
 //   - `timeline({...})` for named, edit-friendly duration signals
 //   - `during(tl[name], fn)` time-blocks parameterized by signal duration
 //   - `draggable(knob, fn)` for drag-to-edit knobs
-//   - `anim.emit/on` for click pings + reactive tap counts
+//   - `bus.emit/on` for click pings + reactive tap counts
 //
 // Drag the knobs below the timeline strip to retime each phase live.
 // Click any of the stage actors to ping (counter increments). The
@@ -19,13 +19,13 @@ import {
   computed,
   css,
   draggable,
+  durations,
   during,
   label,
   line,
   pt,
   rect,
   signal,
-  timeline,
 } from "../../minim";
 
 const PHASES = ["intro", "hold", "outro"] as const;
@@ -45,7 +45,7 @@ export class MdTimelineEditor extends Diagram {
     s.view(0, 0, W, H);
 
     // ── Editable timeline ─────────────────────────────────────────────
-    const tl = timeline({ intro: 0.7, hold: 1.2, outro: 0.5 });
+    const tl = durations({ intro: 0.7, hold: 1.2, outro: 0.5 });
     const total = computed(() =>
       tl.intro.value + tl.hold.value + tl.outro.value,
     );
@@ -60,7 +60,7 @@ export class MdTimelineEditor extends Diagram {
     const phase = signal<string>(PHASES[0]);
     const phaseT = signal(0);
     const taps = signal(0);
-    this.anim.on("ping", () => {
+    this.bus.on("ping", () => {
       taps.value = taps.peek() + 1;
     });
 
@@ -143,7 +143,7 @@ export class MdTimelineEditor extends Diagram {
         fill: COLORS[i],
         opacity: 0.25,
       });
-      c.on("click", () => this.anim.emit("ping"));
+      c.on("click", () => this.bus.emit("ping"));
       return c;
     });
     actors.forEach((c) => s(c));

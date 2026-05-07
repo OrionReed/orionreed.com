@@ -1,15 +1,12 @@
 import {
-  Shape,
-  Point,
-  aabb,
   computed,
   signal,
   toSig,
-  type Segment,
   type Arg,
   type ReadonlySignal,
   type Signal,
 } from "../core";
+import { Shape, Point, aabb, type Segment } from "../scene";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface PathOpts extends CommonOpts {

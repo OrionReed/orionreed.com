@@ -3,7 +3,7 @@
 // computed dash positions. Works on lines, polylines, arcs, rounded
 // rects, circles, and other shapes with analytic boundaries.
 
-import type { Segment } from "../core";
+import type { Segment } from "../scene";
 
 const TWO_PI = Math.PI * 2;
 

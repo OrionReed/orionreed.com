@@ -4,16 +4,16 @@ import {
   signal,
   Signal,
   type ReadonlySignal,
-} from "./signal";
-import { toSig, type Arg, type ResolveSig } from "./arg";
+} from "../core/signal";
+import { toSig, type Arg, type ResolveSig } from "../core/arg";
 import {
   Bounds,
   aabb,
   aabbEdgeFrom,
   unionAABB,
   type AABB,
-  type Vec,
 } from "./bounds";
+import type { Vec } from "../core/vec";
 import {
   compose,
   invert,
@@ -24,7 +24,7 @@ import {
   type Matrix2D,
 } from "./matrix";
 import { Point, pt } from "./point";
-import type { Animator } from "./anim";
+import type { Animator } from "../core/anim";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 

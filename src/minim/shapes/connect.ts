@@ -1,7 +1,8 @@
 // Connector ops. Use `shape.boundary` so analytic edges work without
 // per-kind dispatch.
 
-import { Shape, SVG_NS, Point, computed, toSig, type Arg } from "../core";
+import { computed, toSig, type Arg } from "../core";
+import { Shape, SVG_NS, Point } from "../scene";
 import { tokens } from "./tokens";
 import { Line, type LineOpts } from "./line";
 

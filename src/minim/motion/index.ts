@@ -9,7 +9,6 @@ export {
   repeat,
   race,
 } from "./compose";
-export { timeline } from "./timeline";
 export {
   fadeIn,
   fadeUp,

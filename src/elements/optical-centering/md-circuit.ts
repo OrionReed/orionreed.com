@@ -44,6 +44,7 @@ export class MdCircuit extends Diagram {
   protected scene(s: Scene): void {
     s.view(0, 0, 600, 360);
     const anim = this.anim;
+    const bus = this.bus;
 
     // ── Visual primitives ───────────────────────────────────────────
 
@@ -52,7 +53,7 @@ export class MdCircuit extends Diagram {
       const c = circle(pt(x, y), 18);
       s(c, label(c.center, lbl, { size: 13, bold: true }));
       anim.loop(function* () {
-        yield* anim.until(ev);
+        yield* bus.until(ev);
         yield* c.scale.to({ x: 1.4, y: 1.4 }, 0.08).to({ x: 1, y: 1 }, 0.3);
       });
       return c;
@@ -68,9 +69,9 @@ export class MdCircuit extends Diagram {
         label(c.center, () => String(count.value), { size: 13, bold: true }),
         label(c.center.up(30), lbl, { size: 11, opacity: 0.7 }),
       );
-      anim.on(ev, () => { count.value = count.peek() + 1; });
+      bus.on(ev, () => { count.value = count.peek() + 1; });
       anim.loop(function* () {
-        yield* anim.until(ev);
+        yield* bus.until(ev);
         yield* c.scale.to({ x: 1.3, y: 1.3 }, 0.06).to({ x: 1, y: 1 }, 0.3);
       });
       return c;
@@ -178,14 +179,14 @@ export class MdCircuit extends Diagram {
       anim.run(function* () {
         yield R.float(0.3, minGap);
         while (true) {
-          anim.emit(ev);
+          bus.emit(ev);
           yield R.float(minGap, maxGap);
         }
       });
 
     /** When `from` fires, send a pulse along `w`; on arrival fire `to`. */
     const relay = (from: string, w: Path, to: string) =>
-      anim.on(from, () => pulse(w, () => anim.emit(to)));
+      bus.on(from, () => pulse(w, () => bus.emit(to)));
 
     /** AND-sync: tokens accumulate from `evA` and `evB`; whenever each
      *  has ≥1, fire `out` and consume one of each. Pending counts live
@@ -202,10 +203,10 @@ export class MdCircuit extends Diagram {
         const n = Math.min(sync.a, sync.b);
         sync.a -= n;
         sync.b -= n;
-        for (let i = 0; i < n; i++) anim.emit(out);
+        for (let i = 0; i < n; i++) bus.emit(out);
       };
-      anim.on(evA, () => { sync.a++; settle(); });
-      anim.on(evB, () => { sync.b++; settle(); });
+      bus.on(evA, () => { sync.a++; settle(); });
+      bus.on(evB, () => { sync.b++; settle(); });
     };
 
     /** Hold an arriving event for a randomized interval, then relay. */
@@ -219,25 +220,25 @@ export class MdCircuit extends Diagram {
       const holding = signal(false);
       gate.add(lit(gate.bounds.center.down(6), holding));
       anim.loop(function* () {
-        yield* anim.until(from);
+        yield* bus.until(from);
         holding.value = true;
         yield R.float(holdRange[0], holdRange[1]);
         holding.value = false;
-        pulse(w, () => anim.emit(out));
+        pulse(w, () => bus.emit(out));
       });
     };
 
     /** SPLIT — fan one input into N parallel pulses. */
     const split = (from: string, branches: [Path, string][]) =>
-      anim.on(from, () => {
-        for (const [w, out] of branches) pulse(w, () => anim.emit(out));
+      bus.on(from, () => {
+        for (const [w, out] of branches) pulse(w, () => bus.emit(out));
       });
 
     /** CHOICE — fan one input into ONE randomly-picked branch. */
     const choose = (from: string, branches: [Path, string][]) =>
-      anim.on(from, () => {
+      bus.on(from, () => {
         const [w, out] = R.pick(branches);
-        pulse(w, () => anim.emit(out));
+        pulse(w, () => bus.emit(out));
       });
 
     // ── Nodes ───────────────────────────────────────────────────────

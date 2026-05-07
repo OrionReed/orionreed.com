@@ -3,7 +3,8 @@
 // or from rest to invisible (outros). Compose with `lag`/`all`/`sequence`.
 
 import { easeIn, easeInOut, easeOut } from "./easings";
-import type { Animator, Writable } from "../core";
+import type { Animator } from "../core";
+import type { Writable } from "../scene";
 
 // Each helper constrains only the props it animates via `Writable<K>`
 // — leaving other props free to be readonly. e.g. a

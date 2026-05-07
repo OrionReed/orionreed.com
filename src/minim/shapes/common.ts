@@ -1,12 +1,7 @@
 // Shared style opts + applier for stroked/filled shapes.
 
-import {
-  computed,
-  toSig,
-  type Arg,
-  type AnyShape,
-  type ShapeOpts,
-} from "../core";
+import { computed, toSig, type Arg } from "../core";
+import type { AnyShape, ShapeOpts } from "../scene";
 import { tokens } from "./tokens";
 import { dashedPath } from "./dashed";
 

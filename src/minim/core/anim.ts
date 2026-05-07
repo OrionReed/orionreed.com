@@ -11,13 +11,10 @@
 // `setTimeout`. `step(dt)` advances by an explicit dt — used for headless /
 // testing harnesses.
 
-import { signal, type Signal, type ReadonlySignal } from "./signal";
+import { signal, type Signal } from "./signal";
 
 export type Yieldable = number | undefined | Animator | Yieldable[];
 export type Animator = Generator<Yieldable, void, number>;
-
-/** Per-event reactive payload — count increments on each emit. */
-export type EventState = { count: number; data: unknown };
 
 /** Per-running-generator runtime state. Exactly one of `wakeAt` /
  *  `childrenLeft` is set while suspended; if neither is set, the active
@@ -44,21 +41,6 @@ export class Anim {
    *  `try/finally` blocks still run. */
   private currentlyAdvancing: Active | undefined;
   private pendingReturn: Active | undefined;
-
-  /** Event bus state — shared with parent via `scope()` so events
-   *  flow freely between scopes within a diagram. */
-  private eventSignals: Map<string, Signal<EventState>>;
-  private eventHandlers: Map<string, Set<(data: unknown) => void>>;
-
-  constructor(parent?: Anim) {
-    if (parent) {
-      this.eventSignals = parent.eventSignals;
-      this.eventHandlers = parent.eventHandlers;
-    } else {
-      this.eventSignals = new Map();
-      this.eventHandlers = new Map();
-    }
-  }
 
   // ── Public API ──────────────────────────────────────────────────────
 
@@ -94,9 +76,9 @@ export class Anim {
   }
 
   /** Child Anim scoped to this one — stopped when the parent stops.
-   *  Shares the parent's event bus. */
+   *  A separate runtime; shares no state with the parent. */
   scope(): Anim {
-    const child = new Anim(this);
+    const child = new Anim();
     this.scopes.add(child);
     return child;
   }
@@ -168,48 +150,6 @@ export class Anim {
       }
     }
     this.active.length = w;
-  }
-
-  // ── Event bus ───────────────────────────────────────────────────────
-
-  /** Fire a named event with optional data. Notifies callbacks and
-   *  increments the named signal. */
-  emit(name: string, data?: unknown): void {
-    const sig = this.eventSignals.get(name);
-    if (sig) sig.value = { count: sig.peek().count + 1, data };
-    const set = this.eventHandlers.get(name);
-    if (set) for (const fn of set) fn(data);
-  }
-
-  /** Subscribe to a named event. Returns a disposer. */
-  on(name: string, handler: (data: unknown) => void): () => void {
-    let set = this.eventHandlers.get(name);
-    if (!set) {
-      set = new Set();
-      this.eventHandlers.set(name, set);
-    }
-    set.add(handler);
-    return () => {
-      set!.delete(handler);
-    };
-  }
-
-  /** Reactive signal that increments on each emit of `name`,
-   *  carrying the latest payload. Lazy-created on first access. */
-  onSignal(name: string): ReadonlySignal<EventState> {
-    let sig = this.eventSignals.get(name);
-    if (!sig) {
-      sig = signal({ count: 0, data: undefined });
-      this.eventSignals.set(name, sig);
-    }
-    return sig;
-  }
-
-  /** Generator that yields frames until the next emit of `name`. */
-  *until(name: string): Animator {
-    const sig = this.onSignal(name);
-    const start = sig.peek().count;
-    while (sig.value.count === start) yield;
   }
 
   // ── Internals ───────────────────────────────────────────────────────

@@ -28,9 +28,11 @@ export {
 
 export { store, snapshot, type Store } from "./core/store";
 
-export { Point, pt } from "./core/point";
+export { type Vec } from "./core/vec";
 
-export { Bounds, type AABB, type Vec } from "./core/bounds";
+export { Point, pt } from "./scene/point";
+
+export { Bounds, type AABB } from "./scene/bounds";
 
 export {
   Shape,
@@ -43,11 +45,22 @@ export {
   boundsInRoot,
   boundsIn,
   draggable,
-} from "./core/shape";
+} from "./scene/shape";
 
-export { makeScene, type Scene } from "./core/scene";
+export { makeScene, type Scene } from "./scene/scene";
 
 export { Anim, type Animator, type Yieldable } from "./core/anim";
+
+export { EventBus, type EventState } from "./core/events";
+
+export {
+  range,
+  Timeline,
+  timeline,
+  durations,
+  type Ranged,
+  type TimelineEntry,
+} from "./core/timeline";
 
 // ── Shapes (space stdlib) ───────────────────────────────────────────
 export {
@@ -97,7 +110,6 @@ export {
   until,
   repeat,
   race,
-  timeline,
   fadeIn,
   fadeUp,
   slideIn,

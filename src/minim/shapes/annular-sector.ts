@@ -1,13 +1,5 @@
-import {
-  Shape,
-  Point,
-  aabb,
-  computed,
-  toSig,
-  type Segment,
-  type Arg,
-  type NumSig,
-} from "../core";
+import { computed, toSig, type Arg, type NumSig } from "../core";
+import { Shape, Point, aabb, type Segment } from "../scene";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface AnnularSectorOpts extends CommonOpts {}

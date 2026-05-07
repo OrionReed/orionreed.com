@@ -13,6 +13,7 @@
 import {
   Anim,
   Diagram,
+  EventBus,
   Scene,
   align,
   circle,
@@ -331,32 +332,32 @@ const TESTS: TestCase[] = [
   {
     name: "event bus: emit / on",
     run: (assert) => {
-      const a = new Anim();
+      const bus = new EventBus();
       let count = 0;
       let lastData: unknown = null;
-      const off = a.on("hi", (d) => { count++; lastData = d; });
-      a.emit("hi", { x: 1 });
-      a.emit("hi", { x: 2 });
+      const off = bus.on("hi", (d) => { count++; lastData = d; });
+      bus.emit("hi", { x: 1 });
+      bus.emit("hi", { x: 2 });
       assert(count === 2, `count was ${count}; expected 2`);
       assert((lastData as { x: number }).x === 2, `data didn't propagate`);
       off();
-      a.emit("hi");
+      bus.emit("hi");
       assert(count === 2, `handler still firing after disposer`);
-      a.stop();
     },
   },
   {
     name: "event bus: until generator wakes on emit",
     run: (assert) => {
       const a = new Anim();
+      const bus = new EventBus();
       let woken = false;
       a.run(function* () {
-        yield* a.until("go");
+        yield* bus.until("go");
         woken = true;
       });
       a.step(0); a.step(0.1); a.step(0.1);
       assert(!woken, `should still be waiting`);
-      a.emit("go");
+      bus.emit("go");
       a.step(0);
       assert(woken, `should have woken after emit`);
       a.stop();

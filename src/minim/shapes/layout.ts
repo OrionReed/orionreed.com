@@ -2,7 +2,8 @@
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to` are the
 // reference points for what to add next.
 
-import { transformAABB, type Vec, type Shape } from "../core";
+import type { Vec } from "../core";
+import { transformAABB, type Shape } from "../scene";
 
 /** Named normalized-Vec constants — points on a unit box. Plain `Vec`
  *  values, pass anywhere a `Vec` is expected (e.g. `Label.align`). */

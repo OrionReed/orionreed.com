@@ -2,9 +2,9 @@
 // points (`a.sub(b)`, `a.lerp(b, t)`, etc.) are computed-backed and
 // thus read-only.
 
-import { computed, type ReadonlySignal } from "./signal";
-import { toSig, type Arg, type NumSig } from "./arg";
-import type { Vec } from "./bounds";
+import { computed, type ReadonlySignal } from "../core/signal";
+import { toSig, type Arg, type NumSig } from "../core/arg";
+import type { Vec } from "../core/vec";
 
 export class Point {
   constructor(

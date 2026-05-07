@@ -1,12 +1,5 @@
-import {
-  Shape,
-  aabb,
-  toSig,
-  type ShapeOpts,
-  type Vec,
-  type Arg,
-  type Point,
-} from "../core";
+import { toSig, type Arg, type Vec } from "../core";
+import { Shape, aabb, type ShapeOpts, type Point } from "../scene";
 import { tokens } from "./tokens";
 import { renderContent, flattenText, type Content } from "./text";
 

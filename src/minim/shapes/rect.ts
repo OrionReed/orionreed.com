@@ -1,15 +1,5 @@
-import {
-  Shape,
-  Bounds,
-  Point,
-  aabb,
-  computed,
-  signal,
-  toSig,
-  type Segment,
-  type Arg,
-  type NumSig,
-} from "../core";
+import { computed, signal, toSig, type Arg, type NumSig } from "../core";
+import { Shape, Bounds, Point, aabb, type Segment } from "../scene";
 import { tokens } from "./tokens";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
