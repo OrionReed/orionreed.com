@@ -1,7 +1,8 @@
 // `AABB` (snapshot), `Vec` (literal), `Bounds` (reactive wrapper).
 
 import { Point } from "./point";
-import { computed, toSig, type Arg, type ReadonlySignal } from "./signal";
+import { computed, type ReadonlySignal } from "./signal";
+import { toSig, type Arg } from "./arg";
 
 export interface AABB {
   readonly x: number;

@@ -3,11 +3,9 @@ import {
   effect,
   signal,
   Signal,
-  toSig,
-  type Arg,
   type ReadonlySignal,
-  type ResolveSig,
 } from "./signal";
+import { toSig, type Arg, type ResolveSig } from "./arg";
 import {
   Bounds,
   aabb,

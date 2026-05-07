@@ -1,4 +1,4 @@
-// minim — retained-mode scene graph on @preact/signals-core.
+// minim — retained-mode scene graph on a vendored signals core.
 // Conceptual layout: (space, time) tuple.
 //   core/    — irreducible foundation (signals, shape graph, math)
 //   shapes/  — concrete visuals + layout + list (space stdlib)
@@ -11,17 +11,22 @@ export {
   computed,
   effect,
   Signal,
-  TweenChain,
-  snapshot,
-  store,
+  tween,
+  type ReadonlySignal,
+  type Tween,
+  type Easing,
+  type Duration,
+} from "./core/signal";
+
+export {
   toSig,
   when,
-  type Store,
-  type ReadonlySignal,
   type Arg,
   type NumSig,
   type ResolveSig,
-} from "./core/signal";
+} from "./core/arg";
+
+export { store, snapshot, type Store } from "./core/store";
 
 export { Point, pt } from "./core/point";
 

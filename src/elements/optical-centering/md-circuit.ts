@@ -102,7 +102,7 @@ export class MdCircuit extends Diagram {
     /** Indicator dot whose fill toggles with a reactive boolean. */
     const lit = (at: Point, on: Arg<boolean>) =>
       circle(at, 4, {
-        fill: toSig(on).map((v) => (v ? tokens.stroke : "transparent")),
+        fill: toSig(on).derive((v) => (v ? tokens.stroke : "transparent")),
       });
 
     // Auto-route, fully reactive so endpoints stick to the visual

@@ -26,17 +26,17 @@ export class MdLubyTransform extends Diagram {
     // viewBox width. Surviving cells keep their animation state across
     // breakpoint flips — no rebuild.
     const isMobile = computed(() => viewport().value.w < 768);
-    const W = isMobile.map((m) => (m ? 300 : 400));
-    const N = isMobile.map((m) => (m ? 7 : 10));
+    const W = isMobile.derive((m) => (m ? 300 : 400));
+    const N = isMobile.derive((m) => (m ? 7 : 10));
     const stride = computed(() => (W.value - SIZE) / (N.value - 1));
-    const indices = N.map((n) => Array.from({ length: n }, (_, i) => i));
+    const indices = N.derive((n) => Array.from({ length: n }, (_, i) => i));
 
     const view = s.view(0, 0, W, 200);
 
     // Re-roll the cell pattern and source-edge gating each tick.
     const tick = this.anim.pulse(0.5);
-    const cells = tick.map(() => R.bools(QR_GRID * QR_GRID));
-    const edges = tick.map(() => R.bools(N.value, 0.3, 1));
+    const cells = tick.derive(() => R.bools(QR_GRID * QR_GRID));
+    const edges = tick.derive(() => R.bools(N.value, 0.3, 1));
 
     // ── Sources (top row) — reactive list. `sources.at(i)` exposes
     //    the i-th rect for the connection layer to anchor against.

@@ -2,7 +2,8 @@
 // `s.view(...)` / `s.fit(...)` to set the SVG viewBox.
 
 import { Bounds, aabb, type AABB } from "./bounds";
-import { effect, signal, toSig, type Arg } from "./signal";
+import { effect, signal } from "./signal";
+import { toSig, type Arg } from "./arg";
 import type { AnyShape } from "./shape";
 
 export type Padding =

@@ -77,7 +77,7 @@ export class MdCentering extends Diagram {
     F.forEach((f) =>
       s(
         tick(xAxis, f, 7, {
-          opacity: lineT.map((v) => clamp01((v - f) / 0.06)),
+          opacity: lineT.derive((v) => clamp01((v - f) / 0.06)),
         }),
       ),
     );
@@ -107,7 +107,7 @@ export class MdCentering extends Diagram {
 
     // Box + crosshairs share `boxT`; centroid + its label share
     // `centroidT`. Crosshairs blend a faint baseline (0.6) with the
-    // master via `boxT.map(v => v * 0.6)`.
+    // master via `boxT.derive(v => v * 0.6)`.
     const [xMin, xMid, xMax] = F.map((f) => xAxis.at(f));
     const [yMin, yMid, yMax] = F.map((f) => yAxis.at(f));
     const c = pt(xMid.x, yMid.y);
@@ -116,21 +116,21 @@ export class MdCentering extends Diagram {
       rect(pt(xMin.x, yMax.y), pt(xMax.x, yMin.y), {
         thin: true,
         corner: 4,
-        opacity: boxT.map((v) => v * 0.5),
+        opacity: boxT.derive((v) => v * 0.5),
       }),
     );
     s(
       line(xMid, c, {
         thin: true,
         dashed: true,
-        opacity: boxT.map((v) => v * 0.6),
+        opacity: boxT.derive((v) => v * 0.6),
       }),
     );
     s(
       line(yMid, c, {
         thin: true,
         dashed: true,
-        opacity: boxT.map((v) => v * 0.6),
+        opacity: boxT.derive((v) => v * 0.6),
       }),
     );
 

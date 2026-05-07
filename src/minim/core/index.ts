@@ -1,6 +1,6 @@
 // Core: the irreducible (space, time) foundation. Self-contained —
-// only depends on @preact/signals-core. Drop this folder into another
-// project to bootstrap a minim-like scene graph.
+// signal primitive is vendored (see `preact-signal.ts`). Drop this
+// folder into another project to bootstrap a minim-like scene graph.
 
 export {
   signal,
@@ -9,13 +9,22 @@ export {
   batch,
   untracked,
   Signal,
-  TweenChain,
-  toSig,
+  tween,
   type ReadonlySignal,
+  type Tween,
+  type Easing,
+  type Duration,
+} from "./signal";
+
+export {
+  toSig,
+  when,
   type Arg,
   type NumSig,
   type ResolveSig,
-} from "./signal";
+} from "./arg";
+
+export { store, snapshot, type Store } from "./store";
 
 export { Point, pt } from "./point";
 

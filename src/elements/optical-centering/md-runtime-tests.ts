@@ -413,12 +413,12 @@ export class MdRuntimeTests extends Diagram {
     forEach(s.root, TESTS, (t, i) => {
       const y = HEADER_H + i * ROW_H + ROW_H / 2;
       const dot = circle(pt(PAD_X + 6, y), 5, {
-        fill: statuses[i].map((st) => COLOR[st]),
+        fill: statuses[i].derive((st) => COLOR[st]),
       });
       const name = label(pt(PAD_X + 22, y), t.name, {
         size: 12,
         align: align.left,
-        opacity: statuses[i].map((st) => (st === "pending" ? 0.5 : 1)),
+        opacity: statuses[i].derive((st) => (st === "pending" ? 0.5 : 1)),
       });
       const msg = label(pt(W - PAD_X, y), messages[i], {
         size: 11,
