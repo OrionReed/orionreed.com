@@ -59,17 +59,21 @@ export class MdCircuit extends Diagram {
       return c;
     };
 
-    /** A counting sink — circle showing live count, increments + scale-
-     *  pulses on each `ev`. */
+    /** A counting sink — circle showing live count, increments + scale- */
     const sink = (x: number, y: number, lbl: string, ev: string) => {
-      const count = signal(0);
       const c = circle(pt(x, y), 18);
       s(
         c,
-        label(c.center, () => String(count.value), { size: 13, bold: true }),
+        label(
+          c.center,
+          bus.onSignal(ev).derive((e) => String(e.count)),
+          {
+            size: 13,
+            bold: true,
+          },
+        ),
         label(c.center.up(30), lbl, { size: 11, opacity: 0.7 }),
       );
-      bus.on(ev, () => { count.value = count.peek() + 1; });
       anim.loop(function* () {
         yield* bus.until(ev);
         yield* c.scale.to({ x: 1.3, y: 1.3 }, 0.06).to({ x: 1, y: 1 }, 0.3);
@@ -89,7 +93,10 @@ export class MdCircuit extends Diagram {
       lblY = 0,
     ) => {
       const r = rect(pt(x, y), w, h);
-      s(r, label(r.bounds.center.offset(0, lblY), lbl, { size: 10, opacity: 0.7 }));
+      s(
+        r,
+        label(r.bounds.center.offset(0, lblY), lbl, { size: 10, opacity: 0.7 }),
+      );
       return r;
     };
 
@@ -205,8 +212,14 @@ export class MdCircuit extends Diagram {
         sync.b -= n;
         for (let i = 0; i < n; i++) bus.emit(out);
       };
-      bus.on(evA, () => { sync.a++; settle(); });
-      bus.on(evB, () => { sync.b++; settle(); });
+      bus.on(evA, () => {
+        sync.a++;
+        settle();
+      });
+      bus.on(evB, () => {
+        sync.b++;
+        settle();
+      });
     };
 
     /** Hold an arriving event for a randomized interval, then relay. */

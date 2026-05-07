@@ -23,6 +23,7 @@ import {
   pt,
   rect,
   signal,
+  speed,
   t,
   type Signal,
   type Vec,
@@ -78,12 +79,7 @@ export class MdLayoutDemo extends Diagram {
     const cx = 260;
     const cy = 310;
     const phase = signal(0);
-    this.anim.loop(function* () {
-      while (true) {
-        const dt: number = yield;
-        phase.value = phase.peek() + dt;
-      }
-    });
+    this.anim.run(speed(phase, 1));
     const headPos = pt(
       () => cx + 98 * Math.sin(phase.value * 1.6),
       () => cy + 38 * Math.sin(phase.value * 2.3 + 0.6),
@@ -97,7 +93,7 @@ export class MdLayoutDemo extends Diagram {
       signal({ x: cx - i * linkLen, y: cy }),
     );
 
-    this.anim.loop(function* () {
+    this.anim.run(function* () {
       while (true) {
         yield;
         let prev = headPos.value;
