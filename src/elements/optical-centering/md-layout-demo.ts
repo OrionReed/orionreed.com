@@ -38,42 +38,6 @@ export class MdLayoutDemo extends Diagram {
   protected scene(s: Scene): void {
     s.view(0, 0, 520, 360);
 
-    // ── Top: bounds.at(u, v) + align namespace ──────────────────────
-    const card = s(rect(20, 20, 280, 130, { thin: true, opacity: 0.5 }));
-    const cells: Array<[number, number, string]> = [
-      [0, 0, "TL"],
-      [0.5, 0, "T"],
-      [1, 0, "TR"],
-      [0, 0.5, "L"],
-      [0.5, 0.5, "C"],
-      [1, 0.5, "R"],
-      [0, 1, "BL"],
-      [0.5, 1, "B"],
-      [1, 1, "BR"],
-    ];
-    for (const [u, v, name] of cells) {
-      s(circle(card.bounds.at(u, v), 2, { fill: true, opacity: 0.7 }));
-      s(
-        label(card.bounds.at(u, v), name, {
-          size: 12,
-          // Mirror anchor: TL anchor → label's bottom-right pulls the
-          // text inside the rect; centers stay centered.
-          align: { x: 1 - u, y: 1 - v },
-          opacity: 0.7,
-        }),
-      );
-    }
-    s(
-      label(
-        card.bounds.at(0.5, 0).up(8),
-        t("bounds.at(u, v) + align").muted(),
-        {
-          size: 11,
-          align: align.bottom,
-        },
-      ),
-    );
-
     // ── Middle: arrange() with multiple simultaneous size animations ─
     const w0 = signal(40);
     const w2 = signal(36);

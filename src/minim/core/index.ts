@@ -58,4 +58,4 @@ export {
 
 export { makeScene, type Scene, type Padding } from "./scene";
 
-export { Anim, AbortError, type Animator, type Yieldable } from "./anim";
+export { Anim, type Animator, type Yieldable } from "./anim";

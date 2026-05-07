@@ -11,9 +11,9 @@ import { MdAnimDemo } from "./optical-centering/md-anim-demo";
 import { MdTransitions } from "./optical-centering/md-transitions";
 import { MdOrbits } from "./optical-centering/md-orbits";
 import { MdLayoutDemo } from "./optical-centering/md-layout-demo";
-import { MdEventDemo } from "./optical-centering/md-event-demo";
 import { MdTimelineEditor } from "./optical-centering/md-timeline-editor";
 import { MdCircuit } from "./optical-centering/md-circuit";
+import { MdRuntimeTests } from "./optical-centering/md-runtime-tests";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -28,6 +28,6 @@ MdAnimDemo.define();
 MdTransitions.define();
 MdOrbits.define();
 MdLayoutDemo.define();
-MdEventDemo.define();
 MdTimelineEditor.define();
 MdCircuit.define();
+MdRuntimeTests.define();
