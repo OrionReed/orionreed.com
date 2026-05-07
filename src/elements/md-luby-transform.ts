@@ -10,6 +10,7 @@ import {
   label,
   line,
   pt,
+  pulse,
   rect,
   t,
   viewport,
@@ -34,7 +35,7 @@ export class MdLubyTransform extends Diagram {
     const view = s.view(0, 0, W, 200);
 
     // Re-roll the cell pattern and source-edge gating each tick.
-    const tick = this.anim.pulse(0.5);
+    const tick = pulse(this.anim, 0.5);
     const cells = tick.derive(() => R.bools(QR_GRID * QR_GRID));
     const edges = tick.derive(() => R.bools(N.value, 0.3, 1));
 

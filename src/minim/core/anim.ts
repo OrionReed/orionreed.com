@@ -11,8 +11,6 @@
 // `setTimeout`. `step(dt)` advances by an explicit dt — used for headless /
 // testing harnesses.
 
-import { signal, type Signal } from "./signal";
-
 export type Yieldable = number | undefined | Animator | Yieldable[];
 export type Animator = Generator<Yieldable, void, number>;
 
@@ -63,16 +61,6 @@ export class Anim {
       fn();
       yield sec;
     });
-  }
-
-  /** Periodic tick signal — increments every `sec` seconds. */
-  pulse(sec: number): Signal<number> {
-    const sig = signal(0);
-    this.loop(function* () {
-      yield sec;
-      sig.value = sig.peek() + 1;
-    });
-    return sig;
   }
 
   /** Child Anim scoped to this one — stopped when the parent stops.

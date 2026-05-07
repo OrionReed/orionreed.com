@@ -38,6 +38,7 @@ export {
   Timeline,
   timeline,
   durations,
+  pulse,
   type Ranged,
   type TimelineEntry,
 } from "./timeline";

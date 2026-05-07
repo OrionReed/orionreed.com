@@ -21,10 +21,9 @@ import {
   forEach,
   label,
   pt,
-  rect,
+  pulse,
   signal,
   type Animator,
-  type Signal,
 } from "../../minim";
 
 type Status = "pending" | "running" | "pass" | "fail";
@@ -76,10 +75,10 @@ const TESTS: TestCase[] = [
         dts.push(yield);
       });
       a.step(0.016);
-      a.step(0.020);
+      a.step(0.02);
       assert(dts.length === 2, `dts.length=${dts.length}, expected 2`);
       assert(dts[0] === 0.016, `dts[0]=${dts[0]}, expected 0.016`);
-      assert(dts[1] === 0.020, `dts[1]=${dts[1]}, expected 0.020`);
+      assert(dts[1] === 0.02, `dts[1]=${dts[1]}, expected 0.020`);
       a.stop();
     },
   },
@@ -144,8 +143,12 @@ const TESTS: TestCase[] = [
       let done = false;
       a.run(function* () {
         yield [
-          (function* (): Animator { yield 0.2; })(),
-          (function* (): Animator { yield 0.5; })(),
+          (function* (): Animator {
+            yield 0.2;
+          })(),
+          (function* (): Animator {
+            yield 0.5;
+          })(),
         ];
         done = true;
       });
@@ -180,7 +183,13 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       let done = false;
       a.run(function* () {
-        yield [0.2, undefined, (function* (): Animator { yield 0.3; })()];
+        yield [
+          0.2,
+          undefined,
+          (function* (): Animator {
+            yield 0.3;
+          })(),
+        ];
         done = true;
       });
       a.step(0.1);
@@ -215,10 +224,18 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let runs = 0;
-      a.run(function* () { runs++; yield 0.5; runs++; });
+      a.run(function* () {
+        runs++;
+        yield 0.5;
+        runs++;
+      });
       a.step(0);
       a.stop();
-      a.run(function* () { runs++; yield 0.5; runs++; });
+      a.run(function* () {
+        runs++;
+        yield 0.5;
+        runs++;
+      });
       a.step(0);
       assert(runs === 2, `runs was ${runs}; expected 2 starts`);
       a.stop();
@@ -231,8 +248,16 @@ const TESTS: TestCase[] = [
       const child = a.scope();
       let parentRan = 0;
       let childRan = 0;
-      a.run(function* () { parentRan++; yield 1; parentRan++; });
-      child.run(function* () { childRan++; yield 1; childRan++; });
+      a.run(function* () {
+        parentRan++;
+        yield 1;
+        parentRan++;
+      });
+      child.run(function* () {
+        childRan++;
+        yield 1;
+        childRan++;
+      });
       a.step(0);
       assert(parentRan === 1 && childRan === 1, `both started`);
       child.stop();
@@ -249,7 +274,11 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const child = a.scope();
       let childRan = 0;
-      child.run(function* () { childRan++; yield 1; childRan++; });
+      child.run(function* () {
+        childRan++;
+        yield 1;
+        childRan++;
+      });
       a.step(0);
       a.stop();
       child.step(2);
@@ -264,14 +293,20 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       let goodRan = 0;
       const origError = console.error;
-      console.error = () => { /* expected */ };
+      console.error = () => {
+        /* expected */
+      };
       try {
         a.run(function* () {
           yield* (function* (): Animator {
             throw new Error("boom");
           })();
         });
-        a.run(function* () { goodRan++; yield 0.1; goodRan++; });
+        a.run(function* () {
+          goodRan++;
+          yield 0.1;
+          goodRan++;
+        });
         a.step(0.15);
         assert(goodRan === 2, `good gen ran ${goodRan}/2 phases`);
       } finally {
@@ -288,13 +323,19 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       let goodRan = 0;
       const origError = console.error;
-      console.error = () => { /* expected */ };
+      console.error = () => {
+        /* expected */
+      };
       try {
         a.run(function* () {
           yield 0.05;
           throw new Error("boom");
         });
-        a.run(function* () { goodRan++; yield 0.1; goodRan++; });
+        a.run(function* () {
+          goodRan++;
+          yield 0.1;
+          goodRan++;
+        });
         a.step(0.06);
         a.step(0.06);
         assert(goodRan === 2, `good gen ran ${goodRan}/2 phases`);
@@ -312,17 +353,26 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       let parentDone = false;
       const origError = console.error;
-      console.error = () => { /* expected */ };
+      console.error = () => {
+        /* expected */
+      };
       try {
         a.run(function* () {
           yield [
-            (function* (): Animator { throw new Error("boom"); })(),
-            (function* (): Animator { yield 0.1; })(),
+            (function* (): Animator {
+              throw new Error("boom");
+            })(),
+            (function* (): Animator {
+              yield 0.1;
+            })(),
           ];
           parentDone = true;
         });
         a.step(0.15);
-        assert(parentDone, `parent should resume after throwing child completes`);
+        assert(
+          parentDone,
+          `parent should resume after throwing child completes`,
+        );
       } finally {
         console.error = origError;
         a.stop();
@@ -335,7 +385,10 @@ const TESTS: TestCase[] = [
       const bus = new EventBus();
       let count = 0;
       let lastData: unknown = null;
-      const off = bus.on("hi", (d) => { count++; lastData = d; });
+      const off = bus.on("hi", (d) => {
+        count++;
+        lastData = d;
+      });
       bus.emit("hi", { x: 1 });
       bus.emit("hi", { x: 2 });
       assert(count === 2, `count was ${count}; expected 2`);
@@ -355,7 +408,9 @@ const TESTS: TestCase[] = [
         yield* bus.until("go");
         woken = true;
       });
-      a.step(0); a.step(0.1); a.step(0.1);
+      a.step(0);
+      a.step(0.1);
+      a.step(0.1);
       assert(!woken, `should still be waiting`);
       bus.emit("go");
       a.step(0);
@@ -367,9 +422,10 @@ const TESTS: TestCase[] = [
     name: "pulse signal increments",
     run: (assert) => {
       const a = new Anim();
-      const p = a.pulse(0.1);
+      const p = pulse(a, 0.1);
       assert(p.value === 0, `starts at 0`);
-      a.step(0); a.step(0.15);
+      a.step(0);
+      a.step(0.15);
       assert(p.value >= 1, `expected >= 1, got ${p.value}`);
       a.stop();
     },
@@ -479,9 +535,10 @@ export class MdRuntimeTests extends Diagram {
         yield 0.04;
       }
 
-      summary.value = failed === 0
-        ? `${passed} / ${TESTS.length} pass`
-        : `${passed} / ${TESTS.length} pass · ${failed} fail`;
+      summary.value =
+        failed === 0
+          ? `${passed} / ${TESTS.length} pass`
+          : `${passed} / ${TESTS.length} pass · ${failed} fail`;
       yield 5;
     });
   }

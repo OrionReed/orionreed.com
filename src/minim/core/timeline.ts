@@ -11,7 +11,7 @@
 
 import { signal, computed, type Signal, type ReadonlySignal } from "./signal";
 import { toSig, type Arg } from "./arg";
-import type { Animator } from "./anim";
+import type { Animator, Anim } from "./anim";
 
 // ── Range ────────────────────────────────────────────────────────────
 
@@ -173,4 +173,19 @@ export function durations<const T extends Record<string, number>>(
     out[key] = signal(initial[key]);
   }
   return out as { [K in keyof T]: Signal<number> };
+}
+
+// ── pulse ────────────────────────────────────────────────────────────
+
+/** Tick signal — increments every `sec` seconds while `anim` is active.
+ *  Free function so the `Anim` runtime stays signal-free (layer-A pure);
+ *  the bridge from runtime to reactivity lives at layer B with the rest
+ *  of the temporal helpers. */
+export function pulse(anim: Anim, sec: number): Signal<number> {
+  const sig = signal(0);
+  anim.loop(function* () {
+    yield sec;
+    sig.value = sig.peek() + 1;
+  });
+  return sig;
 }
