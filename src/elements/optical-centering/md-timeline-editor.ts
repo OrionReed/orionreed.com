@@ -1,15 +1,13 @@
 // Mini timeline editor: editable named durations driving a looping
 // animation. Demonstrates:
 //
-//   - `timeline({...})` for named, edit-friendly duration signals
-//   - `during(tl[name], fn)` time-blocks parameterized by signal duration
-//   - `draggable(knob, fn)` for drag-to-edit knobs
-//   - `bus.emit/on` for click pings + reactive tap counts
-//
-// Drag the knobs below the timeline strip to retime each phase live.
-// Click any of the stage actors to ping (counter increments). The
-// loop's `during` blocks re-read `tl[name].value` every frame, so
-// retiming a phase mid-block stretches/shrinks t accordingly.
+//   - `timeline(sequential({...}))` for named, edit-friendly clips
+//     whose `at`s ripple-update from prior durations.
+//   - `clip.t` reactive progress driving opacity directly (no per-frame
+//     callback — pure signal binding).
+//   - `draggable(knob, fn)` for drag-to-edit knobs.
+//   - `bus.emit/on` for click pings + reactive tap counts.
+//   - `snapshot(tl.clock)` as the reset pattern for loops.
 
 import {
   Diagram,
@@ -19,13 +17,14 @@ import {
   computed,
   css,
   draggable,
-  durations,
-  during,
   label,
   line,
   pt,
   rect,
+  sequential,
   signal,
+  snapshot,
+  timeline,
 } from "../../minim";
 
 const PHASES = ["intro", "hold", "outro"] as const;
@@ -45,68 +44,69 @@ export class MdTimelineEditor extends Diagram {
     s.view(0, 0, W, H);
 
     // ── Editable timeline ─────────────────────────────────────────────
-    const tl = durations({ intro: 0.7, hold: 1.2, outro: 0.5 });
-    const total = computed(() =>
-      tl.intro.value + tl.hold.value + tl.outro.value,
-    );
-    // Cumulative offset signals — one per phase, summing prior phases.
-    const offsets = {
-      intro: computed(() => 0),
-      hold: computed(() => tl.intro.value),
-      outro: computed(() => tl.intro.value + tl.hold.value),
-    };
+    // `sequential` produces clip specs with cumulative-start `at`s.
+    // Editing any `dur` ripples through to subsequent clips' `at`s.
+    const tl = timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));
+    const reset = snapshot(tl.clock);
 
-    // Reactive playhead + tap counter.
-    const phase = signal<string>(PHASES[0]);
-    const phaseT = signal(0);
+    // Currently-active clip name (for the header).
+    const phaseName = computed(() => {
+      for (const name of PHASES) if (tl[name].active.value) return name;
+      return tl.clock.value >= tl.duration.value ? "rest" : PHASES[0];
+    });
     const taps = signal(0);
     this.bus.on("ping", () => {
       taps.value = taps.peek() + 1;
     });
 
     // ── Header ────────────────────────────────────────────────────────
-    s(label(
-      pt(W / 2, 24),
-      computed(
-        () => `phase: ${phase.value}   ·   taps: ${taps.value}`,
+    s(
+      label(
+        pt(W / 2, 24),
+        computed(() => `phase: ${phaseName.value}   ·   taps: ${taps.value}`),
+        { size: 14, opacity: 0.75 },
       ),
-      { size: 14, opacity: 0.75 },
-    ));
+    );
 
     // ── Timeline strip (top) ──────────────────────────────────────────
     const STRIP_X = 60;
     const STRIP_W = W - 120;
     const STRIP_Y = 60;
     const STRIP_H = 36;
-    const scale = computed(() => STRIP_W / total.value);
+    const scale = computed(() => STRIP_W / tl.duration.value);
 
     PHASES.forEach((name, i) => {
-      const x = computed(() => STRIP_X + offsets[name].value * scale.value);
-      const w = computed(() => tl[name].value * scale.value);
-      s(rect(x, STRIP_Y, w, STRIP_H, { fill: COLORS[i] }));
-      s(label(
-        pt(
-          computed(() => STRIP_X + (offsets[name].value + tl[name].value / 2) * scale.value),
-          STRIP_Y + 18,
+      const c = tl[name];
+      s(
+        rect(
+          c.at.derive((a) => STRIP_X + a * scale.value),
+          STRIP_Y,
+          c.dur.derive((d) => d * scale.value),
+          STRIP_H,
+          { fill: COLORS[i] },
         ),
-        computed(() => `${name} ${tl[name].value.toFixed(2)}s`),
-        { size: 11, opacity: 0.95 },
-      ));
+      );
+      s(
+        label(
+          pt(
+            computed(
+              () => STRIP_X + (c.at.value + c.dur.value / 2) * scale.value,
+            ),
+            STRIP_Y + 18,
+          ),
+          computed(() => `${name} ${c.dur.value.toFixed(2)}s`),
+          { size: 11, opacity: 0.95 },
+        ),
+      );
     });
 
-    // Playhead — vertical line at (cumulative offset of active phase) +
-    // (phaseT * its duration), all reactive.
-    const playX = computed(() => {
-      const name = phase.value as keyof typeof tl;
-      const off = offsets[name]?.value ?? 0;
-      const dur = tl[name]?.value ?? 1;
-      return STRIP_X + (off + phaseT.value * dur) * scale.value;
-    });
-    s(line(
-      pt(playX, STRIP_Y - 6),
-      pt(playX, STRIP_Y + STRIP_H + 6),
-      { strokeWidth: 2 },
-    ));
+    // Playhead — derived from `tl.t`, so retiming updates it live.
+    const playX = computed(() => STRIP_X + tl.t.value * STRIP_W);
+    s(
+      line(pt(playX, STRIP_Y - 6), pt(playX, STRIP_Y + STRIP_H + 6), {
+        strokeWidth: 2,
+      }),
+    );
 
     // ── Slider knobs (middle) ─────────────────────────────────────────
     const SLIDER_Y = 150;
@@ -115,58 +115,56 @@ export class MdTimelineEditor extends Diagram {
 
     PHASES.forEach((name, i) => {
       const x0 = 60 + i * (SLIDER_W + SLIDER_GAP);
-      const sig = tl[name];
+      // `dur` is editable via the slider — sequential clips produce a
+      // writable `Signal<number>` for dur (input was a number).
+      const dur = tl[name].dur;
 
-      s(line(
-        pt(x0, SLIDER_Y),
-        pt(x0 + SLIDER_W, SLIDER_Y),
-        { thin: true, opacity: 0.3, cap: "round" },
-      ));
+      s(
+        line(pt(x0, SLIDER_Y), pt(x0 + SLIDER_W, SLIDER_Y), {
+          thin: true,
+          opacity: 0.3,
+          cap: "round",
+        }),
+      );
 
-      // Knob center tracks the duration reactively; drag writes back.
-      const knob = s(circle(
-        pt(() => x0 + (sig.value / MAX_DUR) * SLIDER_W, SLIDER_Y),
-        9,
-        { fill: COLORS[i] },
-      ));
+      const knob = s(
+        circle(
+          pt(() => x0 + (dur.value / MAX_DUR) * SLIDER_W, SLIDER_Y),
+          9,
+          { fill: COLORS[i] },
+        ),
+      );
       draggable(knob, (local) => {
         const u = Math.min(Math.max((local.x - x0) / SLIDER_W, 0), 1);
         // Floor at 0.1s so a phase never reaches zero (would freeze the loop).
-        sig.value = Math.max(0.1, u * MAX_DUR);
+        dur.value = Math.max(0.1, u * MAX_DUR);
       });
     });
 
-    // ── Stage actors (bottom) — one per phase, clickable for "ping" ──
+    // ── Stage actors (bottom) — opacity follows clip progress ────────
     const STAGE_Y = 240;
-    const actors = PHASES.map((_, i) => {
+    const actors = PHASES.map((name, i) => {
       const c = circle(pt(120 + i * 180, STAGE_Y), 24, {
         fill: COLORS[i],
-        opacity: 0.25,
+        opacity: tl[name].t.derive((t) => 0.1 + t * 0.9),
       });
       c.on("click", () => this.bus.emit("ping"));
       return c;
     });
     actors.forEach((c) => s(c));
 
-    s(label(
-      pt(W / 2, H - 16),
-      "drag the knobs to retime · click any circle to ping",
-      { size: 11, opacity: 0.5, align: align.center },
-    ));
+    s(
+      label(
+        pt(W / 2, H - 16),
+        "drag the knobs to retime · click any circle to ping",
+        { size: 11, opacity: 0.5, align: align.center },
+      ),
+    );
 
-    // ── Animation flow: loop through phases reactively ───────────────
+    // ── Animation flow: replay the timeline forever ───────────────────
     this.anim.loop(function* () {
-      for (let i = 0; i < PHASES.length; i++) {
-        const name = PHASES[i];
-        phase.value = name;
-        // `during(tl[name], fn)` re-reads the duration every frame, so
-        // dragging the knob mid-phase lengthens or shortens it live.
-        yield* during(tl[name], (t) => {
-          phaseT.value = t;
-          actors[i].opacity.value = 0.25 + t * 0.75;
-        });
-        actors[i].opacity.value = 0.25;
-      }
+      reset();
+      yield* tl;
     });
   }
 }

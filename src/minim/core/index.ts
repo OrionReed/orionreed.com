@@ -34,11 +34,9 @@ export { Anim, type Animator, type Yieldable } from "./anim";
 export { EventBus, type EventState } from "./events";
 
 export {
-  range,
-  Timeline,
   timeline,
-  durations,
-  pulse,
-  type Ranged,
-  type TimelineEntry,
+  sequential,
+  type Clip,
+  type Timeline,
+  type TimelineOf,
 } from "./timeline";

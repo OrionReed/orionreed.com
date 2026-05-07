@@ -43,6 +43,8 @@ The problem with our approach is that we have failed to capture the essence of "
 
 <md-timeline-editor></md-timeline-editor>
 
+<md-multitrack></md-multitrack>
+
 <md-circuit></md-circuit>
 
 <md-runtime-tests></md-runtime-tests>

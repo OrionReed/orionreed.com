@@ -1,0 +1,208 @@
+// Multi-track timeline editor. Demonstrates:
+//
+//   - `timeline({...})` with explicit `{at, dur}` per clip — overlap,
+//     gaps, multiple tracks all expressible.
+//   - Drag-to-move a whole clip (changes `at`).
+//   - Drag the start handle to resize from the start (`at` and `dur`
+//     both update so the end stays put).
+//   - Drag the end handle to resize from the end (`dur` only).
+//   - Multiple animation properties of one shape driven simultaneously
+//     by overlapping clips — fade-in, oscillating scale, oscillating
+//     shift, fade-out — all reactive on `clip.t`.
+//   - `snapshot(tl.clock)` for the loop reset.
+
+import {
+  Diagram,
+  Scene,
+  align,
+  circle,
+  computed,
+  css,
+  draggable,
+  label,
+  line,
+  pt,
+  rect,
+  snapshot,
+  timeline,
+} from "../../minim";
+
+const STRIP_X = 40;
+const STRIP_Y = 24;
+const STRIP_PAD = 6;
+const TRACK_H = 26;
+const TRACK_COUNT = 3;
+const STRIP_H_TOTAL = TRACK_H * TRACK_COUNT + STRIP_PAD * 2;
+
+export class MdMultitrack extends Diagram {
+  static styles = css`
+    :host {
+      --scene-max-width: 640px;
+    }
+  `;
+
+  protected scene(s: Scene): void {
+    const W = 600;
+    const H = 320;
+    s.view(0, 0, W, H);
+
+    // Free-form clips. Overlap is fine; each gets explicit at + dur.
+    const tl = timeline({
+      fadeIn:  { at: 0,   dur: 1.0 },
+      scale:   { at: 0.4, dur: 2.6 },
+      shift:   { at: 0.8, dur: 2.4 },
+      fadeOut: { at: 2.8, dur: 0.8 },
+    });
+
+    const reset = snapshot(tl.clock);
+
+    // Each clip: row in the strip + colour. Order matters for render
+    // order (later clips draw on top).
+    const tracks = [
+      { name: "fadeIn",  clip: tl.fadeIn,  row: 0, color: "#5b8def" },
+      { name: "fadeOut", clip: tl.fadeOut, row: 0, color: "#e25c5c" },
+      { name: "scale",   clip: tl.scale,   row: 1, color: "#f5a623" },
+      { name: "shift",   clip: tl.shift,   row: 2, color: "#7ed321" },
+    ];
+
+    // ── Strip background ─────────────────────────────────────────────
+    const STRIP_W = W - 2 * STRIP_X;
+    const SCALE = computed(() =>
+      tl.duration.value > 0 ? STRIP_W / tl.duration.value : 0,
+    );
+
+    s(rect(STRIP_X, STRIP_Y, STRIP_W, STRIP_H_TOTAL, {
+      fill: "#f5f5f5",
+      stroke: "none",
+      corner: 4,
+    }));
+    for (let i = 1; i < TRACK_COUNT; i++) {
+      const y = STRIP_Y + STRIP_PAD + i * TRACK_H;
+      s(line(pt(STRIP_X, y), pt(STRIP_X + STRIP_W, y), {
+        thin: true, opacity: 0.25,
+      }));
+    }
+
+    // ── Each clip: body + start handle + end handle + label ─────────
+    tracks.forEach(({ name, clip, row, color }) => {
+      const trackY = STRIP_Y + STRIP_PAD + row * TRACK_H;
+      const bodyY = trackY + 2;
+      const bodyH = TRACK_H - 4;
+
+      // Body — drag to move the whole clip.
+      const body = s(rect(
+        clip.at.derive(a => STRIP_X + a * SCALE.value),
+        bodyY,
+        clip.dur.derive(d => Math.max(d * SCALE.value, 8)),
+        bodyH,
+        { fill: color, opacity: 0.78, corner: 3, stroke: "none" },
+      ));
+
+      // Capture click offset (in clip-time units) on pointerdown so the
+      // clip moves under the cursor at the same point user grabbed.
+      let clickOffset = 0;
+      body.on("pointerdown", (e) => {
+        const local = body.toLocal(e as PointerEvent);
+        clickOffset = (local.x - STRIP_X) / SCALE.value - clip.at.value;
+      });
+      draggable(body, (local) => {
+        const cursorTime = (local.x - STRIP_X) / SCALE.value;
+        clip.at.value = Math.max(0, cursorTime - clickOffset);
+      });
+
+      // Start handle — drag changes `at` while keeping `end` fixed.
+      const startKnob = s(circle(
+        pt(clip.at.derive(a => STRIP_X + a * SCALE.value), trackY + TRACK_H / 2),
+        4.5,
+        { fill: color, stroke: "white", strokeWidth: 1.5 },
+      ));
+      let snapEnd = 0;
+      startKnob.on("pointerdown", () => {
+        snapEnd = clip.at.value + clip.dur.value;
+      });
+      draggable(startKnob, (local) => {
+        const cursorTime = (local.x - STRIP_X) / SCALE.value;
+        const newAt = Math.min(Math.max(0, cursorTime), snapEnd - 0.05);
+        clip.at.value = newAt;
+        clip.dur.value = snapEnd - newAt;
+      });
+
+      // End handle — drag changes `dur` while keeping `at` fixed.
+      const endKnob = s(circle(
+        pt(clip.end.derive(e => STRIP_X + e * SCALE.value), trackY + TRACK_H / 2),
+        4.5,
+        { fill: color, stroke: "white", strokeWidth: 1.5 },
+      ));
+      let snapAt = 0;
+      endKnob.on("pointerdown", () => {
+        snapAt = clip.at.value;
+      });
+      draggable(endKnob, (local) => {
+        const cursorTime = (local.x - STRIP_X) / SCALE.value;
+        clip.dur.value = Math.max(0.05, cursorTime - snapAt);
+      });
+
+      // Label inside the clip.
+      s(label(
+        pt(
+          computed(() => STRIP_X + (clip.at.value + clip.dur.value / 2) * SCALE.value),
+          trackY + TRACK_H / 2,
+        ),
+        name,
+        { size: 10, opacity: 0.95, align: align.center },
+      ));
+    });
+
+    // Playhead.
+    s(line(
+      pt(tl.t.derive(t => STRIP_X + t * STRIP_W), STRIP_Y - 4),
+      pt(tl.t.derive(t => STRIP_X + t * STRIP_W), STRIP_Y + STRIP_H_TOTAL + 4),
+      { strokeWidth: 1.5, aside: true },
+    ));
+
+    // ── Visualization: one ball, four overlapping behaviours ───────
+    const STAGE_Y = 210;
+    const STAGE_X = W / 2;
+
+    // Each clip drives a different aspect via signal math:
+    //   fadeIn.t ⇒ opacity ramps up
+    //   scale.t ⇒ radius oscillates (sin → 0 at endpoints, peak at midpoint)
+    //   shift.t ⇒ x-offset oscillates the same way
+    //   fadeOut.t ⇒ opacity ramps down
+    const ballX = computed(
+      () => STAGE_X + Math.sin(tl.shift.t.value * Math.PI) * 110,
+    );
+    const ballR = computed(
+      () => 18 + Math.sin(tl.scale.t.value * Math.PI) * 28,
+    );
+    const ballOpacity = computed(
+      () => tl.fadeIn.t.value * (1 - tl.fadeOut.t.value),
+    );
+
+    s(circle(pt(ballX, STAGE_Y), ballR, {
+      fill: "#1a1a1a",
+      opacity: ballOpacity,
+    }));
+
+    // ── Header + instructions ──────────────────────────────────────
+    s(label(
+      pt(W / 2, H - 32),
+      computed(() =>
+        `time: ${tl.clock.value.toFixed(2)}s / ${tl.duration.value.toFixed(2)}s`,
+      ),
+      { size: 11, opacity: 0.65, align: align.center },
+    ));
+    s(label(
+      pt(W / 2, H - 14),
+      "drag clip body to shift · drag handles to resize · overlapping clips animate together",
+      { size: 10, opacity: 0.5, align: align.center },
+    ));
+
+    // ── Loop ───────────────────────────────────────────────────────
+    this.anim.loop(function* () {
+      reset();
+      yield* tl;
+      yield 0.4;
+    });
+  }
+}

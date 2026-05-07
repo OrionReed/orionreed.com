@@ -54,13 +54,11 @@ export { Anim, type Animator, type Yieldable } from "./core/anim";
 export { EventBus, type EventState } from "./core/events";
 
 export {
-  range,
-  Timeline,
   timeline,
-  durations,
-  pulse,
-  type Ranged,
-  type TimelineEntry,
+  sequential,
+  type Clip,
+  type Timeline,
+  type TimelineOf,
 } from "./core/timeline";
 
 // ── Shapes (space stdlib) ───────────────────────────────────────────
@@ -121,6 +119,10 @@ export {
   zoomOut,
   fadeUpOut,
   slideOut,
+  pulse,
+  ramp,
+  reverse,
+  speed,
 } from "./motion";
 
 // ── Consumer scaffold ───────────────────────────────────────────────

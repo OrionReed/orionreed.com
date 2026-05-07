@@ -12,6 +12,7 @@ import { MdTransitions } from "./optical-centering/md-transitions";
 import { MdOrbits } from "./optical-centering/md-orbits";
 import { MdLayoutDemo } from "./optical-centering/md-layout-demo";
 import { MdTimelineEditor } from "./optical-centering/md-timeline-editor";
+import { MdMultitrack } from "./optical-centering/md-multitrack";
 import { MdCircuit } from "./optical-centering/md-circuit";
 import { MdRuntimeTests } from "./optical-centering/md-runtime-tests";
 
@@ -29,5 +30,6 @@ MdTransitions.define();
 MdOrbits.define();
 MdLayoutDemo.define();
 MdTimelineEditor.define();
+MdMultitrack.define();
 MdCircuit.define();
 MdRuntimeTests.define();

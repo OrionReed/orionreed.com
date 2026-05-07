@@ -1,191 +1,171 @@
-// Range + Timeline. Layer-B userland on top of signals + Anim:
-//   - `range(dur, body?)` — a one-shot generator with introspectable
-//     `elapsed` / `duration` / `t` signals. Default body advances elapsed
-//     each frame until duration is reached (a plain sleep). Custom body
-//     drives side effects (write a signal, call fn(t), etc.).
-//   - `Timeline` — a writable composition of Ranged entries with their
-//     own start times. Itself a generator; its `t` and `duration`
-//     signals are reactive over entries' positions and durations.
-//   - `durations({ a: 0.7, b: 1.2 })` — sugar for `{ a: signal(0.7),
-//     b: signal(1.2) }`. The simple "named editable durations" pattern.
+// Timeline + Clip primitive. A timeline is a clock plus named clips
+// (each a `[at, at + dur)` interval); progress within each clip is
+// derived from the clock. Yieldable: `yield* tl` advances the clock
+// from current to total `duration`, then completes.
+//
+// For the common "sequential phases" pattern, `sequential({...})`
+// produces clip specs whose `at`s are reactive cumulative starts —
+// editing one duration ripples through to subsequent starts.
 
-import { signal, computed, type Signal, type ReadonlySignal } from "./signal";
-import { toSig, type Arg } from "./arg";
-import type { Animator, Anim } from "./anim";
+import {
+  signal,
+  computed,
+  type Signal,
+  type ReadonlySignal,
+} from "./signal";
+import { toSig, type Arg, type NumSig, type ResolveSig } from "./arg";
+import type { Animator } from "./anim";
 
-// ── Range ────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────
 
-/** A generator with introspectable temporal state. Plain animators
- *  (springs, free integrators) don't carry these — they stay outside
- *  the Range vocabulary and can't be placed on a Timeline. */
-export type Ranged = Animator & {
-  readonly elapsed: ReadonlySignal<number>;
-  readonly duration: ReadonlySignal<number>;
+/** A clip on a timeline: an interval `[at, at + dur)` whose progress
+ *  `t` is derived from the timeline's clock. The `t` extends past the
+ *  endpoints (0 before, 1 after) so derivations like
+ *  `clip.t.derive(easeInOut)` work for fades, holds, and oscillations
+ *  without conditional checks. */
+export type Clip<A = number, D = number> = {
+  /** Start time. Editable iff the user passed a writable signal/literal. */
+  readonly at: ResolveSig<A, number>;
+  /** Duration. Same writability rules as `at`. */
+  readonly dur: ResolveSig<D, number>;
+  /** `at + dur`, reactive. */
+  readonly end: ReadonlySignal<number>;
+  /** Progress: 0 before `at`, 0..1 from `at` to `end`, 1 after `end`. */
   readonly t: ReadonlySignal<number>;
+  /** True iff `at <= clock < end`. */
+  readonly active: ReadonlySignal<boolean>;
 };
 
-interface RangeState {
-  readonly t: ReadonlySignal<number>;
-  readonly elapsed: Signal<number>;
+/** Internal — input shape for `timeline()`. Not exported; users either
+ *  pass object literals (whose types are inferred) or feed `sequential()`'s
+ *  output through. */
+type ClipSpec = { at: Arg<number>; dur: Arg<number> };
+
+export interface Timeline {
+  /** Current playhead time in seconds; writable for scrubbing or reset. */
+  readonly clock: Signal<number>;
+  /** `max(end)` across all clips, reactive in clip durations and starts. */
   readonly duration: ReadonlySignal<number>;
+  /** `clock / duration`, clamped to [0, 1]. */
+  readonly t: ReadonlySignal<number>;
+  /** All clips in insertion order. */
+  readonly clips: readonly Clip[];
+  /** Yielding the timeline advances `clock` from current to `duration`,
+   *  then completes. No auto-reset — for loops, write `clock.value = 0`
+   *  at the top of the loop body (or use `snapshot(tl.clock)`). */
+  [Symbol.iterator](): Animator;
 }
 
-/** Build a Range. Without a body, the default behaviour is to advance
- *  `elapsed` each frame until `duration` is reached — equivalent to
- *  `yield duration`, but with introspectable state. With a body, the
- *  body controls advancement and side effects:
- *
- *      range(0.5, ({ t, elapsed, duration }) => function* () {
- *        while (elapsed.value < duration.value) {
- *          const dt: number = yield;
- *          elapsed.value += dt;
- *          mySig.value = lerp(start, end, t.value);
- *        }
- *      }())
- *
- *  Single-use: once iterated to completion, the generator is exhausted.
- *  For looping animations, construct a fresh range inside the loop body. */
-export function range(
-  durArg: Arg<number>,
-  body?: (state: RangeState) => Animator,
-): Ranged {
-  const duration = toSig(durArg);
-  const elapsed = signal(0);
-  const t = computed(() =>
-    duration.value > 0 ? Math.min(elapsed.value / duration.value, 1) : 1,
-  );
-  const state: RangeState = { t, elapsed, duration };
+/** Type-preserving named-clip access: each named clip's at/dur
+ *  writability is preserved from the input via `ResolveSig`. */
+export type TimelineOf<T extends Record<string, ClipSpec>> = Timeline & {
+  readonly [K in keyof T]: T[K] extends { at: infer A; dur: infer D }
+    ? Clip<A, D>
+    : Clip;
+};
 
-  const gen = (
-    body
-      ? body(state)
-      : (function* (): Animator {
-          while (elapsed.value < duration.value) {
-            const dt: number = yield;
-            elapsed.value += dt;
-          }
-        })()
-  ) as Ranged;
+// ── Implementation ───────────────────────────────────────────────────
 
-  return Object.assign(gen, { elapsed, duration, t });
-}
+class TimelineImpl implements Timeline {
+  readonly clock: Signal<number>;
+  readonly duration: ReadonlySignal<number>;
+  readonly t: ReadonlySignal<number>;
+  readonly clips: readonly Clip[];
 
-// ── Timeline ─────────────────────────────────────────────────────────
-
-export interface TimelineEntry {
-  readonly at: Signal<number>;
-  readonly range: Ranged;
-}
-
-/** A writable composition of Ranged entries. Each entry has a start
- *  time (signal-backed) and a Range that runs from that start. The
- *  Timeline is itself a generator: `yield* tl` plays it. Its
- *  `duration` signal is `max(at + range.duration)` reactively; `t` is
- *  `elapsed / duration` for a global playhead. */
-export class Timeline {
-  private _entries = signal<TimelineEntry[]>([]);
-  readonly elapsed = signal(0);
-  readonly duration = computed(() => {
-    let max = 0;
-    for (const e of this._entries.value) {
-      const end = e.at.value + e.range.duration.value;
-      if (end > max) max = end;
-    }
-    return max;
-  });
-  readonly t = computed(() =>
-    this.duration.value > 0
-      ? Math.min(this.elapsed.value / this.duration.value, 1)
-      : 1,
-  );
-
-  get entries(): readonly TimelineEntry[] {
-    return this._entries.value;
+  constructor(clock: Signal<number>, clips: readonly Clip[]) {
+    this.clock = clock;
+    this.clips = clips;
+    this.duration = computed(() => {
+      let max = 0;
+      for (const c of clips) {
+        const e = c.end.value;
+        if (e > max) max = e;
+      }
+      return max;
+    });
+    this.t = computed(() => {
+      const d = this.duration.value;
+      return d > 0 ? Math.min(this.clock.value / d, 1) : 0;
+    });
   }
 
-  /** Append a Range. `at` defaults to the current `duration` (i.e.
-   *  appends to the end of the timeline). Pass an explicit number or
-   *  `Signal<number>` to overlap with earlier entries. Returns the
-   *  entry so callers can mutate `at` later. */
-  add(
-    r: Ranged,
-    opts: { at?: number | Signal<number> | "end" } = {},
-  ): TimelineEntry {
-    const at =
-      opts.at === undefined || opts.at === "end"
-        ? signal(this.duration.peek())
-        : typeof opts.at === "number"
-          ? signal(opts.at)
-          : opts.at;
-    const entry: TimelineEntry = { at, range: r };
-    this._entries.value = [...this._entries.value, entry];
-    return entry;
-  }
-
-  remove(entry: TimelineEntry): void {
-    this._entries.value = this._entries.value.filter((e) => e !== entry);
-  }
-
-  /** Run the timeline from start to finish. Each `yield* tl` resets
-   *  `elapsed` to 0 and walks until every active range completes.
-   *  Single-pass — entries' ranges are consumed once. */
   *[Symbol.iterator](): Animator {
-    const started = new Set<TimelineEntry>();
-    const live = new Set<TimelineEntry>();
-    this.elapsed.value = 0;
-
-    while (true) {
-      // Activate entries whose start time has been reached.
-      for (const e of this._entries.value) {
-        if (!started.has(e) && this.elapsed.value >= e.at.value) {
-          started.add(e);
-          live.add(e);
-        }
-      }
-
-      const total = this.duration.value;
-      if (this.elapsed.value >= total && live.size === 0) return;
-
+    while (this.clock.value < this.duration.value) {
       const dt: number = yield;
-      this.elapsed.value += dt;
-
-      // Step each live range one frame.
-      for (const e of [...live]) {
-        const r = e.range.next(dt);
-        if (r.done) live.delete(e);
-      }
+      this.clock.value += dt;
     }
   }
 }
 
-export const timeline = (): Timeline => new Timeline();
-
-// ── durations ────────────────────────────────────────────────────────
-
-/** Sugar for `{ a: signal(initial.a), b: signal(initial.b), ... }`.
- *  Common pattern for "named editable durations" — slider knobs in a
- *  timeline editor, named phases in a sequence with editable timing. */
-export function durations<const T extends Record<string, number>>(
-  initial: T,
-): { readonly [K in keyof T]: Signal<number> } {
-  const out: Record<string, Signal<number>> = {};
-  for (const key of Object.keys(initial)) {
-    out[key] = signal(initial[key]);
-  }
-  return out as { [K in keyof T]: Signal<number> };
+function makeClip(spec: ClipSpec, clock: Signal<number>): Clip {
+  const at = toSig(spec.at) as NumSig;
+  const dur = toSig(spec.dur) as NumSig;
+  const end = computed(() => at.value + dur.value);
+  const t = computed(() => {
+    const c = clock.value;
+    const a = at.value;
+    const d = dur.value;
+    if (c <= a) return 0;
+    if (c >= a + d) return 1;
+    return d > 0 ? (c - a) / d : 1;
+  });
+  const active = computed(() => {
+    const c = clock.value;
+    return c >= at.value && c < end.value;
+  });
+  return { at, dur, end, t, active } as Clip;
 }
 
-// ── pulse ────────────────────────────────────────────────────────────
+/** Construct a timeline from a record of clip specs. Each spec is
+ *  `{ at, dur }` where both accept literal numbers, signals, or thunks.
+ *  Clips can overlap freely and leave gaps — `at` is independent per
+ *  clip (no auto-cumulative). For sequential clips, see `sequential()`. */
+export function timeline<T extends Record<string, ClipSpec>>(
+  specs: T,
+): TimelineOf<T> {
+  const clock = signal(0);
+  const clips: Clip[] = [];
+  const named: Record<string, Clip> = {};
+  for (const key of Object.keys(specs)) {
+    const clip = makeClip(specs[key as keyof T] as ClipSpec, clock);
+    clips.push(clip);
+    named[key] = clip;
+  }
+  const tl = new TimelineImpl(clock, clips) as TimelineImpl & Record<string, Clip>;
+  // Attach named clips for `tl.intro` etc. (typed via TimelineOf).
+  Object.assign(tl, named);
+  return tl as TimelineOf<T>;
+}
 
-/** Tick signal — increments every `sec` seconds while `anim` is active.
- *  Free function so the `Anim` runtime stays signal-free (layer-A pure);
- *  the bridge from runtime to reactivity lives at layer B with the rest
- *  of the temporal helpers. */
-export function pulse(anim: Anim, sec: number): Signal<number> {
-  const sig = signal(0);
-  anim.loop(function* () {
-    yield sec;
-    sig.value = sig.peek() + 1;
+// ── sequential ───────────────────────────────────────────────────────
+
+type Durations = Record<string, Arg<number>>;
+
+/** Cumulative-start helper. Takes a record of durations and returns
+ *  clip specs whose `at`s are reactive sums of prior durations.
+ *
+ *      const tl = timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));
+ *      // tl.intro.at = 0; tl.hold.at = intro.dur; tl.outro.at = intro.dur + hold.dur.
+ *
+ *  Sequential clips' `at` is a derived `ReadonlySignal` (not writable);
+ *  users edit `dur`s and starts ripple through. For independent draggable
+ *  clip starts, pass explicit specs to `timeline()` instead. */
+export function sequential<T extends Durations>(
+  durs: T,
+): { [K in keyof T]: { at: ReadonlySignal<number>; dur: ResolveSig<T[K], number> } } {
+  const keys = Object.keys(durs) as Array<keyof T>;
+  const durSigs: NumSig[] = keys.map((k) => toSig(durs[k] as Arg<number>) as NumSig);
+  const out = {} as Record<string, { at: ReadonlySignal<number>; dur: NumSig }>;
+  keys.forEach((key, i) => {
+    const idx = i;
+    const at = computed(() => {
+      let sum = 0;
+      for (let j = 0; j < idx; j++) sum += durSigs[j].value;
+      return sum;
+    });
+    out[key as string] = { at, dur: durSigs[i] };
   });
-  return sig;
+  return out as {
+    [K in keyof T]: { at: ReadonlySignal<number>; dur: ResolveSig<T[K], number> };
+  };
 }

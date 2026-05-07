@@ -21,3 +21,5 @@ export {
   fadeUpOut,
   slideOut,
 } from "./transitions";
+export { pulse } from "./pulse";
+export { ramp, reverse, speed } from "./ramping";
