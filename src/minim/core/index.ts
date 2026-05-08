@@ -18,6 +18,8 @@ export {
   type Duration,
 } from "./signal";
 
+export { counter } from "./counter";
+
 export {
   toSig,
   when,

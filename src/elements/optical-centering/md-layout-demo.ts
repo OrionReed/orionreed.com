@@ -25,8 +25,7 @@ import {
   signal,
   speed,
   t,
-  type Signal,
-  type Vec,
+  type Point,
 } from "../../minim";
 
 export class MdLayoutDemo extends Diagram {
@@ -88,9 +87,11 @@ export class MdLayoutDemo extends Diagram {
 
     const N = 8;
     const linkLen = 11;
-    const links: Signal<Vec>[] = Array.from({ length: N }, (_, i) =>
+    // `Point`s are writable `Signal<Vec>`s — pass directly to `circle`,
+    // peek/write via `.value` exactly like a raw signal would.
+    const links: Point[] = Array.from({ length: N }, (_, i) =>
       // Initial spread along -x so the chain starts un-collapsed.
-      signal({ x: cx - i * linkLen, y: cy }),
+      pt(cx - i * linkLen, cy),
     );
 
     this.anim.run(function* () {
@@ -113,16 +114,11 @@ export class MdLayoutDemo extends Diagram {
     });
 
     for (let i = 0; i < N; i++) {
-      const link = links[i];
       s(
-        circle(
-          pt(
-            () => link.value.x,
-            () => link.value.y,
-          ),
-          6.5 - i * 0.45,
-          { fill: true, opacity: 0.6 - i * 0.05 },
-        ),
+        circle(links[i], 6.5 - i * 0.45, {
+          fill: true,
+          opacity: 0.6 - i * 0.05,
+        }),
       );
     }
 

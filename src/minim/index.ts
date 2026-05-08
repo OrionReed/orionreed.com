@@ -19,6 +19,8 @@ export {
   type Duration,
 } from "./core/signal";
 
+export { counter } from "./core/counter";
+
 export {
   toSig,
   when,

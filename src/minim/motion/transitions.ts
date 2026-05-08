@@ -1,6 +1,11 @@
 // Compositional enter/exit animations for Shapes. Each is a generator
 // factory: sets the shape's initial state, animates to rest (intros)
 // or from rest to invisible (outros). Compose with `lag`/`all`/`sequence`.
+//
+// Single-axis intros (`fadeUp`, `slideIn`, `fadeUpOut`, `slideOut`) tween
+// only the axis they affect via the lens-backed `.x` / `.y` signals;
+// orthogonal axes are reset once at the top and then left untouched, so
+// concurrent tweens on the other axis compose correctly.
 
 import { easeIn, easeInOut, easeOut } from "./easings";
 import type { Animator } from "../core";
@@ -19,7 +24,7 @@ export function* fadeIn(s: Writable<"opacity">, sec = 0.3): Animator {
   yield* s.opacity.to(1, sec);
 }
 
-/** Translate from `dy` below + fade in. */
+/** Translate from `dy` below + fade in. Only the y-axis is tweened. */
 export function* fadeUp(
   s: Writable<"translate" | "opacity">,
   sec = 0.4,
@@ -27,41 +32,33 @@ export function* fadeUp(
 ): Animator {
   s.translate.value = { x: 0, y: dy };
   s.opacity.value = 0;
-  yield [
-    s.translate.to({ x: 0, y: 0 }, sec, easeOut),
-    s.opacity.to(1, sec * 0.8),
-  ];
+  yield [s.translate.y.to(0, sec, easeOut), s.opacity.to(1, sec * 0.8)];
 }
 
-/** Slide in from a side. Distance scales with default 30px. */
+/** Slide in from a side. Only the affected axis is tweened. */
 export function* slideIn(
   s: Writable<"translate" | "opacity">,
   from: "left" | "right" | "top" | "bottom" = "left",
   sec = 0.4,
   dist = 30,
 ): Animator {
-  const off = {
-    left: { x: -dist, y: 0 },
-    right: { x: dist, y: 0 },
-    top: { x: 0, y: -dist },
-    bottom: { x: 0, y: dist },
-  }[from];
-  s.translate.value = off;
+  s.translate.value = {
+    x: from === "left" ? -dist : from === "right" ? dist : 0,
+    y: from === "top" ? -dist : from === "bottom" ? dist : 0,
+  };
   s.opacity.value = 0;
-  yield [
-    s.translate.to({ x: 0, y: 0 }, sec, easeOut),
-    s.opacity.to(1, sec * 0.7),
-  ];
+  const horizontal = from === "left" || from === "right";
+  const axisTween = horizontal
+    ? s.translate.x.to(0, sec, easeOut)
+    : s.translate.y.to(0, sec, easeOut);
+  yield [axisTween, s.opacity.to(1, sec * 0.7)];
 }
 
 /** Scale 0 → 1. Pivot from the shape's pivot (default: bounds center). */
 export function* scaleIn(s: Writable<"scale" | "opacity">, sec = 0.3): Animator {
   s.scale.value = { x: 0, y: 0 };
   s.opacity.value = 0;
-  yield [
-    s.scale.to({ x: 1, y: 1 }, sec, easeOut),
-    s.opacity.to(1, sec * 0.7),
-  ];
+  yield [s.scale.to({ x: 1, y: 1 }, sec, easeOut), s.opacity.to(1, sec * 0.7)];
 }
 
 /** Overshoot-and-settle scale. Classic "bounceIn". */
@@ -99,39 +96,29 @@ export function* fadeOut(s: Writable<"opacity">, sec = 0.3): Animator {
 
 /** Scale to 0 + fade out. Mirror of scaleIn. */
 export function* zoomOut(s: Writable<"scale" | "opacity">, sec = 0.3): Animator {
-  yield [
-    s.scale.to({ x: 0, y: 0 }, sec, easeIn),
-    s.opacity.to(0, sec),
-  ];
+  yield [s.scale.to({ x: 0, y: 0 }, sec, easeIn), s.opacity.to(0, sec)];
 }
 
-/** Translate up `dy` + fade out. */
+/** Translate up `dy` + fade out. Only the y-axis is tweened. */
 export function* fadeUpOut(
   s: Writable<"translate" | "opacity">,
   sec = 0.3,
   dy = 16,
 ): Animator {
-  yield [
-    s.translate.to({ x: 0, y: -dy }, sec, easeIn),
-    s.opacity.to(0, sec),
-  ];
+  yield [s.translate.y.to(-dy, sec, easeIn), s.opacity.to(0, sec)];
 }
 
-/** Slide out toward a side. */
+/** Slide out toward a side. Only the affected axis is tweened. */
 export function* slideOut(
   s: Writable<"translate" | "opacity">,
   to: "left" | "right" | "top" | "bottom" = "right",
   sec = 0.3,
   dist = 30,
 ): Animator {
-  const off = {
-    left: { x: -dist, y: 0 },
-    right: { x: dist, y: 0 },
-    top: { x: 0, y: -dist },
-    bottom: { x: 0, y: dist },
-  }[to];
-  yield [
-    s.translate.to(off, sec, easeIn),
-    s.opacity.to(0, sec),
-  ];
+  const horizontal = to === "left" || to === "right";
+  const target = to === "left" || to === "top" ? -dist : dist;
+  const axisTween = horizontal
+    ? s.translate.x.to(target, sec, easeIn)
+    : s.translate.y.to(target, sec, easeIn);
+  yield [axisTween, s.opacity.to(0, sec)];
 }

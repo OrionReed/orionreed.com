@@ -81,15 +81,20 @@ export type AnyShape = Shape<any>;
 /** The animatable props a Shape exposes as `Signal`-backed fields. */
 export type AnimatableKey = "translate" | "rotate" | "scale" | "origin" | "opacity";
 
-type AnimatableValue<K extends AnimatableKey> =
-  K extends "translate" | "scale" | "origin" ? Vec : number;
+/** Concrete field type for each animatable prop — Vec props are
+ *  `Point` (writable, with lens-backed `.x` / `.y` axes); scalar props
+ *  are plain `Signal<number>`. Mirrors what `Shape` actually exposes. */
+type AnimatableField<K extends AnimatableKey> =
+  K extends "translate" | "scale" | "origin" ? Point : Signal<number>;
 
 /** Constrain to "any object with these animatable props writable."
  *  Combinable via union — `Writable<"translate" | "opacity">` requires
  *  both props writable. Use for helpers that animate specific props
- *  but should still accept shapes whose *other* props are readonly. */
+ *  but should still accept shapes whose *other* props are readonly.
+ *  Vec props resolve to `Point`, so axis tweens (`s.translate.x.to(...)`)
+ *  are available. */
 export type Writable<K extends AnimatableKey> = {
-  readonly [P in K]: Signal<AnimatableValue<P>>;
+  readonly [P in K]: AnimatableField<P>;
 };
 
 /** Universal scene-graph node. Wraps an SVG `<g>` (transform + opacity

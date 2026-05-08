@@ -11,8 +11,6 @@
 // Synchronous scheduler: a single RAF loop drives `step(dt)`. `step` is
 // also public for headless / test harnesses.
 
-import { signal, type ReadonlySignal, type Signal } from "./signal";
-
 /** Convention: a generator may carry a `__minimTag` string property to
  *  identify it in traces. The runtime peeks this at spawn time and
  *  copies it to `Span.tag`. Set by `tag` / `tagAll` (in `../trace/tag`)
@@ -61,17 +59,17 @@ export type Span = {
 
 /** Live recording of generator lifecycle, started by `Anim.trace()`.
  *  `spans` mutates in place — new entries on spawn, `completedAt` set
- *  on completion/cancel. `version` bumps on every structural change
- *  (spawn / complete / cancel) so consumers can subscribe natively
- *  instead of polling. Purely data; views (tree, gantt, equality)
- *  live outside `Anim`. */
+ *  on completion/cancel. `onChange` lets consumers subscribe to
+ *  structural changes; sparse, event-paced. Purely data; views (tree,
+ *  gantt, equality) live outside `Anim`. */
 export type Trace = {
   readonly spans: readonly Span[];
-  /** Bumps on each spawn / complete / cancel. Sparse, event-paced —
-   *  not per-frame. Use a separate clock for per-frame needs. */
-  readonly version: ReadonlySignal<number>;
   /** Wall-clock span of the trace: `max(completedAt ?? clock) − min(spawnedAt)`. */
   duration(): number;
+  /** Subscribe to structural changes (spawn / complete / cancel).
+   *  Returns a disposer. Wrap with `counter` from core for a
+   *  signal-flavored adapter. */
+  onChange(cb: () => void): () => void;
   /** Stop collecting; the existing `spans` array is yours to keep. */
   stop(): void;
 };
@@ -90,13 +88,12 @@ export class Anim {
   /** Trace recording state — undefined unless `trace()` was called.
    *  Hot-path overhead: one truthiness check per spawn / complete /
    *  cancel. `byActive` resolves an Active back to its Span on end;
-   *  `version` is the public reactive change-counter exposed via
-   *  `Trace.version`. */
+   *  `listeners` is lazily allocated on first `onChange` subscriber. */
   private _trace?: {
     spans: Span[];
     byActive: Map<Active, Span>;
     nextId: number;
-    version: Signal<number>;
+    listeners?: Set<() => void>;
   };
 
   // ── Public API ──────────────────────────────────────────────────────
@@ -176,13 +173,11 @@ export class Anim {
   trace(): Trace {
     const spans: Span[] = [];
     const byActive = new Map<Active, Span>();
-    const version = signal(0);
-    this._trace = { spans, byActive, nextId: 0, version };
+    this._trace = { spans, byActive, nextId: 0 };
     const self = this;
     const ours = this._trace;
     return {
       spans,
-      version,
       duration() {
         if (spans.length === 0) return 0;
         let min = Infinity;
@@ -193,6 +188,13 @@ export class Anim {
           if (end > max) max = end;
         }
         return max - min;
+      },
+      onChange(cb) {
+        if (!ours.listeners) ours.listeners = new Set();
+        ours.listeners.add(cb);
+        return () => {
+          ours.listeners?.delete(cb);
+        };
       },
       stop() {
         if (self._trace === ours) self._trace = undefined;
@@ -247,23 +249,30 @@ export class Anim {
       };
       this._trace.spans.push(span);
       this._trace.byActive.set(a, span);
-      this._trace.version.value++;
+      this.notifyTrace();
     }
     this.advance(a, 0);
     this.kick();
     return a;
   }
 
-  /** Stamp `completedAt` on the trace span (if any) for `a` and bump
-   *  the trace's version signal. Called from both natural completion
-   *  and cancel paths. */
+  /** Stamp `completedAt` on the trace span (if any) for `a` and notify
+   *  trace listeners. Called from both natural completion and cancel
+   *  paths. */
   private markEnd(a: Active): void {
     if (!this._trace) return;
     const span = this._trace.byActive.get(a);
     if (span && span.completedAt === undefined) {
       span.completedAt = this.clock;
-      this._trace.version.value++;
+      this.notifyTrace();
     }
+  }
+
+  /** Fan out to every `onChange` subscriber. No-op when no listeners. */
+  private notifyTrace(): void {
+    const set = this._trace?.listeners;
+    if (!set) return;
+    for (const cb of set) cb();
   }
 
   /** Mark dead, dispose any pending Awaitable, cascade to live children,

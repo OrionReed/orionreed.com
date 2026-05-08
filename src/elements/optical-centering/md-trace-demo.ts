@@ -1,10 +1,11 @@
 // Self-rendering trace demo. A small animation runs in the top half;
 // underneath, every generator the runtime spawns is rendered live as a
 // Gantt row. Built on:
-//   - `anim.trace()`   — runtime emits `Span`s + a `version` signal.
-//   - `traceTree()`    — derived structural view (parent/child/batches).
-//   - `tag` / `tagAll` — tag at the call site so spans carry names.
-//   - `clock(anim)`    — per-frame `now` for in-flight bar growth.
+//   - `anim.trace()`            — runtime emits `Span`s + onChange callback.
+//   - `counter(trace.onChange)` — adapt the callback to a Signal<number>.
+//   - `traceTree()`             — derived structural view.
+//   - `tag` / `tagAll`          — tag at the call site so spans carry names.
+//   - `clock(anim)`             — per-frame `now` for in-flight bar growth.
 //
 // Layout: per-parent subtree blocks. A span and its descendants form a
 // contiguous vertical block; concurrent siblings get distinct blocks;
@@ -17,6 +18,7 @@ import {
   circle,
   clock,
   computed,
+  counter,
   css,
   easeOut,
   fadeIn,
@@ -103,7 +105,8 @@ export class MdTraceDemo extends Diagram {
       tag(function* demoAnim() {
         yield [t.fadeIn(a, 0.3), t.fadeUp(b, 0.7), t.spinIn(c, 0.5)];
         yield 0.2;
-        yield a.translate.to({ x: -50, y: 0 }, 0.4, easeOut);
+        // Single-axis tween via the lens — only `a.translate.x` writes.
+        yield a.translate.x.to(-50, 0.4, easeOut);
         yield [
           a.translate.to({ x: 0, y: -30 }, 0.5, easeOut),
           b.translate.to({ x: 50, y: -10 }, 0.8, easeOut),
@@ -119,11 +122,13 @@ export class MdTraceDemo extends Diagram {
     );
 
     // ── Reactive derivations ─────────────────────────────────────────
-    // `version` bumps on each spawn / complete / cancel — sparse, event-
-    // paced — so the tree and layout only recompute when structure
-    // changes, not every frame.
+    // Adapt the trace's onChange callback into a `Signal<number>` —
+    // bumps on each spawn / complete / cancel. Sparse, event-paced —
+    // so the tree and layout only recompute when structure changes.
+    const version = counter(trace.onChange);
+
     const tree = computed(() => {
-      trace.version.value;
+      version.value;
       return traceTree(trace.spans);
     });
     const layout = computed(() => assignLanes(tree.value));
@@ -132,7 +137,7 @@ export class MdTraceDemo extends Diagram {
     // SCALE depends on `now` so the gantt re-fits as in-flight time grows.
     const SCALE = computed(() => {
       now.value;
-      trace.version.value;
+      version.value;
       return GANTT_W / Math.max(trace.duration(), SCALE_MIN);
     });
 
@@ -148,7 +153,7 @@ export class MdTraceDemo extends Diagram {
       label(
         pt(W - PAD, HEADER_Y),
         computed(() => {
-          trace.version.value;
+          version.value;
           now.value;
           const n = tree.value.size;
           const lanes = layout.value.total;
@@ -163,7 +168,7 @@ export class MdTraceDemo extends Diagram {
     // forces the diff to run when new spans appear; per-frame frame
     // updates flow through the per-row computed widths instead.
     const spansSig = computed(() => {
-      trace.version.value;
+      version.value;
       return trace.spans.slice();
     });
 
@@ -181,7 +186,7 @@ export class MdTraceDemo extends Diagram {
           return ROWS_Y + lane * (ROW_H + ROW_GAP);
         });
         const isRunning = computed(() => {
-          trace.version.value;
+          version.value;
           return span.completedAt === undefined;
         });
         const fill = computed(() => {
@@ -202,10 +207,7 @@ export class MdTraceDemo extends Diagram {
             ? `#${span.id} root`
             : `#${span.id} ← #${span.parentId}`;
         const tagShape = label(
-          pt(
-            computed(() => x.value + 5),
-            computed(() => y.value + ROW_H / 2),
-          ),
+          pt(x, y).offset(5, ROW_H / 2),
           labelText,
           { size: 9, align: align.left, opacity: 0.9 },
         );
