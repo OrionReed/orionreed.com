@@ -1,15 +1,15 @@
 // Named event bus. Emit and subscribe by string key; signal-backed
-// counters let generators await the next emit. Used for cross-cutting
-// pub/sub inside a diagram (e.g. md-circuit's wire events) without
-// threading explicit references between nodes.
+// counters let observers react reactively, and an `Awaitable` lets
+// generators wait for the next emit without polling.
 //
-// Layer-B utility: depends on signals + the Animator type. Independent
+// Layer-B utility: depends on signals + the Awaitable type. Independent
 // of the Anim runtime — the bus has no opinion about scheduling, and
-// Anim has no opinion about events. Diagram threads one bus instance
-// through its `scene` method.
+// Anim has no opinion about events. The runtime resumes a waiting
+// generator synchronously when `emit` fires (zero latency), via the
+// `Awaitable` protocol Anim consumes.
 
 import { signal, type Signal, type ReadonlySignal } from "./signal";
-import type { Animator } from "./anim";
+import type { Awaitable } from "./anim";
 
 /** Per-event reactive payload — count increments on each emit, `data`
  *  carries whatever was last emitted. */
@@ -20,7 +20,8 @@ export class EventBus {
   private handlers = new Map<string, Set<(data: unknown) => void>>();
 
   /** Fire a named event with optional data. Notifies callbacks and
-   *  increments the named signal. */
+   *  increments the named signal. Generators yielded on `until(name)`
+   *  wake synchronously inside this call. */
   emit(name: string, data?: unknown): void {
     const sig = this.signals.get(name);
     if (sig) sig.value = { count: sig.peek().count + 1, data };
@@ -52,10 +53,8 @@ export class EventBus {
     return sig;
   }
 
-  /** Generator that yields frames until the next emit of `name`. */
-  *until(name: string): Animator {
-    const sig = this.onSignal(name);
-    const start = sig.peek().count;
-    while (sig.value.count === start) yield;
+  /** Awaitable that resumes on the next emit of `name`. */
+  until(name: string): Awaitable {
+    return (wake) => this.on(name, wake);
   }
 }

@@ -1,31 +1,40 @@
 // Generator-driven animation runner. Yield contract:
-//   undefined        → wait one frame, receive `dt` (seconds).
-//   number           → pause that many seconds; receive `0`.
-//                       (≤0 is an immediate tail-call.)
-//   Animator         → spawn as child, wait for completion, receive `0`.
-//   Yieldable[]      → spawn N children in parallel, wait for all, receive `0`.
+//   undefined        → wait one frame, receive `dt`.
+//   number           → pause N seconds; ≤0 is a tail-call (same frame).
+//   Animator         → spawn as child, wait for completion.
+//   Yieldable[]      → spawn N children in parallel, wait for all.
+//   Awaitable        → suspend until `wake` fires (zero-latency).
 //
-// Synchronous scheduler: a single `requestAnimationFrame` loop steps every
-// active generator per frame. No per-yield Promise allocation; the runtime
-// owns the clock so sleeps are scheduled against it rather than via
-// `setTimeout`. `step(dt)` advances by an explicit dt — used for headless /
-// testing harnesses.
+// Generators always resume with a `number` (`dt` for frame yields, `0`
+// otherwise) — payload-less wakes. Side-channel data lives in signals.
+//
+// Synchronous scheduler: a single RAF loop drives `step(dt)`. `step` is
+// also public for headless / test harnesses.
 
-export type Yieldable = number | undefined | Animator | Yieldable[];
+/** Subscribe-style "wait for an external thing." `subscribe` registers
+ *  the wake callback and returns a disposer. Sync-resolve is allowed
+ *  (subscribe may call wake before returning) — handy for composers
+ *  whose children may complete during setup. */
+export type Awaitable = (wake: () => void) => () => void;
+
+export type Yieldable = number | undefined | Animator | Yieldable[] | Awaitable;
 export type Animator = Generator<Yieldable, void, number>;
 
-/** Per-running-generator runtime state. Exactly one of `wakeAt` /
- *  `childrenLeft` is set while suspended; if neither is set, the active
- *  is "ready next frame" and will receive `dt` on resume. `alive` is the
- *  lazy-delete flag — `complete`/`stop` flip it false, `step` skips dead
- *  entries during iteration, and end-of-tick compaction removes them. */
+/** Per-active state. At most one of `wakeAt`/`childrenLeft`/`awaitDispose`
+ *  is set while suspended; otherwise the active is "ready next frame."
+ *  `pendingReturn` defers `.return()` if the gen is on the call stack. */
 interface Active {
   gen: Animator;
   wakeAt?: number;
   childrenLeft?: number;
+  awaitDispose?: () => void;
   parent?: Active;
   alive: boolean;
+  pendingReturn?: boolean;
 }
+
+const isGen = (v: unknown): v is Animator =>
+  typeof v === "object" && v !== null && Symbol.iterator in v;
 
 export class Anim {
   private active: Active[] = [];
@@ -33,54 +42,67 @@ export class Anim {
   private rafId = 0;
   private clock = 0;
   private lastFrame = 0;
-  /** The generator currently in `gen.next()`. `stop()` defers cancelling
-   *  it (calling `.return()` on a running generator throws TypeError);
-   *  `advance`'s finally picks up the deferred return on unwind so its
-   *  `try/finally` blocks still run. */
-  private currentlyAdvancing: Active | undefined;
-  private pendingReturn: Active | undefined;
+  /** Every Active currently on the JS call stack — re-entrant `advance`
+   *  is routine (Awaitable wakes, child completions). `cancel()` checks
+   *  this set to decide whether to defer `.return()`. */
+  private advancing = new Set<Active>();
 
   // ── Public API ──────────────────────────────────────────────────────
 
   /** Run a generator forever, restarting on completion. */
-  loop(genFn: () => Animator): void {
+  loop(factory: () => Animator): () => void {
     const wrapped = (function* (): Animator {
-      while (true) yield* genFn();
+      while (true) yield* factory();
     })();
-    this.spawn(wrapped);
+    const a = this.spawn(wrapped);
+    return () => this.cancel(a);
   }
 
-  /** Run an animator once. Accepts a generator directly or a no-arg factory. */
-  run(arg: Animator | (() => Animator)): void {
-    this.spawn(typeof arg === "function" ? arg() : arg);
+  /** Run a generator once. Accepts a factory or an already-constructed
+   *  Animator — the latter is convenient when something returns one
+   *  (`anim.run(speed(clock, 1))`). Returns a disposer. */
+  run(arg: Animator | (() => Animator)): () => void {
+    const gen = typeof arg === "function" ? arg() : arg;
+    const a = this.spawn(gen);
+    return () => this.cancel(a);
   }
 
-  /** Run `fn` every `sec` seconds. */
-  every(sec: number, fn: () => void): void {
-    this.loop(function* () {
-      fn();
-      yield sec;
-    });
+  /** Spawn N children, resume on first to complete, cancel the losers. */
+  *race(...children: Animator[]): Animator {
+    const self = this;
+    yield (wake: () => void) => {
+      // Defer wake until all children are spawned, so the disposer's
+      // cancel sweep can reach every child (including any that finished
+      // synchronously during setup).
+      let setupDone = false;
+      let pending = false;
+      const safeWake = () => {
+        if (setupDone) wake();
+        else pending = true;
+      };
+      const cancels = children.map((c) =>
+        self.run(function* () {
+          yield* c;
+          safeWake();
+        }),
+      );
+      setupDone = true;
+      if (pending) wake();
+      return () => {
+        for (const c of cancels) c();
+      };
+    };
   }
 
-  /** Child Anim scoped to this one — stopped when the parent stops.
-   *  A separate runtime; shares no state with the parent. */
+  /** Child Anim scoped to this one — stopped when the parent stops. */
   scope(): Anim {
     const child = new Anim();
     this.scopes.add(child);
     return child;
   }
 
-  /** Cancel pending operations. Safe to call from anywhere — including
-   *  from within a running generator on this same Anim. Idempotent;
-   *  cascades to scopes. The Anim is reusable after return.
-   *
-   *  Implementation: marks every active dead (`alive = false`) and runs
-   *  its `gen.return()` so user `finally` blocks fire. Doesn't shrink
-   *  `active.length` — that would invalidate `step`'s length-snapshot
-   *  iteration if `stop` was called from inside a generator. The next
-   *  `step` compacts the dead entries; if no further activity ever
-   *  happens, the array is reclaimed when the Anim is GC'd. */
+  /** Cancel everything. Safe from inside a running generator; cascades
+   *  to scopes. The Anim is reusable after return. */
   stop(): void {
     if (this.rafId !== 0) {
       cancelAnimationFrame(this.rafId);
@@ -88,30 +110,17 @@ export class Anim {
     }
     this.lastFrame = 0;
     this.clock = 0;
-    const toCancel = this.active.slice();
-    for (const a of toCancel) {
-      a.alive = false;
-      if (a === this.currentlyAdvancing) {
-        // Can't .return() a generator that's currently running.
-        // `advance`'s finally picks this up after `gen.next` returns.
-        this.pendingReturn = a;
-        continue;
-      }
-      a.gen.return();
-    }
+    for (const a of this.active.slice()) this.cancel(a);
     this.scopes.forEach((s) => s.stop());
     this.scopes.clear();
   }
 
-  /** Advance the runtime by an explicit dt (seconds). Drives one tick
-   *  of every active generator. Production calls this from RAF; tests /
-   *  headless harnesses call it directly. */
+  /** Advance the runtime by an explicit dt. Production calls this from
+   *  RAF; tests call it directly. */
   step(dt: number): void {
     this.clock += dt;
-    // Length-snapshot iteration: items pushed past `len` during the loop
-    // (newly spawned children) are deferred to the next tick — same
-    // semantic as the browser's RAF callback list. Dead entries are
-    // skipped here and reclaimed by the compaction pass below.
+    // Length-snapshot iteration: children spawned during the loop are
+    // deferred to the next tick (matches RAF callback semantics).
     const len = this.active.length;
     for (let i = 0; i < len; i++) {
       const a = this.active[i];
@@ -121,14 +130,13 @@ export class Anim {
           a.wakeAt = undefined;
           this.advance(a, 0);
         }
-      } else if (a.childrenLeft !== undefined) {
-        // Waiting on children; their completion drives `advance(a, 0)`.
+      } else if (a.childrenLeft !== undefined || a.awaitDispose !== undefined) {
+        // Suspended on children or an Awaitable; resume is callback-driven.
       } else {
         this.advance(a, dt);
       }
     }
-    // Compact dead entries in place. Bounded memory regardless of churn;
-    // entries pushed past `len` during iteration are preserved.
+    // Compact dead entries in place; entries pushed past `len` survive.
     let w = 0;
     for (let r = 0; r < this.active.length; r++) {
       const a = this.active[r];
@@ -150,36 +158,84 @@ export class Anim {
     return a;
   }
 
+  /** Mark dead, dispose any pending Awaitable, cascade to live children,
+   *  then `.return()` (or defer if on the stack). Idempotent. */
+  private cancel(a: Active): void {
+    if (!a.alive) return;
+    a.alive = false;
+    if (a.awaitDispose) {
+      const d = a.awaitDispose;
+      a.awaitDispose = undefined;
+      d();
+    }
+    // Cascade: snapshot length so freshly-spawned entries (different
+    // parent anyway) aren't re-scanned.
+    const len = this.active.length;
+    for (let i = 0; i < len; i++) {
+      const child = this.active[i];
+      if (child.parent === a && child.alive) this.cancel(child);
+    }
+    if (this.advancing.has(a)) {
+      a.pendingReturn = true;
+      return;
+    }
+    a.gen.return();
+  }
+
   private kick(): void {
     if (this.rafId !== 0 || this.active.length === 0) return;
-    // Re-entering after a quiet period: reset so the upcoming RAF reports
-    // dt=0 — pauses don't accumulate logical time.
+    // Reset after idle so the next RAF reports dt=0 — pauses don't
+    // accumulate logical time.
     if (performance.now() - this.lastFrame > 32) this.lastFrame = 0;
     this.rafId = requestAnimationFrame(this.frame);
   }
 
   private frame = (rafNow: number): void => {
     this.rafId = 0;
-    // First frame after idle: dt=0. Subsequent frames: wall-clock interval,
-    // clamped at 32ms for stutter recovery.
+    // First frame after idle: dt=0. Subsequent frames clamp at 32ms.
     const dt =
       this.lastFrame === 0 ? 0 : Math.min(rafNow - this.lastFrame, 32) / 1000;
     this.lastFrame = rafNow;
     try {
       this.step(dt);
     } finally {
-      // Always reschedule, even if `step` propagated an unrecoverable
-      // error — keeps the runtime alive.
+      // Reschedule even on error — keep the runtime alive.
       this.kick();
     }
   };
 
+  /** Subscribe to an Awaitable; resume `a` when wake fires. Two paths:
+   *  async (subscribe returns, gen suspends, wake later resumes); sync
+   *  (subscribe calls wake inline — gen advances re-entrantly, dispose
+   *  is called once subscribe returns). */
+  private suspend(a: Active, awaitable: Awaitable): void {
+    let resumed = false;
+    let dispose: (() => void) | undefined;
+    const wake = () => {
+      if (resumed || !a.alive) return;
+      resumed = true;
+      if (dispose) {
+        if (a.awaitDispose === dispose) a.awaitDispose = undefined;
+        dispose();
+      }
+      this.advance(a, 0);
+    };
+    dispose = awaitable(wake);
+    if (resumed) {
+      // Sync wake: dispose wasn't bound when wake fired. Run it now;
+      // a recursive yield may have installed its own awaitDispose, so
+      // don't touch that slot.
+      dispose();
+      return;
+    }
+    a.awaitDispose = dispose;
+  }
+
   private advance(a: Active, dt: number): void {
-    this.currentlyAdvancing = a;
+    this.advancing.add(a);
     try {
       let result = a.gen.next(dt);
       while (!result.done) {
-        // `stop()` may have killed this active during gen.next.
         if (!a.alive) return;
         const v = result.value;
         if (typeof v === "number") {
@@ -187,10 +243,9 @@ export class Anim {
             a.wakeAt = this.clock + v;
             return;
           }
-          // ≤0: tail-call — advance immediately without consuming a frame.
+          // ≤0: tail-call — advance without consuming a frame.
           result = a.gen.next(0);
         } else if (v === undefined) {
-          // Wait for next frame; receive dt then.
           return;
         } else if (Array.isArray(v)) {
           if (v.length === 0) {
@@ -200,21 +255,13 @@ export class Anim {
           a.childrenLeft = v.length;
           for (const item of v) {
             if (!a.alive) return;
-            // Common case: item is a generator — spawn directly. Saves the
-            // `function*() { yield* item }` wrapper layer.
-            if (
-              typeof item === "number" ||
-              item === undefined ||
-              Array.isArray(item)
-            ) {
-              this.spawn(wrapItem(item), a);
-            } else {
-              this.spawn(item, a);
-            }
+            this.spawn(isGen(item) ? item : wrapItem(item), a);
           }
           return;
+        } else if (typeof v === "function") {
+          this.suspend(a, v as Awaitable);
+          return;
         } else {
-          // Single generator delegate via `yield gen`.
           a.childrenLeft = 1;
           this.spawn(v, a);
           return;
@@ -222,17 +269,13 @@ export class Anim {
       }
       this.complete(a);
     } catch (e) {
-      // User-code error from `gen.next` — at spawn time or during step.
-      // Treat as completion: log, drop from `active`, notify parent so
-      // siblings/awaiters don't hang. The runtime stays alive.
+      // User-code error: log, complete (notifies parent), keep runtime alive.
       console.error("minim: animator threw", e);
       this.complete(a);
     } finally {
-      this.currentlyAdvancing = undefined;
-      // If `stop()` deferred this gen's return because it was currently
-      // advancing, run it now — the gen is back in the suspended state.
-      if (this.pendingReturn === a) {
-        this.pendingReturn = undefined;
+      this.advancing.delete(a);
+      if (a.pendingReturn) {
+        a.pendingReturn = false;
         a.gen.return();
       }
     }
@@ -241,6 +284,11 @@ export class Anim {
   private complete(a: Active): void {
     if (!a.alive) return;
     a.alive = false;
+    if (a.awaitDispose) {
+      const d = a.awaitDispose;
+      a.awaitDispose = undefined;
+      d();
+    }
     const p = a.parent;
     if (!p || !p.alive || p.childrenLeft === undefined) return;
     p.childrenLeft -= 1;
@@ -251,9 +299,7 @@ export class Anim {
   }
 }
 
-/** One-yield generator for the rare parallel-array element that isn't
- *  itself a generator (number, undefined, nested array). Generators in
- *  arrays are spawned directly — no wrapper layer. */
-function* wrapItem(v: number | undefined | Yieldable[]): Animator {
+/** Wrap a non-generator parallel-array item so it goes through `spawn`. */
+function* wrapItem(v: number | undefined | Yieldable[] | Awaitable): Animator {
   yield v;
 }

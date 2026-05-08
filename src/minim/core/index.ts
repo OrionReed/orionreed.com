@@ -29,7 +29,7 @@ export { type Vec } from "./vec";
 
 export { store, snapshot, type Store } from "./store";
 
-export { Anim, type Animator, type Yieldable } from "./anim";
+export { Anim, type Animator, type Awaitable, type Yieldable } from "./anim";
 
 export { EventBus, type EventState } from "./events";
 

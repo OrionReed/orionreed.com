@@ -6,9 +6,13 @@
 //   yield-contract:  number sleeps, undefined frames, parallel arrays,
 //                    yield* delegation, yield gen delegation, tail-call (≤0).
 //   cancellation:    stop()-from-within-gen runs finally; restart works;
-//                    stop() cascades to scopes.
+//                    stop() cascades to scopes; run() disposer cancels.
 //   isolation:       one throwing gen doesn't kill siblings.
-//   event bus:       emit / on / pulse.
+//   awaitable:       sync wake, async wake, disposer fires on cancel,
+//                    nested awaitables.
+//   race:            first-completion wakes parent; losers are cancelled;
+//                    children's full yield protocol is honoured.
+//   event bus:       emit / on; until is zero-latency (wakes inside emit).
 
 import {
   Anim,
@@ -399,22 +403,197 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "event bus: until generator wakes on emit",
+    name: "event bus: until wakes synchronously inside emit",
     run: (assert) => {
+      // Awaitable contract: when emit fires, the waiting generator
+      // resumes in the same tick — no extra step required.
       const a = new Anim();
       const bus = new EventBus();
       let woken = false;
       a.run(function* () {
-        yield* bus.until("go");
+        yield bus.until("go");
         woken = true;
       });
       a.step(0);
       a.step(0.1);
-      a.step(0.1);
       assert(!woken, `should still be waiting`);
       bus.emit("go");
+      assert(woken, `should have woken inside the emit() call`);
+      a.stop();
+    },
+  },
+  {
+    name: "Awaitable: out-of-band wake advances the gen",
+    run: (assert) => {
+      const a = new Anim();
+      let captured: (() => void) | undefined;
+      let woken = false;
+      a.run(function* () {
+        yield (wake) => {
+          captured = wake;
+          return () => {};
+        };
+        woken = true;
+      });
       a.step(0);
-      assert(woken, `should have woken after emit`);
+      assert(!woken, `should be suspended on Awaitable`);
+      assert(captured !== undefined, `subscribe should have run`);
+      captured!();
+      assert(woken, `wake should advance the gen synchronously`);
+      a.stop();
+    },
+  },
+  {
+    name: "Awaitable: synchronous resolve advances immediately",
+    run: (assert) => {
+      // Subscribe calls wake before returning — gen advances re-entrantly,
+      // and the outer advance bails without overwriting awaitDispose.
+      const a = new Anim();
+      let phase = 0;
+      a.run(function* () {
+        phase = 1;
+        yield (wake) => {
+          wake();
+          return () => {};
+        };
+        phase = 2;
+      });
+      a.step(0);
+      assert(phase === 2, `phase=${phase}, expected 2 (sync resolve)`);
+      a.stop();
+    },
+  },
+  {
+    name: "Awaitable: disposer fires when cancelled before wake",
+    run: (assert) => {
+      const a = new Anim();
+      let disposed = false;
+      const handle = a.run(function* () {
+        yield (_wake) => () => {
+          disposed = true;
+        };
+      });
+      a.step(0);
+      assert(!disposed, `still suspended; disposer should not have run`);
+      handle();
+      assert(disposed, `cancel should have called the disposer`);
+    },
+  },
+  {
+    name: "run() disposer cancels and runs finally",
+    run: (assert) => {
+      const a = new Anim();
+      let finallyRan = false;
+      const handle = a.run(function* () {
+        try {
+          yield 5;
+        } finally {
+          finallyRan = true;
+        }
+      });
+      a.step(0);
+      handle();
+      assert(finallyRan, `finally should have run on disposer call`);
+      a.stop();
+    },
+  },
+  {
+    name: "race: first child wins, others are cancelled",
+    run: (assert) => {
+      const a = new Anim();
+      let aFinally = 0;
+      let bFinally = 0;
+      let parentDone = false;
+      a.run(function* () {
+        yield* a.race(
+          (function* (): Animator {
+            try {
+              yield 0.1;
+            } finally {
+              aFinally++;
+            }
+          })(),
+          (function* (): Animator {
+            try {
+              yield 0.5;
+            } finally {
+              bFinally++;
+            }
+          })(),
+        );
+        parentDone = true;
+      });
+      a.step(0);
+      a.step(0.15);
+      assert(parentDone, `parent should have resumed after first finished`);
+      assert(aFinally === 1, `winner's finally should run (got ${aFinally})`);
+      assert(bFinally === 1, `loser's finally should run (got ${bFinally})`);
+      a.stop();
+    },
+  },
+  {
+    name: "cancel cascades to children",
+    run: (assert) => {
+      // When a parent active is cancelled, its spawned children (via
+      // `yield gen` or `yield array`) get cancelled too — their finally
+      // blocks run and they don't keep advancing as orphans.
+      const a = new Anim();
+      let childFinally = 0;
+      const handle = a.run(function* () {
+        yield [
+          (function* (): Animator {
+            try {
+              yield 5;
+            } finally {
+              childFinally++;
+            }
+          })(),
+          (function* (): Animator {
+            try {
+              yield 5;
+            } finally {
+              childFinally++;
+            }
+          })(),
+        ];
+      });
+      a.step(0);
+      handle();
+      assert(childFinally === 2, `expected both children's finallys (got ${childFinally})`);
+      a.stop();
+    },
+  },
+  {
+    name: "race: child yield protocol works (sub-gen, sleep, parallel)",
+    run: (assert) => {
+      // Children use the full yield contract — the bare-yield-only
+      // restriction of the old `race` is gone. Slow child uses a parallel
+      // array; fast child uses yield* delegation; both legal inside race.
+      const a = new Anim();
+      let parentDone = false;
+      a.run(function* () {
+        yield* a.race(
+          (function* (): Animator {
+            yield* (function* (): Animator {
+              yield 0.05;
+            })();
+          })(),
+          (function* (): Animator {
+            yield [
+              (function* (): Animator {
+                yield 1;
+              })(),
+              (function* (): Animator {
+                yield 1;
+              })(),
+            ];
+          })(),
+        );
+        parentDone = true;
+      });
+      a.step(0);
+      a.step(0.06);
+      assert(parentDone, `parent should resume on the fast child`);
       a.stop();
     },
   },

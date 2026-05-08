@@ -53,7 +53,7 @@ export class MdCircuit extends Diagram {
       const c = circle(pt(x, y), 18);
       s(c, label(c.center, lbl, { size: 13, bold: true }));
       anim.loop(function* () {
-        yield* bus.until(ev);
+        yield bus.until(ev);
         yield* c.scale.to({ x: 1.4, y: 1.4 }, 0.08).to({ x: 1, y: 1 }, 0.3);
       });
       return c;
@@ -75,7 +75,7 @@ export class MdCircuit extends Diagram {
         label(c.center.up(30), lbl, { size: 11, opacity: 0.7 }),
       );
       anim.loop(function* () {
-        yield* bus.until(ev);
+        yield bus.until(ev);
         yield* c.scale.to({ x: 1.3, y: 1.3 }, 0.06).to({ x: 1, y: 1 }, 0.3);
       });
       return c;
@@ -233,7 +233,7 @@ export class MdCircuit extends Diagram {
       const holding = signal(false);
       gate.add(lit(gate.bounds.center.down(6), holding));
       anim.loop(function* () {
-        yield* bus.until(from);
+        yield bus.until(from);
         holding.value = true;
         yield R.float(holdRange[0], holdRange[1]);
         holding.value = false;

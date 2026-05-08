@@ -1,14 +1,5 @@
 export { linear, easeOut, easeIn, easeInOut } from "./easings";
-export {
-  all,
-  sequence,
-  delay,
-  during,
-  lag,
-  until,
-  repeat,
-  race,
-} from "./compose";
+export { all, sequence, delay, lag, until, repeat } from "./compose";
 export {
   fadeIn,
   fadeUp,
@@ -21,5 +12,4 @@ export {
   fadeUpOut,
   slideOut,
 } from "./transitions";
-export { pulse } from "./pulse";
-export { ramp, reverse, speed } from "./ramping";
+export { pulse, clock, every, ramp, reverse, speed } from "./clocks";

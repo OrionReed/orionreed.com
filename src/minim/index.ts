@@ -49,7 +49,7 @@ export {
 
 export { makeScene, type Scene } from "./scene/scene";
 
-export { Anim, type Animator, type Yieldable } from "./core/anim";
+export { Anim, type Animator, type Awaitable, type Yieldable } from "./core/anim";
 
 export { EventBus, type EventState } from "./core/events";
 
@@ -104,11 +104,9 @@ export {
   all,
   sequence,
   delay,
-  during,
   lag,
   until,
   repeat,
-  race,
   fadeIn,
   fadeUp,
   slideIn,
@@ -120,6 +118,8 @@ export {
   fadeUpOut,
   slideOut,
   pulse,
+  clock,
+  every,
   ramp,
   reverse,
   speed,
