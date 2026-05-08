@@ -10,7 +10,7 @@
 // targets, stagger an op).
 
 import { lag } from "./compose";
-import type { Animator, Easing, Vec } from "../core";
+import { toSig, type Animator, type Arg, type Easing, type Vec } from "../core";
 import { isPoint, type Pointlike, type Writable } from "../scene";
 
 /** Swap two shapes' positions. Each tweens to the other's current
@@ -60,29 +60,46 @@ export function* splay(
   });
 }
 
-/** Continuous orbital motion — each shape moves on a circle of
- *  `radius` around `center`, evenly phased, completing one revolution
- *  in `period` seconds. Never returns; cancel via the `run` disposer
- *  or include it in a `race`. */
+/** Continuous orbital rotation — each shape rotates around `center`
+ *  preserving its current radial position; one revolution in `period`
+ *  seconds. Snapshots each shape's initial angle and radius (from
+ *  `center`) at start so there's no discontinuous jump — orbit picks
+ *  up whatever layout the shapes are already in (e.g. a prior `splay`
+ *  call). Never returns; cancel via the `run` disposer or include it
+ *  in a `race`.
+ *
+ *  `rate` (default `1`) is a multiplier on the angular advance per
+ *  frame — a writable signal lets you ramp orbit speed in/out via
+ *  `rate.to(0, sec)` / `rate.to(1, sec)` without touching the
+ *  generator. `rate = 0` pauses; negatives reverse. */
 export function* orbit(
   center: Pointlike,
   shapes: readonly Writable<"translate">[],
-  opts: { radius?: number; period?: number } = {},
+  opts: { period?: number; rate?: Arg<number> } = {},
 ): Animator {
-  const radius = opts.radius ?? 60;
   const period = opts.period ?? 4;
+  const rate = toSig(opts.rate ?? 1);
   const omega = (2 * Math.PI) / period;
   const N = shapes.length;
+  // Snapshot initial polar positions relative to `center` — orbit
+  // continues from wherever the shapes are now.
+  const c0 = center.value;
+  const init = shapes.map((sh) => {
+    const v = sh.translate.peek();
+    const dx = v.x - c0.x;
+    const dy = v.y - c0.y;
+    return { angle: Math.atan2(dy, dx), radius: Math.hypot(dx, dy) };
+  });
   let t = 0;
   while (true) {
     const dt: number = yield;
-    t += dt;
+    t += dt * rate.value;
     const c = center.value;
     for (let i = 0; i < N; i++) {
-      const angle = (i / N) * Math.PI * 2 + omega * t;
+      const angle = init[i].angle + omega * t;
       shapes[i].translate.value = {
-        x: c.x + radius * Math.cos(angle),
-        y: c.y + radius * Math.sin(angle),
+        x: c.x + init[i].radius * Math.cos(angle),
+        y: c.y + init[i].radius * Math.sin(angle),
       };
     }
   }
