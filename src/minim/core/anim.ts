@@ -35,6 +35,29 @@ interface Active {
   pendingReturn?: boolean;
 }
 
+/** A single generator's lifecycle as flat data. `completedAt` is set
+ *  on natural completion *and* on cancel — consumers reading still-open
+ *  spans see `undefined`. Spawn order matches insertion order in
+ *  `Trace.spans`; `parentId` walks the spawn tree. */
+export type Span = {
+  readonly id: number;
+  readonly parentId?: number;
+  readonly spawnedAt: number;
+  completedAt?: number;
+};
+
+/** Live recording of generator lifecycle, started by `Anim.trace()`.
+ *  `spans` mutates in place — new entries on spawn, `completedAt` set
+ *  on completion/cancel. Purely data; views (tree, gantt, equality)
+ *  live outside `Anim`. */
+export type Trace = {
+  readonly spans: readonly Span[];
+  /** Wall-clock span of the trace: `max(completedAt ?? clock) − min(spawnedAt)`. */
+  duration(): number;
+  /** Stop collecting; the existing `spans` array is yours to keep. */
+  stop(): void;
+};
+
 const isGen = (v: unknown): v is Animator =>
   typeof v === "object" &&
   v !== null &&
@@ -46,6 +69,14 @@ export class Anim {
   private rafId = 0;
   private clock = 0;
   private lastFrame = 0;
+  /** Trace recording state — undefined unless `trace()` was called.
+   *  Hot-path overhead: one truthiness check per spawn / complete /
+   *  cancel. `byActive` resolves an Active back to its Span on end. */
+  private _trace?: {
+    spans: Span[];
+    byActive: Map<Active, Span>;
+    nextId: number;
+  };
 
   // ── Public API ──────────────────────────────────────────────────────
 
@@ -113,6 +144,39 @@ export class Anim {
     this.scopes.clear();
   }
 
+  /** Begin recording lifecycle of every generator spawned from now on
+   *  (already-running generators are not retroactively included). The
+   *  returned `spans` array fills live as `Active`s spawn and complete;
+   *  `completedAt` is set on natural completion and on cancel.
+   *
+   *  Calling `trace()` again replaces the recording — the previous
+   *  `Trace` keeps its `spans` array (for inspection) but receives no
+   *  further updates. */
+  trace(): Trace {
+    const spans: Span[] = [];
+    const byActive = new Map<Active, Span>();
+    this._trace = { spans, byActive, nextId: 0 };
+    const self = this;
+    const ours = this._trace;
+    return {
+      spans,
+      duration() {
+        if (spans.length === 0) return 0;
+        let min = Infinity;
+        let max = 0;
+        for (const s of spans) {
+          if (s.spawnedAt < min) min = s.spawnedAt;
+          const end = s.completedAt ?? self.clock;
+          if (end > max) max = end;
+        }
+        return max - min;
+      },
+      stop() {
+        if (self._trace === ours) self._trace = undefined;
+      },
+    };
+  }
+
   /** Advance the runtime by an explicit dt. Production calls this from
    *  RAF; tests call it directly. */
   step(dt: number): void {
@@ -150,9 +214,26 @@ export class Anim {
   private spawn(gen: Animator, parent?: Active): Active {
     const a: Active = { gen, parent, alive: true };
     this.active.push(a);
+    if (this._trace) {
+      const span: Span = {
+        id: ++this._trace.nextId,
+        parentId: parent ? this._trace.byActive.get(parent)?.id : undefined,
+        spawnedAt: this.clock,
+      };
+      this._trace.spans.push(span);
+      this._trace.byActive.set(a, span);
+    }
     this.advance(a, 0);
     this.kick();
     return a;
+  }
+
+  /** Stamp `completedAt` on the trace span (if any) for `a`. Called
+   *  from both natural completion and cancel paths. */
+  private markEnd(a: Active): void {
+    if (!this._trace) return;
+    const span = this._trace.byActive.get(a);
+    if (span && span.completedAt === undefined) span.completedAt = this.clock;
   }
 
   /** Mark dead, dispose any pending Awaitable, cascade to live children,
@@ -160,6 +241,7 @@ export class Anim {
   private cancel(a: Active): void {
     if (!a.alive) return;
     a.alive = false;
+    this.markEnd(a);
     if (a.awaitDispose) {
       const d = a.awaitDispose;
       a.awaitDispose = undefined;
@@ -277,6 +359,7 @@ export class Anim {
   private complete(a: Active): void {
     if (!a.alive) return;
     a.alive = false;
+    this.markEnd(a);
     if (a.awaitDispose) {
       const d = a.awaitDispose;
       a.awaitDispose = undefined;

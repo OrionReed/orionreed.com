@@ -49,7 +49,14 @@ export {
 
 export { makeScene, type Scene } from "./scene/scene";
 
-export { Anim, type Animator, type Awaitable, type Yieldable } from "./core/anim";
+export {
+  Anim,
+  type Animator,
+  type Awaitable,
+  type Yieldable,
+  type Span,
+  type Trace,
+} from "./core/anim";
 
 export { EventBus, type EventState } from "./core/events";
 

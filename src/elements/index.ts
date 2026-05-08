@@ -15,6 +15,7 @@ import { MdTimelineEditor } from "./optical-centering/md-timeline-editor";
 import { MdMultitrack } from "./optical-centering/md-multitrack";
 import { MdCircuit } from "./optical-centering/md-circuit";
 import { MdRuntimeTests } from "./optical-centering/md-runtime-tests";
+import { MdTraceDemo } from "./optical-centering/md-trace-demo";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -33,3 +34,4 @@ MdTimelineEditor.define();
 MdMultitrack.define();
 MdCircuit.define();
 MdRuntimeTests.define();
+MdTraceDemo.define();
