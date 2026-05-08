@@ -20,11 +20,12 @@ import type { Vec } from "../core/vec";
 export const vecEquals = (a: Vec, b: Vec): boolean =>
   a === b || (a.x === b.x && a.y === b.y);
 
-// ── Shared math interface ──────────────────────────────────────────
+// ── Type surface ────────────────────────────────────────────────────
 
-/** Methods common to writable and derived Points. All return
- *  `DerivedPoint` (or a scalar `ReadonlySignal<number>` for length /
- *  distance / dot) — math results are never writable. */
+/** Methods shared by writable and derived Points. All return
+ *  `DerivedPoint` (or a scalar `ReadonlySignal<number>`) — math results
+ *  are never writable. Single source of truth for these signatures;
+ *  the runtime trait is `PointMethods` below. */
 interface PointMath {
   add(p: Pointlike): DerivedPoint;
   sub(p: Pointlike): DerivedPoint;
@@ -43,31 +44,18 @@ interface PointMath {
   dot(p: Pointlike): ReadonlySignal<number>;
 }
 
-// ── Type declarations ──────────────────────────────────────────────
-
 /** Writable Point. Both `point.value` (the whole Vec) and `point.x` /
  *  `point.y` (each axis as a lens-backed signal) are writable; writes
- *  to an axis update the parent atomically. */
-declare class Point extends Signal<Vec> implements PointMath {
+ *  to an axis update the parent atomically. The class declaration
+ *  carries only the constructor + statics; the merged `interface`
+ *  brings in the Signal API and `PointMath`. */
+declare class Point {
+  constructor(initial: Vec);
+  static polar(c: Pointlike, r: Arg<number>, angle: Arg<number>): DerivedPoint;
+}
+interface Point extends Signal<Vec>, PointMath {
   readonly x: Signal<number>;
   readonly y: Signal<number>;
-  constructor(initial: Vec);
-  add(p: Pointlike): DerivedPoint;
-  sub(p: Pointlike): DerivedPoint;
-  scale(k: Arg<number>): DerivedPoint;
-  perp(): DerivedPoint;
-  normalize(): DerivedPoint;
-  lerp(b: Pointlike, t: Arg<number>): DerivedPoint;
-  midpoint(b: Pointlike): DerivedPoint;
-  offset(dx: Arg<number>, dy: Arg<number>): DerivedPoint;
-  up(n: Arg<number>): DerivedPoint;
-  down(n: Arg<number>): DerivedPoint;
-  left(n: Arg<number>): DerivedPoint;
-  right(n: Arg<number>): DerivedPoint;
-  length(): ReadonlySignal<number>;
-  distance(b: Pointlike): ReadonlySignal<number>;
-  dot(p: Pointlike): ReadonlySignal<number>;
-  static polar(c: Pointlike, r: Arg<number>, angle: Arg<number>): DerivedPoint;
 }
 
 /** Read-only derived Point. Implements `ReadonlySignal<Vec>` — pass
@@ -75,40 +63,18 @@ declare class Point extends Signal<Vec> implements PointMath {
  *  extend `Signal`/`Computed` at the type level: that would inherit the
  *  `.to` tween shortcut, which would compile fine but throw at runtime
  *  (writing through a Computed's value setter is forbidden). The
- *  prototype chain still goes through Computed at runtime — `instanceof
- *  Signal` is true — but the type surface is the read-only one. */
-declare class DerivedPoint implements ReadonlySignal<Vec>, PointMath {
+ *  prototype chain still goes through Computed at runtime —
+ *  `instanceof Signal` is true — but the type surface is read-only. */
+declare class DerivedPoint {
   constructor(getter: () => Vec);
-  readonly value: Vec;
+}
+interface DerivedPoint extends ReadonlySignal<Vec>, PointMath {
   readonly x: ReadonlySignal<number>;
   readonly y: ReadonlySignal<number>;
-  peek(): Vec;
-  subscribe(fn: (value: Vec) => void): () => void;
-  valueOf(): Vec;
-  toString(): string;
-  toJSON(): Vec;
-  brand: ReadonlySignal<Vec>["brand"];
-  derive<U>(fn: (v: Vec) => U): ReadonlySignal<U>;
-  add(p: Pointlike): DerivedPoint;
-  sub(p: Pointlike): DerivedPoint;
-  scale(k: Arg<number>): DerivedPoint;
-  perp(): DerivedPoint;
-  normalize(): DerivedPoint;
-  lerp(b: Pointlike, t: Arg<number>): DerivedPoint;
-  midpoint(b: Pointlike): DerivedPoint;
-  offset(dx: Arg<number>, dy: Arg<number>): DerivedPoint;
-  up(n: Arg<number>): DerivedPoint;
-  down(n: Arg<number>): DerivedPoint;
-  left(n: Arg<number>): DerivedPoint;
-  right(n: Arg<number>): DerivedPoint;
-  length(): ReadonlySignal<number>;
-  distance(b: Pointlike): ReadonlySignal<number>;
-  dot(p: Pointlike): ReadonlySignal<number>;
 }
 
 /** Either a writable or derived Point — used in signatures that accept
- *  any kind of point. Both runtime types are `Signal<Vec>`-like, so
- *  they read and subscribe identically. */
+ *  any kind of point. */
 export type Pointlike = Point | DerivedPoint;
 
 /** Runtime check: is `v` a Point of either flavor? */
@@ -117,36 +83,25 @@ export const isPoint = (v: unknown): v is Pointlike =>
 
 // `ResolveVec` mirrors `ResolveSig` for Vec-typed shape props, but
 // resolves to the richer `Point` / `DerivedPoint` types so consumers
-// keep `.x` and `.y` axis access (and lens-driven writability where
-// applicable) at the field level — not just `Signal<Vec>`.
+// keep `.x` / `.y` axis access (and lens-driven writability where
+// applicable) at the field level.
 type IsAny<A> = 0 extends 1 & A ? true : false;
 export type ResolveVec<A> = IsAny<A> extends true
   ? Pointlike
   : [A] extends [Point]
     ? Point
-    : [A] extends [DerivedPoint]
+    : [A] extends [DerivedPoint | Signal<Vec> | ReadonlySignal<Vec> | (() => Vec)]
       ? DerivedPoint
-      : [A] extends [Signal<Vec>]
-        ? DerivedPoint
-        : [A] extends [ReadonlySignal<Vec> | (() => Vec)]
-          ? DerivedPoint
-          : Point;
+      : Point;
 
 // ── Implementation ──────────────────────────────────────────────────
 
 // @ts-ignore: "Cannot redeclare exported variable 'Point'."
 function Point(this: Point, initial: Vec) {
   Signal.call(this, initial, { equals: vecEquals });
-  (this as { x: Signal<number> }).x = lens(
-    this,
-    (v) => v.x,
-    (v, n) => ({ x: n, y: v.y }),
-  );
-  (this as { y: Signal<number> }).y = lens(
-    this,
-    (v) => v.y,
-    (v, n) => ({ x: v.x, y: n }),
-  );
+  const self = this as Point & { x: Signal<number>; y: Signal<number> };
+  self.x = lens(this, (v) => v.x, (v, n) => ({ x: n, y: v.y }));
+  self.y = lens(this, (v) => v.y, (v, n) => ({ x: v.x, y: n }));
 }
 Point.prototype = Object.create(Signal.prototype);
 
@@ -157,27 +112,31 @@ function DerivedPoint(this: DerivedPoint, getter: () => Vec) {
   // class boundary (DerivedPoint deliberately isn't typed as Computed
   // — see the declaration for why).
   Computed.call(this as unknown as Computed<Vec>, getter, { equals: vecEquals });
-  (this as { x: ReadonlySignal<number> }).x = computed(() => this.value.x);
-  (this as { y: ReadonlySignal<number> }).y = computed(() => this.value.y);
+  const self = this as DerivedPoint & {
+    x: ReadonlySignal<number>;
+    y: ReadonlySignal<number>;
+  };
+  self.x = computed(() => this.value.x);
+  self.y = computed(() => this.value.y);
 }
 DerivedPoint.prototype = Object.create(Computed.prototype);
 
-// Shared math methods. Each returns a fresh `DerivedPoint` (or scalar
-// `ReadonlySignal<number>`) reading from its inputs lazily.
-const PointMethods = {
-  add(this: Pointlike, p: Pointlike): DerivedPoint {
+// Shared math methods — assigned to both prototypes. Each returns a
+// fresh `DerivedPoint` reading from inputs lazily.
+const PointMethods: ThisType<Pointlike> & PointMath = {
+  add(p) {
     return new DerivedPoint(() => ({
       x: this.value.x + p.value.x,
       y: this.value.y + p.value.y,
     }));
   },
-  sub(this: Pointlike, p: Pointlike): DerivedPoint {
+  sub(p) {
     return new DerivedPoint(() => ({
       x: this.value.x - p.value.x,
       y: this.value.y - p.value.y,
     }));
   },
-  scale(this: Pointlike, k: Arg<number>): DerivedPoint {
+  scale(k) {
     const ks = toSig(k);
     return new DerivedPoint(() => {
       const v = this.value;
@@ -186,13 +145,13 @@ const PointMethods = {
     });
   },
   /** 90° rotation in y-down screen coords: `(x, y) → (-y, x)`. */
-  perp(this: Pointlike): DerivedPoint {
+  perp() {
     return new DerivedPoint(() => {
       const v = this.value;
       return { x: -v.y, y: v.x };
     });
   },
-  normalize(this: Pointlike): DerivedPoint {
+  normalize() {
     return new DerivedPoint(() => {
       const v = this.value;
       const len = Math.hypot(v.x, v.y) || 1;
@@ -200,7 +159,7 @@ const PointMethods = {
     });
   },
   /** Linear interpolation; `t=0` → this, `t=1` → `b`. */
-  lerp(this: Pointlike, b: Pointlike, t: Arg<number>): DerivedPoint {
+  lerp(b, t) {
     const ts = toSig(t);
     return new DerivedPoint(() => {
       const a = this.value;
@@ -209,14 +168,14 @@ const PointMethods = {
       return { x: a.x + (bv.x - a.x) * u, y: a.y + (bv.y - a.y) * u };
     });
   },
-  midpoint(this: Pointlike, b: Pointlike): DerivedPoint {
+  midpoint(b) {
     return new DerivedPoint(() => {
       const a = this.value;
       const bv = b.value;
       return { x: (a.x + bv.x) / 2, y: (a.y + bv.y) / 2 };
     });
   },
-  offset(this: Pointlike, dx: Arg<number>, dy: Arg<number>): DerivedPoint {
+  offset(dx, dy) {
     const dxs = toSig(dx);
     const dys = toSig(dy);
     return new DerivedPoint(() => {
@@ -224,43 +183,43 @@ const PointMethods = {
       return { x: v.x + dxs.value, y: v.y + dys.value };
     });
   },
-  up(this: Pointlike, n: Arg<number>): DerivedPoint {
+  up(n) {
     const ns = toSig(n);
     return new DerivedPoint(() => {
       const v = this.value;
       return { x: v.x, y: v.y - ns.value };
     });
   },
-  down(this: Pointlike, n: Arg<number>): DerivedPoint {
+  down(n) {
     const ns = toSig(n);
     return new DerivedPoint(() => {
       const v = this.value;
       return { x: v.x, y: v.y + ns.value };
     });
   },
-  left(this: Pointlike, n: Arg<number>): DerivedPoint {
+  left(n) {
     const ns = toSig(n);
     return new DerivedPoint(() => {
       const v = this.value;
       return { x: v.x - ns.value, y: v.y };
     });
   },
-  right(this: Pointlike, n: Arg<number>): DerivedPoint {
+  right(n) {
     const ns = toSig(n);
     return new DerivedPoint(() => {
       const v = this.value;
       return { x: v.x + ns.value, y: v.y };
     });
   },
-  length(this: Pointlike): ReadonlySignal<number> {
+  length() {
     return computed(() => Math.hypot(this.value.x, this.value.y));
   },
-  distance(this: Pointlike, b: Pointlike): ReadonlySignal<number> {
+  distance(b) {
     return computed(() =>
       Math.hypot(this.value.x - b.value.x, this.value.y - b.value.y),
     );
   },
-  dot(this: Pointlike, p: Pointlike): ReadonlySignal<number> {
+  dot(p) {
     return computed(
       () => this.value.x * p.value.x + this.value.y * p.value.y,
     );
