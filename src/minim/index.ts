@@ -69,6 +69,16 @@ export {
 
 export { EventBus, type EventState } from "./core/events";
 
+// ── Trace (derivations on top of `Anim.trace()`) ────────────────────
+export {
+  traceTree,
+  tag,
+  tagAll,
+  type TraceTree,
+  type TraceNode,
+  type TraceBatch,
+} from "./trace";
+
 export {
   timeline,
   sequential,

@@ -11,6 +11,16 @@
 // Synchronous scheduler: a single RAF loop drives `step(dt)`. `step` is
 // also public for headless / test harnesses.
 
+import { signal, type ReadonlySignal, type Signal } from "./signal";
+
+/** Convention: a generator may carry a `__minimTag` string property to
+ *  identify it in traces. The runtime peeks this at spawn time and
+ *  copies it to `Span.tag`. Set by `tag` / `tagAll` (in `../trace/tag`)
+ *  but the runtime doesn't import either — string convention is enough.
+ *  Exported as a constant so consumers writing custom helpers stay in
+ *  sync. */
+export const TAG_KEY = "__minimTag" as const;
+
 /** Subscribe-style "wait for an external thing." `subscribe` registers
  *  the wake callback and returns a disposer. Sync-resolve is allowed
  *  (subscribe may call wake before returning) — handy for composers
@@ -38,20 +48,28 @@ interface Active {
 /** A single generator's lifecycle as flat data. `completedAt` is set
  *  on natural completion *and* on cancel — consumers reading still-open
  *  spans see `undefined`. Spawn order matches insertion order in
- *  `Trace.spans`; `parentId` walks the spawn tree. */
+ *  `Trace.spans`; `parentId` walks the spawn tree. `tag` is set at
+ *  spawn time from the generator's `__minimTag` slot if present
+ *  (see `../trace/tag`). */
 export type Span = {
   readonly id: number;
   readonly parentId?: number;
   readonly spawnedAt: number;
+  readonly tag?: string;
   completedAt?: number;
 };
 
 /** Live recording of generator lifecycle, started by `Anim.trace()`.
  *  `spans` mutates in place — new entries on spawn, `completedAt` set
- *  on completion/cancel. Purely data; views (tree, gantt, equality)
+ *  on completion/cancel. `version` bumps on every structural change
+ *  (spawn / complete / cancel) so consumers can subscribe natively
+ *  instead of polling. Purely data; views (tree, gantt, equality)
  *  live outside `Anim`. */
 export type Trace = {
   readonly spans: readonly Span[];
+  /** Bumps on each spawn / complete / cancel. Sparse, event-paced —
+   *  not per-frame. Use a separate clock for per-frame needs. */
+  readonly version: ReadonlySignal<number>;
   /** Wall-clock span of the trace: `max(completedAt ?? clock) − min(spawnedAt)`. */
   duration(): number;
   /** Stop collecting; the existing `spans` array is yours to keep. */
@@ -71,11 +89,14 @@ export class Anim {
   private lastFrame = 0;
   /** Trace recording state — undefined unless `trace()` was called.
    *  Hot-path overhead: one truthiness check per spawn / complete /
-   *  cancel. `byActive` resolves an Active back to its Span on end. */
+   *  cancel. `byActive` resolves an Active back to its Span on end;
+   *  `version` is the public reactive change-counter exposed via
+   *  `Trace.version`. */
   private _trace?: {
     spans: Span[];
     byActive: Map<Active, Span>;
     nextId: number;
+    version: Signal<number>;
   };
 
   // ── Public API ──────────────────────────────────────────────────────
@@ -155,11 +176,13 @@ export class Anim {
   trace(): Trace {
     const spans: Span[] = [];
     const byActive = new Map<Active, Span>();
-    this._trace = { spans, byActive, nextId: 0 };
+    const version = signal(0);
+    this._trace = { spans, byActive, nextId: 0, version };
     const self = this;
     const ours = this._trace;
     return {
       spans,
+      version,
       duration() {
         if (spans.length === 0) return 0;
         let min = Infinity;
@@ -215,25 +238,32 @@ export class Anim {
     const a: Active = { gen, parent, alive: true };
     this.active.push(a);
     if (this._trace) {
+      const tag = (gen as { [TAG_KEY]?: unknown })[TAG_KEY];
       const span: Span = {
         id: ++this._trace.nextId,
         parentId: parent ? this._trace.byActive.get(parent)?.id : undefined,
         spawnedAt: this.clock,
+        tag: typeof tag === "string" ? tag : undefined,
       };
       this._trace.spans.push(span);
       this._trace.byActive.set(a, span);
+      this._trace.version.value++;
     }
     this.advance(a, 0);
     this.kick();
     return a;
   }
 
-  /** Stamp `completedAt` on the trace span (if any) for `a`. Called
-   *  from both natural completion and cancel paths. */
+  /** Stamp `completedAt` on the trace span (if any) for `a` and bump
+   *  the trace's version signal. Called from both natural completion
+   *  and cancel paths. */
   private markEnd(a: Active): void {
     if (!this._trace) return;
     const span = this._trace.byActive.get(a);
-    if (span && span.completedAt === undefined) span.completedAt = this.clock;
+    if (span && span.completedAt === undefined) {
+      span.completedAt = this.clock;
+      this._trace.version.value++;
+    }
   }
 
   /** Mark dead, dispose any pending Awaitable, cascade to live children,
