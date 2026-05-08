@@ -22,7 +22,8 @@ export type Animator = Generator<Yieldable, void, number>;
 
 /** Per-active state. At most one of `wakeAt`/`childrenLeft`/`awaitDispose`
  *  is set while suspended; otherwise the active is "ready next frame."
- *  `pendingReturn` defers `.return()` if the gen is on the call stack. */
+ *  `onStack` marks the active as being inside `advance` (re-entrant
+ *  routinely); `pendingReturn` defers `.return()` until it unwinds. */
 interface Active {
   gen: Animator;
   wakeAt?: number;
@@ -30,11 +31,14 @@ interface Active {
   awaitDispose?: () => void;
   parent?: Active;
   alive: boolean;
+  onStack?: boolean;
   pendingReturn?: boolean;
 }
 
 const isGen = (v: unknown): v is Animator =>
-  typeof v === "object" && v !== null && Symbol.iterator in v;
+  typeof v === "object" &&
+  v !== null &&
+  typeof (v as Animator).next === "function";
 
 export class Anim {
   private active: Active[] = [];
@@ -42,20 +46,14 @@ export class Anim {
   private rafId = 0;
   private clock = 0;
   private lastFrame = 0;
-  /** Every Active currently on the JS call stack — re-entrant `advance`
-   *  is routine (Awaitable wakes, child completions). `cancel()` checks
-   *  this set to decide whether to defer `.return()`. */
-  private advancing = new Set<Active>();
 
   // ── Public API ──────────────────────────────────────────────────────
 
   /** Run a generator forever, restarting on completion. */
   loop(factory: () => Animator): () => void {
-    const wrapped = (function* (): Animator {
+    return this.run(function* () {
       while (true) yield* factory();
-    })();
-    const a = this.spawn(wrapped);
-    return () => this.cancel(a);
+    });
   }
 
   /** Run a generator once. Accepts a factory or an already-constructed
@@ -130,11 +128,10 @@ export class Anim {
           a.wakeAt = undefined;
           this.advance(a, 0);
         }
-      } else if (a.childrenLeft !== undefined || a.awaitDispose !== undefined) {
-        // Suspended on children or an Awaitable; resume is callback-driven.
-      } else {
+      } else if (a.childrenLeft === undefined && a.awaitDispose === undefined) {
         this.advance(a, dt);
       }
+      // else: suspended on children/Awaitable; resume is callback-driven.
     }
     // Compact dead entries in place; entries pushed past `len` survive.
     let w = 0;
@@ -175,7 +172,7 @@ export class Anim {
       const child = this.active[i];
       if (child.parent === a && child.alive) this.cancel(child);
     }
-    if (this.advancing.has(a)) {
+    if (a.onStack) {
       a.pendingReturn = true;
       return;
     }
@@ -204,35 +201,30 @@ export class Anim {
     }
   };
 
-  /** Subscribe to an Awaitable; resume `a` when wake fires. Two paths:
-   *  async (subscribe returns, gen suspends, wake later resumes); sync
-   *  (subscribe calls wake inline — gen advances re-entrantly, dispose
-   *  is called once subscribe returns). */
+  /** Subscribe to an Awaitable; resume `a` when wake fires. If subscribe
+   *  calls wake inline (sync-resolve), the gen advances re-entrantly and
+   *  the disposer runs after subscribe returns — a recursive yield may
+   *  have installed its own `awaitDispose`, so we don't touch that slot. */
   private suspend(a: Active, awaitable: Awaitable): void {
     let resumed = false;
     let dispose: (() => void) | undefined;
     const wake = () => {
       if (resumed || !a.alive) return;
       resumed = true;
-      if (dispose) {
-        if (a.awaitDispose === dispose) a.awaitDispose = undefined;
-        dispose();
+      const d = dispose;
+      if (d) {
+        if (a.awaitDispose === d) a.awaitDispose = undefined;
+        d();
       }
       this.advance(a, 0);
     };
     dispose = awaitable(wake);
-    if (resumed) {
-      // Sync wake: dispose wasn't bound when wake fired. Run it now;
-      // a recursive yield may have installed its own awaitDispose, so
-      // don't touch that slot.
-      dispose();
-      return;
-    }
-    a.awaitDispose = dispose;
+    if (resumed) dispose();
+    else a.awaitDispose = dispose;
   }
 
   private advance(a: Active, dt: number): void {
-    this.advancing.add(a);
+    a.onStack = true;
     try {
       let result = a.gen.next(dt);
       while (!result.done) {
@@ -253,8 +245,9 @@ export class Anim {
             continue;
           }
           a.childrenLeft = v.length;
-          for (const item of v) {
+          for (let j = 0; j < v.length; j++) {
             if (!a.alive) return;
+            const item = v[j];
             this.spawn(isGen(item) ? item : wrapItem(item), a);
           }
           return;
@@ -273,7 +266,7 @@ export class Anim {
       console.error("minim: animator threw", e);
       this.complete(a);
     } finally {
-      this.advancing.delete(a);
+      a.onStack = false;
       if (a.pendingReturn) {
         a.pendingReturn = false;
         a.gen.return();
