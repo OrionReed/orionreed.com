@@ -39,19 +39,8 @@ export {
   draggable,
 } from "./shape";
 
-export {
-  type Matrix2D,
-  identity as matrixIdentity,
-  fromTranslate,
-  fromRotate,
-  fromScale,
-  multiply as matrixMultiply,
-  invert as matrixInvert,
-  transformPoint,
-  transformAABB,
-  compose as composeMatrix,
-  isIdentity,
-  toString as matrixToString,
-} from "./matrix";
+// `./matrix` is internal — Shape / layout use it directly. Not re-
+// exported because consumers shouldn't need affine math; they reach
+// for `transform`, `bounds`, or `boundsInRoot` on a Shape.
 
 export { makeScene, type Scene, type Padding } from "./scene";

@@ -33,7 +33,6 @@ interface PointMath {
   perp(): DerivedPoint;
   normalize(): DerivedPoint;
   lerp(b: Pointlike, t: Arg<number>): DerivedPoint;
-  midpoint(b: Pointlike): DerivedPoint;
   offset(dx: Arg<number>, dy: Arg<number>): DerivedPoint;
   up(n: Arg<number>): DerivedPoint;
   down(n: Arg<number>): DerivedPoint;
@@ -41,7 +40,6 @@ interface PointMath {
   right(n: Arg<number>): DerivedPoint;
   length(): ReadonlySignal<number>;
   distance(b: Pointlike): ReadonlySignal<number>;
-  dot(p: Pointlike): ReadonlySignal<number>;
 }
 
 /** Writable Point. Both `point.value` (the whole Vec) and `point.x` /
@@ -215,13 +213,6 @@ const PointMethods: ThisType<Pointlike> & PointMath = {
       return { x: a.x + (bv.x - a.x) * u, y: a.y + (bv.y - a.y) * u };
     });
   },
-  midpoint(b) {
-    return new DerivedPoint(() => {
-      const a = this.value;
-      const bv = b.value;
-      return { x: (a.x + bv.x) / 2, y: (a.y + bv.y) / 2 };
-    });
-  },
   offset(dx, dy) {
     const dxs = toSig(dx);
     const dys = toSig(dy);
@@ -264,11 +255,6 @@ const PointMethods: ThisType<Pointlike> & PointMath = {
   distance(b) {
     return computed(() =>
       Math.hypot(this.value.x - b.value.x, this.value.y - b.value.y),
-    );
-  },
-  dot(p) {
-    return computed(
-      () => this.value.x * p.value.x + this.value.y * p.value.y,
     );
   },
 };

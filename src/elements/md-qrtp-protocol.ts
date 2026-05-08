@@ -9,8 +9,8 @@ import {
   label,
   line,
   pt,
+  signal,
   snapshot,
-  store,
   until,
   when,
   type Animator,
@@ -53,24 +53,24 @@ export class MdQrtpProtocol extends Diagram {
     const center = pt(rOut, rOut);
 
     // ── State ───────────────────────────────────────────────────────
-    // All four reactive fields live in one `store` — read with plain
-    // property access (tracked inside `computed`, untracked outside),
-    // write with assignment, snapshot the whole record at once.
-    const state = store({
-      cells: new Map<number, CellState>(),
-      overrides: new Map<number, string>(),
-      broadcast: 0,
-      lastBroadcast: -1,
-    });
+    // Plain record of signals — `state.cells.value` etc. for both read
+    // and write. `snapshot(state)` flattens all signal-valued
+    // properties for one-call reset.
+    const state = {
+      cells: signal(new Map<number, CellState>()),
+      overrides: signal(new Map<number, string>()),
+      broadcast: signal(0),
+      lastBroadcast: signal(-1),
+    };
 
     // Per-cell color: override > broadcast highlight > state-based.
     // Returns null when the cell should be invisible.
     const cellColor = (i: number) =>
       computed((): string | null => {
-        const ov = state.overrides.get(i);
+        const ov = state.overrides.value.get(i);
         if (ov !== undefined) return ov;
-        if (i === state.lastBroadcast) return stroke.toString();
-        const st = state.cells.get(i);
+        if (i === state.lastBroadcast.value) return stroke.toString();
+        const st = state.cells.value.get(i);
         if (st === "received") return ink("green").mod(0.7).toString();
         if (st === "retransmit") return ink("orange").mod(0.7).toString();
         if (st === "acknowledged") return grey.mod(0.7).toString();
@@ -111,11 +111,12 @@ export class MdQrtpProtocol extends Diagram {
 
     const cellsWithState = (st: CellState): number[] => {
       const out: number[] = [];
-      for (const [i, v] of state.cells) if (v === st) out.push(i);
+      for (const [i, v] of state.cells.peek()) if (v === st) out.push(i);
       return out;
     };
 
     const buildComponents = (): number[][] => {
+      const cells = state.cells.peek();
       const visited = new Set<number>();
       const components: number[][] = [];
       for (const seed of cellsWithState("retransmit")) {
@@ -129,7 +130,7 @@ export class MdQrtpProtocol extends Diagram {
           component.push(c);
           for (const nb of [(c - 1 + N) % N, (c + 1) % N]) {
             // Flood crosses any received-once neighbor (incl. acknowledged).
-            if (!visited.has(nb) && state.cells.has(nb)) queue.push(nb);
+            if (!visited.has(nb) && cells.has(nb)) queue.push(nb);
           }
         }
         if (component.length > 0) components.push(component);
@@ -138,14 +139,15 @@ export class MdQrtpProtocol extends Diagram {
     };
 
     const handleReception = (i: number): void => {
-      const st = state.cells.get(i);
-      const next = new Map(state.cells);
+      const cells = state.cells.peek();
+      const st = cells.get(i);
+      const next = new Map(cells);
       if (st === "received") {
         if (R.chance(RECEIVE_CHANCE)) next.set(i, "retransmit");
       } else if (st === undefined) {
         if (R.chance(RECEIVE_CHANCE)) next.set(i, "received");
       }
-      state.cells = next;
+      state.cells.value = next;
     };
 
     const reset = snapshot(state);
@@ -160,10 +162,10 @@ export class MdQrtpProtocol extends Diagram {
 
       for (const component of components) {
         for (const cell of component) {
-          if (cell !== state.lastBroadcast) {
-            const next = new Map(state.overrides);
+          if (cell !== state.lastBroadcast.peek()) {
+            const next = new Map(state.overrides.peek());
             next.set(cell, flood);
-            state.overrides = next;
+            state.overrides.value = next;
           }
           yield T.floodCellStep;
         }
@@ -171,15 +173,15 @@ export class MdQrtpProtocol extends Diagram {
 
       yield T.afterFlood;
 
-      const next = new Map(state.cells);
+      const next = new Map(state.cells.peek());
       for (const c of cellsWithState("retransmit")) next.set(c, "received");
       if (backchannel) {
         for (const component of components) {
           for (const c of component) next.set(c, "acknowledged");
         }
       }
-      state.cells = next;
-      state.overrides = new Map();
+      state.cells.value = next;
+      state.overrides.value = new Map();
     }
 
     const startFloodFillLoop = () => {
@@ -195,17 +197,20 @@ export class MdQrtpProtocol extends Diagram {
 
     this.anim.loop(function* () {
       // Skip already-acknowledged cells.
-      if (backchannel && state.cells.get(state.broadcast) === "acknowledged") {
-        state.broadcast = (state.broadcast + 1) % N;
+      if (
+        backchannel &&
+        state.cells.peek().get(state.broadcast.peek()) === "acknowledged"
+      ) {
+        state.broadcast.value = (state.broadcast.peek() + 1) % N;
         return;
       }
 
-      state.lastBroadcast = state.broadcast;
-      handleReception(state.broadcast);
-      state.broadcast = (state.broadcast + 1) % N;
+      state.lastBroadcast.value = state.broadcast.peek();
+      handleReception(state.broadcast.peek());
+      state.broadcast.value = (state.broadcast.peek() + 1) % N;
 
       // Full cycle complete — reset and (if backchannel) restart flood.
-      if (state.cells.size === N) {
+      if (state.cells.peek().size === N) {
         yield T.beforeReset;
         floodAnim.stop();
         reset();

@@ -3,7 +3,8 @@
 // reference points for what to add next.
 
 import type { Vec } from "../core";
-import { transformAABB, type Shape } from "../scene";
+import { transformAABB } from "../scene/matrix";
+import type { Shape } from "../scene";
 
 /** Named normalized-Vec constants — points on a unit box. Plain `Vec`
  *  values, pass anywhere a `Vec` is expected (e.g. `Label.align`). */

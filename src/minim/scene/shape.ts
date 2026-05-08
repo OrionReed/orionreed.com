@@ -31,7 +31,7 @@ import {
   type Pointlike,
   type ResolveVec,
 } from "./point";
-import type { Animator } from "../core/anim";
+import type { Awaitable } from "../core/anim";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -268,26 +268,16 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     return dispose;
   }
 
-  /** Reactive signal that increments on each emit of `name`, carrying
-   *  the latest event. Lazy: the underlying listener is installed on
-   *  first call (per name). */
-  onSignal(name: string): ReadonlySignal<{ count: number; last: Event | undefined }> {
-    if (!this._eventSignals) this._eventSignals = new Map();
-    const cached = this._eventSignals.get(name);
-    if (cached) return cached;
-    const sig = signal({ count: 0, last: undefined as Event | undefined });
-    this._eventSignals.set(name, sig);
-    this.on(name, (e) => {
-      sig.value = { count: sig.peek().count + 1, last: e };
-    });
-    return sig;
-  }
-
-  /** Generator that yields frames until the next emit of `name`. */
-  *until(name: string): Animator {
-    const sig = this.onSignal(name);
-    const start = sig.peek().count;
-    while (sig.value.count === start) yield;
+  /** Awaitable that resumes on the next DOM event of `name`. Use as
+   *  `yield s.until("click")` (note: no `*` — it's an Awaitable, not
+   *  a generator). Zero-latency: the listener fires inside the same
+   *  call stack as the underlying event. */
+  until(name: string): Awaitable {
+    return (wake) => {
+      const handler = () => wake();
+      const dispose = this.on(name, handler, { once: true });
+      return dispose;
+    };
   }
 
   /** Convert client-space coordinates (e.g. `evt.clientX/clientY`) to
@@ -302,11 +292,6 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
       y: evt.clientX * inv.b + evt.clientY * inv.d + inv.f,
     };
   }
-
-  private _eventSignals?: Map<
-    string,
-    Signal<{ count: number; last: Event | undefined }>
-  >;
 
   add<T extends AnyShape>(child: T): T;
   add<T extends AnyShape[]>(...children: T): T;

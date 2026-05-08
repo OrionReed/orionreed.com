@@ -1,15 +1,21 @@
 export { linear, easeOut, easeIn, easeInOut } from "./easings";
 export { all, sequence, delay, lag, until, repeat } from "./compose";
 export {
+  // primitive — the pose-then-tween every intro is built from
+  from,
+  // atoms
   fadeIn,
+  fadeOut,
+  // compounds (visible compositions of `from` and `.to`)
   fadeUp,
+  fadeUpOut,
   slideIn,
+  slideOut,
   scaleIn,
+  zoomOut,
   bounceIn,
   spinIn,
-  fadeOut,
-  zoomOut,
-  fadeUpOut,
-  slideOut,
+  // direction vectors for slideIn/slideOut
+  Dir,
 } from "./transitions";
 export { pulse, clock, every, ramp, reverse, speed } from "./clocks";

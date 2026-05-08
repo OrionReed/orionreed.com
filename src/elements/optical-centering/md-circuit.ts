@@ -14,6 +14,7 @@
 
 import {
   Diagram,
+  EventBus,
   Scene,
   type AnyShape,
   type Arg,
@@ -21,6 +22,7 @@ import {
   type Pointlike,
   circle,
   computed,
+  counter,
   css,
   label,
   linear,
@@ -28,7 +30,6 @@ import {
   pt,
   rect,
   signal,
-  store,
   toSig,
   tokens,
 } from "../../minim";
@@ -44,7 +45,7 @@ export class MdCircuit extends Diagram {
   protected scene(s: Scene): void {
     s.view(0, 0, 600, 360);
     const anim = this.anim;
-    const bus = this.bus;
+    const bus = new EventBus();
 
     // ── Visual primitives ───────────────────────────────────────────
 
@@ -66,7 +67,7 @@ export class MdCircuit extends Diagram {
         c,
         label(
           c.center,
-          bus.onSignal(ev).derive((e) => String(e.count)),
+          counter((cb) => bus.on(ev, () => cb())).derive(String),
           {
             size: 13,
             bold: true,
@@ -142,7 +143,7 @@ export class MdCircuit extends Diagram {
       } else {
         // 45° staircase: the bend points sit on the y-midline at the
         // x where each diagonal leg covers exactly |dy|/2 horizontally.
-        const m = aRef.midpoint(bRef);
+        const m = aRef.lerp(bRef, 0.5);
         const dirX = bRefV.x > aRefV.x ? 1 : -1;
         const halfDy = computed(() => Math.abs(m.y.value - aRef.y.value));
         const pA = pt(() => aRef.x.value + dirX * halfDy.value, m.y);
@@ -196,28 +197,29 @@ export class MdCircuit extends Diagram {
       bus.on(from, () => pulse(w, () => bus.emit(to)));
 
     /** AND-sync: tokens accumulate from `evA` and `evB`; whenever each
-     *  has ≥1, fire `out` and consume one of each. Pending counts live
-     *  in a `store`; the slot-dot visuals derive from those counts —
-     *  no manual mirroring. */
+     *  has ≥1, fire `out` and consume one of each. Pending counts are
+     *  plain signals; the slot-dot visuals derive from them — no
+     *  manual mirroring. */
     const andSync = (evA: string, evB: string, out: string, gate: AnyShape) => {
-      const sync = store({ a: 0, b: 0 });
+      const a = signal(0);
+      const b = signal(0);
       gate.add(
-        lit(gate.bounds.center.offset(-14, 14), () => sync.a > 0),
-        lit(gate.bounds.center.offset(+14, 14), () => sync.b > 0),
+        lit(gate.bounds.center.offset(-14, 14), () => a.value > 0),
+        lit(gate.bounds.center.offset(+14, 14), () => b.value > 0),
       );
 
       const settle = () => {
-        const n = Math.min(sync.a, sync.b);
-        sync.a -= n;
-        sync.b -= n;
+        const n = Math.min(a.peek(), b.peek());
+        a.value -= n;
+        b.value -= n;
         for (let i = 0; i < n; i++) bus.emit(out);
       };
       bus.on(evA, () => {
-        sync.a++;
+        a.value++;
         settle();
       });
       bus.on(evB, () => {
-        sync.b++;
+        b.value++;
         settle();
       });
     };

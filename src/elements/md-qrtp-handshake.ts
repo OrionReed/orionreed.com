@@ -7,8 +7,8 @@ import {
   line,
   pt,
   rect,
+  signal,
   snapshot,
-  store,
   t,
   when,
   type Signal,
@@ -48,10 +48,10 @@ export class MdQrtpHandshake extends Diagram {
     // Single source of truth — both rows + arrow visibility derive from
     // the chunk arrays. Arrows fire iff the corresponding chunk's `ack`
     // is set.
-    const state = store({
-      A: initialChunks("A", N),
-      B: initialChunks("B", N),
-    });
+    const state = {
+      A: signal(initialChunks("A", N)),
+      B: signal(initialChunks("B", N)),
+    };
 
     // Build one row of N chunks reading from `state[device]`. Returns
     // the [data, ack] bounds per chunk so arrows can land on them.
@@ -66,20 +66,20 @@ export class MdQrtpHandshake extends Diagram {
         s(r.outline(4, {
           dashed: true,
           cap: "round",
-          opacity: when(() => state[device][i].status === "current"),
+          opacity: when(() => state[device].value[i].status === "current"),
           aside: true,
         }));
 
         // Data slot: value (only when not future) + muted "data" tag.
         s(label(data.center.up(5), () => {
-          const c = state[device][i];
+          const c = state[device].value[i];
           if (c.status === "future") return "";
           return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
         }));
         s(label(data.center.down(8), t("data").muted(), { size: 12 }));
 
         // Ack slot: hash (when set) + muted "ack" tag.
-        s(label(ack.center.up(5), () => state[device][i].ack));
+        s(label(ack.center.up(5), () => state[device].value[i].ack));
         s(label(ack.center.down(8), t("ack").muted(), { size: 12 }));
 
         return { data, ack };
@@ -98,26 +98,26 @@ export class MdQrtpHandshake extends Diagram {
     // arrows array to keep in sync.
     for (let i = 0; i < N; i++) {
       s(arrow(slotsA[i].ack.bottom, slotsB[i].data.top, {
-        opacity: when(() => state.A[i].ack !== ""),
+        opacity: when(() => state.A.value[i].ack !== ""),
       }));
       s(arrow(slotsB[i].ack.top, slotsA[i].data.bottom, {
-        opacity: when(() => state.B[i].ack !== ""),
+        opacity: when(() => state.B.value[i].ack !== ""),
       }));
     }
 
     // ── Mutation helpers ────────────────────────────────────────────
 
     const addAck = (device: "A" | "B", i: number, hash: string) => {
-      const next = [...state[device]];
+      const next = [...state[device].peek()];
       next[i] = { ...next[i], ack: hash };
-      state[device] = next;
+      state[device].value = next;
     };
 
     const advance = (device: "A" | "B", i: number) => {
-      const next = [...state[device]];
+      const next = [...state[device].peek()];
       next[i] = { ...next[i], status: "past" };
       if (i + 1 < N) next[i + 1] = { ...next[i + 1], status: "current" };
-      state[device] = next;
+      state[device].value = next;
     };
 
     // ── Animation ────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import {
   type Animator,
 } from "../../minim";
 import {
+  Dir,
   bounceIn,
   fadeOut,
   fadeUp,
@@ -74,8 +75,8 @@ export class MdTransitions extends Diagram {
       {
         name: "slideIn",
         shape: (sc, x, y) => sc(rect(pt(x, y), 22, 12, { fill: true })),
-        intro: (sh) => slideIn(sh, "left", 0.4, 40),
-        outro: (sh) => slideOut(sh, "right", 0.3, 40),
+        intro: (sh) => slideIn(sh, Dir.Left, 0.4, 40),
+        outro: (sh) => slideOut(sh, Dir.Right, 0.3, 40),
       },
       {
         name: "spinIn",

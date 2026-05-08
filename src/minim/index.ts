@@ -29,7 +29,7 @@ export {
   type ResolveSig,
 } from "./core/arg";
 
-export { store, snapshot, type Store } from "./core/store";
+export { snapshot } from "./core/store";
 
 export { type Vec } from "./core/vec";
 
@@ -71,7 +71,7 @@ export {
   type Trace,
 } from "./core/anim";
 
-export { EventBus, type EventState } from "./core/events";
+export { EventBus } from "./core/events";
 
 // ── Trace (derivations on top of `Anim.trace()`) ────────────────────
 export {
@@ -137,16 +137,18 @@ export {
   lag,
   until,
   repeat,
+  from,
   fadeIn,
+  fadeOut,
   fadeUp,
+  fadeUpOut,
   slideIn,
+  slideOut,
   scaleIn,
+  zoomOut,
   bounceIn,
   spinIn,
-  fadeOut,
-  zoomOut,
-  fadeUpOut,
-  slideOut,
+  Dir,
   pulse,
   clock,
   every,

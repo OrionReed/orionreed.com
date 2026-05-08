@@ -30,7 +30,7 @@ export {
 
 export { type Vec } from "./vec";
 
-export { store, snapshot, type Store } from "./store";
+export { snapshot } from "./store";
 
 export {
   Anim,
@@ -41,7 +41,7 @@ export {
   type Trace,
 } from "./anim";
 
-export { EventBus, type EventState } from "./events";
+export { EventBus } from "./events";
 
 export {
   timeline,

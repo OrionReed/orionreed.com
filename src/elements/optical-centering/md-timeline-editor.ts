@@ -11,6 +11,7 @@
 
 import {
   Diagram,
+  EventBus,
   Scene,
   align,
   circle,
@@ -54,8 +55,9 @@ export class MdTimelineEditor extends Diagram {
       for (const name of PHASES) if (tl[name].active.value) return name;
       return tl.clock.value >= tl.duration.value ? "rest" : PHASES[0];
     });
+    const bus = new EventBus();
     const taps = signal(0);
-    this.bus.on("ping", () => {
+    bus.on("ping", () => {
       taps.value = taps.peek() + 1;
     });
 
@@ -148,7 +150,7 @@ export class MdTimelineEditor extends Diagram {
         fill: COLORS[i],
         opacity: tl[name].t.derive((t) => 0.1 + t * 0.9),
       });
-      c.on("click", () => this.bus.emit("ping"));
+      c.on("click", () => bus.emit("ping"));
       return c;
     });
     actors.forEach((c) => s(c));
