@@ -44,7 +44,7 @@ export {
   type ResolveVec,
 } from "./scene/point";
 
-export { centroid } from "./scene/aggregates";
+export { centroid, meanVec, meanNum } from "./scene/aggregates";
 
 export { Bounds, type AABB } from "./scene/bounds";
 
@@ -155,6 +155,11 @@ export {
   ramp,
   reverse,
   speed,
+  swap,
+  stagger,
+  splay,
+  orbit,
+  assemble,
 } from "./motion";
 
 // ── Consumer scaffold ───────────────────────────────────────────────

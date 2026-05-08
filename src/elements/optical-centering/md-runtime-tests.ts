@@ -27,15 +27,20 @@ import {
   Point,
   Scene,
   align,
+  assemble,
   centroid,
   circle,
   css,
   forEach,
   label,
   lens,
+  meanNum,
+  meanVec,
   pt,
   pulse,
   signal,
+  splay,
+  swap,
   type Animator,
 } from "../../minim";
 
@@ -758,6 +763,100 @@ const TESTS: TestCase[] = [
       assert(a.translate.peek().x === 50, `a.x after axis: ${a.translate.peek().x}`);
       assert(b.translate.peek().x === 150, `b.x after axis: ${b.translate.peek().x}`);
       assert(a.translate.peek().y === 10, `a.y after axis (unchanged): ${a.translate.peek().y}`);
+    },
+  },
+  {
+    name: "meanNum: read avg, write distributes",
+    run: (assert) => {
+      const a = signal(0);
+      const b = signal(10);
+      const c = signal(20);
+      const m = meanNum(a, b, c);
+      assert(m.value === 10, `initial mean: ${m.value}`);
+      m.value = 13;  // delta = 3 → each += 3
+      assert(a.peek() === 3, `a after: ${a.peek()}`);
+      assert(b.peek() === 13, `b after: ${b.peek()}`);
+      assert(c.peek() === 23, `c after: ${c.peek()}`);
+      assert(m.value === 13, `mean after: ${m.value}`);
+    },
+  },
+  {
+    name: "meanVec: drop-in centroid for raw signals",
+    run: (assert) => {
+      const a = signal({ x: 0, y: 0 });
+      const b = signal({ x: 100, y: 50 });
+      const m = meanVec(a, b);
+      assert(m instanceof Point, `meanVec should return a Point`);
+      assert(m.value.x === 50 && m.value.y === 25, `initial mean off`);
+      m.value = { x: 60, y: 35 };  // delta (10, 10)
+      assert(a.peek().x === 10 && a.peek().y === 10, `a not shifted: ${JSON.stringify(a.peek())}`);
+      assert(b.peek().x === 110 && b.peek().y === 60, `b not shifted: ${JSON.stringify(b.peek())}`);
+    },
+  },
+  {
+    name: "swap: tweens exchange translates",
+    run: (assert) => {
+      const a = new Anim();
+      const sh1 = { translate: pt(0, 0) };
+      const sh2 = { translate: pt(100, 50) };
+      a.run(function* () {
+        yield* swap(sh1, sh2, 0.1);
+      });
+      a.step(0);
+      a.step(0.11);
+      // After full tween, positions are exchanged.
+      assert(sh1.translate.peek().x === 100, `sh1.x: ${sh1.translate.peek().x}`);
+      assert(sh1.translate.peek().y === 50, `sh1.y: ${sh1.translate.peek().y}`);
+      assert(sh2.translate.peek().x === 0, `sh2.x: ${sh2.translate.peek().x}`);
+      assert(sh2.translate.peek().y === 0, `sh2.y: ${sh2.translate.peek().y}`);
+      a.stop();
+    },
+  },
+  {
+    name: "splay: distributes radially around centre",
+    run: (assert) => {
+      const a = new Anim();
+      const centre = pt(100, 100);
+      const shapes = [
+        { translate: pt(0, 0) },
+        { translate: pt(0, 0) },
+        { translate: pt(0, 0) },
+        { translate: pt(0, 0) },
+      ];
+      a.run(function* () {
+        yield* splay(centre, 50, shapes, 0.1);
+      });
+      a.step(0);
+      a.step(0.11);
+      // All four shapes are at distance 50 from centre.
+      for (let i = 0; i < shapes.length; i++) {
+        const v = shapes[i].translate.peek();
+        const d = Math.hypot(v.x - 100, v.y - 100);
+        assert(Math.abs(d - 50) < 0.001, `shape ${i} dist: ${d}`);
+      }
+      a.stop();
+    },
+  },
+  {
+    name: "assemble: pairs each shape to its target",
+    run: (assert) => {
+      const a = new Anim();
+      const shapes = [
+        { translate: pt(0, 0) },
+        { translate: pt(0, 0) },
+      ];
+      const targets = [
+        { x: 100, y: 0 },
+        { x: 0, y: 100 },
+      ];
+      a.run(function* () {
+        yield* assemble(shapes, targets, 0.1);
+      });
+      a.step(0);
+      a.step(0.11);
+      assert(shapes[0].translate.peek().x === 100, `s0.x: ${shapes[0].translate.peek().x}`);
+      assert(shapes[1].translate.peek().y === 100, `s1.y: ${shapes[1].translate.peek().y}`);
+      a.stop();
     },
   },
   {

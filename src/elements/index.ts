@@ -17,6 +17,7 @@ import { MdCircuit } from "./optical-centering/md-circuit";
 import { MdRuntimeTests } from "./optical-centering/md-runtime-tests";
 import { MdTraceDemo } from "./optical-centering/md-trace-demo";
 import { MdCentroid } from "./optical-centering/md-centroid";
+import { MdChoreography } from "./optical-centering/md-choreography";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -37,3 +38,4 @@ MdCircuit.define();
 MdRuntimeTests.define();
 MdTraceDemo.define();
 MdCentroid.define();
+MdChoreography.define();

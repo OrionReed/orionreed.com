@@ -15,7 +15,7 @@ export {
   type ResolveVec,
 } from "./point";
 
-export { centroid } from "./aggregates";
+export { centroid, meanVec, meanNum } from "./aggregates";
 
 export {
   Bounds,

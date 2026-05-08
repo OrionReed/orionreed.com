@@ -19,3 +19,10 @@ export {
   Dir,
 } from "./transitions";
 export { pulse, clock, every, ramp, reverse, speed } from "./clocks";
+export {
+  swap,
+  stagger,
+  splay,
+  orbit,
+  assemble,
+} from "./choreographers";
