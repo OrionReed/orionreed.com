@@ -10,6 +10,7 @@ export {
   signal,
   computed,
   effect,
+  lens,
   Signal,
   tween,
   type ReadonlySignal,
@@ -30,7 +31,16 @@ export { store, snapshot, type Store } from "./core/store";
 
 export { type Vec } from "./core/vec";
 
-export { Point, pt } from "./scene/point";
+export {
+  Point,
+  DerivedPoint,
+  pt,
+  toPoint,
+  isPoint,
+  vecEquals,
+  type Pointlike,
+  type ResolveVec,
+} from "./scene/point";
 
 export { Bounds, type AABB } from "./scene/bounds";
 
@@ -41,7 +51,6 @@ export {
   type AnimatableKey,
   type Writable,
   type Segment,
-  type VecArg,
   boundsInRoot,
   boundsIn,
   draggable,

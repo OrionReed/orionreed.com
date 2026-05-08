@@ -1,5 +1,11 @@
 import { computed, toSig, type Arg, type NumSig } from "../core";
-import { Shape, Point, aabb, type Segment } from "../scene";
+import {
+  Shape,
+  DerivedPoint,
+  aabb,
+  type Pointlike,
+  type Segment,
+} from "../scene";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface AnnularSectorOpts extends CommonOpts {}
@@ -14,7 +20,7 @@ export class AnnularSector<
   readonly a1: NumSig;
 
   constructor(
-    readonly center: Point,
+    readonly center: Pointlike,
     rOuter: Arg<number>,
     rInner: Arg<number>,
     a0: Arg<number>,
@@ -80,10 +86,10 @@ export class AnnularSector<
     const a0 = () => this.a0.value;
     const a1 = () => this.a1.value;
     const polar = (rfn: () => number, afn: () => number) =>
-      new Point(
-        computed(() => cx() + rfn() * Math.cos(afn())),
-        computed(() => cy() + rfn() * Math.sin(afn())),
-      );
+      new DerivedPoint(() => ({
+        x: cx() + rfn() * Math.cos(afn()),
+        y: cy() + rfn() * Math.sin(afn()),
+      }));
     return [
       { type: "arc", cx, cy, r: ro, a0, a1 },
       { type: "line", from: polar(ro, a1), to: polar(ri, a1) },
@@ -94,7 +100,7 @@ export class AnnularSector<
 }
 
 export const annularSector = <const O extends AnnularSectorOpts>(
-  center: Point,
+  center: Pointlike,
   rOuter: Arg<number>,
   rInner: Arg<number>,
   a0: Arg<number>,

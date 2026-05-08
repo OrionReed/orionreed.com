@@ -2,7 +2,7 @@
 // per-kind dispatch.
 
 import { computed, toSig, type Arg } from "../core";
-import { Shape, SVG_NS, Point } from "../scene";
+import { Shape, SVG_NS, type Pointlike } from "../scene";
 import { tokens } from "./tokens";
 import { Line, type LineOpts } from "./line";
 
@@ -13,8 +13,8 @@ const ARROW_GAP_DEFAULT = 4;
 /** Line between two shapes / points. Shape endpoints meet the
  *  analytic boundary. */
 export function connect(
-  a: Shape | Point,
-  b: Shape | Point,
+  a: Shape | Pointlike,
+  b: Shape | Pointlike,
   opts?: LineOpts,
 ): Line {
   const aP = a instanceof Shape ? a.boundary(b instanceof Shape ? b.bounds.center : b) : a;
@@ -32,8 +32,8 @@ export interface ArrowOpts extends LineOpts {
  *  the tip, with a small optical compensation at the start for the
  *  round cap reading shorter than its mathematical extent. */
 export function arrow(
-  a: Shape | Point,
-  b: Shape | Point,
+  a: Shape | Pointlike,
+  b: Shape | Pointlike,
   opts: ArrowOpts = {},
 ): Line {
   const aBase = a instanceof Shape ? a.boundary(b instanceof Shape ? b.bounds.center : b) : a;

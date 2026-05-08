@@ -1,13 +1,19 @@
 import { computed, type Arg, type ReadonlySignal } from "../core";
-import { Shape, Point, aabb, type Segment } from "../scene";
+import {
+  Shape,
+  DerivedPoint,
+  aabb,
+  type Pointlike,
+  type Segment,
+} from "../scene";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface LineOpts extends CommonOpts {}
 
 export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
   constructor(
-    readonly from: Point,
-    readonly to: Point,
+    readonly from: Pointlike,
+    readonly to: Pointlike,
     opts: O = {} as O,
   ) {
     const dashed = opts.dashed ?? false;
@@ -45,13 +51,13 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
 
   // Tangent/normal/angle are constant along a Line, so the `t` arg is
   // accepted for API symmetry with Path but ignored. Cached lazily.
-  #tangent?: Point;
-  #normal?: Point;
+  #tangent?: DerivedPoint;
+  #normal?: DerivedPoint;
   #angle?: ReadonlySignal<number>;
   #length?: ReadonlySignal<number>;
 
   /** Position at fraction `t` (`0`=from, `1`=to). */
-  at(t: Arg<number>): Point {
+  at(t: Arg<number>): Pointlike {
     if (typeof t === "number") {
       if (t === 0) return this.from;
       if (t === 1) return this.to;
@@ -59,31 +65,33 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
     return this.from.lerp(this.to, t);
   }
 
-  tangentAt(_t: Arg<number> = 0): Point {
-    return this.#tangent ??= this.to.sub(this.from).normalize();
+  tangentAt(_t: Arg<number> = 0): DerivedPoint {
+    return (this.#tangent ??= this.to.sub(this.from).normalize());
   }
 
-  normalAt(_t: Arg<number> = 0): Point {
-    return this.#normal ??= this.tangentAt().perp();
+  normalAt(_t: Arg<number> = 0): DerivedPoint {
+    return (this.#normal ??= this.tangentAt().perp());
   }
 
   angleAt(_t: Arg<number> = 0): ReadonlySignal<number> {
     if (this.#angle) return this.#angle;
     const tan = this.tangentAt();
-    return this.#angle = computed(() => Math.atan2(tan.y.value, tan.x.value));
+    return (this.#angle = computed(() =>
+      Math.atan2(tan.y.value, tan.x.value),
+    ));
   }
 
   length(): ReadonlySignal<number> {
-    return this.#length ??= computed(() => {
+    return (this.#length ??= computed(() => {
       const a = this.from.value;
       const b = this.to.value;
       return Math.hypot(b.x - a.x, b.y - a.y);
-    });
+    }));
   }
 
   /** Closer endpoint to `toward`. */
-  override boundary(toward: Point): Point {
-    const which = computed(() => {
+  override boundary(toward: Pointlike): DerivedPoint {
+    return new DerivedPoint(() => {
       const t = toward.value;
       const a = this.from.value;
       const b = this.to.value;
@@ -91,10 +99,6 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
       const db = (t.x - b.x) ** 2 + (t.y - b.y) ** 2;
       return da <= db ? a : b;
     });
-    return new Point(
-      computed(() => which.value.x),
-      computed(() => which.value.y),
-    );
   }
 
   override segments(): Segment[] {
@@ -103,7 +107,7 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
 }
 
 export const line = <const O extends LineOpts>(
-  from: Point,
-  to: Point,
+  from: Pointlike,
+  to: Pointlike,
   opts?: O,
 ): Line<O> => new Line<O>(from, to, opts);

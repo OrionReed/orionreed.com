@@ -7,6 +7,8 @@ import {
   computed,
   Anim,
   Signal,
+  Point,
+  DerivedPoint,
   type Animator,
   type ReadonlySignal,
 } from "./index";
@@ -84,11 +86,13 @@ anim.run(run);
 
 // ── Pure type-level assertions ────────────────────────────────────────
 
-// Default no-opts: every animatable prop is a writable Signal.
+// Default no-opts: every animatable prop is writable. Vec props
+// resolve to `Point` (writable lens-backed axes); scalar props to
+// `Signal<number>`.
 {
   const c = circle(pt(0, 0), 5);
   assert<Equals<typeof c.opacity, Signal<number>>>();
-  assert<Equals<typeof c.translate, Signal<{ x: number; y: number }>>>();
+  assert<Equals<typeof c.translate, Point>>();
 }
 
 // Plain-value opts: still writable.
@@ -116,14 +120,13 @@ anim.run(run);
   assert<Equals<typeof c.opacity, ReadonlySignal<number>>>();
 }
 
-// Mixed: one prop readonly, others default-writable.
+// Mixed: one prop readonly, others default-writable. Vec props use
+// `Point`/`DerivedPoint` instead of bare `Signal<Vec>`.
 {
   const g = group({ translate: computed(() => ({ x: 0, y: 0 })) });
-  assert<
-    Equals<typeof g.translate, ReadonlySignal<{ x: number; y: number }>>
-  >();
+  assert<Equals<typeof g.translate, DerivedPoint>>();
   assert<Equals<typeof g.opacity, Signal<number>>>();
-  assert<Equals<typeof g.scale, Signal<{ x: number; y: number }>>>();
+  assert<Equals<typeof g.scale, Point>>();
 }
 
 // ── Ergonomics: generic helpers over "any shape" ───────────────────────

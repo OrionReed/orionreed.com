@@ -6,7 +6,14 @@ import {
   type ReadonlySignal,
   type Signal,
 } from "../core";
-import { Shape, Point, aabb, type Segment } from "../scene";
+import {
+  Shape,
+  DerivedPoint,
+  aabb,
+  isPoint,
+  type Pointlike,
+  type Segment,
+} from "../scene";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
 export interface PathOpts extends CommonOpts {
@@ -19,7 +26,7 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
  *  signal is read inside every computed, so adding/removing points
  *  (via `Path.to`, `.up`, etc.) re-runs `length`/`at`/`atDistance`/
  *  `tangentAt`/`angleAt` automatically. */
-function sampler(pts: Signal<readonly Point[]>) {
+function sampler(pts: Signal<readonly Pointlike[]>) {
   const cumLen = computed(() => {
     const points = pts.value;
     const lens = [0];
@@ -37,7 +44,7 @@ function sampler(pts: Signal<readonly Point[]>) {
   });
 
   /** Locate by absolute arc-length `d` (px), clamped to [0, total]. */
-  const locateAt = (d: number, points: readonly Point[]) => {
+  const locateAt = (d: number, points: readonly Pointlike[]) => {
     const lens = cumLen.value;
     const total = lens[lens.length - 1] ?? 0;
     if (points.length < 2 || total === 0) return { i: 0, segT: 0 };
@@ -49,40 +56,28 @@ function sampler(pts: Signal<readonly Point[]>) {
     return { i: i - 1, segT };
   };
 
-  const sample = (d: ReadonlySignal<number>) =>
-    computed(() => {
+  const sampleAt = (ds: ReadonlySignal<number>): DerivedPoint =>
+    new DerivedPoint(() => {
       const points = pts.value;
       if (points.length === 0) return { x: 0, y: 0 };
       if (points.length === 1) return points[0].value;
-      const { i, segT } = locateAt(d.value, points);
+      const { i, segT } = locateAt(ds.value, points);
       const a = points[i].value;
       const b = points[i + 1].value;
       return { x: a.x + (b.x - a.x) * segT, y: a.y + (b.y - a.y) * segT };
     });
 
-  const at = (t: Arg<number>): Point => {
+  const at = (t: Arg<number>): DerivedPoint => {
     const ts = toSig(t);
-    const ds = computed(() => clamp01(ts.value) * length.value);
-    const s = sample(ds);
-    return new Point(
-      computed(() => s.value.x),
-      computed(() => s.value.y),
-    );
+    return sampleAt(computed(() => clamp01(ts.value) * length.value));
   };
 
   /** Sample at absolute arc-length distance (px from start). */
-  const atDistance = (d: Arg<number>): Point => {
-    const ds = toSig(d);
-    const s = sample(ds);
-    return new Point(
-      computed(() => s.value.x),
-      computed(() => s.value.y),
-    );
-  };
+  const atDistance = (d: Arg<number>): DerivedPoint => sampleAt(toSig(d));
 
-  const tangentAt = (t: Arg<number>): Point => {
+  const tangentAt = (t: Arg<number>): DerivedPoint => {
     const ts = toSig(t);
-    const tangent = computed(() => {
+    return new DerivedPoint(() => {
       const points = pts.value;
       if (points.length < 2) return { x: 1, y: 0 };
       const total = length.value;
@@ -94,13 +89,9 @@ function sampler(pts: Signal<readonly Point[]>) {
       const len = Math.hypot(dx, dy) || 1;
       return { x: dx / len, y: dy / len };
     });
-    return new Point(
-      computed(() => tangent.value.x),
-      computed(() => tangent.value.y),
-    );
   };
 
-  const normalAt = (t: Arg<number>): Point => tangentAt(t).perp();
+  const normalAt = (t: Arg<number>): DerivedPoint => tangentAt(t).perp();
 
   const angleAt = (t: Arg<number>): ReadonlySignal<number> => {
     const tan = tangentAt(t);
@@ -121,19 +112,19 @@ function sampler(pts: Signal<readonly Point[]>) {
  *  attribute and all sampling methods (`at`/`atDistance`/`length`/
  *  …) re-run automatically when points change. */
 export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
-  private readonly _points: Signal<readonly Point[]>;
+  private readonly _points: Signal<readonly Pointlike[]>;
   readonly closed: boolean;
 
   readonly length: ReadonlySignal<number>;
-  readonly at: (t: Arg<number>) => Point;
-  readonly atDistance: (d: Arg<number>) => Point;
-  readonly tangentAt: (t: Arg<number>) => Point;
-  readonly normalAt: (t: Arg<number>) => Point;
+  readonly at: (t: Arg<number>) => DerivedPoint;
+  readonly atDistance: (d: Arg<number>) => DerivedPoint;
+  readonly tangentAt: (t: Arg<number>) => DerivedPoint;
+  readonly normalAt: (t: Arg<number>) => DerivedPoint;
   readonly angleAt: (t: Arg<number>) => ReadonlySignal<number>;
 
-  constructor(start: Point | readonly Point[] = [], opts: O = {} as O) {
-    const init: readonly Point[] = start instanceof Point ? [start] : start;
-    const points = signal<readonly Point[]>(init);
+  constructor(start: Pointlike | readonly Pointlike[] = [], opts: O = {} as O) {
+    const init: readonly Pointlike[] = isPoint(start) ? [start] : start;
+    const points = signal<readonly Pointlike[]>(init);
     const closed = opts.closed ?? false;
 
     super(
@@ -197,21 +188,21 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   }
 
   /** Snapshot of the current points list (untracked). */
-  get points(): readonly Point[] {
+  get points(): readonly Pointlike[] {
     return this._points.peek();
   }
 
-  private get last(): Point {
+  private get last(): Pointlike {
     const ps = this._points.peek();
     return ps[ps.length - 1];
   }
 
-  private extend(p: Point): this {
+  private extend(p: Pointlike): this {
     this._points.value = [...this._points.peek(), p];
     return this;
   }
 
-  to(p: Point): this {
+  to(p: Pointlike): this {
     return this.extend(p);
   }
   up(n: Arg<number>) {
@@ -257,6 +248,6 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
 /** Start a fluent path at `start`. Returns a Path you can chain on
  *  (`.to(p)`, `.up(n)`, etc.) and pass to `s(...)` to render. */
 export const path = <const O extends PathOpts>(
-  start: Point,
+  start: Pointlike,
   opts?: O,
 ): Path<O> => new Path<O>(start, opts);

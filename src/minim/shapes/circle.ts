@@ -1,5 +1,11 @@
-import { computed, toSig, type Arg, type NumSig } from "../core";
-import { Shape, Point, aabb, type Segment } from "../scene";
+import { toSig, type Arg, type NumSig } from "../core";
+import {
+  Shape,
+  DerivedPoint,
+  aabb,
+  type Pointlike,
+  type Segment,
+} from "../scene";
 import { TWO_PI } from "./dashed";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
@@ -9,7 +15,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   readonly radius: NumSig;
 
   constructor(
-    readonly center: Point,
+    readonly center: Pointlike,
     radius: Arg<number>,
     opts: O = {} as O,
   ) {
@@ -33,24 +39,24 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   }
 
   /** Point on perimeter at angle θ (radians, y-down). */
-  at(angle: Arg<number>): Point {
+  at(angle: Arg<number>): DerivedPoint {
     const a = toSig(angle);
-    return new Point(
-      computed(() => this.center.x.value + this.radius.value * Math.cos(a.value)),
-      computed(() => this.center.y.value + this.radius.value * Math.sin(a.value)),
-    );
+    return new DerivedPoint(() => ({
+      x: this.center.x.value + this.radius.value * Math.cos(a.value),
+      y: this.center.y.value + this.radius.value * Math.sin(a.value),
+    }));
   }
   /** Unit tangent at angle θ. */
-  tangentAt(angle: Arg<number>): Point {
+  tangentAt(angle: Arg<number>): DerivedPoint {
     const a = toSig(angle);
-    return new Point(
-      computed(() => -Math.sin(a.value)),
-      computed(() => Math.cos(a.value)),
-    );
+    return new DerivedPoint(() => ({
+      x: -Math.sin(a.value),
+      y: Math.cos(a.value),
+    }));
   }
 
-  override boundary(toward: Point): Point {
-    const proj = computed(() => {
+  override boundary(toward: Pointlike): DerivedPoint {
+    return new DerivedPoint(() => {
       const t = toward.value;
       const c = this.center.value;
       const sc = this.scale.value;
@@ -59,12 +65,11 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
       // circle of the larger axis (close enough for ports/connectors).
       const r = this.radius.value * Math.max(sc.x, sc.y);
       const len = Math.hypot(t.x - c.x, t.y - c.y) || 1;
-      return { x: c.x + (t.x - c.x) / len * r, y: c.y + (t.y - c.y) / len * r };
+      return {
+        x: c.x + ((t.x - c.x) / len) * r,
+        y: c.y + ((t.y - c.y) / len) * r,
+      };
     });
-    return new Point(
-      computed(() => proj.value.x),
-      computed(() => proj.value.y),
-    );
   }
 
   /** Two half-arcs — keeps each span ≤ π so SVG's `largeArc` flag
@@ -81,7 +86,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
 }
 
 export const circle = <const O extends CircleOpts>(
-  at: Point,
+  at: Pointlike,
   r: Arg<number>,
   opts?: O,
 ): Circle<O> => new Circle<O>(at, r, opts);

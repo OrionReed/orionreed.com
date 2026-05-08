@@ -1,5 +1,14 @@
-import { computed, signal, toSig, type Arg, type NumSig } from "../core";
-import { Shape, Bounds, Point, aabb, type Segment } from "../scene";
+import { computed, toSig, type Arg, type NumSig } from "../core";
+import {
+  Shape,
+  Bounds,
+  DerivedPoint,
+  Point,
+  aabb,
+  isPoint,
+  type Pointlike,
+  type Segment,
+} from "../scene";
 import { tokens } from "./tokens";
 import { applyOpts, setupDashed, type CommonOpts } from "./common";
 
@@ -56,8 +65,8 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     applyOpts(this, opts);
   }
 
-  override boundary(toward: Point): Point {
-    const proj = computed(() => {
+  override boundary(toward: Pointlike): DerivedPoint {
+    return new DerivedPoint(() => {
       const b = this.bounds.value;
       const sc = this.scale.value;
       const t = toward.value;
@@ -75,10 +84,6 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
       );
       return { x: cx + dx * k, y: cy + dy * k };
     });
-    return new Point(
-      computed(() => proj.value.x),
-      computed(() => proj.value.y),
-    );
   }
 
   /** Concentric outline: a new (unmounted) Rect inflated by `by` on
@@ -103,8 +108,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     const y = b.y;
     const w = b.w;
     const h = b.h;
-    const p = (px: number, py: number) =>
-      new Point(signal(px), signal(py));
+    const p = (px: number, py: number) => new Point({ x: px, y: py });
     if (r <= 0) {
       return [
         { type: "line", from: p(x, y), to: p(x + w, y) },
@@ -130,17 +134,17 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
  *
  *   rect(x, y, w, h, opts?)            — corner-based (canonical)
  *   rect(b: Bounds, opts?)             — from another shape's bounds
- *   rect(center: Point, w, h, opts?)   — centered on a Point
- *   rect(p1: Point, p2: Point, opts?)  — bounded by two corner Points
+ *   rect(center: Pointlike, w, h, opts?)  — centered on a Point
+ *   rect(p1: Pointlike, p2: Pointlike, opts?) — bounded by two corner Points
  */
 export function rect<const O extends RectOpts>(b: Bounds, opts?: O): Rect<O>;
 export function rect<const O extends RectOpts>(
-  p1: Point,
-  p2: Point,
+  p1: Pointlike,
+  p2: Pointlike,
   opts?: O,
 ): Rect<O>;
 export function rect<const O extends RectOpts>(
-  center: Point,
+  center: Pointlike,
   w: Arg<number>,
   h: Arg<number>,
   opts?: O,
@@ -153,8 +157,8 @@ export function rect<const O extends RectOpts>(
   opts?: O,
 ): Rect<O>;
 export function rect(
-  a: Arg<number> | Bounds | Point,
-  b?: Arg<number> | Point | RectOpts,
+  a: Arg<number> | Bounds | Pointlike,
+  b?: Arg<number> | Pointlike | RectOpts,
   c?: Arg<number>,
   d?: Arg<number> | RectOpts,
   e?: RectOpts,
@@ -162,11 +166,11 @@ export function rect(
   if (a instanceof Bounds) {
     return new Rect(a.x, a.y, a.w, a.h, b as RectOpts | undefined);
   }
-  if (a instanceof Point && b instanceof Point) {
+  if (isPoint(a) && isPoint(b)) {
     const bb = Bounds.between(a, b);
     return new Rect(bb.x, bb.y, bb.w, bb.h, c as RectOpts | undefined);
   }
-  if (a instanceof Point) {
+  if (isPoint(a)) {
     const w = b as Arg<number>;
     const h = c as Arg<number>;
     const ws = toSig(w);

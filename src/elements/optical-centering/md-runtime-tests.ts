@@ -13,17 +13,25 @@
 //   race:            first-completion wakes parent; losers are cancelled;
 //                    children's full yield protocol is honoured.
 //   event bus:       emit / on; until is zero-latency (wakes inside emit).
+//   signals:         equals option suppresses no-op writes.
+//   lens:            read/write through; sub-field memoization;
+//                    independent axes don't cross-fire.
+//   point:           writable Point + axis lenses; derived Points
+//                    (Bounds.center, math methods) are read-only.
 
 import {
   Anim,
+  DerivedPoint,
   Diagram,
   EventBus,
+  Point,
   Scene,
   align,
   circle,
   css,
   forEach,
   label,
+  lens,
   pt,
   pulse,
   signal,
@@ -595,6 +603,114 @@ const TESTS: TestCase[] = [
       a.step(0.06);
       assert(parentDone, `parent should resume on the fast child`);
       a.stop();
+    },
+  },
+  {
+    name: "signal equals option suppresses no-op writes",
+    run: (assert) => {
+      const s = signal(
+        { x: 1, y: 2 },
+        { equals: (a, b) => a.x === b.x && a.y === b.y },
+      );
+      let fires = 0;
+      s.subscribe(() => fires++);
+      // Initial subscribe call.
+      assert(fires === 1, `initial fire count was ${fires}, expected 1`);
+      // Same-value write (different object): suppressed.
+      s.value = { x: 1, y: 2 };
+      assert(fires === 1, `same-value write fired (${fires})`);
+      // Different value: fires.
+      s.value = { x: 1, y: 3 };
+      assert(fires === 2, `changed write didn't fire (${fires})`);
+    },
+  },
+  {
+    name: "lens reads through and writes back",
+    run: (assert) => {
+      const parent = signal({ a: 1, b: 2 });
+      const lensA = lens(
+        parent,
+        (p) => p.a,
+        (p, n) => ({ ...p, a: n }),
+      );
+      assert(lensA.value === 1, `read mismatch: ${lensA.value}`);
+      lensA.value = 10;
+      assert(parent.peek().a === 10, `write didn't propagate: ${parent.peek().a}`);
+      assert(parent.peek().b === 2, `unrelated field changed: ${parent.peek().b}`);
+      assert(lensA.value === 10, `lens didn't see its own write`);
+    },
+  },
+  {
+    name: "lens: independent axes don't cross-fire",
+    run: (assert) => {
+      const p = pt(1, 2);
+      let xFires = 0;
+      let yFires = 0;
+      p.x.subscribe(() => xFires++);
+      p.y.subscribe(() => yFires++);
+      // Initial subscribe-call fires.
+      assert(xFires === 1 && yFires === 1, `initial fires off`);
+      p.x.value = 99;
+      assert(xFires === 2, `x didn't fire on x-write (${xFires})`);
+      assert(yFires === 1, `y fired on x-write (${yFires})`);
+      p.y.value = 88;
+      assert(xFires === 2, `x fired on y-write (${xFires})`);
+      assert(yFires === 2, `y didn't fire on y-write (${yFires})`);
+    },
+  },
+  {
+    name: "point: parent write reaches lenses",
+    run: (assert) => {
+      const p = pt(1, 2);
+      assert(p.x.value === 1 && p.y.value === 2, `read mismatch`);
+      p.value = { x: 10, y: 20 };
+      assert(p.x.value === 10, `lens x didn't update: ${p.x.value}`);
+      assert(p.y.value === 20, `lens y didn't update: ${p.y.value}`);
+    },
+  },
+  {
+    name: "point: per-axis tween + parallel composition",
+    run: (assert) => {
+      const a = new Anim();
+      const p = pt(0, 0);
+      a.run(function* () {
+        yield [p.x.to(10, 0.1), p.y.to(20, 0.1)];
+      });
+      a.step(0);
+      a.step(0.05);
+      // Mid-tween: both axes have advanced.
+      assert(p.x.value > 0 && p.x.value < 10, `x mid: ${p.x.value}`);
+      assert(p.y.value > 0 && p.y.value < 20, `y mid: ${p.y.value}`);
+      a.step(0.06);
+      assert(p.x.value === 10, `x final: ${p.x.value}`);
+      assert(p.y.value === 20, `y final: ${p.y.value}`);
+      a.stop();
+    },
+  },
+  {
+    name: "pt(literal) → Point; pt(signal) → DerivedPoint",
+    run: (assert) => {
+      const lit = pt(1, 2);
+      assert(lit instanceof Point, `pt(num,num) should be Point`);
+      const s = signal(5);
+      const der = pt(s, 10);
+      assert(der instanceof DerivedPoint, `pt(sig,num) should be DerivedPoint`);
+      assert(der.x.value === 5 && der.y.value === 10, `derived read off`);
+      s.value = 99;
+      assert(der.x.value === 99, `derived didn't follow source: ${der.x.value}`);
+    },
+  },
+  {
+    name: "point math returns DerivedPoint",
+    run: (assert) => {
+      const a = pt(1, 2);
+      const b = pt(3, 4);
+      const sum = a.add(b);
+      assert(sum instanceof DerivedPoint, `add result not DerivedPoint`);
+      assert(sum.value.x === 4 && sum.value.y === 6, `sum value off`);
+      // Reactive: changing a updates sum.
+      a.value = { x: 10, y: 20 };
+      assert(sum.value.x === 13 && sum.value.y === 24, `sum didn't react`);
     },
   },
   {

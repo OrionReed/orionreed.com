@@ -18,7 +18,7 @@ import {
   type AnyShape,
   type Arg,
   type Path,
-  type Point,
+  type Pointlike,
   circle,
   computed,
   css,
@@ -108,7 +108,7 @@ export class MdCircuit extends Diagram {
     };
 
     /** Indicator dot whose fill toggles with a reactive boolean. */
-    const lit = (at: Point, on: Arg<boolean>) =>
+    const lit = (at: Pointlike, on: Arg<boolean>) =>
       circle(at, 4, {
         fill: toSig(on).derive((v) => (v ? tokens.stroke : "transparent")),
       });
@@ -128,7 +128,7 @@ export class MdCircuit extends Diagram {
     const wire = (
       a: AnyShape,
       b: AnyShape,
-      opts: { from?: Point; to?: Point } = {},
+      opts: { from?: Pointlike; to?: Pointlike } = {},
     ) => {
       const aRef = opts.from ?? a.bounds.center;
       const bRef = opts.to ?? b.bounds.center;

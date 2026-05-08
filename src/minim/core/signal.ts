@@ -286,6 +286,10 @@ declare class Signal<T = any> {
   /** @internal */
   _batchSnapshotVersion: number;
 
+  /** @internal — typed `any` so `T` stays variance-free; callers
+   *  supply the correctly-typed predicate via `SignalOptions.equals`. */
+  _equals?: (a: any, b: any) => boolean;
+
   constructor(value?: T, options?: SignalOptions<T>);
 
   /** @internal */
@@ -325,6 +329,11 @@ export interface SignalOptions<T = any> {
   watched?: (this: Signal<T>) => void;
   unwatched?: (this: Signal<T>) => void;
   name?: string;
+  /** Custom equality check; writes/recomputations whose new value is
+   *  equal under this predicate don't fire subscribers. Default is
+   *  reference inequality (`!==`). Useful for struct values like Vec
+   *  where a freshly-allocated object may carry the same data. */
+  equals?: (a: T, b: T) => boolean;
 }
 
 /** @internal */
@@ -342,6 +351,7 @@ function Signal(this: Signal, value?: unknown, options?: SignalOptions) {
   this._batchSnapshotVersion = 0;
   this._watched = options?.watched;
   this._unwatched = options?.unwatched;
+  this._equals = options?.equals;
   this.name = options?.name;
 }
 
@@ -434,7 +444,10 @@ Object.defineProperty(Signal.prototype, "value", {
     return this._value;
   },
   set(this: Signal, value) {
-    if (value !== this._value) {
+    const changed = this._equals
+      ? !this._equals(value, this._value)
+      : value !== this._value;
+    if (changed) {
       if (batchIteration > 100) {
         throw new Error("Cycle detected");
       }
@@ -616,6 +629,7 @@ function Computed(this: Computed, fn: () => unknown, options?: SignalOptions) {
   this._flags = OUTDATED;
   this._watched = options?.watched;
   this._unwatched = options?.unwatched;
+  this._equals = options?.equals;
   this.name = options?.name;
 }
 
@@ -654,11 +668,15 @@ Computed.prototype._refresh = function () {
     prepareSources(this);
     evalContext = this;
     const value = this._fn();
-    if (
-      this._flags & HAS_ERROR ||
-      this._value !== value ||
-      this._version === 0
-    ) {
+    // First evaluation: `_value` is uninitialised (undefined). Skip the
+    // user equals predicate — it'd be called with `undefined` as `b`.
+    const isFirst = this._version === 0;
+    const changed =
+      isFirst ||
+      (this._equals
+        ? !this._equals(value, this._value)
+        : this._value !== value);
+    if (this._flags & HAS_ERROR || changed) {
       this._value = value;
       this._flags &= ~HAS_ERROR;
       this._version++;
@@ -742,6 +760,71 @@ Object.defineProperty(Computed.prototype, "value", {
     return this._value;
   },
 });
+
+//#region Lens
+
+/**
+ * A writable view of a sub-field of a struct signal. Reads via the
+ * supplied getter, writes via the setter (which builds and assigns a
+ * new whole-struct value to the parent). `instanceof Signal` — pass
+ * anywhere a `Signal<T>` is expected.
+ */
+declare class Lens<P = any, T = any> extends Computed<T> {
+  /** @internal */
+  _parent: Signal<P>;
+  /** @internal */
+  _setter: (p: P, n: T) => P;
+  constructor(
+    parent: Signal<P>,
+    getter: (p: P) => T,
+    setter: (p: P, n: T) => P,
+  );
+  get value(): T;
+  set value(v: T);
+}
+
+/** @internal */
+// @ts-ignore: "Cannot redeclare exported variable 'Lens'."
+function Lens(
+  this: Lens,
+  parent: Signal<unknown>,
+  getter: (p: unknown) => unknown,
+  setter: (p: unknown, n: unknown) => unknown,
+) {
+  Computed.call(this, () => getter(parent.value));
+  this._parent = parent;
+  this._setter = setter;
+}
+
+Lens.prototype = Object.create(Computed.prototype);
+
+const computedValueGet = Object.getOwnPropertyDescriptor(
+  Computed.prototype,
+  "value",
+)!.get!;
+
+Object.defineProperty(Lens.prototype, "value", {
+  get: computedValueGet,
+  set(this: Lens, n: unknown) {
+    this._parent.value = this._setter(this._parent.peek(), n);
+  },
+});
+
+/** Construct a `Lens<P, T>` — a writable view onto a sub-field of
+ *  `parent`. Reads memoize like a `computed`; writes build a new whole
+ *  struct via `setter` and assign to `parent.value`. Multiple lenses
+ *  on one parent compose: each axis only fires its own subscribers
+ *  when its value actually changes (Computed memoization), even though
+ *  the parent fires on every write. */
+export function lens<P, T>(
+  parent: Signal<P>,
+  getter: (p: P) => T,
+  setter: (p: P, n: T) => P,
+): Signal<T> {
+  return new Lens(parent, getter, setter) as unknown as Signal<T>;
+}
+
+//#endregion Lens
 
 /**
  * An interface for read-only signals.

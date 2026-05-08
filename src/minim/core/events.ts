@@ -47,7 +47,7 @@ export class EventBus {
   onSignal(name: string): ReadonlySignal<EventState> {
     let sig = this.signals.get(name);
     if (!sig) {
-      sig = signal({ count: 0, data: undefined });
+      sig = signal<EventState>({ count: 0, data: undefined });
       this.signals.set(name, sig);
     }
     return sig;

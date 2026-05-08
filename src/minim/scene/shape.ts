@@ -23,7 +23,14 @@ import {
   transformAABB,
   type Matrix2D,
 } from "./matrix";
-import { Point, pt } from "./point";
+import {
+  DerivedPoint,
+  Point,
+  pt,
+  toPoint,
+  type Pointlike,
+  type ResolveVec,
+} from "./point";
 import type { Animator } from "../core/anim";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
@@ -31,7 +38,7 @@ export const SVG_NS = "http://www.w3.org/2000/svg";
 /** A stroke segment — line or arc. Used by `Shape.segments()` to drive
  *  dashed rendering; subclasses override to expose their geometry. */
 export type Segment =
-  | { type: "line"; from: Point; to: Point }
+  | { type: "line"; from: Pointlike; to: Pointlike }
   | {
       type: "arc";
       cx: () => number;
@@ -42,7 +49,8 @@ export type Segment =
     };
 
 /** Construction-time options shared by every Shape. Animatable props
- *  accept `Arg<T>` (value / Signal / thunk).
+ *  accept `Arg<T>` (value / Signal / thunk) — Points satisfy
+ *  `Arg<Vec>` directly because they extend `Signal<Vec>`.
  *
  *  `origin` is the local-frame point about which `rotate` and `scale`
  *  are applied. Subclasses pick sensible defaults (circle's center,
@@ -51,21 +59,11 @@ export type Segment =
  *  `aside` excludes this shape from its parent's children-union bounds
  *  (and transitively from auto-fit) — for decorative overlays that
  *  shouldn't extend the diagram's natural extent. */
-/** Either a Vec-typed `Arg` (value / signal / thunk) or a `Point` —
- *  Points are auto-unwrapped to a thunk reading `.value`. Lets you
- *  write `translate: someShape.bounds.center` directly. */
-export type VecArg = Arg<Vec> | Point;
-
-/** Normalize a `VecArg` into the underlying `Arg<Vec>` form, threading
- *  `Point`s through as `() => point.value` thunks. */
-const vecOpt = (v: VecArg | undefined): Arg<Vec> | undefined =>
-  v instanceof Point ? () => v.value : v;
-
 export interface ShapeOpts {
-  translate?: VecArg;
+  translate?: Arg<Vec>;
   rotate?: Arg<number>;
-  scale?: VecArg;
-  origin?: VecArg;
+  scale?: Arg<Vec>;
+  origin?: Arg<Vec>;
   opacity?: Arg<number>;
   aside?: boolean;
 }
@@ -106,10 +104,10 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly el: SVGGElement;
   readonly intrinsic?: SVGElement;
 
-  readonly translate: ResolveSig<Lookup<O, "translate">, Vec>;
+  readonly translate: ResolveVec<Lookup<O, "translate">>;
   readonly rotate: ResolveSig<Lookup<O, "rotate">, number>;
-  readonly scale: ResolveSig<Lookup<O, "scale">, Vec>;
-  readonly origin: ResolveSig<Lookup<O, "origin">, Vec>;
+  readonly scale: ResolveVec<Lookup<O, "scale">>;
+  readonly origin: ResolveVec<Lookup<O, "origin">>;
   readonly opacity: ResolveSig<Lookup<O, "opacity">, number>;
   /** Local-frame AABB. Lazy — only evaluates when read, so a diagram
    *  that never calls `s.fit()` / `connect` / layout helpers pays
@@ -151,14 +149,15 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
       this.el.appendChild(this.intrinsic);
     }
 
-    // Cast aligns the field's conditional type with `toSig`'s wider
-    // return — runtime is unchanged either way.
-    type Cast<K extends keyof ShapeOpts, T> = ResolveSig<Lookup<O, K>, T>;
-    this.translate = toSig(vecOpt(opts.translate) ?? vecOpt(defaults.translate), { x: 0, y: 0 }) as Cast<"translate", Vec>;
-    this.rotate = toSig(opts.rotate ?? defaults.rotate, 0) as Cast<"rotate", number>;
-    this.scale = toSig(vecOpt(opts.scale) ?? vecOpt(defaults.scale), { x: 1, y: 1 }) as Cast<"scale", Vec>;
-    this.origin = toSig(vecOpt(opts.origin) ?? vecOpt(defaults.origin), { x: 0, y: 0 }) as Cast<"origin", Vec>;
-    this.opacity = toSig(opts.opacity ?? defaults.opacity, 1) as Cast<"opacity", number>;
+    // Cast aligns the field's conditional type with the wider return —
+    // runtime is unchanged either way.
+    type CastVec<K extends keyof ShapeOpts> = ResolveVec<Lookup<O, K>>;
+    type CastNum<K extends keyof ShapeOpts> = ResolveSig<Lookup<O, K>, number>;
+    this.translate = toPoint(opts.translate ?? defaults.translate, { x: 0, y: 0 }) as CastVec<"translate">;
+    this.rotate = toSig(opts.rotate ?? defaults.rotate, 0) as CastNum<"rotate">;
+    this.scale = toPoint(opts.scale ?? defaults.scale, { x: 1, y: 1 }) as CastVec<"scale">;
+    this.origin = toPoint(opts.origin ?? defaults.origin, { x: 0, y: 0 }) as CastVec<"origin">;
+    this.opacity = toSig(opts.opacity ?? defaults.opacity, 1) as CastNum<"opacity">;
     this.aside = opts.aside ?? defaults.aside ?? false;
 
     this.bounds = new Bounds(
@@ -196,11 +195,9 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
   /** Analytic perimeter point in the direction of `toward`. Default
    *  is AABB-edge math; tighter shapes (Circle, Rect) override. */
-  boundary(toward: Point): Point {
-    const proj = computed(() => aabbEdgeFrom(this.bounds.value, toward.value));
-    return new Point(
-      computed(() => proj.value.x),
-      computed(() => proj.value.y),
+  boundary(toward: Pointlike): DerivedPoint {
+    return new DerivedPoint(() =>
+      aabbEdgeFrom(this.bounds.value, toward.value),
     );
   }
 

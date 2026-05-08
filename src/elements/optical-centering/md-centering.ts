@@ -1,6 +1,5 @@
 import {
   Diagram,
-  Point,
   Scene,
   Text,
   align,
@@ -17,6 +16,7 @@ import {
   timeline,
   when,
   type LineOpts,
+  type Pointlike,
 } from "../../minim";
 
 /** Italic letter with optional italic subscript: `math("x", "min")`. */
@@ -27,7 +27,7 @@ function math(base: string, sub?: string): Text {
 
 /** Perpendicular tick across segment `a→b` at fraction `f`, half-length
  *  `h`. Segment lives as plain Point math — no phantom Line shape. */
-function tick(a: Point, b: Point, f: number, h: number, opts: LineOpts = {}) {
+function tick(a: Pointlike, b: Pointlike, f: number, h: number, opts: LineOpts = {}) {
   const c = a.lerp(b, f);
   const off = b.sub(a).normalize().perp().scale(h);
   return line(c.sub(off), c.add(off), { thin: true, ...opts });

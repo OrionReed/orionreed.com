@@ -1,5 +1,5 @@
 import { toSig, type Arg, type Vec } from "../core";
-import { Shape, aabb, type ShapeOpts, type Point } from "../scene";
+import { Shape, aabb, type ShapeOpts, type Pointlike } from "../scene";
 import { tokens } from "./tokens";
 import { renderContent, flattenText, type Content } from "./text";
 
@@ -18,7 +18,7 @@ const yAttr = (y: number) =>
 
 export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
   constructor(
-    readonly at: Point,
+    readonly at: Pointlike,
     content: Arg<Content>,
     opts: O = {} as O,
   ) {
@@ -54,7 +54,7 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
 }
 
 export const label = <const O extends LabelOpts>(
-  at: Point,
+  at: Pointlike,
   content: Arg<Content>,
   opts?: O,
 ): Label<O> => new Label<O>(at, content, opts);

@@ -9,6 +9,7 @@ export {
   effect,
   batch,
   untracked,
+  lens,
   Signal,
   tween,
   type ReadonlySignal,

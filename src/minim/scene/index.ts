@@ -4,7 +4,16 @@
 // and layer-B (signals + utilities). The shape stdlib (`../shapes/`)
 // is built on this.
 
-export { Point, pt } from "./point";
+export {
+  Point,
+  DerivedPoint,
+  pt,
+  toPoint,
+  isPoint,
+  vecEquals,
+  type Pointlike,
+  type ResolveVec,
+} from "./point";
 
 export {
   Bounds,
@@ -23,7 +32,6 @@ export {
   type AnimatableKey,
   type Writable,
   type Segment,
-  type VecArg,
   boundsInRoot,
   boundsIn,
   draggable,

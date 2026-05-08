@@ -2,7 +2,7 @@
 // `./vec` so layer-B utilities can reference it without depending on
 // the scene graph.
 
-import { Point } from "./point";
+import { DerivedPoint, type Pointlike } from "./point";
 import { computed, type ReadonlySignal } from "../core/signal";
 import { toSig, type Arg } from "../core/arg";
 
@@ -63,15 +63,15 @@ export class Bounds {
   readonly w: ReadonlySignal<number>;
   readonly h: ReadonlySignal<number>;
 
-  #tl?: Point;
-  #tr?: Point;
-  #bl?: Point;
-  #br?: Point;
-  #top?: Point;
-  #bottom?: Point;
-  #left?: Point;
-  #right?: Point;
-  #center?: Point;
+  #tl?: DerivedPoint;
+  #tr?: DerivedPoint;
+  #bl?: DerivedPoint;
+  #br?: DerivedPoint;
+  #top?: DerivedPoint;
+  #bottom?: DerivedPoint;
+  #left?: DerivedPoint;
+  #right?: DerivedPoint;
+  #center?: DerivedPoint;
 
   constructor(private readonly sig: ReadonlySignal<AABB>) {
     this.x = computed(() => sig.value.x);
@@ -81,7 +81,7 @@ export class Bounds {
   }
 
   /** Bounding box of two opposing corners (any orientation). */
-  static between(a: Point, b: Point): Bounds {
+  static between(a: Pointlike, b: Pointlike): Bounds {
     return new Bounds(
       computed(() => {
         const av = a.value;
@@ -94,7 +94,7 @@ export class Bounds {
   }
 
   /** Axis-aligned bounding box of any number of points. */
-  static from(...points: Point[]): Bounds {
+  static from(...points: Pointlike[]): Bounds {
     return new Bounds(
       computed(() => {
         if (points.length === 0) return aabb(0, 0, 0, 0);
@@ -123,11 +123,11 @@ export class Bounds {
 
   /** Reactive Point at normalized fraction (u, v): `(0,0)` = top-left,
    *  `(1,1)` = bottom-right. The named getters cover common cases. */
-  at(u: number, v: number): Point {
-    return new Point(
-      computed(() => { const b = this.sig.value; return b.x + u * b.w; }),
-      computed(() => { const b = this.sig.value; return b.y + v * b.h; }),
-    );
+  at(u: number, v: number): DerivedPoint {
+    return new DerivedPoint(() => {
+      const b = this.sig.value;
+      return { x: b.x + u * b.w, y: b.y + v * b.h };
+    });
   }
 
   get value(): AABB {
