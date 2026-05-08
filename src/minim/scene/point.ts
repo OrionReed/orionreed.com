@@ -51,6 +51,9 @@ interface PointMath {
  *  brings in the Signal API and `PointMath`. */
 declare class Point {
   constructor(initial: Vec);
+  /** Wrap an existing `Signal<Vec>` (e.g. a `lens(...)` aggregate) as
+   *  a Point with writable axis lenses + math methods. */
+  static from(source: Signal<Vec>): Point;
   static polar(c: Pointlike, r: Arg<number>, angle: Arg<number>): DerivedPoint;
 }
 interface Point extends Signal<Vec>, PointMath {
@@ -96,14 +99,58 @@ export type ResolveVec<A> = IsAny<A> extends true
 
 // ── Implementation ──────────────────────────────────────────────────
 
+/** Build the two writable axis lenses on a Point — common between
+ *  the literal-initial constructor and `Point.from(source)`. */
+function attachAxes(p: Point, source: Signal<Vec>): void {
+  const self = p as Point & { x: Signal<number>; y: Signal<number> };
+  self.x = lens(
+    () => source.value.x,
+    (n) => {
+      source.value = { x: n, y: source.peek().y };
+    },
+  );
+  self.y = lens(
+    () => source.value.y,
+    (n) => {
+      source.value = { x: source.peek().x, y: n };
+    },
+  );
+}
+
 // @ts-ignore: "Cannot redeclare exported variable 'Point'."
 function Point(this: Point, initial: Vec) {
   Signal.call(this, initial, { equals: vecEquals });
-  const self = this as Point & { x: Signal<number>; y: Signal<number> };
-  self.x = lens(this, (v) => v.x, (v, n) => ({ x: n, y: v.y }));
-  self.y = lens(this, (v) => v.y, (v, n) => ({ x: v.x, y: n }));
+  attachAxes(this, this);
 }
 Point.prototype = Object.create(Signal.prototype);
+
+/** Wrap an existing `Signal<Vec>` (typically a `lens(...)` aggregate)
+ *  as a Point — adds writable axis lenses (`.x` / `.y`) and the math
+ *  methods, while delegating `value` / `peek` / `subscribe` to the
+ *  source. Used by `centroid(...)` and friends; users rarely call
+ *  this directly. The result is `instanceof Point` (and `Signal`) so
+ *  it threads through every API that accepts `Pointlike`. */
+(Point as unknown as { from(source: Signal<Vec>): Point }).from = function (
+  source,
+) {
+  const p = Object.create(Point.prototype) as Point;
+  // Delegate `value` to the source — picks up source's tracking, no
+  // independent state on `p` (we never call Signal.call here).
+  Object.defineProperty(p, "value", {
+    get() {
+      return source.value;
+    },
+    set(v: Vec) {
+      source.value = v;
+    },
+  });
+  (p as { peek: () => Vec; subscribe: typeof source.subscribe }).peek = () =>
+    source.peek();
+  (p as { peek: () => Vec; subscribe: typeof source.subscribe }).subscribe =
+    source.subscribe.bind(source);
+  attachAxes(p, source);
+  return p;
+};
 
 // @ts-ignore: "Cannot redeclare exported variable 'DerivedPoint'."
 function DerivedPoint(this: DerivedPoint, getter: () => Vec) {

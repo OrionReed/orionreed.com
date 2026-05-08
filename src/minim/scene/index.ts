@@ -15,6 +15,8 @@ export {
   type ResolveVec,
 } from "./point";
 
+export { centroid } from "./aggregates";
+
 export {
   Bounds,
   aabb,

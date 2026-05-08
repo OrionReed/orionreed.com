@@ -27,6 +27,7 @@ import {
   Point,
   Scene,
   align,
+  centroid,
   circle,
   css,
   forEach,
@@ -629,15 +630,39 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const parent = signal({ a: 1, b: 2 });
       const lensA = lens(
-        parent,
-        (p) => p.a,
-        (p, n) => ({ ...p, a: n }),
+        () => parent.value.a,
+        (n) => {
+          parent.value = { ...parent.peek(), a: n };
+        },
       );
       assert(lensA.value === 1, `read mismatch: ${lensA.value}`);
       lensA.value = 10;
       assert(parent.peek().a === 10, `write didn't propagate: ${parent.peek().a}`);
       assert(parent.peek().b === 2, `unrelated field changed: ${parent.peek().b}`);
       assert(lensA.value === 10, `lens didn't see its own write`);
+    },
+  },
+  {
+    name: "lens aggregates multiple parents (centroid-style)",
+    run: (assert) => {
+      // The general `lens(read, write)` form: read averages two
+      // signals (tracked, so changes invalidate the lens), write
+      // distributes a delta back to both.
+      const a = signal(0);
+      const b = signal(10);
+      const avg = lens(
+        () => (a.value + b.value) / 2,
+        (n) => {
+          const delta = n - (a.peek() + b.peek()) / 2;
+          a.value = a.peek() + delta;
+          b.value = b.peek() + delta;
+        },
+      );
+      assert(avg.value === 5, `initial avg: ${avg.value}`);
+      avg.value = 20;
+      assert(a.peek() === 15, `a after write: ${a.peek()}`);
+      assert(b.peek() === 25, `b after write: ${b.peek()}`);
+      assert(avg.value === 20, `avg after write: ${avg.value}`);
     },
   },
   {
@@ -711,6 +736,28 @@ const TESTS: TestCase[] = [
       // Reactive: changing a updates sum.
       a.value = { x: 10, y: 20 };
       assert(sum.value.x === 13 && sum.value.y === 24, `sum didn't react`);
+    },
+  },
+  {
+    name: "centroid: read averages, write distributes delta",
+    run: (assert) => {
+      // Two stand-in shapes: anything with a writable Point at .translate.
+      const a = { translate: pt(0, 0) };
+      const b = { translate: pt(100, 50) };
+      const c = centroid(a, b);
+      assert(c instanceof Point, `centroid should be a Point`);
+      assert(c.value.x === 50 && c.value.y === 25, `initial avg off`);
+      // Write the whole Vec — both shapes shift by the delta.
+      c.value = { x: 60, y: 35 };
+      assert(a.translate.peek().x === 10, `a.x after write: ${a.translate.peek().x}`);
+      assert(b.translate.peek().x === 110, `b.x after write: ${b.translate.peek().x}`);
+      assert(a.translate.peek().y === 10, `a.y after write: ${a.translate.peek().y}`);
+      assert(b.translate.peek().y === 60, `b.y after write: ${b.translate.peek().y}`);
+      // Per-axis write — only x distributes.
+      c.x.value = 100;  // delta dx = 100 - 60 = 40
+      assert(a.translate.peek().x === 50, `a.x after axis: ${a.translate.peek().x}`);
+      assert(b.translate.peek().x === 150, `b.x after axis: ${b.translate.peek().x}`);
+      assert(a.translate.peek().y === 10, `a.y after axis (unchanged): ${a.translate.peek().y}`);
     },
   },
   {

@@ -764,36 +764,26 @@ Object.defineProperty(Computed.prototype, "value", {
 //#region Lens
 
 /**
- * A writable view of a sub-field of a struct signal. Reads via the
- * supplied getter, writes via the setter (which builds and assigns a
- * new whole-struct value to the parent). `instanceof Signal` — pass
- * anywhere a `Signal<T>` is expected.
+ * A writable signal whose read and write sides are user-defined.
+ * `read` produces the current value (memoized like a `computed`);
+ * `write(n)` distributes a write back to whatever underlying state
+ * the lens is a view of — one parent signal, several signals, or
+ * any other custom logic. `instanceof Signal` — pass anywhere a
+ * `Signal<T>` is expected.
  */
-declare class Lens<P = any, T = any> extends Computed<T> {
+declare class Lens<T = any> extends Computed<T> {
   /** @internal */
-  _parent: Signal<P>;
-  /** @internal */
-  _setter: (p: P, n: T) => P;
-  constructor(
-    parent: Signal<P>,
-    getter: (p: P) => T,
-    setter: (p: P, n: T) => P,
-  );
+  _write: (n: T) => void;
+  constructor(read: () => T, write: (n: T) => void);
   get value(): T;
   set value(v: T);
 }
 
 /** @internal */
 // @ts-ignore: "Cannot redeclare exported variable 'Lens'."
-function Lens(
-  this: Lens,
-  parent: Signal<unknown>,
-  getter: (p: unknown) => unknown,
-  setter: (p: unknown, n: unknown) => unknown,
-) {
-  Computed.call(this, () => getter(parent.value));
-  this._parent = parent;
-  this._setter = setter;
+function Lens(this: Lens, read: () => unknown, write: (n: unknown) => void) {
+  Computed.call(this, read);
+  this._write = write;
 }
 
 Lens.prototype = Object.create(Computed.prototype);
@@ -806,22 +796,17 @@ const computedValueGet = Object.getOwnPropertyDescriptor(
 Object.defineProperty(Lens.prototype, "value", {
   get: computedValueGet,
   set(this: Lens, n: unknown) {
-    this._parent.value = this._setter(this._parent.peek(), n);
+    this._write(n);
   },
 });
 
-/** Construct a `Lens<P, T>` — a writable view onto a sub-field of
- *  `parent`. Reads memoize like a `computed`; writes build a new whole
- *  struct via `setter` and assign to `parent.value`. Multiple lenses
- *  on one parent compose: each axis only fires its own subscribers
- *  when its value actually changes (Computed memoization), even though
- *  the parent fires on every write. */
-export function lens<P, T>(
-  parent: Signal<P>,
-  getter: (p: P) => T,
-  setter: (p: P, n: T) => P,
-): Signal<T> {
-  return new Lens(parent, getter, setter) as unknown as Signal<T>;
+/** Construct a writable `Lens<T>` from a `read` thunk and a `write`
+ *  callback. Reads memoize via Computed; writes call `write(n)` —
+ *  the lens has no notion of "parent." Use for sub-field views of a
+ *  struct signal (`lens(() => p.value.x, n => p.value = {x: n, y: p.value.y})`)
+ *  or for aggregates over multiple signals. */
+export function lens<T>(read: () => T, write: (n: T) => void): Signal<T> {
+  return new Lens(read, write) as unknown as Signal<T>;
 }
 
 //#endregion Lens

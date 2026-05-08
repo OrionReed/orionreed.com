@@ -44,6 +44,8 @@ export {
   type ResolveVec,
 } from "./scene/point";
 
+export { centroid } from "./scene/aggregates";
+
 export { Bounds, type AABB } from "./scene/bounds";
 
 export {
