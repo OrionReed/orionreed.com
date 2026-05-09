@@ -10,19 +10,40 @@
 import { aabb, type AABB, type Vec } from "./bounds";
 
 export interface Matrix2D {
-  a: number; b: number;
-  c: number; d: number;
-  e: number; f: number;
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  e: number;
+  f: number;
 }
 
-export const identity = (): Matrix2D =>
-  ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+export const identity = (): Matrix2D => ({
+  a: 1,
+  b: 0,
+  c: 0,
+  d: 1,
+  e: 0,
+  f: 0,
+});
 
-export const fromTranslate = (x: number, y: number): Matrix2D =>
-  ({ a: 1, b: 0, c: 0, d: 1, e: x, f: y });
+export const fromTranslate = (x: number, y: number): Matrix2D => ({
+  a: 1,
+  b: 0,
+  c: 0,
+  d: 1,
+  e: x,
+  f: y,
+});
 
-export const fromScale = (x: number, y: number): Matrix2D =>
-  ({ a: x, b: 0, c: 0, d: y, e: 0, f: 0 });
+export const fromScale = (x: number, y: number): Matrix2D => ({
+  a: x,
+  b: 0,
+  c: 0,
+  d: y,
+  e: 0,
+  f: 0,
+});
 
 export const fromRotate = (angle: number): Matrix2D => {
   const s = Math.sin(angle);
@@ -85,18 +106,41 @@ export function transformAABB(m: Matrix2D, b: AABB): AABB {
   return aabb(minX, minY, maxX - minX, maxY - minY);
 }
 
+// Smallest scale magnitude the matrix output is allowed to carry —
+// anything closer to zero clamps up. Firefox's SVG compositor leaks GPU
+// layer textures unboundedly when an animated transform is exactly
+// singular (det = 0). Empirically any non-zero magnitude is enough to
+// dodge it; `1e-8` is sub-pixel for any conceivable shape but still
+// firmly above the equality test on the consumer side. Likely related
+// to https://bugzilla.mozilla.org/show_bug.cgi?id=1316003 (open since
+// 2016 — animated transform/opacity can cause unbounded memory).
+const SCALE_EPS = 1e-8;
+
 /** Shape transform: translate × pivoted rotate × pivoted scale.
  *  Equivalent to `translate(t) translate(pivot) rotate(r) scale(s)
  *  translate(-pivot)`.
+ *
+ *  Invariant: never emits a singular (non-invertible) matrix — `s.x`
+ *  and `s.y` are clamped away from zero (`|s.x| < SCALE_EPS` → ±EPS,
+ *  preserving sign). Both for downstream math (`invert`, hit-testing)
+ *  and to sidestep the Firefox-compositor leak above.
  *
  *  Fast paths for the common animation cases (no scale, no rotate, etc.)
  *  avoid the chain-of-multiplies general path — closed form, ~3× faster
  *  per call. The transform effect runs once per shape per frame, so
  *  shaving microseconds here scales linearly with shape count. */
 export function compose(t: Vec, r: number, s: Vec, pivot: Vec): Matrix2D {
+  // Clamp by magnitude, not equality — a tween from 1 → 0 passes
+  // through small floats on its way to zero. Equality-clamping `=== 0`
+  // would let those slip past and re-emit singular-ish matrices.
+  const sx =
+    Math.abs(s.x) < SCALE_EPS ? (s.x < 0 ? -SCALE_EPS : SCALE_EPS) : s.x;
+  const sy =
+    Math.abs(s.y) < SCALE_EPS ? (s.y < 0 ? -SCALE_EPS : SCALE_EPS) : s.y;
+
   const hasTrans = t.x !== 0 || t.y !== 0;
   const hasRot = r !== 0;
-  const hasScale = s.x !== 1 || s.y !== 1;
+  const hasScale = sx !== 1 || sy !== 1;
   if (!hasTrans && !hasRot && !hasScale) return identity();
 
   // Pure translate.
@@ -121,12 +165,12 @@ export function compose(t: Vec, r: number, s: Vec, pivot: Vec): Matrix2D {
   // Translate + pivoted scale (no rotate) — bounceIn/zoomOut hot path.
   if (hasScale && !hasRot) {
     return {
-      a: s.x,
+      a: sx,
       b: 0,
       c: 0,
-      d: s.y,
-      e: t.x + pivot.x * (1 - s.x),
-      f: t.y + pivot.y * (1 - s.y),
+      d: sy,
+      e: t.x + pivot.x * (1 - sx),
+      f: t.y + pivot.y * (1 - sy),
     };
   }
 
@@ -134,7 +178,7 @@ export function compose(t: Vec, r: number, s: Vec, pivot: Vec): Matrix2D {
   let m = hasTrans ? fromTranslate(t.x, t.y) : identity();
   m = multiply(m, fromTranslate(pivot.x, pivot.y));
   if (hasRot) m = multiply(m, fromRotate(r));
-  if (hasScale) m = multiply(m, fromScale(s.x, s.y));
+  if (hasScale) m = multiply(m, fromScale(sx, sy));
   m = multiply(m, fromTranslate(-pivot.x, -pivot.y));
   return m;
 }
