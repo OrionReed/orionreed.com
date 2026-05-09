@@ -44,7 +44,13 @@ export {
   type ResolveVec,
 } from "./scene/point";
 
-export { centroid, meanVec, meanNum } from "./scene/aggregates";
+export {
+  centroid,
+  meanRotation,
+  meanScale,
+  meanVec,
+  meanNum,
+} from "./scene/aggregates";
 
 export { Bounds, type AABB } from "./scene/bounds";
 
@@ -72,6 +78,8 @@ export {
 } from "./core/anim";
 
 export { EventBus } from "./core/events";
+
+export { untilChange, onceEvent, fromPromise } from "./core/awaitables";
 
 // ── Trace (derivations on top of `Anim.trace()`) ────────────────────
 export {
@@ -134,10 +142,13 @@ export {
   all,
   sequence,
   delay,
-  lag,
   until,
-  repeat,
   from,
+  spring,
+  oscillate,
+  drift,
+  attract,
+  type SpringOpts,
   fadeIn,
   fadeOut,
   fadeUp,

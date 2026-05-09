@@ -1,0 +1,17 @@
+{
+  "name": "minim",
+  "version": "0.0.1",
+  "description": "Generator-driven animated SVG diagrams.",
+  "type": "module",
+  "main": "./index.ts",
+  "module": "./index.ts",
+  "types": "./index.ts",
+  "sideEffects": false,
+  "author": "Orion Reed",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OrionReed/orionreed.com",
+    "directory": "src/minim"
+  }
+}

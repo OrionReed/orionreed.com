@@ -18,7 +18,8 @@ export class EventBus {
    *  this call. */
   emit(name: string, data?: unknown): void {
     const set = this.handlers.get(name);
-    if (set) for (const fn of set) fn(data);
+    if (!set) return;
+    for (const fn of set) fn(data);
   }
 
   /** Subscribe to a named event. Returns a disposer. */

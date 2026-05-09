@@ -1,7 +1,7 @@
 // Choreographer playground. Six shapes cycle through every named
 // group operation; `snapshot` captures the initial pose so each
 // iteration starts identical (perfect loop). Phases compose freely:
-// staggered swaps (lag-of-swaps), eased orbit (rate-signal tween),
+// staggered swaps (per-pair lag), eased orbit (rate-signal tween),
 // writable centroid (group translate via aggregate). The whole loop
 // body is one generator that reads top-to-bottom.
 

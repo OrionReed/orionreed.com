@@ -80,3 +80,18 @@ export function meanNum(...sigs: Signal<number>[]): Signal<number> {
 export function centroid(...shapes: Writable<"translate">[]): Point {
   return meanVec(...shapes.map((s) => s.translate));
 }
+
+/** Mean rotation of N shapes as a writable `Signal<number>`. Writes
+ *  apply the delta rigidly — every shape rotates by the same amount,
+ *  preserving relative orientations. */
+export function meanRotation(
+  ...shapes: Writable<"rotate">[]
+): Signal<number> {
+  return meanNum(...shapes.map((s) => s.rotate));
+}
+
+/** Mean scale of N shapes as a writable `Point`. Writes distribute
+ *  the delta to each shape's scale, preserving relative size offsets. */
+export function meanScale(...shapes: Writable<"scale">[]): Point {
+  return meanVec(...shapes.map((s) => s.scale));
+}

@@ -9,7 +9,7 @@
 // (swap pairs, splay around a centre, orbit, lay out to specific
 // targets, stagger an op).
 
-import { lag } from "./compose";
+import { delay } from "./compose";
 import { toSig, type Animator, type Arg, type Easing, type Vec } from "../core";
 import { isPoint, type Pointlike, type Writable } from "../scene";
 
@@ -27,14 +27,15 @@ export function* swap(
 }
 
 /** Apply `fn` to each item with a per-index time offset (`stride`
- *  seconds between starts). Sugar over `lag` for shape-keyed ops:
+ *  seconds between starts). Children run in parallel; the call
+ *  completes when the longest child finishes:
  *  `yield* stagger(0.05, shapes, (s) => fadeIn(s, 0.3))`. */
 export function* stagger<S>(
   stride: number,
   items: readonly S[],
   fn: (item: S, i: number) => Animator,
 ): Animator {
-  yield* lag(stride, ...items.map((item, i) => fn(item, i)));
+  yield items.map((item, i) => delay(i * stride, fn(item, i)));
 }
 
 /** Distribute shapes radially around `center` at `radius`, evenly

@@ -51,7 +51,9 @@ The problem with our approach is that we have failed to capture the essence of "
 
 <md-trace-demo></md-trace-demo>
 
-<md-centroid></md-centroid>
+<md-aggregates></md-aggregates>
+
+<md-behaviors></md-behaviors>
 
 <md-choreography></md-choreography>
 

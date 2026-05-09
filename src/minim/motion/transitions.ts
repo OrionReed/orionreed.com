@@ -32,10 +32,10 @@ export function* from<T extends Lerpable>(
 /** Named unit direction vectors. Pass to `slideIn` / `slideOut`, or
  *  use any other `Vec` for diagonals (`{ x: 0.7, y: 0.7 }` etc.). */
 export const Dir = {
-  Left:  { x: -1, y:  0 } as Vec,
-  Right: { x:  1, y:  0 } as Vec,
-  Up:    { x:  0, y: -1 } as Vec,
-  Down:  { x:  0, y:  1 } as Vec,
+  Left: { x: -1, y: 0 } as Vec,
+  Right: { x: 1, y: 0 } as Vec,
+  Up: { x: 0, y: -1 } as Vec,
+  Down: { x: 0, y: 1 } as Vec,
 };
 
 // ── Atoms ────────────────────────────────────────────────────────────
@@ -78,10 +78,7 @@ export function* fadeUpOut(
   sec = 0.3,
   dy = 16,
 ): Animator {
-  yield [
-    s.translate.to({ x: 0, y: -dy }, sec, easeIn),
-    fadeOut(s, sec),
-  ];
+  yield [s.translate.to({ x: 0, y: -dy }, sec, easeIn), fadeOut(s, sec)];
 }
 
 /** Slide in from a side + fade in. `dir` is a unit `Vec` — use `Dir.Left`
@@ -133,10 +130,7 @@ export function* zoomOut(
   s: Writable<"scale" | "opacity">,
   sec = 0.3,
 ): Animator {
-  yield [
-    s.scale.to({ x: 0, y: 0 }, sec, easeIn),
-    fadeOut(s, sec),
-  ];
+  yield [s.scale.to({ x: 0, y: 0 }, sec, easeIn), fadeOut(s, sec)];
 }
 
 /** Overshoot-and-settle scale + fade in. The two-phase chain on `scale`

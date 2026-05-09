@@ -7,7 +7,8 @@ import {
   Diagram,
   easeInOut,
   label,
-  lag,
+  stagger,
+  spring,
   align,
   pt,
   Scene,
@@ -17,23 +18,6 @@ import {
   type Content,
   type Signal,
 } from "../../minim";
-
-// ── Custom generator: spring follow (uses bare `yield;` per frame) ──
-function* springTo(
-  sig: Signal<number>,
-  target: Signal<number>,
-  k = 0.1,
-  damping = 0.85,
-): Animator {
-  let v = 0;
-  while (true) {
-    const dt: number = yield;
-    const dx = target.value - sig.value;
-    // dt is in seconds; *60 normalizes to "frame fraction" at 60fps.
-    v = (v + dx * k * (dt * 60)) * damping;
-    sig.value += v;
-  }
-}
 
 // ── Custom mini-animator: set text, hold, return ────────────────────
 function* setTextFor(
@@ -66,19 +50,19 @@ export class MdAnimDemo extends Diagram {
       yield* aX.to(540, 1, easeInOut).to(60, 1, easeInOut);
     });
 
-    // ── Strip B: lag stagger + array sugar (parallel) ──────────────
-    sideLabel(105, "lag");
+    // ── Strip B: stagger + array sugar (parallel, time-offset) ─────
+    sideLabel(105, "stagger");
     const bDots = Array.from({ length: 5 }, (_, i) =>
       s(circle(pt(80 + i * 100, 105), 10, { fill: true, opacity: 0 })),
     );
     this.anim.loop(function* () {
-      yield* lag(0.12, ...bDots.map((d) => d.opacity.to(1, 0.4)));
+      yield* stagger(0.12, bDots, (d) => d.opacity.to(1, 0.4));
       yield 0.5;
       yield bDots.map((d) => d.opacity.to(0, 0.4));
       yield 0.3;
     });
 
-    // ── Strip C: spring follow (custom generator + concurrent loops) ─
+    // ── Strip C: spring follow (behavior + concurrent loops) ───────
     sideLabel(175, "spring");
     const cTarget = signal(80);
     const cFollower = signal(80);
@@ -89,7 +73,7 @@ export class MdAnimDemo extends Diagram {
       yield* cTarget.to(520, 1.5, easeInOut).to(80, 1.5, easeInOut);
     });
     // Follower runs forever, never settles (target keeps moving).
-    this.anim.loop(() => springTo(cFollower, cTarget));
+    this.anim.run(() => spring(cFollower, cTarget));
 
     // ── Strip D: sequence + reactive label content ─────────────────
     sideLabel(245, "sequence");

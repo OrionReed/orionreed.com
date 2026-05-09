@@ -10,7 +10,7 @@ import {
   circle,
   css,
   label,
-  lag,
+  stagger,
   pt,
   rect,
   type Animator,
@@ -97,9 +97,9 @@ export class MdTransitions extends Diagram {
       );
 
       this.anim.loop(function* () {
-        yield* lag(0.07, ...shapes.map(lane.intro));
+        yield* stagger(0.07, shapes, lane.intro);
         yield 0.6;
-        yield* lag(0.04, ...shapes.map(lane.outro));
+        yield* stagger(0.04, shapes, lane.outro);
         yield 0.4;
       });
     });

@@ -13,8 +13,8 @@ import {
   circle,
   css,
   group,
-  lag,
   pt,
+  stagger,
   rect,
   signal,
   type Signal,
@@ -113,9 +113,9 @@ export class MdOrbits extends Diagram {
     // next intro picks them up wherever they ended up.
     const bodies = [sun, mercury, venus, earth, saturn, outer];
     this.anim.loop(function* () {
-      yield* lag(0.2, ...bodies.map((b) => bounceIn(b, 0.9)));
+      yield* stagger(0.2, bodies, (b) => bounceIn(b, 0.9));
       yield 6;
-      yield* lag(0.1, ...[...bodies].reverse().map((b) => zoomOut(b, 0.6)));
+      yield* stagger(0.1, [...bodies].reverse(), (b) => zoomOut(b, 0.6));
       yield 1;
     });
   }

@@ -6,18 +6,11 @@ import {
   type ReadonlySignal,
 } from "../core/signal";
 import { toSig, type Arg, type ResolveSig } from "../core/arg";
-import {
-  Bounds,
-  aabb,
-  aabbEdgeFrom,
-  unionAABB,
-  type AABB,
-} from "./bounds";
+import { Bounds, aabb, aabbEdgeFrom, unionAABB, type AABB } from "./bounds";
 import type { Vec } from "../core/vec";
 import {
   compose,
   invert,
-  isIdentity,
   multiply,
   toString as matrixToString,
   transformAABB,
@@ -68,7 +61,9 @@ export interface ShapeOpts {
   aside?: boolean;
 }
 
-type Lookup<O, K extends keyof ShapeOpts> = K extends keyof O ? O[K] : undefined;
+type Lookup<O, K extends keyof ShapeOpts> = K extends keyof O
+  ? O[K]
+  : undefined;
 
 /** Wide-form escape hatch — sidesteps invariant generic mismatches
  *  caused by the conditional prop types. Reach for this when you need
@@ -79,13 +74,22 @@ type Lookup<O, K extends keyof ShapeOpts> = K extends keyof O ? O[K] : undefined
 export type AnyShape = Shape<any>;
 
 /** The animatable props a Shape exposes as `Signal`-backed fields. */
-export type AnimatableKey = "translate" | "rotate" | "scale" | "origin" | "opacity";
+export type AnimatableKey =
+  | "translate"
+  | "rotate"
+  | "scale"
+  | "origin"
+  | "opacity";
 
 /** Concrete field type for each animatable prop — Vec props are
  *  `Point` (writable, with lens-backed `.x` / `.y` axes); scalar props
  *  are plain `Signal<number>`. Mirrors what `Shape` actually exposes. */
-type AnimatableField<K extends AnimatableKey> =
-  K extends "translate" | "scale" | "origin" ? Point : Signal<number>;
+type AnimatableField<K extends AnimatableKey> = K extends
+  | "translate"
+  | "scale"
+  | "origin"
+  ? Point
+  : Signal<number>;
 
 /** Constrain to "any object with these animatable props writable."
  *  Combinable via union — `Writable<"translate" | "opacity">` requires
@@ -131,7 +135,9 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly children: ReadonlySignal<readonly AnyShape[]> = this._children;
 
   #parent: AnyShape | null = null;
-  get parent(): AnyShape | null { return this.#parent; }
+  get parent(): AnyShape | null {
+    return this.#parent;
+  }
 
   constructor(
     intrinsicType?: string,
@@ -158,11 +164,23 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     // runtime is unchanged either way.
     type CastVec<K extends keyof ShapeOpts> = ResolveVec<Lookup<O, K>>;
     type CastNum<K extends keyof ShapeOpts> = ResolveSig<Lookup<O, K>, number>;
-    this.translate = toPoint(opts.translate ?? defaults.translate, { x: 0, y: 0 }) as CastVec<"translate">;
+    this.translate = toPoint(opts.translate ?? defaults.translate, {
+      x: 0,
+      y: 0,
+    }) as CastVec<"translate">;
     this.rotate = toSig(opts.rotate ?? defaults.rotate, 0) as CastNum<"rotate">;
-    this.scale = toPoint(opts.scale ?? defaults.scale, { x: 1, y: 1 }) as CastVec<"scale">;
-    this.origin = toPoint(opts.origin ?? defaults.origin, { x: 0, y: 0 }) as CastVec<"origin">;
-    this.opacity = toSig(opts.opacity ?? defaults.opacity, 1) as CastNum<"opacity">;
+    this.scale = toPoint(opts.scale ?? defaults.scale, {
+      x: 1,
+      y: 1,
+    }) as CastVec<"scale">;
+    this.origin = toPoint(opts.origin ?? defaults.origin, {
+      x: 0,
+      y: 0,
+    }) as CastVec<"origin">;
+    this.opacity = toSig(
+      opts.opacity ?? defaults.opacity,
+      1,
+    ) as CastNum<"opacity">;
     this.aside = opts.aside ?? defaults.aside ?? false;
 
     this.bounds = new Bounds(
@@ -189,11 +207,10 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
     this.disposers.push(
       effect(() => {
-        const m = this.transform.value;
-        this.el.style.transform = isIdentity(m) ? "" : matrixToString(m);
+        this.el.style.transform = matrixToString(this.transform.value);
       }),
       effect(() => {
-        this.el.setAttribute("opacity", String(this.opacity.value));
+        this.el.style.opacity = String(this.opacity.value);
       }),
     );
   }
@@ -383,20 +400,28 @@ export function draggable(
   let dragging = false;
   let pointerId = -1;
   const offs: Array<() => void> = [];
-  offs.push(handle.on("pointerdown", (e) => {
-    const pe = e as PointerEvent;
-    dragging = true;
-    pointerId = pe.pointerId;
-    handle.el.setPointerCapture(pointerId);
-    onDrag(handle.toLocal(pe));
-  }));
-  offs.push(handle.on("pointermove", (e) => {
-    if (!dragging) return;
-    onDrag(handle.toLocal(e as PointerEvent));
-  }));
+  offs.push(
+    handle.on("pointerdown", (e) => {
+      const pe = e as PointerEvent;
+      dragging = true;
+      pointerId = pe.pointerId;
+      handle.el.setPointerCapture(pointerId);
+      onDrag(handle.toLocal(pe));
+    }),
+  );
+  offs.push(
+    handle.on("pointermove", (e) => {
+      if (!dragging) return;
+      onDrag(handle.toLocal(e as PointerEvent));
+    }),
+  );
   const stop = () => {
     if (dragging && pointerId !== -1) {
-      try { handle.el.releasePointerCapture(pointerId); } catch { /* ok */ }
+      try {
+        handle.el.releasePointerCapture(pointerId);
+      } catch {
+        /* ok */
+      }
     }
     dragging = false;
     pointerId = -1;

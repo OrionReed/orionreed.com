@@ -16,8 +16,9 @@ import { MdMultitrack } from "./optical-centering/md-multitrack";
 import { MdCircuit } from "./optical-centering/md-circuit";
 import { MdRuntimeTests } from "./optical-centering/md-runtime-tests";
 import { MdTraceDemo } from "./optical-centering/md-trace-demo";
-import { MdCentroid } from "./optical-centering/md-centroid";
 import { MdChoreography } from "./optical-centering/md-choreography";
+import { MdBehaviors } from "./optical-centering/md-behaviors";
+import { MdAggregates } from "./optical-centering/md-aggregates";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -37,5 +38,6 @@ MdMultitrack.define();
 MdCircuit.define();
 MdRuntimeTests.define();
 MdTraceDemo.define();
-MdCentroid.define();
 MdChoreography.define();
+MdBehaviors.define();
+MdAggregates.define();

@@ -1,5 +1,12 @@
 export { linear, easeOut, easeIn, easeInOut } from "./easings";
-export { all, sequence, delay, lag, until, repeat } from "./compose";
+export { all, sequence, delay, until } from "./compose";
+export {
+  spring,
+  oscillate,
+  drift,
+  attract,
+  type SpringOpts,
+} from "./behaviors";
 export {
   // primitive — the pose-then-tween every intro is built from
   from,

@@ -43,6 +43,8 @@ export {
 
 export { EventBus } from "./events";
 
+export { untilChange, onceEvent, fromPromise } from "./awaitables";
+
 export {
   timeline,
   sequential,

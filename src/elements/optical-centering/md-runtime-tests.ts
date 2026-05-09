@@ -28,19 +28,27 @@ import {
   Scene,
   align,
   assemble,
+  attract,
   centroid,
   circle,
   css,
+  drift,
   forEach,
+  fromPromise,
   label,
   lens,
   meanNum,
+  meanRotation,
+  meanScale,
   meanVec,
+  oscillate,
   pt,
   pulse,
   signal,
   splay,
+  spring,
   swap,
+  untilChange,
   type Animator,
 } from "../../minim";
 
@@ -869,6 +877,159 @@ const TESTS: TestCase[] = [
       a.step(0.15);
       assert(p.value >= 1, `expected >= 1, got ${p.value}`);
       a.stop();
+    },
+  },
+  {
+    name: "spring: settles at target with precision",
+    run: (assert) => {
+      const a = new Anim();
+      const sig = signal(0);
+      let done = false;
+      a.run(function* () {
+        yield* spring(sig, 100, { precision: 0.01 });
+        done = true;
+      });
+      // Step long enough for a critically-damped spring to settle
+      // (~6 / sqrt(stiffness) seconds at default stiffness=170).
+      for (let i = 0; i < 200; i++) a.step(0.016);
+      assert(done, `spring should have settled`);
+      assert(sig.value === 100, `should snap to target; got ${sig.value}`);
+      a.stop();
+    },
+  },
+  {
+    name: "oscillate: returns to base across one period",
+    run: (assert) => {
+      const a = new Anim();
+      const sig = signal(50);
+      a.run(() => oscillate(sig, 10, 1)); // amp=10, freq=1Hz
+      a.step(0);
+      a.step(0.25); // quarter period — should be near base + amp
+      assert(Math.abs(sig.value - 60) < 0.5, `quarter: ${sig.value}`);
+      a.step(0.75); // full period — back near base
+      assert(Math.abs(sig.value - 50) < 0.5, `period: ${sig.value}`);
+      a.stop();
+    },
+  },
+  {
+    name: "drift: integrates velocity over time",
+    run: (assert) => {
+      const a = new Anim();
+      const sig = signal(0);
+      a.run(() => drift(sig, 100));
+      a.step(0);
+      a.step(0.5);
+      assert(Math.abs(sig.value - 50) < 0.001, `at t=0.5: ${sig.value}`);
+      a.stop();
+    },
+  },
+  {
+    name: "attract: exponential pull toward target",
+    run: (assert) => {
+      const a = new Anim();
+      const sig = signal(0);
+      a.run(() => attract(sig, 100, 1));
+      a.step(0);
+      // Many small steps approximate continuous: 1 - e^-1 ≈ 0.632
+      for (let i = 0; i < 100; i++) a.step(0.01);
+      assert(
+        Math.abs(sig.value - 63.2) < 1,
+        `after t=1: ${sig.value} (expected ~63.2)`,
+      );
+      a.stop();
+    },
+  },
+  {
+    name: "untilChange: wakes on next signal change",
+    run: (assert) => {
+      const a = new Anim();
+      const sig = signal(0);
+      let woke = false;
+      a.run(function* () {
+        yield untilChange(sig);
+        woke = true;
+      });
+      a.step(0);
+      assert(!woke, `should not wake before change`);
+      sig.value = 1;
+      assert(woke, `should wake on change`);
+      a.stop();
+    },
+  },
+  {
+    name: "untilChange: ignores baseline read",
+    run: (assert) => {
+      const a = new Anim();
+      const sig = signal(42);
+      let woke = false;
+      a.run(function* () {
+        yield untilChange(sig);
+        woke = true;
+      });
+      // The first effect run reads the current value and must not wake.
+      a.step(0);
+      a.step(0.1);
+      assert(!woke, `baseline read should not wake`);
+      a.stop();
+    },
+  },
+  {
+    name: "fromPromise: disposer suppresses wake after cancel",
+    run: (assert) => {
+      const a = new Anim();
+      let resolve!: () => void;
+      const p = new Promise<void>((r) => {
+        resolve = r;
+      });
+      let woke = false;
+      const dispose = a.run(function* () {
+        yield fromPromise(p);
+        woke = true;
+      });
+      a.step(0);
+      assert(!woke, `not before settlement`);
+      // Cancel the active before the promise settles. The disposer
+      // sets a "cancelled" flag — even when the microtask fires later,
+      // wake is suppressed.
+      dispose();
+      resolve();
+      a.step(0);
+      assert(!woke, `wake suppressed after dispose`);
+      a.stop();
+    },
+  },
+  {
+    name: "meanRotation: distributes delta across shapes",
+    run: (assert) => {
+      const sh1 = { rotate: signal(0) };
+      const sh2 = { rotate: signal(Math.PI / 2) };
+      const m = meanRotation(sh1, sh2);
+      assert(
+        Math.abs(m.value - Math.PI / 4) < 1e-9,
+        `mean: ${m.value}`,
+      );
+      // Write distributes the delta rigidly.
+      m.value = Math.PI / 2;
+      assert(
+        Math.abs(sh1.rotate.value - Math.PI / 4) < 1e-9,
+        `sh1: ${sh1.rotate.value}`,
+      );
+      assert(
+        Math.abs(sh2.rotate.value - (3 * Math.PI) / 4) < 1e-9,
+        `sh2: ${sh2.rotate.value}`,
+      );
+    },
+  },
+  {
+    name: "meanScale: writable Point over scale fields",
+    run: (assert) => {
+      const sh1 = { scale: pt(1, 1) };
+      const sh2 = { scale: pt(2, 2) };
+      const m = meanScale(sh1, sh2);
+      assert(m.value.x === 1.5, `mean.x: ${m.value.x}`);
+      m.value = { x: 3, y: 3 }; // delta = +1.5 each
+      assert(sh1.scale.peek().x === 2.5, `sh1.x: ${sh1.scale.peek().x}`);
+      assert(sh2.scale.peek().x === 3.5, `sh2.x: ${sh2.scale.peek().x}`);
     },
   },
 ];
