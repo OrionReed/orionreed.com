@@ -8,12 +8,9 @@ export {
   type SpringOpts,
 } from "./behaviors";
 export {
-  // primitive — the pose-then-tween every intro is built from
   from,
-  // atoms
   fadeIn,
   fadeOut,
-  // compounds (visible compositions of `from` and `.to`)
   fadeUp,
   fadeUpOut,
   slideIn,
@@ -22,14 +19,7 @@ export {
   zoomOut,
   bounceIn,
   spinIn,
-  // direction vectors for slideIn/slideOut
   Dir,
 } from "./transitions";
 export { pulse, clock, every, ramp, reverse, speed } from "./clocks";
-export {
-  swap,
-  stagger,
-  splay,
-  orbit,
-  assemble,
-} from "./choreographers";
+export { swap, stagger, splay, orbit, assemble } from "./choreographers";

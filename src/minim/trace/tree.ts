@@ -1,24 +1,18 @@
-// Structural derivation over `Span[]`. The trace itself stays as
-// flat data in `Anim`; this module turns that into a tree where the
-// units that matter — parent-child, sibling batches, depth — are
-// first-class. Both visual layouts (gantt, swim-lane) and assertions
-// ("X always happens before Y", "Z is never more than 1") build on
-// this view, so it's the right shared primitive.
+// Structural view over `Span[]`. The flat data is canonical; this
+// module groups it as a tree where parent-child, sibling batches, and
+// depth are first-class. Used by gantt layouts and assertions alike.
 
 import type { Span } from "./spans";
 
-/** A yield-array's worth of siblings. All members share the same
- *  parent and the same `spawnedAt` (they're spawned in one synchronous
- *  block of `advance`). Sequential batches under the same parent are
- *  represented by separate `TraceBatch` entries on that parent. */
+/** A yield-array's worth of siblings — same parent, same `spawnedAt`.
+ *  Sequential batches under one parent are separate entries. */
 export type TraceBatch = {
   readonly spawnedAt: number;
   readonly members: readonly TraceNode[];
 };
 
-/** Tree node wrapping one `Span`. `children` is the flat list across
- *  all batches in spawn order; `batches` preserves yield-array
- *  groupings. `depth` is `parentId`-chain hops to root (0 for root). */
+/** Tree node. `children` is the flat list across all batches in spawn
+ *  order; `batches` preserves yield-array groupings. */
 export type TraceNode = {
   readonly span: Span;
   readonly parent?: TraceNode;
@@ -31,8 +25,8 @@ export type TraceTree = {
   readonly roots: readonly TraceNode[];
   readonly byId: ReadonlyMap<number, TraceNode>;
   readonly size: number;
-  /** Pre-order DFS: each parent visited before its children, batches
-   *  in spawn-time order, siblings within a batch in spawn order. */
+  /** Pre-order DFS: parent before children, batches in spawn-time
+   *  order, siblings within a batch in spawn order. */
   dfs(visit: (node: TraceNode, depth: number) => void): void;
 };
 
@@ -44,13 +38,9 @@ interface MutableNode {
   children: TraceNode[];
 }
 
-/** Build a `TraceTree` snapshot from a flat list of spans. Pure;
- *  reads only the data passed in. Intended to be called from inside a
- *  `computed` (re-runs when `trace.version` bumps) or once at the
- *  end of a run for after-the-fact inspection.
- *
- *  Spans must be in spawn order (which `Trace.spans` already is — the
- *  runtime appends on spawn). Parent always precedes its children. */
+/** Build a `TraceTree` snapshot. Pure — call from inside a `computed`
+ *  (re-runs on trace changes) or once at the end of a run. Spans must
+ *  be in spawn order (Trace.spans always is). */
 export function traceTree(spans: readonly Span[]): TraceTree {
   // First pass: skeletal nodes so parent/child references can resolve.
   const byId = new Map<number, MutableNode>();
@@ -63,8 +53,7 @@ export function traceTree(spans: readonly Span[]): TraceTree {
     });
   }
 
-  // Group children-of-each-parent by parent id, preserving spawn order
-  // (`spans` is already spawn-ordered, so push order suffices).
+  // Group children by parent id, preserving spawn order.
   const childrenOf = new Map<number, MutableNode[]>();
   const roots: MutableNode[] = [];
   for (const s of spans) {
@@ -75,8 +64,8 @@ export function traceTree(spans: readonly Span[]): TraceTree {
     }
     const parent = byId.get(s.parentId);
     if (!parent) {
-      // Parent not in this span list (maybe trace started after parent
-      // was spawned). Treat as root for layout purposes.
+      // Parent not in this span list (trace started mid-run). Treat
+      // as root for layout purposes.
       roots.push(node);
       continue;
     }

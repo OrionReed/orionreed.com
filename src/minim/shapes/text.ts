@@ -1,5 +1,5 @@
-// Chainable rich text composed of nested styled spans. Pure values
-// (no DOM); rendered to tspan markup by `label()`.
+// Chainable rich text — nested styled spans, pure values (no DOM).
+// Rendered to `<tspan>` markup by `label()`.
 
 import { tokens } from "./tokens";
 
@@ -57,7 +57,7 @@ function renderTextNode(node: TextPart): string {
 export const renderContent = (c: Content): string =>
   typeof c === "string" ? escapeXml(c) : renderTextNode(c);
 
-/** Plain-text flatten — for approximating label widths. */
+/** Plain-text flatten — used to approximate label widths. */
 export function flattenText(c: Content): string {
   if (typeof c === "string") return c;
   const walk = (n: TextPart): string =>

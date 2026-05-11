@@ -1,14 +1,7 @@
-// Random branching with `rand(...gens)`. One shape, looping forever;
-// each iteration picks a different animation from a fixed menu. The
-// trick: the loop body is a single `yield* rand(...)` over generator
-// instances tagged with their name + color. Only the chosen branch
-// runs, so the side effects of the unselected ones (label updates,
-// history pushes) never happen — randomness is fully encapsulated.
-//
-// Visualisation: current pick name above the shape; the menu of
-// candidates listed on the right with the active one highlighted; a
-// rolling history strip across the bottom so the random distribution
-// becomes visible over time.
+// `yield* rand(...gens)` — only the chosen branch runs, so unselected
+// generators' side-effects (label updates, history pushes) never fire.
+// Visualised by a current pick label, a candidates menu, and a rolling
+// history strip.
 
 import {
   Diagram,
@@ -120,13 +113,13 @@ export class MdRand extends Diagram {
   protected scene(s: Scene): void {
     s.view(0, 0, W, H);
 
-    // ── State ─────────────────────────────────────────────────────────
+    // ── State ────────────────────────────────────────────────────────
     const current = signal<Pick | null>(null);
     const currentName = computed<Content>(() => current.value?.name ?? "—");
     const currentColor = computed(() => current.value?.color ?? "#1a1a1a");
     const history = signal<Pick[]>([]);
 
-    // ── Header ────────────────────────────────────────────────────────
+    // ── Header ───────────────────────────────────────────────────────
     s(
       label(pt(20, 24), "rand", {
         size: 13,
@@ -141,7 +134,7 @@ export class MdRand extends Diagram {
       ),
     );
 
-    // ── Stage: subject + active-pick title ────────────────────────────
+    // ── Stage ────────────────────────────────────────────────────────
     s(
       label(pt(STAGE_X, STAGE_Y - 60), currentName, {
         size: 18,
@@ -152,8 +145,8 @@ export class MdRand extends Diagram {
     const subject = s(
       circle(pt(STAGE_X, STAGE_Y), 22, { fill: currentColor }),
     );
-    // Snapshot baseline so each iteration starts from a clean pose —
-    // moves can mutate translate/rotate/scale/opacity freely.
+    // Each iteration starts from a clean pose — moves are free to
+    // mutate translate/rotate/scale/opacity.
     const reset = snapshot(
       subject.translate,
       subject.rotate,
@@ -161,7 +154,7 @@ export class MdRand extends Diagram {
       subject.opacity,
     );
 
-    // ── Menu of candidates (right column) ─────────────────────────────
+    // ── Candidates menu ──────────────────────────────────────────────
     const MENU_X = 440;
     const MENU_Y = 70;
     const ROW_H = 22;
@@ -188,7 +181,7 @@ export class MdRand extends Diagram {
       );
     });
 
-    // ── History strip (rolling, oldest left) ──────────────────────────
+    // ── History strip (rolling, oldest left) ─────────────────────────
     const HISTORY_STRIDE = HISTORY_DOT_R * 2 + HISTORY_GAP;
     const HISTORY_X0 = W / 2 - ((HISTORY_LEN - 1) * HISTORY_STRIDE) / 2;
 
@@ -202,8 +195,8 @@ export class MdRand extends Diagram {
 
     forEach(
       s.root,
-      // Pad-left to a fixed width so chips slide right as the strip
-      // fills; empty slots render as faint outlines.
+      // Pad-left to a fixed width; chips slide right as the strip
+      // fills, empty slots render as faint outlines.
       computed(() => {
         const h = history.value;
         const pad = HISTORY_LEN - h.length;
@@ -224,7 +217,7 @@ export class MdRand extends Diagram {
             { stroke: "#1a1a1a", opacity: 0.1, corner: 2 },
           );
         }
-        // Older entries fade so the eye tracks the freshly-picked tail.
+        // Older entries fade so the eye tracks the recent tail.
         const age = HISTORY_LEN - 1 - i;
         const opacity = Math.max(0.25, 1 - age * 0.06);
         return circle(
@@ -233,16 +226,14 @@ export class MdRand extends Diagram {
           { fill: item.color, opacity },
         );
       },
-      // Key on slot index — slots themselves don't change identity,
-      // only their underlying item does, so per-render is fine.
+      // Slot-index keys — slots don't change identity, only their
+      // underlying item does.
       { key: (_, i) => i },
     );
 
-    // ── The loop ──────────────────────────────────────────────────────
-    // `record` sets the current pick + appends to the history strip,
-    // then runs the move's body. Only the branch `rand` selects ever
-    // runs — the unselected wrappers' side effects never fire. This is
-    // the whole point: branch picking is a value, not an action.
+    // ── Loop ────────────────────────────────────────────────────────
+    // `record` sets the current pick + appends to history, then runs
+    // the move body. Only the selected wrapper's side-effects fire.
     function* record(move: Move, body: Animator): Animator {
       const pick: Pick = { name: move.name, color: move.color };
       current.value = pick;

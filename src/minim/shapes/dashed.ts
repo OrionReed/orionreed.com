@@ -1,7 +1,6 @@
-// Pixel-perfect dashing. Sidesteps `stroke-dasharray` browser quirks
-// and corner artifacts by emitting explicit `<path>` commands at
-// computed dash positions. Works on lines, polylines, arcs, rounded
-// rects, circles, and other shapes with analytic boundaries.
+// Pixel-perfect dashing. Avoids browser `stroke-dasharray` quirks and
+// corner artifacts by emitting explicit `<path>` commands at the
+// computed dash positions.
 
 import type { Segment } from "../scene";
 
@@ -162,17 +161,17 @@ function pathFromTo(segs: EvalSeg[], start: number, end: number): string {
 
 interface DashOpts {
   closed?: boolean;
-  /** Target dash length, default 4. */
+  /** Target dash length. Default 4. */
   dashSize?: number;
-  /** Target gap length, default 3. */
+  /** Target gap length. Default 3. */
   gapSize?: number;
   /** Optical compensation for round caps — extends each dash so the
-   *  visible (capped) length matches `dashSize`. */
+   *  visible length matches `dashSize`. */
   capExtension?: number;
 }
 
-/** SVG path `d` for a dashed stroke through `segments`. Multiple
- *  `M…L…/A…` runs, one per dash. Use with `<path fill="none">`. */
+/** SVG path `d` for a dashed stroke through `segments` — one `M…L…/A…`
+ *  run per dash. Use with `<path fill="none">`. */
 export function dashedPath(segments: Segment[], opts: DashOpts = {}): string {
   const segs = evalSegments(segments);
   if (segs.length === 0) return "";

@@ -1,4 +1,4 @@
-// Shared visual tokens — single source of truth for stroke/font/spacing.
+// Shared visual tokens — stroke, font, spacing defaults.
 
 export const tokens = {
   /** Default stroke; CSS var so dark mode flips automatically. */
@@ -11,7 +11,6 @@ export const tokens = {
   /** Approximate glyph aspect for label width (SVG can't measure). */
   charWidth: 0.6,
   subFontSize: "0.75em",
-  /** Opacity for muted/secondary visuals. */
   mutedOpacity: 0.5,
 } as const;
 

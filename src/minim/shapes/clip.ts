@@ -1,5 +1,5 @@
-// `<clipPath>` matching a shape's geometry via `<use href>` — clip
-// follows the source reactively without copying attributes.
+// `<clipPath>` mirroring a shape's geometry via `<use href>`, so the
+// clip follows the source reactively without copying attributes.
 
 import { SVG_NS, type Shape, type Scene } from "../scene";
 
@@ -14,8 +14,8 @@ function ensureDefs(svg: SVGSVGElement): SVGDefsElement {
   return defs;
 }
 
-/** Create a `<clipPath>` mirroring `shape` and return a `url(#id)`
- *  string for use with `clip-path`. */
+/** Install a `<clipPath>` mirroring `shape` and return a `url(#id)`
+ *  for use with the CSS `clip-path` property. */
 export function clipPath(scene: Scene, shape: Shape): string {
   const target = shape.intrinsic ?? shape.el;
   if (!target.id) target.id = `clip-target-${nextId++}`;

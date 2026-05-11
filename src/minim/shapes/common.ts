@@ -1,4 +1,4 @@
-// Shared style opts + applier for stroked/filled shapes.
+// Shared style options + applier for stroked/filled shapes.
 
 import { computed, toSig, type Arg } from "../core";
 import type { AnyShape, ShapeOpts } from "../scene";
@@ -7,8 +7,7 @@ import { dashedPath } from "./dashed";
 
 const NSS = "non-scaling-stroke";
 
-/** `fill: true` → stroke color; `Arg<string>` → that color;
- *  `undefined` (default) → no fill. */
+/** `fill: true` → stroke color; string → that color; omitted → no fill. */
 export interface CommonOpts extends ShapeOpts {
   stroke?: Arg<string>;
   strokeWidth?: Arg<number>;
@@ -19,8 +18,7 @@ export interface CommonOpts extends ShapeOpts {
   fill?: Arg<string> | true;
 }
 
-/** Apply stroke + fill + linecap/join. Dashing is handled separately
- *  by `setupDashed`. */
+/** Apply stroke + fill + linecap/join. Dashing is `setupDashed`. */
 export function applyOpts<S extends AnyShape>(s: S, opts: CommonOpts): void {
   s.attr("stroke", opts.stroke ?? tokens.stroke);
   s.attr(
@@ -36,9 +34,9 @@ export function applyOpts<S extends AnyShape>(s: S, opts: CommonOpts): void {
   else s.attr("fill", opts.fill);
 }
 
-/** Bind a reactive `<path>` `d` from `s.segments()` when `dashed`
- *  is set. `capExtension` scales with stroke width so the visible
- *  dash/gap ratio stays consistent across weights. */
+/** When `dashed`, bind a reactive `<path>` `d` from `s.segments()`.
+ *  `capExtension` compensates for round caps so the visible dash/gap
+ *  ratio stays consistent across stroke weights. */
 export function setupDashed<S extends AnyShape>(
   s: S,
   opts: CommonOpts,

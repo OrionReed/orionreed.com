@@ -60,9 +60,8 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
       const t = toward.value;
       const c = this.center.value;
       const sc = this.scale.value;
-      // Visual radius respects the shape's own scale so the boundary
-      // tracks pulses; for non-uniform scale we treat the result as a
-      // circle of the larger axis (close enough for ports/connectors).
+      // Boundary tracks the visual radius so pulses scale it; for
+      // non-uniform scale, approximate as a circle of the larger axis.
       const r = this.radius.value * Math.max(sc.x, sc.y);
       const len = Math.hypot(t.x - c.x, t.y - c.y) || 1;
       return {
@@ -72,8 +71,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
     });
   }
 
-  /** Two half-arcs — keeps each span ≤ π so SVG's `largeArc` flag
-   *  stays unambiguous. */
+  /** Two half-arcs so each span stays ≤ π (keeps `largeArc` unambiguous). */
   override segments(): Segment[] {
     const cx = () => this.center.x.value;
     const cy = () => this.center.y.value;

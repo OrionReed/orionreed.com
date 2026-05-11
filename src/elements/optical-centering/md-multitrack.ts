@@ -1,15 +1,5 @@
-// Multi-track timeline editor. Demonstrates:
-//
-//   - `timeline({...})` with explicit `{at, dur}` per clip — overlap,
-//     gaps, multiple tracks all expressible.
-//   - Drag-to-move a whole clip (changes `at`).
-//   - Drag the start handle to resize from the start (`at` and `dur`
-//     both update so the end stays put).
-//   - Drag the end handle to resize from the end (`dur` only).
-//   - Multiple animation properties of one shape driven simultaneously
-//     by overlapping clips — fade-in, oscillating scale, oscillating
-//     shift, fade-out — all reactive on `clip.t`.
-//   - `snapshot(tl.clock)` for the loop reset.
+// Multi-track timeline editor — overlapping clips, drag-to-edit
+// handles, one ball driven by all four clip progresses in parallel.
 
 import {
   Diagram,
@@ -46,7 +36,7 @@ export class MdMultitrack extends Diagram {
     const H = 320;
     s.view(0, 0, W, H);
 
-    // Free-form clips. Overlap is fine; each gets explicit at + dur.
+    // Overlap is fine; each clip has its own at + dur.
     const tl = timeline({
       fadeIn:  { at: 0,   dur: 1.0 },
       scale:   { at: 0.4, dur: 2.6 },
@@ -56,8 +46,7 @@ export class MdMultitrack extends Diagram {
 
     const reset = snapshot(tl.clock);
 
-    // Each clip: row in the strip + colour. Order matters for render
-    // order (later clips draw on top).
+    // Order matters for render order (later clips draw on top).
     const tracks = [
       { name: "fadeIn",  clip: tl.fadeIn,  row: 0, color: "#5b8def" },
       { name: "fadeOut", clip: tl.fadeOut, row: 0, color: "#e25c5c" },
@@ -65,7 +54,7 @@ export class MdMultitrack extends Diagram {
       { name: "shift",   clip: tl.shift,   row: 2, color: "#7ed321" },
     ];
 
-    // ── Strip background ─────────────────────────────────────────────
+    // ── Strip ─────────────────────────────────────────────────────
     const STRIP_W = W - 2 * STRIP_X;
     const SCALE = computed(() =>
       tl.duration.value > 0 ? STRIP_W / tl.duration.value : 0,
@@ -83,13 +72,13 @@ export class MdMultitrack extends Diagram {
       }));
     }
 
-    // ── Each clip: body + start handle + end handle + label ─────────
+    // ── Each clip: body + start/end handles + label ────────────────
     tracks.forEach(({ name, clip, row, color }) => {
       const trackY = STRIP_Y + STRIP_PAD + row * TRACK_H;
       const bodyY = trackY + 2;
       const bodyH = TRACK_H - 4;
 
-      // Body — drag to move the whole clip.
+      // Body — drag to move the clip.
       const body = s(rect(
         clip.at.derive(a => STRIP_X + a * SCALE.value),
         bodyY,
@@ -98,8 +87,8 @@ export class MdMultitrack extends Diagram {
         { fill: color, opacity: 0.78, corner: 3, stroke: "none" },
       ));
 
-      // Capture click offset (in clip-time units) on pointerdown so the
-      // clip moves under the cursor at the same point user grabbed.
+      // Capture click offset (clip-time units) so the clip stays under
+      // the cursor at the original grab point.
       let clickOffset = 0;
       body.on("pointerdown", (e) => {
         const local = body.toLocal(e as PointerEvent);
@@ -110,7 +99,7 @@ export class MdMultitrack extends Diagram {
         clip.at.value = Math.max(0, cursorTime - clickOffset);
       });
 
-      // Start handle — drag changes `at` while keeping `end` fixed.
+      // Start handle — drags `at` while keeping `end` fixed.
       const startKnob = s(circle(
         pt(clip.at.derive(a => STRIP_X + a * SCALE.value), trackY + TRACK_H / 2),
         4.5,
@@ -127,7 +116,7 @@ export class MdMultitrack extends Diagram {
         clip.dur.value = snapEnd - newAt;
       });
 
-      // End handle — drag changes `dur` while keeping `at` fixed.
+      // End handle — drags `dur` while keeping `at` fixed.
       const endKnob = s(circle(
         pt(clip.end.derive(e => STRIP_X + e * SCALE.value), trackY + TRACK_H / 2),
         4.5,
@@ -142,7 +131,6 @@ export class MdMultitrack extends Diagram {
         clip.dur.value = Math.max(0.05, cursorTime - snapAt);
       });
 
-      // Label inside the clip.
       s(label(
         pt(
           computed(() => STRIP_X + (clip.at.value + clip.dur.value / 2) * SCALE.value),
@@ -153,22 +141,20 @@ export class MdMultitrack extends Diagram {
       ));
     });
 
-    // Playhead.
     s(line(
       pt(tl.t.derive(t => STRIP_X + t * STRIP_W), STRIP_Y - 4),
       pt(tl.t.derive(t => STRIP_X + t * STRIP_W), STRIP_Y + STRIP_H_TOTAL + 4),
       { strokeWidth: 1.5, aside: true },
     ));
 
-    // ── Visualization: one ball, four overlapping behaviours ───────
+    // ── Stage: one ball driven by all four clip progresses ────────
     const STAGE_Y = 210;
     const STAGE_X = W / 2;
 
-    // Each clip drives a different aspect via signal math:
-    //   fadeIn.t ⇒ opacity ramps up
-    //   scale.t ⇒ radius oscillates (sin → 0 at endpoints, peak at midpoint)
-    //   shift.t ⇒ x-offset oscillates the same way
-    //   fadeOut.t ⇒ opacity ramps down
+    //   fadeIn.t  → opacity ramps up
+    //   scale.t   → radius oscillates (sin: 0 at endpoints)
+    //   shift.t   → x oscillates the same way
+    //   fadeOut.t → opacity ramps down
     const ballX = computed(
       () => STAGE_X + Math.sin(tl.shift.t.value * Math.PI) * 110,
     );
@@ -184,7 +170,7 @@ export class MdMultitrack extends Diagram {
       opacity: ballOpacity,
     }));
 
-    // ── Header + instructions ──────────────────────────────────────
+    // ── Footer ─────────────────────────────────────────────────────
     s(label(
       pt(W / 2, H - 32),
       computed(() =>
@@ -198,7 +184,6 @@ export class MdMultitrack extends Diagram {
       { size: 10, opacity: 0.5, align: align.center },
     ));
 
-    // ── Loop ───────────────────────────────────────────────────────
     this.anim.loop(function* () {
       reset();
       yield* tl;

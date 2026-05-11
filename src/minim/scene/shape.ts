@@ -28,8 +28,8 @@ import type { Awaitable } from "../core/anim";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
-/** A stroke segment — line or arc. Used by `Shape.segments()` to drive
- *  dashed rendering; subclasses override to expose their geometry. */
+/** A stroke segment — line or arc. Subclasses override `segments()`
+ *  to expose their geometry to the dashed renderer. */
 export type Segment =
   | { type: "line"; from: Pointlike; to: Pointlike }
   | {
@@ -41,17 +41,13 @@ export type Segment =
       a1: () => number;
     };
 
-/** Construction-time options shared by every Shape. Animatable props
- *  accept `Arg<T>` (value / Signal / thunk) — Points satisfy
- *  `Arg<Vec>` directly because they extend `Signal<Vec>`.
+/** Construction options shared by every Shape.
  *
- *  `origin` is the local-frame point about which `rotate` and `scale`
- *  are applied. Subclasses pick sensible defaults (circle's center,
- *  rect's bbox center, …); groups default to `(0, 0)`.
- *
- *  `aside` excludes this shape from its parent's children-union bounds
- *  (and transitively from auto-fit) — for decorative overlays that
- *  shouldn't extend the diagram's natural extent. */
+ *  - Animatable props accept `Arg<T>` (value / Signal / thunk).
+ *  - `origin` is the local-frame pivot for `rotate` / `scale`;
+ *    subclasses pick sensible defaults.
+ *  - `aside` excludes this shape from its parent's bounds (and
+ *    auto-fit) — for decorative overlays. */
 export interface ShapeOpts {
   translate?: Arg<Vec>;
   rotate?: Arg<number>;
@@ -65,15 +61,12 @@ type Lookup<O, K extends keyof ShapeOpts> = K extends keyof O
   ? O[K]
   : undefined;
 
-/** Wide-form escape hatch — sidesteps invariant generic mismatches
- *  caused by the conditional prop types. Reach for this when you need
- *  to accept shapes with readonly props alongside default-writable
- *  ones (e.g. heterogeneous parent/child collections). For the common
- *  case prefer `Shape` and let the type system catch mismatches. */
+/** Wide-form escape hatch for heterogeneous shape collections — sidesteps
+ *  the conditional-prop generic. Prefer `Shape` or `Writable<K>` when
+ *  you can. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyShape = Shape<any>;
 
-/** The animatable props a Shape exposes as `Signal`-backed fields. */
 export type AnimatableKey =
   | "translate"
   | "rotate"
@@ -81,9 +74,7 @@ export type AnimatableKey =
   | "origin"
   | "opacity";
 
-/** Concrete field type for each animatable prop — Vec props are
- *  `Point` (writable, with lens-backed `.x` / `.y` axes); scalar props
- *  are plain `Signal<number>`. Mirrors what `Shape` actually exposes. */
+/** Resolved field type per animatable prop. */
 type AnimatableField<K extends AnimatableKey> = K extends
   | "translate"
   | "scale"
@@ -91,24 +82,21 @@ type AnimatableField<K extends AnimatableKey> = K extends
   ? Point
   : Signal<number>;
 
-/** Constrain to "any object with these animatable props writable."
- *  Combinable via union — `Writable<"translate" | "opacity">` requires
- *  both props writable. Use for helpers that animate specific props
- *  but should still accept shapes whose *other* props are readonly.
- *  Vec props resolve to `Point`, so axis tweens (`s.translate.x.to(...)`)
- *  are available. */
+/** "Any shape whose listed props are writable." Combinable via union —
+ *  use in helpers that animate specific props but should still accept
+ *  shapes with other props readonly. */
 export type Writable<K extends AnimatableKey> = {
   readonly [P in K]: AnimatableField<P>;
 };
 
 /** Universal scene-graph node. Wraps an SVG `<g>` (transform + opacity
- *  + children); subclasses add an intrinsic SVG element and geometry-
- *  specific vocabulary. A bare `new Shape()` is a group.
+ *  + children); subclasses add an intrinsic element and geometry.
+ *  A bare `new Shape()` is a group.
  *
- *  Generic over `O` so each animatable prop's type tracks the user's
- *  input — `computed(...)` → readonly field (writes are compile errors),
- *  value/Signal → writable. Plain `Shape` (no generic) resolves to
- *  writable-everywhere; see `Writable<K>` for the in-between case. */
+ *  Generic over `O` so user-supplied prop types flow through — a
+ *  `computed` field becomes readonly (writes are compile errors),
+ *  Signal/value stays writable. Plain `Shape` is writable everywhere;
+ *  for the mixed case see `Writable<K>`. */
 export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly el: SVGGElement;
   readonly intrinsic?: SVGElement;
@@ -118,14 +106,11 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly scale: ResolveVec<Lookup<O, "scale">>;
   readonly origin: ResolveVec<Lookup<O, "origin">>;
   readonly opacity: ResolveSig<Lookup<O, "opacity">, number>;
-  /** Local-frame AABB. Lazy — only evaluates when read, so a diagram
-   *  that never calls `s.fit()` / `connect` / layout helpers pays
-   *  nothing for bounds. For groups it's the union of non-aside
-   *  children's bounds composed through each child's transform. */
+  /** Local-frame AABB; lazy. For groups, the union of non-aside
+   *  children's bounds (each composed through its transform). */
   readonly bounds: Bounds;
-  /** Composed `translate × pivoted-rotate × pivoted-scale`, pivoting
-   *  around `origin` (decoupled from `bounds`, so transforms don't
-   *  trigger bounds evaluation). */
+  /** Composed `translate × pivoted-rotate × pivoted-scale`. Decoupled
+   *  from `bounds` so transforms don't trigger bounds evaluation. */
   readonly transform: ReadonlySignal<Matrix2D>;
   readonly aside: boolean;
 
@@ -143,25 +128,23 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     intrinsicType?: string,
     boundsFn?: () => AABB,
     opts: O = {} as O,
-    /** Subclass-supplied per-prop defaults — e.g. Circle wires
-     *  `origin: () => center.value`. Kept off `O` so the field types
-     *  stay driven by user input only. */
+    /** Subclass per-prop defaults (kept off `O` so the field types
+     *  stay driven by user input only). */
     defaults: ShapeOpts = {},
   ) {
     this.el = document.createElementNS(SVG_NS, "g") as SVGGElement;
-    // Use CSS transforms (set below) instead of the SVG `transform`
-    // attribute — the GPU-composited path is significantly faster for
-    // large numbers of animating shapes. Pin transform-origin to the
-    // SVG userspace origin so our composed matrix's pivot math stays
-    // correct (browsers vary on the SVG default).
+    // CSS transforms (vs SVG `transform`) hit the GPU composite path —
+    // significantly faster for many animating shapes. Pin
+    // transform-origin to the SVG userspace origin so our composed
+    // pivot math is correct (browser defaults vary).
     this.el.style.transformOrigin = "0 0";
     if (intrinsicType) {
       this.intrinsic = document.createElementNS(SVG_NS, intrinsicType);
       this.el.appendChild(this.intrinsic);
     }
 
-    // Cast aligns the field's conditional type with the wider return —
-    // runtime is unchanged either way.
+    // Cast narrows the field type from `toPoint`'s wider return; the
+    // runtime is unchanged.
     type CastVec<K extends keyof ShapeOpts> = ResolveVec<Lookup<O, K>>;
     type CastNum<K extends keyof ShapeOpts> = ResolveSig<Lookup<O, K>, number>;
     this.translate = toPoint(opts.translate ?? defaults.translate, {
@@ -215,16 +198,16 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     );
   }
 
-  /** Analytic perimeter point in the direction of `toward`. Default
-   *  is AABB-edge math; tighter shapes (Circle, Rect) override. */
+  /** Perimeter point in the direction of `toward`. Default is AABB-edge
+   *  math; tighter shapes (Circle, Rect) override. */
   boundary(toward: Pointlike): DerivedPoint {
     return new DerivedPoint(() =>
       aabbEdgeFrom(this.bounds.value, toward.value),
     );
   }
 
-  /** Stroke segments — used by dashed rendering. Default is the
-   *  bounding rect (4 sides, no corners). */
+  /** Stroke segments — used by the dashed renderer. Default is the
+   *  bounding rect. */
   segments(): Segment[] {
     const b = this.bounds.value;
     const tl = pt(b.x, b.y);
@@ -239,8 +222,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     ];
   }
 
-  /** Bind one SVG attribute. Static value sets once; Signal or thunk
-   *  sets up a reactive effect. */
+  /** Bind one SVG attribute. Static value sets once; Signal/thunk
+   *  runs as a reactive effect. */
   attr(
     name: string,
     value: Arg<string | number>,
@@ -258,21 +241,20 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     }
   }
 
+  /** Register a disposer to run on `dispose()`. */
   track(dispose: () => void): void {
     this.disposers.push(dispose);
   }
 
-  /** Sugar for `track(effect(fn))` — runs reactively, torn down with
-   *  the shape. */
+  /** Reactive effect torn down with the shape. */
   effect(fn: () => void): void {
     this.disposers.push(effect(fn));
   }
 
   // ── DOM events ──────────────────────────────────────────────────────
 
-  /** Subscribe to a DOM event on this shape's element. Returns a
-   *  disposer that detaches the listener; cleanup is also automatic
-   *  when the shape disposes. */
+  /** Subscribe to a DOM event on the wrapper `<g>`. Returns a disposer;
+   *  also auto-detaches on shape dispose. */
   on(
     name: string,
     handler: (e: Event) => void,
@@ -285,10 +267,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     return dispose;
   }
 
-  /** Awaitable that resumes on the next DOM event of `name`. Use as
-   *  `yield s.until("click")` (note: no `*` — it's an Awaitable, not
-   *  a generator). Zero-latency: the listener fires inside the same
-   *  call stack as the underlying event. */
+  /** Awaitable that wakes on the next `name` event. `yield s.until("click")`
+   *  (no `*` — it's an Awaitable, not a generator). */
   until(name: string): Awaitable {
     return (wake) => {
       const handler = () => wake();
@@ -297,8 +277,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     };
   }
 
-  /** Convert client-space coordinates (e.g. `evt.clientX/clientY`) to
-   *  this shape's local frame via `getScreenCTM`. */
+  /** Map client-space coords (e.g. `evt.clientX/clientY`) into this
+   *  shape's local frame via `getScreenCTM`. */
   toLocal(evt: { clientX: number; clientY: number }): Vec {
     const target = (this.intrinsic ?? this.el) as SVGGraphicsElement;
     const ctm = target.getScreenCTM();
@@ -355,8 +335,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
 // ── Cross-frame helpers ─────────────────────────────────────────────
 
-/** AABB of `shape` in the scene-root frame. Reactive in any shape's
- *  transform along the parent chain. */
+/** `shape`'s AABB in the scene-root frame. */
 export function boundsInRoot(shape: AnyShape): ReadonlySignal<AABB> {
   return computed(() => {
     let m = shape.transform.value;
@@ -369,8 +348,7 @@ export function boundsInRoot(shape: AnyShape): ReadonlySignal<AABB> {
   });
 }
 
-/** AABB of `shape` expressed in `observer`'s local frame. Useful for
- *  `connect`/`arrow` calls that span subtrees with different transforms. */
+/** `shape`'s AABB in `observer`'s local frame. */
 export function boundsIn(
   shape: AnyShape,
   observer: AnyShape,

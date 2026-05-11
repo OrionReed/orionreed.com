@@ -1,14 +1,12 @@
-// Behaviors: open-ended, frame-driven generators that animate a signal
-// without a fixed duration. Each is a thin wrapper around an `Animator`
-// that integrates a per-frame `dt` into the signal's value. They never
-// pre-allocate samples — the loop body is always proportional to one
-// step (a few flops). Pair with `anim.run(...)` (returns a disposer)
-// or `until(trigger, behavior)` / `race(...)` for bounded use.
+// Open-ended, frame-driven dynamics — generators that integrate `dt`
+// into a signal. No pre-allocated samples; the loop body is a handful
+// of flops per step. Pair with `anim.run(...)` (forever) or
+// `until(trigger, …)` / `race(...)` for bounded use.
 //
 // Motion stdlib taxonomy:
-//   transitions — bounded, pose → tween (`fadeUp`, `slideIn`, …)
-//   tweens      — `sig.to(target, sec)` — explicit duration, easing
-//   behaviors   — open-ended dynamics (this file)
+//   transitions   — bounded pose-then-tween (`fadeUp`, `slideIn`, …)
+//   tweens        — `sig.to(target, sec)` — explicit duration, easing
+//   behaviors     — open-ended dynamics (this file)
 //   choreographers — multi-shape coordination (`swap`, `stagger`, …)
 
 import type { Animator, Arg } from "../core";
@@ -16,21 +14,18 @@ import { toSig } from "../core";
 import type { Signal } from "../core/signal";
 
 export interface SpringOpts {
-  /** Stiffness — pull strength (default 170, Framer-style critical). */
+  /** Stiffness — pull strength. Default 170 (Framer-style critical). */
   stiffness?: number;
-  /** Damping — velocity drag (default 26 for visual critical-damping). */
+  /** Damping — velocity drag. Default 26. */
   damping?: number;
-  /** Settle threshold. When `|dx| < precision` and `|v| < precision`
-   *  for one frame, snap to target and complete. `0` (default) runs
-   *  forever — handy when the target is itself moving. */
+  /** Settle threshold. When `|dx|` and `|v|` are both below this for
+   *  one frame, snap to target and complete. `0` (default) runs
+   *  forever — handy when the target keeps moving. */
   precision?: number;
 }
 
-/** Critically-damped spring chase. Each frame, integrate
- *  `a = stiffness · (target − sig) − damping · v` and apply velocity.
- *  Reactive: `target` may be a signal, so the follower keeps chasing
- *  a moving point. Cancel via `anim.run(...)`'s disposer or wrap in
- *  `until(trigger, spring(...))` for bounded use. */
+/** Critically-damped spring chase. `target` may be a signal — the
+ *  follower keeps chasing a moving point. */
 export function* spring(
   sig: Signal<number>,
   target: Arg<number>,
@@ -42,7 +37,7 @@ export function* spring(
   const eps = opts.precision ?? 0;
   let v = 0;
   while (true) {
-    const dt: number = yield;
+    const dt = yield;
     const dx = tgt.value - sig.value;
     v += (k * dx - c * v) * dt;
     sig.value += v * dt;
@@ -53,9 +48,8 @@ export function* spring(
   }
 }
 
-/** Sinusoidal oscillation around `sig`'s value at start. `amp` and
- *  `freq` (Hz) may be reactive — dial them while the loop runs.
- *  Never returns; cancel via the run disposer. */
+/** Sinusoidal oscillation around `sig`'s initial value. `amp` and
+ *  `freq` (Hz) may be reactive. Never returns. */
 export function* oscillate(
   sig: Signal<number>,
   amp: Arg<number>,
@@ -66,7 +60,7 @@ export function* oscillate(
   const base = sig.peek();
   let t = 0;
   while (true) {
-    const dt: number = yield;
+    const dt = yield;
     t += dt;
     sig.value = base + A.value * Math.sin(2 * Math.PI * F.value * t);
   }
@@ -76,15 +70,14 @@ export function* oscillate(
 export function* drift(sig: Signal<number>, vel: Arg<number>): Animator {
   const V = toSig(vel);
   while (true) {
-    const dt: number = yield;
+    const dt = yield;
     sig.value += V.value * dt;
   }
 }
 
-/** Soft attractor — exponential pull toward `target` with rate `k`
- *  per second (1 = ~63% of distance closed in 1s). Asymmetric with
- *  `spring`: no overshoot, no velocity. Useful for cursor-trail follow,
- *  smoothed inputs, low-pass filters on noisy signals. */
+/** Exponential pull toward `target` with rate `k` per second (k=1
+ *  closes ~63% of distance per second). No overshoot, no velocity —
+ *  good for trails, smoothing, low-pass filters. */
 export function* attract(
   sig: Signal<number>,
   target: Arg<number>,
@@ -93,7 +86,7 @@ export function* attract(
   const T = toSig(target);
   const K = toSig(k);
   while (true) {
-    const dt: number = yield;
+    const dt = yield;
     sig.value += (T.value - sig.value) * K.value * dt;
   }
 }

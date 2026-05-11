@@ -1,21 +1,13 @@
-// Span recording, externalized from `Anim`. Subscribes via `anim.observe`
-// and builds a flat span list with the same shape the previous in-core
-// `Anim.trace()` returned. Pure consumer — the runtime knows nothing
-// about spans, only about lifecycle events (spawn / complete / cancel).
-//
-// Tag association is via a WeakMap keyed on the spawned generator (see
-// `./tag`); the runtime hands the gen reference to `observe`'s spawn
-// listener, and we look it up here.
+// Span recording via `anim.observe`. Pure consumer — the runtime
+// knows nothing about spans, only lifecycle events. Tags are looked
+// up from a WeakMap keyed on the spawned generator (see `./tag`).
 
 import type { Anim, Animator } from "../core/anim";
 import { tagOf } from "./tag";
 
-/** A single generator's lifecycle as flat data. `completedAt` is set
- *  on natural completion *and* on cancel — consumers reading still-open
- *  spans see `undefined`. Spawn order matches insertion order in
- *  `Trace.spans`; `parentId` walks the spawn tree. `tag` is set at
- *  spawn time from the generator's `tagOf` weak-map entry if present
- *  (see `./tag`). */
+/** One generator's lifecycle as flat data. `completedAt` is set on
+ *  natural completion *and* on cancel; still-open spans read
+ *  `undefined`. `tag` is set at spawn time if the generator has one. */
 export type Span = {
   readonly id: number;
   readonly parentId?: number;
@@ -24,31 +16,22 @@ export type Span = {
   completedAt?: number;
 };
 
-/** Live recording of generator lifecycle, started by `spans(anim)`.
- *  `spans` mutates in place — new entries on spawn, `completedAt` set
- *  on completion/cancel. `onChange` lets consumers subscribe to
- *  structural changes; sparse, event-paced. Purely data; views (tree,
- *  gantt, equality) live outside this module. */
+/** Live recording of generator lifecycle. `spans` mutates in place;
+ *  `onChange` notifies on structural changes (sparse, event-paced).
+ *  Views (tree, gantt) live outside this module. */
 export type Trace = {
   readonly spans: readonly Span[];
-  /** Wall-clock span of the trace: `max(completedAt ?? clock) − min(spawnedAt)`. */
+  /** Wall-clock duration: `max(completedAt ?? clock) − min(spawnedAt)`. */
   duration(): number;
-  /** Subscribe to structural changes (spawn / complete / cancel).
-   *  Returns a disposer. Wrap with `counter` from core for a
-   *  signal-flavored adapter. */
+  /** Subscribe to spawn/complete/cancel events. Wrap with `counter`
+   *  for a signal adapter. */
   onChange(cb: () => void): () => void;
   /** Stop collecting; the existing `spans` array is yours to keep. */
   stop(): void;
 };
 
-/** Begin recording lifecycle of every generator spawned from now on
- *  (already-running generators are not retroactively included). The
- *  returned `spans` array fills live as actives spawn and complete;
- *  `completedAt` is set on natural completion and on cancel.
- *
- *  Single-recorder per Anim — calling `spans(anim)` again replaces the
- *  observation; the previous `Trace`'s array stays for inspection but
- *  receives no further updates. */
+/** Begin recording every generator spawned from now on (already-
+ *  running ones aren't retroactively included). */
 export function spans(anim: Anim): Trace {
   const list: Span[] = [];
   const byId = new Map<number, Span>();
@@ -83,8 +66,8 @@ export function spans(anim: Anim): Trace {
 
   return {
     spans: list,
-    /** In-flight bars use `anim.clock` directly so the duration grows
-     *  per-frame, not just on lifecycle events. */
+    // Use `anim.clock` directly so in-flight bars grow per-frame, not
+    // just on lifecycle events.
     duration() {
       if (list.length === 0) return 0;
       const now = anim.clock;

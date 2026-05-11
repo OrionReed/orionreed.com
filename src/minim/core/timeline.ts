@@ -1,63 +1,40 @@
-// Timeline + Clip primitive. A timeline is a clock plus named clips
-// (each a `[at, at + dur)` interval); progress within each clip is
-// derived from the clock. Yieldable: `yield* tl` advances the clock
-// from current to total `duration`, then completes.
-//
-// For the common "sequential phases" pattern, `sequential({...})`
-// produces clip specs whose `at`s are reactive cumulative starts —
-// editing one duration ripples through to subsequent starts.
+// Timeline + Clip. A timeline is a clock plus named clips (each an
+// `[at, at + dur)` interval); `yield* tl` advances the clock to
+// `duration`. `sequential({...})` produces cumulative-start specs.
 
-import {
-  signal,
-  computed,
-  type Signal,
-  type ReadonlySignal,
-} from "./signal";
+import { signal, computed, type Signal, type ReadonlySignal } from "./signal";
 import { toSig, type Arg, type NumSig, type ResolveSig } from "./arg";
 import type { Animator } from "./anim";
 
 // ── Types ────────────────────────────────────────────────────────────
 
-/** A clip on a timeline: an interval `[at, at + dur)` whose progress
- *  `t` is derived from the timeline's clock. The `t` extends past the
- *  endpoints (0 before, 1 after) so derivations like
- *  `clip.t.derive(easeInOut)` work for fades, holds, and oscillations
- *  without conditional checks. */
+/** A clip on a timeline. `t` extends past the endpoints (0 before,
+ *  1 after) so `clip.t.derive(ease)` works without conditional checks. */
 export type Clip<A = number, D = number> = {
-  /** Start time. Editable iff the user passed a writable signal/literal. */
+  /** Start. Writable iff caller passed a writable signal/literal. */
   readonly at: ResolveSig<A, number>;
   /** Duration. Same writability rules as `at`. */
   readonly dur: ResolveSig<D, number>;
-  /** `at + dur`, reactive. */
   readonly end: ReadonlySignal<number>;
-  /** Progress: 0 before `at`, 0..1 from `at` to `end`, 1 after `end`. */
+  /** Progress: 0 before `at`, 0..1 within, 1 after `end`. */
   readonly t: ReadonlySignal<number>;
-  /** True iff `at <= clock < end`. */
   readonly active: ReadonlySignal<boolean>;
 };
 
-/** Internal — input shape for `timeline()`. Not exported; users either
- *  pass object literals (whose types are inferred) or feed `sequential()`'s
- *  output through. */
 type ClipSpec = { at: Arg<number>; dur: Arg<number> };
 
 export interface Timeline {
-  /** Current playhead time in seconds; writable for scrubbing or reset. */
   readonly clock: Signal<number>;
-  /** `max(end)` across all clips, reactive in clip durations and starts. */
   readonly duration: ReadonlySignal<number>;
-  /** `clock / duration`, clamped to [0, 1]. */
+  /** `clock / duration`, clamped to `[0, 1]`. */
   readonly t: ReadonlySignal<number>;
-  /** All clips in insertion order. */
   readonly clips: readonly Clip[];
-  /** Yielding the timeline advances `clock` from current to `duration`,
-   *  then completes. No auto-reset — for loops, write `clock.value = 0`
-   *  at the top of the loop body (or use `snapshot(tl.clock)`). */
+  /** `yield* tl` advances `clock` to `duration`. No auto-reset — for
+   *  loops, use `snapshot(tl.clock)`. */
   [Symbol.iterator](): Animator;
 }
 
-/** Type-preserving named-clip access: each named clip's at/dur
- *  writability is preserved from the input via `ResolveSig`. */
+/** Type-preserving named-clip access via `ResolveSig`. */
 export type TimelineOf<T extends Record<string, ClipSpec>> = Timeline & {
   readonly [K in keyof T]: T[K] extends { at: infer A; dur: infer D }
     ? Clip<A, D>
@@ -91,7 +68,7 @@ class TimelineImpl implements Timeline {
 
   *[Symbol.iterator](): Animator {
     while (this.clock.value < this.duration.value) {
-      const dt: number = yield;
+      const dt = yield;
       this.clock.value += dt;
     }
   }
@@ -116,10 +93,9 @@ function makeClip(spec: ClipSpec, clock: Signal<number>): Clip {
   return { at, dur, end, t, active } as Clip;
 }
 
-/** Construct a timeline from a record of clip specs. Each spec is
- *  `{ at, dur }` where both accept literal numbers, signals, or thunks.
- *  Clips can overlap freely and leave gaps — `at` is independent per
- *  clip (no auto-cumulative). For sequential clips, see `sequential()`. */
+/** Build a timeline from a record of clip specs. `at` and `dur` accept
+ *  numbers, signals, or thunks; clips can overlap or leave gaps. For
+ *  cumulative-start sequential clips, see `sequential()`. */
 export function timeline<T extends Record<string, ClipSpec>>(
   specs: T,
 ): TimelineOf<T> {
@@ -131,8 +107,8 @@ export function timeline<T extends Record<string, ClipSpec>>(
     clips.push(clip);
     named[key] = clip;
   }
-  const tl = new TimelineImpl(clock, clips) as TimelineImpl & Record<string, Clip>;
-  // Attach named clips for `tl.intro` etc. (typed via TimelineOf).
+  const tl = new TimelineImpl(clock, clips) as TimelineImpl &
+    Record<string, Clip>;
   Object.assign(tl, named);
   return tl as TimelineOf<T>;
 }
@@ -141,20 +117,21 @@ export function timeline<T extends Record<string, ClipSpec>>(
 
 type Durations = Record<string, Arg<number>>;
 
-/** Cumulative-start helper. Takes a record of durations and returns
- *  clip specs whose `at`s are reactive sums of prior durations.
+/** Cumulative-start helper. Each clip's `at` is the reactive sum of
+ *  prior durations, so editing one duration ripples through. `at` is
+ *  a `ReadonlySignal` (use `timeline()` directly for draggable starts).
  *
- *      const tl = timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));
- *      // tl.intro.at = 0; tl.hold.at = intro.dur; tl.outro.at = intro.dur + hold.dur.
- *
- *  Sequential clips' `at` is a derived `ReadonlySignal` (not writable);
- *  users edit `dur`s and starts ripple through. For independent draggable
- *  clip starts, pass explicit specs to `timeline()` instead. */
+ *      timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));
+ */
 export function sequential<T extends Durations>(
   durs: T,
-): { [K in keyof T]: { at: ReadonlySignal<number>; dur: ResolveSig<T[K], number> } } {
+): {
+  [K in keyof T]: { at: ReadonlySignal<number>; dur: ResolveSig<T[K], number> };
+} {
   const keys = Object.keys(durs) as Array<keyof T>;
-  const durSigs: NumSig[] = keys.map((k) => toSig(durs[k] as Arg<number>) as NumSig);
+  const durSigs: NumSig[] = keys.map(
+    (k) => toSig(durs[k] as Arg<number>) as NumSig,
+  );
   const out = {} as Record<string, { at: ReadonlySignal<number>; dur: NumSig }>;
   keys.forEach((key, i) => {
     const idx = i;
@@ -166,6 +143,9 @@ export function sequential<T extends Durations>(
     out[key as string] = { at, dur: durSigs[i] };
   });
   return out as {
-    [K in keyof T]: { at: ReadonlySignal<number>; dur: ResolveSig<T[K], number> };
+    [K in keyof T]: {
+      at: ReadonlySignal<number>;
+      dur: ResolveSig<T[K], number>;
+    };
   };
 }

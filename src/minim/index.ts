@@ -1,9 +1,10 @@
-// minim — retained-mode scene graph on a vendored signals core.
-// Conceptual layout: (space, time) tuple.
-//   core/    — irreducible foundation (signals, shape graph, math)
-//   shapes/  — concrete visuals + layout + list (space stdlib)
-//   motion/  — easings, composers, transitions (time stdlib)
-//   diagram, attr, viewport — consumer scaffold (this folder)
+// minim — generator-driven SVG diagrams with reactive primitives.
+//   core/   — signals, Anim, awaitables, timeline, …
+//   scene/  — Shape, Point, Bounds, aggregates, …
+//   shapes/ — visuals + layout + list (space stdlib)
+//   motion/ — easings, composers, transitions, … (time stdlib)
+//   trace/  — derivations on `Anim.observe`
+//   diagram, attr, viewport — custom-element scaffold
 
 // ── Core ────────────────────────────────────────────────────────────
 export {
@@ -77,7 +78,6 @@ export {
   type Awaitable,
   type Yieldable,
   type SpawnFn,
-  type ObserveListeners,
 } from "./core/anim";
 
 export { EventBus } from "./core/events";
@@ -91,7 +91,7 @@ export {
   until,
 } from "./core/awaitables";
 
-// ── Trace (derivations on top of `Anim.observe`) ────────────────────
+// ── Trace ───────────────────────────────────────────────────────────
 export {
   spans,
   traceTree,

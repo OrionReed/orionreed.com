@@ -1,5 +1,5 @@
-// Shared viewport signal — re-emits on window resize. One resize
-// listener, attached lazily on first call.
+// Shared viewport signal — one lazy resize listener, re-emits on
+// window resize.
 
 import { signal, type ReadonlySignal, type Signal } from "./core";
 

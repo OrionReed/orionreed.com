@@ -22,10 +22,8 @@ export interface PathOpts extends CommonOpts {
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-/** Pure-geometry sampler over a reactive list of Points. The `pts`
- *  signal is read inside every computed, so adding/removing points
- *  (via `Path.to`, `.up`, etc.) re-runs `length`/`at`/`atDistance`/
- *  `tangentAt`/`angleAt` automatically. */
+/** Geometry sampler over a reactive list of Points. `pts` is tracked
+ *  by every computed, so mutating the list re-runs sampling. */
 function sampler(pts: Signal<readonly Pointlike[]>) {
   const cumLen = computed(() => {
     const points = pts.value;
@@ -43,7 +41,7 @@ function sampler(pts: Signal<readonly Pointlike[]>) {
     return lens[lens.length - 1] ?? 0;
   });
 
-  /** Locate by absolute arc-length `d` (px), clamped to [0, total]. */
+  /** Locate by arc-length `d` (px), clamped to `[0, total]`. */
   const locateAt = (d: number, points: readonly Pointlike[]) => {
     const lens = cumLen.value;
     const total = lens[lens.length - 1] ?? 0;
@@ -72,7 +70,7 @@ function sampler(pts: Signal<readonly Pointlike[]>) {
     return sampleAt(computed(() => clamp01(ts.value) * length.value));
   };
 
-  /** Sample at absolute arc-length distance (px from start). */
+  /** Sample at absolute arc-length (px from start). */
   const atDistance = (d: Arg<number>): DerivedPoint => sampleAt(toSig(d));
 
   const tangentAt = (t: Arg<number>): DerivedPoint => {
@@ -101,16 +99,14 @@ function sampler(pts: Signal<readonly Pointlike[]>) {
   return { length, at, atDistance, tangentAt, normalAt, angleAt };
 }
 
-/** Open or closed polyline through a list of reactive Points.
+/** Open or closed polyline through a reactive list of Points.
  *
- *   path(start, opts?).to(p2).to(p3)        — fluent (preferred)
- *   new Path([p1, p2, p3], opts?)           — explicit array
+ *   path(start, opts?).to(p2).to(p3)   — fluent (preferred)
+ *   new Path([p1, p2, p3], opts?)      — explicit array
  *
- *  All extension methods (`to`/`up`/`down`/`left`/`right`/`offset`/
- *  `along`) mutate the points list in place and return `this`, so
- *  chaining works without producing intermediate Shapes. The `d`
- *  attribute and all sampling methods (`at`/`atDistance`/`length`/
- *  …) re-run automatically when points change. */
+ *  Extension methods (`to`/`up`/`down`/`left`/`right`/`offset`/`along`)
+ *  mutate in place and return `this`. The `d` attribute and all
+ *  sampling methods react to point changes automatically. */
 export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   private readonly _points: Signal<readonly Pointlike[]>;
   readonly closed: boolean;
@@ -147,8 +143,8 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
       },
       opts,
       {
-        // First vertex — consistent with `path.at(0)`. Authors with a
-        // richer "path center" can override.
+        // First vertex — matches `path.at(0)`. Override via `origin`
+        // for a different pivot.
         origin: () => {
           const ps = points.value;
           return ps.length > 0 ? ps[0].value : { x: 0, y: 0 };
@@ -167,7 +163,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
     this.normalAt = s.normalAt;
     this.angleAt = s.angleAt;
 
-    // Dashed paths get their `d` from `setupDashed` instead.
+    // Dashed paths get `d` from `setupDashed` instead.
     if (!opts.dashed) {
       this.attr(
         "d",
@@ -187,7 +183,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
     applyOpts(this, opts);
   }
 
-  /** Snapshot of the current points list (untracked). */
+  /** Untracked snapshot of the points list. */
   get points(): readonly Pointlike[] {
     return this._points.peek();
   }
@@ -245,8 +241,8 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   }
 }
 
-/** Start a fluent path at `start`. Returns a Path you can chain on
- *  (`.to(p)`, `.up(n)`, etc.) and pass to `s(...)` to render. */
+/** Start a fluent path at `start`. Chain `.to(p)`/`.up(n)`/etc. and
+ *  pass to `s(...)` to render. */
 export const path = <const O extends PathOpts>(
   start: Pointlike,
   opts?: O,

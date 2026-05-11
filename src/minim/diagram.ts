@@ -1,5 +1,5 @@
 // Custom-element scaffold. Subclasses override `scene(s)` to build
-// the graph; signal reactivity drives all updates.
+// the graph; signals drive updates.
 
 import { Anim } from "./core";
 import { Shape, SVG_NS, makeScene, type Scene } from "./scene";
@@ -25,8 +25,8 @@ export class Diagram extends HTMLElement {
   protected shadow: ShadowRoot;
   protected anim = new Anim();
   protected svg!: SVGSVGElement;
-  /** The Scene built in `scene(s)` — accessible from event handlers
-   *  and lifecycle hooks. Same handle that's passed to `scene(s)`. */
+  /** Same handle passed to `scene(s)` — available in event handlers
+   *  and lifecycle hooks. */
   protected s!: Scene;
 
   private static styleSheets = new Map<string, CSSStyleSheet>();
@@ -59,8 +59,8 @@ export class Diagram extends HTMLElement {
     this.initializeStyles();
   }
 
-  /** Build the scene graph. Override in subclasses. Runs once per
-   *  element-connect; reactivity handles dynamic behavior. */
+  /** Build the scene graph. Runs once per element-connect; signals
+   *  handle dynamic behavior. Override in subclasses. */
   protected scene(_s: Scene): void {}
 
   connectedCallback(): void {
@@ -102,7 +102,7 @@ export class Diagram extends HTMLElement {
     this.shadow.appendChild(container);
   }
 
-  /** Combine base + subclass styles, cached per subclass. */
+  /** Combine base + subclass styles. Cached per subclass. */
   private initializeStyles(): void {
     const ctor = this.constructor as typeof Diagram;
     const cacheKey = ctor.name;

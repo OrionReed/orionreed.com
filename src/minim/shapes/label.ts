@@ -5,9 +5,8 @@ import { renderContent, flattenText, type Content } from "./text";
 
 export interface LabelOpts extends ShapeOpts {
   size?: Arg<number>;
-  /** Which point on the label's bbox sits at the `at` point.
-   *  `{x:0, y:0}` = top-left at `at`, `{x:0.5, y:0.5}` (default) =
-   *  center at `at`. See the `align` namespace for named consts. */
+  /** Bbox point that sits at `at` — `{0, 0}` = top-left, `{0.5, 0.5}`
+   *  (default) = center. See `align` for named consts. */
   align?: Vec;
   bold?: boolean;
 }
@@ -34,8 +33,7 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
         return aabb(at.x.value - a.x * w, at.y.value - a.y * fs, w, fs);
       },
       opts,
-      // Origin = the `at` point so rotations hinge there, not on the
-      // bbox center.
+      // Pivot rotations on `at`, not the bbox center.
       { origin: () => at.value },
     );
     this.attr("x", at.x);

@@ -1,6 +1,4 @@
-// `AABB` (snapshot) + `Bounds` (reactive wrapper). `Vec` lives in
-// `./vec` so layer-B utilities can reference it without depending on
-// the scene graph.
+// `AABB` (snapshot) + `Bounds` (reactive wrapper).
 
 import { DerivedPoint, type Pointlike } from "./point";
 import { computed, type ReadonlySignal } from "../core/signal";
@@ -37,7 +35,7 @@ export function unionAABB(...bs: AABB[]): AABB {
   return aabb(xMin, yMin, xMax - xMin, yMax - yMin);
 }
 
-/** Perimeter point on an AABB facing `toward`. Used by the default
+/** Perimeter point on an AABB facing `toward`. Used by default
  *  `Shape.boundary`. */
 export function aabbEdgeFrom(
   b: AABB,

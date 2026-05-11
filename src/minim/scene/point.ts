@@ -1,9 +1,7 @@
-// Reactive 2D point. `pt(x, y)` returns a writable `Point` (extends
-// `Signal<Vec>`) when both args are concrete numbers; otherwise returns
-// a derived `DerivedPoint` (a `ReadonlySignal<Vec>`) whose value follows
-// the inputs. Both pass anywhere `Signal<Vec>` / `ReadonlySignal<Vec>`
-// is expected (`shape.translate`, etc.). Math methods (`add`, `lerp`,
-// `polar`, …) always produce `DerivedPoint` — read-only by design.
+// Reactive 2D point. `pt(x, y)` returns a writable `Point` for
+// concrete-number args; reactive inputs produce a read-only
+// `DerivedPoint`. Both pass anywhere `Signal<Vec>` is expected. Math
+// methods always return `DerivedPoint`.
 
 import {
   Signal,
@@ -15,17 +13,15 @@ import {
 import { toSig, type Arg } from "../core/arg";
 import type { Vec } from "../core/vec";
 
-/** Structural equality for `Vec` — suppresses no-op writes when a fresh
- *  Vec literal carries the same components as the previous value. */
+/** Structural equality for `Vec` — suppresses no-op writes from fresh
+ *  literals with the same components. */
 export const vecEquals = (a: Vec, b: Vec): boolean =>
   a === b || (a.x === b.x && a.y === b.y);
 
 // ── Type surface ────────────────────────────────────────────────────
 
-/** Methods shared by writable and derived Points. All return
- *  `DerivedPoint` (or a scalar `ReadonlySignal<number>`) — math results
- *  are never writable. Single source of truth for these signatures;
- *  the runtime trait is `PointMethods` below. */
+/** Math methods shared by both Point flavors. Results are always
+ *  read-only — math never produces writable points. */
 interface PointMath {
   add(p: Pointlike): DerivedPoint;
   sub(p: Pointlike): DerivedPoint;
@@ -42,15 +38,11 @@ interface PointMath {
   distance(b: Pointlike): ReadonlySignal<number>;
 }
 
-/** Writable Point. Both `point.value` (the whole Vec) and `point.x` /
- *  `point.y` (each axis as a lens-backed signal) are writable; writes
- *  to an axis update the parent atomically. The class declaration
- *  carries only the constructor + statics; the merged `interface`
- *  brings in the Signal API and `PointMath`. */
+/** Writable Point. `.value`, `.x`, and `.y` are all writable (axes are
+ *  lens-backed); writes to an axis update the parent atomically. */
 declare class Point {
   constructor(initial: Vec);
-  /** Wrap an existing `Signal<Vec>` (e.g. a `lens(...)` aggregate) as
-   *  a Point with writable axis lenses + math methods. */
+  /** Wrap an existing `Signal<Vec>` (e.g. a lens aggregate) as a Point. */
   static from(source: Signal<Vec>): Point;
   static polar(c: Pointlike, r: Arg<number>, angle: Arg<number>): DerivedPoint;
 }
@@ -59,13 +51,10 @@ interface Point extends Signal<Vec>, PointMath {
   readonly y: Signal<number>;
 }
 
-/** Read-only derived Point. Implements `ReadonlySignal<Vec>` — pass
- *  anywhere a readable Vec signal is expected. Deliberately does NOT
- *  extend `Signal`/`Computed` at the type level: that would inherit the
- *  `.to` tween shortcut, which would compile fine but throw at runtime
- *  (writing through a Computed's value setter is forbidden). The
- *  prototype chain still goes through Computed at runtime —
- *  `instanceof Signal` is true — but the type surface is read-only. */
+/** Read-only derived Point. The runtime prototype chains through
+ *  `Computed` (so `instanceof Signal` is true), but the TS surface
+ *  deliberately excludes `Signal` — inheriting `.to` would compile
+ *  fine but throw at runtime. */
 declare class DerivedPoint {
   constructor(getter: () => Vec);
 }
@@ -74,18 +63,14 @@ interface DerivedPoint extends ReadonlySignal<Vec>, PointMath {
   readonly y: ReadonlySignal<number>;
 }
 
-/** Either a writable or derived Point — used in signatures that accept
- *  any kind of point. */
+/** Either flavor — used in signatures that take any Point. */
 export type Pointlike = Point | DerivedPoint;
 
-/** Runtime check: is `v` a Point of either flavor? */
 export const isPoint = (v: unknown): v is Pointlike =>
   v instanceof Point || v instanceof DerivedPoint;
 
-// `ResolveVec` mirrors `ResolveSig` for Vec-typed shape props, but
-// resolves to the richer `Point` / `DerivedPoint` types so consumers
-// keep `.x` / `.y` axis access (and lens-driven writability where
-// applicable) at the field level.
+// `ResolveVec` mirrors `ResolveSig` but resolves to the richer
+// Point/DerivedPoint types so `.x`/`.y` axis access survives.
 type IsAny<A> = 0 extends 1 & A ? true : false;
 export type ResolveVec<A> = IsAny<A> extends true
   ? Pointlike
@@ -97,8 +82,6 @@ export type ResolveVec<A> = IsAny<A> extends true
 
 // ── Implementation ──────────────────────────────────────────────────
 
-/** Build the two writable axis lenses on a Point — common between
- *  the literal-initial constructor and `Point.from(source)`. */
 function attachAxes(p: Point, source: Signal<Vec>): void {
   const self = p as Point & { x: Signal<number>; y: Signal<number> };
   self.x = lens(
@@ -122,18 +105,15 @@ function Point(this: Point, initial: Vec) {
 }
 Point.prototype = Object.create(Signal.prototype);
 
-/** Wrap an existing `Signal<Vec>` (typically a `lens(...)` aggregate)
- *  as a Point — adds writable axis lenses (`.x` / `.y`) and the math
- *  methods, while delegating `value` / `peek` / `subscribe` to the
- *  source. Used by `centroid(...)` and friends; users rarely call
- *  this directly. The result is `instanceof Point` (and `Signal`) so
- *  it threads through every API that accepts `Pointlike`. */
+/** Wrap an existing `Signal<Vec>` (typically a lens aggregate) as a
+ *  Point with writable `.x`/`.y` and math methods. Used by `centroid`
+ *  and friends; rarely called directly. */
 (Point as unknown as { from(source: Signal<Vec>): Point }).from = function (
   source,
 ) {
   const p = Object.create(Point.prototype) as Point;
-  // Delegate `value` to the source — picks up source's tracking, no
-  // independent state on `p` (we never call Signal.call here).
+  // Delegate to the source — no independent state on `p`, no
+  // `Signal.call` here.
   Object.defineProperty(p, "value", {
     get() {
       return source.value;
@@ -152,10 +132,8 @@ Point.prototype = Object.create(Signal.prototype);
 
 // @ts-ignore: "Cannot redeclare exported variable 'DerivedPoint'."
 function DerivedPoint(this: DerivedPoint, getter: () => Vec) {
-  // Runtime: chains through Computed.prototype so `instanceof Signal`
-  // works and dep tracking is inherited. Cast bypasses the typed
-  // class boundary (DerivedPoint deliberately isn't typed as Computed
-  // — see the declaration for why).
+  // Chains through Computed at runtime for dep-tracking and the
+  // `instanceof Signal` check; the type-surface gap is intentional.
   Computed.call(this as unknown as Computed<Vec>, getter, { equals: vecEquals });
   const self = this as DerivedPoint & {
     x: ReadonlySignal<number>;
@@ -166,8 +144,8 @@ function DerivedPoint(this: DerivedPoint, getter: () => Vec) {
 }
 DerivedPoint.prototype = Object.create(Computed.prototype);
 
-// Shared math methods — assigned to both prototypes. Each returns a
-// fresh `DerivedPoint` reading from inputs lazily.
+// Shared methods on both prototypes; results are fresh DerivedPoints
+// reading inputs lazily.
 const PointMethods: ThisType<Pointlike> & PointMath = {
   add(p) {
     return new DerivedPoint(() => ({
@@ -262,8 +240,7 @@ const PointMethods: ThisType<Pointlike> & PointMath = {
 Object.assign(Point.prototype, PointMethods);
 Object.assign(DerivedPoint.prototype, PointMethods);
 
-// `Point.polar` — static helper. Returns a derived Point at radius `r`
-// and angle `θ` (radians, y-down) from `c`.
+/** Derived Point at radius `r` and angle `θ` (radians, y-down) from `c`. */
 (Point as unknown as {
   polar(c: Pointlike, r: Arg<number>, angle: Arg<number>): DerivedPoint;
 }).polar = function (c, r, angle) {
@@ -282,8 +259,8 @@ export { Point, DerivedPoint };
 
 // ── Factories ───────────────────────────────────────────────────────
 
-/** Construct a Point. Both literal numbers → writable `Point`; any
- *  reactive input (signal/thunk) → derived Point that follows it. */
+/** Construct a Point. Two numbers → writable `Point`; any reactive
+ *  input → derived. */
 export function pt(x: number, y: number): Point;
 export function pt(x: Arg<number>, y: Arg<number>): Pointlike;
 export function pt(x: Arg<number>, y: Arg<number>): Pointlike {
@@ -295,12 +272,10 @@ export function pt(x: Arg<number>, y: Arg<number>): Pointlike {
   return new DerivedPoint(() => ({ x: xs.value, y: ys.value }));
 }
 
-/** Normalize a `translate`/`scale`/`origin`-style argument into a
- *  Point. Used by `Shape` so every shape's transform fields are
- *  Points (gains per-axis tweens via `shape.translate.x.to(...)`).
- *  Plain Vec literals or `undefined` → fresh writable Point seeded
- *  with the value (or `fallback`). Existing Pointlike → passes
- *  through. Plain `Signal<Vec>` / thunk → wraps as DerivedPoint. */
+/** Normalize a Vec-style arg into a Point. Used by `Shape` so every
+ *  transform field gains per-axis tweens (`s.translate.x.to(...)`).
+ *  Literal/undefined → writable; Signal/thunk → derived; Pointlike
+ *  passes through. */
 export function toPoint(
   arg: Arg<Vec> | Pointlike | undefined,
   fallback: Vec,
@@ -312,7 +287,6 @@ export function toPoint(
     return new DerivedPoint(() => sig.value);
   }
   if (typeof arg === "function") return new DerivedPoint(arg as () => Vec);
-  // Plain Vec literal — narrowed by elimination above.
   const v = arg as Vec;
   return new Point({ x: v.x, y: v.y });
 }

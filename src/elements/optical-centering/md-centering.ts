@@ -19,14 +19,13 @@ import {
   type Pointlike,
 } from "../../minim";
 
-/** Italic letter with optional italic subscript: `math("x", "min")`. */
+/** Italic letter with optional italic subscript. */
 function math(base: string, sub?: string): Text {
   const b = t(base).italic();
   return sub ? b.sub(t(sub).italic()) : b;
 }
 
-/** Perpendicular tick across segment `a→b` at fraction `f`, half-length
- *  `h`. Segment lives as plain Point math — no phantom Line shape. */
+/** Perpendicular tick across `a→b` at fraction `f`, half-length `h`. */
 function tick(a: Pointlike, b: Pointlike, f: number, h: number, opts: LineOpts = {}) {
   const c = a.lerp(b, f);
   const off = b.sub(a).normalize().perp().scale(h);
@@ -66,17 +65,13 @@ export class MdCentering extends Diagram {
     const F = [0.2, 0.45, 0.7];
     const subs = ["min", "c", "max"];
 
-    // Morphing y-axis tip — slides along x→y as morph plays.
+    // y-axis tip slides along x→y as morph plays.
     const yTip = xEnd.lerp(yEnd, morphT);
-    // "y-axis is on stage" — clip.t > 0 ⟺ morph has started; reads as
-    // a timeline-native query rather than a derived display flag.
+    // y-axis is "on stage" once morph starts.
     const yShown = when(tl.morph.t);
 
-    // Visible axes.
     s(line(O, O.lerp(xEnd, lineT)), line(O, yTip, { opacity: yShown }));
 
-    // Labels + ticks. Each group shares one opacity signal so the trio
-    // fades in together — no SVG group needed.
     F.forEach((f, i) =>
       s(
         label(O.lerp(xEnd, f).down(24), math("x", subs[i]), {
@@ -96,9 +91,6 @@ export class MdCentering extends Diagram {
       ),
     );
 
-    // Box + crosshairs share `boxT`; centroid + its label share
-    // `centroidT`. Crosshairs blend a faint baseline (0.6) with the
-    // master via `boxT.derive(v => v * 0.6)`.
     const [xMin, xMid, xMax] = F.map((f) => O.lerp(xEnd, f));
     const [yMin, yMid, yMax] = F.map((f) => O.lerp(yEnd, f));
     const c = pt(xMid.x, yMid.y);

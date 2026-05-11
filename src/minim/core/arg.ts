@@ -1,31 +1,25 @@
-// "Value or signal" interop. Most reactive APIs accept any of: a literal
-// value, an existing Signal/ReadonlySignal, or a thunk that derives a
-// computed signal. `Arg<T>` names that union; `toSig` normalizes it.
+// "Value or signal" interop. `Arg<T>` unifies literal, signal, and
+// thunk; `toSig` normalizes to a Signal/ReadonlySignal.
 
 import { signal, computed, Signal, type ReadonlySignal } from "./signal";
 
-/** A value, a Signal/ReadonlySignal, or a thunk `() => T` (sugar for
- *  `computed(() => ...)`). Accepted at every "drive this reactively"
- *  call site. */
+/** Literal, signal, or `() => T` thunk (sugar for `computed`). */
 export type Arg<T> = T | Signal<T> | ReadonlySignal<T> | (() => T);
 
-/** Either side of the read/write split — common across many shape
- *  fields where the runtime kind depends on what the caller passed. */
 export type NumSig = Signal<number> | ReadonlySignal<number>;
 
 type ReadOrWrite<T> = Signal<T> | ReadonlySignal<T>;
 
-/** Field type for an `Arg<T>` slot:
+/** Resolve the field type for an `Arg<T>`:
  *
  *   - `Signal<T>`         → `Signal<T>`         (writable)
  *   - `ReadonlySignal<T>` → `ReadonlySignal<T>`
- *   - `() => T`           → `ReadonlySignal<T>` (wrapped in computed)
- *   - `T` or `undefined`  → `Signal<T>`         (fresh writable, default-seeded)
+ *   - `() => T`           → `ReadonlySignal<T>`
+ *   - `T` or `undefined`  → `Signal<T>`         (default-seeded)
  *   - `any`               → `Signal<T> | ReadonlySignal<T>`
  *
- *  The `IsAny` guard widens the erased-generic case so `Shape<any>` is
- *  a valid supertype of any specific `Shape<O>`. The `[A] extends [...]`
- *  brackets prevent union distribution. */
+ *  Bracketed `[A] extends [...]` prevents union distribution; `IsAny`
+ *  widens the erased-generic case for `Shape<any>` supertyping. */
 type IsAny<A> = 0 extends 1 & A ? true : false;
 export type ResolveSig<A, T> = IsAny<A> extends true
   ? Signal<T> | ReadonlySignal<T>
@@ -36,14 +30,11 @@ export type ResolveSig<A, T> = IsAny<A> extends true
       : Signal<T>;
 
 function isSig<T>(v: Arg<T>): v is ReadOrWrite<T> {
-  // ReadonlySignal is structurally an interface, but the runtime carrier
-  // is always a Signal-class instance (Computed extends Signal).
   return v instanceof Signal;
 }
 
-/** Resolve an `Arg<T>` to a Signal-or-ReadonlySignal handle. With a
- *  `fallback`, an `undefined` arg becomes a fresh writable seeded with
- *  it. Thunks wrap in `computed`; existing signals pass through. */
+/** Normalize an `Arg<T>` to a signal. With `fallback`, `undefined` →
+ *  fresh writable seeded with it. */
 export function toSig<T>(arg: Arg<T>): ReadOrWrite<T>;
 export function toSig<T>(arg: Arg<T> | undefined, fallback: T): ReadOrWrite<T>;
 export function toSig<T>(arg: Arg<T> | undefined, fallback?: T): ReadOrWrite<T> {
@@ -53,9 +44,7 @@ export function toSig<T>(arg: Arg<T> | undefined, fallback?: T): ReadOrWrite<T> 
   return signal(arg);
 }
 
-/** `0` if `arg` is falsy, `1` if truthy. With a `predicate`, `0` if
- *  the predicate is false, `1` if true. Common for binding shape
- *  opacity to a reactive boolean: `opacity: when(state.holding)`. */
+/** Coerce reactive truthiness to `0`/`1` — e.g. `opacity: when(hovered)`. */
 export function when<T>(
   arg: Arg<T>,
   predicate?: (v: T) => boolean,

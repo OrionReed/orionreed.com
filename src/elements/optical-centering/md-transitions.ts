@@ -1,6 +1,5 @@
-// Gallery for the transition primitives in `transitions.ts`. Each row
-// loops one intro → hold → outro, lagged across N shapes so the intro
-// reads as a wave.
+// Gallery for the transitions in `motion/transitions.ts`. Each row
+// loops intro → hold → outro, staggered so the intro reads as a wave.
 
 import {
   Diagram,

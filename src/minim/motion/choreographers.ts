@@ -1,20 +1,19 @@
-// Group choreographers — generator factories that animate N shapes
-// in coordinated ways. Built on the existing yield protocol (parallel
-// arrays + `sig.to`); no new runtime concepts. Each is small enough
-// to read top-to-bottom; pick whichever's named for what you want.
-//
-// For "translate the whole group rigidly" the better answer is
-// `centroid(...shapes).to(target, sec)` — that's a writable lens,
-// not a choreographer. These factories are for non-rigid coordination
-// (swap pairs, splay around a centre, orbit, lay out to specific
-// targets, stagger an op).
+// Generator factories that animate N shapes in coordinated ways —
+// built on yield-arrays + `sig.to`. For rigid group translate, reach
+// for `centroid(...shapes).to(...)` instead; these are for non-rigid
+// coordination (swap pairs, splay around a centre, orbit, etc.).
 
 import { delay } from "./compose";
-import { toSig, type Animator, type Arg, type Easing, type Vec } from "../core";
+import {
+  toSig,
+  type Animator,
+  type Arg,
+  type Easing,
+  type Vec,
+} from "../core";
 import { isPoint, type Pointlike, type Writable } from "../scene";
 
-/** Swap two shapes' positions. Each tweens to the other's current
- *  translate over `sec`. */
+/** Swap two shapes' positions over `sec`. */
 export function* swap(
   a: Writable<"translate">,
   b: Writable<"translate">,
@@ -26,10 +25,9 @@ export function* swap(
   yield [a.translate.to(bv, sec, ease), b.translate.to(av, sec, ease)];
 }
 
-/** Apply `fn` to each item with a per-index time offset (`stride`
- *  seconds between starts). Children run in parallel; the call
- *  completes when the longest child finishes:
- *  `yield* stagger(0.05, shapes, (s) => fadeIn(s, 0.3))`. */
+/** Run `fn(item)` for each item, lagged by `stride` seconds. All in
+ *  parallel; completes when the longest child finishes:
+ *  `yield* stagger(0.05, shapes, s => fadeIn(s, 0.3))`. */
 export function* stagger<S>(
   stride: number,
   items: readonly S[],
@@ -61,18 +59,10 @@ export function* splay(
   });
 }
 
-/** Continuous orbital rotation — each shape rotates around `center`
- *  preserving its current radial position; one revolution in `period`
- *  seconds. Snapshots each shape's initial angle and radius (from
- *  `center`) at start so there's no discontinuous jump — orbit picks
- *  up whatever layout the shapes are already in (e.g. a prior `splay`
- *  call). Never returns; cancel via the `run` disposer or include it
- *  in a `race`.
- *
- *  `rate` (default `1`) is a multiplier on the angular advance per
- *  frame — a writable signal lets you ramp orbit speed in/out via
- *  `rate.to(0, sec)` / `rate.to(1, sec)` without touching the
- *  generator. `rate = 0` pauses; negatives reverse. */
+/** Continuous orbit around `center`, one revolution per `period`
+ *  seconds. Picks up each shape's current radius/angle (no jump). Never
+ *  returns. `rate` (default 1) is a reactive multiplier — tween it for
+ *  ease-in/out; negatives reverse; 0 pauses. */
 export function* orbit(
   center: Pointlike,
   shapes: readonly Writable<"translate">[],
@@ -82,8 +72,6 @@ export function* orbit(
   const rate = toSig(opts.rate ?? 1);
   const omega = (2 * Math.PI) / period;
   const N = shapes.length;
-  // Snapshot initial polar positions relative to `center` — orbit
-  // continues from wherever the shapes are now.
   const c0 = center.value;
   const init = shapes.map((sh) => {
     const v = sh.translate.peek();
@@ -93,7 +81,7 @@ export function* orbit(
   });
   let t = 0;
   while (true) {
-    const dt: number = yield;
+    const dt = yield;
     t += dt * rate.value;
     const c = center.value;
     for (let i = 0; i < N; i++) {
@@ -106,10 +94,8 @@ export function* orbit(
   }
 }
 
-/** Tween each shape to its paired target. The arrays line up by
- *  index — `shapes[i].translate` animates to `targets[i]`. Targets
- *  can be plain `Vec` literals or any `Pointlike` (e.g. another
- *  shape's `bounds.center`). */
+/** Tween each shape to its paired target (matched by index). Targets
+ *  may be `Vec` literals or any `Pointlike`. */
 export function* assemble(
   shapes: readonly Writable<"translate">[],
   targets: readonly (Vec | Pointlike)[],

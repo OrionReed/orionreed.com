@@ -49,14 +49,14 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
     applyOpts(this, opts);
   }
 
-  // Tangent/normal/angle are constant along a Line, so the `t` arg is
-  // accepted for API symmetry with Path but ignored. Cached lazily.
+  // Tangent/normal/angle are constant along a Line; `t` is accepted
+  // for API symmetry with Path but ignored. Cached lazily.
   #tangent?: DerivedPoint;
   #normal?: DerivedPoint;
   #angle?: ReadonlySignal<number>;
   #length?: ReadonlySignal<number>;
 
-  /** Position at fraction `t` (`0`=from, `1`=to). */
+  /** Position at fraction `t` (0=from, 1=to). */
   at(t: Arg<number>): Pointlike {
     if (typeof t === "number") {
       if (t === 0) return this.from;

@@ -1,13 +1,7 @@
-// Mini timeline editor: editable named durations driving a looping
-// animation. Demonstrates:
-//
-//   - `timeline(sequential({...}))` for named, edit-friendly clips
-//     whose `at`s ripple-update from prior durations.
-//   - `clip.t` reactive progress driving opacity directly (no per-frame
-//     callback — pure signal binding).
-//   - `draggable(knob, fn)` for drag-to-edit knobs.
-//   - `bus.emit/on` for click pings + reactive tap counts.
-//   - `snapshot(tl.clock)` as the reset pattern for loops.
+// Editable named durations driving a looping animation. Drag the
+// knobs to retime; clip durations ripple through to subsequent starts
+// via `sequential`. Actor opacities are pure signal bindings on
+// `clip.t`.
 
 import {
   Diagram,
@@ -44,13 +38,10 @@ export class MdTimelineEditor extends Diagram {
     const H = 320;
     s.view(0, 0, W, H);
 
-    // ── Editable timeline ─────────────────────────────────────────────
-    // `sequential` produces clip specs with cumulative-start `at`s.
-    // Editing any `dur` ripples through to subsequent clips' `at`s.
+    // ── Editable timeline ──────────────────────────────────────────
     const tl = timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));
     const reset = snapshot(tl.clock);
 
-    // Currently-active clip name (for the header).
     const phaseName = computed(() => {
       for (const name of PHASES) if (tl[name].active.value) return name;
       return tl.clock.value >= tl.duration.value ? "rest" : PHASES[0];
@@ -61,7 +52,7 @@ export class MdTimelineEditor extends Diagram {
       taps.value = taps.peek() + 1;
     });
 
-    // ── Header ────────────────────────────────────────────────────────
+    // ── Header ─────────────────────────────────────────────────────
     s(
       label(
         pt(W / 2, 24),
@@ -70,7 +61,7 @@ export class MdTimelineEditor extends Diagram {
       ),
     );
 
-    // ── Timeline strip (top) ──────────────────────────────────────────
+    // ── Timeline strip (top) ───────────────────────────────────────
     const STRIP_X = 60;
     const STRIP_W = W - 120;
     const STRIP_Y = 60;
@@ -102,7 +93,6 @@ export class MdTimelineEditor extends Diagram {
       );
     });
 
-    // Playhead — derived from `tl.t`, so retiming updates it live.
     const playX = computed(() => STRIP_X + tl.t.value * STRIP_W);
     s(
       line(pt(playX, STRIP_Y - 6), pt(playX, STRIP_Y + STRIP_H + 6), {
@@ -110,15 +100,13 @@ export class MdTimelineEditor extends Diagram {
       }),
     );
 
-    // ── Slider knobs (middle) ─────────────────────────────────────────
+    // ── Slider knobs ───────────────────────────────────────────────
     const SLIDER_Y = 150;
     const SLIDER_GAP = 24;
     const SLIDER_W = (W - 120 - SLIDER_GAP * 2) / 3;
 
     PHASES.forEach((name, i) => {
       const x0 = 60 + i * (SLIDER_W + SLIDER_GAP);
-      // `dur` is editable via the slider — sequential clips produce a
-      // writable `Signal<number>` for dur (input was a number).
       const dur = tl[name].dur;
 
       s(
@@ -138,12 +126,12 @@ export class MdTimelineEditor extends Diagram {
       );
       draggable(knob, (local) => {
         const u = Math.min(Math.max((local.x - x0) / SLIDER_W, 0), 1);
-        // Floor at 0.1s so a phase never reaches zero (would freeze the loop).
+        // Floor at 0.1s — a zero-duration phase would freeze the loop.
         dur.value = Math.max(0.1, u * MAX_DUR);
       });
     });
 
-    // ── Stage actors (bottom) — opacity follows clip progress ────────
+    // ── Stage actors ───────────────────────────────────────────────
     const STAGE_Y = 240;
     const actors = PHASES.map((name, i) => {
       const c = circle(pt(120 + i * 180, STAGE_Y), 24, {
@@ -163,7 +151,6 @@ export class MdTimelineEditor extends Diagram {
       ),
     );
 
-    // ── Animation flow: replay the timeline forever ───────────────────
     this.anim.loop(function* () {
       reset();
       yield* tl;

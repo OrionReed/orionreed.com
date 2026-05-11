@@ -1,4 +1,4 @@
-// Connector ops. Use `shape.boundary` so analytic edges work without
+// Connectors. Uses `shape.boundary` so analytic edges work without
 // per-kind dispatch.
 
 import { computed, toSig, type Arg } from "../core";
@@ -10,8 +10,8 @@ const ARROW_ID = "minim-arrow";
 const ARROW_W = 10;
 const ARROW_GAP_DEFAULT = 4;
 
-/** Line between two shapes / points. Shape endpoints meet the
- *  analytic boundary. */
+/** Line between two shapes/points; shape endpoints meet the analytic
+ *  boundary. */
 export function connect(
   a: Shape | Pointlike,
   b: Shape | Pointlike,
@@ -27,26 +27,22 @@ export interface ArrowOpts extends LineOpts {
   gap?: Arg<number>;
 }
 
-/** Arrow from `a` to `b`. The tip lands at `b`'s boundary (less
- *  `gap`); the line is shortened so the round cap doesn't poke past
- *  the tip, with a small optical compensation at the start for the
- *  round cap reading shorter than its mathematical extent. */
+/** Arrow from `a` to `b`. Endpoints are adjusted so the round cap lines
+ *  up gap-ish past the source and the tip lands gap-ish before the
+ *  target (the marker extends past the line end). */
 export function arrow(
   a: Shape | Pointlike,
   b: Shape | Pointlike,
   opts: ArrowOpts = {},
 ): Line {
-  const aBase = a instanceof Shape ? a.boundary(b instanceof Shape ? b.bounds.center : b) : a;
-  const bBase = b instanceof Shape ? b.boundary(a instanceof Shape ? a.bounds.center : a) : b;
+  const aBase =
+    a instanceof Shape ? a.boundary(b instanceof Shape ? b.bounds.center : b) : a;
+  const bBase =
+    b instanceof Shape ? b.boundary(a instanceof Shape ? a.bounds.center : a) : b;
 
   const gapSig = toSig(opts.gap ?? ARROW_GAP_DEFAULT);
   const dir = bBase.sub(aBase).normalize();
-
-  // Start: push toward target by gap + stroke weight (so the round
-  // cap lines up gap-ish past the source perimeter).
   const aP = aBase.add(dir.scale(computed(() => gapSig.value + tokens.weight)));
-  // End: pull back toward source by gap + ARROW_W (the marker extends
-  // ARROW_W past the line end, so the tip lands gap-ish before target).
   const bP = bBase.sub(dir.scale(computed(() => gapSig.value + ARROW_W)));
 
   const line = new Line(aP, bP, opts);
@@ -72,7 +68,8 @@ export function ensureArrowMarker(svg: SVGSVGElement): void {
   marker.setAttribute("orient", "auto");
   marker.setAttribute("markerUnits", "userSpaceOnUse");
 
-  // Triangle with rounded vertices.
+  // Triangle with rounded vertices: trace each edge from its rounded
+  // start to its rounded end, then a short Q through each vertex.
   const r = 0.9;
   const v0 = { x: 0, y: 0 };
   const v1 = { x: 10, y: 3.5 };

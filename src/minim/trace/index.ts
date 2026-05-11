@@ -1,5 +1,5 @@
-// `trace/` — derivations and helpers built on top of `Anim.observe`.
-// Pure consumers: nothing here participates in the runtime hot path.
+// Derivations + helpers built on `Anim.observe`. Pure consumers —
+// nothing here is on the runtime hot path.
 
 export { spans, type Span, type Trace } from "./spans";
 

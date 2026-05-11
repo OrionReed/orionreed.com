@@ -1,5 +1,5 @@
-// HTML attributes mapped to reactive Signals on a custom element.
-// The decorated field IS the signal — pass it to animations, computeds,
+// HTML attributes mapped to reactive Signals on a custom element. The
+// decorated field IS the signal — pass it to animations, computeds,
 // or `forEach` sources directly.
 //
 //   @attr.str()      declare width: Signal<string | undefined>;
@@ -7,8 +7,8 @@
 //   @attr.num(4)     declare cells: Signal<number>;          // default 4
 //   @attr.bool()     declare flag:  Signal<boolean>;         // default false
 //
-// `attr.bool` always produces `Signal<boolean>` since HTML boolean
-// attributes are presence-based (no "missing vs unset" distinction).
+// `attr.bool` is always `Signal<boolean>` since HTML boolean attrs
+// are presence-based.
 
 import { signal, type Signal } from "./core";
 
@@ -106,8 +106,8 @@ export const attr = { str, num, bool };
 
 // ── Plumbing for Diagram ────────────────────────────────────────────
 
-/** Walk the prototype chain and collect every `_attributes` registration.
- *  Used by `Diagram.observedAttributes` so subclasses pick up parent decls. */
+/** Walk the prototype chain collecting `_attributes`. Used by
+ *  `Diagram.observedAttributes` so subclasses see parent decls. */
 export function observedAttributesOf(ctor: Function): string[] {
   const acc: string[] = [];
   let c: any = ctor;
@@ -120,8 +120,8 @@ export function observedAttributesOf(ctor: Function): string[] {
   return acc;
 }
 
-/** Push a new HTML-attribute value into its signal, coercing per the
- *  declared type. Lazy-creates the signal if unread so far. Called by
+/** Push a new HTML-attribute value into its signal, coerced by type.
+ *  Lazy-creates the signal if not read yet. Called by
  *  `Diagram.attributeChangedCallback`. */
 export function syncAttrSignal(
   instance: HTMLElement,

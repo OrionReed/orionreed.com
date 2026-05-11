@@ -1,17 +1,10 @@
-// Self-rendering trace demo. A small animation runs in the top half;
-// underneath, every generator the runtime spawns is rendered live as a
-// Gantt row. Built on:
-//   - `spans(anim)`             — externalized recorder; subscribes to
-//                                  `anim.observe` and builds a flat
-//                                  `Span[]` with an `onChange` hook.
-//   - `counter(trace.onChange)` — adapt the callback to a Signal<number>.
-//   - `traceTree()`             — derived structural view.
-//   - `tag` / `tagAll`          — tag at the call site so spans carry names.
-//   - `clock(anim)`             — per-frame `now` for in-flight bar growth.
+// Self-rendering trace demo. A small animation up top; below it, every
+// generator the runtime spawns becomes a live Gantt row. Built on
+// `spans(anim)` + `counter` + `traceTree` + `tag`/`tagAll` + `clock`.
 //
-// Layout: per-parent subtree blocks. A span and its descendants form a
-// contiguous vertical block; concurrent siblings get distinct blocks;
-// sequential batches under one parent reuse the block's lanes.
+// Layout: per-parent subtree blocks. A span plus its descendants form
+// one contiguous block; concurrent siblings stack into separate
+// blocks; sequential batches under one parent reuse lanes.
 
 import {
   Diagram,
@@ -53,9 +46,8 @@ const MAX_LANES = 10;
 
 const ROW_FILL = ["#1a1a1a", "#5b8def", "#7aa6f0", "#a5c2f5"] as const;
 
-/** Lane assignment over a `TraceTree`. Each subtree owns a contiguous
- *  block of lanes below its root span; sequential batches under one
- *  parent reuse those lanes (they can't overlap in time). */
+/** Lane assignment. Each subtree owns a contiguous block of lanes
+ *  below its root; sequential batches reuse lanes. */
 function assignLanes(tree: TraceTree): {
   lanes: Map<number, number>;
   total: number;
@@ -76,8 +68,8 @@ function assignLanes(tree: TraceTree): {
   return { lanes, total: cursor || 1 };
 }
 
-// Tagged factories — local to the demo. Library exports stay untagged
-// so production pays nothing; demos and tests opt in here.
+// Tag library factories locally — library exports stay untagged so
+// production code pays nothing.
 const t = tagAll({ fadeIn, fadeUp, fadeOut, fadeUpOut, spinIn, zoomOut });
 
 export class MdTraceDemo extends Diagram {
@@ -91,24 +83,21 @@ export class MdTraceDemo extends Diagram {
     const H = ROWS_Y + MAX_LANES * (ROW_H + ROW_GAP) + 24;
     s.view(0, 0, W, H);
 
-    // ── Top: three circles the demo animates ──────────────────────────
+    // ── Top: three circles the demo animates ───────────────────────
     const cy = TOP_H / 2;
     const a = s(circle(pt(W / 2 - 100, cy), 18, { fill: "#5b8def" }));
     const b = s(circle(pt(W / 2, cy), 18, { fill: "#f5a623" }));
     const c = s(circle(pt(W / 2 + 100, cy), 18, { fill: "#e25c5c" }));
 
-    // Per-frame `now` for in-flight bar growth. Spawned BEFORE trace()
-    // so the clock loop isn't itself recorded.
+    // Spawn the clock BEFORE trace() so its loop isn't recorded.
     const now = clock(this.anim);
-
-    // Begin tracing — the next `run()` becomes the root span.
     const trace = spans(this.anim);
 
     this.anim.run(
       tag(function* demoAnim() {
         yield [t.fadeIn(a, 0.3), t.fadeUp(b, 0.7), t.spinIn(c, 0.5)];
         yield 0.2;
-        // Single-axis tween via the lens — only `a.translate.x` writes.
+        // Single-axis tween via the lens.
         yield a.translate.x.to(-50, 0.4, easeOut);
         yield [
           a.translate.to({ x: 0, y: -30 }, 0.5, easeOut),
@@ -124,10 +113,9 @@ export class MdTraceDemo extends Diagram {
       }),
     );
 
-    // ── Reactive derivations ─────────────────────────────────────────
-    // Adapt the trace's onChange callback into a `Signal<number>` —
-    // bumps on each spawn / complete / cancel. Sparse, event-paced —
-    // so the tree and layout only recompute when structure changes.
+    // ── Reactive derivations ───────────────────────────────────────
+    // Bumps on each spawn/complete/cancel. Sparse, event-paced — tree
+    // and layout only recompute when structure changes.
     const version = counter(trace.onChange);
 
     const tree = computed(() => {
@@ -144,7 +132,7 @@ export class MdTraceDemo extends Diagram {
       return GANTT_W / Math.max(trace.duration(), SCALE_MIN);
     });
 
-    // ── Header ───────────────────────────────────────────────────────
+    // ── Header ─────────────────────────────────────────────────────
     s(
       label(pt(PAD, HEADER_Y), "trace", {
         size: 12,
@@ -166,10 +154,9 @@ export class MdTraceDemo extends Diagram {
       ),
     );
 
-    // ── Rows ─────────────────────────────────────────────────────────
-    // forEach diffs on this signal. A fresh slice per version bump
-    // forces the diff to run when new spans appear; per-frame frame
-    // updates flow through the per-row computed widths instead.
+    // ── Rows ───────────────────────────────────────────────────────
+    // A fresh slice per version-bump forces forEach to diff when new
+    // spans appear; per-frame growth flows through per-row computeds.
     const spansSig = computed(() => {
       version.value;
       return trace.spans.slice();
@@ -219,7 +206,7 @@ export class MdTraceDemo extends Diagram {
       { key: (span) => span },
     );
 
-    // ── Footer ───────────────────────────────────────────────────────
+    // ── Footer ─────────────────────────────────────────────────────
     s(
       label(
         pt(W / 2, H - 10),

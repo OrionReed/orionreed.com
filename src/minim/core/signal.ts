@@ -763,14 +763,11 @@ Object.defineProperty(Computed.prototype, "value", {
 
 //#region Lens
 
-/**
- * A writable signal whose read and write sides are user-defined.
- * `read` produces the current value (memoized like a `computed`);
- * `write(n)` distributes a write back to whatever underlying state
- * the lens is a view of — one parent signal, several signals, or
- * any other custom logic. `instanceof Signal` — pass anywhere a
- * `Signal<T>` is expected.
- */
+/** A writable signal with user-defined read and write sides. Reads
+ *  memoize like a `computed`; writes call `write(n)` — the lens has
+ *  no parent. Used for sub-field views of struct signals and for
+ *  aggregates over multiple signals (`centroid`, `meanRotation`, …).
+ *  `instanceof Signal` is true. */
 declare class Lens<T = any> extends Computed<T> {
   /** @internal */
   _write: (n: T) => void;
@@ -800,11 +797,6 @@ Object.defineProperty(Lens.prototype, "value", {
   },
 });
 
-/** Construct a writable `Lens<T>` from a `read` thunk and a `write`
- *  callback. Reads memoize via Computed; writes call `write(n)` —
- *  the lens has no notion of "parent." Use for sub-field views of a
- *  struct signal (`lens(() => p.value.x, n => p.value = {x: n, y: p.value.y})`)
- *  or for aggregates over multiple signals. */
 export function lens<T>(read: () => T, write: (n: T) => void): Signal<T> {
   return new Lens(read, write) as unknown as Signal<T>;
 }
@@ -1036,25 +1028,20 @@ export {
   Computed,
 };
 
-// ─────────────────────────────────────────────────────────────────────
-//  minim extensions
+// ── minim extensions ────────────────────────────────────────────────
 //
-//  Added to the vendored preact-signals core: a `.derive(fn)` deriver
-//  (renamed from preact's idiomatic `.map` to avoid Array.map collision)
-//  and a `.to(target, source, ease?)` tween that returns a yieldable
-//  generator suitable for the Anim runtime.
-// ─────────────────────────────────────────────────────────────────────
+// Added to the vendored signals core: `.derive(fn)` (renamed from
+// preact's `.map` to avoid Array.map collision) and `.to(target, sec)`,
+// a yieldable tween for the Anim runtime.
 
 import type { Animator, Yieldable } from "./anim";
 import type { Vec } from "./vec";
 
-/** Easing function: takes normalized time `t ∈ [0,1]`, returns eased
- *  value (typically also in `[0,1]`). */
+/** `t ∈ [0,1]` → eased value (typically also in `[0,1]`). */
 export type Easing = (t: number) => number;
 const defaultEase: Easing = (t) => 1 - (1 - t) * (1 - t); // easeOut
 
-/** Duration source for a tween — a fixed `number` of seconds, or a
- *  reactive `Signal<number>` (read per frame, so live edits propagate). */
+/** Seconds, fixed or reactive (read each frame). */
 export type Duration = number | ReadonlySignal<number>;
 
 type Lerpable = number | Vec;
@@ -1074,10 +1061,8 @@ function lerp<T extends Lerpable>(a: T, b: T, t: number): T {
   throw new Error("tween: unsupported value type");
 }
 
-/** A yieldable tween. `yield* sig.to(target, sec)` runs it; `.to(...)`
- *  chains another step on the same signal — `sig.to(a, sec).to(b, sec)`
- *  goes to `a` then `b`. Implements the `Generator` protocol via the
- *  underlying generator captured in `tween()`. */
+/** A yieldable tween. Chain with `.to` — `sig.to(a, s).to(b, s)` goes
+ *  a then b. */
 export interface Tween<T> extends Generator<Yieldable, void, number> {
   to(target: T, source: Duration, ease?: Easing): Tween<T>;
 }
@@ -1093,7 +1078,7 @@ function* tweenStep<T extends Lerpable>(
   while (true) {
     const total = typeof source === "number" ? source : source.value;
     if (elapsed >= total) break;
-    const dt: number = yield;
+    const dt = yield;
     elapsed += dt;
     const t = total > 0 ? Math.min(elapsed / total, 1) : 1;
     sig.value = lerp(start, target, ease(t));
@@ -1101,9 +1086,6 @@ function* tweenStep<T extends Lerpable>(
   sig.value = target;
 }
 
-/** Build a chainable tween. Each `.to` returns a new `Tween` whose
- *  generator yields the prior chain then the new step — composition
- *  via `yield*`, no special data structure. */
 function tween<T extends Lerpable>(
   sig: Signal<T>,
   target: T,
@@ -1119,28 +1101,48 @@ function tween<T extends Lerpable>(
   return gen;
 }
 
-// Interface augmentation: declaration-merged with the `Signal` /
-// `ReadonlySignal` interfaces above. Adds `.derive` and `.to` methods.
+// Declaration-merge `.derive` / `.to` onto the Signal interfaces.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface Signal<T = any> {
   derive<U>(fn: (v: T) => U): ReadonlySignal<U>;
-  to(this: Signal<number>, target: number, source: Duration, ease?: Easing): Tween<number>;
-  to(this: Signal<Vec>, target: Vec, source: Duration, ease?: Easing): Tween<Vec>;
+  to(
+    this: Signal<number>,
+    target: number,
+    source: Duration,
+    ease?: Easing,
+  ): Tween<number>;
+  to(
+    this: Signal<Vec>,
+    target: Vec,
+    source: Duration,
+    ease?: Easing,
+  ): Tween<Vec>;
 }
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface ReadonlySignal<T = any> {
   derive<U>(fn: (v: T) => U): ReadonlySignal<U>;
 }
 
-(Signal.prototype as unknown as {
-  derive: <T, U>(this: Signal<T>, fn: (v: T) => U) => ReadonlySignal<U>;
-}).derive = function <T, U>(this: Signal<T>, fn: (v: T) => U): ReadonlySignal<U> {
+(
+  Signal.prototype as unknown as {
+    derive: <T, U>(this: Signal<T>, fn: (v: T) => U) => ReadonlySignal<U>;
+  }
+).derive = function <T, U>(
+  this: Signal<T>,
+  fn: (v: T) => U,
+): ReadonlySignal<U> {
   return computed(() => fn(this.value));
 };
 
-(Signal.prototype as unknown as {
-  to: <T extends Lerpable>(target: T, source: Duration, ease?: Easing) => Tween<T>;
-}).to = function <T extends Lerpable>(
+(
+  Signal.prototype as unknown as {
+    to: <T extends Lerpable>(
+      target: T,
+      source: Duration,
+      ease?: Easing,
+    ) => Tween<T>;
+  }
+).to = function <T extends Lerpable>(
   this: Signal<T>,
   target: T,
   source: Duration,

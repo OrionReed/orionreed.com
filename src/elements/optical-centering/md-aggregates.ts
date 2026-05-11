@@ -1,11 +1,6 @@
-// All three group aggregates composing freely on the same shapes:
-// `centroid` translates, `meanRotation` spins, `meanScale` breathes.
-// Each is a writable lens; tweens through any of them distribute the
-// delta to every shape, *preserving each shape's relative offset*.
-// The shapes are deliberately heterogeneous (different sizes, different
-// starting rotations) so it's visible that those offsets are preserved
-// through every tween. Each cycle picks fresh random targets so the
-// loop doesn't read as a repeating routine.
+// `centroid`/`meanRotation`/`meanScale` composing freely on one set
+// of (heterogeneous) shapes, each iteration picking fresh random
+// targets so the offsets-are-preserved property is visible.
 
 import * as R from "../rand";
 import {
@@ -25,9 +20,8 @@ import {
 const W = 600;
 const H = 360;
 
-// Varied sizes, colors, AND starting rotations — so meanRotation
-// tweens through the *group* mean while each shape's individual
-// offset (`p.rot`) stays intact.
+// Heterogeneous sizes, colors, starting rotations — so it reads as
+// "each shape's offset survives the tween."
 const SHAPES = [
   { x: 130, y: 130, w: 38, h: 10, rot: -0.6, fill: "#5b8def" },
   { x: 280, y: 100, w: 26, h: 8, rot: 0.0, fill: "#f5a623" },
@@ -60,8 +54,6 @@ export class MdAggregates extends Diagram {
     const r = meanRotation(...shapes);
     const k = meanScale(...shapes);
 
-    // Live readout — derived from the lens, so it tracks the group
-    // exactly however the group is being driven.
     s(
       label(
         pt(W / 2, 30),
@@ -73,8 +65,6 @@ export class MdAggregates extends Diagram {
       ),
     );
 
-    // Each cycle: fresh random targets for all three aggregates,
-    // running in parallel.
     this.anim.loop(function* () {
       const sec = R.float(1.4, 2.0);
       yield [

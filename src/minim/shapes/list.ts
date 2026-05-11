@@ -1,15 +1,12 @@
-// Reactive list rendering. Mounts shapes per source item and diffs
-// the parent's children as the source changes — stable keys preserve
-// per-shape state (animations, signals, listeners) across structural
-// updates. New items render, removed items dispose.
+// Reactive list rendering. Diffs `parent`'s children as `source`
+// changes; stable keys preserve per-shape state across updates.
 
 import { effect, toSig, untracked, type Arg } from "../core";
 import type { AnyShape } from "../scene";
 
 export interface ForEachOptions<T> {
-  /** Stable identity per item. Defaults to the array index — fine for
-   *  fixed-position lists, but means swaps look like full replacement.
-   *  Provide a real key for identity-based reuse. */
+  /** Stable identity per item; defaults to index (fine for fixed
+   *  positions, makes swaps look like replacement). */
   key?: (item: T, index: number) => unknown;
 }
 
@@ -18,9 +15,8 @@ interface Entry {
   shapes: AnyShape[];
 }
 
-/** Reactive list rendering result. `at(i)` returns the primary shape
- *  rendered for the i-th source item (the first if `render` returned
- *  an array), or `undefined` when out of range. */
+/** Reactive list result. `at(i)` returns the primary shape (the first
+ *  if `render` returned an array). */
 export interface ForEachResult {
   dispose: () => void;
   at: (i: number) => AnyShape | undefined;
@@ -28,9 +24,8 @@ export interface ForEachResult {
 }
 
 /** Render a shape (or shapes) per item in `source`, mounting under
- *  `parent`. Re-runs only on list changes; per-item reactivity is
- *  the render function's job. Returns a disposer plus indexed access
- *  to the rendered shapes (for cross-layer references). */
+ *  `parent`. Re-runs only on structural changes; per-item reactivity
+ *  is the render fn's job. */
 export function forEach<T>(
   parent: AnyShape,
   source: Arg<readonly T[]>,
@@ -44,8 +39,7 @@ export function forEach<T>(
 
   const eff = effect(() => {
     const next = sourceSig.value;
-    // Diff in `untracked` so reads of `entries` and add/remove writes
-    // don't re-trigger this effect.
+    // Diff in `untracked` so internal reads/writes don't re-trigger.
     untracked(() => {
       const prevByKey = new Map<unknown, Entry>();
       for (const e of entries) prevByKey.set(e.key, e);
@@ -66,7 +60,7 @@ export function forEach<T>(
         }
       }
 
-      // Whatever's left in prevByKey was removed from the source.
+      // Anything left in prevByKey is gone from the source.
       for (const removed of prevByKey.values()) {
         parent.remove(...removed.shapes);
       }

@@ -1,8 +1,5 @@
-// Scene graph: the shape primitive + spatial primitives (Point, Bounds,
-// AABB) + matrix math + the Scene callable. Layer C — depends on
-// layer-A (Anim, only via the `Animator` type for `until`/`onSignal`)
-// and layer-B (signals + utilities). The shape stdlib (`../shapes/`)
-// is built on this.
+// Scene graph: `Shape` + spatial primitives (Point, Bounds, AABB) +
+// matrix math + the `Scene` callable. `../shapes/` is built on this.
 
 export {
   Point,
@@ -45,9 +42,5 @@ export {
 } from "./shape";
 
 export { draggable } from "./interaction";
-
-// `./matrix` is internal — Shape / layout use it directly. Not re-
-// exported because consumers shouldn't need affine math; they reach
-// for `transform`, `bounds`, or `boundsInRoot` on a Shape.
 
 export { makeScene, type Scene, type Padding } from "./scene";

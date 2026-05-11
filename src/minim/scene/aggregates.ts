@@ -1,23 +1,15 @@
-// Aggregate views over collections of signals/shapes. Variadic in,
-// signal out — built on the generic `lens(read, write)` primitive so
-// the result is writable. Reading queries the aggregate; writing
-// distributes the change back to the underlying inputs.
-//
-// `centroid(a, b, c).to(target, sec)` moves the group rigidly: the
-// tween writes the centroid each frame; the lens converts each write
-// into a per-shape translate delta. Animation falls out of `.to(...)`
-// for free; there's no separate "choreographer" needed for rigid
-// translation.
+// Writable aggregates — `lens(read, write)` over N signals. Reads
+// query the aggregate; writes distribute the delta back, preserving
+// relative offsets. `centroid(...).to(target, sec)` moves the group
+// rigidly with no special choreographer.
 
 import { lens, type Signal } from "../core/signal";
 import type { Vec } from "../core/vec";
 import { Point } from "./point";
 import type { Writable } from "./shape";
 
-/** Average of N writable Vec signals as a writable `Point`. Reads
- *  return the component-wise mean; writes apply the delta from the
- *  current mean to every input, preserving relative offsets. The
- *  primitive that `centroid(...shapes)` is sugar over. */
+/** Mean of N writable Vec signals as a writable `Point`. Writes apply
+ *  the delta to every input. Primitive `centroid` is sugar over. */
 export function meanVec(...sigs: Signal<Vec>[]): Point {
   return Point.from(
     lens<Vec>(
@@ -52,8 +44,7 @@ export function meanVec(...sigs: Signal<Vec>[]): Point {
   );
 }
 
-/** Scalar sibling of `meanVec`. Reads the average of N writable number
- *  signals; writes distribute the delta from the current mean. */
+/** Scalar sibling of `meanVec`. */
 export function meanNum(...sigs: Signal<number>[]): Signal<number> {
   return lens<number>(
     () => {
@@ -70,28 +61,21 @@ export function meanNum(...sigs: Signal<number>[]): Signal<number> {
   );
 }
 
-/** Centroid of N shapes' translates as a writable `Point`. Sugar over
- *  `meanVec` applied to `s.translate` for each shape. Tweening
- *  (`centroid(...).to(target, sec)`) moves the group rigidly.
- *
- *  Shapes are constrained to `Writable<"translate">` — derived-
- *  translate shapes (`group({ translate: computed(...) })`) can't be
- *  the target of a centroid write and are rejected at the type level. */
+/** Centroid of N shapes' translates as a writable `Point`. Tween it to
+ *  move the group rigidly. */
 export function centroid(...shapes: Writable<"translate">[]): Point {
   return meanVec(...shapes.map((s) => s.translate));
 }
 
-/** Mean rotation of N shapes as a writable `Signal<number>`. Writes
- *  apply the delta rigidly — every shape rotates by the same amount,
- *  preserving relative orientations. */
+/** Mean rotation as a writable `Signal<number>`; writes rotate every
+ *  shape by the same delta. */
 export function meanRotation(
   ...shapes: Writable<"rotate">[]
 ): Signal<number> {
   return meanNum(...shapes.map((s) => s.rotate));
 }
 
-/** Mean scale of N shapes as a writable `Point`. Writes distribute
- *  the delta to each shape's scale, preserving relative size offsets. */
+/** Mean scale as a writable `Point`. */
 export function meanScale(...shapes: Writable<"scale">[]): Point {
   return meanVec(...shapes.map((s) => s.scale));
 }

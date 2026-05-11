@@ -1,7 +1,5 @@
-// Core: time + reactivity foundation. Layer-A (Anim) is the runtime;
-// layer-B (signals + utilities) is the reactive substrate. Self-contained
-// — the signal primitive is vendored. Pair with `../scene/` for the
-// scene graph; pair with `../shapes/`, `../motion/` for the stdlibs.
+// Core: time (Anim) + reactivity (vendored signals) + utilities.
+// Pair with `../scene/`, `../shapes/`, `../motion/`.
 
 export {
   signal,
@@ -40,7 +38,6 @@ export {
   type Awaitable,
   type Yieldable,
   type SpawnFn,
-  type ObserveListeners,
 } from "./anim";
 
 export { EventBus } from "./events";

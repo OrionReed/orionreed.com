@@ -1,5 +1,5 @@
-// Callable scene handle: `s(shape)` mounts under root, plus
-// `s.view(...)` / `s.fit(...)` to set the SVG viewBox.
+// Callable scene handle: `s(shape)` mounts under root; `s.view(...)`
+// or `s.fit(...)` sets the SVG viewBox.
 
 import { Bounds, aabb, type AABB } from "./bounds";
 import { effect, signal } from "../core/signal";
@@ -23,19 +23,19 @@ export interface Scene {
   readonly svg: SVGSVGElement;
   readonly root: AnyShape;
 
-  /** Set viewBox. Reactive in any `Arg<number>` input. First call
-   *  wins; returns Bounds representing the viewBox for layout use. */
+  /** Set viewBox (reactive in any input). First call wins; returns a
+   *  Bounds representing the viewBox for layout use. */
   view(
     x: Arg<number>,
     y: Arg<number>,
     w: Arg<number>,
     h: Arg<number>,
   ): Bounds;
-  /** Auto-fit viewBox to root bounds + optional padding. First call wins. */
+  /** Auto-fit viewBox to root bounds + optional padding. */
   fit(padding?: Padding): Bounds;
 
-  /** True until `view()` or `fit()` is called — `Diagram` falls back
-   *  to auto-fit if `setup` doesn't set the view explicitly. */
+  /** True until `view()` or `fit()` is called — `Diagram` auto-fits
+   *  when `scene()` doesn't set a view explicitly. */
   readonly _viewPending: boolean;
 }
 

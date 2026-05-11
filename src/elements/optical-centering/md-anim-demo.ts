@@ -1,5 +1,4 @@
-// Kitchen sink for the v2 animation system. Each strip exercises a
-// different yield pattern. Useful as a smoke test and as a reference.
+// Kitchen sink — each strip exercises a different yield pattern.
 
 import {
   circle,
@@ -19,7 +18,7 @@ import {
   type Signal,
 } from "../../minim";
 
-// ── Custom mini-animator: set text, hold, return ────────────────────
+// Mini-animator: set text, hold, return.
 function* setTextFor(
   text: Signal<Content>,
   value: string,
@@ -42,7 +41,7 @@ export class MdAnimDemo extends Diagram {
     const sideLabel = (y: number, name: string) =>
       s(label(pt(10, y), name, { size: 11, align: align.left, opacity: 0.5 }));
 
-    // ── Strip A: tween + easing, looping bounce ────────────────────
+    // tween + easing
     sideLabel(35, "tween");
     const aX = signal(60);
     s(circle(pt(aX, 35), 10, { fill: true }));
@@ -50,7 +49,7 @@ export class MdAnimDemo extends Diagram {
       yield* aX.to(540, 1, easeInOut).to(60, 1, easeInOut);
     });
 
-    // ── Strip B: stagger + array sugar (parallel, time-offset) ─────
+    // stagger + array sugar
     sideLabel(105, "stagger");
     const bDots = Array.from({ length: 5 }, (_, i) =>
       s(circle(pt(80 + i * 100, 105), 10, { fill: true, opacity: 0 })),
@@ -62,20 +61,19 @@ export class MdAnimDemo extends Diagram {
       yield 0.3;
     });
 
-    // ── Strip C: spring follow (behavior + concurrent loops) ───────
+    // spring follow (target oscillates on its own loop; follower
+    // runs forever, never settles).
     sideLabel(175, "spring");
     const cTarget = signal(80);
     const cFollower = signal(80);
     s(circle(pt(cTarget, 175), 6, { fill: true }));
     s(circle(pt(cFollower, 175), 14, { thin: true }));
-    // Target oscillates on its own loop.
     this.anim.loop(function* () {
       yield* cTarget.to(520, 1.5, easeInOut).to(80, 1.5, easeInOut);
     });
-    // Follower runs forever, never settles (target keeps moving).
     this.anim.run(() => spring(cFollower, cTarget));
 
-    // ── Strip D: sequence + reactive label content ─────────────────
+    // sequence + reactive label content
     sideLabel(245, "sequence");
     const dText = signal<Content>("ready");
     s(label(pt(300, 245), dText, { size: 14 }));

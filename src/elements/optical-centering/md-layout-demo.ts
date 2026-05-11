@@ -1,15 +1,6 @@
-// Showcases the layout primitives + their interaction with animation:
-//
-//   - `align` namespace for label alignment.
-//   - `bounds.at(u, v)` for arbitrary anchor points on a rect.
-//   - `arrange(shapes, axis, opts)` for reactive row/column layout.
-//   - Multiple simultaneous size animations flowing through `arrange`
-//     to reflow neighbours.
-//   - A fixed-link chain "snake" — each tail link sits at a constant
-//     distance from its predecessor, dragged along when the head moves.
-//     The classic per-frame chain solve: dependency graph (link i
-//     depends on link i-1) is the layout relation; the per-frame
-//     sweep is the animation. Both share signals as their substrate.
+// Layout × animation: `arrange` reflowing as multiple rect widths
+// pulse, and a fixed-link "snake" (per-frame chain solve where each
+// link depends on the previous).
 
 import {
   Diagram,
@@ -38,7 +29,7 @@ export class MdLayoutDemo extends Diagram {
   protected scene(s: Scene): void {
     s.view(0, 0, 520, 360);
 
-    // ── Middle: arrange() with multiple simultaneous size animations ─
+    // ── arrange + pulsing widths ───────────────────────────────────
     const w0 = signal(40);
     const w2 = signal(36);
     const w4 = signal(48);
@@ -51,8 +42,6 @@ export class MdLayoutDemo extends Diagram {
     cards[0].translate.value = { x: 30, y: 0 };
     arrange(cards, "row", { gap: 12, align: 0.5 });
 
-    // Three widths pulsing on staggered cycles — each one's neighbours
-    // reflow live through `arrange`.
     this.anim.loop(function* () {
       yield* w0.to(80, 1.2, easeInOut).to(40, 1.2, easeInOut);
     });
@@ -70,11 +59,9 @@ export class MdLayoutDemo extends Diagram {
       }),
     );
 
-    // ── Bottom: fixed-link chain "snake" ────────────────────────────
-    // Each tail link is at a fixed `linkLen` from its predecessor.
-    // The head drifts along a Lissajous path; the chain solves
-    // forward each frame: pull link[i] to be exactly `linkLen` away
-    // from link[i-1] in the direction it currently sits.
+    // ── Fixed-link chain "snake" ───────────────────────────────────
+    // Head drifts along a Lissajous path; each frame, pull link[i] to
+    // be exactly `linkLen` from link[i-1] in its current direction.
     const cx = 260;
     const cy = 310;
     const phase = signal(0);
@@ -87,10 +74,8 @@ export class MdLayoutDemo extends Diagram {
 
     const N = 8;
     const linkLen = 11;
-    // `Point`s are writable `Signal<Vec>`s — pass directly to `circle`,
-    // peek/write via `.value` exactly like a raw signal would.
     const links: Point[] = Array.from({ length: N }, (_, i) =>
-      // Initial spread along -x so the chain starts un-collapsed.
+      // Spread along -x so the chain starts un-collapsed.
       pt(cx - i * linkLen, cy),
     );
 

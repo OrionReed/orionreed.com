@@ -1,28 +1,6 @@
-// Runtime correctness tests for `Anim`. Each test creates a fresh `Anim`
-// and drives it via `step(dt)` — fully synchronous and deterministic, no
-// RAF dependency. Re-runs every few seconds so a regression shows up live.
-//
-// What's covered:
-//   yield-contract:  number sleeps, undefined frames, parallel arrays,
-//                    yield* delegation, yield gen delegation, tail-call (≤0).
-//   cancellation:    stop()-from-within-gen runs finally; restart works;
-//                    stop() cascades to scopes; run() disposer cancels.
-//   isolation:       one throwing gen doesn't kill siblings.
-//   awaitable:       sync wake, async wake, disposer fires on cancel,
-//                    nested awaitables, ctx.spawn host-parented children,
-//                    spawn-after-setup throws.
-//   race:            first-completion wakes parent; losers are cancelled;
-//                    children's full yield protocol is honoured; mixed
-//                    Yieldable args (numbers, awaitables, generators).
-//   until:           cancel-on-trigger pattern; sequel runs after.
-//   observe:         spawn/complete/cancel events fire with correct ids;
-//                    no overhead when no observer; cancel after disposer.
-//   event bus:       emit / on; until is zero-latency (wakes inside emit).
-//   signals:         equals option suppresses no-op writes.
-//   lens:            read/write through; sub-field memoization;
-//                    independent axes don't cross-fire.
-//   point:           writable Point + axis lenses; derived Points
-//                    (Bounds.center, math methods) are read-only.
+// Runtime correctness tests. Each test creates a fresh `Anim` and
+// drives it via `step(dt)` — synchronous and deterministic, no RAF.
+// Re-runs every few seconds so regressions surface live.
 
 import {
   Anim,
@@ -97,10 +75,8 @@ const TESTS: TestCase[] = [
   {
     name: "frame yield receives dt on resume",
     run: (assert) => {
-      // The bootstrap `gen.next(0)` happens inside `spawn()` — by the time
-      // user code calls `step`, the gen is already suspended at its first
-      // `yield`. Each subsequent `step(dt)` resumes the gen and the dt
-      // reaches the gen as the value of the yield expression.
+      // The bootstrap `gen.next(0)` runs inside `spawn()`; by the time
+      // user code calls `step`, the gen is already at its first yield.
       const a = new Anim();
       const dts: number[] = [];
       a.run(function* () {
@@ -277,8 +253,8 @@ const TESTS: TestCase[] = [
   {
     name: "throw at spawn time is isolated",
     run: (assert) => {
-      // The bad gen throws on its first .next, which lands inside `spawn`
-      // via `advance`. Isolation in `advance`'s catch keeps siblings alive.
+      // Bad gen throws on first `.next` — `advance`'s catch keeps
+      // siblings alive.
       const a = new Anim();
       let goodRan = 0;
       const origError = console.error;
@@ -307,8 +283,7 @@ const TESTS: TestCase[] = [
   {
     name: "throw during step is isolated",
     run: (assert) => {
-      // Bad gen suspends at first yield, then throws on resume during a
-      // later step. Isolation must work for the in-loop throw path too.
+      // Bad gen throws on resume during a later step — in-loop path.
       const a = new Anim();
       let goodRan = 0;
       const origError = console.error;
@@ -337,8 +312,8 @@ const TESTS: TestCase[] = [
   {
     name: "child throw doesn't hang parent",
     run: (assert) => {
-      // A throwing child must notify its parent (via `complete`) so the
-      // parent's child counter decrements and the parent eventually wakes.
+      // Throwing children must report via `complete` so the parent's
+      // counter decrements.
       const a = new Anim();
       let parentDone = false;
       const origError = console.error;
@@ -390,8 +365,6 @@ const TESTS: TestCase[] = [
   {
     name: "event bus: until wakes synchronously inside emit",
     run: (assert) => {
-      // Awaitable contract: when emit fires, the waiting generator
-      // resumes in the same tick — no extra step required.
       const a = new Anim();
       const bus = new EventBus();
       let woken = false;
@@ -431,8 +404,7 @@ const TESTS: TestCase[] = [
   {
     name: "Awaitable: synchronous resolve advances immediately",
     run: (assert) => {
-      // Subscribe calls wake before returning — gen advances re-entrantly,
-      // and the outer advance bails without overwriting awaitDispose.
+      // Subscribe calls wake before returning; gen advances re-entrantly.
       const a = new Anim();
       let phase = 0;
       a.run(function* () {
@@ -519,9 +491,6 @@ const TESTS: TestCase[] = [
   {
     name: "cancel cascades to children",
     run: (assert) => {
-      // When a parent active is cancelled, its spawned children (via
-      // `yield gen` or `yield array`) get cancelled too — their finally
-      // blocks run and they don't keep advancing as orphans.
       const a = new Anim();
       let childFinally = 0;
       const handle = a.run(function* () {
@@ -551,8 +520,6 @@ const TESTS: TestCase[] = [
   {
     name: "race: child yield protocol works (sub-gen, sleep, parallel)",
     run: (assert) => {
-      // Children use the full yield contract. Slow child uses a parallel
-      // array; fast child uses yield* delegation; both legal inside race.
       const a = new Anim();
       let parentDone = false;
       a.run(function* () {
@@ -584,8 +551,6 @@ const TESTS: TestCase[] = [
   {
     name: "race: accepts mixed Yieldable args (number, awaitable, gen)",
     run: (assert) => {
-      // `race(...)` lifts non-generator Yieldables. A number means
-      // "sleep for N seconds"; an awaitable subscribes directly.
       const a = new Anim();
       const bus = new EventBus();
       let winner = "";
@@ -601,7 +566,6 @@ const TESTS: TestCase[] = [
       });
       a.step(0);
       a.step(0.12);
-      // The 0.1s gen wins; sets winner before resuming parent.
       assert(winner === "gen", `winner=${winner}, expected "gen"`);
       a.stop();
     },
@@ -629,8 +593,6 @@ const TESTS: TestCase[] = [
   {
     name: "until: cancels work on trigger, sequel runs",
     run: (assert) => {
-      // The graceful-exit pattern: work runs until trigger fires; the
-      // next `yield*` is the exit. Both run in the same generator.
       const a = new Anim();
       const stop = signal(false);
       let phase = 0;
@@ -658,9 +620,6 @@ const TESTS: TestCase[] = [
   {
     name: "ctx.spawn parents children to the suspended host",
     run: (assert) => {
-      // An awaitable that uses ctx.spawn produces children whose
-      // cancel-cascade walks through the host. Killing the host kills
-      // the children (their finallys fire) without manual plumbing.
       const a = new Anim();
       let childFinally = 0;
       const handle = a.run(function* () {
@@ -724,8 +683,7 @@ const TESTS: TestCase[] = [
   {
     name: "ctx.spawn onComplete fires on natural completion",
     run: (assert) => {
-      // The `onComplete` hook is how `race`/`all`/`single` learn that a
-      // spawned child finished. It must NOT fire on cancel.
+      // `onComplete` MUST NOT fire on cancel.
       const a = new Anim();
       let completes = 0;
       let cancels = 0;
@@ -745,9 +703,8 @@ const TESTS: TestCase[] = [
                 cancels++;
               }
             })(),
-            () => completes++, // SHOULD NOT fire — we cancel this one
+            () => completes++, // SHOULD NOT fire — cancelled below
           );
-          // Cancel the second child immediately.
           cancelChild();
           return () => {};
         };
@@ -814,12 +771,9 @@ const TESTS: TestCase[] = [
       );
       let fires = 0;
       s.subscribe(() => fires++);
-      // Initial subscribe call.
       assert(fires === 1, `initial fire count was ${fires}, expected 1`);
-      // Same-value write (different object): suppressed.
       s.value = { x: 1, y: 2 };
       assert(fires === 1, `same-value write fired (${fires})`);
-      // Different value: fires.
       s.value = { x: 1, y: 3 };
       assert(fires === 2, `changed write didn't fire (${fires})`);
     },
@@ -844,9 +798,6 @@ const TESTS: TestCase[] = [
   {
     name: "lens aggregates multiple parents (centroid-style)",
     run: (assert) => {
-      // The general `lens(read, write)` form: read averages two
-      // signals (tracked, so changes invalidate the lens), write
-      // distributes a delta back to both.
       const a = signal(0);
       const b = signal(10);
       const avg = lens(
@@ -872,7 +823,6 @@ const TESTS: TestCase[] = [
       let yFires = 0;
       p.x.subscribe(() => xFires++);
       p.y.subscribe(() => yFires++);
-      // Initial subscribe-call fires.
       assert(xFires === 1 && yFires === 1, `initial fires off`);
       p.x.value = 99;
       assert(xFires === 2, `x didn't fire on x-write (${xFires})`);
@@ -902,7 +852,6 @@ const TESTS: TestCase[] = [
       });
       a.step(0);
       a.step(0.05);
-      // Mid-tween: both axes have advanced.
       assert(p.x.value > 0 && p.x.value < 10, `x mid: ${p.x.value}`);
       assert(p.y.value > 0 && p.y.value < 20, `y mid: ${p.y.value}`);
       a.step(0.06);
@@ -932,7 +881,6 @@ const TESTS: TestCase[] = [
       const sum = a.add(b);
       assert(sum instanceof DerivedPoint, `add result not DerivedPoint`);
       assert(sum.value.x === 4 && sum.value.y === 6, `sum value off`);
-      // Reactive: changing a updates sum.
       a.value = { x: 10, y: 20 };
       assert(sum.value.x === 13 && sum.value.y === 24, `sum didn't react`);
     },
@@ -940,20 +888,18 @@ const TESTS: TestCase[] = [
   {
     name: "centroid: read averages, write distributes delta",
     run: (assert) => {
-      // Two stand-in shapes: anything with a writable Point at .translate.
       const a = { translate: pt(0, 0) };
       const b = { translate: pt(100, 50) };
       const c = centroid(a, b);
       assert(c instanceof Point, `centroid should be a Point`);
       assert(c.value.x === 50 && c.value.y === 25, `initial avg off`);
-      // Write the whole Vec — both shapes shift by the delta.
       c.value = { x: 60, y: 35 };
       assert(a.translate.peek().x === 10, `a.x after write: ${a.translate.peek().x}`);
       assert(b.translate.peek().x === 110, `b.x after write: ${b.translate.peek().x}`);
       assert(a.translate.peek().y === 10, `a.y after write: ${a.translate.peek().y}`);
       assert(b.translate.peek().y === 60, `b.y after write: ${b.translate.peek().y}`);
-      // Per-axis write — only x distributes.
-      c.x.value = 100;  // delta dx = 100 - 60 = 40
+      // Per-axis write — only x distributes (dx = 100 - 60 = 40).
+      c.x.value = 100;
       assert(a.translate.peek().x === 50, `a.x after axis: ${a.translate.peek().x}`);
       assert(b.translate.peek().x === 150, `b.x after axis: ${b.translate.peek().x}`);
       assert(a.translate.peek().y === 10, `a.y after axis (unchanged): ${a.translate.peek().y}`);
@@ -967,7 +913,7 @@ const TESTS: TestCase[] = [
       const c = signal(20);
       const m = meanNum(a, b, c);
       assert(m.value === 10, `initial mean: ${m.value}`);
-      m.value = 13;  // delta = 3 → each += 3
+      m.value = 13; // delta = 3 → each += 3
       assert(a.peek() === 3, `a after: ${a.peek()}`);
       assert(b.peek() === 13, `b after: ${b.peek()}`);
       assert(c.peek() === 23, `c after: ${c.peek()}`);
@@ -982,7 +928,7 @@ const TESTS: TestCase[] = [
       const m = meanVec(a, b);
       assert(m instanceof Point, `meanVec should return a Point`);
       assert(m.value.x === 50 && m.value.y === 25, `initial mean off`);
-      m.value = { x: 60, y: 35 };  // delta (10, 10)
+      m.value = { x: 60, y: 35 }; // delta (10, 10)
       assert(a.peek().x === 10 && a.peek().y === 10, `a not shifted: ${JSON.stringify(a.peek())}`);
       assert(b.peek().x === 110 && b.peek().y === 60, `b not shifted: ${JSON.stringify(b.peek())}`);
     },
@@ -998,7 +944,6 @@ const TESTS: TestCase[] = [
       });
       a.step(0);
       a.step(0.11);
-      // After full tween, positions are exchanged.
       assert(sh1.translate.peek().x === 100, `sh1.x: ${sh1.translate.peek().x}`);
       assert(sh1.translate.peek().y === 50, `sh1.y: ${sh1.translate.peek().y}`);
       assert(sh2.translate.peek().x === 0, `sh2.x: ${sh2.translate.peek().x}`);
@@ -1022,7 +967,6 @@ const TESTS: TestCase[] = [
       });
       a.step(0);
       a.step(0.11);
-      // All four shapes are at distance 50 from centre.
       for (let i = 0; i < shapes.length; i++) {
         const v = shapes[i].translate.peek();
         const d = Math.hypot(v.x - 100, v.y - 100);
@@ -1075,8 +1019,7 @@ const TESTS: TestCase[] = [
         yield* spring(sig, 100, { precision: 0.01 });
         done = true;
       });
-      // Step long enough for a critically-damped spring to settle
-      // (~6 / sqrt(stiffness) seconds at default stiffness=170).
+      // ~6/√stiffness seconds at default stiffness=170 is plenty.
       for (let i = 0; i < 200; i++) a.step(0.016);
       assert(done, `spring should have settled`);
       assert(sig.value === 100, `should snap to target; got ${sig.value}`);
@@ -1090,9 +1033,9 @@ const TESTS: TestCase[] = [
       const sig = signal(50);
       a.run(() => oscillate(sig, 10, 1)); // amp=10, freq=1Hz
       a.step(0);
-      a.step(0.25); // quarter period — should be near base + amp
+      a.step(0.25); // quarter period → near base + amp
       assert(Math.abs(sig.value - 60) < 0.5, `quarter: ${sig.value}`);
-      a.step(0.75); // full period — back near base
+      a.step(0.75); // full period → back near base
       assert(Math.abs(sig.value - 50) < 0.5, `period: ${sig.value}`);
       a.stop();
     },
@@ -1116,7 +1059,7 @@ const TESTS: TestCase[] = [
       const sig = signal(0);
       a.run(() => attract(sig, 100, 1));
       a.step(0);
-      // Many small steps approximate continuous: 1 - e^-1 ≈ 0.632
+      // After t=1 at rate=1, approaches 1 - e^-1 ≈ 0.632.
       for (let i = 0; i < 100; i++) a.step(0.01);
       assert(
         Math.abs(sig.value - 63.2) < 1,
@@ -1152,7 +1095,7 @@ const TESTS: TestCase[] = [
         yield untilChange(sig);
         woke = true;
       });
-      // The first effect run reads the current value and must not wake.
+      // First effect run is the baseline — must not wake.
       a.step(0);
       a.step(0.1);
       assert(!woke, `baseline read should not wake`);
@@ -1174,9 +1117,8 @@ const TESTS: TestCase[] = [
       });
       a.step(0);
       assert(!woke, `not before settlement`);
-      // Cancel the active before the promise settles. The disposer
-      // sets a "cancelled" flag — even when the microtask fires later,
-      // wake is suppressed.
+      // Cancel before settlement; the disposer flags cancelled so
+      // the later microtask doesn't fire wake.
       dispose();
       resolve();
       a.step(0);
@@ -1194,7 +1136,6 @@ const TESTS: TestCase[] = [
         Math.abs(m.value - Math.PI / 4) < 1e-9,
         `mean: ${m.value}`,
       );
-      // Write distributes the delta rigidly.
       m.value = Math.PI / 2;
       assert(
         Math.abs(sh1.rotate.value - Math.PI / 4) < 1e-9,
@@ -1273,7 +1214,6 @@ export class MdRuntimeTests extends Diagram {
       return [dot, name, msg];
     });
 
-    // Footer hint.
     s(
       label(
         pt(W / 2, H - 12),
@@ -1282,9 +1222,7 @@ export class MdRuntimeTests extends Diagram {
       ),
     );
 
-    // Test driver — runs each test then holds, looping.
     this.anim.loop(function* () {
-      // Reset.
       for (let i = 0; i < TESTS.length; i++) {
         statuses[i].value = "pending";
         messages[i].value = "";

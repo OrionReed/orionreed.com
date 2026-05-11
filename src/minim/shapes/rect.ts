@@ -72,7 +72,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
       const t = toward.value;
       const cx = b.x + b.w / 2;
       const cy = b.y + b.h / 2;
-      // Scale-aware half-extents — boundary tracks the visual rect.
+      // Scale-aware half-extents track the visual rect.
       const halfW = (b.w / 2) * sc.x;
       const halfH = (b.h / 2) * sc.y;
       const dx = t.x - cx;
@@ -86,9 +86,8 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     });
   }
 
-  /** Concentric outline: a new (unmounted) Rect inflated by `by` on
-   *  each side, with corner radius bumped to keep the outer curve
-   *  parallel to the inner. */
+  /** Concentric outline — a new unmounted Rect inflated by `by` per
+   *  side; corner radius bumps to keep curves parallel. */
   outline(by: Arg<number>, opts?: RectOpts): Rect {
     const bys = toSig(by);
     return new Rect(
@@ -100,7 +99,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     );
   }
 
-  /** Rounded-rect outline: 4 sides + 4 quarter-arcs at corners. */
+  /** 4 sides + 4 corner quarter-arcs (or just sides when `corner === 0`). */
   override segments(): Segment[] {
     const b = this.bounds.value;
     const r = Math.min(this.corner.value, b.w / 2, b.h / 2);
@@ -130,12 +129,12 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   }
 }
 
-/** Rect factory, four forms:
+/** Rect factory:
  *
- *   rect(x, y, w, h, opts?)            — corner-based (canonical)
- *   rect(b: Bounds, opts?)             — from another shape's bounds
- *   rect(center: Pointlike, w, h, opts?)  — centered on a Point
- *   rect(p1: Pointlike, p2: Pointlike, opts?) — bounded by two corner Points
+ *   rect(x, y, w, h, opts?)             — corner-based (canonical)
+ *   rect(b: Bounds, opts?)              — from another shape's bounds
+ *   rect(center: Point, w, h, opts?)    — centered on a Point
+ *   rect(p1: Point, p2: Point, opts?)   — between two corner Points
  */
 export function rect<const O extends RectOpts>(b: Bounds, opts?: O): Rect<O>;
 export function rect<const O extends RectOpts>(

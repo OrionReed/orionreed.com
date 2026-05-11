@@ -1,12 +1,9 @@
-// Circuit — non-linear topology with multiple gate kinds, driven by
-// minim's event bus. Read top-to-bottom: helpers, then nodes, then
-// wires, then behaviors. The diagram's shape should be legible from
-// the structure of `scene()` alone.
-//
-// Two parallel topologies sharing the bus:
+// Non-linear topology driven by an event bus. Read top-to-bottom:
+// helpers → nodes → wires → behavior. Two parallel topologies share
+// the bus:
 //
 //   A ─┐
-//      AND ── DELAY ── SPLIT ─┬─ X       (sync + held + parallel fan-out)
+//      AND ── DELAY ── SPLIT ─┬─ X       (sync + held + fan-out)
 //   B ─┘                      └─ Y
 //
 //   C ─── CHOICE ─┬─ Z                   (random one-of branch)
@@ -49,7 +46,7 @@ export class MdCircuit extends Diagram {
 
     // ── Visual primitives ───────────────────────────────────────────
 
-    /** A source — circle + label, scale-pulses on each fire. */
+    /** Circle + label that scale-pulses on `ev`. */
     const source = (x: number, y: number, lbl: string, ev: string) => {
       const c = circle(pt(x, y), 18);
       s(c, label(c.center, lbl, { size: 13, bold: true }));
@@ -60,7 +57,7 @@ export class MdCircuit extends Diagram {
       return c;
     };
 
-    /** A counting sink — circle showing live count, increments + scale- */
+    /** Counting sink — live count + scale-pulse on each fire. */
     const sink = (x: number, y: number, lbl: string, ev: string) => {
       const c = circle(pt(x, y), 18);
       s(
@@ -82,9 +79,8 @@ export class MdCircuit extends Diagram {
       return c;
     };
 
-    /** A boxed gate — rectangle centered on (x,y) with a title. `lblY`
-     *  shifts the title vertically (negative = up); useful when an
-     *  indicator dot needs to sit below the title without crowding. */
+    /** Boxed gate — rectangle + title. `lblY` shifts the title
+     *  (negative = up) to make room for indicator dots. */
     const box = (
       x: number,
       y: number,
@@ -101,31 +97,28 @@ export class MdCircuit extends Diagram {
       return r;
     };
 
-    /** A small junction circle — branch point. */
+    /** Junction circle. */
     const node = (x: number, y: number) => {
       const c = circle(pt(x, y), 9);
       s(c);
       return c;
     };
 
-    /** Indicator dot whose fill toggles with a reactive boolean. */
+    /** Indicator dot toggled by a reactive boolean. */
     const lit = (at: Pointlike, on: Arg<boolean>) =>
       circle(at, 4, {
         fill: toSig(on).derive((v) => (v ? tokens.stroke : "transparent")),
       });
 
-    // Auto-route, fully reactive so endpoints stick to the visual
-    // boundary as shapes pulse:
+    // Reactive auto-route — endpoints track visual boundaries as
+    // shapes pulse:
+    //   1. y-midline between source/target reference points
+    //   2. P_A on the midline at 45° from source
+    //   3. P_B symmetric to target
+    //   4. path: src → P_A → P_B → tgt
     //
-    //   1. Find the y-midline between the source/target reference points.
-    //   2. Place P_A on the midline at 45° from the source point.
-    //   3. Place P_B symmetrically at 45° from the target point.
-    //   4. Path: src → P_A → P_B → tgt.
-    //
-    // The reference points (`from`/`to`) default to each shape's bounds
-    // center, in which case `src`/`tgt` resolve to the analytic boundary
-    // along the 45° ray. Pass an explicit Point (e.g. `AND.bounds.left`)
-    // to anchor the wire to a specific edge of the shape.
+    // Refs default to each shape's bounds.center; pass an explicit
+    // Point (e.g. `AND.bounds.left`) to anchor a specific edge.
     const wire = (
       a: AnyShape,
       b: AnyShape,
@@ -141,8 +134,8 @@ export class MdCircuit extends Diagram {
         const end = opts.to ?? b.boundary(aRef);
         w = path(start).to(end);
       } else {
-        // 45° staircase: the bend points sit on the y-midline at the
-        // x where each diagonal leg covers exactly |dy|/2 horizontally.
+        // 45° staircase: bend points sit on the y-midline where each
+        // diagonal leg covers exactly |dy|/2 horizontally.
         const m = aRef.lerp(bRef, 0.5);
         const dirX = bRefV.x > aRefV.x ? 1 : -1;
         const halfDy = computed(() => Math.abs(m.y.value - aRef.y.value));
@@ -157,13 +150,10 @@ export class MdCircuit extends Diagram {
       return w;
     };
 
-    /** Constant spatial speed (px/sec) for token dots. Long wires
-     *  take proportionally longer; short wires zip across — natural
-     *  motion regardless of routing length. */
+    /** Constant spatial speed (px/sec) — longer wires take longer. */
     const SPEED = 240;
 
-    /** Send one pulse along `w`. The wire's opacity flashes in lockstep
-     *  — visible "this wire is carrying an event right now." */
+    /** Send one pulse along `w`; the wire's opacity flashes in lockstep. */
     const pulse = (w: Path, onArrive?: () => void) => {
       const total = w.length.value;
       const sec = total / SPEED;
@@ -182,7 +172,7 @@ export class MdCircuit extends Diagram {
 
     // ── Behavior helpers ────────────────────────────────────────────
 
-    /** Fire `ev` at random intervals — drives the demo. */
+    /** Fire `ev` at random intervals. */
     const ticker = (ev: string, minGap: number, maxGap: number) =>
       anim.run(function* () {
         yield R.float(0.3, minGap);
@@ -192,14 +182,13 @@ export class MdCircuit extends Diagram {
         }
       });
 
-    /** When `from` fires, send a pulse along `w`; on arrival fire `to`. */
+    /** On `from`, send a pulse along `w`; on arrival fire `to`. */
     const relay = (from: string, w: Path, to: string) =>
       bus.on(from, () => pulse(w, () => bus.emit(to)));
 
-    /** AND-sync: tokens accumulate from `evA` and `evB`; whenever each
-     *  has ≥1, fire `out` and consume one of each. Pending counts are
-     *  plain signals; the slot-dot visuals derive from them — no
-     *  manual mirroring. */
+    /** AND-sync: tokens accumulate from `evA`/`evB`; when each has ≥1,
+     *  fire `out` and consume one of each. Slot-dot visuals derive
+     *  from the counts (no manual mirroring). */
     const andSync = (evA: string, evB: string, out: string, gate: AnyShape) => {
       const a = signal(0);
       const b = signal(0);
@@ -224,7 +213,7 @@ export class MdCircuit extends Diagram {
       });
     };
 
-    /** Hold an arriving event for a randomized interval, then relay. */
+    /** Hold an arriving event for a random interval, then relay. */
     const hold = (
       from: string,
       holdRange: [number, number],
@@ -243,13 +232,13 @@ export class MdCircuit extends Diagram {
       });
     };
 
-    /** SPLIT — fan one input into N parallel pulses. */
+    /** Fan one input into N parallel pulses. */
     const split = (from: string, branches: [Path, string][]) =>
       bus.on(from, () => {
         for (const [w, out] of branches) pulse(w, () => bus.emit(out));
       });
 
-    /** CHOICE — fan one input into ONE randomly-picked branch. */
+    /** Fan one input into ONE randomly-picked branch. */
     const choose = (from: string, branches: [Path, string][]) =>
       bus.on(from, () => {
         const [w, out] = R.pick(branches);
@@ -257,7 +246,6 @@ export class MdCircuit extends Diagram {
       });
 
     // ── Nodes ───────────────────────────────────────────────────────
-    // Top track: A ⋀ B → AND → DELAY → SPLIT → {X, Y}
     const A = source(50, 70, "A", "fire:A");
     const B = source(50, 170, "B", "fire:B");
     const AND = box(200, 120, 60, 48, "AND");
@@ -267,16 +255,14 @@ export class MdCircuit extends Diagram {
     const X = sink(560, 70, "X", "arrived:X");
     const Y = sink(560, 170, "Y", "arrived:Y");
 
-    // Bottom track: C → CHOICE → {Z | W}
     const C = source(50, 290, "C", "fire:C");
     const CHOICE = box(270, 290, 60, 40, "CHOICE");
     const Z = sink(560, 250, "Z", "arrived:Z");
     const W_ = sink(560, 330, "W", "arrived:W");
 
     // ── Wires ───────────────────────────────────────────────────────
-    // Both AND inputs converge at AND.left; both CHOICE outputs leave
-    // from CHOICE.right. The 45° geometry is computed against those
-    // anchors, so the staircase lands cleanly on the shared edge.
+    // Anchor AND inputs to AND.left and CHOICE outputs to CHOICE.right
+    // so the 45° staircase lands cleanly on a shared edge.
     const wA = wire(A, AND, { to: AND.bounds.left });
     const wB = wire(B, AND, { to: AND.bounds.left });
     const wAD = wire(AND, DELAY);

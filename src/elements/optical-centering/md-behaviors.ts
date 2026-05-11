@@ -1,10 +1,7 @@
-// Composition piece for `motion/behaviors.ts`. Two heads — one
-// drift+oscillate above, one below — each leads a snake of followers.
-// Top trail uses `attract` (smooth exponential pull, no overshoot),
-// bottom uses `spring` (elastic, momentum, overshoots). All four
-// behaviors composed in ~50 lines. The trail isn't a special primitive:
-// each link is just a behavior whose target is the previous link's
-// signal.
+// Two heads — drift+oscillate above and below — each leading a trail.
+// Top uses `attract` (smooth, no overshoot), bottom uses `spring`
+// (elastic). Each trail link is a behavior whose target is the
+// previous link's signal — no special primitive needed.
 
 import {
   Diagram,
@@ -37,8 +34,8 @@ export class MdBehaviors extends Diagram {
   protected scene(s: Scene): void {
     s.view(0, 0, W, H);
 
-    // Each head: x drifts wall-to-wall (with a tiny anonymous loop
-    // flipping vel at the boundaries), y oscillates around its lane.
+    // Each head: x drifts wall-to-wall (flipping vel at boundaries
+    // via a tiny loop), y oscillates around its lane.
     const head = (lane: number, xVelInit: number, freqY: number) => {
       const x = signal(W / 2);
       const y = signal(lane);
@@ -55,16 +52,13 @@ export class MdBehaviors extends Diagram {
       return { x, y };
     };
 
-    // Top head: rightward, slow wobble.
     const a = head(H / 3, 180, 0.4);
     s(circle(pt(a.x, a.y), 9, { fill: "#1a1a1a" }));
-
-    // Bottom head: leftward, faster wobble.
     const b = head((2 * H) / 3, -150, 0.7);
     s(circle(pt(b.x, b.y), 9, { fill: "#1a1a1a" }));
 
-    // Trail factory — chain of N circles, each chasing the previous
-    // via `run`. The behavior decides the personality.
+    // Trail of N circles, each chasing the previous via `run`. The
+    // behavior decides the personality.
     const trail = (
       seedX: Signal<number>,
       seedY: Signal<number>,
@@ -89,12 +83,9 @@ export class MdBehaviors extends Diagram {
       }
     };
 
-    // Top: attract — smooth exponential pull, never overshoots.
     trail(a.x, a.y, "#5b8def", (sig, target) => {
       this.anim.run(() => attract(sig, target, 9));
     });
-
-    // Bottom: spring — momentum, the chain wiggles.
     trail(b.x, b.y, "#e25c5c", (sig, target) => {
       this.anim.run(() => spring(sig, target, { stiffness: 180, damping: 18 }));
     });

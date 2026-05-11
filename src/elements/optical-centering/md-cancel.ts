@@ -1,22 +1,8 @@
-// Two cancellation modes side by side. EXIT cooperatively shuts the
-// behaviors down and lets each shape animate out via its own sequel;
-// STOP cancels everything via the disposer (cascading through any
-// in-flight exits too).
-//
-// The pattern: each shape's lifecycle is one generator —
-//
-//     yield until(untilChange(stop), oscillate(...));
-//     yield* fadeOut(s, 0.4);
-//
-// `until(trigger, work)` runs the work as a child; when `trigger`
-// fires, the child is cancelled and the awaitable resumes. The next
-// `yield*` is the exit, and it runs in the *same* generator. No host
-// reference, no try/finally, no separate registry. Cancellation is
-// just race(work, trigger), named for the intent.
-//
-// STOP demonstrates that hard cancel reaches everything, including
-// exits-in-flight: click STOP while shapes are fading and they freeze
-// mid-fade. The structural cascade is the same machinery throughout.
+// Two cancellation modes. EXIT cooperatively flips a `stop` signal —
+// each shape's `until(untilChange(stop), oscillate(...))` resumes,
+// and the next statement (`fadeOut`) runs as the sequel in the same
+// generator. STOP cancels via the run disposers — the cascade also
+// kills any in-flight fadeOut (shapes freeze mid-fade).
 
 import {
   Diagram,
@@ -91,9 +77,8 @@ export class MdCancel extends Diagram {
       slots.push({ x, y, shape });
     }
 
-    // Controller: per-cycle stop signal + collected disposers. EXIT
-    // flips stop (sequels run); STOP calls each disposer (cascade
-    // catches anything in flight, including the sequels themselves).
+    // Per-cycle stop signal + collected disposers. EXIT flips stop;
+    // STOP calls every disposer.
     const anim = this.anim;
     let stop: Signal<boolean> = signal(false);
     let disposers: (() => void)[] = [];

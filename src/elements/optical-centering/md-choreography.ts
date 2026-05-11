@@ -1,9 +1,5 @@
-// Choreographer playground. Six shapes cycle through every named
-// group operation; `snapshot` captures the initial pose so each
-// iteration starts identical (perfect loop). Phases compose freely:
-// staggered swaps (per-pair lag), eased orbit (rate-signal tween),
-// writable centroid (group translate via aggregate). The whole loop
-// body is one generator that reads top-to-bottom.
+// Six shapes cycle through every group operation. `snapshot` captures
+// the initial pose so each iteration loops perfectly.
 
 import {
   Diagram,
@@ -58,8 +54,7 @@ const DIAMOND = [
   { x: W / 2 - 110, y: 130 },
 ];
 
-// Pair indices for the staggered swap phase. (0↔3, 1↔4, 2↔5) opposes
-// each diamond vertex with the one across the centre.
+// (0↔3, 1↔4, 2↔5) — opposite diamond vertices.
 const PAIRS: [number, number][] = [
   [0, 3],
   [1, 4],
@@ -91,12 +86,11 @@ export class MdChoreography extends Diagram {
     const c = centroid(...shapes);
     s(circle(c, 3, { fill: "#1a1a1a", opacity: 0.7 }));
 
-    // Capture initial translates so each loop iteration starts from
-    // the exact same pose — orbit's frame-time integration would
-    // otherwise drift positions slightly per cycle.
+    // Without this, orbit's frame-time integration drifts positions
+    // slightly each cycle.
     const reset = snapshot(...shapes.map((sh) => sh.translate));
 
-    // Orbit speed as a signal — tween it to ease in / hold / ease out.
+    // Orbit speed as a signal — tween for ease-in / hold / ease-out.
     const orbitRate = signal(0);
     const orbitCentre = pt(ORBIT_CENTRE.x, ORBIT_CENTRE.y);
 
@@ -131,9 +125,9 @@ export class MdChoreography extends Diagram {
       const stopOrbit = anim.run(
         orbit(orbitCentre, shapes, { period: 2.5, rate: orbitRate }),
       );
-      yield* orbitRate.to(1, 0.5, easeInOut);  // ease in
-      yield 1.4;                                // full speed
-      yield* orbitRate.to(0, 0.5, easeInOut);  // ease out
+      yield* orbitRate.to(1, 0.5, easeInOut);
+      yield 1.4;
+      yield* orbitRate.to(0, 0.5, easeInOut);
       stopOrbit();
       yield 0.2;
 

@@ -1,14 +1,11 @@
-// Pointer / input helpers that bind to scene-graph shapes. Bridges the
-// raw DOM event surface to minim's signal world via small wiring
-// helpers — composable with `Awaitable`s, signals, and generators.
+// DOM input → signal-world bridges that bind to scene-graph shapes.
 
 import type { Vec } from "../core/vec";
 import type { AnyShape } from "./shape";
 
-/** Wire `handle` for pointer-drag — every move while pressed calls
- *  `onDrag(local)` with the current pointer position in `handle`'s
- *  local coordinate frame. Captures the pointer so drags continue
- *  outside the handle's bounds. Returns a disposer. */
+/** Wire `handle` for pointer-drag. Each pointermove while pressed
+ *  calls `onDrag(local)` with the pointer in `handle`'s local frame;
+ *  pointer-captured so drags survive leaving the handle. */
 export function draggable(
   handle: AnyShape,
   onDrag: (local: Vec) => void,

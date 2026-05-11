@@ -1,28 +1,7 @@
-// Reaction game. Targets blink in at random positions; the player has
-// a short window to click each one. Each round is a `race(timeout,
-// trackedClick)` — first to fire wins, the other gets cancelled. The
-// outcome (hit vs miss) drives a different exit animation, and the
-// loop continues.
-//
-// What this exercises:
-//
-//   • `race(...)` with mixed Yieldable — a number (timeout) and a
-//     custom Awaitable (DOM click). Pick whichever; cancel the loser.
-//   • A custom Awaitable that subscribes to a DOM event AND records
-//     side-state on wake. Disposer removes the listener — including the
-//     race-loser case where wake never fires.
-//   • A multi-stage per-round pipeline (intro → race → outro) all in
-//     one generator, reading top-to-bottom.
-//   • A global STOP button that disposes the loop. Cascade kills the
-//     in-flight round (any pending click listener is removed via the
-//     awaitable's disposer; no leaks). RESET starts the loop again.
-//   • `try { … } finally { target.dispose(); }` to keep the SVG clean
-//     across rounds — runs on natural completion *and* on cancel.
-//
-// The deeper point: every "race against time or input" UX pattern is
-// the same shape — `race(timeout, eventAwaitable)`. No bespoke
-// scheduler, no AbortController, no useEffect cleanup juggling. The
-// generator reads top-to-bottom; cancellation flows through the tree.
+// Reaction game. Each round is `race(timeout, trackedClick)` — hit
+// runs `zoomOut`, miss runs `fadeOut`. STOP cancels the loop; the
+// cascade kills any in-flight click listener via its awaitable
+// disposer.
 
 import {
   Diagram,
@@ -61,9 +40,8 @@ const BTN_W = 80;
 const BTN_H = 26;
 const BTN_GAP = 12;
 
-/** Custom Awaitable: wake on a DOM click AND record that the click
- *  fired (via `flag`). The disposer removes the listener regardless,
- *  so the race-loser case (timeout wins) doesn't leak. */
+/** Awaitable that wakes on a click and records the fact via `flag`.
+ *  The disposer removes the listener whether or not wake fired. */
 function trackedClick(target: EventTarget, flag: Signal<boolean>): Awaitable {
   return (wake) => {
     const handler = (): void => {
@@ -85,7 +63,6 @@ export class MdReact extends Diagram {
   protected scene(s: Scene): void {
     s.view(0, 0, W, H);
 
-    // Playfield rectangle — visual frame for the target spawn area.
     s(
       rect(PAD - 6, PAD - 6, W - 2 * (PAD - 6), PLAYFIELD_H - 2 * (PAD - 6) + 12, {
         thin: true,
@@ -135,10 +112,9 @@ export class MdReact extends Diagram {
     const anim = this.anim;
     let dispose: (() => void) | undefined;
 
-    /** The spawned target must be both writable on the props the
-     *  intro/outro animations touch, *and* a Shape (for `el` access by
-     *  trackedClick + `dispose()` for end-of-round cleanup). The
-     *  `circle(...)` factory satisfies all three. */
+    /** Target needs writable opacity/scale (for intro/outro) plus
+     *  `el` (for trackedClick) plus `dispose()` (for round cleanup).
+     *  `circle(...)` satisfies all three. */
     type Target = Writable<"opacity" | "scale"> & {
       el: EventTarget;
       dispose(): void;
@@ -154,9 +130,6 @@ export class MdReact extends Diagram {
     function* round(target: Target): Animator {
       try {
         const clicked = signal(false);
-        // The race: timeout (number) vs a tracked click (custom
-        // awaitable). Whichever fires first wakes the parent and
-        // cancels the loser (listener removed via dispose).
         yield race(ROUND_TIMEOUT, trackedClick(target.el, clicked));
         if (clicked.value) {
           hits.value = hits.peek() + 1;
@@ -166,10 +139,8 @@ export class MdReact extends Diagram {
           yield* fadeOut(target, 0.35);
         }
       } finally {
-        // Runs on natural completion and on cancel. `dispose()` is
-        // idempotent — safe even if the round was already in its
-        // outro when STOP fired. Without this, the SVG would
-        // accumulate invisible nodes across rounds.
+        // Runs on natural completion AND cancel — without this, SVG
+        // nodes would accumulate across rounds.
         target.dispose();
       }
     }

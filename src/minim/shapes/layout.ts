@@ -1,13 +1,12 @@
-// Spatial composition primitives. Grows as patterns crystallize;
-// Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to` are the
-// reference points for what to add next.
+// Spatial composition primitives. Reference points for growth:
+// Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
 import type { Vec } from "../core";
 import { transformAABB } from "../scene/matrix";
 import type { Shape } from "../scene";
 
-/** Named normalized-Vec constants — points on a unit box. Plain `Vec`
- *  values, pass anywhere a `Vec` is expected (e.g. `Label.align`). */
+/** Named anchor points on a unit box. Plain `Vec`s — pass to e.g.
+ *  `Label.align`. */
 export const align = {
   topLeft:     { x: 0, y: 0 } as Vec,
   topRight:    { x: 1, y: 0 } as Vec,
@@ -23,15 +22,14 @@ export const align = {
 export interface ArrangeOpts {
   /** Spacing between adjacent bounding boxes. Default 0. */
   gap?: number;
-  /** Cross-axis alignment vs the first shape: `0` top/left,
-   *  `0.5` centered, `1` bottom/right. Default 0. */
+  /** Cross-axis align vs the first shape: 0 top/left, 0.5 center,
+   *  1 bottom/right. Default 0. */
   align?: number;
 }
 
-/** Place `shapes` in a row or column. The first stays put; the rest
- *  bind their `translate` reactively so each box sits `gap` past the
- *  previous on the chosen axis. Reflows when any shape's intrinsic
- *  size animates or the anchor moves. */
+/** Lay out `shapes` in a row/column. First stays put; the rest bind
+ *  their `translate` reactively to sit `gap` past the previous.
+ *  Reflows on size or anchor change. */
 export function arrange(
   shapes: readonly Shape[],
   axis: "row" | "column",
@@ -45,9 +43,8 @@ export function arrange(
     const prev = shapes[i - 1];
     const cur = shapes[i];
     cur.effect(() => {
-      // Read prev/anchor bounds in the parent frame (so transforms
-      // upstream cascade); cur stays in local frame since we're about
-      // to write its own translate.
+      // prev/anchor in the parent frame so upstream transforms
+      // cascade; cur stays local since we're writing its own translate.
       const pAABB = transformAABB(prev.transform.value, prev.bounds.value);
       const aAABB = transformAABB(anchor.transform.value, anchor.bounds.value);
       const cb = cur.bounds.value;
