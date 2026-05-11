@@ -49,7 +49,7 @@ export {
   fromPromise,
   race,
   until,
-} from "./awaitables";
+} from "./suspensions";
 
 export {
   timeline,

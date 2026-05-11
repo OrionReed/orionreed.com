@@ -1,5 +1,5 @@
 // minim — generator-driven SVG diagrams with reactive primitives.
-//   core/   — signals, Anim, awaitables, timeline, …
+//   core/   — signals, Anim, suspensions, timeline, …
 //   scene/  — Shape, Point, Bounds, aggregates, …
 //   shapes/ — visuals + layout + list (space stdlib)
 //   motion/ — easings, composers, transitions, … (time stdlib)
@@ -79,7 +79,7 @@ export {
   fromPromise,
   race,
   until,
-} from "./core/awaitables";
+} from "./core/suspensions";
 
 // ── Trace ───────────────────────────────────────────────────────────
 export {
@@ -98,7 +98,8 @@ export {
 // ── Claims (specs & assertions as labeled bool signals) ─────────────
 export {
   claim,
-  during,
+  process,
+  labelledProcess,
   held,
   any,
   not,
@@ -107,7 +108,7 @@ export {
   SignalClaim,
   Predicates,
   type Claim,
-  type DuringHandle,
+  type Process,
 } from "./claim";
 
 export {

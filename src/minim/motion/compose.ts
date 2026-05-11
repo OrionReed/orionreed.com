@@ -1,6 +1,6 @@
 // Composers for `Animator` generators. For first-completion +
 // cancel-losers (`race`) and cancel-on-trigger (`until`), see
-// `core/awaitables.ts`.
+// `core/suspensions.ts`.
 
 import type { Animator, Signal } from "../core";
 import { snapshot } from "../core";

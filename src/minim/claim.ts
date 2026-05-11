@@ -2,19 +2,28 @@
 //
 // A claim is a labeled `Signal<boolean>`. `true` = currently holding;
 // `false` = violated (or not yet fulfilled, for liveness claims).
-// Compose by signal composition (`held`, `any`, `not`); render by
-// signal binding; scope to a process with `during`. That's the whole
-// story — there is no Witness, no Verdict object, no Policy enum.
+// Claims compose by chaining — `.and`, `.or`, `.not`, `.during(p)`,
+// `.before(other)`, `.labelled(...)` — each returning a fresh Claim.
+// There is no Witness, no Verdict object, no Policy enum.
 //
 //     const bounded  = claim(c.opacity, "α").stays.in([0, 1]);
 //     const reaches1 = claim(c.opacity, "α").becomes.equal(1);
-//     const allOk    = held(bounded, reaches1);
+//     const introOk  = bounded.and(reaches1).labelled("intro spec");
 //
-//     yield* during(fadeIn(c, 0.3), bounded, reaches1);
+//     const intro = process(function* () {
+//       yield* fadeIn(c, 0.3);
+//     }, bounded, reaches1);
 //
-// Each claim wires one `effect` and exposes a couple of management
-// hooks (`reset`, `dispose`) tacked onto the underlying signal. The
-// signal is the API; everything else is metadata.
+//     this.anim.loop(function* () {
+//       yield* intro.run();
+//     });
+//
+// `process(factory, ...claims)` returns a persistent handle whose
+// lifecycle signals (`alive` / `started` / `completed` / `duration`)
+// survive across `.run()` calls. Cross-process and `.during(p)`
+// claims subscribe to those signals once and observe every run.
+//
+// Everything reduces to bool signals. There's nothing else to learn.
 
 import {
   signal,
@@ -23,6 +32,7 @@ import {
   Signal,
   type ReadonlySignal,
 } from "./core/signal";
+import { race } from "./core/suspensions";
 import type { Animator } from "./core/anim";
 import type { Vec } from "./core/vec";
 import { Bounds, type AABB } from "./scene/bounds";
@@ -31,28 +41,64 @@ import { pt, type Pointlike } from "./scene/point";
 
 // ── Types ────────────────────────────────────────────────────────────
 
-/** A claim is a labeled `Signal<boolean>`. `.value === true` while the
- *  claim holds; flips to `false` on violation (or `false → true` once
- *  fulfilled, for liveness claims).
+/** A claim is a labeled `Signal<boolean>` with a small chain algebra
+ *  for composition. `.value === true` while the claim holds; flips to
+ *  `false` on violation (or `false → true` once fulfilled, for liveness
+ *  claims).
  *
- *  - `reset()` clears the latched state — call at the top of each
- *    scope to re-check the claim against a fresh run.
- *  - `dispose()` tears down the underlying `effect` subscription.
- *    `during` does not call this; persistent claims outlive their
- *    scopes by default. */
+ *  Management hooks:
+ *  - `reset()` clears the latched state — `process()` calls this at
+ *    scope entry; you can also call it directly to re-arm a claim.
+ *  - `dispose()` tears down the underlying `effect` subscription. Not
+ *    called by `process`; persistent claims outlive their scopes by
+ *    default. */
 export type Claim = ReadonlySignal<boolean> & {
   readonly label?: string;
   reset(): void;
   dispose(): void;
+
+  // Logical composition. Each returns a new Claim built over the
+  // signal algebra; the input claims are unaffected.
+  and(other: Claim): Claim;
+  or(other: Claim): Claim;
+  not(): Claim;
+
+  // Modifiers.
+  /** Gate this claim by a process's lifetime — vacuously `true` when
+   *  `p` is sleeping. Re-arms the underlying claim when `p` enters. */
+  during(p: Process): Claim;
+  /** Re-label without changing the underlying signal. */
+  labelled(name: string): Claim;
+
+  // Temporal ordering. Both operands are bool-signal events ("X
+  // becomes true").
+  /** This event becomes true before `other`'s does. Holds vacuously
+   *  if neither has become true. */
+  before(other: Claim): Claim;
+  /** This event becomes true only after `other`'s already has. */
+  after(other: Claim): Claim;
 };
 
-/** Handle returned by `during`. Wraps the work as an Animator, plus
- *  exposes `alive` — `true` while the work is running, useful for
- *  cross-process claims. */
-export type DuringHandle = Animator & {
-  /** True while the wrapped work is running. Use in predicates that
-   *  talk about another process: `claim(other.alive).never.true()`. */
+/** Persistent handle for a reusable named process. Signals stay alive
+ *  across calls to `.run()` (each `.run()` resets them and produces a
+ *  fresh Animator), so claims that reference them — `intro.duration`,
+ *  `intro.completed.before(...)`, etc. — survive loop iterations. */
+export type Process = {
+  readonly label?: string;
+  /** True while the wrapped work is running. */
   readonly alive: ReadonlySignal<boolean>;
+  /** True once the work has started in the current run. Reset at
+   *  each `.run()`. */
+  readonly started: ReadonlySignal<boolean>;
+  /** True once the work has both started and ended in the current
+   *  run. Reset at each `.run()`. */
+  readonly completed: ReadonlySignal<boolean>;
+  /** Elapsed alive-time in seconds, integrated from `dt`. Reset to
+   *  0 at each `.run()`. */
+  readonly duration: ReadonlySignal<number>;
+  /** Build a fresh Animator for one execution. Reset-arms the attached
+   *  claims and the lifecycle signals on entry. */
+  run(): Animator;
 };
 
 // ── Latching helpers ─────────────────────────────────────────────────
@@ -72,8 +118,7 @@ function latchFalse(p: ReadonlySignal<boolean>, label?: string): Claim {
 }
 
 /** Liveness latch: signal is `false` until `p` is ever `true`, then
- *  latches `true` until `reset`. Used for `becomes.X`. At scope close
- *  a `false` value means the eventual never happened. */
+ *  latches `true` until `reset`. Used for `becomes.X`. */
 function latchTrue(p: ReadonlySignal<boolean>, label?: string): Claim {
   const held = signal(false);
   const stop = effect(() => {
@@ -84,33 +129,137 @@ function latchTrue(p: ReadonlySignal<boolean>, label?: string): Claim {
   }, stop);
 }
 
-/** No latching — the claim is just `p`. Used for `ends.X`: the
- *  predicate is read at scope close. Resetting is a no-op. */
+/** No latching — the claim is just `p`. Used for `ends.X`: read the
+ *  predicate at scope close. Resetting is a no-op. */
 function passthrough(p: ReadonlySignal<boolean>, label?: string): Claim {
   const wrapped = computed(() => p.value);
   return finalize(wrapped as Signal<boolean>, label, () => {}, () => {});
 }
 
-/** Tack `label`, `reset`, `dispose` onto a bool signal to make it a
- *  `Claim`. The signal-ness is preserved. */
+// ── finalize: tack metadata + chain methods onto a bool signal ───────
+
 function finalize(
   sig: ReadonlySignal<boolean>,
   label: string | undefined,
   reset: () => void,
   dispose: () => void,
 ): Claim {
-  const meta: { label?: string; reset: () => void; dispose: () => void } = {
-    reset,
-    dispose,
-  };
+  const meta: Record<string, unknown> = { reset, dispose };
   if (label !== undefined) meta.label = label;
-  return Object.assign(sig, meta) as Claim;
+
+  meta.and = function (this: Claim, other: Claim): Claim {
+    return _and(this, other);
+  };
+  meta.or = function (this: Claim, other: Claim): Claim {
+    return _or(this, other);
+  };
+  meta.not = function (this: Claim): Claim {
+    return _not(this);
+  };
+  meta.during = function (this: Claim, p: Process): Claim {
+    return _during(this, p);
+  };
+  meta.labelled = function (this: Claim, name: string): Claim {
+    return finalize(sig, name, reset, dispose);
+  };
+  meta.before = function (this: Claim, other: Claim): Claim {
+    return _before(this, other);
+  };
+  meta.after = function (this: Claim, other: Claim): Claim {
+    return _before(other, this);
+  };
+
+  return Object.assign(sig, meta) as unknown as Claim;
 }
 
-// ── Fluent entry ─────────────────────────────────────────────────────
+// ── Chain helpers ────────────────────────────────────────────────────
 
-/** Start a claim sentence: `claim(sig, "α").stays.in([0, 1])`. The
- *  optional `label` shows up in failure metadata and rendered labels. */
+function _and(a: Claim, b: Claim): Claim {
+  return finalize(
+    computed(() => a.value && b.value),
+    `${labelOf(a)} ∧ ${labelOf(b)}`,
+    () => { a.reset(); b.reset(); },
+    () => {},
+  );
+}
+
+function _or(a: Claim, b: Claim): Claim {
+  return finalize(
+    computed(() => a.value || b.value),
+    `${labelOf(a)} ∨ ${labelOf(b)}`,
+    () => { a.reset(); b.reset(); },
+    () => {},
+  );
+}
+
+function _not(c: Claim): Claim {
+  return finalize(
+    computed(() => !c.value),
+    `¬${labelOf(c)}`,
+    () => c.reset(),
+    () => {},
+  );
+}
+
+/** Gate a claim by a process's lifetime. Vacuously `true` when `p`
+ *  sleeps; underlying claim is re-armed at each `p` entry. */
+function _during(c: Claim, p: Process): Claim {
+  let wasAlive = false;
+  const stop = effect(() => {
+    const a = p.alive.value;
+    if (a && !wasAlive) c.reset();
+    wasAlive = a;
+  });
+  return finalize(
+    computed(() => !p.alive.value || c.value),
+    `(${labelOf(c)}) during ${p.label ?? "process"}`,
+    () => c.reset(),
+    stop,
+  );
+}
+
+/** "a becomes true before b becomes true." Verdict is `true` until
+ *  `b` is observed `true` while `a` hasn't been; holds vacuously if
+ *  neither ever becomes true. */
+function _before(a: Claim, b: Claim): Claim {
+  const held = signal(true);
+  let aFirst = false;
+  let decided = false;
+  const stop = effect(() => {
+    if (decided) return;
+    // Read both to register deps even on the won branch.
+    const av = a.value;
+    const bv = b.value;
+    if (av && !aFirst && !bv) {
+      aFirst = true;
+      decided = true;
+    } else if (bv && !aFirst) {
+      decided = true;
+      held.value = false;
+    }
+  });
+  return finalize(
+    held,
+    `${labelOf(a)} before ${labelOf(b)}`,
+    () => {
+      aFirst = false;
+      decided = false;
+      held.value = true;
+      a.reset();
+      b.reset();
+    },
+    stop,
+  );
+}
+
+function labelOf(c: Claim | Process): string {
+  return c.label ?? "?";
+}
+
+// ── Fluent entry: claim(sig).stays.X / .becomes.X / .never.X / .ends.X
+
+/** Start a claim sentence about a signal: `claim(sig, "α").stays.in([0, 1])`.
+ *  The optional `label` shows up in failure metadata and rendered labels. */
 export function claim<T>(sig: ReadonlySignal<T>, label?: string): SignalClaim<T> {
   return new SignalClaim(sig, label);
 }
@@ -129,8 +278,7 @@ export class SignalClaim<T> {
     return new Predicates(this.sig, "stays", this.lbl);
   }
   /** Liveness — must hold at least once before scope end. Latches
-   *  `true` on first fulfillment; `false` at scope end means the
-   *  eventual never happened. */
+   *  `true` on first fulfillment. */
   get becomes(): Predicates<T> {
     return new Predicates(this.sig, "becomes", this.lbl);
   }
@@ -162,7 +310,7 @@ export class Predicates<T> {
     const label = `${this.lbl ?? "signal"} ${this.mood} ${what}`;
     switch (this.mood) {
       case "stays":   return latchFalse(pred, label);
-      case "never":   return latchFalse(invert(pred), label);
+      case "never":   return latchFalse(computed(() => !pred.value), label);
       case "becomes": return latchTrue(pred, label);
       case "ends":    return passthrough(pred, label);
     }
@@ -266,44 +414,104 @@ export class Predicates<T> {
   }
 }
 
-// ── Scope binding ────────────────────────────────────────────────────
+// ── process() — persistent scope binding for a unit of work ──────────
 
-/** Run `work`, resetting each claim's latch at scope entry so the run
- *  starts from a clean verdict. Returns an `Animator & { alive }`.
+/** Build a reusable named process. The factory is invoked once per
+ *  `.run()` call; the returned `Process` has persistent lifecycle
+ *  signals (`alive`, `started`, `completed`, `duration`) that any
+ *  cross-process claim, `.during(p)` modifier, or process-duration
+ *  claim can subscribe to once and observe across many runs.
  *
- *  `during` does not dispose the claims — they're values you keep
- *  hold of and re-use. Each loop iteration re-resets them so the
- *  pip flickers per-iteration. For one-shot use, call `.dispose()`
- *  on the claim explicitly when you're done. */
-export function during(
-  work: Animator,
+ *  Pattern:
+ *
+ *      const intro = process(function* () {
+ *        yield* fadeIn(c, 0.3);
+ *      }, bounded, reachesOne);
+ *
+ *      this.anim.loop(function* () {
+ *        yield* intro.run();
+ *        yield 1;
+ *      });
+ *
+ *  Each `.run()` resets the attached claims and re-evaluates the
+ *  predicates against a fresh execution. `process()` does not dispose
+ *  the claims; they're values that outlive any single run. */
+export function process(
+  factory: () => Animator,
   ...claims: readonly Claim[]
-): DuringHandle {
-  const alive = signal(false);
-  const gen = (function* () {
-    for (const c of claims) c.reset();
-    alive.value = true;
-    try {
-      yield* work;
-    } finally {
-      alive.value = false;
-    }
-  })() as DuringHandle & { alive: Signal<boolean> };
-  (gen as { alive: ReadonlySignal<boolean> }).alive = alive;
-  return gen;
+): Process {
+  return makeProcess(undefined, factory, claims);
 }
 
-// ── Composition (signal algebra) ─────────────────────────────────────
+/** `process` with an explicit label — appears in `.during(p)` and
+ *  `.before/.after` failure messages. */
+export function labelledProcess(
+  label: string,
+  factory: () => Animator,
+  ...claims: readonly Claim[]
+): Process {
+  return makeProcess(label, factory, claims);
+}
+
+function makeProcess(
+  label: string | undefined,
+  factory: () => Animator,
+  claims: readonly Claim[],
+): Process {
+  const alive = signal(false);
+  const started = signal(false);
+  const elapsed = signal(0);
+  const completed = computed(() => started.value && !alive.value);
+
+  const run = (): Animator =>
+    (function* (): Animator {
+      // Reset signals + claims so a fresh execution observes a
+      // clean slate. Writes are independent — preact-signals
+      // batches notifications within this synchronous block.
+      for (const c of claims) c.reset();
+      if (started.peek()) started.value = false;
+      if (alive.peek()) alive.value = false;
+      if (elapsed.peek() !== 0) elapsed.value = 0;
+      started.value = true;
+      alive.value = true;
+      try {
+        // Race work against a perpetual frame counter so we can
+        // integrate dt for `duration` without changing work's
+        // yield semantics. Work winning the race cancels the counter.
+        yield race(
+          factory(),
+          (function* (): Animator {
+            while (true) {
+              const dt = yield;
+              elapsed.value = elapsed.peek() + dt;
+            }
+          })(),
+        );
+      } finally {
+        alive.value = false;
+      }
+    })();
+
+  const proc: Record<string, unknown> = {
+    alive,
+    started,
+    completed,
+    duration: elapsed,
+    run,
+  };
+  if (label !== undefined) proc.label = label;
+  return proc as unknown as Process;
+}
+
+// ── n-ary composition (handy for spread cases) ───────────────────────
 
 /** AND-reduction over claim signals. Returns a `ReadonlySignal<boolean>`
- *  that's `true` iff every claim is currently `true`. */
+ *  that's `true` iff every claim is currently `true`. Force-reads all
+ *  values so the computed registers them all as deps (plain
+ *  `Array.every` short-circuits, breaking reactivity). */
 export function held(
   ...claims: readonly ReadonlySignal<boolean>[]
 ): ReadonlySignal<boolean> {
-  // Force-read every value so the computed registers all as deps.
-  // Plain `Array.every` short-circuits, which would mean signals
-  // past the first `false` wouldn't be tracked — flipping them
-  // wouldn't re-fire the aggregate.
   return computed(() => {
     let all = true;
     for (const c of claims) {
@@ -313,7 +521,7 @@ export function held(
   });
 }
 
-/** OR-reduction over claim signals. `true` iff at least one is `true`. */
+/** OR-reduction. `true` iff at least one is `true`. */
 export function any(
   ...claims: readonly ReadonlySignal<boolean>[]
 ): ReadonlySignal<boolean> {
@@ -331,15 +539,10 @@ export function not(p: ReadonlySignal<boolean>): ReadonlySignal<boolean> {
   return computed(() => !p.value);
 }
 
-function invert(p: ReadonlySignal<boolean>): ReadonlySignal<boolean> {
-  return computed(() => !p.value);
-}
-
 // ── Bisimulation ─────────────────────────────────────────────────────
 
 /** Pointwise tracking — produces a `stays`-style claim that the two
- *  numeric signals agree within `tol` at every observation. Failure
- *  metadata uses `opts.label` if provided. */
+ *  numeric signals agree within `tol` at every observation. */
 export function track(
   actual: ReadonlySignal<number>,
   expected: ReadonlySignal<number>,

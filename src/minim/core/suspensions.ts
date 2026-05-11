@@ -39,7 +39,7 @@ export function* untilChange<T>(sig: ReadonlySignal<T>): Animator<T> {
  *  payload — `true` is the only thing it would ever carry. For
  *  "becomes falsy," pass `sig.derive(v => !v)`. */
 export function* untilTrue(sig: ReadonlySignal<unknown>): Animator<void> {
-  return yield* suspend((wake) => {
+  return yield* suspend<void>((wake) => {
     let resolved = false;
     return effect(() => {
       if (resolved) return;
