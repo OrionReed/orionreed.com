@@ -34,6 +34,8 @@ export { snapshot } from "./store";
 
 export {
   Anim,
+  asGen,
+  isGen,
   type Animator,
   type Awaitable,
   type Yieldable,
@@ -45,6 +47,7 @@ export { EventBus } from "./events";
 
 export {
   untilChange,
+  untilTrue,
   onceEvent,
   fromPromise,
   race,

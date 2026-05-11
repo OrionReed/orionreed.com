@@ -22,6 +22,7 @@ import {
   Diagram,
   Scene,
   align,
+  button,
   circle,
   css,
   fadeOut,
@@ -38,8 +39,14 @@ import {
 } from "../../minim";
 
 const W = 380;
-const H = 110;
+const H = 160;
 const N = 12;
+const SHAPE_Y = 40;
+const STATUS_Y = 100;
+const BTN_Y = 116;
+const BTN_W = 80;
+const BTN_H = 26;
+const BTN_GAP = 12;
 
 function* lifecycle(
   shape: Writable<"opacity">,
@@ -57,30 +64,6 @@ export class MdCancel extends Diagram {
     :host {
       --scene-max-width: 420px;
     }
-    .controls {
-      display: flex;
-      justify-content: center;
-      gap: 8px;
-      padding: 0 0 14px;
-    }
-    button {
-      font: 11px / 1 ui-monospace, monospace;
-      letter-spacing: 0.05em;
-      padding: 6px 14px;
-      border: 1px solid var(--text-color);
-      background: transparent;
-      color: var(--text-color);
-      cursor: pointer;
-      border-radius: 3px;
-      transition: background 0.15s ease, color 0.15s ease;
-    }
-    button:hover {
-      background: var(--text-color);
-      color: var(--bg-color);
-    }
-    button:active {
-      transform: translateY(1px);
-    }
   `;
 
   protected scene(s: Scene): void {
@@ -88,7 +71,7 @@ export class MdCancel extends Diagram {
 
     const status = signal<Content>("running");
     s(
-      label(pt(W / 2, H - 14), status, {
+      label(pt(W / 2, STATUS_Y), status, {
         size: 11,
         align: align.center,
         opacity: 0.55,
@@ -103,7 +86,7 @@ export class MdCancel extends Diagram {
     const slots: Slot[] = [];
     for (let i = 0; i < N; i++) {
       const x = 30 + i * ((W - 60) / (N - 1));
-      const y = signal(H / 2 - 20);
+      const y = signal(SHAPE_Y);
       const shape = s(circle(pt(x, y), 8, { fill: true }));
       slots.push({ x, y, shape });
     }
@@ -117,34 +100,28 @@ export class MdCancel extends Diagram {
 
     const startCycle = (): void => {
       for (const slot of slots) slot.shape.opacity.value = 1;
-      for (const slot of slots) slot.y.value = H / 2 - 20;
+      for (const slot of slots) slot.y.value = SHAPE_Y;
       stop = signal(false);
       const localStop = stop;
       disposers = slots.map((slot, i) =>
         anim.run(() =>
-          lifecycle(slot.shape, slot.y, 22, 0.45 + i * 0.04, localStop),
+          lifecycle(slot.shape, slot.y, 14, 0.45 + i * 0.04, localStop),
         ),
       );
       status.value = "running";
     };
 
-    const exitBtn = document.createElement("button");
-    exitBtn.textContent = "EXIT";
-    exitBtn.onclick = (): void => {
+    const onExit = (): void => {
       if (stop.peek()) return;
       stop.value = true;
       status.value = "exiting…";
-      // After the longest fadeOut completes, restart so the demo
-      // replays. Race the fade window against a hard cap.
       anim.run(function* () {
         yield 1.4;
         startCycle();
       });
     };
 
-    const stopBtn = document.createElement("button");
-    stopBtn.textContent = "STOP";
-    stopBtn.onclick = (): void => {
+    const onStop = (): void => {
       for (const d of disposers) d();
       disposers = [];
       status.value = "stopped — restarting…";
@@ -154,11 +131,15 @@ export class MdCancel extends Diagram {
       });
     };
 
-    const controls = document.createElement("div");
-    controls.className = "controls";
-    controls.appendChild(exitBtn);
-    controls.appendChild(stopBtn);
-    this.shadow.appendChild(controls);
+    const btnsW = BTN_W * 2 + BTN_GAP;
+    const btnsX = (W - btnsW) / 2;
+    s(button(pt(btnsX, BTN_Y), "EXIT", onExit, { width: BTN_W, height: BTN_H }));
+    s(
+      button(pt(btnsX + BTN_W + BTN_GAP, BTN_Y), "STOP", onStop, {
+        width: BTN_W,
+        height: BTN_H,
+      }),
+    );
 
     startCycle();
   }

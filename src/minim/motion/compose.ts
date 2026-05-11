@@ -5,7 +5,8 @@
 // those are awaitable combinators that take advantage of the runtime's
 // spawn capability to compose without anim plumbing.
 
-import type { Animator } from "../core";
+import type { Animator, Signal } from "../core";
+import { snapshot } from "../core";
 
 /** Run in parallel; complete when all finish. */
 export function* all(...children: Animator[]): Animator {
@@ -21,6 +22,29 @@ export function* sequence(...children: Animator[]): Animator {
 export function* delay(sec: number, c: Animator): Animator {
   if (sec > 0) yield sec;
   yield* c;
+}
+
+/** Snapshot the given signals, run `work`, and on cancel restore the
+ *  snapshot synchronously. On natural completion the snapshot is
+ *  discarded. Useful for atomic-effect patterns: drag-to-reorder,
+ *  optimistic UI, exploration. The restore runs in `finally` so it
+ *  fires whether the work returns, throws, or is cancelled.
+ *
+ *  Note: restore is synchronous — it sets the signals back to their
+ *  start values in one step. For an animated restore, write the
+ *  unwind as a sequel after `until(trigger, work)` instead. */
+export function* transaction(
+  work: Animator,
+  ...sigs: Array<Signal<unknown> | Record<string, unknown>>
+): Animator {
+  const restore = snapshot(...sigs);
+  let completed = false;
+  try {
+    yield* work;
+    completed = true;
+  } finally {
+    if (!completed) restore();
+  }
 }
 
 /** Pick one of `children` uniformly at random and run it. Pair with

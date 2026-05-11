@@ -74,14 +74,28 @@ interface Active {
   observeId: number | undefined;
 }
 
-const isGen = (v: unknown): v is Animator =>
+/** Duck-type a value as an `Animator` (has `.next`). Cheap, allocates
+ *  nothing. Exported so awaitable combinators (`race`, `until`) and
+ *  any future Yieldable-handlers can share the one definition. */
+export const isGen = (v: unknown): v is Animator =>
   typeof v === "object" &&
   v !== null &&
   typeof (v as Animator).next === "function";
 
+/** Lift any `Yieldable` to an `Animator`. Generators pass through;
+ *  scalars/arrays/awaitables get wrapped in a one-shot gen that yields
+ *  them, so the runtime's existing yield-shape handling does the work.
+ *  Used by the runtime for `yield [number | awaitable | …]` items, and
+ *  by combinators in `core/awaitables.ts` for the same lifting. */
+export function asGen(v: Yieldable): Animator {
+  if (isGen(v)) return v;
+  return (function* () {
+    yield v;
+  })();
+}
+
 export class Anim {
   private active: Active[] = [];
-  private scopes = new Set<Anim>();
   private rafId = 0;
   private _clock = 0;
   private lastFrame = 0;
@@ -119,15 +133,8 @@ export class Anim {
     return () => this.cancel(a);
   }
 
-  /** Child Anim scoped to this one — stopped when the parent stops. */
-  scope(): Anim {
-    const child = new Anim();
-    this.scopes.add(child);
-    return child;
-  }
-
-  /** Cancel everything. Safe from inside a running generator; cascades
-   *  to scopes. The Anim is reusable after return. */
+  /** Cancel everything. Safe from inside a running generator. The Anim
+   *  is reusable after return. */
   stop(): void {
     if (this.rafId !== 0) {
       cancelAnimationFrame(this.rafId);
@@ -136,8 +143,6 @@ export class Anim {
     this.lastFrame = 0;
     this._clock = 0;
     for (const a of this.active.slice()) this.cancel(a);
-    this.scopes.forEach((s) => s.stop());
-    this.scopes.clear();
   }
 
   /** Subscribe to lifecycle events (spawn / complete / cancel). Only
@@ -357,8 +362,7 @@ export class Anim {
           };
           for (let j = 0; j < v.length; j++) {
             if (!a.alive) return;
-            const item = v[j];
-            this.spawn(isGen(item) ? item : wrapItem(item), a, onChild);
+            this.spawn(asGen(v[j]), a, onChild);
           }
           return;
         } else if (typeof v === "function") {
@@ -414,8 +418,3 @@ export class Anim {
  *  reaches the children via `parent === a`; the disposer just marks
  *  "not ready to tick" for `step()`. */
 const noop = (): void => {};
-
-/** Wrap a non-generator parallel-array item so it goes through `spawn`. */
-function* wrapItem(v: number | undefined | Yieldable[] | Awaitable): Animator {
-  yield v;
-}

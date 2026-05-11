@@ -50,6 +50,7 @@ import {
   pt,
   pulse,
   race,
+  scope,
   signal,
   splay,
   spring,
@@ -275,10 +276,13 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "scope.stop() is independent of parent",
+    name: "scope.stop() leaves parent gens running",
     run: (assert) => {
+      // Userland `scope` tracks its own gens via a Set of disposers.
+      // Stopping the scope cancels just those; gens spawned directly
+      // on the parent (or in another scope) continue.
       const a = new Anim();
-      const child = a.scope();
+      const child = scope(a);
       let parentRan = 0;
       let childRan = 0;
       a.run(function* () {
@@ -302,10 +306,12 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "parent stop() cascades to scopes",
+    name: "parent stop() reaches scope gens (they live on parent)",
     run: (assert) => {
+      // Scope gens are top-level actives on the parent — `parent.stop()`
+      // cancels them along with everything else.
       const a = new Anim();
-      const child = a.scope();
+      const child = scope(a);
       let childRan = 0;
       child.run(function* () {
         childRan++;
@@ -314,7 +320,7 @@ const TESTS: TestCase[] = [
       });
       a.step(0);
       a.stop();
-      child.step(2);
+      a.step(2);
       assert(childRan === 1, `child shouldn't advance after parent stop`);
     },
   },

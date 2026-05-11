@@ -8,7 +8,7 @@
 // Sync-resolve is allowed (calling `wake()` before returning is fine —
 // `Anim` handles it).
 
-import type { Animator, Awaitable, Yieldable } from "./anim";
+import { asGen, isGen, type Awaitable, type Yieldable } from "./anim";
 import { effect, type ReadonlySignal } from "./signal";
 
 // ── Adapters ────────────────────────────────────────────────────────
@@ -27,6 +27,23 @@ export function untilChange<T>(sig: ReadonlySignal<T>): Awaitable {
         return;
       }
       wake();
+    });
+  };
+}
+
+/** Wake when `sig` becomes truthy. Wakes immediately if the value is
+ *  already truthy at subscribe time (sync-resolve). For "wake on any
+ *  change," use `untilChange`; for "wake when becomes falsy," derive
+ *  the negation: `untilTrue(sig.derive(v => !v))`. */
+export function untilTrue(sig: ReadonlySignal<unknown>): Awaitable {
+  return (wake) => {
+    let resolved = false;
+    return effect(() => {
+      if (resolved) return;
+      if (sig.value) {
+        resolved = true;
+        wake();
+      }
     });
   };
 }
@@ -63,19 +80,6 @@ export function fromPromise(p: Promise<unknown>): Awaitable {
 
 // ── Combinators ─────────────────────────────────────────────────────
 
-const isGen = (v: unknown): v is Animator =>
-  typeof v === "object" &&
-  v !== null &&
-  typeof (v as { next?: unknown }).next === "function";
-
-/** Wrap a non-generator yieldable so it can be spawned via `SpawnFn`.
- *  Used by `race` to accept numbers, arrays, awaitables, or undefined
- *  alongside generators. */
-const lift = (v: Exclude<Yieldable, Animator>): Animator =>
-  (function* () {
-    yield v;
-  })();
-
 /** First-completion race. Spawn each child; the first to finish wakes
  *  the parent, the rest are cancelled (via the returned disposer's
  *  cascade). Children may be any `Yieldable` — generators, awaitables,
@@ -103,16 +107,14 @@ export function race(...children: Yieldable[]): Awaitable {
     };
     const disposers: (() => void)[] = [];
     for (const c of children) {
-      if (isGen(c)) {
-        disposers.push(spawn(c, safeWake));
-      } else if (typeof c === "function") {
+      if (typeof c === "function" && !isGen(c)) {
         // Bare Awaitable — subscribe directly, sharing our spawn so
         // nested combinators (race-of-races) work without rewrapping.
         disposers.push((c as Awaitable)(safeWake, spawn));
       } else {
-        // number | undefined | Yieldable[] — lift to a mini-gen so the
-        // runtime's existing yield-shape handling does the work.
-        disposers.push(spawn(lift(c), safeWake));
+        // Animator | number | undefined | Yieldable[] — `asGen` lifts
+        // non-generators; generators pass through untouched.
+        disposers.push(spawn(asGen(c), safeWake));
       }
     }
     setupDone = true;

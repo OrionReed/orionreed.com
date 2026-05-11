@@ -71,6 +71,8 @@ export { makeScene, type Scene } from "./scene/scene";
 
 export {
   Anim,
+  asGen,
+  isGen,
   type Animator,
   type Awaitable,
   type Yieldable,
@@ -80,8 +82,11 @@ export {
 
 export { EventBus } from "./core/events";
 
+export { scope, type Scope } from "./core/scope";
+
 export {
   untilChange,
+  untilTrue,
   onceEvent,
   fromPromise,
   race,
@@ -117,6 +122,7 @@ export {
   rect,
   label,
   group,
+  button,
   Path,
   path,
   annularSector,
@@ -134,6 +140,7 @@ export {
   type RectOpts,
   type CircleOpts,
   type LabelOpts,
+  type ButtonOpts,
   type PathOpts,
   type AnnularSectorOpts,
   type ArrowOpts,
@@ -153,6 +160,7 @@ export {
   all,
   sequence,
   delay,
+  transaction,
   rand,
   from,
   spring,

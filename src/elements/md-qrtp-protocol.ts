@@ -9,6 +9,7 @@ import {
   label,
   line,
   pt,
+  scope,
   signal,
   snapshot,
   when,
@@ -153,7 +154,7 @@ export class MdQrtpProtocol extends Diagram {
 
     // ── Animation ───────────────────────────────────────────────────
 
-    const floodAnim = this.anim.scope();
+    const floodAnim = scope(this.anim);
 
     function* doFloodFill(): Animator {
       const components = buildComponents();
