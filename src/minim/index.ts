@@ -182,15 +182,12 @@ export {
   zoomOut,
   bounceIn,
   spinIn,
+  orbit,
   pulse,
   every,
-  ramp,
-  reverse,
-  speed,
   swap,
   stagger,
   splay,
-  orbit,
   assemble,
 } from "./motion";
 

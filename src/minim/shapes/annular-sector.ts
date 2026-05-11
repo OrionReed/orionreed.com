@@ -6,7 +6,7 @@ import {
   type Pointlike,
   type Segment,
 } from "../scene";
-import { applyOpts, setupDashed, type CommonOpts } from "./common";
+import { wireStroke, type CommonOpts } from "./common";
 
 export interface AnnularSectorOpts extends CommonOpts {}
 
@@ -48,7 +48,7 @@ export class AnnularSector<
     this.a0 = a0s;
     this.a1 = a1s;
 
-    if (!opts.dashed) {
+    wireStroke(this, opts, true, () => {
       this.attr(
         "d",
         computed(() => {
@@ -73,9 +73,7 @@ export class AnnularSector<
           return `M ${o0x},${o0y} A ${_ro},${_ro} 0 ${largeArc} ${sweep} ${o1x},${o1y} L ${i1x},${i1y} A ${_ri},${_ri} 0 ${largeArc} ${back} ${i0x},${i0y} Z`;
         }),
       );
-    }
-    setupDashed(this, opts, true);
-    applyOpts(this, opts);
+    });
   }
 
   override segments(): Segment[] {

@@ -13,6 +13,14 @@ import {
 import { toSig, type Arg } from "../core/arg";
 import type { Vec } from "../core/vec";
 
+/** Runtime check: does this signal's prototype expose a `value` setter?
+ *  `Signal` and `Lens` do (writable); `Computed` overrides with only a
+ *  getter. One-level lookup since each class defines its own descriptor. */
+function isWritableSignal(s: Signal<unknown>): boolean {
+  const d = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(s), "value");
+  return d?.set !== undefined;
+}
+
 /** Structural equality for `Vec` — suppresses no-op writes from fresh
  *  literals with the same components. */
 export const vecEquals = (a: Vec, b: Vec): boolean =>
@@ -42,8 +50,6 @@ interface PointMath {
  *  lens-backed); writes to an axis update the parent atomically. */
 declare class Point {
   constructor(initial: Vec);
-  /** Wrap an existing `Signal<Vec>` (e.g. a lens aggregate) as a Point. */
-  static from(source: Signal<Vec>): Point;
   static polar(c: Pointlike, r: Arg<number>, angle: Arg<number>): DerivedPoint;
 }
 interface Point extends Signal<Vec>, PointMath {
@@ -105,12 +111,10 @@ function Point(this: Point, initial: Vec) {
 }
 Point.prototype = Object.create(Signal.prototype);
 
-/** Wrap an existing `Signal<Vec>` (typically a lens aggregate) as a
- *  Point with writable `.x`/`.y` and math methods. Used by `centroid`
- *  and friends; rarely called directly. */
-(Point as unknown as { from(source: Signal<Vec>): Point }).from = function (
-  source,
-) {
+/** Wrap an existing writable `Signal<Vec>` (typically a lens aggregate)
+ *  as a Point that delegates reads/writes to the source. Used by
+ *  `toPoint` for the writable-signal case; internal. */
+function wrapAsPoint(source: Signal<Vec>): Point {
   const p = Object.create(Point.prototype) as Point;
   // Delegate to the source — no independent state on `p`, no
   // `Signal.call` here.
@@ -128,7 +132,7 @@ Point.prototype = Object.create(Signal.prototype);
     source.subscribe.bind(source);
   attachAxes(p, source);
   return p;
-};
+}
 
 // @ts-ignore: "Cannot redeclare exported variable 'DerivedPoint'."
 function DerivedPoint(this: DerivedPoint, getter: () => Vec) {
@@ -274,17 +278,33 @@ export function pt(x: Arg<number>, y: Arg<number>): Pointlike {
 
 /** Normalize a Vec-style arg into a Point. Used by `Shape` so every
  *  transform field gains per-axis tweens (`s.translate.x.to(...)`).
- *  Literal/undefined → writable; Signal/thunk → derived; Pointlike
- *  passes through. */
+ *
+ *  - `Pointlike` → pass-through (exact type preserved)
+ *  - writable `Signal<Vec>` → writable Point delegating to source
+ *    (writes propagate, so lens aggregates animate rigidly)
+ *  - `ReadonlySignal<Vec>` / thunk → `DerivedPoint`
+ *  - `Vec` literal / `undefined` → fresh writable `Point` */
+export function toPoint<P extends Pointlike>(arg: P, fallback?: Vec): P;
+export function toPoint(arg: Signal<Vec>, fallback?: Vec): Point;
+export function toPoint(
+  arg: ReadonlySignal<Vec> | (() => Vec),
+  fallback?: Vec,
+): DerivedPoint;
+export function toPoint(arg: Vec | undefined, fallback?: Vec): Point;
 export function toPoint(
   arg: Arg<Vec> | Pointlike | undefined,
-  fallback: Vec,
+  fallback?: Vec,
+): Pointlike;
+export function toPoint(
+  arg: Arg<Vec> | Pointlike | undefined,
+  fallback: Vec = { x: 0, y: 0 },
 ): Pointlike {
   if (arg === undefined) return new Point({ ...fallback });
   if (arg instanceof Point || arg instanceof DerivedPoint) return arg;
   if (arg instanceof Signal) {
-    const sig = arg as { readonly value: Vec };
-    return new DerivedPoint(() => sig.value);
+    return isWritableSignal(arg)
+      ? wrapAsPoint(arg as Signal<Vec>)
+      : new DerivedPoint(() => (arg as ReadonlySignal<Vec>).value);
   }
   if (typeof arg === "function") return new DerivedPoint(arg as () => Vec);
   const v = arg as Vec;

@@ -5,13 +5,13 @@
 
 import { lens, type Signal } from "../core/signal";
 import type { Vec } from "../core/vec";
-import { Point } from "./point";
+import { toPoint, type Point } from "./point";
 import type { Writable } from "./shape";
 
 /** Mean of N writable Vec signals as a writable `Point`. Writes apply
  *  the delta to every input. Primitive `centroid` is sugar over. */
 export function meanVec(...sigs: Signal<Vec>[]): Point {
-  return Point.from(
+  return toPoint(
     lens<Vec>(
       () => {
         let sx = 0;

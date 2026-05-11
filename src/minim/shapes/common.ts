@@ -18,6 +18,28 @@ export interface CommonOpts extends ShapeOpts {
   fill?: Arg<string> | true;
 }
 
+/** SVG element name for the intrinsic — `"path"` if dashed (so we can
+ *  emit explicit segment runs), else `nativeKind`. Pass to `super(...)`. */
+export function intrinsicType(opts: CommonOpts, nativeKind: string): string {
+  return opts.dashed ? "path" : nativeKind;
+}
+
+/** One-call wire-up for stroke shapes. Call after `super(...)` with a
+ *  callback that writes the shape's native attributes (`cx/cy/r` for
+ *  circle, `x1/y1/x2/y2` for line, etc.); the callback runs only when
+ *  not dashed. Then sets up the dashed `<path d>` (if dashed) and
+ *  applies common stroke/fill options. */
+export function wireStroke<S extends AnyShape>(
+  s: S,
+  opts: CommonOpts,
+  closed: boolean,
+  nativeAttrs?: () => void,
+): void {
+  if (!opts.dashed && nativeAttrs) nativeAttrs();
+  setupDashed(s, opts, closed);
+  applyOpts(s, opts);
+}
+
 /** Apply stroke + fill + linecap/join. Dashing is `setupDashed`. */
 export function applyOpts<S extends AnyShape>(s: S, opts: CommonOpts): void {
   s.attr("stroke", opts.stroke ?? tokens.stroke);

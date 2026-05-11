@@ -9,12 +9,12 @@ import {
   arrange,
   circle,
   css,
+  drift,
   easeInOut,
   label,
   pt,
   rect,
   signal,
-  speed,
   t,
   type Point,
 } from "../../minim";
@@ -65,7 +65,7 @@ export class MdLayoutDemo extends Diagram {
     const cx = 260;
     const cy = 310;
     const phase = signal(0);
-    this.anim.run(speed(phase, 1));
+    this.anim.run(drift(phase, 1));
     const headPos = pt(
       () => cx + 98 * Math.sin(phase.value * 1.6),
       () => cy + 38 * Math.sin(phase.value * 2.3 + 0.6),

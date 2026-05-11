@@ -10,7 +10,7 @@ import {
   type Segment,
 } from "../scene";
 import { tokens } from "./tokens";
-import { applyOpts, setupDashed, type CommonOpts } from "./common";
+import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
 export interface RectOpts extends CommonOpts {
   corner?: Arg<number>;
@@ -36,9 +36,8 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     const ys = toSig(y);
     const ws = toSig(w);
     const hs = toSig(h);
-    const dashed = opts.dashed ?? false;
     super(
-      dashed ? "path" : "rect",
+      intrinsicType(opts, "rect"),
       () => aabb(xs.value, ys.value, ws.value, hs.value),
       opts,
       {
@@ -53,16 +52,14 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     this.w = ws;
     this.h = hs;
     this.corner = toSig(opts.corner ?? tokens.corner);
-    if (!dashed) {
+    wireStroke(this, opts, true, () => {
       this.attr("x", xs);
       this.attr("y", ys);
       this.attr("width", ws);
       this.attr("height", hs);
       this.attr("rx", this.corner);
       this.attr("ry", this.corner);
-    }
-    setupDashed(this, opts, true);
-    applyOpts(this, opts);
+    });
   }
 
   override boundary(toward: Pointlike): DerivedPoint {

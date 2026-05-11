@@ -6,7 +6,7 @@ import {
   type Pointlike,
   type Segment,
 } from "../scene";
-import { applyOpts, setupDashed, type CommonOpts } from "./common";
+import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
 export interface LineOpts extends CommonOpts {}
 
@@ -16,9 +16,8 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
     readonly to: Pointlike,
     opts: O = {} as O,
   ) {
-    const dashed = opts.dashed ?? false;
     super(
-      dashed ? "path" : "line",
+      intrinsicType(opts, "line"),
       () => {
         const a = from.value;
         const b = to.value;
@@ -38,15 +37,13 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
         },
       },
     );
-    if (!dashed) {
+    this.attr("stroke-linecap", opts.cap ?? "round");
+    wireStroke(this, opts, false, () => {
       this.attr("x1", from.x);
       this.attr("y1", from.y);
       this.attr("x2", to.x);
       this.attr("y2", to.y);
-    }
-    this.attr("stroke-linecap", opts.cap ?? "round");
-    setupDashed(this, opts, false);
-    applyOpts(this, opts);
+    });
   }
 
   // Tangent/normal/angle are constant along a Line; `t` is accepted

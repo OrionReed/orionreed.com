@@ -1,4 +1,10 @@
-export { applyOpts, setupDashed, type CommonOpts } from "./common";
+export {
+  applyOpts,
+  setupDashed,
+  intrinsicType,
+  wireStroke,
+  type CommonOpts,
+} from "./common";
 export { Line, line, type LineOpts } from "./line";
 export { Circle, circle, type CircleOpts } from "./circle";
 export { Rect, rect, type RectOpts } from "./rect";
