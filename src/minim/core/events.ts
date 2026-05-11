@@ -28,9 +28,7 @@ export class EventBus {
   /** Wake on the next emit of `name`; resume with the emit data. Pass
    *  an explicit type parameter (`yield* bus.until<string>("msg")`) to
    *  type the payload at the call site. */
-  *until<T = unknown>(name: string): Animator<T> {
-    return yield* suspend<T>(
-      (wake) => this.on(name, wake as (d: unknown) => void),
-    );
+  until<T = unknown>(name: string): Animator<T> {
+    return suspend<T>((wake) => this.on(name, wake as (d: unknown) => void));
   }
 }

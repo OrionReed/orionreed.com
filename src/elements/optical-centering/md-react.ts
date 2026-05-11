@@ -42,8 +42,8 @@ const BTN_GAP = 12;
 /** Wake on a click; resume with the `MouseEvent`. Race winners get
  *  this payload; race losers (timeout) get `undefined` — the
  *  discriminator for hit vs miss in the round. */
-function* trackedClick(target: EventTarget): Animator<MouseEvent> {
-  return yield* suspend<MouseEvent>((wake) => {
+function trackedClick(target: EventTarget): Animator<MouseEvent> {
+  return suspend<MouseEvent>((wake) => {
     const handler = (e: Event): void => wake(e as MouseEvent);
     target.addEventListener("click", handler, { once: true });
     return () => target.removeEventListener("click", handler);

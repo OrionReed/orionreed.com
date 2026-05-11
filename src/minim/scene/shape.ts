@@ -270,8 +270,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   /** Wake on the next `name` event; resume with the event. Use
    *  `const evt = yield* s.until("click")` to receive the typed event,
    *  or `yield s.until("click")` to ignore it. */
-  *until(name: string): Animator<Event> {
-    return yield* suspend<Event>((wake) => {
+  until(name: string): Animator<Event> {
+    return suspend<Event>((wake) => {
       const handler = (e: Event) => wake(e);
       return this.on(name, handler, { once: true });
     });

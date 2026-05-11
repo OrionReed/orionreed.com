@@ -1,6 +1,6 @@
-// Suspension adapters and combinators. Each adapter is a generator
-// function returning `Animator<R>`; `yield* aw(...)` resumes with the
-// typed payload at the call site.
+// Suspension adapters and combinators. Each adapter returns the
+// `Animator<R>` that `suspend<R>(impl)` produces — flat wrappers, not
+// `function*`. `yield* aw(...)` resumes with the typed payload:
 //
 //     const evt = yield* onceEvent(el, "click");   // Event
 //     const v   = yield* untilChange(sig);         // T (sig's new value)
@@ -21,8 +21,8 @@ import { effect, type ReadonlySignal } from "./signal";
 
 /** Wake on the next change of `sig`; resume with the new value. The
  *  baseline read is ignored. */
-export function* untilChange<T>(sig: ReadonlySignal<T>): Animator<T> {
-  return yield* suspend<T>((wake) => {
+export function untilChange<T>(sig: ReadonlySignal<T>): Animator<T> {
+  return suspend<T>((wake) => {
     let first = true;
     return effect(() => {
       const v = sig.value;
@@ -38,8 +38,8 @@ export function* untilChange<T>(sig: ReadonlySignal<T>): Animator<T> {
 /** Wake when `sig` is truthy. Wakes immediately if already truthy. No
  *  payload — `true` is the only thing it would ever carry. For
  *  "becomes falsy," pass `sig.derive(v => !v)`. */
-export function* untilTrue(sig: ReadonlySignal<unknown>): Animator<void> {
-  return yield* suspend<void>((wake) => {
+export function untilTrue(sig: ReadonlySignal<unknown>): Animator<void> {
+  return suspend<void>((wake) => {
     let resolved = false;
     return effect(() => {
       if (resolved) return;
@@ -53,12 +53,12 @@ export function* untilTrue(sig: ReadonlySignal<unknown>): Animator<void> {
 
 /** Wake on one DOM event; resume with the event. Listener auto-removes
  *  on fire or cancel. */
-export function* onceEvent(
+export function onceEvent(
   target: EventTarget,
   name: string,
   opts?: AddEventListenerOptions,
 ): Animator<Event> {
-  return yield* suspend<Event>((wake) => {
+  return suspend<Event>((wake) => {
     const handler = (e: Event): void => wake(e);
     target.addEventListener(name, handler, { ...opts, once: true });
     return () => target.removeEventListener(name, handler);
@@ -67,8 +67,8 @@ export function* onceEvent(
 
 /** Wake when `p` settles; resume with the resolved value. Cancel
  *  suppresses `wake` (the promise itself can't be cancelled). */
-export function* fromPromise<T>(p: Promise<T>): Animator<T> {
-  return yield* suspend<T>((wake) => {
+export function fromPromise<T>(p: Promise<T>): Animator<T> {
+  return suspend<T>((wake) => {
     let cancelled = false;
     p.then((v) => {
       if (!cancelled) wake(v);
@@ -82,27 +82,22 @@ export function* fromPromise<T>(p: Promise<T>): Animator<T> {
 // ── Combinators ─────────────────────────────────────────────────────
 
 /** Extract the payload type from a `Yieldable`. Generators carry their
- *  return value in `R`; raw `SuspendFn<T>` lambdas (rare in user code)
- *  carry `T`; everything else (numbers, arrays, undefined) is `void`. */
-type PayloadOf<Y> = Y extends Generator<any, infer R, any>
-  ? R
-  : Y extends (wake: (value: infer T) => void, spawn: SpawnFn) => () => void
-    ? T
-    : Y extends (wake: () => void, spawn: SpawnFn) => () => void
-      ? void
-      : void;
+ *  return value in `R`; everything else (numbers, arrays, raw suspend-fn
+ *  lambdas, `undefined`) is `void`. For a typed payload from a custom
+ *  impl, wrap it in `suspend<T>()` so it returns `Animator<T>`. */
+type PayloadOf<Y> = Y extends Generator<any, infer R, any> ? R : void;
 
 /** First-completion race; resume with the winning child's payload.
  *  Children may be any `Yieldable` (generator, raw suspend-fn, number
  *  sleep, array parallel, `undefined` one frame). First to finish
- *  wakes the parent with its payload; the rest are cancelled.
- *  Non-payload children (gens with `R = void`, sleeps, parallels)
- *  contribute `void` to the payload union — the winner being one of
- *  those resumes with `undefined`. */
-export function* race<Cs extends readonly Yieldable[]>(
+ *  wakes the parent with its payload; the rest are cancelled. Non-gen
+ *  children (numbers, parallels, raw suspend-fn lambdas) contribute
+ *  `void` to the payload union — when one wins, the resume value is
+ *  `undefined`. Wrap a raw impl in `suspend<T>()` to flow its payload. */
+export function race<Cs extends readonly Yieldable[]>(
   ...children: Cs
 ): Animator<PayloadOf<Cs[number]>> {
-  return yield* suspend<PayloadOf<Cs[number]>>((wake, spawn) => {
+  return suspend<PayloadOf<Cs[number]>>((wake, spawn) => {
     type V = PayloadOf<Cs[number]>;
     let won = false;
     let setupDone = false;
@@ -149,11 +144,9 @@ export function* race<Cs extends readonly Yieldable[]>(
 /** Run `work` until `trigger` fires (cancel-on-trigger). Sugar over
  *  `race(work, trigger)`. Resume value is whichever side won. The next
  *  `yield*` after `yield until(...)` is the graceful-exit sequel. */
-export function* until<W extends Yieldable, T extends Yieldable>(
+export function until<W extends Yieldable, T extends Yieldable>(
   trigger: T,
   work: W,
 ): Animator<PayloadOf<W> | PayloadOf<T>> {
-  return yield* race(work, trigger) as Animator<
-    PayloadOf<W> | PayloadOf<T>
-  >;
+  return race(work, trigger) as Animator<PayloadOf<W> | PayloadOf<T>>;
 }
