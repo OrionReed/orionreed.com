@@ -1,7 +1,8 @@
 // Named event bus. Subscribe/emit synchronously; `until(name)` is an
-// Awaitable that wakes the next time `name` fires.
+// `Awaitable<T>` that wakes the next time `name` fires, carrying the
+// emit data as the resume value.
 
-import type { Awaitable } from "./anim";
+import { awaitable, type Awaitable } from "./anim";
 
 export class EventBus {
   private handlers = new Map<string, Set<(data: unknown) => void>>();
@@ -24,7 +25,10 @@ export class EventBus {
     };
   }
 
-  until(name: string): Awaitable {
-    return (wake) => this.on(name, wake);
+  /** Wake on the next emit of `name`; the emit data is the resume
+   *  value. Pass an explicit type parameter (`bus.until<string>("msg")`)
+   *  to type the payload at the call site. */
+  until<T = unknown>(name: string): Awaitable<T> {
+    return awaitable<T>((wake) => this.on(name, wake as (d: unknown) => void));
   }
 }

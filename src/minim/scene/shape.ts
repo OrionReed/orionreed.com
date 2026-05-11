@@ -24,7 +24,7 @@ import {
   type Pointlike,
   type ResolveVec,
 } from "./point";
-import type { Awaitable } from "../core/anim";
+import { awaitable, type Awaitable } from "../core/anim";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -267,14 +267,14 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     return dispose;
   }
 
-  /** Awaitable that wakes on the next `name` event. `yield s.until("click")`
-   *  (no `*` — it's an Awaitable, not a generator). */
-  until(name: string): Awaitable {
-    return (wake) => {
-      const handler = () => wake();
-      const dispose = this.on(name, handler, { once: true });
-      return dispose;
-    };
+  /** Awaitable that wakes on the next `name` event; the event itself
+   *  is the resume value. Use `const evt = yield* s.until("click")` to
+   *  receive the typed event, or `yield s.until("click")` to ignore it. */
+  until(name: string): Awaitable<Event> {
+    return awaitable<Event>((wake) => {
+      const handler = (e: Event) => wake(e);
+      return this.on(name, handler, { once: true });
+    });
   }
 
   /** Map client-space coords (e.g. `evt.clientX/clientY`) into this

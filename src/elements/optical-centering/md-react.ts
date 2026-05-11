@@ -4,6 +4,7 @@
 // disposer.
 
 import {
+  awaitable,
   Diagram,
   Scene,
   Anchor,
@@ -22,7 +23,6 @@ import {
   type Animator,
   type Awaitable,
   type Content,
-  type Signal,
   type Writable,
 } from "../../minim";
 
@@ -40,17 +40,15 @@ const BTN_W = 80;
 const BTN_H = 26;
 const BTN_GAP = 12;
 
-/** Awaitable that wakes on a click and records the fact via `flag`.
- *  The disposer removes the listener whether or not wake fired. */
-function trackedClick(target: EventTarget, flag: Signal<boolean>): Awaitable {
-  return (wake) => {
-    const handler = (): void => {
-      flag.value = true;
-      wake();
-    };
+/** Awaitable that wakes on a click; the `MouseEvent` is the resume
+ *  value. Race winners get this payload; race losers (timeout) get
+ *  `undefined` — the discriminator for hit vs miss in the round. */
+function trackedClick(target: EventTarget): Awaitable<MouseEvent> {
+  return awaitable<MouseEvent>((wake) => {
+    const handler = (e: Event): void => wake(e as MouseEvent);
     target.addEventListener("click", handler, { once: true });
     return () => target.removeEventListener("click", handler);
-  };
+  });
 }
 
 export class MdReact extends Diagram {
@@ -129,9 +127,11 @@ export class MdReact extends Diagram {
 
     function* round(target: Target): Animator {
       try {
-        const clicked = signal(false);
-        yield race(ROUND_TIMEOUT, trackedClick(target.el, clicked));
-        if (clicked.value) {
+        // `yield* race(...)` resolves to the winner's payload — a
+        // `MouseEvent` if the click landed, `undefined` if the timeout
+        // ran out. The discriminator IS the payload; no flag needed.
+        const evt = yield* race(ROUND_TIMEOUT, trackedClick(target.el));
+        if (evt) {
           hits.value = hits.peek() + 1;
           yield* zoomOut(target, 0.25);
         } else {

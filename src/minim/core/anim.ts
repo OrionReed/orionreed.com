@@ -17,34 +17,63 @@
  *  awaitable's initial subscribe call. */
 export type SpawnFn = (gen: Animator, onComplete?: () => void) => () => void;
 
-/** Subscribe + return a disposer. May call `wake` synchronously. For
- *  payload-less suspensions (the common case) use the default `void` —
- *  `wake` is then `() => void`. Typed-payload awaitables (`Awaitable<T>`)
- *  pass `value: T` through `wake`; the generator recovers it at the
- *  yield site:
- *
- *      const v = (yield aw) as unknown as T;
- *
- *  (TS has one `TNext` per generator — `number` for `dt` ergonomics —
- *  so per-yield-site narrowing is via cast. Wrap in a helper if it
- *  recurs: `function* take<T>(aw: Awaitable<T>) { return (yield aw)
- *  as unknown as T; }` then `yield* take(aw)`.) The optional `spawn`
- *  arg is for combinators that orchestrate child generators (`race`,
- *  `until`); simple subscribers ignore it. */
-export type Awaitable<T = void> = (
+/** Bare callable form of an awaitable: subscribe + return a disposer.
+ *  May call `wake` synchronously. `Awaitable<T>` (below) is the public
+ *  type — it adds `[Symbol.iterator]` so `yield* aw` returns the typed
+ *  payload at the call site. `AwaitableFn<T>` is the low-level shape
+ *  the runtime actually invokes; raw lambdas in yield position match
+ *  this looser type. */
+export type AwaitableFn<T = void> = (
   wake: [T] extends [void] ? () => void : (value: T) => void,
   spawn: SpawnFn,
 ) => () => void;
 
-// `Awaitable<any>` in Yieldable is the variance escape: it accepts any
-// `Awaitable<T>` and keeps the inline-lambda form (`yield (wake) => ...`)
-// callable with zero args when the awaitable carries no payload.
+/** Subscribe + return a disposer, plus iterator sugar so the typed
+ *  payload comes through at the yield site without a manual cast:
+ *
+ *      const evt = yield* untilClick(button);     // evt: MouseEvent
+ *
+ *  Constructed via the `awaitable<T>(impl)` factory; the iterator
+ *  attaches at construction time. For payload-less suspensions, both
+ *  `yield aw` (returns `number` per TNext, ignore it) and `yield* aw`
+ *  (returns `void`) work; for typed payloads, prefer `yield*`. The
+ *  optional `spawn` arg passed to `impl` is for combinators that
+ *  orchestrate child generators (`race`, `until`); simple subscribers
+ *  ignore it. */
+export type Awaitable<T = void> = AwaitableFn<T> & {
+  [Symbol.iterator](): Generator<Awaitable<T>, T, number>;
+};
+
+/** Wrap a bare awaitable impl as an `Awaitable<T>` with iterator sugar.
+ *  Use at the definition site of any typed-payload suspension primitive:
+ *
+ *      function onceEvent(el: EventTarget, name: string): Awaitable<Event> {
+ *        return awaitable<Event>((wake) => {
+ *          const handler = (e: Event) => wake(e);
+ *          el.addEventListener(name, handler, { once: true });
+ *          return () => el.removeEventListener(name, handler);
+ *        });
+ *      }
+ *
+ *  Users then `const evt = yield* onceEvent(el, "click")` — typed
+ *  payload, no cast. */
+export function awaitable<T = void>(impl: AwaitableFn<T>): Awaitable<T> {
+  const aw = impl as Awaitable<T>;
+  aw[Symbol.iterator] = function* () {
+    return (yield aw) as unknown as T;
+  };
+  return aw;
+}
+
+// `AwaitableFn<any>` in Yieldable is the variance escape: it accepts
+// both raw lambdas (`(wake) => ...`) and factory-constructed iterable
+// awaitables, and keeps inline lambdas callable with zero args.
 export type Yieldable =
   | number
   | undefined
   | Animator
   | Yieldable[]
-  | Awaitable<any>;
+  | AwaitableFn<any>;
 export type Animator = Generator<Yieldable, void, number>;
 
 // Lifecycle listeners for `Anim.observe`. Local type — Anim stays
@@ -257,11 +286,11 @@ export class Anim {
   // but they earn enough hot-path traffic to skip the closure
   // allocations and wire the wake-up directly.
 
-  /** Subscribe to an Awaitable. `spawn` is only valid during initial
-   *  subscribe — calling it later throws. Sync-resolve safe. The
-   *  payload `wake(value)` carries (or `undefined` for `Awaitable<void>`)
-   *  is forwarded as the resume value to the generator. */
-  private suspend(a: Active, awaitable: Awaitable<any>): void {
+  /** Subscribe to an awaitable (bare or iterable form). `spawn` is only
+   *  valid during initial subscribe — calling it later throws. Sync-
+   *  resolve safe. The payload `wake(value)` carries (or `undefined` for
+   *  payload-less awaitables) is forwarded as the resume value. */
+  private suspend(a: Active, awaitable: AwaitableFn<any>): void {
     let resumed = false;
     let dispose: (() => void) | undefined;
     let setupActive = true;
@@ -352,7 +381,7 @@ export class Anim {
           return;
         }
         if (typeof v === "function") {
-          this.suspend(a, v as Awaitable<any>);
+          this.suspend(a, v as AwaitableFn<any>);
           return;
         }
         this.suspendChild(a, v as Animator);
