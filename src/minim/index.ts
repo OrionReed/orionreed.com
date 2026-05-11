@@ -22,13 +22,7 @@ export {
 
 export { counter } from "./core/counter";
 
-export {
-  toSig,
-  when,
-  type Arg,
-  type NumSig,
-  type ResolveSig,
-} from "./core/arg";
+export { toSig, when, type Arg } from "./core/arg";
 
 export { snapshot } from "./core/store";
 
@@ -42,7 +36,6 @@ export {
   isPoint,
   vecEquals,
   type Pointlike,
-  type ResolveVec,
 } from "./scene/point";
 
 export {
@@ -59,9 +52,7 @@ export {
   Shape,
   type ShapeOpts,
   type AnyShape,
-  type AnimatableKey,
   type Writable,
-  type Segment,
   boundsInRoot,
   boundsIn,
 } from "./scene/shape";
@@ -77,8 +68,6 @@ export {
   isGen,
   type Animator,
   type Awaitable,
-  type AwaitableFn,
-  type Yieldable,
   type SpawnFn,
 } from "./core/anim";
 
