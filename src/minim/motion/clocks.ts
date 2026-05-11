@@ -7,6 +7,7 @@ import { signal, type Signal } from "../core";
 import { toSig, type Arg } from "../core";
 import type { Anim, Animator } from "../core";
 import type { Easing } from "../core";
+import { drive } from "./drive";
 
 // ── Constructors ─────────────────────────────────────────────────────
 
@@ -47,35 +48,28 @@ export function ramp(
   ease: Easing,
 ): Animator {
   const totalSig = toSig(total);
-  return (function* () {
-    while (clock.value < totalSig.value) {
-      const dt = yield;
-      const t = totalSig.value > 0 ? clock.value / totalSig.value : 1;
-      clock.value += dt * ease(t);
-    }
-  })();
+  return drive((dt) => {
+    if (clock.value >= totalSig.value) return false;
+    const t = totalSig.value > 0 ? clock.value / totalSig.value : 1;
+    clock.value += dt * ease(t);
+  });
 }
 
 /** Drive `clock` backwards to 0. Symmetric with `ramp` — pass an
  *  easing for non-linear rate. */
 export function reverse(clock: Signal<number>, ease?: Easing): Animator {
-  return (function* () {
-    while (clock.value > 0) {
-      const dt = yield;
-      const rate = ease ? ease(1 - clock.value / Math.max(clock.value, 1)) : 1;
-      clock.value = Math.max(0, clock.value - dt * rate);
-    }
-  })();
+  return drive((dt) => {
+    if (clock.value <= 0) return false;
+    const rate = ease ? ease(1 - clock.value / Math.max(clock.value, 1)) : 1;
+    clock.value = Math.max(0, clock.value - dt * rate);
+  });
 }
 
 /** Advance `clock` forever, scaled by `rate` (reactive — negatives
  *  reverse, signal lets you scrub live). */
 export function speed(clock: Signal<number>, rate: Arg<number>): Animator {
   const r = toSig(rate);
-  return (function* () {
-    while (true) {
-      const dt = yield;
-      clock.value += dt * r.value;
-    }
-  })();
+  return drive((dt) => {
+    clock.value += dt * r.value;
+  });
 }

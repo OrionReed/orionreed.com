@@ -156,6 +156,7 @@ export {
   easeOut,
   easeIn,
   easeInOut,
+  drive,
   all,
   sequence,
   delay,

@@ -4,6 +4,7 @@
 // coordination (swap pairs, splay around a centre, orbit, etc.).
 
 import { delay } from "./compose";
+import { drive } from "./drive";
 import {
   toSig,
   type Animator,
@@ -63,7 +64,7 @@ export function* splay(
  *  seconds. Picks up each shape's current radius/angle (no jump). Never
  *  returns. `rate` (default 1) is a reactive multiplier — tween it for
  *  ease-in/out; negatives reverse; 0 pauses. */
-export function* orbit(
+export function orbit(
   center: Pointlike,
   shapes: readonly Writable<"translate">[],
   opts: { period?: number; rate?: Arg<number> } = {},
@@ -79,9 +80,9 @@ export function* orbit(
     const dy = v.y - c0.y;
     return { angle: Math.atan2(dy, dx), radius: Math.hypot(dx, dy) };
   });
+  // Own `t`, not drive's: needs reactive-rate scaling per step.
   let t = 0;
-  while (true) {
-    const dt = yield;
+  return drive((dt) => {
     t += dt * rate.value;
     const c = center.value;
     for (let i = 0; i < N; i++) {
@@ -91,7 +92,7 @@ export function* orbit(
         y: c.y + init[i].radius * Math.sin(angle),
       };
     }
-  }
+  });
 }
 
 /** Tween each shape to its paired target (matched by index). Targets
