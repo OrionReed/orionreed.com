@@ -8,7 +8,7 @@ import {
   label,
   stagger,
   spring,
-  align,
+  Anchor,
   pt,
   Scene,
   sequence,
@@ -39,7 +39,7 @@ export class MdAnimDemo extends Diagram {
     s.view(0, 0, 600, 280);
 
     const sideLabel = (y: number, name: string) =>
-      s(label(pt(10, y), name, { size: 11, align: align.left, opacity: 0.5 }));
+      s(label(pt(10, y), name, { size: 11, align: Anchor.Left, opacity: 0.5 }));
 
     // tween + easing
     sideLabel(35, "tween");

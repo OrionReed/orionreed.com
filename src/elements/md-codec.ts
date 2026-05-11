@@ -1,7 +1,7 @@
 import {
   Diagram,
   Scene,
-  align,
+  Anchor,
   attr,
   label,
   line,
@@ -93,7 +93,7 @@ export class MdCodec extends Diagram {
       s(
         label(leader.at(1), t(part.label).bold(), {
           size: LABEL_SIZE,
-          align: align.left,
+          align: Anchor.Left,
           rotate: leader.angleAt(1),
         }),
       );

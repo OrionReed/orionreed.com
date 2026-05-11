@@ -4,7 +4,7 @@
 //   shapes/ — visuals + layout + list (space stdlib)
 //   motion/ — easings, composers, transitions, … (time stdlib)
 //   trace/  — derivations on `Anim.observe`
-//   diagram, attr, viewport — custom-element scaffold
+//   anchor, diagram, attr, viewport — top-level utilities + scaffold
 
 // ── Core ────────────────────────────────────────────────────────────
 export {
@@ -130,7 +130,6 @@ export {
   tokens,
   Text,
   t,
-  align,
   arrange,
   forEach,
   type CommonOpts,
@@ -176,7 +175,6 @@ export {
   zoomOut,
   bounceIn,
   spinIn,
-  Dir,
   pulse,
   clock,
   every,
@@ -189,6 +187,9 @@ export {
   orbit,
   assemble,
 } from "./motion";
+
+// ── Spatial constants ───────────────────────────────────────────────
+export { Anchor, Dir } from "./anchor";
 
 // ── Consumer scaffold ───────────────────────────────────────────────
 export { Diagram, css } from "./diagram";

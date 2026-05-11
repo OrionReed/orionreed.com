@@ -7,7 +7,7 @@ import {
   Diagram,
   EventBus,
   Scene,
-  align,
+  Anchor,
   circle,
   computed,
   css,
@@ -147,7 +147,7 @@ export class MdTimelineEditor extends Diagram {
       label(
         pt(W / 2, H - 16),
         "drag the knobs to retime · click any circle to ping",
-        { size: 11, opacity: 0.5, align: align.center },
+        { size: 11, opacity: 0.5, align: Anchor.Center },
       ),
     );
 

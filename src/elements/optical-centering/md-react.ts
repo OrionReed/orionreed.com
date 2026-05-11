@@ -6,7 +6,7 @@
 import {
   Diagram,
   Scene,
-  align,
+  Anchor,
   bounceIn,
   button,
   circle,
@@ -77,14 +77,14 @@ export class MdReact extends Diagram {
     s(
       label(pt(PAD, STATS_Y), hits.derive((n) => `hits: ${n}`), {
         size: 12,
-        align: align.left,
+        align: Anchor.Left,
       }),
     );
     s(
       label(
         pt(W - PAD, STATS_Y),
         misses.derive((n) => `misses: ${n}`),
-        { size: 12, align: align.right },
+        { size: 12, align: Anchor.Right },
       ),
     );
     s(
@@ -97,14 +97,14 @@ export class MdReact extends Diagram {
           if (total === 0) return "—";
           return `${Math.round((h / total) * 100)}%`;
         }),
-        { size: 12, align: align.center, opacity: 0.6 },
+        { size: 12, align: Anchor.Center, opacity: 0.6 },
       ),
     );
 
     s(
       label(pt(W / 2, STATUS_Y), status, {
         size: 11,
-        align: align.center,
+        align: Anchor.Center,
         opacity: 0.5,
       }),
     );

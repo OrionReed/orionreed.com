@@ -6,7 +6,7 @@
 import {
   Diagram,
   Scene,
-  align,
+  Anchor,
   attract,
   circle,
   css,
@@ -94,7 +94,7 @@ export class MdBehaviors extends Diagram {
       label(
         pt(W / 2, H - 12),
         "head: drift + oscillate. trails: attract (blue, smooth) vs spring (red, elastic)",
-        { size: 10, align: align.center, opacity: 0.55 },
+        { size: 10, align: Anchor.Center, opacity: 0.55 },
       ),
     );
   }

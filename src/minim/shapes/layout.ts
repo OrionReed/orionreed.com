@@ -1,23 +1,8 @@
 // Spatial composition primitives. Reference points for growth:
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
-import type { Vec } from "../core";
 import { transformAABB } from "../scene/matrix";
 import type { Shape } from "../scene";
-
-/** Named anchor points on a unit box. Plain `Vec`s — pass to e.g.
- *  `Label.align`. */
-export const align = {
-  topLeft:     { x: 0, y: 0 } as Vec,
-  topRight:    { x: 1, y: 0 } as Vec,
-  bottomLeft:  { x: 0, y: 1 } as Vec,
-  bottomRight: { x: 1, y: 1 } as Vec,
-  top:         { x: 0.5, y: 0 } as Vec,
-  bottom:      { x: 0.5, y: 1 } as Vec,
-  left:        { x: 0, y: 0.5 } as Vec,
-  right:       { x: 1, y: 0.5 } as Vec,
-  center:      { x: 0.5, y: 0.5 } as Vec,
-};
 
 export interface ArrangeOpts {
   /** Spacing between adjacent bounding boxes. Default 0. */

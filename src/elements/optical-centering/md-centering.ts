@@ -2,7 +2,7 @@ import {
   Diagram,
   Scene,
   Text,
-  align,
+  Anchor,
   circle,
   css,
   easeInOut,
@@ -76,12 +76,12 @@ export class MdCentering extends Diagram {
       s(
         label(O.lerp(xEnd, f).down(24), math("x", subs[i]), {
           size: 16,
-          align: align.top,
+          align: Anchor.Top,
           opacity: xLabelsT,
         }),
         label(O.lerp(yEnd, f).left(14), math("y", subs[i]), {
           size: 16,
-          align: align.right,
+          align: Anchor.Right,
           opacity: yLabelsT,
         }),
         tick(O, yTip, f, 7, { opacity: yShown }),
@@ -115,7 +115,7 @@ export class MdCentering extends Diagram {
       label(
         c.right(10).up(10),
         t("(", math("x", "c"), ", ", math("y", "c"), ")"),
-        { size: 14, align: align.bottomLeft, opacity: centroidT },
+        { size: 14, align: Anchor.BottomLeft, opacity: centroidT },
       ),
     );
 

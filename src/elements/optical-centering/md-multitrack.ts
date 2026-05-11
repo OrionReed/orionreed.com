@@ -4,7 +4,7 @@
 import {
   Diagram,
   Scene,
-  align,
+  Anchor,
   circle,
   computed,
   css,
@@ -137,7 +137,7 @@ export class MdMultitrack extends Diagram {
           trackY + TRACK_H / 2,
         ),
         name,
-        { size: 10, opacity: 0.95, align: align.center },
+        { size: 10, opacity: 0.95, align: Anchor.Center },
       ));
     });
 
@@ -176,12 +176,12 @@ export class MdMultitrack extends Diagram {
       computed(() =>
         `time: ${tl.clock.value.toFixed(2)}s / ${tl.duration.value.toFixed(2)}s`,
       ),
-      { size: 11, opacity: 0.65, align: align.center },
+      { size: 11, opacity: 0.65, align: Anchor.Center },
     ));
     s(label(
       pt(W / 2, H - 14),
       "drag clip body to shift · drag handles to resize · overlapping clips animate together",
-      { size: 10, opacity: 0.5, align: align.center },
+      { size: 10, opacity: 0.5, align: Anchor.Center },
     ));
 
     this.anim.loop(function* () {

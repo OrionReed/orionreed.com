@@ -9,7 +9,7 @@ import {
   EventBus,
   Point,
   Scene,
-  align,
+  Anchor,
   assemble,
   attract,
   centroid,
@@ -1185,13 +1185,13 @@ export class MdRuntimeTests extends Diagram {
       label(pt(PAD_X, 18), "minim runtime tests", {
         size: 14,
         bold: true,
-        align: align.left,
+        align: Anchor.Left,
       }),
     );
     s(
       label(pt(W - PAD_X, 18), summary, {
         size: 12,
-        align: align.right,
+        align: Anchor.Right,
         opacity: 0.8,
       }),
     );
@@ -1203,12 +1203,12 @@ export class MdRuntimeTests extends Diagram {
       });
       const name = label(pt(PAD_X + 22, y), t.name, {
         size: 12,
-        align: align.left,
+        align: Anchor.Left,
         opacity: statuses[i].derive((st) => (st === "pending" ? 0.5 : 1)),
       });
       const msg = label(pt(W - PAD_X, y), messages[i], {
         size: 11,
-        align: align.right,
+        align: Anchor.Right,
         opacity: 0.65,
       });
       return [dot, name, msg];
@@ -1218,7 +1218,7 @@ export class MdRuntimeTests extends Diagram {
       label(
         pt(W / 2, H - 12),
         "all tests run on a fresh Anim driven by step(dt)",
-        { size: 10, align: align.center, opacity: 0.5 },
+        { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );
 

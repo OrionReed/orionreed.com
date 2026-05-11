@@ -6,7 +6,7 @@ import * as R from "../rand";
 import {
   Diagram,
   Scene,
-  align,
+  Anchor,
   centroid,
   css,
   easeInOut,
@@ -61,7 +61,7 @@ export class MdAggregates extends Diagram {
           (rad) =>
             `mean rotation: ${((rad * 180) / Math.PI).toFixed(0)}°    mean scale: ${k.peek().x.toFixed(2)}`,
         ),
-        { size: 11, align: align.center, opacity: 0.7 },
+        { size: 11, align: Anchor.Center, opacity: 0.7 },
       ),
     );
 
@@ -86,7 +86,7 @@ export class MdAggregates extends Diagram {
       label(
         pt(W / 2, H - 14),
         "centroid + meanRotation + meanScale composed in parallel; targets randomized each cycle",
-        { size: 10, align: align.center, opacity: 0.5 },
+        { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );
   }

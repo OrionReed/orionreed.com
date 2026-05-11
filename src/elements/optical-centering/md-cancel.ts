@@ -7,7 +7,7 @@
 import {
   Diagram,
   Scene,
-  align,
+  Anchor,
   button,
   circle,
   css,
@@ -59,7 +59,7 @@ export class MdCancel extends Diagram {
     s(
       label(pt(W / 2, STATUS_Y), status, {
         size: 11,
-        align: align.center,
+        align: Anchor.Center,
         opacity: 0.55,
       }),
     );

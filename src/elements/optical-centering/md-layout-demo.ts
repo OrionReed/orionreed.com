@@ -5,7 +5,7 @@
 import {
   Diagram,
   Scene,
-  align,
+  Anchor,
   arrange,
   circle,
   css,
@@ -55,7 +55,7 @@ export class MdLayoutDemo extends Diagram {
     s(
       label(pt(170, 252), t("arrange + multiple size animations").muted(), {
         size: 11,
-        align: align.top,
+        align: Anchor.Top,
       }),
     );
 
@@ -110,7 +110,7 @@ export class MdLayoutDemo extends Diagram {
     s(
       label(pt(20, 280), t("layout × animation: fixed-link chain").muted(), {
         size: 11,
-        align: align.left,
+        align: Anchor.Left,
       }),
     );
   }

@@ -6,7 +6,7 @@ import { renderContent, flattenText, type Content } from "./text";
 export interface LabelOpts extends ShapeOpts {
   size?: Arg<number>;
   /** Bbox point that sits at `at` — `{0, 0}` = top-left, `{0.5, 0.5}`
-   *  (default) = center. See `align` for named consts. */
+   *  (default) = center. See `Anchor` for named consts. */
   align?: Vec;
   bold?: boolean;
 }

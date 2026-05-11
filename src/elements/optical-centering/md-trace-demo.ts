@@ -9,7 +9,7 @@
 import {
   Diagram,
   Scene,
-  align,
+  Anchor,
   circle,
   clock,
   computed,
@@ -137,7 +137,7 @@ export class MdTraceDemo extends Diagram {
       label(pt(PAD, HEADER_Y), "trace", {
         size: 12,
         bold: true,
-        align: align.left,
+        align: Anchor.Left,
       }),
     );
     s(
@@ -150,7 +150,7 @@ export class MdTraceDemo extends Diagram {
           const lanes = layout.value.total;
           return `${n} span${n === 1 ? "" : "s"} · ${lanes} lane${lanes === 1 ? "" : "s"} · ${trace.duration().toFixed(2)}s`;
         }),
-        { size: 11, opacity: 0.6, align: align.right },
+        { size: 11, opacity: 0.6, align: Anchor.Right },
       ),
     );
 
@@ -199,7 +199,7 @@ export class MdTraceDemo extends Diagram {
         const tagShape = label(
           pt(x, y).offset(5, ROW_H / 2),
           labelText,
-          { size: 9, align: align.left, opacity: 0.9 },
+          { size: 9, align: Anchor.Left, opacity: 0.9 },
         );
         return [bar, tagShape];
       },
@@ -211,7 +211,7 @@ export class MdTraceDemo extends Diagram {
       label(
         pt(W / 2, H - 10),
         "lanes stack one yield-array's siblings · sequential batches share lanes · nesting goes deeper",
-        { size: 9, align: align.center, opacity: 0.5 },
+        { size: 9, align: Anchor.Center, opacity: 0.5 },
       ),
     );
   }

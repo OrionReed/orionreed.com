@@ -4,7 +4,7 @@
 import {
   Diagram,
   Scene,
-  align,
+  Anchor,
   assemble,
   centroid,
   circle,
@@ -77,10 +77,10 @@ export class MdChoreography extends Diagram {
 
     const phase = signal<Content>("assemble (row)");
     s(label(pt(W / 2, 24), phase, {
-      size: 14, bold: true, align: align.center, opacity: 0.85,
+      size: 14, bold: true, align: Anchor.Center, opacity: 0.85,
     }));
     s(label(pt(W / 2, 42), "snapshot · stagger · ramp · centroid · all composing", {
-      size: 10, align: align.center, opacity: 0.45,
+      size: 10, align: Anchor.Center, opacity: 0.45,
     }));
 
     const c = centroid(...shapes);

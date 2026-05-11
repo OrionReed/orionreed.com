@@ -6,7 +6,7 @@
 import {
   Diagram,
   Scene,
-  align,
+  Anchor,
   bounceIn,
   circle,
   computed,
@@ -124,13 +124,13 @@ export class MdRand extends Diagram {
       label(pt(20, 24), "rand", {
         size: 13,
         bold: true,
-        align: align.left,
+        align: Anchor.Left,
         opacity: 0.85,
       }),
       label(
         pt(20, 42),
         "yield* rand(...gens) — pick one branch each loop",
-        { size: 10, align: align.left, opacity: 0.5 },
+        { size: 10, align: Anchor.Left, opacity: 0.5 },
       ),
     );
 
@@ -139,7 +139,7 @@ export class MdRand extends Diagram {
       label(pt(STAGE_X, STAGE_Y - 60), currentName, {
         size: 18,
         bold: true,
-        align: align.center,
+        align: Anchor.Center,
       }),
     );
     const subject = s(
@@ -161,7 +161,7 @@ export class MdRand extends Diagram {
     s(
       label(pt(MENU_X, MENU_Y - 22), "candidates", {
         size: 10,
-        align: align.left,
+        align: Anchor.Left,
         opacity: 0.5,
       }),
     );
@@ -175,7 +175,7 @@ export class MdRand extends Diagram {
         }),
         label(pt(MENU_X + 14, MENU_Y + i * ROW_H), m.name, {
           size: 12,
-          align: align.left,
+          align: Anchor.Left,
           opacity,
         }),
       );
@@ -188,7 +188,7 @@ export class MdRand extends Diagram {
     s(
       label(pt(W / 2, HISTORY_Y - 22), "history (newest →)", {
         size: 10,
-        align: align.center,
+        align: Anchor.Center,
         opacity: 0.5,
       }),
     );

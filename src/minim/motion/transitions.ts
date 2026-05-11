@@ -6,6 +6,7 @@
 import { tween, type Duration, type Easing, type Signal } from "../core";
 import type { Animator, Vec } from "../core";
 import type { Writable } from "../scene";
+import { Dir } from "../anchor";
 import { easeIn, easeInOut, easeOut } from "./easings";
 
 type Lerpable = number | Vec;
@@ -23,17 +24,6 @@ export function* from<T extends Lerpable>(
   sig.value = start;
   yield* tween(sig, end, sec, ease);
 }
-
-// ── Direction constants — paired with `slideIn` / `slideOut` ─────────
-
-/** Unit direction vectors. Any `Vec` works; these just name the
- *  cardinals. */
-export const Dir = {
-  Left: { x: -1, y: 0 } as Vec,
-  Right: { x: 1, y: 0 } as Vec,
-  Up: { x: 0, y: -1 } as Vec,
-  Down: { x: 0, y: 1 } as Vec,
-};
 
 // ── Atoms ────────────────────────────────────────────────────────────
 

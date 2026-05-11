@@ -3,11 +3,11 @@
 
 import { signal, toSig, type Arg, type Signal } from "../core";
 import { type AnyShape, type Pointlike, pt } from "../scene";
+import { Anchor } from "../anchor";
 import { tokens } from "./tokens";
 import { group } from "./group";
 import { rect } from "./rect";
 import { label } from "./label";
-import { align } from "./layout";
 import type { Content } from "./text";
 
 export interface ButtonOpts {
@@ -44,7 +44,7 @@ export function button(
     }),
   );
   g.add(rect(0, 0, w, h, { thin: true }));
-  g.add(label(pt(w / 2, h / 2), content, { size, align: align.center }));
+  g.add(label(pt(w / 2, h / 2), content, { size, align: Anchor.Center }));
 
   g.on("pointerover", () => {
     hovered.value = true;
