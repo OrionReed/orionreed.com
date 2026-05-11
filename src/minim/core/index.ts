@@ -16,8 +16,6 @@ export {
   type Duration,
 } from "./signal";
 
-export { counter } from "./counter";
-
 export {
   toSig,
   when,
@@ -28,7 +26,7 @@ export {
 
 export { type Vec } from "./vec";
 
-export { snapshot } from "./store";
+export { snapshot, counter } from "./store";
 
 export {
   Anim,
@@ -45,11 +43,24 @@ export { EventBus } from "./events";
 export {
   untilChange,
   untilTrue,
-  onceEvent,
-  fromPromise,
+  untilFalse,
+  untilEvent,
+  untilPromise,
   race,
-  until,
+  firstN,
+  endOn,
+  startOn,
 } from "./suspensions";
+
+export {
+  all,
+  sequence,
+  delay,
+  transaction,
+  rand,
+} from "./compose";
+
+export { drive } from "./drive";
 
 export {
   timeline,

@@ -1,5 +1,5 @@
 // The frame-loop substrate: `drive(step)` runs `step(dt, t)` once per
-// frame. Foundation under behaviors, clocks, and bounded transitions —
+// frame. Foundation under integrators, clocks, and bounded transitions —
 // every "yield dt; update signal" pattern in this stdlib reduces to a
 // `drive` call. Return `false` to stop naturally; any other return
 // (including `void`) keeps driving. Cancellation from outside still
@@ -12,7 +12,7 @@
 //     sig.value = lerp(start, target, ease(t / dur));
 //   });
 
-import type { Animator } from "../core";
+import type { Animator } from "./anim";
 
 /** Yield once per frame, calling `step(dt, t)` each time. `dt` is the
  *  frame delta in seconds; `t` is total elapsed since drive started.

@@ -32,9 +32,13 @@ import { signal, type ReadonlySignal } from "./signal";
 const FRAME_CAP_MS = 32;
 
 /** Spawn a generator parented to the suspended host. `onComplete`
- *  fires on natural completion only (not cancel). Only valid during
- *  the suspension's initial subscribe call. */
-export type SpawnFn = (gen: Animator, onComplete?: () => void) => () => void;
+ *  fires on natural completion only (not cancel), receiving the
+ *  generator's `return`-value (the `R` in `Animator<R>`). Only valid
+ *  during the suspension's initial subscribe call. */
+export type SpawnFn = <R>(
+  gen: Animator<R>,
+  onComplete?: (value: R) => void,
+) => () => void;
 
 // Bare subscribe-and-return-disposer shape. The runtime invokes this
 // directly when a generator yields a function; the `suspend()` factory
@@ -50,7 +54,7 @@ type SuspendFn<T = void> = (
  *  suspend(impl)`. The optional `spawn` arg is for combinators that
  *  orchestrate child generators; simple subscribers ignore it.
  *
- *      function* onceEvent(el, name): Animator<Event> {
+ *      function* untilEvent(el, name): Animator<Event> {
  *        return yield* suspend<Event>((wake) => {
  *          const h = (e: Event) => wake(e);
  *          el.addEventListener(name, h, { once: true });
@@ -98,7 +102,9 @@ interface Active {
   state: number;                          // one of the constants above
   wakeAt: number;                         // valid when state === SLEEPING
   dispose: (() => void) | undefined;      // valid when state === SUBSCRIBED
-  onComplete: (() => void) | undefined;   // parent's "child finished" callback
+  // Parent's "child finished" callback. Called with the gen's
+  // `return`-value on natural completion; not called on cancel.
+  onComplete: ((value: unknown) => void) | undefined;
   parent: Active | undefined;
   // True while inside `advance`; defers `.return()` if cancelled re-entrantly.
   onStack: boolean;
@@ -228,7 +234,7 @@ export class Anim {
   private spawn(
     gen: Animator<any>,
     parent?: Active,
-    onComplete?: () => void,
+    onComplete?: (value: unknown) => void,
   ): Active {
     const a: Active = {
       gen,
@@ -329,11 +335,21 @@ export class Anim {
       if (d) d();          // undefined during sync-resolve (dispose not yet stored)
       this.advance(a, value);
     };
-    const spawn: SpawnFn = (gen, onComplete) => {
+    const spawn: SpawnFn = <R>(
+      gen: Animator<R>,
+      onComplete?: (value: R) => void,
+    ) => {
       if (!setupActive) {
         throw new Error("minim: spawn() valid only during suspend setup");
       }
-      const child = this.spawn(gen, a, onComplete);
+      // Internal `spawn` types onComplete as `(unknown) => void` — the
+      // runtime passes whatever `result.value` was; we trust the caller
+      // to know the gen's R.
+      const child = this.spawn(
+        gen,
+        a,
+        onComplete as ((value: unknown) => void) | undefined,
+      );
       return () => this.cancel(child);
     };
     const dispose = impl(wake, spawn);
@@ -412,11 +428,15 @@ export class Anim {
         this.suspendChild(a, v as Animator<any>);
         return;
       }
-      this.complete(a);
+      // Natural completion: `result.value` is the generator's
+      // return-value (the `R` in `Animator<R>`). Pass to onComplete
+      // so combinators can collect typed payloads from child gens.
+      this.complete(a, result.value);
     } catch (e) {
-      // Isolate user errors: log, complete, keep the runtime alive.
+      // Isolate user errors: log, complete with no value, keep the
+      // runtime alive.
       console.error("minim: animator threw", e);
-      this.complete(a);
+      this.complete(a, undefined);
     } finally {
       a.onStack = false;
       if (a.pendingReturn) {
@@ -430,7 +450,7 @@ export class Anim {
   // state=READY; advance either dispatches a yield via suspend* and
   // returns, or finishes and reaches here). No SUBSCRIBED-dispose
   // cleanup needed.
-  private complete(a: Active): void {
+  private complete(a: Active, value: unknown): void {
     if (a.state === DEAD) return;
     a.state = DEAD;
     if (this.listeners.size > 0 && a.observeId !== undefined) {
@@ -440,7 +460,7 @@ export class Anim {
     if (a.onComplete) {
       const cb = a.onComplete;
       a.onComplete = undefined;
-      cb();
+      cb(value);
     }
   }
 }

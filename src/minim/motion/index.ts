@@ -1,6 +1,4 @@
 export { linear, easeOut, easeIn, easeInOut } from "./easings";
-export { drive } from "./drive";
-export { all, sequence, delay, transaction, rand } from "./compose";
 export {
   spring,
   oscillate,

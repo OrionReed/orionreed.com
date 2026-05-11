@@ -1,17 +1,16 @@
 // Frame-driven integrators — generators that step `dt` into one or
 // more signals, never returning until cancelled (with the spring-
 // precision exception). Built on `drive`. Pair with `anim.run(...)`
-// (forever) or `until(trigger, …)` / `race(...)` for bounded use.
+// (forever) or `endOn(trigger, …)` / `race(...)` for bounded use.
 //
 // What unifies this file: every export integrates `dt` into a signal.
 // Whether the signal is called a "clock" or a "position" is purely
 // naming — the runtime is the same.
 
 import type { Animator, Arg, Vec } from "../core";
-import { toSig } from "../core";
+import { drive, toSig } from "../core";
 import type { Signal } from "../core/signal";
 import type { Pointlike, Writable } from "../scene";
-import { drive } from "./drive";
 
 // ── Scalar integrators ──────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import { Signal } from "./signal";
+import { signal, Signal, type ReadonlySignal } from "./signal";
 
 /** Capture current values; return a reset function. Args are signals
  *  or plain objects whose Signal-valued props get flattened. Useful at
@@ -21,4 +21,17 @@ export function snapshot(
   return () => {
     for (let i = 0; i < sigs.length; i++) sigs[i].value = initials[i];
   };
+}
+
+/** Wrap a callback subscription `(cb) => disposer` as a `Signal<number>`
+ *  that bumps on each fire. Sparse, event-paced — handy for adapting
+ *  things like `Trace.onChange` into the signal graph. */
+export function counter(
+  subscribe: (cb: () => void) => () => void,
+): ReadonlySignal<number> {
+  const sig = signal(0);
+  subscribe(() => {
+    sig.value = sig.peek() + 1;
+  });
+  return sig;
 }

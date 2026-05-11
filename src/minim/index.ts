@@ -1,9 +1,9 @@
 // minim — generator-driven SVG diagrams with reactive primitives.
-//   core/   — signals, Anim, suspensions, timeline, …
+//   core/   — signals, Anim, suspensions, composers, drive, timeline, …
 //   scene/  — Shape, Point, Bounds, aggregates, …
 //   shapes/ — visuals + layout + list (space stdlib)
-//   motion/ — easings, composers, transitions, … (time stdlib)
-//   trace/  — derivations on `Anim.observe`
+//   motion/ — easings, transitions, integrators (time stdlib)
+//   assert/ — trace (spans/tree/tag) + claim (assertions)
 //   anchor, diagram, attr, viewport — top-level utilities + scaffold
 
 // ── Core ────────────────────────────────────────────────────────────
@@ -20,11 +20,9 @@ export {
   type Duration,
 } from "./core/signal";
 
-export { counter } from "./core/counter";
-
 export { toSig, when, type Arg } from "./core/arg";
 
-export { snapshot } from "./core/store";
+export { snapshot, counter } from "./core/store";
 
 export { type Vec } from "./core/vec";
 
@@ -75,13 +73,26 @@ export { EventBus } from "./core/events";
 export {
   untilChange,
   untilTrue,
-  onceEvent,
-  fromPromise,
+  untilFalse,
+  untilEvent,
+  untilPromise,
   race,
-  until,
+  firstN,
+  endOn,
+  startOn,
 } from "./core/suspensions";
 
-// ── Trace ───────────────────────────────────────────────────────────
+export {
+  all,
+  sequence,
+  delay,
+  transaction,
+  rand,
+} from "./core/compose";
+
+export { drive } from "./core/drive";
+
+// ── Assert (observability + assertions) ─────────────────────────────
 export {
   spans,
   traceTree,
@@ -93,10 +104,6 @@ export {
   type TraceTree,
   type TraceNode,
   type TraceBatch,
-} from "./trace";
-
-// ── Claims (specs & assertions as labeled bool signals) ─────────────
-export {
   claim,
   process,
   labelledProcess,
@@ -109,7 +116,7 @@ export {
   Predicates,
   type Claim,
   type Process,
-} from "./claim";
+} from "./assert";
 
 export {
   timeline,
@@ -160,12 +167,6 @@ export {
   easeOut,
   easeIn,
   easeInOut,
-  drive,
-  all,
-  sequence,
-  delay,
-  transaction,
-  rand,
   from,
   spring,
   oscillate,

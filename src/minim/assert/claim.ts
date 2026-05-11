@@ -31,13 +31,13 @@ import {
   effect,
   Signal,
   type ReadonlySignal,
-} from "./core/signal";
-import { race } from "./core/suspensions";
-import type { Animator } from "./core/anim";
-import type { Vec } from "./core/vec";
-import { Bounds, type AABB } from "./scene/bounds";
-import { circle } from "./shapes/circle";
-import { pt, type Pointlike } from "./scene/point";
+} from "../core/signal";
+import { race } from "../core/suspensions";
+import type { Animator } from "../core/anim";
+import type { Vec } from "../core/vec";
+import { Bounds, type AABB } from "../scene/bounds";
+import { circle } from "../shapes/circle";
+import { pt, type Pointlike } from "../scene/point";
 
 // ── Types ────────────────────────────────────────────────────────────
 

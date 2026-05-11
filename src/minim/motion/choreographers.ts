@@ -4,8 +4,8 @@
 // reach for `centroid(...shapes).to(...)` instead. For continuous
 // circular motion, see `orbit` in `motion/integrators.ts`.
 
-import { delay } from "./compose";
 import type { Animator, Easing, Vec } from "../core";
+import { delay } from "../core";
 import { isPoint, type Pointlike, type Writable } from "../scene";
 
 /** Swap two shapes' positions over `sec`. */

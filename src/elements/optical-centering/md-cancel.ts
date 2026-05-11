@@ -1,5 +1,5 @@
 // Two cancellation modes. EXIT cooperatively flips a `stop` signal —
-// each shape's `until(untilChange(stop), oscillate(...))` resumes,
+// each shape's `endOn(untilChange(stop), oscillate(...))` resumes,
 // and the next statement (`fadeOut`) runs as the sequel in the same
 // generator. STOP cancels via the run disposers — the cascade also
 // kills any in-flight fadeOut (shapes freeze mid-fade).
@@ -11,12 +11,12 @@ import {
   button,
   circle,
   css,
+  endOn,
   fadeOut,
   label,
   oscillate,
   pt,
   signal,
-  until,
   untilChange,
   type Animator,
   type Content,
@@ -41,7 +41,7 @@ function* lifecycle(
   freq: number,
   stop: Signal<boolean>,
 ): Animator {
-  yield until(untilChange(stop), oscillate(y, amp, freq));
+  yield endOn(untilChange(stop), oscillate(y, amp, freq));
   yield* fadeOut(shape, 0.4);
 }
 

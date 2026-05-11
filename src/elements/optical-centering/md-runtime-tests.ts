@@ -16,8 +16,8 @@ import {
   circle,
   css,
   drift,
+  endOn,
   forEach,
-  fromPromise,
   label,
   lens,
   meanNum,
@@ -32,8 +32,8 @@ import {
   splay,
   spring,
   swap,
-  until,
   untilChange,
+  untilPromise,
   type Animator,
 } from "../../minim";
 
@@ -591,13 +591,13 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "until: cancels work on trigger, sequel runs",
+    name: "endOn: cancels work on trigger, sequel runs",
     run: (assert) => {
       const a = new Anim();
       const stop = signal(false);
       let phase = 0;
       a.run(function* () {
-        yield until(
+        yield endOn(
           untilChange(stop),
           (function* (): Animator {
             phase = 1;
@@ -1103,7 +1103,7 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "fromPromise: disposer suppresses wake after cancel",
+    name: "untilPromise: disposer suppresses wake after cancel",
     run: (assert) => {
       const a = new Anim();
       let resolve!: () => void;
@@ -1112,7 +1112,7 @@ const TESTS: TestCase[] = [
       });
       let woke = false;
       const dispose = a.run(function* () {
-        yield fromPromise(p);
+        yield untilPromise(p);
         woke = true;
       });
       a.step(0);
