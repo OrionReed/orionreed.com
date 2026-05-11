@@ -31,38 +31,6 @@ but if you've ever tried to center other shapes, you will have quickly discovere
 
 The problem with our approach is that we have failed to capture the essence of "center" in our abstraction. What we have captured is a notion of center for _axis-aligned boxes_. This is the same center you can calculate as the middle of two points on a number line.
 
-<md-centering></md-centering>
-
-<md-anim-demo></md-anim-demo>
-
-<md-transitions></md-transitions>
-
-<md-orbits></md-orbits>
-
-<md-layout-demo></md-layout-demo>
-
-<md-timeline-editor></md-timeline-editor>
-
-<md-multitrack></md-multitrack>
-
-<md-circuit></md-circuit>
-
-<md-rand></md-rand>
-
-<md-cancel></md-cancel>
-
-<md-react></md-react>
-
-<md-runtime-tests></md-runtime-tests>
-
-<md-trace-demo></md-trace-demo>
-
-<md-aggregates></md-aggregates>
-
-<md-behaviors></md-behaviors>
-
-<md-choreography></md-choreography>
-
 Designers and artists have known for thousands of years that the _perceptual center_ of a shape is not simply derived from its width and height. There are in fact many [optical effects in user interfaces](https://medium.com/design-bridges/optical-effects-9fca82b4cd9a) which are not captured in our programming languages or libraries and which are left to designers to account for.
 
 This is a large part of the value of _icon libraries_ which have been painstakingly designed to feel balanced and consistent in alignment, size, and other attributes.
