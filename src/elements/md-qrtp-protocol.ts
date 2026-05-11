@@ -9,7 +9,6 @@ import {
   label,
   line,
   pt,
-  scope,
   signal,
   snapshot,
   when,
@@ -154,7 +153,10 @@ export class MdQrtpProtocol extends Diagram {
 
     // ── Animation ───────────────────────────────────────────────────
 
-    const floodAnim = scope(this.anim);
+    // Disposer for the flood-fill loop so we can tear it down between
+    // full cycles. Tracked by hand — `anim.loop(...)` returns the
+    // disposer, we hold it, and call it on reset.
+    let floodDispose: (() => void) | undefined;
 
     function* doFloodFill(): Animator {
       const components = buildComponents();
@@ -185,7 +187,7 @@ export class MdQrtpProtocol extends Diagram {
     }
 
     const startFloodFillLoop = () => {
-      floodAnim.loop(function* () {
+      floodDispose = this.anim.loop(function* () {
         while (cellsWithState("retransmit").length === 0) yield;
         yield T.beforeFlood;
         yield* doFloodFill();
@@ -212,7 +214,8 @@ export class MdQrtpProtocol extends Diagram {
       // Full cycle complete — reset and (if backchannel) restart flood.
       if (state.cells.peek().size === N) {
         yield T.beforeReset;
-        floodAnim.stop();
+        floodDispose?.();
+        floodDispose = undefined;
         reset();
         yield T.betweenFullCycles;
         if (backchannel) startFloodFillLoop();

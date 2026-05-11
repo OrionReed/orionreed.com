@@ -82,8 +82,6 @@ export {
 
 export { EventBus } from "./core/events";
 
-export { scope, type Scope } from "./core/scope";
-
 export {
   untilChange,
   untilTrue,
