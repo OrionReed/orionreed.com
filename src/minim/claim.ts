@@ -104,11 +104,16 @@ export type Process = {
 // ── Latching helpers ─────────────────────────────────────────────────
 
 /** Invariant latch: signal is `true` until `p` is ever `false`, then
- *  latches `false` until `reset`. Used for `stays.X` / `never.X`. */
+ *  latches `false` until `reset`. Used for `stays.X` / `never.X`.
+ *
+ *  Read `p.value` unconditionally — `held.peek() && !p.value` would
+ *  short-circuit once held flips, dropping `p` from the effect's deps
+ *  and breaking re-arm on the next `.reset()`. */
 function latchFalse(p: ReadonlySignal<boolean>, label?: string): Claim {
   const held = signal(true);
   const stop = effect(() => {
-    if (held.peek() && !p.value) held.value = false;
+    const pv = p.value;
+    if (held.peek() && !pv) held.value = false;
   });
   return finalize(held, label, () => {
     held.value = true;
@@ -118,11 +123,14 @@ function latchFalse(p: ReadonlySignal<boolean>, label?: string): Claim {
 }
 
 /** Liveness latch: signal is `false` until `p` is ever `true`, then
- *  latches `true` until `reset`. Used for `becomes.X`. */
+ *  latches `true` until `reset`. Used for `becomes.X`.
+ *
+ *  Same dep-tracking rule as `latchFalse`. */
 function latchTrue(p: ReadonlySignal<boolean>, label?: string): Claim {
   const held = signal(false);
   const stop = effect(() => {
-    if (!held.peek() && p.value) held.value = true;
+    const pv = p.value;
+    if (!held.peek() && pv) held.value = true;
   });
   return finalize(held, label, () => {
     held.value = p.peek() ? true : false;
@@ -220,16 +228,17 @@ function _during(c: Claim, p: Process): Claim {
 
 /** "a becomes true before b becomes true." Verdict is `true` until
  *  `b` is observed `true` while `a` hasn't been; holds vacuously if
- *  neither ever becomes true. */
+ *  neither ever becomes true. Reads both signals unconditionally
+ *  before checking `decided`, so reset()-ing the decision still
+ *  keeps the effect subscribed to both. */
 function _before(a: Claim, b: Claim): Claim {
   const held = signal(true);
   let aFirst = false;
   let decided = false;
   const stop = effect(() => {
-    if (decided) return;
-    // Read both to register deps even on the won branch.
     const av = a.value;
     const bv = b.value;
+    if (decided) return;
     if (av && !aFirst && !bv) {
       aFirst = true;
       decided = true;
