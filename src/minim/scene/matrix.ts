@@ -114,7 +114,7 @@ export function transformAABB(m: Matrix2D, b: AABB): AABB {
 // firmly above the equality test on the consumer side. Likely related
 // to https://bugzilla.mozilla.org/show_bug.cgi?id=1316003 (open since
 // 2016 — animated transform/opacity can cause unbounded memory).
-const SCALE_EPS = 1e-8;
+const SCALE_EPS = 1e-7;
 
 /** Shape transform: translate × pivoted rotate × pivoted scale.
  *  Equivalent to `translate(t) translate(pivot) rotate(r) scale(s)
