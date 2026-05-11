@@ -1,5 +1,5 @@
 export { linear, easeOut, easeIn, easeInOut } from "./easings";
-export { all, sequence, delay, until } from "./compose";
+export { all, sequence, delay, until, rand } from "./compose";
 export {
   spring,
   oscillate,

@@ -42,8 +42,9 @@ export {
   type Segment,
   boundsInRoot,
   boundsIn,
-  draggable,
 } from "./shape";
+
+export { draggable } from "./interaction";
 
 // `./matrix` is internal — Shape / layout use it directly. Not re-
 // exported because consumers shouldn't need affine math; they reach

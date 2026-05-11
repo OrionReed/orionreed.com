@@ -63,8 +63,9 @@ export {
   type Segment,
   boundsInRoot,
   boundsIn,
-  draggable,
 } from "./scene/shape";
+
+export { draggable } from "./scene/interaction";
 
 export { makeScene, type Scene } from "./scene/scene";
 
@@ -143,6 +144,7 @@ export {
   sequence,
   delay,
   until,
+  rand,
   from,
   spring,
   oscillate,

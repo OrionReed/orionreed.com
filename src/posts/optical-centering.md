@@ -47,6 +47,8 @@ The problem with our approach is that we have failed to capture the essence of "
 
 <md-circuit></md-circuit>
 
+<md-rand></md-rand>
+
 <md-runtime-tests></md-runtime-tests>
 
 <md-trace-demo></md-trace-demo>
