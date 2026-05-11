@@ -11,6 +11,13 @@
 // payload (cast at the yield site — TS has one TNext per generator).
 // Sleep/parallel/child yields resume with `undefined`. A single RAF
 // loop drives `step(dt)`; `step` is public for headless use.
+//
+// Time alteration is signal-arithmetic on `anim.timeScale` (1 = real,
+// 0 = paused, 0.5 = slow-mo, -1 = reverse). `anim.clock` is the
+// reactive logical-time signal; the frame loop writes to it at
+// `wallDt × timeScale`.
+
+import { signal, type ReadonlySignal } from "./signal";
 
 /** Spawn a generator parented to the suspended host. `onComplete` fires
  *  on natural completion only (not cancel). Only valid during the
@@ -118,13 +125,18 @@ export function asGen(v: Yieldable): Animator {
 export class Anim {
   private active: Active[] = [];
   private rafId = 0;
-  private _clock = 0;
+  private _clock = signal(0);
   private lastFrame = 0;
-  /** Logical clock — total seconds advanced via `step(dt)`. For a
-   *  reactive per-frame signal, use `clock(anim)` from `motion/clocks`. */
-  get clock(): number {
-    return this._clock;
-  }
+  /** Reactive logical-time signal. Advanced by the frame loop at
+   *  `wallDt × timeScale`, or by direct `step(dt)` calls (which bypass
+   *  `timeScale`). Read-only — write through `step()` or by mutating
+   *  `timeScale`. */
+  readonly clock: ReadonlySignal<number> = this._clock;
+  /** Time-flow rate. `1` is real-time, `0` is paused, `0.5` is slow-mo,
+   *  `2` is fast-forward, negative reverses (integrator behaviors only).
+   *  Multiplies wall-clock dt at the frame-loop boundary; `step(dt)`
+   *  bypasses, applying dt directly for manual / headless advance. */
+  readonly timeScale = signal(1);
   private listeners = new Set<ObserveListeners>();
   private nextActiveId = 0;
 
@@ -145,14 +157,15 @@ export class Anim {
     return () => this.cancel(a);
   }
 
-  /** Cancel everything. Safe from inside a running generator; reusable. */
+  /** Cancel everything. Safe from inside a running generator; reusable.
+   *  Does not reset `timeScale` — that's user state. */
   stop(): void {
     if (this.rafId !== 0) {
       cancelAnimationFrame(this.rafId);
       this.rafId = 0;
     }
     this.lastFrame = 0;
-    this._clock = 0;
+    this._clock.value = 0;
     for (const a of this.active.slice()) this.cancel(a);
   }
 
@@ -166,10 +179,11 @@ export class Anim {
     };
   }
 
-  /** Advance the runtime by an explicit dt. RAF in production; tests
-   *  call directly. */
+  /** Advance the runtime by an explicit dt. Bypasses `timeScale` —
+   *  this is the raw "advance by exactly this much" primitive used by
+   *  RAF (after applying `timeScale`) and tests. */
   step(dt: number): void {
-    this._clock += dt;
+    this._clock.value += dt;
     // Length-snapshot: children spawned during the loop wait for the
     // next tick (matches RAF semantics).
     const len = this.active.length;
@@ -177,7 +191,7 @@ export class Anim {
       const a = this.active[i];
       if (!a.alive) continue;
       if (a.wakeAt !== undefined) {
-        if (this._clock >= a.wakeAt) {
+        if (this._clock.peek() >= a.wakeAt) {
           a.wakeAt = undefined;
           this.advance(a, undefined);
         }
@@ -220,8 +234,9 @@ export class Anim {
     this.active.push(a);
     if (this.listeners.size > 0) {
       a.observeId = ++this.nextActiveId;
+      const t = this._clock.peek();
       for (const l of this.listeners) {
-        l.spawn?.(a.observeId, parent?.observeId, this._clock, gen);
+        l.spawn?.(a.observeId, parent?.observeId, t, gen);
       }
     }
     // First `.next()` arg is discarded by JS generators; pass undefined.
@@ -237,7 +252,8 @@ export class Anim {
     if (!a.alive) return;
     a.alive = false;
     if (this.listeners.size > 0 && a.observeId !== undefined) {
-      for (const l of this.listeners) l.cancel?.(a.observeId, this._clock);
+      const t = this._clock.peek();
+      for (const l of this.listeners) l.cancel?.(a.observeId, t);
     }
     if (a.awaitDispose) {
       const d = a.awaitDispose;
@@ -266,11 +282,18 @@ export class Anim {
 
   private frame = (rafNow: number): void => {
     this.rafId = 0;
-    const dt =
-      this.lastFrame === 0 ? 0 : Math.min(rafNow - this.lastFrame, 32) / 1000;
-    this.lastFrame = rafNow;
     try {
-      this.step(dt);
+      const scale = this.timeScale.peek();
+      if (scale === 0) {
+        // Paused — don't step, and reset lastFrame so unpausing
+        // starts with dt=0 (no catch-up hitch).
+        this.lastFrame = 0;
+      } else {
+        const dt =
+          this.lastFrame === 0 ? 0 : Math.min(rafNow - this.lastFrame, 32) / 1000;
+        this.lastFrame = rafNow;
+        this.step(dt * scale);
+      }
     } finally {
       this.kick();
     }
@@ -319,7 +342,7 @@ export class Anim {
 
   /** Fast path for `yield <sec>`: park on the wakeAt clock slot. */
   private suspendSleep(a: Active, sec: number): void {
-    a.wakeAt = this._clock + sec;
+    a.wakeAt = this._clock.peek() + sec;
   }
 
   /** Fast path for `yield [a, b, ...]`: spawn each as a child, resume
@@ -406,7 +429,8 @@ export class Anim {
     if (!a.alive) return;
     a.alive = false;
     if (this.listeners.size > 0 && a.observeId !== undefined) {
-      for (const l of this.listeners) l.complete?.(a.observeId, this._clock);
+      const t = this._clock.peek();
+      for (const l of this.listeners) l.complete?.(a.observeId, t);
     }
     if (a.awaitDispose) {
       const d = a.awaitDispose;

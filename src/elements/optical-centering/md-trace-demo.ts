@@ -1,6 +1,7 @@
 // Self-rendering trace demo. A small animation up top; below it, every
 // generator the runtime spawns becomes a live Gantt row. Built on
-// `spans(anim)` + `counter` + `traceTree` + `tag`/`tagAll` + `clock`.
+// `spans(anim)` + `counter` + `traceTree` + `tag`/`tagAll` +
+// `anim.clock` (the reactive logical-time signal).
 //
 // Layout: per-parent subtree blocks. A span plus its descendants form
 // one contiguous block; concurrent siblings stack into separate
@@ -11,7 +12,6 @@ import {
   Scene,
   Anchor,
   circle,
-  clock,
   computed,
   counter,
   css,
@@ -89,8 +89,9 @@ export class MdTraceDemo extends Diagram {
     const b = s(circle(pt(W / 2, cy), 18, { fill: "#f5a623" }));
     const c = s(circle(pt(W / 2 + 100, cy), 18, { fill: "#e25c5c" }));
 
-    // Spawn the clock BEFORE trace() so its loop isn't recorded.
-    const now = clock(this.anim);
+    // `anim.clock` is the reactive logical-time signal — read it
+    // before `spans()` so we don't pull any loop into the trace.
+    const now = this.anim.clock;
     const trace = spans(this.anim);
 
     this.anim.run(

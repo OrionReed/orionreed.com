@@ -70,7 +70,7 @@ export function spans(anim: Anim): Trace {
     // just on lifecycle events.
     duration() {
       if (list.length === 0) return 0;
-      const now = anim.clock;
+      const now = anim.clock.peek();
       let min = Infinity;
       let max = 0;
       for (const s of list) {

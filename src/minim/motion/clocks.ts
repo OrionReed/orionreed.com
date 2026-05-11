@@ -1,7 +1,8 @@
-// Clocks — any `Signal<number>` advancing over time. Constructors
-// (`pulse`, `clock`) plus modulators (`speed`, `ramp`, `reverse`)
-// that work on any signal-as-clock (Timeline.clock, a plain signal,
-// or one returned by `clock()`).
+// Clocks — any `Signal<number>` advancing over time. For the runtime's
+// own logical clock, read `anim.clock` directly. Constructors here
+// build *custom* clock signals (tick counters, sec-interval callbacks);
+// modulators (`speed`, `ramp`, `reverse`) drive any signal-as-clock —
+// `Timeline.clock`, a plain signal, or `anim.clock`-derived computeds.
 
 import { signal, type Signal } from "../core";
 import { toSig, type Arg } from "../core";
@@ -18,13 +19,6 @@ export function pulse(anim: Anim, sec: number): Signal<number> {
     yield sec;
     sig.value = sig.peek() + 1;
   });
-  return sig;
-}
-
-/** Continuous clock — grows by `dt` each frame while `anim` runs. */
-export function clock(anim: Anim): Signal<number> {
-  const sig = signal(0);
-  anim.run(speed(sig, 1));
   return sig;
 }
 

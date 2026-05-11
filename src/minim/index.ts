@@ -96,6 +96,21 @@ export {
   type TraceBatch,
 } from "./trace";
 
+// ── Claims (specs & assertions as labeled bool signals) ─────────────
+export {
+  claim,
+  during,
+  held,
+  any,
+  not,
+  track,
+  verdictDot,
+  SignalClaim,
+  Predicates,
+  type Claim,
+  type DuringHandle,
+} from "./claim";
+
 export {
   timeline,
   sequential,
@@ -168,7 +183,6 @@ export {
   bounceIn,
   spinIn,
   pulse,
-  clock,
   every,
   ramp,
   reverse,
