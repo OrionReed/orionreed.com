@@ -64,10 +64,9 @@ export { makeScene, type Scene } from "./scene/scene";
 export {
   Anim,
   asGen,
-  awaitable,
   isGen,
+  suspend,
   type Animator,
-  type Awaitable,
   type SpawnFn,
 } from "./core/anim";
 

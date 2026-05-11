@@ -24,7 +24,7 @@ import {
   type Pointlike,
   type ResolveVec,
 } from "./point";
-import { awaitable, type Awaitable } from "../core/anim";
+import { suspend, type Animator } from "../core/anim";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -267,11 +267,11 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     return dispose;
   }
 
-  /** Awaitable that wakes on the next `name` event; the event itself
-   *  is the resume value. Use `const evt = yield* s.until("click")` to
-   *  receive the typed event, or `yield s.until("click")` to ignore it. */
-  until(name: string): Awaitable<Event> {
-    return awaitable<Event>((wake) => {
+  /** Wake on the next `name` event; resume with the event. Use
+   *  `const evt = yield* s.until("click")` to receive the typed event,
+   *  or `yield s.until("click")` to ignore it. */
+  *until(name: string): Animator<Event> {
+    return yield* suspend<Event>((wake) => {
       const handler = (e: Event) => wake(e);
       return this.on(name, handler, { once: true });
     });

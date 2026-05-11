@@ -33,11 +33,9 @@ export { snapshot } from "./store";
 export {
   Anim,
   asGen,
-  awaitable,
   isGen,
+  suspend,
   type Animator,
-  type Awaitable,
-  type AwaitableFn,
   type Yieldable,
   type SpawnFn,
 } from "./anim";

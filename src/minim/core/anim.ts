@@ -1,87 +1,71 @@
 // Generator-driven animation runner.
 //
-// Yield contract:
+// Yield contract (user-facing):
 //   undefined      → wait one frame, resume with `dt: number`.
 //   number         → sleep N seconds; ≤0 is a tail-call (same frame).
-//   Animator       → spawn as child, wait for completion.
+//   Animator<R>    → spawn as child, wait for completion.
 //   Yieldable[]    → spawn N children in parallel, wait for all.
-//   Awaitable<T>   → suspend until `wake(value: T)` fires; resume with `value`.
+//   yield* Animator<R> → JS delegation; expression evaluates to `R`.
 //
-// Frame yields resume with `dt`; awaitable yields resume with their
-// payload (cast at the yield site — TS has one TNext per generator).
-// Sleep/parallel/child yields resume with `undefined`. A single RAF
-// loop drives `step(dt)`; `step` is public for headless use.
+// Frame yields resume with `dt`. Sleep/parallel/child yields resume
+// with `undefined`. Suspensions (external events, signal changes,
+// promises) are generator functions returning `Animator<T>`, built via
+// the `suspend<T>(impl)` factory; `yield* suspend(...)` returns `T`.
 //
 // Time alteration is signal-arithmetic on `anim.timeScale` (1 = real,
 // 0 = paused, 0.5 = slow-mo, -1 = reverse). `anim.clock` is the
 // reactive logical-time signal; the frame loop writes to it at
-// `wallDt × timeScale`.
+// `wallDt × timeScale`. `Anim` itself satisfies the Animator protocol
+// (`next`/`return`/`throw`/`Symbol.iterator`) — yield* a sub-Anim
+// inside another generator to compose runtimes / scope time.
 
 import { signal, type ReadonlySignal } from "./signal";
 
 /** Spawn a generator parented to the suspended host. `onComplete` fires
  *  on natural completion only (not cancel). Only valid during the
- *  awaitable's initial subscribe call. */
+ *  suspension's initial subscribe call. */
 export type SpawnFn = (gen: Animator, onComplete?: () => void) => () => void;
 
-/** Bare callable form of an awaitable: subscribe + return a disposer.
- *  May call `wake` synchronously. `Awaitable<T>` (below) is the public
- *  type — it adds `[Symbol.iterator]` so `yield* aw` returns the typed
- *  payload at the call site. `AwaitableFn<T>` is the low-level shape
- *  the runtime actually invokes; raw lambdas in yield position match
- *  this looser type. */
-export type AwaitableFn<T = void> = (
+// Internal: the bare callable shape the runtime actually invokes for
+// `function`-shaped Yieldables. Raw lambdas in yield position match
+// this; the `suspend()` factory yields one inside a generator.
+type SuspendFn<T = void> = (
   wake: [T] extends [void] ? () => void : (value: T) => void,
   spawn: SpawnFn,
 ) => () => void;
 
-/** Subscribe + return a disposer, plus iterator sugar so the typed
- *  payload comes through at the yield site without a manual cast:
+/** Construct a one-shot suspension generator. The `impl` is the
+ *  classic subscribe-and-return-disposer protocol; `wake(value)`
+ *  resumes the host with `value`, which becomes the result of
+ *  `yield* suspend(impl)`. The optional `spawn` arg is for combinators
+ *  that orchestrate child generators (`race`, `until`); simple
+ *  subscribers ignore it. For payload-less suspensions, omit `T` —
+ *  `wake` is then `() => void`.
  *
- *      const evt = yield* untilClick(button);     // evt: MouseEvent
- *
- *  Constructed via the `awaitable<T>(impl)` factory; the iterator
- *  attaches at construction time. For payload-less suspensions, both
- *  `yield aw` (returns `number` per TNext, ignore it) and `yield* aw`
- *  (returns `void`) work; for typed payloads, prefer `yield*`. The
- *  optional `spawn` arg passed to `impl` is for combinators that
- *  orchestrate child generators (`race`, `until`); simple subscribers
- *  ignore it. */
-export type Awaitable<T = void> = AwaitableFn<T> & {
-  [Symbol.iterator](): Generator<Awaitable<T>, T, number>;
-};
-
-/** Wrap a bare awaitable impl as an `Awaitable<T>` with iterator sugar.
- *  Use at the definition site of any typed-payload suspension primitive:
- *
- *      function onceEvent(el: EventTarget, name: string): Awaitable<Event> {
- *        return awaitable<Event>((wake) => {
- *          const handler = (e: Event) => wake(e);
- *          el.addEventListener(name, handler, { once: true });
- *          return () => el.removeEventListener(name, handler);
+ *      function onceEvent(el, name): Animator<Event> {
+ *        return suspend<Event>((wake) => {
+ *          const h = (e: Event) => wake(e);
+ *          el.addEventListener(name, h, { once: true });
+ *          return () => el.removeEventListener(name, h);
  *        });
  *      }
- *
- *  Users then `const evt = yield* onceEvent(el, "click")` — typed
- *  payload, no cast. */
-export function awaitable<T = void>(impl: AwaitableFn<T>): Awaitable<T> {
-  const aw = impl as Awaitable<T>;
-  aw[Symbol.iterator] = function* () {
-    return (yield aw) as unknown as T;
-  };
-  return aw;
+ *      // user: const evt = yield* onceEvent(el, "click");
+ */
+export function* suspend<T = void>(impl: SuspendFn<T>): Animator<T> {
+  return (yield impl) as T;
 }
 
-// `AwaitableFn<any>` in Yieldable is the variance escape: it accepts
-// both raw lambdas (`(wake) => ...`) and factory-constructed iterable
-// awaitables, and keeps inline lambdas callable with zero args.
+// Yieldable union — internal. The `SuspendFn<any>` member admits both
+// raw lambdas (`(wake) => ...`) and the impl yielded by `suspend`.
 export type Yieldable =
   | number
   | undefined
-  | Animator
+  | Animator<any>
   | Yieldable[]
-  | AwaitableFn<any>;
-export type Animator = Generator<Yieldable, void, number>;
+  | SuspendFn<any>;
+/** A generator the runtime can advance. `R` is what `yield* anim`
+ *  evaluates to; defaults to `void` for the common case. */
+export type Animator<R = void> = Generator<Yieldable, R, number>;
 
 // Lifecycle listeners for `Anim.observe`. Local type — Anim stays
 // self-contained and we don't export listener-shape internals.
@@ -179,9 +163,44 @@ export class Anim {
     };
   }
 
+  // ── Animator protocol — Anim *is* an Animator ──────────────────────
+  //
+  // Implementing the iterator protocol means Anim itself can be
+  // yielded into a parent generator (`yield* sub`), driven by tests
+  // (`anim.next(dt)`), or cancelled like any other generator
+  // (`anim.return()`). Sub-Anims compose for free — give them their
+  // own timeScale to scope time, run them as children of a parent
+  // Anim, and cancellation cascades through the gen tree.
+
+  /** Advance the runtime by `dt`, applying `timeScale`. Per the
+   *  Animator protocol — called by the parent's `yield*` or by a
+   *  test harness. */
+  next(dt?: number): IteratorResult<Yieldable, void> {
+    const scale = this.timeScale.peek();
+    if (scale !== 0) this.step((dt ?? 0) * scale);
+    return { done: false, value: undefined };
+  }
+  /** Stop the runtime (cancel all actives). Idempotent; runtime is
+   *  reusable after. Per the Animator protocol — called when a
+   *  parent's `yield*` unwinds. */
+  return(): IteratorResult<Yieldable, void> {
+    this.stop();
+    return { done: true, value: undefined };
+  }
+  /** Stop the runtime and propagate the error. Per the Animator
+   *  protocol — called when a parent gen throws into us. */
+  throw(e: unknown): IteratorResult<Yieldable, void> {
+    this.stop();
+    throw e;
+  }
+  [Symbol.iterator](): this {
+    return this;
+  }
+
   /** Advance the runtime by an explicit dt. Bypasses `timeScale` —
    *  this is the raw "advance by exactly this much" primitive used by
-   *  RAF (after applying `timeScale`) and tests. */
+   *  RAF (after applying `timeScale`) and tests. For Animator-protocol
+   *  advance that honours `timeScale`, use `next(dt)`. */
   step(dt: number): void {
     this._clock.value += dt;
     // Length-snapshot: children spawned during the loop wait for the
@@ -198,8 +217,8 @@ export class Anim {
       } else if (a.awaitDispose === undefined) {
         this.advance(a, dt);
       }
-      // else: suspended on awaitable or spawned children (both park an
-      // `awaitDispose`); resume is callback-driven.
+      // else: suspended on a subscription or spawned children (both
+      // park an `awaitDispose`); resume is callback-driven.
     }
     // Compact dead entries; entries pushed past `len` survive.
     let w = 0;
@@ -245,9 +264,9 @@ export class Anim {
     return a;
   }
 
-  /** Mark dead, dispose pending Awaitable, cascade to children, then
-   *  `.return()` (or defer if on the stack). Idempotent. `onComplete`
-   *  is NOT fired on cancel. */
+  /** Mark dead, dispose any pending subscription, cascade to children,
+   *  then `.return()` (or defer if on the stack). Idempotent.
+   *  `onComplete` is NOT fired on cancel. */
   private cancel(a: Active): void {
     if (!a.alive) return;
     a.alive = false;
@@ -302,18 +321,18 @@ export class Anim {
   // ── Suspension ──────────────────────────────────────────────────────
   //
   // Every yield ultimately parks the active in a "suspended until X"
-  // state. `suspend` below is the general path — subscribe to an
-  // Awaitable, resume on `wake`. The other three (`suspendSleep`,
-  // `suspendAll`, `suspendChild`) are inlined fast paths for the
-  // sugar shapes — each could be expressed as an awaitable factory,
-  // but they earn enough hot-path traffic to skip the closure
-  // allocations and wire the wake-up directly.
+  // state. `subscribe` below is the general path — subscribe to a
+  // SuspendFn impl, resume on `wake`. The other three (`suspendSleep`,
+  // `suspendAll`, `suspendChild`) are inlined fast paths for the sugar
+  // shapes — each could be expressed via the suspend factory, but they
+  // earn enough hot-path traffic to skip the closure allocations and
+  // wire the wake-up directly.
 
-  /** Subscribe to an awaitable (bare or iterable form). `spawn` is only
-   *  valid during initial subscribe — calling it later throws. Sync-
-   *  resolve safe. The payload `wake(value)` carries (or `undefined` for
-   *  payload-less awaitables) is forwarded as the resume value. */
-  private suspend(a: Active, awaitable: AwaitableFn<any>): void {
+  /** Subscribe to a suspend-fn impl. `spawn` is only valid during the
+   *  initial subscribe — calling it later throws. Sync-resolve safe.
+   *  `wake(value)`'s payload (or `undefined`) is forwarded as the
+   *  resume value of the generator that yielded the impl. */
+  private subscribe(a: Active, impl: SuspendFn<any>): void {
     let resumed = false;
     let dispose: (() => void) | undefined;
     let setupActive = true;
@@ -329,12 +348,12 @@ export class Anim {
     };
     const spawn: SpawnFn = (gen, onComplete) => {
       if (!setupActive) {
-        throw new Error("minim: spawn() valid only during awaitable setup");
+        throw new Error("minim: spawn() valid only during suspend setup");
       }
       const child = this.spawn(gen, a, onComplete);
       return () => this.cancel(child);
     };
-    dispose = awaitable(wake, spawn);
+    dispose = impl(wake, spawn);
     setupActive = false;
     if (resumed || !a.alive) dispose();
     else a.awaitDispose = dispose;
@@ -383,9 +402,9 @@ export class Anim {
     a.onStack = true;
     try {
       // Cast: TNext is widened to `number` for the common frame-yield
-      // ergonomics; awaitable wakes pass through the payload as the
-      // runtime's resume value. Yield sites that want a typed payload
-      // recover it via `as T` at the call site.
+      // ergonomics; suspension wakes pass through their payload as the
+      // runtime's resume value. The `suspend<T>()` factory wraps this
+      // so `yield* suspend(impl)` returns the typed payload naturally.
       let result = a.gen.next(resume as number);
       while (!result.done) {
         if (!a.alive) return;
@@ -404,7 +423,7 @@ export class Anim {
           return;
         }
         if (typeof v === "function") {
-          this.suspend(a, v as AwaitableFn<any>);
+          this.subscribe(a, v as SuspendFn<any>);
           return;
         }
         this.suspendChild(a, v as Animator);

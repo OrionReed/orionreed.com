@@ -4,7 +4,6 @@
 // disposer.
 
 import {
-  awaitable,
   Diagram,
   Scene,
   Anchor,
@@ -19,9 +18,9 @@ import {
   race,
   rect,
   signal,
+  suspend,
   zoomOut,
   type Animator,
-  type Awaitable,
   type Content,
   type Writable,
 } from "../../minim";
@@ -40,11 +39,11 @@ const BTN_W = 80;
 const BTN_H = 26;
 const BTN_GAP = 12;
 
-/** Awaitable that wakes on a click; the `MouseEvent` is the resume
- *  value. Race winners get this payload; race losers (timeout) get
- *  `undefined` — the discriminator for hit vs miss in the round. */
-function trackedClick(target: EventTarget): Awaitable<MouseEvent> {
-  return awaitable<MouseEvent>((wake) => {
+/** Wake on a click; resume with the `MouseEvent`. Race winners get
+ *  this payload; race losers (timeout) get `undefined` — the
+ *  discriminator for hit vs miss in the round. */
+function* trackedClick(target: EventTarget): Animator<MouseEvent> {
+  return yield* suspend<MouseEvent>((wake) => {
     const handler = (e: Event): void => wake(e as MouseEvent);
     target.addEventListener("click", handler, { once: true });
     return () => target.removeEventListener("click", handler);
