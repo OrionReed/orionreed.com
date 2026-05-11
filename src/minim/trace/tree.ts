@@ -5,7 +5,7 @@
 // ("X always happens before Y", "Z is never more than 1") build on
 // this view, so it's the right shared primitive.
 
-import type { Span } from "../core/anim";
+import type { Span } from "./spans";
 
 /** A yield-array's worth of siblings. All members share the same
  *  parent and the same `spawnedAt` (they're spawned in one synchronous

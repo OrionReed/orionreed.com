@@ -74,19 +74,29 @@ export {
   type Animator,
   type Awaitable,
   type Yieldable,
-  type Span,
-  type Trace,
+  type SpawnFn,
+  type ObserveListeners,
 } from "./core/anim";
 
 export { EventBus } from "./core/events";
 
-export { untilChange, onceEvent, fromPromise } from "./core/awaitables";
-
-// ── Trace (derivations on top of `Anim.trace()`) ────────────────────
 export {
+  untilChange,
+  onceEvent,
+  fromPromise,
+  race,
+  until,
+} from "./core/awaitables";
+
+// ── Trace (derivations on top of `Anim.observe`) ────────────────────
+export {
+  spans,
   traceTree,
   tag,
   tagAll,
+  tagOf,
+  type Span,
+  type Trace,
   type TraceTree,
   type TraceNode,
   type TraceBatch,
@@ -143,7 +153,6 @@ export {
   all,
   sequence,
   delay,
-  until,
   rand,
   from,
   spring,

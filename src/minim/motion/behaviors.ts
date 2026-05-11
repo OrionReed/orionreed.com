@@ -3,7 +3,7 @@
 // that integrates a per-frame `dt` into the signal's value. They never
 // pre-allocate samples — the loop body is always proportional to one
 // step (a few flops). Pair with `anim.run(...)` (returns a disposer)
-// or `race`/cancellation for bounded use.
+// or `until(trigger, behavior)` / `race(...)` for bounded use.
 //
 // Motion stdlib taxonomy:
 //   transitions — bounded, pose → tween (`fadeUp`, `slideIn`, …)
@@ -30,7 +30,7 @@ export interface SpringOpts {
  *  `a = stiffness · (target − sig) − damping · v` and apply velocity.
  *  Reactive: `target` may be a signal, so the follower keeps chasing
  *  a moving point. Cancel via `anim.run(...)`'s disposer or wrap in
- *  `anim.race` for bounded use. */
+ *  `until(trigger, spring(...))` for bounded use. */
 export function* spring(
   sig: Signal<number>,
   target: Arg<number>,

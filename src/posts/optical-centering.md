@@ -49,6 +49,10 @@ The problem with our approach is that we have failed to capture the essence of "
 
 <md-rand></md-rand>
 
+<md-cancel></md-cancel>
+
+<md-react></md-react>
+
 <md-runtime-tests></md-runtime-tests>
 
 <md-trace-demo></md-trace-demo>

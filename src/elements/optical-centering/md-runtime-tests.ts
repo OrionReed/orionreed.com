@@ -9,9 +9,14 @@
 //                    stop() cascades to scopes; run() disposer cancels.
 //   isolation:       one throwing gen doesn't kill siblings.
 //   awaitable:       sync wake, async wake, disposer fires on cancel,
-//                    nested awaitables.
+//                    nested awaitables, ctx.spawn host-parented children,
+//                    spawn-after-setup throws.
 //   race:            first-completion wakes parent; losers are cancelled;
-//                    children's full yield protocol is honoured.
+//                    children's full yield protocol is honoured; mixed
+//                    Yieldable args (numbers, awaitables, generators).
+//   until:           cancel-on-trigger pattern; sequel runs after.
+//   observe:         spawn/complete/cancel events fire with correct ids;
+//                    no overhead when no observer; cancel after disposer.
 //   event bus:       emit / on; until is zero-latency (wakes inside emit).
 //   signals:         equals option suppresses no-op writes.
 //   lens:            read/write through; sub-field memoization;
@@ -44,10 +49,12 @@ import {
   oscillate,
   pt,
   pulse,
+  race,
   signal,
   splay,
   spring,
   swap,
+  until,
   untilChange,
   type Animator,
 } from "../../minim";
@@ -375,7 +382,7 @@ const TESTS: TestCase[] = [
     name: "child throw doesn't hang parent",
     run: (assert) => {
       // A throwing child must notify its parent (via `complete`) so the
-      // parent's `childrenLeft` decrements and the parent eventually wakes.
+      // parent's child counter decrements and the parent eventually wakes.
       const a = new Anim();
       let parentDone = false;
       const origError = console.error;
@@ -527,7 +534,7 @@ const TESTS: TestCase[] = [
       let bFinally = 0;
       let parentDone = false;
       a.run(function* () {
-        yield* a.race(
+        yield race(
           (function* (): Animator {
             try {
               yield 0.1;
@@ -588,13 +595,12 @@ const TESTS: TestCase[] = [
   {
     name: "race: child yield protocol works (sub-gen, sleep, parallel)",
     run: (assert) => {
-      // Children use the full yield contract — the bare-yield-only
-      // restriction of the old `race` is gone. Slow child uses a parallel
+      // Children use the full yield contract. Slow child uses a parallel
       // array; fast child uses yield* delegation; both legal inside race.
       const a = new Anim();
       let parentDone = false;
       a.run(function* () {
-        yield* a.race(
+        yield race(
           (function* (): Animator {
             yield* (function* (): Animator {
               yield 0.05;
@@ -616,6 +622,230 @@ const TESTS: TestCase[] = [
       a.step(0);
       a.step(0.06);
       assert(parentDone, `parent should resume on the fast child`);
+      a.stop();
+    },
+  },
+  {
+    name: "race: accepts mixed Yieldable args (number, awaitable, gen)",
+    run: (assert) => {
+      // `race(...)` lifts non-generator Yieldables. A number means
+      // "sleep for N seconds"; an awaitable subscribes directly.
+      const a = new Anim();
+      const bus = new EventBus();
+      let winner = "";
+      a.run(function* () {
+        yield race(
+          0.5,
+          bus.until("go"),
+          (function* (): Animator {
+            yield 0.1;
+            winner = "gen";
+          })(),
+        );
+      });
+      a.step(0);
+      a.step(0.12);
+      // The 0.1s gen wins; sets winner before resuming parent.
+      assert(winner === "gen", `winner=${winner}, expected "gen"`);
+      a.stop();
+    },
+  },
+  {
+    name: "race: number arg wins on time",
+    run: (assert) => {
+      const a = new Anim();
+      let resumed = false;
+      a.run(function* () {
+        yield race(
+          0.1,
+          (function* (): Animator {
+            yield 5;
+          })(),
+        );
+        resumed = true;
+      });
+      a.step(0);
+      a.step(0.12);
+      assert(resumed, `parent should resume after the 0.1s sleep wins`);
+      a.stop();
+    },
+  },
+  {
+    name: "until: cancels work on trigger, sequel runs",
+    run: (assert) => {
+      // The graceful-exit pattern: work runs until trigger fires; the
+      // next `yield*` is the exit. Both run in the same generator.
+      const a = new Anim();
+      const stop = signal(false);
+      let phase = 0;
+      a.run(function* () {
+        yield until(
+          untilChange(stop),
+          (function* (): Animator {
+            phase = 1;
+            while (true) yield;
+          })(),
+        );
+        phase = 2;
+        yield 0.1;
+        phase = 3;
+      });
+      a.step(0);
+      assert(phase === 1, `phase=${phase}, expected 1 (work running)`);
+      stop.value = true;
+      assert(phase === 2, `phase=${phase}, expected 2 after trigger`);
+      a.step(0.11);
+      assert(phase === 3, `phase=${phase}, expected 3 after sequel`);
+      a.stop();
+    },
+  },
+  {
+    name: "ctx.spawn parents children to the suspended host",
+    run: (assert) => {
+      // An awaitable that uses ctx.spawn produces children whose
+      // cancel-cascade walks through the host. Killing the host kills
+      // the children (their finallys fire) without manual plumbing.
+      const a = new Anim();
+      let childFinally = 0;
+      const handle = a.run(function* () {
+        yield (_wake, spawn) => {
+          spawn!(
+            (function* (): Animator {
+              try {
+                yield 5;
+              } finally {
+                childFinally++;
+              }
+            })(),
+          );
+          spawn!(
+            (function* (): Animator {
+              try {
+                yield 5;
+              } finally {
+                childFinally++;
+              }
+            })(),
+          );
+          return () => {};
+        };
+      });
+      a.step(0);
+      handle();
+      assert(
+        childFinally === 2,
+        `cascade should run both children's finallys (got ${childFinally})`,
+      );
+      a.stop();
+    },
+  },
+  {
+    name: "ctx.spawn after setup throws",
+    run: (assert) => {
+      const a = new Anim();
+      let captured: ((g: Animator) => () => void) | undefined;
+      a.run(function* () {
+        yield (_wake, spawn) => {
+          captured = spawn!;
+          return () => {};
+        };
+      });
+      a.step(0);
+      let threw = false;
+      try {
+        captured!(
+          (function* (): Animator {
+            yield;
+          })(),
+        );
+      } catch {
+        threw = true;
+      }
+      assert(threw, `spawn outside setup window should throw`);
+      a.stop();
+    },
+  },
+  {
+    name: "ctx.spawn onComplete fires on natural completion",
+    run: (assert) => {
+      // The `onComplete` hook is how `race`/`all`/`single` learn that a
+      // spawned child finished. It must NOT fire on cancel.
+      const a = new Anim();
+      let completes = 0;
+      let cancels = 0;
+      a.run(function* () {
+        yield (_wake, spawn) => {
+          spawn!(
+            (function* (): Animator {
+              yield 0.05;
+            })(),
+            () => completes++,
+          );
+          const cancelChild = spawn!(
+            (function* (): Animator {
+              try {
+                yield 5;
+              } finally {
+                cancels++;
+              }
+            })(),
+            () => completes++, // SHOULD NOT fire — we cancel this one
+          );
+          // Cancel the second child immediately.
+          cancelChild();
+          return () => {};
+        };
+      });
+      a.step(0);
+      a.step(0.06);
+      assert(completes === 1, `expected 1 onComplete (got ${completes})`);
+      assert(cancels === 1, `cancelled child's finally should run`);
+      a.stop();
+    },
+  },
+  {
+    name: "observe: emits spawn / complete / cancel events",
+    run: (assert) => {
+      const a = new Anim();
+      type Ev = { type: "spawn" | "complete" | "cancel"; id: number };
+      const events: Ev[] = [];
+      const stop = a.observe({
+        spawn: (id) => events.push({ type: "spawn", id }),
+        complete: (id) => events.push({ type: "complete", id }),
+        cancel: (id) => events.push({ type: "cancel", id }),
+      });
+      const handle = a.run(function* () {
+        yield 0.1;
+      });
+      a.step(0);
+      assert(events.length === 1 && events[0].type === "spawn", `spawn`);
+      const id = events[0].id;
+      handle();
+      const cancelled = events.find((e) => e.type === "cancel");
+      assert(cancelled?.id === id, `cancel event should reference same id`);
+      stop();
+      a.stop();
+    },
+  },
+  {
+    name: "observe: zero events fire after disposer",
+    run: (assert) => {
+      const a = new Anim();
+      let count = 0;
+      const stop = a.observe({
+        spawn: () => count++,
+      });
+      a.run(function* () {
+        yield;
+      });
+      a.step(0);
+      assert(count === 1, `pre-stop spawn should be observed`);
+      stop();
+      a.run(function* () {
+        yield;
+      });
+      a.step(0);
+      assert(count === 1, `no events after disposer (got ${count})`);
       a.stop();
     },
   },

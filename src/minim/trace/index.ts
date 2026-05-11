@@ -1,5 +1,7 @@
-// `trace/` — derivations and helpers built on top of `Anim.trace()`.
+// `trace/` — derivations and helpers built on top of `Anim.observe`.
 // Pure consumers: nothing here participates in the runtime hot path.
+
+export { spans, type Span, type Trace } from "./spans";
 
 export {
   traceTree,
@@ -8,4 +10,4 @@ export {
   type TraceBatch,
 } from "./tree";
 
-export { tag, tagAll } from "./tag";
+export { tag, tagAll, tagOf } from "./tag";

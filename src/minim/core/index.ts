@@ -37,13 +37,19 @@ export {
   type Animator,
   type Awaitable,
   type Yieldable,
-  type Span,
-  type Trace,
+  type SpawnFn,
+  type ObserveListeners,
 } from "./anim";
 
 export { EventBus } from "./events";
 
-export { untilChange, onceEvent, fromPromise } from "./awaitables";
+export {
+  untilChange,
+  onceEvent,
+  fromPromise,
+  race,
+  until,
+} from "./awaitables";
 
 export {
   timeline,

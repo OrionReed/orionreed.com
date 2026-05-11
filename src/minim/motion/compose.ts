@@ -1,4 +1,9 @@
 // Composers for `Animator` generators.
+//
+// For first-completion + cancel-losers semantics ("race") and the
+// cancel-on-trigger pattern ("until"), see `core/awaitables.ts` —
+// those are awaitable combinators that take advantage of the runtime's
+// spawn capability to compose without anim plumbing.
 
 import type { Animator } from "../core";
 
@@ -16,14 +21,6 @@ export function* sequence(...children: Animator[]): Animator {
 export function* delay(sec: number, c: Animator): Animator {
   if (sec > 0) yield sec;
   yield* c;
-}
-
-/** Pause until `condition()` is true (polled per frame). For waits on a
- *  specific event, signal change, or other subscribable source, prefer a
- *  zero-latency `Awaitable` (e.g. `bus.until(name)`, `untilChange(sig)`,
- *  `fromPromise(p)`). */
-export function* until(condition: () => boolean): Animator {
-  while (!condition()) yield;
 }
 
 /** Pick one of `children` uniformly at random and run it. Pair with

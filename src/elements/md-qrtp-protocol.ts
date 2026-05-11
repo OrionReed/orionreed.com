@@ -11,7 +11,6 @@ import {
   pt,
   signal,
   snapshot,
-  until,
   when,
   type Animator,
   type Signal,
@@ -186,7 +185,7 @@ export class MdQrtpProtocol extends Diagram {
 
     const startFloodFillLoop = () => {
       floodAnim.loop(function* () {
-        yield* until(() => cellsWithState("retransmit").length > 0);
+        while (cellsWithState("retransmit").length === 0) yield;
         yield T.beforeFlood;
         yield* doFloodFill();
         yield T.betweenCycles;

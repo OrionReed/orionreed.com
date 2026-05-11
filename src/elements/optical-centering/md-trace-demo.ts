@@ -1,7 +1,9 @@
 // Self-rendering trace demo. A small animation runs in the top half;
 // underneath, every generator the runtime spawns is rendered live as a
 // Gantt row. Built on:
-//   - `anim.trace()`            — runtime emits `Span`s + onChange callback.
+//   - `spans(anim)`             — externalized recorder; subscribes to
+//                                  `anim.observe` and builds a flat
+//                                  `Span[]` with an `onChange` hook.
 //   - `counter(trace.onChange)` — adapt the callback to a Signal<number>.
 //   - `traceTree()`             — derived structural view.
 //   - `tag` / `tagAll`          — tag at the call site so spans carry names.
@@ -29,6 +31,7 @@ import {
   label,
   pt,
   rect,
+  spans,
   spinIn,
   tag,
   tagAll,
@@ -99,7 +102,7 @@ export class MdTraceDemo extends Diagram {
     const now = clock(this.anim);
 
     // Begin tracing — the next `run()` becomes the root span.
-    const trace = this.anim.trace();
+    const trace = spans(this.anim);
 
     this.anim.run(
       tag(function* demoAnim() {
