@@ -33,6 +33,12 @@ A small library for generator-driven animated SVG diagrams with reactive primiti
 
 <md-tex-demo></md-tex-demo>
 
+<md-tex-correspond></md-tex-correspond>
+
+<md-tex-matrix></md-tex-matrix>
+
+<md-tex-live></md-tex-live>
+
 <md-anchors></md-anchors>
 
 <md-handles></md-handles>

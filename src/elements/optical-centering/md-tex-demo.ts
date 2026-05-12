@@ -1,6 +1,6 @@
 // minim/tex demo: factory-with-interpolation API + the full motion
 // surface (write, highlight, decorations, morph, pluck/unpluck,
-// writeParts, writeOut).
+// writeOut, per-part stagger via the standard `stagger` combinator).
 //
 // The animation walks four sections:
 //
@@ -18,7 +18,7 @@
 //      x leaves the picture.
 //
 //   D. Pluck & outro           ─── lift `f` out and orbit it, then
-//      morph back to a part-rich form for a meaningful writeParts.
+//      morph back to a part-rich form for a per-part staggered fade.
 //
 // Note on `tex` and backslashes: the template tag reads `strings.raw`,
 // so author-side LaTeX uses single backslashes (e.g. `\frac`, `\dot`,
@@ -37,12 +37,12 @@ import {
   pluck,
   signal,
   snapshot,
+  stagger,
   tex,
   underline,
   unpluck,
   write,
   writeOut,
-  writeParts,
   type Content,
 } from "../../minim";
 
@@ -70,34 +70,30 @@ export class MdTexDemo extends Diagram {
     // multiplication cycle. f, x carry the derivative cycle.
     // `cross` (= the 2ab term) appears partway through the
     // Pythagorean derivation.
-    const { a, b, c, cross } = parts({
-      a: "a",
-      b: "b",
-      c: "c",
-      cross: "2ab",
-    });
-    const { f, x } = parts({ f: "f", x: "x" });
+    const { a, b, c, cross } = parts("a", "b", "c", { cross: "2ab" });
+    const { f, x } = parts("f", "x");
 
-    const tex28 = tex({ size: 28 });
+    // Default math size (`tokens.tex.size`) is already large enough
+    // for diagrams; no per-shape size override needed.
 
     // ── Pythagorean: 5 forms ─────────────────────────────────────────
-    const p1 = s(tex28`${a} + ${b} = ${c}`);
-    const p2 = s(tex28`(${a} + ${b})^2 = ${c}^2`);
-    const p3 = s(tex28`${a}^2 + ${cross} + ${b}^2 = ${c}^2`);
-    const p4 = s(tex28`${a}^2 + ${b}^2 = ${c}^2 - ${cross}`);
-    const p5 = s(tex28`\frac{${a}^2 + ${b}^2}{${c}^2 - ${cross}} = 1`);
+    const p1 = s(tex`${a} + ${b} = ${c}`);
+    const p2 = s(tex`(${a} + ${b})^2 = ${c}^2`);
+    const p3 = s(tex`${a}^2 + ${cross} + ${b}^2 = ${c}^2`);
+    const p4 = s(tex`${a}^2 + ${b}^2 = ${c}^2 - ${cross}`);
+    const p5 = s(tex`\frac{${a}^2 + ${b}^2}{${c}^2 - ${cross}} = 1`);
 
     // ── Multiplication: 4 forms + the swap-via-morph variant ─────────
-    const m1 = s(tex28`${a} \cdot ${b}`);
-    const m1r = s(tex28`${b} \cdot ${a}`); // commutativity target
-    const m2 = s(tex28`${a} \times ${b}`);
-    const m3 = s(tex28`${a}${b}`);
-    const m4 = s(tex28`(${a})(${b})`);
+    const m1 = s(tex`${a} \cdot ${b}`);
+    const m1r = s(tex`${b} \cdot ${a}`); // commutativity target
+    const m2 = s(tex`${a} \times ${b}`);
+    const m3 = s(tex`${a}${b}`);
+    const m4 = s(tex`(${a})(${b})`);
 
     // ── Derivative: 3 forms ──────────────────────────────────────────
-    const d1 = s(tex28`\frac{d${f}}{d${x}}`);
-    const d2 = s(tex28`${f}'(${x})`);
-    const d3 = s(tex28`\dot{${f}}`);
+    const d1 = s(tex`\frac{d${f}}{d${x}}`);
+    const d2 = s(tex`${f}'(${x})`);
+    const d3 = s(tex`\dot{${f}}`);
 
     const eqs = [p1, p2, p3, p4, p5, m1, m1r, m2, m3, m4, d1, d2, d3];
 
@@ -225,15 +221,9 @@ export class MdTexDemo extends Diagram {
       status.value = "pluck — lift f out, orbit, then unpluck back";
       const fHandle = pluck(d1.parts.f);
       const home = fHandle.translate.peek();
-      yield* fHandle.translate.to(
-        { x: home.x + 90, y: home.y - 50 },
-        0.45,
-      );
+      yield* fHandle.translate.to({ x: home.x + 90, y: home.y - 50 }, 0.45);
       yield* fHandle.scale.to({ x: 1.6, y: 1.6 }, 0.3);
-      yield* fHandle.translate.to(
-        { x: home.x - 90, y: home.y - 50 },
-        0.55,
-      );
+      yield* fHandle.translate.to({ x: home.x - 90, y: home.y - 50 }, 0.55);
       yield* fHandle.scale.to({ x: 1, y: 1 }, 0.3);
       yield* unpluck(fHandle, undefined, 0.5);
       yield 0.5;
@@ -246,8 +236,11 @@ export class MdTexDemo extends Diagram {
       yield* morph(d1, m1, 0.7);
       yield 0.4;
 
-      status.value = "writeParts — staggered fade across named parts";
-      yield* writeParts(m1, 0.7);
+      status.value = "stagger — per-part fade-in over a + b";
+      // No dedicated `writeParts` primitive — minim's `stagger` is the
+      // general form. Setup: zero opacities; animate: stagger fade-in.
+      for (const p of m1.parts) p.opacity.value = 0;
+      yield* stagger(0.12, m1.parts, (p) => p.opacity.to(1, 0.4));
       yield 0.5;
 
       status.value = "writeOut — sweep back, formula clipped to nothing";

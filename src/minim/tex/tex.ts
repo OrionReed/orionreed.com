@@ -35,6 +35,11 @@ export interface TexOpts extends ShapeOpts {
   /** Background tint applied while a part's `highlighted` signal is
    *  true. Default: `tokens.tex.highlightColor`. */
   highlightColor?: string;
+  /** "inline" (default) for inline-math style, "block" for display
+   *  style — bigger fractions, sums with limits above/below, and
+   *  multi-line constructs (`\begin{align}`, `\begin{pmatrix}`, …)
+   *  rendered properly. Equivalent to KaTeX/Temml's `displayMode`. */
+  display?: "inline" | "block";
 }
 
 /** Extract the union of part names from a tuple of interpolation
@@ -91,11 +96,11 @@ const compileTemplate = (
   return { source, markers };
 };
 
-const renderToMathML = (source: string): string => {
+const renderToMathML = (source: string, displayMode: boolean): string => {
   try {
     return temml.renderToString(source, {
       trust: true,
-      displayMode: false,
+      displayMode,
       strict: false,
       throwOnError: false,
     });
@@ -249,22 +254,18 @@ export class TexShape<Names extends string = string> extends Shape {
   /** Height in local-frame user units. */
   readonly height: ReadonlySignal<number>;
 
-  /** @internal — resolved font/size, kept so `morph` can build matching
-   *  ghost shapes without re-parsing opts. */
-  readonly _fontSize: number;
-  readonly _fontFamily: string;
-
   constructor(
     strings: TemplateStringsArray | readonly string[],
     values: readonly TexInterp[],
     opts: TexOpts = {},
   ) {
-    const fontSize = opts.size ?? tokens.fontSize;
+    const fontSize = opts.size ?? tokens.tex.size;
     const fontFamily = opts.font ?? tokens.mathFont;
     const highlightColor = opts.highlightColor ?? tokens.tex.highlightColor;
+    const displayMode = opts.display === "block";
 
     const { source, markers } = compileTemplate(strings, values);
-    const initialMathml = renderToMathML(source);
+    const initialMathml = renderToMathML(source, displayMode);
     const measured = measureMathML(initialMathml, fontSize, fontFamily);
     const w = signal(measured.width);
     const h = signal(measured.height);
@@ -278,8 +279,6 @@ export class TexShape<Names extends string = string> extends Shape {
 
     this.width = w;
     this.height = h;
-    this._fontSize = fontSize;
-    this._fontFamily = fontFamily;
 
     const fo = this.intrinsic as SVGForeignObjectElement;
     fo.setAttribute("x", "0");
@@ -305,9 +304,7 @@ export class TexShape<Names extends string = string> extends Shape {
       const cls = partClass(m.name);
       const aabbSig = signal(measured.rects.get(cls) ?? aabb(0, 0, 0, 0));
       aabbWriters.set(cls, aabbSig);
-      const p = new Part(m.name, m.content, aabbSig);
-      p._host = this as TexShape;
-      list.push(p);
+      list.push(new Part(m.name, m.content, aabbSig, m, this as TexShape));
     }
     this.parts = buildPartList(list);
 
@@ -353,7 +350,7 @@ export class TexShape<Names extends string = string> extends Shape {
         return;
       }
       const next = compileTemplate(strings, values);
-      mountInto(renderToMathML(next.source));
+      mountInto(renderToMathML(next.source, displayMode));
     });
 
     // Refresh bounds after webfonts have settled. The synchronous
@@ -368,7 +365,7 @@ export class TexShape<Names extends string = string> extends Shape {
       void fonts.ready.then(() => {
         const cur = compileTemplate(strings, values);
         const fresh = measureMathML(
-          renderToMathML(cur.source),
+          renderToMathML(cur.source, displayMode),
           fontSize,
           fontFamily,
         );
@@ -424,17 +421,23 @@ const isTemplateStrings = (v: unknown): v is TemplateStringsArray =>
  *  `parts({ a: "x_{\\min}" })` keeps the usual JS-string `\\` for
  *  one literal backslash.
  *
- *      tex`x_{\min} < x_{\max}`
- *      const { a, b } = parts({ a: "x_{\\min}", b: "x_{\\max}" });
- *      tex`${a} < ${b}`                       // TexShape<"a" | "b">
- *      tex({ size: 18 })`E = mc^2`
+ *  Three forms:
+ *
+ *      tex`E = mc^2`                         // direct, default size
+ *      const eq = tex(28); eq`E = mc^2`      // size-only shorthand
+ *      tex({ size: 28, display: "block" })`...`  // full options
+ *
+ *  And with parts:
+ *
+ *      const { a, b } = parts("a", "b");
+ *      tex`${a} < ${b}`                      // TexShape<"a" | "b">
  */
 export function tex<V extends readonly TexInterp[]>(
   strings: TemplateStringsArray,
   ...values: V
 ): TexShape<NamesOf<V>>;
 export function tex(
-  opts: TexOpts,
+  opts: TexOpts | number,
 ): <V extends readonly TexInterp[]>(
   strings: TemplateStringsArray,
   ...values: V
@@ -447,7 +450,13 @@ export function tex(...args: unknown[]): unknown {
     ];
     return new TexShape(strings, values);
   }
-  const opts = args[0] as TexOpts;
+  // Number shorthand: `tex(28)` ≡ `tex({ size: 28 })`. Saves the
+  // options-object boilerplate when size is the only thing being
+  // overridden (the common case for "give this diagram bigger math").
+  const opts =
+    typeof args[0] === "number"
+      ? ({ size: args[0] } as TexOpts)
+      : (args[0] as TexOpts);
   return (strings: TemplateStringsArray, ...values: TexInterp[]) =>
     new TexShape(strings, values, opts);
 }

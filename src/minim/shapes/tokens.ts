@@ -17,8 +17,12 @@ export const tokens = {
   charWidth: 0.6,
   subFontSize: "0.75em",
   mutedOpacity: 0.5,
-  /** TexShape-specific defaults (highlight visual, etc.). */
+  /** TexShape-specific defaults (default size, highlight visual, etc.). */
   tex: {
+    /** Default math size in user units. Larger than `tokens.fontSize`
+     *  so equations read clearly without per-shape size overrides;
+     *  override per-shape with `tex(28)` or `tex({ size })`. */
+    size: 26,
     /** Background tint applied while a part's `highlighted` is true. */
     highlightColor: "rgba(255, 220, 80, 0.45)",
     /** Background-color transition duration on parts (ms). */

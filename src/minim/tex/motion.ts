@@ -6,18 +6,24 @@
 // parent TexShape into a free-standing Shape (a `Plucked`) you can
 // translate / scale / rotate independently. Disposing the Plucked
 // (directly or via `unpluck`) restores the source's pre-pluck
-// opacity. `morph` and `swap` are then thin combinators over
-// pluck/unpluck — there's no separate "rider" / "transit" concept,
-// just a Plucked that may or may not be animated by `unpluck`.
+// opacity. `morph` is then a thin combinator over pluck/unpluck —
+// there's no separate "rider" / "transit" concept, just a Plucked
+// that may or may not be animated by `unpluck`.
+//
+// For per-part stagger (the common "reveal each named part in turn"
+// recipe), use minim's existing `stagger` directly:
+//
+//      for (const p of eq.parts) p.opacity.value = 0;
+//      yield* stagger(0.05, eq.parts, p => p.opacity.to(1, 0.3));
+//
+// Composes with any per-part animation (`fadeIn`, `slideIn`, custom).
 
 import { effect, signal } from "../core/signal";
-import { stagger, swap as swapPositions } from "../motion/choreographers";
 import { easeInOut, easeOut } from "../motion/easings";
-import { all } from "../core/compose";
 import type { Animator, Easing } from "../core";
-import { Shape, type Writable } from "../scene/shape";
+import { Shape } from "../scene/shape";
 import { aabb } from "../scene/box";
-import { Part } from "./parts";
+import { Part, type PartMarker } from "./parts";
 import type { TexShape } from "./tex";
 
 /** Wildcard `TexShape` that accepts any `Names` union. Used in
@@ -46,85 +52,67 @@ export function* highlight(part: Part, dt = 0.6): Animator {
 // ── Reveal sweep — clip-path sweep across the wrapper ──────────────
 
 /** Reveal a tex shape left-to-right via a clip-path sweep. The whole
- *  formula appears as if being written from the left margin. */
+ *  formula appears as if being written from the left margin.
+ *
+ *  We clip the inner HTML wrapper inside the foreignObject — *not*
+ *  the outer `<g>` — because CSS clip-path on an SVG element doesn't
+ *  reliably invalidate composite layers for foreignObject HTML
+ *  content (Chromium especially), causing visible tearing and
+ *  end-of-tween snap-pops. HTML elements honor clip-path
+ *  consistently. */
 export function* write(
   eq: AnyTex,
   dt = 0.6,
   ease: Easing = easeOut,
 ): Animator {
+  const target = clipTarget(eq);
   const progress = signal(0);
   const stop = effect(() => {
-    eq.el.style.clipPath = `inset(0 ${(1 - progress.value) * 100}% 0 0)`;
+    target.style.clipPath = `inset(0 ${(1 - progress.value) * 100}% 0 0)`;
   });
   try {
     yield* progress.to(1, dt, ease);
   } finally {
-    eq.el.style.clipPath = "";
+    target.style.clipPath = "";
     stop();
   }
 }
 
-/** Reverse of `write` — sweep back from right to left. After natural
- *  completion the formula is fully clipped (visually hidden); pairs
+/** Reverse of `write` — sweep back from right to left. After
+ *  completion the formula is fully hidden (`opacity: 0`) and
+ *  clip-path is cleared, so the eq is in a clean state for a future
+ *  `write` (which will start from full clip and sweep open). Pairs
  *  with `write` for round-trip reveal/hide. */
 export function* writeOut(
   eq: AnyTex,
   dt = 0.4,
   ease: Easing = easeOut,
 ): Animator {
+  const target = clipTarget(eq);
   const progress = signal(1);
   const stop = effect(() => {
-    eq.el.style.clipPath = `inset(0 ${(1 - progress.value) * 100}% 0 0)`;
+    target.style.clipPath = `inset(0 ${(1 - progress.value) * 100}% 0 0)`;
   });
   try {
     yield* progress.to(0, dt, ease);
   } finally {
     stop();
+    // Hide via opacity (so future shows are a single `eq.opacity = 1`)
+    // and clear the clip-path inline style so the next `write` starts
+    // from its own initial clip rather than this one's residue.
+    eq.opacity.value = 0;
+    target.style.clipPath = "";
   }
 }
 
-// ── Per-part stagger ───────────────────────────────────────────────
-
-/** Stagger a fade-in across the named parts of a tex shape. Touches
- *  only the parts' opacity — text outside parts stays visible (use
- *  `eq.opacity` for whole-shape fades). */
-export function* writeParts(
-  eq: AnyTex,
-  dt = 0.6,
-  opts: { stride?: number; ease?: Easing } = {},
-): Animator {
-  const parts = eq.parts;
-  const ease = opts.ease ?? easeOut;
-  if (parts.length === 0) {
-    yield* eq.opacity.to(1, dt, ease);
-    return;
-  }
-  for (const p of parts) p.opacity.value = 0;
-  const stride =
-    opts.stride ?? Math.max(0.04, dt / Math.max(2, parts.length * 1.5));
-  yield* stagger(stride, parts as readonly Part[], (p) =>
-    p.opacity.to(1, dt * 0.7, ease),
-  );
-}
-
-/** Reverse of `writeParts` — stagger fade-out across parts. */
-export function* unwriteParts(
-  eq: AnyTex,
-  dt = 0.4,
-  opts: { stride?: number; ease?: Easing } = {},
-): Animator {
-  const parts = eq.parts;
-  const ease = opts.ease ?? easeOut;
-  if (parts.length === 0) {
-    yield* eq.opacity.to(0, dt, ease);
-    return;
-  }
-  const stride =
-    opts.stride ?? Math.max(0.03, dt / Math.max(2, parts.length * 1.5));
-  yield* stagger(stride, parts as readonly Part[], (p) =>
-    p.opacity.to(0, dt * 0.7, ease),
-  );
-}
+/** The inner wrapper div inside the foreignObject — the HTML element
+ *  that hosts the rendered `<math>`. Falls back to the outer `<g>`
+ *  if for some reason the wrapper isn't there yet (defensive). */
+const clipTarget = (eq: AnyTex): HTMLElement | SVGGElement => {
+  const fo = eq.intrinsic as SVGForeignObjectElement | undefined;
+  const wrapper = fo?.firstElementChild;
+  return wrapper instanceof HTMLElement ? wrapper : eq.el;
+};
 
 // ── pluck / unpluck — the "rider" primitive ────────────────────────
 
@@ -144,7 +132,7 @@ const findMathWrapper = (matchedEl: HTMLElement): HTMLElement | null => {
 /** Matched-mrow position (parent-frame, top-left) for `part` at this
  *  instant — `host.translate + part.aabb.tl`. */
 const partPose = (part: Part): { x: number; y: number } => {
-  const tr = part._host.translate.value;
+  const tr = part.host.translate.value;
   const a = part.aabb.value;
   return { x: tr.x + a.x, y: tr.y + a.y };
 };
@@ -189,10 +177,10 @@ export class Plucked extends Shape {
  *  or `unpluck(plucked, ...)`. */
 export function pluck(part: Part): Plucked {
   const liveEl = part.el;
-  const host = part._host;
-  if (!liveEl || !host?.parent) {
+  const host = part.host;
+  if (!liveEl || !host.parent) {
     throw new Error(
-      "pluck: part has no live element or its TexShape isn't mounted",
+      "pluck: TexShape isn't mounted yet — `s(eq)` it before plucking",
     );
   }
   const wrapper = findMathWrapper(liveEl);
@@ -271,25 +259,35 @@ export function* unpluck(
 
 // ── Morph (matched by name, auto rewrite) ──────────────────────────
 
-/** Animate from `from` to `to`, matching parts by name.
+/** Animate from `from` to `to`, matching parts by *marker identity*.
  *
- *  For each name shared between `from` and `to`:
+ *  Two parts share identity when they were instantiated from the
+ *  same `PartMarker` reference (typically by sharing the markers
+ *  produced by a single `parts({...})` call across multiple
+ *  templates), or when one's marker is the `group` of the other —
+ *  i.e. it's a `derived` component (see `PartMarker.derived`).
  *
- *    • If the part's content matches, a single `Plucked` rides the
- *      source content from `from`'s slot to `to`'s slot, scaling
- *      along the way to absorb scriptlevel changes.
+ *  Group both sides by identity root (`marker.group ?? marker`) and
+ *  branch by cardinality:
  *
- *    • If the content *differs* (a "rewrite": `f'(x)` vs `Df`), two
- *      Plucked's ride the same trajectory — source-content fades
- *      out, dest-content fades in. Auto, no flag.
+ *    • 1↔1, same content      ride a single source-content clone
+ *                             from `from`'s slot to `to`'s slot.
+ *    • 1↔1, different content same trajectory; source-content fades
+ *                             out, dest-content fades in (rewrite).
+ *    • 1↔N (fan-out)          source fades in place; N riders
+ *                             *emerge* from source's slot and slide
+ *                             to their respective dest slots, fading
+ *                             in. e.g. `\vec{v}` → `(v_x, v_y, v_z)`.
+ *    • N↔1 (fan-in)           N source riders converge to dest's
+ *                             slot, fading out; dest fades in there.
+ *    • N↔M (rare)             pair by index; extras get the
+ *                             whole-parent crossfade.
  *
  *  Parts with no counterpart on the other side cross-fade with their
  *  parent's whole-shape opacity envelope.
  *
  *  Assumes both shapes share a parent and have translate-only
- *  transforms relative to that parent. Heterogeneous name unions are
- *  fine: `morph(m1, d1)` where neither side's names overlap falls
- *  through to a clean parent crossfade. */
+ *  transforms relative to that parent. */
 export function* morph(
   from: AnyTex,
   to: AnyTex,
@@ -312,56 +310,31 @@ export function* morph(
     from.opacity.to(0, dt, ease),
     to.opacity.to(1, dt, ease),
   ];
-  /** Each rider — and the q.opacity hide for the same-content case —
-   *  registers a teardown here. Run on the morph's `finally` so the
-   *  cleanup happens even if interrupted. */
+  /** Each rider registers its dispose here. Run in the morph's
+   *  `finally` so cleanup happens even if interrupted. */
   const cleanups: Array<() => void> = [];
 
-  for (const p of from.parts) {
-    const q = (to.parts as Record<string, Part>)[p.name];
-    if (!q) continue;
-    if (!p.el || !q.el) continue;
-    const pa = p.aabb.value;
-    const qa = q.aabb.value;
-    if (pa.w === 0 || qa.w === 0 || pa.h === 0 || qa.h === 0) continue;
+  // Group both sides by identity root. `groupRoot(marker)` returns
+  // the topmost marker in a `marker → marker.group → …` chain — two
+  // parts share identity for morph iff they share a root.
+  const fromByRoot = groupByRoot(from.parts);
+  const toByRoot = groupByRoot(to.parts);
 
-    const sameContent = p.content.peek() === q.content.peek();
-    const destPose = partPose(q);
+  for (const root of new Set([...fromByRoot.keys(), ...toByRoot.keys()])) {
+    const fps = fromByRoot.get(root) ?? [];
+    const tps = toByRoot.get(root) ?? [];
+    if (fps.length === 0 || tps.length === 0) continue; // parent crossfade
 
-    // Source rider: travels from p's pose (at scale 1) to q's pose
-    // (scaled to match q's size). Same logic for both branches; the
-    // rewrite branch additionally fades it out.
-    const srcRider = pluck(p);
-    animators.push(
-      srcRider.translate.to(destPose, dt, ease),
-      srcRider.scale.to({ x: qa.w / pa.w, y: qa.h / pa.h }, dt, ease),
-    );
-    cleanups.push(() => srcRider.dispose());
-
-    if (sameContent) {
-      // Source clone *is* the right content; keep visible end-to-end.
-      // Hide q during the flight; restore at the end. (q.opacity is
-      // restored to whatever the author had set, not blindly to 1.)
-      const prevQ = q.opacity.peek();
-      q.opacity.value = 0;
-      cleanups.push(() => {
-        q.opacity.value = prevQ;
-      });
+    if (fps.length === 1 && tps.length === 1) {
+      ride(fps[0], tps[0], dt, ease, animators, cleanups);
+    } else if (fps.length === 1 && tps.length > 1) {
+      fanOut(fps[0], tps, dt, ease, animators, cleanups);
+    } else if (fps.length > 1 && tps.length === 1) {
+      fanIn(fps, tps[0], dt, ease, animators, cleanups);
     } else {
-      // Rewrite: pluck q too and ride it on the same trajectory,
-      // crossfading from src→dest. Initial pose: at p's location,
-      // scaled down so the visible footprint matches src at t=0.
-      const destRider = pluck(q);
-      destRider.translate.value = partPose(p);
-      destRider.scale.value = { x: pa.w / qa.w, y: pa.h / qa.h };
-      destRider.opacity.value = 0;
-      animators.push(
-        srcRider.opacity.to(0, dt, ease),
-        destRider.translate.to(destPose, dt, ease),
-        destRider.scale.to({ x: 1, y: 1 }, dt, ease),
-        destRider.opacity.to(1, dt, ease),
-      );
-      cleanups.push(() => destRider.dispose());
+      // N↔M: pair by index, leftovers fall through to parent crossfade.
+      const n = Math.min(fps.length, tps.length);
+      for (let i = 0; i < n; i++) ride(fps[i], tps[i], dt, ease, animators, cleanups);
     }
   }
 
@@ -374,55 +347,151 @@ export function* morph(
   }
 }
 
-/** Sugar for `morph(from, to, dt)` — semantically: replace `from`
- *  with `to`, with matched parts carrying their identity across. */
-export const substitute = morph;
+/** "Identity root" — walks up the `marker.group` chain. Two markers
+ *  share an identity for morph iff they share a root. */
+const groupRoot = (m: PartMarker): PartMarker => {
+  let r = m;
+  while (r.group) r = r.group;
+  return r;
+};
 
-// ── Swap — exchange two things' positions ─────────────────────────
+const groupByRoot = (parts: readonly Part[]): Map<PartMarker, Part[]> => {
+  const out = new Map<PartMarker, Part[]>();
+  for (const p of parts) {
+    if (!p.el) continue;
+    const a = p.aabb.value;
+    if (a.w === 0 || a.h === 0) continue;
+    const r = groupRoot(p.marker);
+    const list = out.get(r);
+    if (list) list.push(p);
+    else out.set(r, [p]);
+  }
+  return out;
+};
 
-/** Exchange two things' positions over `dt` seconds. Two flavors,
- *  dispatched on `instanceof Part`:
- *
- *    • `swap(p1: Part, p2: Part)` — pluck both parts, animate each
- *      into the other's slot, dispose. Visual swap is transient: at
- *      the end both parts are restored at their original template
- *      positions (the demo value is in the choreography, not in
- *      permanent reassignment).
- *
- *    • `swap(s1, s2)` for any two shapes with writable `translate` —
- *      tweens their `translate` values to each other (the original
- *      motion-stdlib swap, kept here so a single name covers both
- *      Part and Shape callers). */
-export function swap(a: Part, b: Part, dt?: number, ease?: Easing): Animator;
-export function swap(
-  a: Writable<"translate">,
-  b: Writable<"translate">,
-  dt?: number,
-  ease?: Easing,
-): Animator;
-export function swap(
-  a: Part | Writable<"translate">,
-  b: Part | Writable<"translate">,
-  dt = 0.5,
-  ease?: Easing,
-): Animator {
-  if (a instanceof Part && b instanceof Part)
-    return swapPartsImpl(a, b, dt, ease ?? easeInOut);
-  return swapPositions(
-    a as Writable<"translate">,
-    b as Writable<"translate">,
-    dt,
-    ease,
-  );
-}
-
-function* swapPartsImpl(
-  a: Part,
-  b: Part,
+/** 1↔1: ride a single source-content clone from `p`'s slot to `q`'s
+ *  slot, scaled to match q's size. If contents differ, also ride a
+ *  dest-content clone on the same trajectory and crossfade. */
+const ride = (
+  p: Part,
+  q: Part,
   dt: number,
   ease: Easing,
-): Animator {
-  const ah = pluck(a);
-  const bh = pluck(b);
-  yield all(unpluck(ah, b, dt, ease), unpluck(bh, a, dt, ease));
-}
+  animators: Animator[],
+  cleanups: Array<() => void>,
+): void => {
+  const pa = p.aabb.value;
+  const qa = q.aabb.value;
+  const destPose = partPose(q);
+  const sameContent = p.content.peek() === q.content.peek();
+
+  const src = pluck(p);
+  animators.push(
+    src.translate.to(destPose, dt, ease),
+    src.scale.to({ x: qa.w / pa.w, y: qa.h / pa.h }, dt, ease),
+  );
+  cleanups.push(() => src.dispose());
+
+  if (sameContent) {
+    // Source IS the right content; keep visible end-to-end. Hide q
+    // during the flight; restore at the end (to whatever the author
+    // had set, not blindly to 1).
+    const prevQ = q.opacity.peek();
+    q.opacity.value = 0;
+    cleanups.push(() => {
+      q.opacity.value = prevQ;
+    });
+  } else {
+    // Rewrite: pluck q too and ride on the same trajectory,
+    // crossfading from src→dest. Initial pose: at p's location,
+    // scaled down so the visible footprint matches src at t=0.
+    const dst = pluck(q);
+    dst.translate.value = partPose(p);
+    dst.scale.value = { x: pa.w / qa.w, y: pa.h / qa.h };
+    dst.opacity.value = 0;
+    animators.push(
+      src.opacity.to(0, dt, ease),
+      dst.translate.to(destPose, dt, ease),
+      dst.scale.to({ x: 1, y: 1 }, dt, ease),
+      dst.opacity.to(1, dt, ease),
+    );
+    cleanups.push(() => dst.dispose());
+  }
+};
+
+/** 1→N: source fades in place; N dest riders emerge from source's
+ *  slot and slide to their respective dests, fading in. */
+const fanOut = (
+  p: Part,
+  qs: readonly Part[],
+  dt: number,
+  ease: Easing,
+  animators: Animator[],
+  cleanups: Array<() => void>,
+): void => {
+  const pa = p.aabb.value;
+  const pPose = partPose(p);
+
+  // Source rider holds at p's pose, fading out. (Plucked source is
+  // hidden by `pluck` for the duration; rider provides the visible
+  // content during flight.)
+  const src = pluck(p);
+  animators.push(src.opacity.to(0, dt, ease));
+  cleanups.push(() => src.dispose());
+
+  for (const q of qs) {
+    const qa = q.aabb.value;
+    const dst = pluck(q);
+    // Start at p's pose, scaled down to match p's footprint, faded
+    // out. Then fly out to q's pose at full size, fading in.
+    dst.translate.value = pPose;
+    dst.scale.value = { x: pa.w / qa.w, y: pa.h / qa.h };
+    dst.opacity.value = 0;
+    animators.push(
+      dst.translate.to(partPose(q), dt, ease),
+      dst.scale.to({ x: 1, y: 1 }, dt, ease),
+      dst.opacity.to(1, dt, ease),
+    );
+    cleanups.push(() => dst.dispose());
+  }
+};
+
+/** N→1: N source riders converge into dest's slot, fading out as
+ *  they arrive; dest fades in there. */
+const fanIn = (
+  ps: readonly Part[],
+  q: Part,
+  dt: number,
+  ease: Easing,
+  animators: Animator[],
+  cleanups: Array<() => void>,
+): void => {
+  const qa = q.aabb.value;
+  const qPose = partPose(q);
+
+  for (const p of ps) {
+    const pa = p.aabb.value;
+    const src = pluck(p);
+    animators.push(
+      src.translate.to(qPose, dt, ease),
+      src.scale.to({ x: qa.w / pa.w, y: qa.h / pa.h }, dt, ease),
+      src.opacity.to(0, dt, ease),
+    );
+    cleanups.push(() => src.dispose());
+  }
+
+  // Dest rider just fades in at q's pos — supplies the visible q
+  // content while parent crossfade is partway through.
+  const dst = pluck(q);
+  dst.opacity.value = 0;
+  animators.push(dst.opacity.to(1, dt, ease));
+  cleanups.push(() => dst.dispose());
+};
+
+// Note: there's deliberately no `swap(p1: Part, p2: Part)` here. To
+// "swap" two parts visually, morph between two equations that hold
+// them in opposite slots — `morph(tex`${a}${b}`, tex`${b}${a}`)`.
+// The morph rider machinery already exchanges matched-name parts,
+// and (unlike a pluck-based swap) the post-state is correct because
+// the second equation actually exists. See md-tex-demo for an
+// example.
