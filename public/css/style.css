@@ -45,6 +45,15 @@
   font-style: italic;
 }
 
+/* Math variant — has the OpenType MATH table the browser needs to size
+   radicals, fractions, big operators with consistent stroke weight. */
+@font-face {
+  font-family: 'New CM Math';
+  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Math%20Serif%20Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
 html,
 body {
   padding: 0;

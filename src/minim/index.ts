@@ -192,6 +192,30 @@ export {
   assemble,
 } from "./motion";
 
+// ── Tex (LaTeX → MathML primitives via Temml) ───────────────────────
+export {
+  tex,
+  TexShape,
+  Part,
+  PartMarker,
+  part,
+  brace,
+  box,
+  underline,
+  cross,
+  highlight,
+  write,
+  writeOut,
+  writeParts,
+  unwriteParts,
+  morph,
+  substitute,
+  type TexInterp,
+  type TexOpts,
+  type PartList,
+  type DecorationOpts,
+} from "./tex";
+
 // ── Spatial constants ───────────────────────────────────────────────
 export { Anchor, Dir } from "./anchor";
 

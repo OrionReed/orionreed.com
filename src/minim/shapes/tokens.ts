@@ -7,6 +7,11 @@ export const tokens = {
   thinWeight: 1.5,
   corner: 2,
   font: "'New CM', monospace",
+  /** Math-aware font stack. `New CM Math` ships an OpenType MATH table
+   *  so browsers can size radicals/fractions correctly; the rest are
+   *  cross-platform fallbacks that also have a MATH table. */
+  mathFont:
+    "'New CM Math', 'Cambria Math', 'STIXTwoMath-Regular', 'NotoSansMath-Regular', 'New CM', math, serif",
   fontSize: 14,
   /** Approximate glyph aspect for label width (SVG can't measure). */
   charWidth: 0.6,

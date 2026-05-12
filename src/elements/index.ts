@@ -23,6 +23,7 @@ import { MdBehaviors } from "./optical-centering/md-behaviors";
 import { MdAggregates } from "./optical-centering/md-aggregates";
 import { MdRand } from "./optical-centering/md-rand";
 import { MdClaimDemo } from "./optical-centering/md-claim-demo";
+import { MdTexDemo } from "./optical-centering/md-tex-demo";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -49,3 +50,4 @@ MdBehaviors.define();
 MdAggregates.define();
 MdRand.define();
 MdClaimDemo.define();
+MdTexDemo.define();

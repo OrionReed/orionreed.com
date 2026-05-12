@@ -35,6 +35,8 @@ A small library for generator-driven animated SVG diagrams with reactive primiti
 
 <md-claim-demo></md-claim-demo>
 
+<md-tex-demo></md-tex-demo>
+
 <md-aggregates></md-aggregates>
 
 <md-behaviors></md-behaviors>
