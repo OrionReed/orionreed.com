@@ -27,8 +27,7 @@ const MAX_DUR = 2.5;
 
 export class MdTimelineEditor extends Diagram {
   protected scene(s: Scene): void {
-    const W = 600;
-    const view = s.view(W, 320);
+    const view = s.view(600, 320);
 
     // ── Editable timeline ──────────────────────────────────────────
     const tl = timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));
@@ -55,7 +54,7 @@ export class MdTimelineEditor extends Diagram {
 
     // ── Timeline strip (top) ───────────────────────────────────────
     const STRIP_X = 60;
-    const STRIP_W = W - 120;
+    const STRIP_W = view.w.value - 120;
     const STRIP_Y = 60;
     const STRIP_H = 36;
     const scale = computed(() => STRIP_W / tl.duration.value);
@@ -90,7 +89,7 @@ export class MdTimelineEditor extends Diagram {
     // ── Slider knobs ───────────────────────────────────────────────
     const SLIDER_Y = 150;
     const SLIDER_GAP = 24;
-    const SLIDER_W = (W - 120 - SLIDER_GAP * 2) / 3;
+    const SLIDER_W = (view.w.value - 120 - SLIDER_GAP * 2) / 3;
 
     PHASES.forEach((name, i) => {
       const x0 = 60 + i * (SLIDER_W + SLIDER_GAP);

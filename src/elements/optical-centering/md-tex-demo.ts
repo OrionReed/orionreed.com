@@ -102,6 +102,8 @@ export class MdTexDemo extends Diagram {
       eq1.opacity,
       eq2.opacity,
       eq3.opacity,
+      eq4.opacity,
+      eq5.opacity,
       cBrace.opacity,
       aBox.opacity,
       bUnderline.opacity,
@@ -141,16 +143,24 @@ export class MdTexDemo extends Diagram {
       ];
       yield 0.25;
 
-      status.value = "morph — top-level → inside √";
+      status.value = "morph — square both sides";
       yield* morph(eq1, eq2, 0.7);
-      yield 0.8;
+      yield 0.7;
 
-      status.value = "morph — inside √ → inside fraction";
+      status.value = "morph — expand the square (cross term appears)";
       yield* morph(eq2, eq3, 0.7);
-      yield 0.8;
+      yield 0.7;
 
-      status.value = "morph — inside fraction → top-level";
-      yield* morph(eq3, eq1, 0.7);
+      status.value = "morph — rearrange (cross moves across)";
+      yield* morph(eq3, eq4, 0.7);
+      yield 0.7;
+
+      status.value = "morph — divide (parts enter fraction context)";
+      yield* morph(eq4, eq5, 0.8);
+      yield 0.9;
+
+      status.value = "morph — back to the start (parts leave fraction)";
+      yield* morph(eq5, eq1, 0.8);
       yield 0.6;
 
       status.value = "writeParts — staggered fade across named parts";

@@ -16,9 +16,6 @@ import {
   rect,
 } from "../../minim";
 
-const W = 600;
-const H = 360;
-
 // Heterogeneous sizes, colors, starting rotations — so it reads as
 // "each shape's offset survives the tween."
 const SHAPES = [
@@ -31,7 +28,7 @@ const SHAPES = [
 
 export class MdAggregates extends Diagram {
   protected scene(s: Scene): void {
-    const view = s.view(W, H);
+    const view = s.view(600, 360);
 
     const shapes = SHAPES.map((p) =>
       s(
@@ -65,11 +62,12 @@ export class MdAggregates extends Diagram {
 
     this.anim.loop(function* () {
       const sec = R.float(1.4, 2.0);
+      const centre = view.center.value;
       yield [
         c.to(
           {
-            x: R.float(W / 2 - 90, W / 2 + 90),
-            y: R.float(H / 2 - 50, H / 2 + 50),
+            x: centre.x + R.float(-90, 90),
+            y: centre.y + R.float(-50, 50),
           },
           sec,
           easeInOut,

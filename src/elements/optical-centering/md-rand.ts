@@ -26,16 +26,12 @@ import {
   type Writable,
 } from "../../minim";
 
-const W = 600;
-const H = 280;
-
 const STAGE_X = 240;
 const STAGE_Y = 120;
 
 const HISTORY_LEN = 16;
 const HISTORY_DOT_R = 7;
 const HISTORY_GAP = 4;
-const HISTORY_Y = H - 36;
 
 interface Pick {
   name: string;
@@ -104,7 +100,7 @@ const MOVES: Move[] = [
 
 export class MdRand extends Diagram {
   protected scene(s: Scene): void {
-    s.view(W, H);
+    const view = s.view(600, 280);
 
     // ── State ────────────────────────────────────────────────────────
     const current = signal<Pick | null>(null);
@@ -176,10 +172,11 @@ export class MdRand extends Diagram {
 
     // ── History strip (rolling, oldest left) ─────────────────────────
     const HISTORY_STRIDE = HISTORY_DOT_R * 2 + HISTORY_GAP;
-    const HISTORY_X0 = W / 2 - ((HISTORY_LEN - 1) * HISTORY_STRIDE) / 2;
+    const HISTORY_Y = view.bottom.y.value - 36;
+    const HISTORY_X0 = view.center.x.value - ((HISTORY_LEN - 1) * HISTORY_STRIDE) / 2;
 
     s(
-      label(pt(W / 2, HISTORY_Y - 22), "history (newest →)", {
+      label(view.bottom.up(58), "history (newest →)", {
         size: 10,
         align: Anchor.Center,
         opacity: 0.5,

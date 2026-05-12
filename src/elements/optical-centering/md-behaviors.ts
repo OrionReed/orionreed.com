@@ -19,18 +19,17 @@ import {
   type Signal,
 } from "../../minim";
 
-const W = 600;
-const H = 320;
 const N_TRAIL = 14;
 
 export class MdBehaviors extends Diagram {
   protected scene(s: Scene): void {
-    const view = s.view(W, H);
+    const view = s.view(600, 320);
+    const wall = view.w.value - 40;
 
     // Each head: x drifts wall-to-wall (flipping vel at boundaries
     // via a tiny loop), y oscillates around its lane.
     const head = (lane: number, xVelInit: number, freqY: number) => {
-      const x = signal(W / 2);
+      const x = signal(view.center.x.value);
       const y = signal(lane);
       const v = signal(xVelInit);
       this.anim.run(() => drift(x, v));
@@ -38,17 +37,19 @@ export class MdBehaviors extends Diagram {
       this.anim.run(function* () {
         while (true) {
           yield;
-          if (x.value > W - 40 && v.value > 0) v.value = -v.value;
+          if (x.value > wall && v.value > 0) v.value = -v.value;
           else if (x.value < 40 && v.value < 0) v.value = -v.value;
         }
       });
       return { x, y };
     };
 
-    const a = head(H / 3, 180, 0.4);
-    s(circle(pt(a.x, a.y), 9, { fill: "#1a1a1a" }));
-    const b = head((2 * H) / 3, -150, 0.7);
-    s(circle(pt(b.x, b.y), 9, { fill: "#1a1a1a" }));
+    const a = head(view.h.value / 3, 180, 0.4);
+    const b = head((2 * view.h.value) / 3, -150, 0.7);
+    s(
+      circle(pt(a.x, a.y), 9, { fill: "#1a1a1a" }),
+      circle(pt(b.x, b.y), 9, { fill: "#1a1a1a" }),
+    );
 
     // Trail of N circles, each chasing the previous via `run`. The
     // behavior decides the personality.

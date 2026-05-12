@@ -25,8 +25,7 @@ const STRIP_H_TOTAL = TRACK_H * TRACK_COUNT + STRIP_PAD * 2;
 
 export class MdMultitrack extends Diagram {
   protected scene(s: Scene): void {
-    const W = 600;
-    const view = s.view(W, 320);
+    const view = s.view(600, 320);
 
     // Overlap is fine; each clip has its own at + dur.
     const tl = timeline({
@@ -47,7 +46,7 @@ export class MdMultitrack extends Diagram {
     ];
 
     // ── Strip ─────────────────────────────────────────────────────
-    const STRIP_W = W - 2 * STRIP_X;
+    const STRIP_W = view.w.value - 2 * STRIP_X;
     const SCALE = computed(() =>
       tl.duration.value > 0 ? STRIP_W / tl.duration.value : 0,
     );
@@ -134,7 +133,7 @@ export class MdMultitrack extends Diagram {
 
     // ── Stage: one ball driven by all four clip progresses ────────
     const STAGE_Y = 210;
-    const STAGE_X = W / 2;
+    const STAGE_X = view.center.x.value;
 
     //   fadeIn.t  → opacity ramps up
     //   scale.t   → radius oscillates (sin: 0 at endpoints)

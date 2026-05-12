@@ -76,10 +76,10 @@ export class MdTraceDemo extends Diagram {
     const view = s.view(W, ROWS_Y + MAX_LANES * (ROW_H + ROW_GAP) + 24);
 
     // ── Top: three circles the demo animates ───────────────────────
-    const cy = TOP_H / 2;
-    const a = s(circle(pt(W / 2 - 100, cy), 18, { fill: "#5b8def" }));
-    const b = s(circle(pt(W / 2, cy), 18, { fill: "#f5a623" }));
-    const c = s(circle(pt(W / 2 + 100, cy), 18, { fill: "#e25c5c" }));
+    const row = view.top.down(TOP_H / 2);
+    const a = s(circle(row.left(100), 18, { fill: "#5b8def" }));
+    const b = s(circle(row, 18, { fill: "#f5a623" }));
+    const c = s(circle(row.right(100), 18, { fill: "#e25c5c" }));
 
     // `anim.clock` is the reactive logical-time signal — read it
     // before `spans()` so we don't pull any loop into the trace.

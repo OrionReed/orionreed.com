@@ -23,7 +23,6 @@ import {
   type Writable,
 } from "../../minim";
 
-const W = 380;
 const N = 12;
 const SHAPE_Y = 40;
 const STATUS_Y = 100;
@@ -45,11 +44,11 @@ function* lifecycle(
 
 export class MdCancel extends Diagram {
   protected scene(s: Scene): void {
-    s.view(W, 160);
+    const view = s.view(380, 160);
 
     const status = signal<Content>("running");
     s(
-      label(pt(W / 2, STATUS_Y), status, {
+      label(view.top.down(STATUS_Y), status, {
         size: 11,
         align: Anchor.Center,
         opacity: 0.55,
@@ -62,8 +61,9 @@ export class MdCancel extends Diagram {
       shape: Writable<"opacity">;
     };
     const slots: Slot[] = [];
+    const stride = (view.w.value - 60) / (N - 1);
     for (let i = 0; i < N; i++) {
-      const x = 30 + i * ((W - 60) / (N - 1));
+      const x = 30 + i * stride;
       const y = signal(SHAPE_Y);
       const shape = s(circle(pt(x, y), 8, { fill: true }));
       slots.push({ x, y, shape });
@@ -109,7 +109,7 @@ export class MdCancel extends Diagram {
     };
 
     const btnsW = BTN_W * 2 + BTN_GAP;
-    const btnsX = (W - btnsW) / 2;
+    const btnsX = view.center.x.value - btnsW / 2;
     s(
       button(pt(btnsX, BTN_Y), "EXIT", onExit, { width: BTN_W, height: BTN_H }),
       button(pt(btnsX + BTN_W + BTN_GAP, BTN_Y), "STOP", onStop, {
