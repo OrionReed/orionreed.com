@@ -1,13 +1,31 @@
 // Motion combinators over tex shapes. Pure compositions on top of
 // the existing motion stdlib (`tween`, `stagger`, signal effects);
 // no per-tex animation primitives.
+//
+// `pluck` is the foundational primitive: it lifts a `Part` out of its
+// parent TexShape into a free-standing Shape (a `Plucked`) you can
+// translate / scale / rotate independently. Disposing the Plucked
+// (directly or via `unpluck`) restores the source's pre-pluck
+// opacity. `morph` and `swap` are then thin combinators over
+// pluck/unpluck — there's no separate "rider" / "transit" concept,
+// just a Plucked that may or may not be animated by `unpluck`.
 
-import { effect, signal, type Signal } from "../core/signal";
-import { stagger } from "../motion/choreographers";
+import { effect, signal } from "../core/signal";
+import { stagger, swap as swapPositions } from "../motion/choreographers";
 import { easeInOut, easeOut } from "../motion/easings";
+import { all } from "../core/compose";
 import type { Animator, Easing } from "../core";
-import type { Part } from "./parts";
+import { Shape, type Writable } from "../scene/shape";
+import { aabb } from "../scene/box";
+import { Part } from "./parts";
 import type { TexShape } from "./tex";
+
+/** Wildcard `TexShape` that accepts any `Names` union. Used in
+ *  signatures so a `TexShape<"a"|"b">` and `TexShape<"f"|"x">` flow
+ *  into the same function — necessary for cross-cycle morphs and for
+ *  combinators that don't care which names a TexShape carries. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyTex = TexShape<any>;
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -15,7 +33,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** Pulse a part's `highlighted` signal — true for `dt` seconds, then
  *  back to false. The default highlight visual (subtle background
- *  tint) is wired by the parent TexShape. */
+ *  tint) is wired by Part itself when its el is bound. */
 export function* highlight(part: Part, dt = 0.6): Animator {
   part.highlighted.value = true;
   try {
@@ -30,7 +48,7 @@ export function* highlight(part: Part, dt = 0.6): Animator {
 /** Reveal a tex shape left-to-right via a clip-path sweep. The whole
  *  formula appears as if being written from the left margin. */
 export function* write(
-  eq: TexShape,
+  eq: AnyTex,
   dt = 0.6,
   ease: Easing = easeOut,
 ): Animator {
@@ -47,10 +65,10 @@ export function* write(
 }
 
 /** Reverse of `write` — sweep back from right to left. After natural
- *  completion the formula is fully clipped (visually hidden); this
- *  pairs with `write` for round-trip reveal/hide. */
+ *  completion the formula is fully clipped (visually hidden); pairs
+ *  with `write` for round-trip reveal/hide. */
 export function* writeOut(
-  eq: TexShape,
+  eq: AnyTex,
   dt = 0.4,
   ease: Easing = easeOut,
 ): Animator {
@@ -71,7 +89,7 @@ export function* writeOut(
  *  only the parts' opacity — text outside parts stays visible (use
  *  `eq.opacity` for whole-shape fades). */
 export function* writeParts(
-  eq: TexShape,
+  eq: AnyTex,
   dt = 0.6,
   opts: { stride?: number; ease?: Easing } = {},
 ): Animator {
@@ -91,7 +109,7 @@ export function* writeParts(
 
 /** Reverse of `writeParts` — stagger fade-out across parts. */
 export function* unwriteParts(
-  eq: TexShape,
+  eq: AnyTex,
   dt = 0.4,
   opts: { stride?: number; ease?: Easing } = {},
 ): Animator {
@@ -108,282 +126,249 @@ export function* unwriteParts(
   );
 }
 
-// ── Morph (matched by name) ────────────────────────────────────────
-
-interface MorphTransit {
-  /** SVG `<g>` wrapping the transit. We use a CSS transform on the
-   *  `<g>` (matching Shape's own pattern) rather than an SVG-attribute
-   *  transform on the inner `<foreignObject>` — different transform
-   *  paths can rasterize the same fractional position to slightly
-   *  different pixels, and the source/dest TexShapes both use the CSS
-   *  transform path (`shape.el.style.transform`), so we want the
-   *  rider on the same path. */
-  g: SVGGElement;
-  fo: SVGForeignObjectElement;
-  pPart: Part;
-  qPart: Part;
-  /** Saved part opacities so we restore whatever the author had set,
-   *  not just blindly bump back to 1. */
-  prevP: number;
-  prevQ: number;
-  /** Source matched-mrow position in parent's local frame
-   *  (`from.translate + p.aabb.tl`) — captured at morph start. */
-  sx: number;
-  sy: number;
-  /** Trajectory delta in parent's local frame (`dPos − sPos`). */
-  dx: number;
-  dy: number;
-  /** Matched-mrow offset within the cloned wrapper, equal to
-   *  `p.aabb.tl` (the clone is a deep-copy with identical structure,
-   *  so its matched mrow lands at the same offset within the wrapper
-   *  as in the source). Used to anchor scale around the part. */
-  natX: number;
-  natY: number;
-  /** dest / source size ratios, X and Y measured independently. ≠ 1
-   *  when the part changes scriptlevel between source and dest (e.g.
-   *  top-level → inside `<mfrac>` numerator), since MathML scales
-   *  content inside fractions/scripts via the OpenType MATH table.
-   *  After `stabilizePart` (`math-shift: normal; math-style: normal`)
-   *  the rendered aspect ratio is context-independent, so in theory
-   *  `rx ≈ ry`. Measuring both axes independently absorbs any
-   *  residual anisotropy from line-box leading or font hinting at
-   *  different sizes. */
-  rx: number;
-  ry: number;
-  /** Single progress signal driving translate and scale together. */
-  progress: Signal<number>;
-}
+// ── pluck / unpluck — the "rider" primitive ────────────────────────
 
 /** Walk up to the nearest `<math>` and return its parent (the wrapper
  *  div that tex.ts mounts in the foreignObject) — what we deep-clone
- *  to give the morph rider its byte-identical context. */
-function findMathWrapper(matchedEl: HTMLElement): HTMLElement | null {
-  let mathEl: Element | null = matchedEl.parentElement;
-  while (mathEl && mathEl.tagName.toLowerCase() !== "math") {
-    mathEl = mathEl.parentElement;
+ *  to give a Plucked its byte-identical context. */
+const findMathWrapper = (matchedEl: HTMLElement): HTMLElement | null => {
+  let cur: Element | null = matchedEl.parentElement;
+  while (cur && cur.tagName.toLowerCase() !== "math") {
+    cur = cur.parentElement;
   }
-  if (!mathEl) return null;
-  const wrapper = mathEl.parentElement;
+  if (!cur) return null;
+  const wrapper = cur.parentElement;
   return wrapper instanceof HTMLElement ? wrapper : null;
+};
+
+/** Matched-mrow position (parent-frame, top-left) for `part` at this
+ *  instant — `host.translate + part.aabb.tl`. */
+const partPose = (part: Part): { x: number; y: number } => {
+  const tr = part._host.translate.value;
+  const a = part.aabb.value;
+  return { x: tr.x + a.x, y: tr.y + a.y };
+};
+
+/** A part lifted out of its TexShape. A regular Shape (transform,
+ *  opacity, decorations all work). `translate` is the matched mrow's
+ *  TL position in parent coords — animate it directly to fly the
+ *  part around. `scale` pivots around the same TL.
+ *
+ *  Created by `pluck(part)`. The source part is hidden (opacity 0)
+ *  for the Plucked's lifetime; `dispose()` restores it. `unpluck`
+ *  is sugar that animates a tween into a target pose then disposes. */
+export class Plucked extends Shape {
+  readonly source: Part;
+  readonly #sourcePrevOpacity: number;
+
+  constructor(source: Part) {
+    // The cloned wrapper is shifted (in CSS) so the matched mrow
+    // lands at (0, 0) of our local frame — see `pluck`. So our local
+    // AABB is just the mrow's footprint at the origin. Combined with
+    // origin=(0,0), this makes `plucked.translate` semantically
+    // equal to "matched mrow TL in parent coords".
+    const a = source.aabb.peek();
+    const local = aabb(0, 0, a.w, a.h);
+    super("foreignObject", () => local);
+    this.source = source;
+    this.#sourcePrevOpacity = source.opacity.peek();
+    source.opacity.value = 0;
+  }
+
+  /** Restore the source part's pre-pluck opacity and remove the
+   *  Plucked's DOM — reverses everything `pluck` did. */
+  dispose(): void {
+    this.source.opacity.value = this.#sourcePrevOpacity;
+    super.dispose();
+  }
 }
 
-/** Build a transit (`<g>` + `<foreignObject>`) containing a deep clone
- *  of `wrapper` with only the descendant carrying `matchedClass`
- *  rendered. The outer `<g>` is what the morph translates via CSS
- *  transform (matching Shape's own transform path for byte-identical
- *  rasterization). */
-function buildTransit(
-  wrapper: HTMLElement,
-  matchedClass: string,
-  width: number,
-  height: number,
-): { g: SVGGElement; fo: SVGForeignObjectElement } | null {
-  const wrapperClone = wrapper.cloneNode(true) as HTMLElement;
-  const matchedClone = wrapperClone.querySelector(
-    `.${matchedClass}`,
-  ) as HTMLElement | null;
-  const mathClone = wrapperClone.querySelector("math") as HTMLElement | null;
-  if (!matchedClone || !mathClone) return null;
-  // Hide the whole math tree, then re-show just the matched mrow.
-  // Visibility preserves layout, so the matched mrow lands at exactly
-  // the same offset within the clone as it does in the source — the
-  // surrounding glyphs are present (so layout is untouched) but
-  // invisible.
+/** Lift `part` out of its TexShape into a free `Plucked` Shape and
+ *  mount it under the same parent. Source part is hidden (opacity 0)
+ *  for the Plucked's lifetime; restore by calling `plucked.dispose()`
+ *  or `unpluck(plucked, ...)`. */
+export function pluck(part: Part): Plucked {
+  const liveEl = part.el;
+  const host = part._host;
+  if (!liveEl || !host?.parent) {
+    throw new Error(
+      "pluck: part has no live element or its TexShape isn't mounted",
+    );
+  }
+  const wrapper = findMathWrapper(liveEl);
+  if (!wrapper) throw new Error("pluck: cannot find <math> wrapper");
+
+  const aabbLocal = part.aabb.value;
+  const pose = partPose(part);
+
+  // Clone the wrapper, hide everything except the matched mrow.
+  // `visibility: hidden` preserves layout so the mrow lands at the
+  // same offset within the clone as in the source.
+  const clonedWrapper = wrapper.cloneNode(true) as HTMLElement;
+  const matchedClone = clonedWrapper.querySelector<HTMLElement>(
+    `.minim-part-${part.name}`,
+  );
+  const mathClone = clonedWrapper.querySelector("math") as HTMLElement | null;
+  if (!matchedClone || !mathClone) {
+    throw new Error("pluck: cloned wrapper lost its matched mrow");
+  }
   mathClone.style.visibility = "hidden";
   matchedClone.style.visibility = "visible";
+  // Shift the wrapper so the matched mrow lands at (0, 0) of the
+  // foreignObject's local frame. Combined with the Plucked's
+  // aabb=(0,0,w,h), `plucked.translate` == matched mrow's parent-
+  // frame TL position — animate translate, mrow follows directly.
+  clonedWrapper.style.transform = `translate(${-aabbLocal.x}px, ${-aabbLocal.y}px)`;
+  clonedWrapper.style.transformOrigin = "0 0";
 
-  const fo = document.createElementNS(
-    SVG_NS,
-    "foreignObject",
-  ) as SVGForeignObjectElement;
+  const plucked = new Plucked(part);
+  const fo = plucked.intrinsic as SVGForeignObjectElement;
+  // Size to comfortably contain the full clone (which carries the
+  // whole eq tree, just visibility-hidden except for the matched
+  // mrow). Generous padding absorbs any fractional growth from
+  // font-hinting.
   fo.setAttribute("x", "0");
   fo.setAttribute("y", "0");
-  fo.setAttribute("width", String(Math.max(width, 1)));
-  fo.setAttribute("height", String(Math.max(height, 1)));
+  fo.setAttribute("width", String(Math.max(host.width.value + 32, 1)));
+  fo.setAttribute("height", String(Math.max(host.height.value + 16, 1)));
   fo.style.overflow = "visible";
   fo.style.pointerEvents = "none";
-  fo.appendChild(wrapperClone);
+  fo.appendChild(clonedWrapper);
 
-  const g = document.createElementNS(SVG_NS, "g") as SVGGElement;
-  g.style.transformOrigin = "0 0";
-  g.appendChild(fo);
-  return { g, fo };
+  // Land the matched mrow exactly where the source one is right now.
+  plucked.translate.value = pose;
+
+  host.parent.add(plucked);
+  return plucked;
 }
+
+/** Sugar: animate `plucked` into `target`'s pose (or back to its own
+ *  source if no target is given), then dispose. Disposal restores
+ *  the *source*'s opacity automatically — `unpluck` deliberately
+ *  doesn't touch the destination's opacity, so callers can compose
+ *  parallel pluck/unpluck pairs without races.
+ *
+ *  Translates only, no automatic scale. The Plucked keeps its source's
+ *  natural size — important when target is a *different* Part (e.g.
+ *  the two letters in a `swap(a, b)`): the rider showing "a" should
+ *  visit b's *position* without morphing into b's glyph metrics, or
+ *  the user sees an unwanted vertical stretch as it travels. If you
+ *  want morph-style fit-into-target sizing, animate `scale` yourself
+ *  alongside this — that's what `morph` does. */
+export function* unpluck(
+  plucked: Plucked,
+  target?: Part,
+  dt = 0.5,
+  ease: Easing = easeInOut,
+): Animator {
+  const dest = target ?? plucked.source;
+  try {
+    yield* plucked.translate.to(partPose(dest), dt, ease);
+  } finally {
+    plucked.dispose();
+  }
+}
+
+// ── Morph (matched by name, auto rewrite) ──────────────────────────
 
 /** Animate from `from` to `to`, matching parts by name.
  *
- *  Strategy ("single source-context rider, analytically anchored"):
- *    1. Each matched part's mrow is stabilized at construction time
- *       (`math-shift: normal; math-style: normal` in tex.ts), so its
- *       *internal* layout — script elevation, bar gaps, etc. — is
- *       context-independent. Only its overall *size* changes with
- *       scriptlevel (top-level vs inside `<msqrt>` vs inside an
- *       `<mfrac>` numerator).
- *    2. For each match we clone the source's `<math>` wrapper into a
- *       transit and use CSS visibility to render only the matched
- *       mrow. The transit's outer `<g>` carries a CSS transform —
- *       same path Shape uses, so rasterization snaps to pixels the
- *       same way as `from.el` and `to.el`.
- *    3. Source / dest / clone-natural positions are derived
- *       analytically from `shape.translate.value + part.aabb.tl`
- *       (matched-mrow position in the parent's local frame). The
- *       clone is a deep-copy of the source wrapper, so its matched
- *       mrow lands at the same offset within the wrapper as in the
- *       source — i.e. `naturalPos = p.aabb.tl`. No DOM measurement
- *       in the morph hot path: zero `getBoundingClientRect` reads.
- *       This relies on (1): without stabilization the live render
- *       can drift from the (also stabilized) measurement performed
- *       at `tex.ts` construction time, and the analytical answer
- *       would no longer match what the user sees.
- *    4. The rider's CSS transform is `translate(...) scale(sx, sy)`
- *       driven by a single `progress` signal. `sx` tweens 1 → rx,
- *       `sy` tweens 1 → ry where `rx = q.aabb.w / p.aabb.w`,
- *       `ry = q.aabb.h / p.aabb.h`, so a part moving between
- *       contexts at different scriptlevels (e.g. top-level → inside
- *       `<mfrac>` numerator) smoothly resizes with its slide instead
- *       of popping size at the hand-off. With (1) in place `rx ≈ ry`,
- *       but measuring both axes independently absorbs any residual
- *       anisotropy from line-box leading or font hinting at different
- *       sizes. Scale is anchored at the matched mrow's local TL —
- *       see the effect below.
- *    5. At t=0 the rider lands exactly on `p.el`'s rendered position;
- *       at t=1 it lands exactly on `q.el`'s. Combined with the
- *       stabilization (1), the handoffs are pixel-perfect.
+ *  For each name shared between `from` and `to`:
  *
- *  Parts whose content *differs* (e.g. `c^2` ↔ `c`) aren't ridden —
- *  they cross-fade with their parent shapes at their natural source
- *  and dest positions.
+ *    • If the part's content matches, a single `Plucked` rides the
+ *      source content from `from`'s slot to `to`'s slot, scaling
+ *      along the way to absorb scriptlevel changes.
  *
- *  Assumptions: both shapes share a parent and have translate-only
- *  transforms relative to that parent (no per-shape scale or
- *  rotation). After completion, `from.opacity` is 0 and `to.opacity`
- *  is 1.
- */
+ *    • If the content *differs* (a "rewrite": `f'(x)` vs `Df`), two
+ *      Plucked's ride the same trajectory — source-content fades
+ *      out, dest-content fades in. Auto, no flag.
+ *
+ *  Parts with no counterpart on the other side cross-fade with their
+ *  parent's whole-shape opacity envelope.
+ *
+ *  Assumes both shapes share a parent and have translate-only
+ *  transforms relative to that parent. Heterogeneous name unions are
+ *  fine: `morph(m1, d1)` where neither side's names overlap falls
+ *  through to a clean parent crossfade. */
 export function* morph(
-  from: TexShape,
-  to: TexShape,
+  from: AnyTex,
+  to: AnyTex,
   dt = 0.6,
   ease: Easing = easeInOut,
 ): Animator {
   const parent = from.parent;
-  const fallback = (): [Animator, Animator] => {
-    if (to.opacity.peek() < 1) to.opacity.value = 0;
-    return [from.opacity.to(0, dt, ease), to.opacity.to(1, dt, ease)];
-  };
-
   if (!parent || from.parent !== to.parent) {
-    yield fallback();
+    if (to.opacity.peek() < 1) to.opacity.value = 0;
+    yield [from.opacity.to(0, dt, ease), to.opacity.to(1, dt, ease)];
     return;
   }
 
-  const fromTr = from.translate.value;
-  const toTr = to.translate.value;
+  // Make sure `to` starts hidden — riders supply visible content for
+  // matched parts during the flight, parent crossfade handles the
+  // rest. (No-op if already 0.)
+  if (to.opacity.peek() !== 0) to.opacity.value = 0;
 
-  const transits: MorphTransit[] = [];
-  const stops: Array<() => void> = [];
-
-  // Size the transit foreignObject to comfortably contain the *full*
-  // source wrapper — the clone holds the entire eq tree (just
-  // visibility-hidden except for the matched mrow), so it needs the
-  // eq's natural width/height plus headroom to avoid the wrapper
-  // reflowing inside a too-narrow foreignObject.
-  const transitW = Math.max(from.width.value, to.width.value) + 32;
-  const transitH = Math.max(from.height.value, to.height.value) + 16;
+  const animators: Animator[] = [
+    from.opacity.to(0, dt, ease),
+    to.opacity.to(1, dt, ease),
+  ];
+  /** Each rider — and the q.opacity hide for the same-content case —
+   *  registers a teardown here. Run on the morph's `finally` so the
+   *  cleanup happens even if interrupted. */
+  const cleanups: Array<() => void> = [];
 
   for (const p of from.parts) {
     const q = (to.parts as Record<string, Part>)[p.name];
     if (!q) continue;
-    if (p.content !== q.content) continue;
     if (!p.el || !q.el) continue;
-
     const pa = p.aabb.value;
     const qa = q.aabb.value;
     if (pa.w === 0 || qa.w === 0 || pa.h === 0 || qa.h === 0) continue;
 
-    const wrapper = findMathWrapper(p.el);
-    if (!wrapper) continue;
-    const matchedClass = `minim-part-${p.name}`;
-    const built = buildTransit(wrapper, matchedClass, transitW, transitH);
-    if (!built) continue;
+    const sameContent = p.content.peek() === q.content.peek();
+    const destPose = partPose(q);
 
-    // sPos = fromTr + pa.tl  (matched mrow in parent frame, source).
-    // dPos = toTr   + qa.tl  (matched mrow in parent frame, dest).
-    // naturalPos = pa.tl     (clone is a deep-copy of source wrapper,
-    // so its matched mrow lands at the same offset within the wrapper
-    // as in the source).
-    const sx = fromTr.x + pa.x;
-    const sy = fromTr.y + pa.y;
-    const dx = toTr.x + qa.x - sx;
-    const dy = toTr.y + qa.y - sy;
-    const natX = pa.x;
-    const natY = pa.y;
-    const rx = qa.w / pa.w;
-    const ry = qa.h / pa.h;
-
-    // Position the rider exactly where the source matched mrow sits
-    // in parent coords, then mount. No measurement needed: the
-    // formula below at p=0 produces transform = `translate(fromTr.x,
-    // fromTr.y) scale(1, 1)`, which is precisely the source's own
-    // position.
-    built.g.style.transform = `translate(${fromTr.x}px, ${fromTr.y}px) scale(1, 1)`;
-    parent.el.appendChild(built.g);
-
-    const prevP = p.opacity.peek();
-    const prevQ = q.opacity.peek();
-    p.opacity.value = 0;
-    q.opacity.value = 0;
-
-    const transit: MorphTransit = {
-      g: built.g,
-      fo: built.fo,
-      pPart: p,
-      qPart: q,
-      prevP,
-      prevQ,
-      sx,
-      sy,
-      dx,
-      dy,
-      natX,
-      natY,
-      rx,
-      ry,
-      progress: signal(0) as Signal<number>,
-    };
-    transits.push(transit);
-
-    stops.push(
-      effect(() => {
-        // Anchor scale around the matched mrow's local TL so the
-        // part stays glued to its trajectory while it resizes.
-        // Per axis:
-        //   matchedMrow_parent.x = tx + s · natX = curX
-        //   ⇒ tx = curX − s · natX   (same for y).
-        const t = transit.progress.value;
-        const s_x = 1 + t * (transit.rx - 1);
-        const s_y = 1 + t * (transit.ry - 1);
-        const cx = transit.sx + t * transit.dx;
-        const cy = transit.sy + t * transit.dy;
-        const tx = cx - s_x * transit.natX;
-        const ty = cy - s_y * transit.natY;
-        transit.g.style.transform = `translate(${tx}px, ${ty}px) scale(${s_x}, ${s_y})`;
-      }),
+    // Source rider: travels from p's pose (at scale 1) to q's pose
+    // (scaled to match q's size). Same logic for both branches; the
+    // rewrite branch additionally fades it out.
+    const srcRider = pluck(p);
+    animators.push(
+      srcRider.translate.to(destPose, dt, ease),
+      srcRider.scale.to({ x: qa.w / pa.w, y: qa.h / pa.h }, dt, ease),
     );
+    cleanups.push(() => srcRider.dispose());
+
+    if (sameContent) {
+      // Source clone *is* the right content; keep visible end-to-end.
+      // Hide q during the flight; restore at the end. (q.opacity is
+      // restored to whatever the author had set, not blindly to 1.)
+      const prevQ = q.opacity.peek();
+      q.opacity.value = 0;
+      cleanups.push(() => {
+        q.opacity.value = prevQ;
+      });
+    } else {
+      // Rewrite: pluck q too and ride it on the same trajectory,
+      // crossfading from src→dest. Initial pose: at p's location,
+      // scaled down so the visible footprint matches src at t=0.
+      const destRider = pluck(q);
+      destRider.translate.value = partPose(p);
+      destRider.scale.value = { x: pa.w / qa.w, y: pa.h / qa.h };
+      destRider.opacity.value = 0;
+      animators.push(
+        srcRider.opacity.to(0, dt, ease),
+        destRider.translate.to(destPose, dt, ease),
+        destRider.scale.to({ x: 1, y: 1 }, dt, ease),
+        destRider.opacity.to(1, dt, ease),
+      );
+      cleanups.push(() => destRider.dispose());
+    }
   }
 
   try {
-    yield [
-      from.opacity.to(0, dt, ease),
-      to.opacity.to(1, dt, ease),
-      ...transits.map((t) => t.progress.to(1, dt, ease)),
-    ];
+    yield animators;
   } finally {
-    for (const s of stops) s();
-    for (const t of transits) {
-      t.pPart.opacity.value = t.prevP;
-      t.qPart.opacity.value = t.prevQ;
-      t.g.remove();
-    }
+    for (const c of cleanups) c();
     from.opacity.value = 0;
     to.opacity.value = 1;
   }
@@ -392,3 +377,52 @@ export function* morph(
 /** Sugar for `morph(from, to, dt)` — semantically: replace `from`
  *  with `to`, with matched parts carrying their identity across. */
 export const substitute = morph;
+
+// ── Swap — exchange two things' positions ─────────────────────────
+
+/** Exchange two things' positions over `dt` seconds. Two flavors,
+ *  dispatched on `instanceof Part`:
+ *
+ *    • `swap(p1: Part, p2: Part)` — pluck both parts, animate each
+ *      into the other's slot, dispose. Visual swap is transient: at
+ *      the end both parts are restored at their original template
+ *      positions (the demo value is in the choreography, not in
+ *      permanent reassignment).
+ *
+ *    • `swap(s1, s2)` for any two shapes with writable `translate` —
+ *      tweens their `translate` values to each other (the original
+ *      motion-stdlib swap, kept here so a single name covers both
+ *      Part and Shape callers). */
+export function swap(a: Part, b: Part, dt?: number, ease?: Easing): Animator;
+export function swap(
+  a: Writable<"translate">,
+  b: Writable<"translate">,
+  dt?: number,
+  ease?: Easing,
+): Animator;
+export function swap(
+  a: Part | Writable<"translate">,
+  b: Part | Writable<"translate">,
+  dt = 0.5,
+  ease?: Easing,
+): Animator {
+  if (a instanceof Part && b instanceof Part)
+    return swapPartsImpl(a, b, dt, ease ?? easeInOut);
+  return swapPositions(
+    a as Writable<"translate">,
+    b as Writable<"translate">,
+    dt,
+    ease,
+  );
+}
+
+function* swapPartsImpl(
+  a: Part,
+  b: Part,
+  dt: number,
+  ease: Easing,
+): Animator {
+  const ah = pluck(a);
+  const bh = pluck(b);
+  yield all(unpluck(ah, b, dt, ease), unpluck(bh, a, dt, ease));
+}

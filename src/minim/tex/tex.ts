@@ -6,10 +6,14 @@
 // back the overall size and per-part bounding rects, then mount the
 // same MathML inside the SVG foreignObject.
 //
-// Parts (named via `part(name, content)` interpolation) are
+// Parts (named via `part(name, content)` or `parts({...})`) are
 // lightweight handles — see `parts.ts`. Per-character primitives
 // would be wrong: a glyph isn't an addressable concept; a labeled
 // sub-formula is.
+//
+// Names flow through the type system: `tex`${a} + ${b}`` returns a
+// `TexShape<"a"|"b">`, and `eq.parts.a` is typed; `eq.parts.x` is a
+// TS error.
 
 import temml from "temml";
 import { signal, type ReadonlySignal, type Signal } from "../core/signal";
@@ -33,46 +37,73 @@ export interface TexOpts extends ShapeOpts {
   highlightColor?: string;
 }
 
-interface PartMeta {
-  name: string;
-  className: string;
-  content: string;
-}
+/** Extract the union of part names from a tuple of interpolation
+ *  values. Plain strings contribute nothing; `PartMarker<N>`s
+ *  contribute their literal name `N`. */
+export type NamesOf<V extends readonly TexInterp[]> = V extends readonly (
+  | infer U
+)[]
+  ? U extends PartMarker<infer N>
+    ? N
+    : never
+  : never;
 
 /** Class on the rendered `<mrow>` for `part(name, …)`. Naming by the
- *  user-supplied `name` (rather than by template position) is
- *  deliberate: morph matches parts across two TexShapes by name, and
- *  using the same class on both sides means we can re-find a part in
- *  any cloned subtree without juggling separate per-shape index maps. */
+ *  user-supplied name (rather than by template position) is what lets
+ *  `morph` match parts across two TexShapes by name and re-find them
+ *  in any cloned subtree without juggling per-shape index maps. */
 const partClass = (name: string): string => `minim-part-${name}`;
 
-const buildSource = (
-  strings: readonly string[],
+/** Single-pass walk over the template: emits the LaTeX source string
+ *  and the list of unique-name PartMarkers in template order.
+ *
+ *  Reads from `strings.raw` when available (the standard tagged-
+ *  template form) so authors can write `\frac{a}{b}` directly — JS
+ *  template literals would otherwise process `\f` as form-feed,
+ *  `\t` as tab, etc. Falls back to the cooked form if `compileTemplate`
+ *  is called with a plain `string[]` (programmatic use, internal
+ *  re-renders). Same idiom as `String.raw\`…\``. */
+const compileTemplate = (
+  strings: TemplateStringsArray | readonly string[],
   values: readonly TexInterp[],
-  meta: PartMeta[],
-): string => {
-  let src = "";
+): { source: string; markers: PartMarker[] } => {
+  const chunks = (strings as TemplateStringsArray).raw ?? strings;
+  let source = "";
+  const markers: PartMarker[] = [];
   const seen = new Set<string>();
-  for (let i = 0; i < strings.length; i++) {
-    src += strings[i];
-    if (i < values.length) {
-      const v = values[i];
-      if (v instanceof PartMarker) {
-        if (seen.has(v.name)) {
-          throw new Error(
-            `tex: duplicate part name "${v.name}" — names must be unique within a single template`,
-          );
-        }
-        seen.add(v.name);
-        const className = partClass(v.name);
-        meta.push({ name: v.name, className, content: v.content });
-        src += `\\class{${className}}{${v.content}}`;
-      } else {
-        src += v;
+  for (let i = 0; i < chunks.length; i++) {
+    source += chunks[i];
+    if (i >= values.length) continue;
+    const v = values[i];
+    if (v instanceof PartMarker) {
+      if (seen.has(v.name)) {
+        throw new Error(
+          `tex: duplicate part name "${v.name}" — names must be unique within a single template`,
+        );
       }
+      seen.add(v.name);
+      markers.push(v);
+      source += `\\class{${partClass(v.name)}}{${v.content.peek()}}`;
+    } else {
+      source += v;
     }
   }
-  return src;
+  return { source, markers };
+};
+
+const renderToMathML = (source: string): string => {
+  try {
+    return temml.renderToString(source, {
+      trust: true,
+      displayMode: false,
+      strict: false,
+      throwOnError: false,
+    });
+  } catch (e) {
+    return `<span style="color:#c33;font:13px monospace">${
+      (e as Error).message
+    }</span>`;
+  }
 };
 
 /** CSS for the wrapper div that hosts the rendered `<math>`. Same in
@@ -97,8 +128,7 @@ const wrapperCss = (fontSize: number, fontFamily: string): string =>
  *  font *has* to be set on the element itself for the surd glyph
  *  and vinculum to come from a font with a real MATH table. We
  *  deliberately don't touch `display`: MathML Core only honors
- *  `inline math` / `block math`, and overriding it can break
- *  layout. */
+ *  `inline math` / `block math`, and overriding it can break layout. */
 const styleMathRoot = (
   mathEl: HTMLElement,
   fontSize: number,
@@ -144,11 +174,17 @@ const stabilizePart = (el: HTMLElement): void => {
   el.style.transition = `background-color ${tokens.tex.highlightDurationMs}ms ease-out`;
 };
 
+interface Measurement {
+  width: number;
+  height: number;
+  rects: Map<string, AABB>;
+}
+
 const measureMathML = (
   mathml: string,
   fontSize: number,
   fontFamily: string,
-): { width: number; height: number; rects: Map<string, AABB> } => {
+): Measurement => {
   const div = document.createElement("div");
   div.style.cssText =
     "position:absolute;left:-99999px;top:0;visibility:hidden;" +
@@ -156,47 +192,41 @@ const measureMathML = (
   div.innerHTML = mathml;
   const mathEl = div.querySelector("math") as HTMLElement | null;
   if (mathEl) styleMathRoot(mathEl, fontSize, fontFamily);
-  // Measure with the same `math-shift: normal` override that the live
-  // tree will use, so part bounds reflect what the user sees.
+  // Apply the same `math-shift: normal` override the live tree uses —
+  // part bounds should reflect what the user sees.
   div
     .querySelectorAll<HTMLElement>("[class*='minim-part-']")
     .forEach(stabilizePart);
   document.body.appendChild(div);
   try {
-    const root = (mathEl ?? (div.firstElementChild as HTMLElement) ?? div);
+    const root = mathEl ?? (div.firstElementChild as HTMLElement) ?? div;
     const rootRect = root.getBoundingClientRect();
     // Anchor part rects to the *wrapper* (= the inline-block `div`,
     // which sits at (0,0) of the live foreignObject), not the math
-    // element. With `<mfrac>` and other constructs the math content
-    // can overflow its line-box vertically — math's BCR top sits
-    // *above* the wrapper's BCR top — so a math-relative aabb would
-    // be off by that overflow when used for analytical positioning.
-    // Wrapper-relative makes `aabb.tl` exactly the matched mrow's
-    // position in shape-local frame (since shape-local = fO-local =
-    // wrapper-local), so `morph` can derive screen positions as
-    // `shape.translate + aabb.tl` without knowing math's
-    // intra-wrapper offset. Width/height keep using the math BCR so
-    // the foreignObject is sized to math content, not the line-box.
+    // element. With `<mfrac>` the math content can overflow its
+    // line-box vertically — math's BCR top sits *above* the wrapper's
+    // BCR top — so a math-relative aabb would be off by that overflow
+    // when used for analytical positioning. Wrapper-relative makes
+    // `aabb.tl` exactly the matched mrow's position in shape-local
+    // frame.
     const wrapperRect = div.getBoundingClientRect();
     const rects = new Map<string, AABB>();
-    div.querySelectorAll<HTMLElement>("[class*='minim-part-']").forEach(
-      (el) => {
-        const cls = Array.from(el.classList).find((c) =>
-          c.startsWith("minim-part-"),
-        );
-        if (!cls) return;
-        const r = el.getBoundingClientRect();
-        rects.set(
-          cls,
-          aabb(
-            r.left - wrapperRect.left,
-            r.top - wrapperRect.top,
-            r.width,
-            r.height,
-          ),
-        );
-      },
-    );
+    div.querySelectorAll<HTMLElement>("[class*='minim-part-']").forEach((el) => {
+      const cls = Array.from(el.classList).find((c) =>
+        c.startsWith("minim-part-"),
+      );
+      if (!cls) return;
+      const r = el.getBoundingClientRect();
+      rects.set(
+        cls,
+        aabb(
+          r.left - wrapperRect.left,
+          r.top - wrapperRect.top,
+          r.width,
+          r.height,
+        ),
+      );
+    });
     return { width: rootRect.width, height: rootRect.height, rects };
   } finally {
     document.body.removeChild(div);
@@ -205,22 +235,19 @@ const measureMathML = (
 
 /** Generator-driven LaTeX shape. Parts are addressable by name:
  *
- *      const eq = s(tex`${part("a", "x_{\\min}")} < ${part("b", "x_{\\max}")}`);
+ *      const { a, b } = parts({ a: "x_{\\min}", b: "x_{\\max}" });
+ *      const eq = s(tex`${a} < ${b}`);          // TexShape<"a"|"b">
  *      yield* highlight(eq.parts.a);
  *      eq.add(brace(eq.parts.b));
  *      yield* morph(eq, eq2, 0.6);
  */
-export class TexShape extends Shape {
-  readonly parts: PartList;
+export class TexShape<Names extends string = string> extends Shape {
+  readonly parts: PartList<Names>;
   /** Width in local-frame user units (matches the rendered MathML
    *  bounding rect). */
   readonly width: ReadonlySignal<number>;
   /** Height in local-frame user units. */
   readonly height: ReadonlySignal<number>;
-
-  /** @internal — names → Part, used by `highlight(name)` sugar and by
-   *  motion combinators that match parts across two TexShapes. */
-  readonly _byName: Record<string, Part>;
 
   /** @internal — resolved font/size, kept so `morph` can build matching
    *  ghost shapes without re-parsing opts. */
@@ -236,23 +263,9 @@ export class TexShape extends Shape {
     const fontFamily = opts.font ?? tokens.mathFont;
     const highlightColor = opts.highlightColor ?? tokens.tex.highlightColor;
 
-    const meta: PartMeta[] = [];
-    const source = buildSource(strings, values, meta);
-    let mathml: string;
-    try {
-      mathml = temml.renderToString(source, {
-        trust: true,
-        displayMode: false,
-        strict: false,
-        throwOnError: false,
-      });
-    } catch (e) {
-      mathml = `<span style="color:#c33;font:13px monospace">${
-        (e as Error).message
-      }</span>`;
-    }
-
-    const measured = measureMathML(mathml, fontSize, fontFamily);
+    const { source, markers } = compileTemplate(strings, values);
+    const initialMathml = renderToMathML(source);
+    const measured = measureMathML(initialMathml, fontSize, fontFamily);
     const w = signal(measured.width);
     const h = signal(measured.height);
 
@@ -278,108 +291,155 @@ export class TexShape extends Shape {
     // Inline-block wrapper matches the measurement div setup so the
     // `<math>` lands at the same TL within its container in both
     // contexts — measurements and live-render agree.
-    const inner = document.createElement("div");
-    inner.style.cssText = wrapperCss(fontSize, fontFamily);
-    inner.innerHTML = mathml;
-    const mathEl = inner.querySelector("math") as HTMLElement | null;
-    if (mathEl) styleMathRoot(mathEl, fontSize, fontFamily);
-    fo.appendChild(inner);
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = wrapperCss(fontSize, fontFamily);
+    fo.appendChild(wrapper);
 
+    // Build Parts up-front; `mountInto` then populates the wrapper
+    // and binds each Part to its newly-mounted live element.
     const list: Part[] = [];
-    const byName: Record<string, Part> = {};
-    /** Writable handles to each part's bounds, kept here so we can
-     *  refresh them once webfonts have actually loaded — see the
-     *  `document.fonts.ready` block below. */
-    const aabbWriters: Array<{ className: string; sig: Signal<AABB> }> = [];
-    for (const m of meta) {
-      const r = measured.rects.get(m.className) ?? aabb(0, 0, 0, 0);
-      const liveEl = inner.querySelector<HTMLElement>(`.${m.className}`);
-      if (liveEl) stabilizePart(liveEl);
-      const aabbSig = signal(r);
-      aabbWriters.push({ className: m.className, sig: aabbSig });
-      const p = new Part(m.name, m.content, aabbSig, liveEl);
+    /** Writable handles to each part's bounds, so `mountInto` and the
+     *  webfont-ready re-measure can push fresh values. */
+    const aabbWriters = new Map<string, Signal<AABB>>();
+    for (const m of markers) {
+      const cls = partClass(m.name);
+      const aabbSig = signal(measured.rects.get(cls) ?? aabb(0, 0, 0, 0));
+      aabbWriters.set(cls, aabbSig);
+      const p = new Part(m.name, m.content, aabbSig);
+      p._host = this as TexShape;
       list.push(p);
-      byName[m.name] = p;
-      if (liveEl) {
-        this.effect(() => {
-          liveEl.style.backgroundColor = p.highlighted.value
-            ? highlightColor
-            : "transparent";
-        });
-        this.effect(() => {
-          liveEl.style.opacity = String(p.opacity.value);
-        });
-      }
     }
-    this._byName = byName;
-    const out = list.slice() as Part[] & Record<string, Part>;
-    for (const k in byName) (out as Record<string, Part>)[k] = byName[k];
-    this.parts = out as unknown as PartList;
+    this.parts = buildPartList(list);
+
+    /** Render the current source into `wrapper`, re-find each Part's
+     *  live element, push fresh bounds, and rebind visual effects.
+     *  Used for the initial mount and for reactive content updates.
+     *  `bounds` is optional: pass it when you've already measured (so
+     *  we don't re-measure the same source twice). */
+    const mountInto = (mathml: string, bounds?: Measurement): void => {
+      wrapper.innerHTML = mathml;
+      const m = wrapper.querySelector("math") as HTMLElement | null;
+      if (m) styleMathRoot(m, fontSize, fontFamily);
+      wrapper
+        .querySelectorAll<HTMLElement>("[class*='minim-part-']")
+        .forEach(stabilizePart);
+
+      const fresh = bounds ?? measureMathML(mathml, fontSize, fontFamily);
+      if (fresh.width !== w.peek()) w.value = fresh.width;
+      if (fresh.height !== h.peek()) h.value = fresh.height;
+      for (const p of list) {
+        const cls = partClass(p.name);
+        const r = fresh.rects.get(cls);
+        const sig = aabbWriters.get(cls);
+        if (r && sig) {
+          const cur = sig.peek();
+          if (r.x !== cur.x || r.y !== cur.y || r.w !== cur.w || r.h !== cur.h)
+            sig.value = r;
+        }
+        p.bind(wrapper.querySelector(`.${cls}`), highlightColor);
+      }
+    };
+
+    mountInto(initialMathml, measured);
+
+    // Reactive re-render: when any signal-content changes, recompile,
+    // re-render, remount. Effect's first run only subscribes (no
+    // remount work); subsequent runs do the work.
+    let firstRun = true;
+    this.effect(() => {
+      for (const m of markers) void m.content.value; // track
+      if (firstRun) {
+        firstRun = false;
+        return;
+      }
+      const next = compileTemplate(strings, values);
+      mountInto(renderToMathML(next.source));
+    });
 
     // Refresh bounds after webfonts have settled. The synchronous
     // measurement above runs before `New CM Math` (loaded from a CDN
     // via @font-face) is necessarily ready, so it can fall back to
-    // browser-default math metrics — which differ from the live
-    // render's metrics once the real font arrives. The analytical
-    // `morph` reads `Part.aabb` directly (no live BCR), so a stale
-    // measurement shows up as a position pop on first morph. One
-    // re-measure on `document.fonts.ready` closes this race; the
-    // signal write is a no-op if metrics happen to match.
+    // browser-default math metrics. The analytical `morph` reads
+    // `Part.aabb` directly (no live BCR), so a stale measurement
+    // shows up as a position pop on first morph. One re-measure on
+    // `document.fonts.ready` closes this race.
     const fonts = (document as { fonts?: FontFaceSet }).fonts;
     if (fonts?.ready) {
       void fonts.ready.then(() => {
-        const fresh = measureMathML(mathml, fontSize, fontFamily);
+        const cur = compileTemplate(strings, values);
+        const fresh = measureMathML(
+          renderToMathML(cur.source),
+          fontSize,
+          fontFamily,
+        );
         if (fresh.width !== w.peek()) w.value = fresh.width;
         if (fresh.height !== h.peek()) h.value = fresh.height;
-        for (const { className, sig } of aabbWriters) {
-          const r = fresh.rects.get(className);
+        for (const [cls, sig] of aabbWriters) {
+          const r = fresh.rects.get(cls);
           if (!r) continue;
-          const cur = sig.peek();
-          if (
-            r.x !== cur.x ||
-            r.y !== cur.y ||
-            r.w !== cur.w ||
-            r.h !== cur.h
-          ) {
+          const c = sig.peek();
+          if (r.x !== c.x || r.y !== c.y || r.w !== c.w || r.h !== c.h)
             sig.value = r;
-          }
         }
       });
     }
+
+    // Tear down per-Part disposers when the host shape is disposed.
+    this.track(() => {
+      for (const p of list) p.dispose();
+    });
   }
 
   /** Sugar: `eq.highlight("a")` → `eq.parts.a.highlighted.value = true`. */
-  highlight(name: string, on = true): void {
-    const p = this._byName[name];
+  highlight(name: Names, on = true): void {
+    const p = (this.parts as Record<string, Part>)[name];
     if (p) p.highlighted.value = on;
   }
 }
+
+/** Combine a positional array and named record into a single
+ *  `PartList<Names>`. `Object.assign` keeps the array's iteration
+ *  protocol intact while attaching named properties. */
+const buildPartList = <Names extends string>(
+  list: readonly Part[],
+): PartList<Names> => {
+  const out = list.slice() as Part[] & Record<string, Part>;
+  for (const p of list) (out as Record<string, Part>)[p.name] = p;
+  return out as unknown as PartList<Names>;
+};
 
 const isTemplateStrings = (v: unknown): v is TemplateStringsArray =>
   Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, "raw");
 
 /** `tex\`…\`` — render a LaTeX formula via Temml.
  *
- *  Use `${part(name, content)}` interpolations to mark addressable
- *  sub-formulas. Plain string interpolations splice through verbatim.
- *  Position with `eq.translate.value = ...`.
+ *  Use `${part(name, content)}` or markers from `parts({...})` in
+ *  template holes to mark addressable sub-formulas. Plain strings
+ *  splice through verbatim. Position with `eq.translate.value = ...`.
+ *
+ *  Backslashes in the template work as authors expect: `tex\`\frac{a}{b}\``
+ *  renders a fraction. (Internally we read `strings.raw` so JS's
+ *  control-character escapes — `\f`, `\t`, etc. — don't eat your
+ *  LaTeX commands.) Interpolated values are normal JS strings, so
+ *  `parts({ a: "x_{\\min}" })` keeps the usual JS-string `\\` for
+ *  one literal backslash.
  *
  *      tex`x_{\min} < x_{\max}`
- *      tex`${part("a", "x_{\min}")} < ${part("b", "x_{\max}")}`
+ *      const { a, b } = parts({ a: "x_{\\min}", b: "x_{\\max}" });
+ *      tex`${a} < ${b}`                       // TexShape<"a" | "b">
  *      tex({ size: 18 })`E = mc^2`
  */
-export function tex(
+export function tex<V extends readonly TexInterp[]>(
   strings: TemplateStringsArray,
-  ...values: TexInterp[]
-): TexShape;
+  ...values: V
+): TexShape<NamesOf<V>>;
 export function tex(
   opts: TexOpts,
-): (strings: TemplateStringsArray, ...values: TexInterp[]) => TexShape;
-export function tex(
-  ...args: unknown[]
-):
-  | TexShape
-  | ((strings: TemplateStringsArray, ...values: TexInterp[]) => TexShape) {
+): <V extends readonly TexInterp[]>(
+  strings: TemplateStringsArray,
+  ...values: V
+) => TexShape<NamesOf<V>>;
+export function tex(...args: unknown[]): unknown {
   if (isTemplateStrings(args[0])) {
     const [strings, ...values] = args as [
       TemplateStringsArray,

@@ -7,8 +7,21 @@
 // from that aabb; motion combinators (`write`, `writeParts`, `morph`)
 // compose over the existing motion stdlib.
 
-export { TexShape, tex, type TexInterp, type TexOpts } from "./tex";
-export { Part, PartMarker, part, type PartList } from "./parts";
+export {
+  TexShape,
+  tex,
+  type TexInterp,
+  type TexOpts,
+  type NamesOf,
+} from "./tex";
+export {
+  Part,
+  PartMarker,
+  part,
+  parts,
+  type PartContent,
+  type PartList,
+} from "./parts";
 export {
   brace,
   box,
@@ -24,4 +37,8 @@ export {
   unwriteParts,
   morph,
   substitute,
+  pluck,
+  unpluck,
+  swap,
+  Plucked,
 } from "./motion";
