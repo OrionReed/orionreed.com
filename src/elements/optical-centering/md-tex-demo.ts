@@ -60,8 +60,8 @@ export class MdTexDemo extends Diagram {
 
     const eqs = [eq1, eq2, eq3];
 
-    // note: translate is a Point not a Bounds, so centering is hand-math.
-    // A placement API on Shape (or a `centerAt(point)` sugar) would close this.
+    // TODO(stage-2): once anchors are writable, this collapses to
+    //   `eq.center.bind(view.center)` per eq.
     const c = view.center.value;
     for (const eq of eqs) {
       eq.translate.value = {

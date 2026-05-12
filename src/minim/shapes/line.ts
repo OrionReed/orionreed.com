@@ -53,8 +53,9 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
   #angle?: ReadonlySignal<number>;
   #length?: ReadonlySignal<number>;
 
-  /** Position at fraction `t` (0=from, 1=to). */
-  at(t: Arg<number>): Pointlike {
+  /** Position at fraction `t` (0=from, 1=to). Symmetric with
+   *  `Path.pointAt`. */
+  pointAt(t: Arg<number>): Pointlike {
     if (typeof t === "number") {
       if (t === 0) return this.from;
       if (t === 1) return this.to;

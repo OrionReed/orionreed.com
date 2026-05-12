@@ -1,4 +1,4 @@
-// Scene graph: `Shape` + spatial primitives (Point, Bounds, AABB) +
+// Scene graph: `Shape` + spatial primitives (Point, Box, AABB) +
 // matrix math + the `Scene` callable. `../shapes/` is built on this.
 
 export {
@@ -21,13 +21,14 @@ export {
 } from "./aggregates";
 
 export {
-  Bounds,
   aabb,
   aabbEdgeFrom,
   expandAABB,
+  makeBox,
   unionAABB,
   type AABB,
-} from "./bounds";
+  type Box,
+} from "./box";
 
 export {
   Shape,
@@ -37,8 +38,8 @@ export {
   type AnimatableKey,
   type Writable,
   type Segment,
-  boundsInRoot,
-  boundsIn,
+  aabbInRoot,
+  aabbIn,
 } from "./shape";
 
 export { draggable } from "./interaction";

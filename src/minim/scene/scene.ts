@@ -1,7 +1,7 @@
 // Callable scene handle: `s(shape)` mounts under root; `s.view(...)`
 // or `s.fit(...)` sets the SVG viewBox.
 
-import { Bounds, aabb, type AABB } from "./bounds";
+import { aabb, makeBox, type AABB, type Box } from "./box";
 import { effect, signal } from "../core/signal";
 import { toSig, type Arg } from "../core/arg";
 import type { AnyShape } from "./shape";
@@ -30,10 +30,12 @@ export interface Scene {
   readonly root: AnyShape;
 
   /** Set viewBox to `(0, 0, w, h)` (reactive in any input). First call
-   *  wins; returns a Bounds representing the viewBox for layout use. */
-  view(w: Arg<number>, h: Arg<number>): Bounds;
+   *  wins; returns a Box representing the viewBox for layout use.
+   *  If you ever need a non-zero origin, add a 4-arg overload — none
+   *  of the current diagrams do. */
+  view(w: Arg<number>, h: Arg<number>): Box;
   /** Auto-fit viewBox to root bounds + optional padding. */
-  fit(padding?: Padding): Bounds;
+  fit(padding?: Padding): Box;
 
   /** True until `view()` or `fit()` is called — `Diagram` auto-fits
    *  when `scene()` doesn't set a view explicitly. */
@@ -47,7 +49,7 @@ export function makeScene(
 ): Scene {
   let viewSet = false;
   const viewSig = signal<AABB>(aabb(0, 0, 0, 0));
-  const viewBounds = new Bounds(viewSig);
+  const viewBox = makeBox(viewSig);
 
   const fn = ((...shapes: AnyShape[]) => {
     for (const shape of shapes) root.add(shape);
@@ -74,18 +76,18 @@ export function makeScene(
   Object.defineProperty(fn, "_viewPending", { get: () => !viewSet });
 
   fn.view = (w, h) => {
-    if (viewSet) return viewBounds;
+    if (viewSet) return viewBox;
     const ws = toSig(w);
     const hs = toSig(h);
     effect(() => setViewBox(0, 0, ws.value, hs.value));
     viewSet = true;
-    return viewBounds;
+    return viewBox;
   };
 
   fn.fit = (padding) => {
-    if (viewSet) return viewBounds;
+    if (viewSet) return viewBox;
     const p = resolvePadding(padding);
-    const b = root.bounds.value;
+    const b = root.aabb.value;
     setViewBox(
       b.x - p.left,
       b.y - p.top,
@@ -93,7 +95,7 @@ export function makeScene(
       b.h + p.top + p.bottom,
     );
     viewSet = true;
-    return viewBounds;
+    return viewBox;
   };
 
   return fn;

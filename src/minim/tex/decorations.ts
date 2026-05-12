@@ -1,5 +1,5 @@
 // Derived shapes that decorate a tex Part. Each one re-derives from
-// `part.bounds` so the decoration tracks its target through any
+// `part.aabb` so the decoration tracks its target through any
 // re-measurement or animation.
 //
 // Mount as a child of the parent TexShape if you want the decoration
@@ -10,7 +10,7 @@
 
 import { computed, type ReadonlySignal } from "../core/signal";
 import { Shape } from "../scene/shape";
-import { aabb, type AABB } from "../scene/bounds";
+import { aabb, type AABB } from "../scene/box";
 import { tokens } from "../shapes/tokens";
 import type { Part } from "./parts";
 
@@ -31,9 +31,9 @@ const applyStroke = (s: Shape, opts: DecorationOpts) => {
   s.attr("fill", "none");
 };
 
-/** A `<rect>` whose x/y/w/h and bounds all derive from the same
- *  layout signal — single source of truth, one re-render per change. */
-function rectFromBounds(layout: ReadonlySignal<AABB>): Shape {
+/** A `<rect>` whose x/y/w/h and AABB all derive from the same layout
+ *  signal — single source of truth, one re-render per change. */
+function rectFromAABB(layout: ReadonlySignal<AABB>): Shape {
   const s = new Shape("rect", () => layout.value);
   s.attr("x", () => layout.value.x);
   s.attr("y", () => layout.value.y);
@@ -49,9 +49,9 @@ interface LineEnds {
   y2: number;
 }
 
-/** A `<line>` whose endpoints (and bounds) derive from the same
- *  layout signal. */
-function lineFromBounds(layout: ReadonlySignal<LineEnds>): Shape {
+/** A `<line>` whose endpoints (and AABB) derive from the same layout
+ *  signal. */
+function lineFromEnds(layout: ReadonlySignal<LineEnds>): Shape {
   const s = new Shape("line", () => {
     const e = layout.value;
     const x = Math.min(e.x1, e.x2);
@@ -65,7 +65,7 @@ function lineFromBounds(layout: ReadonlySignal<LineEnds>): Shape {
   return s;
 }
 
-/** Curly brace below (or above) a part. Reactive on `part.bounds`. */
+/** Curly brace below (or above) a part. Reactive on `part.aabb`. */
 export function brace(
   part: Part,
   opts: DecorationOpts & {
@@ -80,7 +80,7 @@ export function brace(
   const gap = opts.gap ?? tokens.decoration.braceGap;
 
   const d = computed(() => {
-    const b = part.bounds.value;
+    const b = part.aabb.value;
     const x0 = b.x;
     const x1 = b.x + b.w;
     const baseY = placement === "below" ? b.y + b.h + gap : b.y - gap;
@@ -101,7 +101,7 @@ export function brace(
   });
 
   const s = new Shape("path", () => {
-    const b = part.bounds.value;
+    const b = part.aabb.value;
     const baseY = placement === "below" ? b.y + b.h + gap : b.y - gap;
     const tip = baseY + (placement === "below" ? height : -height);
     return aabb(b.x, Math.min(baseY, tip), b.w, Math.abs(tip - baseY));
@@ -121,10 +121,10 @@ export function box(
   const gap = opts.gap ?? tokens.decoration.gap;
   const corner = opts.corner ?? tokens.corner;
   const layout = computed(() => {
-    const b = part.bounds.value;
+    const b = part.aabb.value;
     return aabb(b.x - gap, b.y - gap, b.w + 2 * gap, b.h + 2 * gap);
   });
-  const s = rectFromBounds(layout);
+  const s = rectFromAABB(layout);
   s.attr("rx", corner);
   s.attr("ry", corner);
   applyStroke(s, opts);
@@ -135,11 +135,11 @@ export function box(
 export function underline(part: Part, opts: DecorationOpts = {}): Shape {
   const gap = opts.gap ?? tokens.decoration.gap;
   const layout = computed(() => {
-    const b = part.bounds.value;
+    const b = part.aabb.value;
     const y = b.y + b.h + gap;
     return { x1: b.x, y1: y, x2: b.x + b.w, y2: y };
   });
-  const s = lineFromBounds(layout);
+  const s = lineFromEnds(layout);
   s.attr("stroke-linecap", "round");
   applyStroke(s, opts);
   return s;
@@ -150,7 +150,7 @@ export function underline(part: Part, opts: DecorationOpts = {}): Shape {
 export function cross(part: Part, opts: DecorationOpts = {}): Shape {
   const gap = opts.gap ?? tokens.decoration.crossGap;
   const layout = computed(() => {
-    const b = part.bounds.value;
+    const b = part.aabb.value;
     return {
       x1: b.x - gap,
       y1: b.y + b.h + gap,
@@ -158,7 +158,7 @@ export function cross(part: Part, opts: DecorationOpts = {}): Shape {
       y2: b.y - gap,
     };
   });
-  const s = lineFromBounds(layout);
+  const s = lineFromEnds(layout);
   s.attr("stroke-linecap", "round");
   applyStroke(s, opts);
   return s;

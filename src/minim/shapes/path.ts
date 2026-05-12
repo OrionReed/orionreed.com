@@ -104,15 +104,18 @@ function sampler(pts: Signal<readonly Pointlike[]>) {
  *   path(start, opts?).to(p2).to(p3)   — fluent (preferred)
  *   new Path([p1, p2, p3], opts?)      — explicit array
  *
- *  Extension methods (`to`/`up`/`down`/`left`/`right`/`offset`/`along`)
- *  mutate in place and return `this`. The `d` attribute and all
- *  sampling methods react to point changes automatically. */
+ *  Extension methods (`to`/`u`/`d`/`l`/`r`/`offset`/`along`) mutate in
+ *  place and return `this`. The `d` attribute and all sampling methods
+ *  react to point changes automatically. */
 export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   private readonly _points: Signal<readonly Pointlike[]>;
   readonly closed: boolean;
 
   readonly length: ReadonlySignal<number>;
-  readonly at: (t: Arg<number>) => DerivedPoint;
+  /** Sample the path at parameter `t ∈ [0, 1]`. Named to avoid
+   *  shadowing the Box `at(u, v)` anchor — same `t` symmetry as
+   *  `tangentAt` / `normalAt` / `angleAt`. */
+  readonly pointAt: (t: Arg<number>) => DerivedPoint;
   readonly atDistance: (d: Arg<number>) => DerivedPoint;
   readonly tangentAt: (t: Arg<number>) => DerivedPoint;
   readonly normalAt: (t: Arg<number>) => DerivedPoint;
@@ -143,7 +146,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
       },
       opts,
       {
-        // First vertex — matches `path.at(0)`. Override via `origin`
+        // First vertex — matches `path.pointAt(0)`. Override via `origin`
         // for a different pivot.
         origin: () => {
           const ps = points.value;
@@ -157,7 +160,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
 
     const s = sampler(points);
     this.length = s.length;
-    this.at = s.at;
+    this.pointAt = s.at;
     this.atDistance = s.atDistance;
     this.tangentAt = s.tangentAt;
     this.normalAt = s.normalAt;
@@ -198,16 +201,20 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   to(p: Pointlike): this {
     return this.extend(p);
   }
-  up(n: Arg<number>) {
+  /** Step `n` up from the last vertex. */
+  u(n: Arg<number>) {
     return this.extend(this.last.up(n));
   }
-  down(n: Arg<number>) {
+  /** Step `n` down from the last vertex. */
+  d(n: Arg<number>) {
     return this.extend(this.last.down(n));
   }
-  left(n: Arg<number>) {
+  /** Step `n` left from the last vertex. */
+  l(n: Arg<number>) {
     return this.extend(this.last.left(n));
   }
-  right(n: Arg<number>) {
+  /** Step `n` right from the last vertex. */
+  r(n: Arg<number>) {
     return this.extend(this.last.right(n));
   }
   offset(dx: Arg<number>, dy: Arg<number>) {
@@ -238,7 +245,8 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   }
 }
 
-/** Start a fluent path at `start`. Chain `.to(p)`/`.up(n)`/etc. and
+/** Start a fluent path at `start`. Chain `.to(p)` / `.u(n)` / `.d(n)`
+ *  / `.l(n)` / `.r(n)` / `.offset(dx, dy)` / `.along(angle, dist)` and
  *  pass to `s(...)` to render. */
 export const path = <const O extends PathOpts>(
   start: Pointlike,

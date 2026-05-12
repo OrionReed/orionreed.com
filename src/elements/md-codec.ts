@@ -7,6 +7,7 @@ import {
   line,
   path,
   rect,
+  split,
   t,
   type Signal,
 } from "../minim";
@@ -60,10 +61,7 @@ export class MdCodec extends Diagram {
     const charWidth = LABEL_SIZE * CHAR_FACTOR;
 
     const row = s(rect(0, 0, TOTAL_W, CELL_H));
-    const slots = row.bounds.split(
-      "x",
-      parts.map((p) => p.unitSize),
-    );
+    const slots = split(row, "x", parts.map((p) => p.unitSize));
 
     // Dividers between adjacent slots — dashed when the two parts share
     // a group (visual grouping), solid otherwise.
@@ -71,7 +69,7 @@ export class MdCodec extends Diagram {
       if (i === parts.length - 1) return;
       const next = parts[i + 1];
       const sameGroup = part.group !== undefined && part.group === next.group;
-      s(line(slots[i].tr, slots[i].br, { thin: true, dashed: sameGroup }));
+      s(line(slots[i].at(1, 0), slots[i].at(1, 1), { thin: true, dashed: sameGroup }));
     });
 
     // Labels: inside the slot when they fit, otherwise on a leader path
@@ -87,11 +85,11 @@ export class MdCodec extends Diagram {
       }
 
       const leader = path(slot.top, { thin: true })
-        .up(VERT_H)
+        .u(VERT_H)
         .along(LEADER_ANGLE, DIAG_D);
       s(leader);
       s(
-        label(leader.at(1), t(part.label).bold(), {
+        label(leader.pointAt(1), t(part.label).bold(), {
           size: LABEL_SIZE,
           align: Anchor.Left,
           rotate: leader.angleAt(1),

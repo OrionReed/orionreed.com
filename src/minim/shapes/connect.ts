@@ -17,8 +17,8 @@ export function connect(
   b: Shape | Pointlike,
   opts?: LineOpts,
 ): Line {
-  const aP = a instanceof Shape ? a.boundary(b instanceof Shape ? b.bounds.center : b) : a;
-  const bP = b instanceof Shape ? b.boundary(a instanceof Shape ? a.bounds.center : a) : b;
+  const aP = a instanceof Shape ? a.boundary(b instanceof Shape ? b.center : b) : a;
+  const bP = b instanceof Shape ? b.boundary(a instanceof Shape ? a.center : a) : b;
   return new Line(aP, bP, opts);
 }
 
@@ -36,9 +36,9 @@ export function arrow(
   opts: ArrowOpts = {},
 ): Line {
   const aBase =
-    a instanceof Shape ? a.boundary(b instanceof Shape ? b.bounds.center : b) : a;
+    a instanceof Shape ? a.boundary(b instanceof Shape ? b.center : b) : a;
   const bBase =
-    b instanceof Shape ? b.boundary(a instanceof Shape ? a.bounds.center : a) : b;
+    b instanceof Shape ? b.boundary(a instanceof Shape ? a.center : a) : b;
 
   const gapSig = toSig(opts.gap ?? ARROW_GAP_DEFAULT);
   const dir = bBase.sub(aBase).normalize();

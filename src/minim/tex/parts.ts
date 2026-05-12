@@ -1,6 +1,6 @@
 // Lightweight observable handles into a tex-rendered formula.
 //
-// A `Part` is *not* a Shape — it's a `bounds` signal plus a
+// A `Part` is *not* a Shape — it's an `aabb` signal plus a
 // `highlighted` toggle, sharing the parent TexShape's single
 // `<foreignObject>` rendering. This keeps per-glyph cost out of the
 // scene graph: marking N named parts allocates N small objects, not
@@ -11,13 +11,12 @@
 // so we can re-find the rendered MathML node and measure its bbox.
 
 import { signal, type Signal, type ReadonlySignal } from "../core/signal";
-import type { AABB } from "../scene/bounds";
+import type { AABB } from "../scene/box";
 
-/** A named, addressable region of a TexShape. `bounds` is in the
- *  parent TexShape's local frame; `highlighted` and `opacity` are
- *  wired by the parent TexShape to the live MathML element so authors
- *  can drive per-part visuals reactively without reaching for the
- *  DOM. */
+/** A named, addressable region of a TexShape. `aabb` is in the parent
+ *  TexShape's local frame; `highlighted` and `opacity` are wired by
+ *  the parent TexShape to the live MathML element so authors can drive
+ *  per-part visuals reactively without reaching for the DOM. */
 export class Part {
   /** Toggle to flash the default highlight visual (a translucent
    *  background tint). Authors can also drive their own visuals off
@@ -35,7 +34,7 @@ export class Part {
      *  `part(name, content)` interpolation. Lets `morph` render a
      *  free-standing ghost without re-parsing the parent template. */
     readonly content: string,
-    readonly bounds: ReadonlySignal<AABB>,
+    readonly aabb: ReadonlySignal<AABB>,
     /** @internal — live MathML element inside the foreignObject.
      *  Used by `morph`, `writeParts`, and the highlight effect.
      *  `null` when the renderer couldn't locate the rendered node. */

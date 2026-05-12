@@ -36,7 +36,7 @@ export class MdWaapiDemo extends Diagram {
 
     const bar = (y: number, name: string, p: ReadonlySignal<number>): void => {
       s(
-        label(view.tl.right(20).down(y + 4), name, {
+        label(view.at(0, 0).right(20).down(y + 4), name, {
           size: 11,
           align: Anchor.Left,
           opacity: 0.6,
@@ -50,7 +50,7 @@ export class MdWaapiDemo extends Diagram {
           { fill: true },
         ),
         label(
-          view.tr.left(20).down(y + 4),
+          view.at(1, 0).left(20).down(y + 4),
           p.derive((v) => v.toFixed(2)),
           {
             size: 11,

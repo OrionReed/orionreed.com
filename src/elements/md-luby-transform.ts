@@ -6,6 +6,7 @@ import {
   computed,
   connect,
   forEach,
+  grid,
   group,
   label,
   line,
@@ -45,7 +46,7 @@ export class MdLubyTransform extends Diagram {
     const sources = forEach(sourcesLayer, indices, (i) => {
       const r = rect(() => i * stride.value, 24, SIZE, SIZE);
       const lbl = label(
-        r.bounds.center,
+        r.center,
         t("S").bold().sub(t(String(i + 1)).italic()),
         { size: 16 },
       );
@@ -56,7 +57,7 @@ export class MdLubyTransform extends Diagram {
     // right edge via `sources.at(N - 1)`, so it tracks N reactively.
     s(label(
       pt(
-        () => (sources.at(N.value - 1)?.bounds.right.x.value ?? 0) + 14,
+        () => (sources.at(N.value - 1)?.right.x.value ?? 0) + 14,
         24 + SIZE / 2,
       ),
       t("..."),
@@ -68,14 +69,14 @@ export class MdLubyTransform extends Diagram {
     const qr = s(rect(view.center.down(60), SIZE, SIZE));
 
     s(
-      line(xor.bounds.left, xor.bounds.right),
-      line(xor.bounds.top, xor.bounds.bottom),
+      line(xor.left, xor.right),
+      line(xor.top, xor.bottom),
       connect(xor, qr, { thin: true }),
     );
 
     const cellsLayer = s(group());
     cellsLayer.attr("clip-path", clipPath(s, qr), "wrapper");
-    qr.bounds.grid(QR_GRID, QR_GRID).flat().forEach((cellB, i) =>
+    grid(qr, QR_GRID, QR_GRID).flat().forEach((cellB, i) =>
       cellsLayer.add(rect(cellB, {
         fill: true,
         corner: 0,
@@ -90,7 +91,7 @@ export class MdLubyTransform extends Diagram {
     forEach(connectionsLayer, indices, (i) => {
       const src = sources.at(i);
       if (!src) return [];
-      return connect(src.bounds.bottom, xor, {
+      return connect(src.bottom, xor, {
         thin: true,
         opacity: when(() => edges.value[i]),
       });

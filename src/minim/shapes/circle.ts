@@ -15,7 +15,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   readonly radius: NumSig;
 
   constructor(
-    readonly center: Pointlike,
+    center: Pointlike,
     radius: Arg<number>,
     opts: O = {} as O,
   ) {
@@ -28,6 +28,10 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
       { origin: () => center.value },
     );
     this.radius = r;
+    // Note: the inherited Box `this.center` (a DerivedPoint computed
+    // from the AABB) resolves to the same point as `center` reactively;
+    // internal methods read it via `this.center` rather than capturing
+    // the constructor parameter.
     wireStroke(this, opts, true, () => {
       this.attr("cx", center.x);
       this.attr("cy", center.y);
@@ -36,7 +40,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   }
 
   /** Point on perimeter at angle θ (radians, y-down). */
-  at(angle: Arg<number>): DerivedPoint {
+  atAngle(angle: Arg<number>): DerivedPoint {
     const a = toSig(angle);
     return new DerivedPoint(() => ({
       x: this.center.x.value + this.radius.value * Math.cos(a.value),

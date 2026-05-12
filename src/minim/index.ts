@@ -1,6 +1,6 @@
 // minim — generator-driven SVG diagrams with reactive primitives.
 //   core/   — signals, Anim, suspensions, composers, drive, timeline, …
-//   scene/  — Shape, Point, Bounds, aggregates, …
+//   scene/  — Shape, Point, Box (AABB), aggregates, …
 //   shapes/ — visuals + layout + list (space stdlib)
 //   motion/ — easings, transitions, integrators (time stdlib)
 //   assert/ — trace (spans/tree/tag) + claim (assertions)
@@ -44,15 +44,15 @@ export {
   meanNum,
 } from "./scene/aggregates";
 
-export { Bounds, type AABB } from "./scene/bounds";
+export { makeBox, aabb, type AABB, type Box } from "./scene/box";
 
 export {
   Shape,
   type ShapeOpts,
   type AnyShape,
   type Writable,
-  boundsInRoot,
-  boundsIn,
+  aabbInRoot,
+  aabbIn,
 } from "./scene/shape";
 
 export { draggable } from "./scene/interaction";
@@ -144,6 +144,9 @@ export {
   Text,
   t,
   arrange,
+  expand,
+  grid,
+  split,
   forEach,
   type CommonOpts,
   type LineOpts,

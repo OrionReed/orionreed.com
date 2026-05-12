@@ -7,7 +7,8 @@
 // `multiply(A, B)` is `A·B` — B applies first, matching SVG's
 // `transform="A B C"` order.
 
-import { aabb, type AABB, type Vec } from "./bounds";
+import { aabb, type AABB } from "./box";
+import type { Vec } from "../core/vec";
 
 export interface Matrix2D {
   a: number;

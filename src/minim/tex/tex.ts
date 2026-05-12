@@ -14,7 +14,7 @@
 import temml from "temml";
 import { signal, type ReadonlySignal } from "../core/signal";
 import { Shape, type ShapeOpts } from "../scene/shape";
-import { aabb, type AABB } from "../scene/bounds";
+import { aabb, type AABB } from "../scene/box";
 import { tokens } from "../shapes/tokens";
 import { Part, PartMarker, type PartList } from "./parts";
 
@@ -113,18 +113,33 @@ const styleMathRoot = (
 };
 
 /** Force a part's `<msup>` (and friends) to lay out the same regardless
- *  of ambient context. `<msqrt>` and other constructs cascade
- *  `math-shift: compact` (TeX's "cramped" style), which shifts
- *  superscripts by `superscriptShiftUpCramped` instead of
- *  `superscriptShiftUp` — typically 1–3px in New CM Math. Resetting
- *  to `normal` on the part's mrow makes a matched fragment render
- *  with the *same* glyph offsets in eq1's top-level position and
- *  eq2's `<msqrt>` interior, so morph is pixel-perfect at both
- *  endpoints. The visual cost is that radical interiors are a hair
- *  less tucked; in body-text math at our default size it's
- *  imperceptible. */
+ *  of ambient context — only the overall *size* should change with
+ *  scriptlevel, never the internal proportions. There are two
+ *  context-dependent properties we have to neutralize:
+ *
+ *   • `math-shift`: `<msqrt>` and other constructs cascade
+ *     `math-shift: compact` (TeX's "cramped" style), which shifts
+ *     superscripts by `superscriptShiftUpCramped` instead of
+ *     `superscriptShiftUp` — typically 1–3px in New CM Math.
+ *
+ *   • `math-style`:  `<mfrac>` cascades `math-style: compact` to
+ *     its children, which uses tighter script-spacing constants from
+ *     the OpenType MATH table (smaller superscript elevation,
+ *     smaller fraction-bar gaps, etc.). Without this, `a^2` inside
+ *     a fraction has its exponent sitting markedly closer to the
+ *     base than `a^2` at top-level — so when morph rides it from
+ *     top-level into a fraction, the matched mrow's *aspect ratio*
+ *     changes (width and height scale by different amounts), which
+ *     reads as a vertical "stretch" at hand-off.
+ *
+ *  Setting both to `normal` makes the matched fragment render with
+ *  the same internal proportions in every ambient context, so all
+ *  that's left for `morph` to bridge is a single uniform scale
+ *  factor. Both properties are inherited, so they propagate to the
+ *  mrow's descendants (`<msup>`, `<mfrac>` etc.) automatically. */
 const stabilizePart = (el: HTMLElement): void => {
   el.style.setProperty("math-shift", "normal");
+  el.style.setProperty("math-style", "normal");
   el.style.borderRadius = `${tokens.tex.highlightCorner}px`;
   el.style.transition = `background-color ${tokens.tex.highlightDurationMs}ms ease-out`;
 };

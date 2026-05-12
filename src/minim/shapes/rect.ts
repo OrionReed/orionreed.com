@@ -1,11 +1,11 @@
 import { computed, toSig, type Arg, type NumSig } from "../core";
 import {
   Shape,
-  Bounds,
   DerivedPoint,
   Point,
   aabb,
   isPoint,
+  type Box,
   type Pointlike,
   type Segment,
 } from "../scene";
@@ -64,7 +64,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
 
   override boundary(toward: Pointlike): DerivedPoint {
     return new DerivedPoint(() => {
-      const b = this.bounds.value;
+      const b = this.aabb.value;
       const sc = this.scale.value;
       const t = toward.value;
       const cx = b.x + b.w / 2;
@@ -98,7 +98,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
 
   /** 4 sides + 4 corner quarter-arcs (or just sides when `corner === 0`). */
   override segments(): Segment[] {
-    const b = this.bounds.value;
+    const b = this.aabb.value;
     const r = Math.min(this.corner.value, b.w / 2, b.h / 2);
     const x = b.x;
     const y = b.y;
@@ -126,14 +126,26 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   }
 }
 
+/** Detect a `Box`-shaped value structurally (anything with `aabb` and
+ *  `at`). Used by the `rect(box, opts?)` overload — Shape, view, and
+ *  split/grid results all qualify. */
+function isBox(v: unknown): v is Box {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    "aabb" in v &&
+    typeof (v as { at?: unknown }).at === "function"
+  );
+}
+
 /** Rect factory:
  *
  *   rect(x, y, w, h, opts?)             — corner-based (canonical)
- *   rect(b: Bounds, opts?)              — from another shape's bounds
+ *   rect(box: Box, opts?)               — fill another Box (Shape, view, split…)
  *   rect(center: Point, w, h, opts?)    — centered on a Point
  *   rect(p1: Point, p2: Point, opts?)   — between two corner Points
  */
-export function rect<const O extends RectOpts>(b: Bounds, opts?: O): Rect<O>;
+export function rect<const O extends RectOpts>(b: Box, opts?: O): Rect<O>;
 export function rect<const O extends RectOpts>(
   p1: Pointlike,
   p2: Pointlike,
@@ -153,18 +165,24 @@ export function rect<const O extends RectOpts>(
   opts?: O,
 ): Rect<O>;
 export function rect(
-  a: Arg<number> | Bounds | Pointlike,
+  a: Arg<number> | Box | Pointlike,
   b?: Arg<number> | Pointlike | RectOpts,
   c?: Arg<number>,
   d?: Arg<number> | RectOpts,
   e?: RectOpts,
 ): Rect {
-  if (a instanceof Bounds) {
+  if (isBox(a)) {
     return new Rect(a.x, a.y, a.w, a.h, b as RectOpts | undefined);
   }
   if (isPoint(a) && isPoint(b)) {
-    const bb = Bounds.between(a, b);
-    return new Rect(bb.x, bb.y, bb.w, bb.h, c as RectOpts | undefined);
+    // Bounding rect of two points (any orientation).
+    return new Rect(
+      computed(() => Math.min(a.x.value, b.x.value)),
+      computed(() => Math.min(a.y.value, b.y.value)),
+      computed(() => Math.abs(b.x.value - a.x.value)),
+      computed(() => Math.abs(b.y.value - a.y.value)),
+      c as RectOpts | undefined,
+    );
   }
   if (isPoint(a)) {
     const w = b as Arg<number>;

@@ -6,7 +6,14 @@ import {
   type ReadonlySignal,
 } from "../core/signal";
 import { toSig, type Arg, type ResolveSig } from "../core/arg";
-import { Bounds, aabb, aabbEdgeFrom, unionAABB, type AABB } from "./bounds";
+import {
+  aabb,
+  aabbEdgeFrom,
+  makeBox,
+  unionAABB,
+  type AABB,
+  type Box,
+} from "./box";
 import type { Vec } from "../core/vec";
 import {
   compose,
@@ -97,7 +104,7 @@ export type Writable<K extends AnimatableKey> = {
  *  `computed` field becomes readonly (writes are compile errors),
  *  Signal/value stays writable. Plain `Shape` is writable everywhere;
  *  for the mixed case see `Writable<K>`. */
-export class Shape<O extends ShapeOpts = ShapeOpts> {
+export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
   readonly el: SVGGElement;
   readonly intrinsic?: SVGElement;
 
@@ -106,11 +113,25 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly scale: ResolveVec<Lookup<O, "scale">>;
   readonly origin: ResolveVec<Lookup<O, "origin">>;
   readonly opacity: ResolveSig<Lookup<O, "opacity">, number>;
-  /** Local-frame AABB; lazy. For groups, the union of non-aside
-   *  children's bounds (each composed through its transform). */
-  readonly bounds: Bounds;
+
+  // ── Box interface (local-frame geometry) ────────────────────────────
+  /** Local-frame AABB Signal; source-of-truth for the Box fields below.
+   *  For groups, the union of non-aside children's AABBs (each composed
+   *  through its transform). */
+  readonly aabb!: ReadonlySignal<AABB>;
+  readonly x!: ReadonlySignal<number>;
+  readonly y!: ReadonlySignal<number>;
+  readonly w!: ReadonlySignal<number>;
+  readonly h!: ReadonlySignal<number>;
+  readonly center!: DerivedPoint;
+  readonly top!: DerivedPoint;
+  readonly bottom!: DerivedPoint;
+  readonly left!: DerivedPoint;
+  readonly right!: DerivedPoint;
+  at!: (u: number, v: number) => DerivedPoint;
+
   /** Composed `translate × pivoted-rotate × pivoted-scale`. Decoupled
-   *  from `bounds` so transforms don't trigger bounds evaluation. */
+   *  from `aabb` so transforms don't trigger AABB recomputation. */
   readonly transform: ReadonlySignal<Matrix2D>;
   readonly aside: boolean;
 
@@ -126,7 +147,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
   constructor(
     intrinsicType?: string,
-    boundsFn?: () => AABB,
+    aabbFn?: () => AABB,
     opts: O = {} as O,
     /** Subclass per-prop defaults (kept off `O` so the field types
      *  stay driven by user input only). */
@@ -166,17 +187,18 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     ) as CastNum<"opacity">;
     this.aside = opts.aside ?? defaults.aside ?? false;
 
-    this.bounds = new Bounds(
-      computed(
-        boundsFn ??
-          (() => {
-            const bs = this._children.value
-              .filter((c) => !c.aside)
-              .map((c) => transformAABB(c.transform.value, c.bounds.value));
-            return bs.length ? unionAABB(...bs) : aabb(0, 0, 0, 0);
-          }),
-      ),
+    // Group default: union of non-aside children's AABBs, each composed
+    // through its transform. Lazy — `this._children` is read on access.
+    const aabbSig = computed(
+      aabbFn ??
+        (() => {
+          const cs = this._children.value
+            .filter((c) => !c.aside)
+            .map((c) => transformAABB(c.transform.value, c.aabb.value));
+          return cs.length ? unionAABB(...cs) : aabb(0, 0, 0, 0);
+        }),
     );
+    Object.assign(this as Box, makeBox(aabbSig));
 
     this.transform = computed(() => {
       const t = this.translate.value;
@@ -202,14 +224,14 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
    *  math; tighter shapes (Circle, Rect) override. */
   boundary(toward: Pointlike): DerivedPoint {
     return new DerivedPoint(() =>
-      aabbEdgeFrom(this.bounds.value, toward.value),
+      aabbEdgeFrom(this.aabb.value, toward.value),
     );
   }
 
   /** Stroke segments — used by the dashed renderer. Default is the
    *  bounding rect. */
   segments(): Segment[] {
-    const b = this.bounds.value;
+    const b = this.aabb.value;
     const tl = pt(b.x, b.y);
     const tr = pt(b.x + b.w, b.y);
     const br = pt(b.x + b.w, b.y + b.h);
@@ -336,7 +358,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 // ── Cross-frame helpers ─────────────────────────────────────────────
 
 /** `shape`'s AABB in the scene-root frame. */
-export function boundsInRoot(shape: AnyShape): ReadonlySignal<AABB> {
+export function aabbInRoot(shape: AnyShape): ReadonlySignal<AABB> {
   return computed(() => {
     let m = shape.transform.value;
     let p = shape.parent;
@@ -344,12 +366,12 @@ export function boundsInRoot(shape: AnyShape): ReadonlySignal<AABB> {
       m = multiply(p.transform.value, m);
       p = p.parent;
     }
-    return transformAABB(m, shape.bounds.value);
+    return transformAABB(m, shape.aabb.value);
   });
 }
 
 /** `shape`'s AABB in `observer`'s local frame. */
-export function boundsIn(
+export function aabbIn(
   shape: AnyShape,
   observer: AnyShape,
 ): ReadonlySignal<AABB> {
@@ -363,6 +385,6 @@ export function boundsIn(
       mObs = multiply(p.transform.value, mObs);
     }
     // shape-local → observer-local = inv(observer→root) ⋅ shape→root
-    return transformAABB(multiply(invert(mObs), mShape), shape.bounds.value);
+    return transformAABB(multiply(invert(mObs), mShape), shape.aabb.value);
   });
 }

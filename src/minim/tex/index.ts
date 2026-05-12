@@ -2,10 +2,10 @@
 //
 // One `tex\`…\`` template is one Shape (a foreignObject hosting
 // browser-rendered MathML). Sub-formulas are addressable via
-// `${part(name, content)}` interpolations: lightweight handles with
-// reactive `bounds` and a `highlighted` toggle. Decorations re-derive
-// from those bounds; motion combinators (`write`, `writeParts`,
-// `morph`) compose over the existing motion stdlib.
+// `${part(name, content)}` interpolations: lightweight handles with a
+// reactive `aabb` and a `highlighted` toggle. Decorations re-derive
+// from that aabb; motion combinators (`write`, `writeParts`, `morph`)
+// compose over the existing motion stdlib.
 
 export { TexShape, tex, type TexInterp, type TexOpts } from "./tex";
 export { Part, PartMarker, part, type PartList } from "./parts";

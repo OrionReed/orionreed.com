@@ -6,7 +6,6 @@ import { effect, signal, type Signal } from "../core/signal";
 import { stagger } from "../motion/choreographers";
 import { easeInOut, easeOut } from "../motion/easings";
 import type { Animator, Easing } from "../core";
-import { transformPoint } from "../scene/matrix";
 import type { Part } from "./parts";
 import type { TexShape } from "./tex";
 
@@ -112,8 +111,14 @@ export function* unwriteParts(
 // ── Morph (matched by name) ────────────────────────────────────────
 
 interface MorphTransit {
-  /** Transit foreignObject holding a clone of source's wrapper, with
-   *  only the matched mrow visible. */
+  /** SVG `<g>` wrapping the transit. We use a CSS transform on the
+   *  `<g>` (matching Shape's own pattern) rather than an SVG-attribute
+   *  transform on the inner `<foreignObject>` — different transform
+   *  paths can rasterize the same fractional position to slightly
+   *  different pixels, and the source/dest TexShapes both use the CSS
+   *  transform path (`shape.el.style.transform`), so we want the
+   *  rider on the same path. */
+  g: SVGGElement;
   fo: SVGForeignObjectElement;
   pPart: Part;
   qPart: Part;
@@ -121,17 +126,29 @@ interface MorphTransit {
    *  not just blindly bump back to 1. */
   prevP: number;
   prevQ: number;
-  /** Translate (in parent-frame user units) that places the cloned
-   *  matched mrow at sourcePos. The wrapper's matched-mrow offset
-   *  equals `p.bounds.tl` analytically (the clone is a deep copy of
-   *  the same wrapper), so no DOM measurement is needed. */
-  baseX: number;
-  baseY: number;
-  /** Trajectory in parent-frame user units. */
-  dx: number;
-  dy: number;
-  offX: Signal<number>;
-  offY: Signal<number>;
+  /** Source / dest matched-mrow rendered positions, both in the
+   *  parent's local frame (BCR + inverse CTM). */
+  sPos: { x: number; y: number };
+  dPos: { x: number; y: number };
+  /** Where the cloned matched mrow renders inside the transit when
+   *  the transit's transform is identity — used to anchor scale
+   *  around the part rather than around the transit's origin. */
+  naturalPos: { x: number; y: number };
+  /** dest / source size ratios, X and Y measured independently. ≠ 1
+   *  when the part changes scriptlevel between source and dest (e.g.
+   *  top-level → inside `<mfrac>` numerator), since MathML scales
+   *  content inside fractions/scripts via the OpenType MATH table.
+   *  After `stabilizePart` (`math-shift: normal; math-style: normal`)
+   *  the rendered aspect ratio is context-independent, so in theory
+   *  `rx ≈ ry`. We still measure both axes and apply non-uniform
+   *  scale as a safety net: any residual anisotropy from line-box
+   *  leading, sub-pixel rasterization, or font hinting at different
+   *  sizes is absorbed into the rider rather than showing up as a
+   *  hand-off jump. */
+  rx: number;
+  ry: number;
+  /** Single progress signal driving translate and scale together. */
+  progress: Signal<number>;
 }
 
 /** Walk up to the nearest `<math>` and return its parent (the wrapper
@@ -147,14 +164,17 @@ function findMathWrapper(matchedEl: HTMLElement): HTMLElement | null {
   return wrapper instanceof HTMLElement ? wrapper : null;
 }
 
-/** Build a transit foreignObject containing a deep clone of `wrapper`
- *  with only the descendant carrying `matchedClass` rendered. */
+/** Build a transit (`<g>` + `<foreignObject>`) containing a deep clone
+ *  of `wrapper` with only the descendant carrying `matchedClass`
+ *  rendered. The outer `<g>` is what the morph translates via CSS
+ *  transform (matching Shape's own transform path for byte-identical
+ *  rasterization). */
 function buildTransit(
   wrapper: HTMLElement,
   matchedClass: string,
   width: number,
   height: number,
-): SVGForeignObjectElement | null {
+): { g: SVGGElement; fo: SVGForeignObjectElement } | null {
   const wrapperClone = wrapper.cloneNode(true) as HTMLElement;
   const matchedClone = wrapperClone.querySelector(
     `.${matchedClass}`,
@@ -180,30 +200,49 @@ function buildTransit(
   fo.style.overflow = "visible";
   fo.style.pointerEvents = "none";
   fo.appendChild(wrapperClone);
-  return fo;
+
+  const g = document.createElementNS(SVG_NS, "g") as SVGGElement;
+  g.style.transformOrigin = "0 0";
+  g.appendChild(fo);
+  return { g, fo };
 }
 
 /** Animate from `from` to `to`, matching parts by name.
  *
- *  Strategy ("single source-context rider"):
+ *  Strategy ("single source-context rider, empirically anchored"):
  *    1. Each matched part's mrow is stabilized at construction time
- *       (`math-shift: normal` in tex.ts), so it renders with the same
- *       glyph offsets in *any* ambient context — top-level, inside an
- *       `<msqrt>`, inside an `<mfrac>` denominator, etc.
+ *       (`math-shift: normal; math-style: normal` in tex.ts), so its
+ *       *internal* layout — script elevation, bar gaps, etc. — is
+ *       context-independent. Only its overall *size* changes with
+ *       scriptlevel (top-level vs inside `<msqrt>` vs inside an
+ *       `<mfrac>` numerator).
  *    2. For each match we clone the source's `<math>` wrapper into a
- *       transit `<foreignObject>` and use CSS visibility to render
- *       only the matched mrow. Because the clone is a deep copy of
- *       the source tree, the matched mrow's offset within the wrapper
- *       equals `p.bounds.tl` analytically — no DOM measurement.
- *    3. The transit translates from sourcePos to destPos in the
- *       parent's local frame. The originals (`p.el`, `q.el`) hold
- *       their slots at `opacity: 0` (preserving source/dest layout
- *       so the surrounding glyphs don't reflow), and `from.opacity` /
- *       `to.opacity` cross-fade the structural background.
- *    4. At t=0 the rider matches `p.el` byte-for-byte (it *is* a clone
- *       of the same tree); at t=1 it matches `q.el` byte-for-byte
- *       because the stabilization removed the only context-dependent
- *       layout knob. Both handoffs are pixel-perfect; no ghosting.
+ *       transit and use CSS visibility to render only the matched
+ *       mrow. The transit's outer `<g>` carries a CSS transform —
+ *       same path Shape uses, so rasterization snaps to pixels the
+ *       same way as `from.el` and `to.el`.
+ *    3. We measure the source's matched mrow, the dest's matched
+ *       mrow, AND the freshly-mounted clone's matched mrow with
+ *       `getBoundingClientRect`, then translate everything into the
+ *       parent's local frame via `getScreenCTM().inverse()`. Empirical
+ *       measurement avoids analytical assumptions about line-box
+ *       baselines, foreignObject content offsets, etc., which can
+ *       differ from theory and have been the source of stubborn
+ *       few-pixel pops.
+ *    4. The rider's CSS transform is `translate(...) scale(sx, sy)`
+ *       driven by a single `progress` signal. `sx` tweens 1 → rx,
+ *       `sy` tweens 1 → ry where `rx = destW/srcW`, `ry = destH/srcH`,
+ *       so a part moving between contexts at different scriptlevels
+ *       (e.g. top-level → inside `<mfrac>` numerator) smoothly
+ *       resizes with its slide instead of popping size at the
+ *       hand-off. With (1) in place `rx ≈ ry`, but measuring both
+ *       axes independently absorbs any residual anisotropy from
+ *       line-box leading or font hinting at different sizes. Scale
+ *       is anchored at the matched mrow's local TL — see the effect
+ *       below.
+ *    5. At t=0 the rider lands exactly on `p.el`'s rendered position;
+ *       at t=1 it lands exactly on `q.el`'s. Combined with the
+ *       stabilization (1), the handoffs are pixel-perfect.
  *
  *  Parts whose content *differs* (e.g. `c^2` ↔ `c`) aren't ridden —
  *  they cross-fade with their parent shapes at their natural source
@@ -231,12 +270,25 @@ export function* morph(
     return;
   }
 
-  // Compose source/dest positions in the parent's local frame
-  // analytically — `Part.bounds` is in each TexShape's local frame,
-  // and `Shape.transform` lifts that into the parent frame. No
-  // `getBoundingClientRect` needed; we read pure signal state.
-  const fromMat = from.transform.value;
-  const toMat = to.transform.value;
+  // Force a layout flush — opacity:0 on parts/shapes preserves layout,
+  // but if either shape was just mounted there's no guarantee its
+  // tree has been laid out yet. A `getBoundingClientRect` does it.
+  to.el.getBoundingClientRect();
+  from.el.getBoundingClientRect();
+
+  const sgEl = parent.el as unknown as SVGGraphicsElement;
+  const ctm = sgEl.getScreenCTM?.();
+  if (!ctm) {
+    yield fallback();
+    return;
+  }
+  const inv = ctm.inverse();
+  /** Convert a viewport-space rect's top-left into the parent's
+   *  local-frame user units. */
+  const screenToParent = (r: DOMRect): { x: number; y: number } => ({
+    x: r.left * inv.a + r.top * inv.c + inv.e,
+    y: r.left * inv.b + r.top * inv.d + inv.f,
+  });
 
   interface Plan {
     pPart: Part;
@@ -245,11 +297,15 @@ export function* morph(
     qEl: HTMLElement;
     sPos: { x: number; y: number };
     dPos: { x: number; y: number };
-    pBoundsTL: { x: number; y: number };
-    width: number;
-    height: number;
+    /** dest size / source size, X and Y independently. Both rects
+     *  came from `getBoundingClientRect`, which already includes any
+     *  ancestor CSS scale, so the ratios are unitless. */
+    rx: number;
+    ry: number;
   }
 
+  // Pass 1 — measure source/dest matched-mrow screen positions before
+  // any mutation. Empirical, no math-TL assumptions.
   const plans: Plan[] = [];
   for (const p of from.parts) {
     const q = (to.parts as Record<string, Part>)[p.name];
@@ -257,48 +313,57 @@ export function* morph(
     if (p.content !== q.content) continue;
     if (!p.el || !q.el) continue;
 
-    const pb = p.bounds.value;
-    const qb = q.bounds.value;
-    if (pb.w === 0 || qb.w === 0) continue;
+    const sRect = p.el.getBoundingClientRect();
+    const dRect = q.el.getBoundingClientRect();
+    if (sRect.width === 0 || dRect.width === 0) continue;
+    if (sRect.height === 0 || dRect.height === 0) continue;
 
     plans.push({
       pPart: p,
       qPart: q,
       pEl: p.el,
       qEl: q.el,
-      sPos: transformPoint(fromMat, { x: pb.x, y: pb.y }),
-      dPos: transformPoint(toMat, { x: qb.x, y: qb.y }),
-      pBoundsTL: { x: pb.x, y: pb.y },
-      width: pb.w,
-      height: pb.h,
+      sPos: screenToParent(sRect),
+      dPos: screenToParent(dRect),
+      rx: dRect.width / sRect.width,
+      ry: dRect.height / sRect.height,
     });
   }
 
   const transits: MorphTransit[] = [];
   const stops: Array<() => void> = [];
 
+  // Size the transit foreignObject to comfortably contain the *full*
+  // source wrapper — the clone holds the entire eq tree (just
+  // visibility-hidden except for the matched mrow), so it needs the
+  // eq's natural width/height plus headroom to avoid the wrapper
+  // reflowing inside a too-narrow foreignObject.
+  const transitW = Math.max(from.width.value, to.width.value) + 32;
+  const transitH = Math.max(from.height.value, to.height.value) + 16;
+
   for (const pl of plans) {
     const wrapper = findMathWrapper(pl.pEl);
     if (!wrapper) continue;
     const matchedClass = `minim-part-${pl.pPart.name}`;
-    // Generous transit canvas so the surrounding (invisible) glyphs
-    // have room to lay out without clipping the visible mrow.
-    const fo = buildTransit(
-      wrapper,
-      matchedClass,
-      Math.max(pl.width * 8 + 16, 64),
-      Math.max(pl.height * 4 + 8, 32),
-    );
-    if (!fo) continue;
+    const built = buildTransit(wrapper, matchedClass, transitW, transitH);
+    if (!built) continue;
 
-    // Place the foreignObject so its content's matched-mrow lands at
-    // sourcePos. Matched-mrow offset within the wrapper equals
-    // `p.bounds.tl` (the wrapper is a deep clone of the same DOM
-    // tree); foreignObject TL = sourcePos − boundsTL.
-    const baseX = pl.sPos.x - pl.pBoundsTL.x;
-    const baseY = pl.sPos.y - pl.pBoundsTL.y;
-    fo.setAttribute("transform", `translate(${baseX} ${baseY})`);
-    parent.el.appendChild(fo);
+    // Mount the transit at identity, measure where the cloned
+    // matched mrow actually rendered, then drive translate + scale
+    // off a single progress signal so the part smoothly slides AND
+    // resizes through context changes (top-level → fraction
+    // numerator, etc.).
+    built.g.style.transform = "translate(0px, 0px) scale(1)";
+    parent.el.appendChild(built.g);
+
+    const cloneMatched = built.fo.querySelector(
+      `.${matchedClass}`,
+    ) as HTMLElement | null;
+    if (!cloneMatched) {
+      built.g.remove();
+      continue;
+    }
+    const naturalPos = screenToParent(cloneMatched.getBoundingClientRect());
 
     const prevP = pl.pPart.opacity.peek();
     const prevQ = pl.qPart.opacity.peek();
@@ -306,26 +371,36 @@ export function* morph(
     pl.qPart.opacity.value = 0;
 
     const transit: MorphTransit = {
-      fo,
+      g: built.g,
+      fo: built.fo,
       pPart: pl.pPart,
       qPart: pl.qPart,
       prevP,
       prevQ,
-      baseX,
-      baseY,
-      dx: pl.dPos.x - pl.sPos.x,
-      dy: pl.dPos.y - pl.sPos.y,
-      offX: signal(0) as Signal<number>,
-      offY: signal(0) as Signal<number>,
+      sPos: pl.sPos,
+      dPos: pl.dPos,
+      naturalPos,
+      rx: pl.rx,
+      ry: pl.ry,
+      progress: signal(0) as Signal<number>,
     };
     transits.push(transit);
 
     stops.push(
       effect(() => {
-        transit.fo.setAttribute(
-          "transform",
-          `translate(${transit.baseX + transit.offX.value} ${transit.baseY + transit.offY.value})`,
-        );
+        // Anchor scale around the matched mrow's local TL so the
+        // part stays glued to its trajectory while it resizes.
+        // Per axis:
+        //   matchedMrow_screen.x = tx + sx · naturalPos.x = curX
+        //   ⇒ tx = curX − sx · naturalPos.x   (same for y).
+        const p = transit.progress.value;
+        const sx = 1 + p * (transit.rx - 1);
+        const sy = 1 + p * (transit.ry - 1);
+        const cx = transit.sPos.x + p * (transit.dPos.x - transit.sPos.x);
+        const cy = transit.sPos.y + p * (transit.dPos.y - transit.sPos.y);
+        const tx = cx - sx * transit.naturalPos.x;
+        const ty = cy - sy * transit.naturalPos.y;
+        transit.g.style.transform = `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
       }),
     );
   }
@@ -334,17 +409,14 @@ export function* morph(
     yield [
       from.opacity.to(0, dt, ease),
       to.opacity.to(1, dt, ease),
-      ...transits.flatMap((t) => [
-        t.offX.to(t.dx, dt, ease),
-        t.offY.to(t.dy, dt, ease),
-      ]),
+      ...transits.map((t) => t.progress.to(1, dt, ease)),
     ];
   } finally {
     for (const s of stops) s();
     for (const t of transits) {
       t.pPart.opacity.value = t.prevP;
       t.qPart.opacity.value = t.prevQ;
-      t.fo.remove();
+      t.g.remove();
     }
     from.opacity.value = 0;
     to.opacity.value = 1;

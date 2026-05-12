@@ -9,6 +9,7 @@ import {
   rect,
   signal,
   snapshot,
+  split,
   t,
   when,
   type Signal,
@@ -60,8 +61,8 @@ export class MdQrtpHandshake extends Diagram {
     const buildRow = (device: "A" | "B", y: number) =>
       Array.from({ length: N }, (_, i) => {
         const r = s(rect(i * PITCH + PAD_X, y + PAD_Y, CHUNK_W, CHUNK_H));
-        const [data, ack] = r.bounds.split("x", [3, 2]);
-        s(line(data.tr, data.br, { thin: true }));
+        const [data, ack] = split(r, "x", [3, 2]);
+        s(line(data.at(1, 0), data.at(1, 1), { thin: true }));
 
         // Dashed outline around the "current" chunk only — concentric
         // outline keeps the corner radius matching the inner rect.

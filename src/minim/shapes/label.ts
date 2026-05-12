@@ -16,8 +16,13 @@ const yAttr = (y: number) =>
   y <= 0.25 ? "hanging" : y >= 0.75 ? "alphabetic" : "central";
 
 export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
+  /** The user-supplied anchor point — the position the label is
+   *  attached to (subject to `align`). Distinct from the inherited
+   *  Box `center` / `at(u, v)` which describe the bounding box. */
+  readonly anchor: Pointlike;
+
   constructor(
-    readonly at: Pointlike,
+    anchor: Pointlike,
     content: Arg<Content>,
     opts: O = {} as O,
   ) {
@@ -30,14 +35,15 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
         const text = flattenText(contentSig.value);
         const fs = sizeSig.value;
         const w = fs * Math.max(1, text.length) * tokens.charWidth;
-        return aabb(at.x.value - a.x * w, at.y.value - a.y * fs, w, fs);
+        return aabb(anchor.x.value - a.x * w, anchor.y.value - a.y * fs, w, fs);
       },
       opts,
-      // Pivot rotations on `at`, not the bbox center.
-      { origin: () => at.value },
+      // Pivot rotations on the anchor, not the bbox center.
+      { origin: () => anchor.value },
     );
-    this.attr("x", at.x);
-    this.attr("y", at.y);
+    this.anchor = anchor;
+    this.attr("x", anchor.x);
+    this.attr("y", anchor.y);
     this.attr("font-family", tokens.font);
     this.attr("font-size", sizeSig);
     this.attr("fill", tokens.stroke);

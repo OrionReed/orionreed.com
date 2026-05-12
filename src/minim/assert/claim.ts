@@ -35,7 +35,7 @@ import {
 import { race } from "../core/suspensions";
 import type { Animator } from "../core/anim";
 import type { Vec } from "../core/vec";
-import { Bounds, type AABB } from "../scene/bounds";
+import { type AABB, type Box } from "../scene/box";
 import { circle } from "../shapes/circle";
 import { pt, type Pointlike } from "../scene/point";
 
@@ -380,16 +380,14 @@ export class Predicates<T> {
 
   // ── Point / Vec ────────────────────────────────────────────────────
 
-  /** Predicate that the point lies inside `bounds`. Accepts a
-   *  `Bounds` or a `ReadonlySignal<AABB>`. */
+  /** Predicate that the point lies inside `region`. Accepts a `Box`
+   *  (Shape, view, split result…) or a `ReadonlySignal<AABB>`. */
   inside(
     this: Predicates<Vec>,
-    bounds: Bounds | ReadonlySignal<AABB>,
+    region: Box | ReadonlySignal<AABB>,
   ): Claim {
     const aabbSig: ReadonlySignal<AABB> =
-      bounds instanceof Bounds
-        ? computed(() => bounds.value)
-        : bounds;
+      "aabb" in region ? region.aabb : region;
     return this.build(
       computed(() => {
         const v = this.sig.value;

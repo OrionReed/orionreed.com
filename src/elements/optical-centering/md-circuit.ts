@@ -85,7 +85,7 @@ export class MdCircuit extends Diagram {
       const r = rect(pt(x, y), w, h);
       s(
         r,
-        label(r.bounds.center.offset(0, lblY), lbl, { size: 10, opacity: 0.7 }),
+        label(r.center.offset(0, lblY), lbl, { size: 10, opacity: 0.7 }),
       );
       return r;
     };
@@ -110,15 +110,15 @@ export class MdCircuit extends Diagram {
     //   3. P_B symmetric to target
     //   4. path: src → P_A → P_B → tgt
     //
-    // Refs default to each shape's bounds.center; pass an explicit
-    // Point (e.g. `AND.bounds.left`) to anchor a specific edge.
+    // Refs default to each shape's `center`; pass an explicit Point
+    // (e.g. `AND.left`) to anchor a specific edge.
     const wire = (
       a: AnyShape,
       b: AnyShape,
       opts: { from?: Pointlike; to?: Pointlike } = {},
     ) => {
-      const aRef = opts.from ?? a.bounds.center;
-      const bRef = opts.to ?? b.bounds.center;
+      const aRef = opts.from ?? a.center;
+      const bRef = opts.to ?? b.center;
       const aRefV = aRef.value;
       const bRefV = bRef.value;
       let w: Path;
@@ -186,8 +186,8 @@ export class MdCircuit extends Diagram {
       const a = signal(0);
       const b = signal(0);
       gate.add(
-        lit(gate.bounds.center.offset(-14, 14), () => a.value > 0),
-        lit(gate.bounds.center.offset(+14, 14), () => b.value > 0),
+        lit(gate.center.offset(-14, 14), () => a.value > 0),
+        lit(gate.center.offset(+14, 14), () => b.value > 0),
       );
 
       const settle = () => {
@@ -215,7 +215,7 @@ export class MdCircuit extends Diagram {
       gate: AnyShape,
     ) => {
       const holding = signal(false);
-      gate.add(lit(gate.bounds.center.down(6), holding));
+      gate.add(lit(gate.center.down(6), holding));
       anim.loop(function* () {
         yield bus.until(from);
         holding.value = true;
@@ -256,15 +256,15 @@ export class MdCircuit extends Diagram {
     // ── Wires ───────────────────────────────────────────────────────
     // Anchor AND inputs to AND.left and CHOICE outputs to CHOICE.right
     // so the 45° staircase lands cleanly on a shared edge.
-    const wA = wire(A, AND, { to: AND.bounds.left });
-    const wB = wire(B, AND, { to: AND.bounds.left });
+    const wA = wire(A, AND, { to: AND.left });
+    const wB = wire(B, AND, { to: AND.left });
     const wAD = wire(AND, DELAY);
     const wDS = wire(DELAY, SPLIT);
     const wSX = wire(SPLIT, X);
     const wSY = wire(SPLIT, Y);
     const wCC = wire(C, CHOICE);
-    const wCZ = wire(CHOICE, Z, { from: CHOICE.bounds.right });
-    const wCW = wire(CHOICE, W_, { from: CHOICE.bounds.right });
+    const wCZ = wire(CHOICE, Z, { from: CHOICE.right });
+    const wCW = wire(CHOICE, W_, { from: CHOICE.right });
 
     // ── Behavior ────────────────────────────────────────────────────
     ticker("fire:A", 1.4, 2.6);
