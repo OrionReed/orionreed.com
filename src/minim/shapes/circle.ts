@@ -72,10 +72,13 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
     });
   }
 
-  /** Two half-arcs so each span stays ≤ π (keeps `largeArc` unambiguous). */
+  /** Two half-arcs so each span stays ≤ π (keeps `largeArc` unambiguous).
+   *  Rendered inside the shape's own `<g transform>` so coords are in
+   *  local frame — derived from the AABB rather than `this.center`
+   *  (which is now parent-frame). */
   override segments(): Segment[] {
-    const cx = () => this.center.x.value;
-    const cy = () => this.center.y.value;
+    const cx = () => this.aabb.value.x + this.aabb.value.w / 2;
+    const cy = () => this.aabb.value.y + this.aabb.value.h / 2;
     const r = () => this.radius.value;
     return [
       { type: "arc", cx, cy, r, a0: () => 0, a1: () => Math.PI },

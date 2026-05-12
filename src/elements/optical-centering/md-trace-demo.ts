@@ -73,8 +73,7 @@ const t = tagAll({ fadeIn, fadeUp, fadeOut, fadeUpOut, spinIn, zoomOut });
 
 export class MdTraceDemo extends Diagram {
   protected scene(s: Scene): void {
-    const H = ROWS_Y + MAX_LANES * (ROW_H + ROW_GAP) + 24;
-    s.view(W, H);
+    const view = s.view(W, ROWS_Y + MAX_LANES * (ROW_H + ROW_GAP) + 24);
 
     // ── Top: three circles the demo animates ───────────────────────
     const cy = TOP_H / 2;
@@ -133,8 +132,6 @@ export class MdTraceDemo extends Diagram {
         bold: true,
         align: Anchor.Left,
       }),
-    );
-    s(
       label(
         pt(W - PAD, HEADER_Y),
         computed(() => {
@@ -190,11 +187,9 @@ export class MdTraceDemo extends Diagram {
           : span.parentId === undefined
             ? `#${span.id} root`
             : `#${span.id} ← #${span.parentId}`;
-        const tagShape = label(
-          pt(x, y).offset(5, ROW_H / 2),
-          labelText,
-          { size: 9, align: Anchor.Left, opacity: 0.9 },
-        );
+        const tagShape = label(bar.left.right(5), labelText, {
+          size: 9, align: Anchor.Left, opacity: 0.9,
+        });
         return [bar, tagShape];
       },
       { key: (span) => span },
@@ -203,7 +198,7 @@ export class MdTraceDemo extends Diagram {
     // ── Footer ─────────────────────────────────────────────────────
     s(
       label(
-        pt(W / 2, H - 10),
+        view.bottom.up(10),
         "lanes stack one yield-array's siblings · sequential batches share lanes · nesting goes deeper",
         { size: 9, align: Anchor.Center, opacity: 0.5 },
       ),

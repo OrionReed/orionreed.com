@@ -28,8 +28,7 @@ const MAX_DUR = 2.5;
 export class MdTimelineEditor extends Diagram {
   protected scene(s: Scene): void {
     const W = 600;
-    const H = 320;
-    s.view(W, H);
+    const view = s.view(W, 320);
 
     // ── Editable timeline ──────────────────────────────────────────
     const tl = timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));
@@ -48,7 +47,7 @@ export class MdTimelineEditor extends Diagram {
     // ── Header ─────────────────────────────────────────────────────
     s(
       label(
-        pt(W / 2, 24),
+        view.top.down(24),
         computed(() => `phase: ${phaseName.value}   ·   taps: ${taps.value}`),
         { size: 14, opacity: 0.75 },
       ),
@@ -63,7 +62,7 @@ export class MdTimelineEditor extends Diagram {
 
     PHASES.forEach((name, i) => {
       const c = tl[name];
-      s(
+      const body = s(
         rect(
           c.at.derive((a) => STRIP_X + a * scale.value),
           STRIP_Y,
@@ -74,12 +73,7 @@ export class MdTimelineEditor extends Diagram {
       );
       s(
         label(
-          pt(
-            computed(
-              () => STRIP_X + (c.at.value + c.dur.value / 2) * scale.value,
-            ),
-            STRIP_Y + 18,
-          ),
+          body.center,
           computed(() => `${name} ${c.dur.value.toFixed(2)}s`),
           { size: 11, opacity: 0.95 },
         ),
@@ -134,11 +128,11 @@ export class MdTimelineEditor extends Diagram {
       c.on("click", () => bus.emit("ping"));
       return c;
     });
-    actors.forEach((c) => s(c));
+    s(...actors);
 
     s(
       label(
-        pt(W / 2, H - 16),
+        view.bottom.up(16),
         "drag the knobs to retime · click any circle to ping",
         { size: 11, opacity: 0.5, align: Anchor.Center },
       ),

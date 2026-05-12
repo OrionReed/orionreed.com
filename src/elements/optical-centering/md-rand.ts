@@ -128,15 +128,15 @@ export class MdRand extends Diagram {
     );
 
     // ── Stage ────────────────────────────────────────────────────────
+    const subject = s(
+      circle(pt(STAGE_X, STAGE_Y), 22, { fill: currentColor }),
+    );
     s(
-      label(pt(STAGE_X, STAGE_Y - 60), currentName, {
+      label(subject.center.up(60), currentName, {
         size: 18,
         bold: true,
         align: Anchor.Center,
       }),
-    );
-    const subject = s(
-      circle(pt(STAGE_X, STAGE_Y), 22, { fill: currentColor }),
     );
     // Each iteration starts from a clean pose — moves are free to
     // mutate translate/rotate/scale/opacity.

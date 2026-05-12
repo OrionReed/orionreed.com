@@ -31,7 +31,7 @@ const SHAPES = [
 
 export class MdAggregates extends Diagram {
   protected scene(s: Scene): void {
-    s.view(W, H);
+    const view = s.view(W, H);
 
     const shapes = SHAPES.map((p) =>
       s(
@@ -49,12 +49,17 @@ export class MdAggregates extends Diagram {
 
     s(
       label(
-        pt(W / 2, 30),
+        view.top.down(30),
         r.derive(
           (rad) =>
             `mean rotation: ${((rad * 180) / Math.PI).toFixed(0)}°    mean scale: ${k.peek().x.toFixed(2)}`,
         ),
         { size: 11, align: Anchor.Center, opacity: 0.7 },
+      ),
+      label(
+        view.bottom.up(14),
+        "centroid + meanRotation + meanScale composed in parallel; targets randomized each cycle",
+        { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );
 
@@ -74,13 +79,5 @@ export class MdAggregates extends Diagram {
       ];
       yield 0.3;
     });
-
-    s(
-      label(
-        pt(W / 2, H - 14),
-        "centroid + meanRotation + meanScale composed in parallel; targets randomized each cycle",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
-      ),
-    );
   }
 }

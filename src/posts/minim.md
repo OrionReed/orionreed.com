@@ -29,13 +29,13 @@ A small library for generator-driven animated SVG diagrams with reactive primiti
 
 <md-react></md-react>
 
-<md-runtime-tests></md-runtime-tests>
-
 <md-trace-demo></md-trace-demo>
 
 <md-claim-demo></md-claim-demo>
 
 <md-tex-demo></md-tex-demo>
+
+<md-anchors></md-anchors>
 
 <md-waapi-demo></md-waapi-demo>
 
@@ -44,3 +44,5 @@ A small library for generator-driven animated SVG diagrams with reactive primiti
 <md-behaviors></md-behaviors>
 
 <md-choreography></md-choreography>
+
+<md-runtime-tests></md-runtime-tests>

@@ -25,7 +25,7 @@ const N_TRAIL = 14;
 
 export class MdBehaviors extends Diagram {
   protected scene(s: Scene): void {
-    s.view(W, H);
+    const view = s.view(W, H);
 
     // Each head: x drifts wall-to-wall (flipping vel at boundaries
     // via a tiny loop), y oscillates around its lane.
@@ -85,7 +85,7 @@ export class MdBehaviors extends Diagram {
 
     s(
       label(
-        pt(W / 2, H - 12),
+        view.bottom.up(12),
         "head: drift + oscillate. trails: attract (blue, smooth) vs spring (red, elastic)",
         { size: 10, align: Anchor.Center, opacity: 0.55 },
       ),

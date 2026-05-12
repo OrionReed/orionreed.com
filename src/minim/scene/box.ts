@@ -13,7 +13,7 @@
 // For placement (writing through anchors to position a Shape), see the
 // future writable-anchor plan; today, write `shape.translate` directly.
 
-import { DerivedPoint } from "./point";
+import { DerivedPoint, type Pointlike } from "./point";
 import { computed, type ReadonlySignal } from "../core/signal";
 
 export interface AABB {
@@ -63,8 +63,10 @@ export function aabbEdgeFrom(
   return { x: cx + dx * k, y: cy + dy * k };
 }
 
-/** Reactive rectangular region. Read-only — for placement, write
- *  through the owning Shape. */
+/** Reactive rectangular region. Anchor types are `Pointlike` so
+ *  implementations can narrow: views / splits return read-only
+ *  `DerivedPoint`s, while `Shape` returns writable `Point`s (lens-
+ *  backed through `translate`). */
 export interface Box {
   /** Source-of-truth AABB Signal; everything else derives from it. */
   readonly aabb: ReadonlySignal<AABB>;
@@ -74,15 +76,15 @@ export interface Box {
   readonly w: ReadonlySignal<number>;
   readonly h: ReadonlySignal<number>;
 
-  readonly center: DerivedPoint;
-  readonly top: DerivedPoint;
-  readonly bottom: DerivedPoint;
-  readonly left: DerivedPoint;
-  readonly right: DerivedPoint;
+  readonly center: Pointlike;
+  readonly top: Pointlike;
+  readonly bottom: Pointlike;
+  readonly left: Pointlike;
+  readonly right: Pointlike;
 
   /** Reactive Point at normalized fraction `(u, v)`: `(0, 0)` is
    *  top-left, `(1, 1)` is bottom-right. Cardinals are sugar. */
-  at(u: number, v: number): DerivedPoint;
+  at(u: number, v: number): Pointlike;
 }
 
 /** Build a Box from a reactive AABB Signal. The 5 cardinal anchors are

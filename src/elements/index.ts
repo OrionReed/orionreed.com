@@ -25,6 +25,7 @@ import { MdRand } from "./optical-centering/md-rand";
 import { MdClaimDemo } from "./optical-centering/md-claim-demo";
 import { MdTexDemo } from "./optical-centering/md-tex-demo";
 import { MdWaapiDemo } from "./optical-centering/md-waapi-demo";
+import { MdAnchors } from "./optical-centering/md-anchors";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -53,3 +54,4 @@ MdRand.define();
 MdClaimDemo.define();
 MdTexDemo.define();
 MdWaapiDemo.define();
+MdAnchors.define();

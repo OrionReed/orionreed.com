@@ -7,6 +7,7 @@ import {
   Signal,
   Computed,
   computed,
+  effect,
   lens,
   type ReadonlySignal,
 } from "../core/signal";
@@ -55,6 +56,12 @@ declare class Point {
 interface Point extends Signal<Vec>, PointMath {
   readonly x: Signal<number>;
   readonly y: Signal<number>;
+  /** Copy `target.value` into this Point — convenience over
+   *  `this.value = target.value`. Returns `this` for chaining. */
+  set(target: Pointlike): this;
+  /** Continuously mirror `target`. Each `target` change writes through;
+   *  returns a disposer that stops the binding. */
+  bind(target: Pointlike): () => void;
 }
 
 /** Read-only derived Point. The runtime prototype chains through
@@ -244,6 +251,21 @@ const PointMethods: ThisType<Pointlike> & PointMath = {
 Object.assign(Point.prototype, PointMethods);
 Object.assign(DerivedPoint.prototype, PointMethods);
 
+// Writable-only methods — live on Point, not DerivedPoint. Sugar for
+// the writable-anchor pattern (`shape.center.set(view.center)`).
+const PointWritableMethods: ThisType<Point> = {
+  set(target: Pointlike): Point {
+    (this as Point).value = target.value;
+    return this as Point;
+  },
+  bind(target: Pointlike): () => void {
+    return effect(() => {
+      (this as Point).value = target.value;
+    });
+  },
+};
+Object.assign(Point.prototype, PointWritableMethods);
+
 /** Derived Point at radius `r` and angle `θ` (radians, y-down) from `c`. */
 (Point as unknown as {
   polar(c: Pointlike, r: Arg<number>, angle: Arg<number>): DerivedPoint;
@@ -260,6 +282,14 @@ Object.assign(DerivedPoint.prototype, PointMethods);
 };
 
 export { Point, DerivedPoint };
+
+/** Build a writable Point whose value is derived from `read` and whose
+ *  writes go through `write`. Used by `Shape` to back its anchor
+ *  cardinals: `read` returns the post-transform world anchor, `write`
+ *  shifts `translate` so the world anchor lands at the target. */
+export function lensPoint(read: () => Vec, write: (v: Vec) => void): Point {
+  return wrapAsPoint(lens(read, write));
+}
 
 // ── Factories ───────────────────────────────────────────────────────
 

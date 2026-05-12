@@ -20,7 +20,7 @@ export class AnnularSector<
   readonly a1: NumSig;
 
   constructor(
-    readonly center: Pointlike,
+    center: Pointlike,
     rOuter: Arg<number>,
     rInner: Arg<number>,
     a0: Arg<number>,
@@ -76,9 +76,12 @@ export class AnnularSector<
     });
   }
 
+  /** Rendered inside the shape's own `<g transform>` so coords are
+   *  local-frame — derived from the AABB (whose center matches the
+   *  user-supplied center). */
   override segments(): Segment[] {
-    const cx = () => this.center.x.value;
-    const cy = () => this.center.y.value;
+    const cx = () => this.aabb.value.x + this.aabb.value.w / 2;
+    const cy = () => this.aabb.value.y + this.aabb.value.h / 2;
     const ro = () => this.rOuter.value;
     const ri = () => this.rInner.value;
     const a0 = () => this.a0.value;

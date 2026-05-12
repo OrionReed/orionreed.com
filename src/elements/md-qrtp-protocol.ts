@@ -8,7 +8,6 @@ import {
   computed,
   label,
   line,
-  pt,
   signal,
   snapshot,
   when,
@@ -48,8 +47,8 @@ export class MdQrtpProtocol extends Diagram {
     const rIn = rOut * (1 - RING_WIDTH_RATIO);
     const start = -Math.PI / 2;
 
-    s.view(rOut * 2, rOut * 2);
-    const center = pt(rOut, rOut);
+    const view = s.view(rOut * 2, rOut * 2);
+    const center = view.center;
 
     // ── State ───────────────────────────────────────────────────────
     // Plain record of signals — `state.cells.value` etc. for both read
@@ -93,8 +92,10 @@ export class MdQrtpProtocol extends Diagram {
       );
     }
 
-    s(circle(center, rOut, { thin: true }));
-    s(circle(center, rIn, { thin: true }));
+    s(
+      circle(center, rOut, { thin: true }),
+      circle(center, rIn, { thin: true }),
+    );
     for (let i = 0; i < N; i++) {
       const a = start + (i * TAU) / N;
       s(

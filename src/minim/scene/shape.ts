@@ -9,7 +9,6 @@ import { toSig, type Arg, type ResolveSig } from "../core/arg";
 import {
   aabb,
   aabbEdgeFrom,
-  makeBox,
   unionAABB,
   type AABB,
   type Box,
@@ -21,11 +20,13 @@ import {
   multiply,
   toString as matrixToString,
   transformAABB,
+  transformPoint,
   type Matrix2D,
 } from "./matrix";
 import {
   DerivedPoint,
   Point,
+  lensPoint,
   pt,
   toPoint,
   type Pointlike,
@@ -114,21 +115,26 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
   readonly origin: ResolveVec<Lookup<O, "origin">>;
   readonly opacity: ResolveSig<Lookup<O, "opacity">, number>;
 
-  // ── Box interface (local-frame geometry) ────────────────────────────
-  /** Local-frame AABB Signal; source-of-truth for the Box fields below.
-   *  For groups, the union of non-aside children's AABBs (each composed
-   *  through its transform). */
-  readonly aabb!: ReadonlySignal<AABB>;
-  readonly x!: ReadonlySignal<number>;
-  readonly y!: ReadonlySignal<number>;
-  readonly w!: ReadonlySignal<number>;
-  readonly h!: ReadonlySignal<number>;
-  readonly center!: DerivedPoint;
-  readonly top!: DerivedPoint;
-  readonly bottom!: DerivedPoint;
-  readonly left!: DerivedPoint;
-  readonly right!: DerivedPoint;
-  at!: (u: number, v: number) => DerivedPoint;
+  // ── Box interface ────────────────────────────────────────────────────
+  /** Local-frame AABB Signal; source-of-truth for the scalar fields
+   *  below. For groups, the union of non-aside children's AABBs (each
+   *  composed through its transform). */
+  readonly aabb: ReadonlySignal<AABB>;
+  readonly x: ReadonlySignal<number>;
+  readonly y: ReadonlySignal<number>;
+  readonly w: ReadonlySignal<number>;
+  readonly h: ReadonlySignal<number>;
+
+  /** Writable parent-frame anchor: reads return the post-transform
+   *  position (so connectors and labels track translate/rotate/scale);
+   *  writes shift `translate` so the anchor lands at the target. Writes
+   *  fail if `translate` is readonly. */
+  readonly center: Point;
+  readonly top: Point;
+  readonly bottom: Point;
+  readonly left: Point;
+  readonly right: Point;
+  at: (u: number, v: number) => Point;
 
   /** Composed `translate × pivoted-rotate × pivoted-scale`. Decoupled
    *  from `aabb` so transforms don't trigger AABB recomputation. */
@@ -198,7 +204,11 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
           return cs.length ? unionAABB(...cs) : aabb(0, 0, 0, 0);
         }),
     );
-    Object.assign(this as Box, makeBox(aabbSig));
+    this.aabb = aabbSig;
+    this.x = computed(() => aabbSig.value.x);
+    this.y = computed(() => aabbSig.value.y);
+    this.w = computed(() => aabbSig.value.w);
+    this.h = computed(() => aabbSig.value.h);
 
     this.transform = computed(() => {
       const t = this.translate.value;
@@ -210,6 +220,39 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
       return compose(t, r, sc, this.origin.value);
     });
 
+    // Lens-backed writable anchors. Reads project the local AABB anchor
+    // through `transform` (post-transform parent-frame). Writes shift
+    // `translate` by (target - currentWorldAnchor) — exact under any
+    // rotation/scale, since `translate` is purely additive after the
+    // linear part of the compose. Writes assume `translate` is writable;
+    // if a caller passed a `computed` translate, the assignment throws.
+    const makeAnchor = (u: number, v: number): Point =>
+      lensPoint(
+        () => {
+          const b = aabbSig.value;
+          return transformPoint(this.transform.value, {
+            x: b.x + u * b.w,
+            y: b.y + v * b.h,
+          });
+        },
+        (target) => {
+          const b = aabbSig.peek();
+          const local = { x: b.x + u * b.w, y: b.y + v * b.h };
+          const currentWorld = transformPoint(this.transform.peek(), local);
+          const tNow = this.translate.peek();
+          (this.translate as Signal<Vec>).value = {
+            x: tNow.x + (target.x - currentWorld.x),
+            y: tNow.y + (target.y - currentWorld.y),
+          };
+        },
+      );
+    this.at = makeAnchor;
+    this.center = makeAnchor(0.5, 0.5);
+    this.top = makeAnchor(0.5, 0);
+    this.bottom = makeAnchor(0.5, 1);
+    this.left = makeAnchor(0, 0.5);
+    this.right = makeAnchor(1, 0.5);
+
     this.disposers.push(
       effect(() => {
         this.el.style.transform = matrixToString(this.transform.value);
@@ -220,11 +263,16 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
     );
   }
 
-  /** Perimeter point in the direction of `toward`. Default is AABB-edge
-   *  math; tighter shapes (Circle, Rect) override. */
+  /** Perimeter point in the direction of `toward`. In parent-frame, so
+   *  it matches the new anchor reads: connectors land on the visual
+   *  edge after translate/rotate/scale. Default is AABB-edge math;
+   *  tighter shapes (Circle, Rect) override. */
   boundary(toward: Pointlike): DerivedPoint {
     return new DerivedPoint(() =>
-      aabbEdgeFrom(this.aabb.value, toward.value),
+      aabbEdgeFrom(
+        transformAABB(this.transform.value, this.aabb.value),
+        toward.value,
+      ),
     );
   }
 

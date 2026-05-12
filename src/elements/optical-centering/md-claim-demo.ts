@@ -33,11 +33,10 @@ import {
 export class MdClaimDemo extends Diagram {
   protected scene(s: Scene): void {
     const W = 520;
-    const H = 330;
-    s.view(W, H);
+    const view = s.view(W, 330);
 
     // ── The shape under test ─────────────────────────────────────
-    const c = s(circle(pt(W / 2, 56), 24, { fill: true, opacity: 0 }));
+    const c = s(circle(view.top.down(56), 24, { fill: true, opacity: 0 }));
 
     // ── Atomic value claims (one per mood) ───────────────────────
     const bounded     = claim(c.opacity, "α").stays.in([0, 1]);
@@ -84,13 +83,15 @@ export class MdClaimDemo extends Diagram {
     const fullSpec = safety.and(liveness).labelled("intro spec");
 
     // ── Header (aggregate verdict) ───────────────────────────────
-    s(label(pt(20, 22), "claims", {
-      size: 12, bold: true, align: Anchor.Left,
-    }));
-    s(label(pt(W - 34, 22), fullSpec.derive((v) => (v ? "ALL HOLD" : "VIOLATED")), {
-      size: 11, align: Anchor.Right, opacity: 0.85,
-    }));
-    s(verdictDot(fullSpec, { at: pt(W - 18, 22), r: 6 }));
+    s(
+      label(pt(20, 22), "claims", {
+        size: 12, bold: true, align: Anchor.Left,
+      }),
+      label(pt(W - 34, 22), fullSpec.derive((v) => (v ? "ALL HOLD" : "VIOLATED")), {
+        size: 11, align: Anchor.Right, opacity: 0.85,
+      }),
+      verdictDot(fullSpec, { at: pt(W - 18, 22), r: 6 }),
+    );
 
     // ── Claim rows: atomics on top, composites bold below ────────
     const rows = [
@@ -119,7 +120,7 @@ export class MdClaimDemo extends Diagram {
 
     // ── Footer ───────────────────────────────────────────────────
     s(label(
-      pt(W / 2, H - 16),
+      view.bottom.up(16),
       "atomics latch and reset per intro.run(); composites are pure signal algebra over them",
       { size: 10, align: Anchor.Center, opacity: 0.55 },
     ));

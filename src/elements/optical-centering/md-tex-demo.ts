@@ -1,7 +1,22 @@
 // Stage 0–2 of the tex package — `tex\`…\`` template, addressable
-// parts, decorations, highlight, write, writeParts, morph. Cycles
-// through a Pythagorean theorem narrative so each primitive shows
-// up on its own with a captioned label.
+// parts, decorations, highlight, write, writeParts, morph.
+//
+// Cycles through a five-step derivation of `(a + b)² = c² − 2ab`,
+// chosen so the same identity letters traverse every ambient MathML
+// context the morph rider needs to handle:
+//
+//   eq1: top-level mrow                   →  a + b = c
+//   eq2: inside paren-group / msup base   →  (a + b)² = c²
+//   eq3: parts split, `2ab` cross appears →  a² + 2ab + b² = c²
+//   eq4: cross moves across               →  a² + b² = c² − 2ab
+//   eq5: everything enters <mfrac>        →  (a² + b²) / (c² − 2ab) = 1
+//
+// `a`, `b`, `c` carry their identity through every step (content
+// stays just the bare letter, so morph rides them byte-identically
+// even though their *surroundings* change drastically). `cross`
+// (= `2ab`) appears in eq3 and rides through eq4 → eq5; on the
+// eq5 → eq1 morph it has no destination and cross-fades with the
+// rest of eq5.
 
 import {
   Anchor,
@@ -25,18 +40,16 @@ import {
 
 export class MdTexDemo extends Diagram {
   protected scene(s: Scene): void {
-    const view = s.view(560, 240);
+    const view = s.view(640, 280);
+
+    const status = signal<Content>("");
 
     s(
-      label(view.top.down(22), "tex — write, decorate, morph", {
+      label(view.top.down(22), "tex — derivation: (a + b)² and beyond", {
         size: 12,
         opacity: 0.55,
         align: Anchor.Center,
       }),
-    );
-
-    const status = signal<Content>("");
-    s(
       label(view.bottom.up(22), status, {
         size: 11,
         opacity: 0.45,
@@ -44,30 +57,32 @@ export class MdTexDemo extends Diagram {
       }),
     );
 
-    // Pythagorean theorem in three equivalent forms. Each shares
-    // the named parts `a`, `b`, `c`, so morph can carry their
-    // identity across — and the parts traverse three different
-    // ambient MathML contexts (top-level mrow, inside `<msqrt>`,
-    // inside `<mfrac>` numerator/denominator), which is the real
-    // stress test for context-independent rendering.
+    // Persistent identities. `a`, `b`, `c` are bare letters so the
+    // matched mrow contains exactly one glyph in every form — morph
+    // rides them through paren-groups, msup bases, mfrac numerators
+    // and denominators with byte-identical handoffs. `cross` is the
+    // `2ab` term that appears at eq3 and persists through eq5.
+    const a = part("a", "a");
+    const b = part("b", "b");
+    const c = part("c", "c");
+    const cross = part("cross", "2ab");
+
     const tex28 = tex({ size: 28 });
-    const eq1 =
-      s(tex28`${part("a", "a^2")} + ${part("b", "b^2")} = ${part("c", "c^2")}`);
-    const eq2 =
-      s(tex28`${part("c", "c")} = \\sqrt{${part("a", "a^2")} + ${part("b", "b^2")}}`);
-    const eq3 =
-      s(tex28`\\frac{${part("a", "a^2")} + ${part("b", "b^2")}}{${part("c", "c^2")}} = 1`);
+    const eq1 = s(tex28`${a} + ${b} = ${c}`);
+    const eq2 = s(tex28`(${a} + ${b})^2 = ${c}^2`);
+    const eq3 = s(tex28`${a}^2 + ${cross} + ${b}^2 = ${c}^2`);
+    const eq4 = s(tex28`${a}^2 + ${b}^2 = ${c}^2 - ${cross}`);
+    const eq5 = s(
+      tex28`\\frac{${a}^2 + ${b}^2}{${c}^2 - ${cross}} = 1`,
+    );
 
-    const eqs = [eq1, eq2, eq3];
+    const eqs = [eq1, eq2, eq3, eq4, eq5];
 
-    // TODO(stage-2): once anchors are writable, this collapses to
-    //   `eq.center.bind(view.center)` per eq.
-    const c = view.center.value;
+    // Writable anchor → translate lens: writes the delta needed to land
+    // each equation's center on the view's. `set` is one-shot (no
+    // ongoing tracking).
     for (const eq of eqs) {
-      eq.translate.value = {
-        x: c.x - eq.width.peek() / 2,
-        y: c.y - eq.height.peek() / 2,
-      };
+      eq.center.set(view.center);
       eq.opacity.value = 0;
     }
 

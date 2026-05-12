@@ -26,8 +26,7 @@ const STRIP_H_TOTAL = TRACK_H * TRACK_COUNT + STRIP_PAD * 2;
 export class MdMultitrack extends Diagram {
   protected scene(s: Scene): void {
     const W = 600;
-    const H = 320;
-    s.view(W, H);
+    const view = s.view(W, 320);
 
     // Overlap is fine; each clip has its own at + dur.
     const tl = timeline({
@@ -92,12 +91,11 @@ export class MdMultitrack extends Diagram {
         clip.at.value = Math.max(0, cursorTime - clickOffset);
       });
 
-      // Start handle — drags `at` while keeping `end` fixed.
-      const startKnob = s(circle(
-        pt(clip.at.derive(a => STRIP_X + a * SCALE.value), trackY + TRACK_H / 2),
-        4.5,
-        { fill: color, stroke: "white", strokeWidth: 1.5 },
-      ));
+      // Start handle — anchored to the body's mid-left, drags `at`
+      // while keeping `end` fixed.
+      const startKnob = s(circle(body.left, 4.5, {
+        fill: color, stroke: "white", strokeWidth: 1.5,
+      }));
       let snapEnd = 0;
       startKnob.on("pointerdown", () => {
         snapEnd = clip.at.value + clip.dur.value;
@@ -109,12 +107,10 @@ export class MdMultitrack extends Diagram {
         clip.dur.value = snapEnd - newAt;
       });
 
-      // End handle — drags `dur` while keeping `at` fixed.
-      const endKnob = s(circle(
-        pt(clip.end.derive(e => STRIP_X + e * SCALE.value), trackY + TRACK_H / 2),
-        4.5,
-        { fill: color, stroke: "white", strokeWidth: 1.5 },
-      ));
+      // End handle — anchored to the body's mid-right, drags `dur`.
+      const endKnob = s(circle(body.right, 4.5, {
+        fill: color, stroke: "white", strokeWidth: 1.5,
+      }));
       let snapAt = 0;
       endKnob.on("pointerdown", () => {
         snapAt = clip.at.value;
@@ -124,19 +120,15 @@ export class MdMultitrack extends Diagram {
         clip.dur.value = Math.max(0.05, cursorTime - snapAt);
       });
 
-      s(label(
-        pt(
-          computed(() => STRIP_X + (clip.at.value + clip.dur.value / 2) * SCALE.value),
-          trackY + TRACK_H / 2,
-        ),
-        name,
-        { size: 10, opacity: 0.95, align: Anchor.Center },
-      ));
+      s(label(body.center, name, {
+        size: 10, opacity: 0.95, align: Anchor.Center,
+      }));
     });
 
+    const playX = tl.t.derive((t) => STRIP_X + t * STRIP_W);
     s(line(
-      pt(tl.t.derive(t => STRIP_X + t * STRIP_W), STRIP_Y - 4),
-      pt(tl.t.derive(t => STRIP_X + t * STRIP_W), STRIP_Y + STRIP_H_TOTAL + 4),
+      pt(playX, STRIP_Y - 4),
+      pt(playX, STRIP_Y + STRIP_H_TOTAL + 4),
       { strokeWidth: 1.5, aside: true },
     ));
 
@@ -164,18 +156,20 @@ export class MdMultitrack extends Diagram {
     }));
 
     // ── Footer ─────────────────────────────────────────────────────
-    s(label(
-      pt(W / 2, H - 32),
-      computed(() =>
-        `time: ${tl.clock.value.toFixed(2)}s / ${tl.duration.value.toFixed(2)}s`,
+    s(
+      label(
+        view.bottom.up(32),
+        computed(() =>
+          `time: ${tl.clock.value.toFixed(2)}s / ${tl.duration.value.toFixed(2)}s`,
+        ),
+        { size: 11, opacity: 0.65, align: Anchor.Center },
       ),
-      { size: 11, opacity: 0.65, align: Anchor.Center },
-    ));
-    s(label(
-      pt(W / 2, H - 14),
-      "drag clip body to shift · drag handles to resize · overlapping clips animate together",
-      { size: 10, opacity: 0.5, align: Anchor.Center },
-    ));
+      label(
+        view.bottom.up(14),
+        "drag clip body to shift · drag handles to resize · overlapping clips animate together",
+        { size: 10, opacity: 0.5, align: Anchor.Center },
+      ),
+    );
 
     this.anim.loop(function* () {
       reset();

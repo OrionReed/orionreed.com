@@ -126,25 +126,28 @@ interface MorphTransit {
    *  not just blindly bump back to 1. */
   prevP: number;
   prevQ: number;
-  /** Source / dest matched-mrow rendered positions, both in the
-   *  parent's local frame (BCR + inverse CTM). */
-  sPos: { x: number; y: number };
-  dPos: { x: number; y: number };
-  /** Where the cloned matched mrow renders inside the transit when
-   *  the transit's transform is identity — used to anchor scale
-   *  around the part rather than around the transit's origin. */
-  naturalPos: { x: number; y: number };
+  /** Source matched-mrow position in parent's local frame
+   *  (`from.translate + p.aabb.tl`) — captured at morph start. */
+  sx: number;
+  sy: number;
+  /** Trajectory delta in parent's local frame (`dPos − sPos`). */
+  dx: number;
+  dy: number;
+  /** Matched-mrow offset within the cloned wrapper, equal to
+   *  `p.aabb.tl` (the clone is a deep-copy with identical structure,
+   *  so its matched mrow lands at the same offset within the wrapper
+   *  as in the source). Used to anchor scale around the part. */
+  natX: number;
+  natY: number;
   /** dest / source size ratios, X and Y measured independently. ≠ 1
    *  when the part changes scriptlevel between source and dest (e.g.
    *  top-level → inside `<mfrac>` numerator), since MathML scales
    *  content inside fractions/scripts via the OpenType MATH table.
    *  After `stabilizePart` (`math-shift: normal; math-style: normal`)
    *  the rendered aspect ratio is context-independent, so in theory
-   *  `rx ≈ ry`. We still measure both axes and apply non-uniform
-   *  scale as a safety net: any residual anisotropy from line-box
-   *  leading, sub-pixel rasterization, or font hinting at different
-   *  sizes is absorbed into the rider rather than showing up as a
-   *  hand-off jump. */
+   *  `rx ≈ ry`. Measuring both axes independently absorbs any
+   *  residual anisotropy from line-box leading or font hinting at
+   *  different sizes. */
   rx: number;
   ry: number;
   /** Single progress signal driving translate and scale together. */
@@ -209,7 +212,7 @@ function buildTransit(
 
 /** Animate from `from` to `to`, matching parts by name.
  *
- *  Strategy ("single source-context rider, empirically anchored"):
+ *  Strategy ("single source-context rider, analytically anchored"):
  *    1. Each matched part's mrow is stabilized at construction time
  *       (`math-shift: normal; math-style: normal` in tex.ts), so its
  *       *internal* layout — script elevation, bar gaps, etc. — is
@@ -221,25 +224,28 @@ function buildTransit(
  *       mrow. The transit's outer `<g>` carries a CSS transform —
  *       same path Shape uses, so rasterization snaps to pixels the
  *       same way as `from.el` and `to.el`.
- *    3. We measure the source's matched mrow, the dest's matched
- *       mrow, AND the freshly-mounted clone's matched mrow with
- *       `getBoundingClientRect`, then translate everything into the
- *       parent's local frame via `getScreenCTM().inverse()`. Empirical
- *       measurement avoids analytical assumptions about line-box
- *       baselines, foreignObject content offsets, etc., which can
- *       differ from theory and have been the source of stubborn
- *       few-pixel pops.
+ *    3. Source / dest / clone-natural positions are derived
+ *       analytically from `shape.translate.value + part.aabb.tl`
+ *       (matched-mrow position in the parent's local frame). The
+ *       clone is a deep-copy of the source wrapper, so its matched
+ *       mrow lands at the same offset within the wrapper as in the
+ *       source — i.e. `naturalPos = p.aabb.tl`. No DOM measurement
+ *       in the morph hot path: zero `getBoundingClientRect` reads.
+ *       This relies on (1): without stabilization the live render
+ *       can drift from the (also stabilized) measurement performed
+ *       at `tex.ts` construction time, and the analytical answer
+ *       would no longer match what the user sees.
  *    4. The rider's CSS transform is `translate(...) scale(sx, sy)`
  *       driven by a single `progress` signal. `sx` tweens 1 → rx,
- *       `sy` tweens 1 → ry where `rx = destW/srcW`, `ry = destH/srcH`,
- *       so a part moving between contexts at different scriptlevels
- *       (e.g. top-level → inside `<mfrac>` numerator) smoothly
- *       resizes with its slide instead of popping size at the
- *       hand-off. With (1) in place `rx ≈ ry`, but measuring both
- *       axes independently absorbs any residual anisotropy from
- *       line-box leading or font hinting at different sizes. Scale
- *       is anchored at the matched mrow's local TL — see the effect
- *       below.
+ *       `sy` tweens 1 → ry where `rx = q.aabb.w / p.aabb.w`,
+ *       `ry = q.aabb.h / p.aabb.h`, so a part moving between
+ *       contexts at different scriptlevels (e.g. top-level → inside
+ *       `<mfrac>` numerator) smoothly resizes with its slide instead
+ *       of popping size at the hand-off. With (1) in place `rx ≈ ry`,
+ *       but measuring both axes independently absorbs any residual
+ *       anisotropy from line-box leading or font hinting at different
+ *       sizes. Scale is anchored at the matched mrow's local TL —
+ *       see the effect below.
  *    5. At t=0 the rider lands exactly on `p.el`'s rendered position;
  *       at t=1 it lands exactly on `q.el`'s. Combined with the
  *       stabilization (1), the handoffs are pixel-perfect.
@@ -248,9 +254,9 @@ function buildTransit(
  *  they cross-fade with their parent shapes at their natural source
  *  and dest positions.
  *
- *  Assumptions: both shapes share a parent whose frame is
- *  translate-only relative to screen (no rotation or non-uniform
- *  scale). After completion, `from.opacity` is 0 and `to.opacity`
+ *  Assumptions: both shapes share a parent and have translate-only
+ *  transforms relative to that parent (no per-shape scale or
+ *  rotation). After completion, `from.opacity` is 0 and `to.opacity`
  *  is 1.
  */
 export function* morph(
@@ -270,65 +276,8 @@ export function* morph(
     return;
   }
 
-  // Force a layout flush — opacity:0 on parts/shapes preserves layout,
-  // but if either shape was just mounted there's no guarantee its
-  // tree has been laid out yet. A `getBoundingClientRect` does it.
-  to.el.getBoundingClientRect();
-  from.el.getBoundingClientRect();
-
-  const sgEl = parent.el as unknown as SVGGraphicsElement;
-  const ctm = sgEl.getScreenCTM?.();
-  if (!ctm) {
-    yield fallback();
-    return;
-  }
-  const inv = ctm.inverse();
-  /** Convert a viewport-space rect's top-left into the parent's
-   *  local-frame user units. */
-  const screenToParent = (r: DOMRect): { x: number; y: number } => ({
-    x: r.left * inv.a + r.top * inv.c + inv.e,
-    y: r.left * inv.b + r.top * inv.d + inv.f,
-  });
-
-  interface Plan {
-    pPart: Part;
-    qPart: Part;
-    pEl: HTMLElement;
-    qEl: HTMLElement;
-    sPos: { x: number; y: number };
-    dPos: { x: number; y: number };
-    /** dest size / source size, X and Y independently. Both rects
-     *  came from `getBoundingClientRect`, which already includes any
-     *  ancestor CSS scale, so the ratios are unitless. */
-    rx: number;
-    ry: number;
-  }
-
-  // Pass 1 — measure source/dest matched-mrow screen positions before
-  // any mutation. Empirical, no math-TL assumptions.
-  const plans: Plan[] = [];
-  for (const p of from.parts) {
-    const q = (to.parts as Record<string, Part>)[p.name];
-    if (!q) continue;
-    if (p.content !== q.content) continue;
-    if (!p.el || !q.el) continue;
-
-    const sRect = p.el.getBoundingClientRect();
-    const dRect = q.el.getBoundingClientRect();
-    if (sRect.width === 0 || dRect.width === 0) continue;
-    if (sRect.height === 0 || dRect.height === 0) continue;
-
-    plans.push({
-      pPart: p,
-      qPart: q,
-      pEl: p.el,
-      qEl: q.el,
-      sPos: screenToParent(sRect),
-      dPos: screenToParent(dRect),
-      rx: dRect.width / sRect.width,
-      ry: dRect.height / sRect.height,
-    });
-  }
+  const fromTr = from.translate.value;
+  const toTr = to.translate.value;
 
   const transits: MorphTransit[] = [];
   const stops: Array<() => void> = [];
@@ -341,47 +290,64 @@ export function* morph(
   const transitW = Math.max(from.width.value, to.width.value) + 32;
   const transitH = Math.max(from.height.value, to.height.value) + 16;
 
-  for (const pl of plans) {
-    const wrapper = findMathWrapper(pl.pEl);
+  for (const p of from.parts) {
+    const q = (to.parts as Record<string, Part>)[p.name];
+    if (!q) continue;
+    if (p.content !== q.content) continue;
+    if (!p.el || !q.el) continue;
+
+    const pa = p.aabb.value;
+    const qa = q.aabb.value;
+    if (pa.w === 0 || qa.w === 0 || pa.h === 0 || qa.h === 0) continue;
+
+    const wrapper = findMathWrapper(p.el);
     if (!wrapper) continue;
-    const matchedClass = `minim-part-${pl.pPart.name}`;
+    const matchedClass = `minim-part-${p.name}`;
     const built = buildTransit(wrapper, matchedClass, transitW, transitH);
     if (!built) continue;
 
-    // Mount the transit at identity, measure where the cloned
-    // matched mrow actually rendered, then drive translate + scale
-    // off a single progress signal so the part smoothly slides AND
-    // resizes through context changes (top-level → fraction
-    // numerator, etc.).
-    built.g.style.transform = "translate(0px, 0px) scale(1)";
+    // sPos = fromTr + pa.tl  (matched mrow in parent frame, source).
+    // dPos = toTr   + qa.tl  (matched mrow in parent frame, dest).
+    // naturalPos = pa.tl     (clone is a deep-copy of source wrapper,
+    // so its matched mrow lands at the same offset within the wrapper
+    // as in the source).
+    const sx = fromTr.x + pa.x;
+    const sy = fromTr.y + pa.y;
+    const dx = toTr.x + qa.x - sx;
+    const dy = toTr.y + qa.y - sy;
+    const natX = pa.x;
+    const natY = pa.y;
+    const rx = qa.w / pa.w;
+    const ry = qa.h / pa.h;
+
+    // Position the rider exactly where the source matched mrow sits
+    // in parent coords, then mount. No measurement needed: the
+    // formula below at p=0 produces transform = `translate(fromTr.x,
+    // fromTr.y) scale(1, 1)`, which is precisely the source's own
+    // position.
+    built.g.style.transform = `translate(${fromTr.x}px, ${fromTr.y}px) scale(1, 1)`;
     parent.el.appendChild(built.g);
 
-    const cloneMatched = built.fo.querySelector(
-      `.${matchedClass}`,
-    ) as HTMLElement | null;
-    if (!cloneMatched) {
-      built.g.remove();
-      continue;
-    }
-    const naturalPos = screenToParent(cloneMatched.getBoundingClientRect());
-
-    const prevP = pl.pPart.opacity.peek();
-    const prevQ = pl.qPart.opacity.peek();
-    pl.pPart.opacity.value = 0;
-    pl.qPart.opacity.value = 0;
+    const prevP = p.opacity.peek();
+    const prevQ = q.opacity.peek();
+    p.opacity.value = 0;
+    q.opacity.value = 0;
 
     const transit: MorphTransit = {
       g: built.g,
       fo: built.fo,
-      pPart: pl.pPart,
-      qPart: pl.qPart,
+      pPart: p,
+      qPart: q,
       prevP,
       prevQ,
-      sPos: pl.sPos,
-      dPos: pl.dPos,
-      naturalPos,
-      rx: pl.rx,
-      ry: pl.ry,
+      sx,
+      sy,
+      dx,
+      dy,
+      natX,
+      natY,
+      rx,
+      ry,
       progress: signal(0) as Signal<number>,
     };
     transits.push(transit);
@@ -391,16 +357,16 @@ export function* morph(
         // Anchor scale around the matched mrow's local TL so the
         // part stays glued to its trajectory while it resizes.
         // Per axis:
-        //   matchedMrow_screen.x = tx + sx · naturalPos.x = curX
-        //   ⇒ tx = curX − sx · naturalPos.x   (same for y).
-        const p = transit.progress.value;
-        const sx = 1 + p * (transit.rx - 1);
-        const sy = 1 + p * (transit.ry - 1);
-        const cx = transit.sPos.x + p * (transit.dPos.x - transit.sPos.x);
-        const cy = transit.sPos.y + p * (transit.dPos.y - transit.sPos.y);
-        const tx = cx - sx * transit.naturalPos.x;
-        const ty = cy - sy * transit.naturalPos.y;
-        transit.g.style.transform = `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
+        //   matchedMrow_parent.x = tx + s · natX = curX
+        //   ⇒ tx = curX − s · natX   (same for y).
+        const t = transit.progress.value;
+        const s_x = 1 + t * (transit.rx - 1);
+        const s_y = 1 + t * (transit.ry - 1);
+        const cx = transit.sx + t * transit.dx;
+        const cy = transit.sy + t * transit.dy;
+        const tx = cx - s_x * transit.natX;
+        const ty = cy - s_y * transit.natY;
+        transit.g.style.transform = `translate(${tx}px, ${ty}px) scale(${s_x}, ${s_y})`;
       }),
     );
   }

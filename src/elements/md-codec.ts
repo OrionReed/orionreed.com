@@ -87,8 +87,8 @@ export class MdCodec extends Diagram {
       const leader = path(slot.top, { thin: true })
         .u(VERT_H)
         .along(LEADER_ANGLE, DIAG_D);
-      s(leader);
       s(
+        leader,
         label(leader.pointAt(1), t(part.label).bold(), {
           size: LABEL_SIZE,
           align: Anchor.Left,

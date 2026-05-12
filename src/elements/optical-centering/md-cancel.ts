@@ -24,7 +24,6 @@ import {
 } from "../../minim";
 
 const W = 380;
-const H = 160;
 const N = 12;
 const SHAPE_Y = 40;
 const STATUS_Y = 100;
@@ -46,7 +45,7 @@ function* lifecycle(
 
 export class MdCancel extends Diagram {
   protected scene(s: Scene): void {
-    s.view(W, H);
+    s.view(W, 160);
 
     const status = signal<Content>("running");
     s(
@@ -111,8 +110,8 @@ export class MdCancel extends Diagram {
 
     const btnsW = BTN_W * 2 + BTN_GAP;
     const btnsX = (W - btnsW) / 2;
-    s(button(pt(btnsX, BTN_Y), "EXIT", onExit, { width: BTN_W, height: BTN_H }));
     s(
+      button(pt(btnsX, BTN_Y), "EXIT", onExit, { width: BTN_W, height: BTN_H }),
       button(pt(btnsX + BTN_W + BTN_GAP, BTN_Y), "STOP", onStop, {
         width: BTN_W,
         height: BTN_H,

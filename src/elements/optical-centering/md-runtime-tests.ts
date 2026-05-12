@@ -27,6 +27,7 @@ import {
   pt,
   pulse,
   race,
+  rect,
   signal,
   splay,
   spring,
@@ -930,6 +931,108 @@ const TESTS: TestCase[] = [
       m.value = { x: 60, y: 35 }; // delta (10, 10)
       assert(a.peek().x === 10 && a.peek().y === 10, `a not shifted: ${JSON.stringify(a.peek())}`);
       assert(b.peek().x === 110 && b.peek().y === 60, `b not shifted: ${JSON.stringify(b.peek())}`);
+    },
+  },
+  {
+    name: "Point.set: copies target's value",
+    run: (assert) => {
+      const a = pt(0, 0);
+      const b = pt(10, 20);
+      a.set(b);
+      assert(a.value.x === 10 && a.value.y === 20, `a after set: ${JSON.stringify(a.value)}`);
+      b.value = { x: 30, y: 40 };
+      assert(a.value.x === 10, `set is one-shot, must not track`);
+    },
+  },
+  {
+    name: "Point.bind: reactive mirror with disposer",
+    run: (assert) => {
+      const a = pt(0, 0);
+      const b = pt(10, 20);
+      const dispose = a.bind(b);
+      assert(a.value.x === 10 && a.value.y === 20, `a after bind: ${JSON.stringify(a.value)}`);
+      b.value = { x: 30, y: 40 };
+      assert(a.value.x === 30 && a.value.y === 40, `bind didn't track: ${JSON.stringify(a.value)}`);
+      dispose();
+      b.value = { x: 99, y: 99 };
+      assert(a.value.x === 30, `disposer didn't stop bind`);
+    },
+  },
+  {
+    name: "shape.center: read post-transform, write delta-to-translate",
+    run: (assert) => {
+      // 100×60 rect at (50, 70). Identity transform → local center
+      // == post-transform center == (100, 100).
+      const r = rect(50, 70, 100, 60);
+      assert(r.center instanceof Point, `shape.center must be a Point`);
+      assert(r.center.value.x === 100 && r.center.value.y === 100,
+        `center initial: ${JSON.stringify(r.center.value)}`);
+      // Write target (250, 300). Translate should shift by (150, 200).
+      r.center.value = { x: 250, y: 300 };
+      assert(r.translate.peek().x === 150 && r.translate.peek().y === 200,
+        `translate after set: ${JSON.stringify(r.translate.peek())}`);
+      // Read reflects the new post-transform position.
+      assert(r.center.value.x === 250 && r.center.value.y === 300,
+        `center after set: ${JSON.stringify(r.center.value)}`);
+    },
+  },
+  {
+    name: "shape.center.set: pure sugar over .value =",
+    run: (assert) => {
+      const r = rect(0, 0, 50, 50);
+      r.center.set(pt(100, 100));
+      assert(r.translate.peek().x === 75 && r.translate.peek().y === 75,
+        `translate: ${JSON.stringify(r.translate.peek())}`);
+    },
+  },
+  {
+    name: "shape anchor writes are exact under rotation",
+    run: (assert) => {
+      // 100×60 rect, origin at center (50, 30 local; AABB center).
+      // Apply 90° rotation. The corner at(1, 0) — local (100, 0) —
+      // rotates to (30, 50) in parent frame (relative to origin
+      // (50, 30): (50, -30) → rotate 90° → (30, 50) → +origin → (80, 80)).
+      const r = rect(0, 0, 100, 60);
+      r.rotate.value = Math.PI / 2;
+      const cornerWorld = r.at(1, 0).value;
+      assert(
+        Math.abs(cornerWorld.x - 80) < 1e-9 && Math.abs(cornerWorld.y - 80) < 1e-9,
+        `rotated corner: ${JSON.stringify(cornerWorld)}`,
+      );
+      // Write target (200, 200) — translate += (target - currentWorld).
+      r.at(1, 0).value = { x: 200, y: 200 };
+      const after = r.at(1, 0).value;
+      assert(
+        Math.abs(after.x - 200) < 1e-9 && Math.abs(after.y - 200) < 1e-9,
+        `corner after write: ${JSON.stringify(after)}`,
+      );
+      // Translate should have absorbed exactly (200 - 80, 200 - 80) = (120, 120).
+      const t = r.translate.peek();
+      assert(
+        Math.abs(t.x - 120) < 1e-9 && Math.abs(t.y - 120) < 1e-9,
+        `translate after write: ${JSON.stringify(t)}`,
+      );
+    },
+  },
+  {
+    name: "shape anchor reads track scale around center",
+    run: (assert) => {
+      // 100×60 rect, default origin = AABB center (50, 30). Scale 2×
+      // around center → local corner (100, 60) lands at center +
+      // 2 × (corner - center) = (50, 30) + 2·(50, 30) = (150, 90).
+      const r = rect(0, 0, 100, 60);
+      r.scale.value = { x: 2, y: 2 };
+      const br = r.at(1, 1).value;
+      assert(
+        Math.abs(br.x - 150) < 1e-9 && Math.abs(br.y - 90) < 1e-9,
+        `scaled corner: ${JSON.stringify(br)}`,
+      );
+      // Center is invariant under center-pivoted scale.
+      assert(
+        Math.abs(r.center.value.x - 50) < 1e-9 &&
+          Math.abs(r.center.value.y - 30) < 1e-9,
+        `center under scale: ${JSON.stringify(r.center.value)}`,
+      );
     },
   },
   {

@@ -62,22 +62,23 @@ const PAIRS: [number, number][] = [
 
 export class MdChoreography extends Diagram {
   protected scene(s: Scene): void {
-    s.view(W, H);
+    const view = s.view(W, H);
 
     const shapes = SCATTER.map((p, i) =>
       s(circle(pt(0, 0), 18, { translate: p, fill: COLORS[i] })),
     );
 
     const phase = signal<Content>("assemble (row)");
-    s(label(pt(W / 2, 24), phase, {
-      size: 14, bold: true, align: Anchor.Center, opacity: 0.85,
-    }));
-    s(label(pt(W / 2, 42), "snapshot · stagger · ramp · centroid · all composing", {
-      size: 10, align: Anchor.Center, opacity: 0.45,
-    }));
-
     const c = centroid(...shapes);
-    s(circle(c, 3, { fill: "#1a1a1a", opacity: 0.7 }));
+    s(
+      label(view.top.down(24), phase, {
+        size: 14, bold: true, align: Anchor.Center, opacity: 0.85,
+      }),
+      label(view.top.down(42), "snapshot · stagger · ramp · centroid · all composing", {
+        size: 10, align: Anchor.Center, opacity: 0.45,
+      }),
+      circle(c, 3, { fill: "#1a1a1a", opacity: 0.7 }),
+    );
 
     // Without this, orbit's frame-time integration drifts positions
     // slightly each cycle.
@@ -101,7 +102,7 @@ export class MdChoreography extends Diagram {
       yield 0.3;
 
       phase.value = "splay";
-      yield* splay(pt(W / 2, H / 2), 110, shapes, 0.7, easeInOut);
+      yield* splay(view.center, 110, shapes, 0.7, easeInOut);
       yield 0.3;
 
       phase.value = "swap (staggered)";
@@ -125,7 +126,7 @@ export class MdChoreography extends Diagram {
       yield 0.2;
 
       phase.value = "centroid → centre";
-      yield* c.to({ x: W / 2, y: H / 2 }, 0.7, easeInOut);
+      yield* c.to(view.center.value, 0.7, easeInOut);
       yield 0.4;
 
       phase.value = "assemble (scatter)";

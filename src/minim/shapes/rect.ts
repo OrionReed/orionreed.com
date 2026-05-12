@@ -64,22 +64,20 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
 
   override boundary(toward: Pointlike): DerivedPoint {
     return new DerivedPoint(() => {
+      const c = this.center.value;
       const b = this.aabb.value;
       const sc = this.scale.value;
       const t = toward.value;
-      const cx = b.x + b.w / 2;
-      const cy = b.y + b.h / 2;
-      // Scale-aware half-extents track the visual rect.
       const halfW = (b.w / 2) * sc.x;
       const halfH = (b.h / 2) * sc.y;
-      const dx = t.x - cx;
-      const dy = t.y - cy;
-      if (dx === 0 && dy === 0) return { x: cx, y: cy };
+      const dx = t.x - c.x;
+      const dy = t.y - c.y;
+      if (dx === 0 && dy === 0) return c;
       const k = Math.min(
         dx === 0 ? Infinity : halfW / Math.abs(dx),
         dy === 0 ? Infinity : halfH / Math.abs(dy),
       );
-      return { x: cx + dx * k, y: cy + dy * k };
+      return { x: c.x + dx * k, y: c.y + dy * k };
     });
   }
 

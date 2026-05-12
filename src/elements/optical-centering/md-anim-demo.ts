@@ -59,8 +59,10 @@ export class MdAnimDemo extends Diagram {
     sideLabel(175, "spring");
     const cTarget = signal(80);
     const cFollower = signal(80);
-    s(circle(pt(cTarget, 175), 6, { fill: true }));
-    s(circle(pt(cFollower, 175), 14, { thin: true }));
+    s(
+      circle(pt(cTarget, 175), 6, { fill: true }),
+      circle(pt(cFollower, 175), 14, { thin: true }),
+    );
     this.anim.loop(function* () {
       yield* cTarget.to(520, 1.5, easeInOut).to(80, 1.5, easeInOut);
     });

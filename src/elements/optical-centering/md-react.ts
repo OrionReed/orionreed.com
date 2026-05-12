@@ -25,7 +25,6 @@ import {
 } from "../../minim";
 
 const W = 380;
-const H = 260;
 const TARGET_R = 14;
 const ROUND_TIMEOUT = 1.2;
 const RESPAWN = 0.4;
@@ -51,7 +50,7 @@ function trackedClick(target: EventTarget): Animator<MouseEvent> {
 
 export class MdReact extends Diagram {
   protected scene(s: Scene): void {
-    s.view(W, H);
+    s.view(W, 260);
 
     s(
       rect(PAD - 6, PAD - 6, W - 2 * (PAD - 6), PLAYFIELD_H - 2 * (PAD - 6) + 12, {
@@ -69,15 +68,11 @@ export class MdReact extends Diagram {
         size: 12,
         align: Anchor.Left,
       }),
-    );
-    s(
       label(
         pt(W - PAD, STATS_Y),
         misses.derive((n) => `misses: ${n}`),
         { size: 12, align: Anchor.Right },
       ),
-    );
-    s(
       label(
         pt(W / 2, STATS_Y),
         computed(() => {
@@ -89,9 +84,6 @@ export class MdReact extends Diagram {
         }),
         { size: 12, align: Anchor.Center, opacity: 0.6 },
       ),
-    );
-
-    s(
       label(pt(W / 2, STATUS_Y), status, {
         size: 11,
         align: Anchor.Center,
@@ -165,8 +157,6 @@ export class MdReact extends Diagram {
     const btnsX = (W - btnsW) / 2;
     s(
       button(pt(btnsX, BTN_Y), "STOP", onStop, { width: BTN_W, height: BTN_H }),
-    );
-    s(
       button(pt(btnsX + BTN_W + BTN_GAP, BTN_Y), "RESET", onReset, {
         width: BTN_W,
         height: BTN_H,
