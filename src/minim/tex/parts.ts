@@ -1,91 +1,93 @@
 // Lightweight observable handles into a tex-rendered formula.
 //
-// A `Part` is *not* a Shape — it's an `aabb` signal plus per-part
-// reactive state (highlighted, opacity), sharing the parent
-// TexShape's single `<foreignObject>` rendering. This keeps per-glyph
-// cost out of the scene graph: marking N named parts allocates N
-// small objects, not N Shapes.
-//
-// Authoring surface:
-//
-//      const { a, b, c } = parts({ a: "a", b: "b", c: "c" });
+//      const { a, b, c } = parts("a", "b", "c");
 //      tex`${a} + ${b} = ${c}`
 //
-// Or, for one-offs:
-//
-//      tex`${part("a", "x_{\\min}")} < ${part("b", "x_{\\max}")}`
-//
-// Content can be a signal, in which case the equation re-renders on
-// change. Names flow into the `TexShape` type so `eq.parts.a` is
-// statically typed and `eq.parts.x` is a TS error.
+// Identity for morph is by *marker reference*, not name. Visuals
+// (highlight, opacity, color) are signal-driven; color cascades
+// through `marker.group` so coloring `v` colors its `expand`-ed
+// children. `Part` implements `Box`, so `eq.parts.a.center` etc.
+// are usable Pointlikes.
 
-import { effect, signal, type Signal, type ReadonlySignal } from "../core/signal";
+import {
+  effect,
+  signal,
+  type Signal,
+  type ReadonlySignal,
+} from "../core/signal";
 import { toSig, type Arg } from "../core/arg";
-import type { AABB } from "../scene/box";
+import { type AABB, type Box, makeBox } from "../scene/box";
+import type { Pointlike } from "../scene/point";
 import type { TexShape } from "./tex";
 
 /** A part's content can be a literal string, a signal, or a thunk. */
 export type PartContent = Arg<string>;
 
-/** A named, addressable region of a TexShape. `aabb` is in the parent
- *  TexShape's local frame; `highlighted`, `opacity`, and `color` are
- *  wired by the Part itself to its live MathML element so authors can
- *  drive per-part visuals reactively without reaching for the DOM.
- *
- *  `marker` is a back-pointer to the `PartMarker` that birthed this
- *  Part: same marker across two TexShapes means "same identity" for
- *  morph (regardless of name). Markers in a derivation chain
- *  (`marker.group`) let morph fan out 1↔N when the same identity is
- *  expressed as one symbol in one form and many in another.
- *
- *  Visual-binding lifecycle: tex.ts calls `bind` once per (re-)render
- *  with the freshly-mounted MathML node. `bind` tears down any
- *  previous effects, points `el` at the new node, and creates new
- *  effects against it. `dispose` (called when the host TexShape goes
- *  away) tears them down for good. */
-export class Part<N extends string = string> {
+/** Walk the `marker.group` chain to find the first marker with a
+ *  non-null color. This is what gives identity-level color: setting
+ *  `v.color` on a parent marker tints `v` and every `v.expand({...})`
+ *  child whose own color is null. */
+const effectiveColor = (m: PartMarker): string | null => {
+  for (let cur: PartMarker | null = m; cur; cur = cur.group) {
+    const c = cur.color.value;
+    if (c !== null) return c;
+  }
+  return null;
+};
+
+/** A named, addressable region of a TexShape. Implements `Box` so
+ *  `part.center`, `part.top`, etc. are Pointlikes in the TexShape's
+ *  local frame (read-only — parts are template-bound). */
+export class Part<N extends string = string> implements Box {
   /** Toggle the default highlight visual (a translucent background
    *  tint). Authors can also drive their own visuals off this signal. */
   readonly highlighted: Signal<boolean> = signal(false);
-  /** Opacity in [0, 1]. Wired to `el.style.opacity` whenever a live
-   *  el is bound, so per-part fades compose with the rest of minim's
-   *  animation primitives. */
+  /** Opacity in [0, 1]. Wired to `el.style.opacity`. */
   readonly opacity: Signal<number> = signal(1);
-  /** Per-part text color override. `null` (default) leaves the inherited
-   *  color from `tokens.stroke`. Useful for showing correspondence
-   *  across forms ("the red letter on the left becomes these red
-   *  letters on the right"). */
-  readonly color: Signal<string | null> = signal<string | null>(null);
+
+  // Box interface — derived from `aabb` via `makeBox`.
+  readonly x: ReadonlySignal<number>;
+  readonly y: ReadonlySignal<number>;
+  readonly w: ReadonlySignal<number>;
+  readonly h: ReadonlySignal<number>;
+  readonly center: Pointlike;
+  readonly top: Pointlike;
+  readonly bottom: Pointlike;
+  readonly left: Pointlike;
+  readonly right: Pointlike;
+  readonly at: (u: number, v: number) => Pointlike;
 
   /** Current live MathML node carrying `class="minim-part-N"`, or
    *  `null` if the host failed to mount it. Set by `bind`. */
   el: HTMLElement | null = null;
 
-  /** Disposers for the per-el visual effects. Cleared and rebuilt on
-   *  each `bind`. */
   #disposers: Array<() => void> = [];
 
   constructor(
     readonly name: N,
-    /** Original LaTeX source for this sub-formula. Reactive: when the
-     *  underlying signal changes, the parent TexShape re-renders. */
     readonly content: ReadonlySignal<string>,
     readonly aabb: ReadonlySignal<AABB>,
-    /** The PartMarker this Part was instantiated from. Morph uses
-     *  this (and `marker.group`) to identify same-identity parts
-     *  across TexShapes — including 1↔N expansions. */
+    /** The marker this Part was instantiated from. Morph identifies
+     *  same-identity parts by reference equality on this. */
     readonly marker: PartMarker,
-    /** The host TexShape. Set at construction (Part can't exist
-     *  without one). Used by motion combinators (`pluck`, `morph`,
-     *  `partPose`, …) to derive parent-frame coordinates. */
     readonly host: TexShape,
-  ) {}
+  ) {
+    const b = makeBox(aabb);
+    this.x = b.x;
+    this.y = b.y;
+    this.w = b.w;
+    this.h = b.h;
+    this.center = b.center;
+    this.top = b.top;
+    this.bottom = b.bottom;
+    this.left = b.left;
+    this.right = b.right;
+    this.at = b.at;
+  }
 
-  /** @internal Wire reactive state (highlighted, opacity, color) to
-   *  `el`'s inline styles. Call once after the live el is mounted,
-   *  and again after any reactive content re-render that replaces
-   *  the el. Tears down previous effects first so we never have two
-   *  effects fighting over the same node. */
+  /** @internal Wire reactive state to `el`'s inline styles. Called by
+   *  the host once per (re-)mount; the previous binding's effects are
+   *  torn down first. */
   bind(el: HTMLElement | null, highlightColor: string): void {
     for (const d of this.#disposers) d();
     this.#disposers.length = 0;
@@ -101,14 +103,13 @@ export class Part<N extends string = string> {
         el.style.opacity = String(this.opacity.value);
       }),
       effect(() => {
-        // Empty string clears the inline style (revert to inherited).
-        el.style.color = this.color.value ?? "";
+        // Resolves through marker.group chain; empty string clears.
+        el.style.color = effectiveColor(this.marker) ?? "";
       }),
     );
   }
 
-  /** @internal Tear down all reactive bindings. Called by the host
-   *  TexShape on dispose. */
+  /** @internal Tear down all reactive bindings. */
   dispose(): void {
     for (const d of this.#disposers) d();
     this.#disposers.length = 0;
@@ -117,57 +118,48 @@ export class Part<N extends string = string> {
 }
 
 /** Marker emitted by `part(name, content)` and `parts({...})`. Only
- *  valid inside `tex\`…\`` template holes — the tag picks these up to
- *  wrap content in `\class{minim-part-…}{…}`.
- *
- *  Identity for morph is by *marker reference* (not by name). Two
- *  Parts in different TexShapes share identity iff their markers are
- *  the same instance. The `group` field threads a parent-marker
- *  reference through derived markers so morph treats `v` (one symbol)
- *  and `{vx, vy, vz}` (three symbols) as 1↔3 components of the same
- *  identity — see `derived` below. */
+ *  valid inside `tex\`…\`` template holes. Identity for morph is by
+ *  marker reference; `group` threads parent-marker through derived
+ *  markers so `v` and `v.expand({vx,vy,vz})` count as one identity
+ *  (1↔3 morphs). `color` is per-marker and cascades to children. */
 export class PartMarker<N extends string = string> {
-  /** Resolved content as a signal (literal strings normalize to a
-   *  one-shot constant signal; real signals/thunks pass through). */
+  /** Resolved content (literal strings normalize to a constant
+   *  signal; real signals/thunks pass through). */
   readonly content: ReadonlySignal<string>;
+
+  /** Per-identity color override. `null` (default) walks up to the
+   *  parent marker, eventually falling back to inherited (no inline
+   *  style). Set this to color every Part instantiated from this
+   *  marker, in any TexShape, retroactively. */
+  readonly color: Signal<string | null> = signal<string | null>(null);
 
   constructor(
     readonly name: N,
     source: PartContent,
-    /** Parent marker for derivation chains (`null` for roots). When
-     *  set, morph treats this marker and its parent (and other
-     *  siblings) as components of one identity, enabling 1↔N fan-out
-     *  / fan-in animations. */
+    /** Parent marker for derivation chains (`null` for roots). */
     readonly group: PartMarker | null = null,
   ) {
     this.content = toSig(source) as ReadonlySignal<string>;
   }
 
   /** One-off content override for a single template, keeping the same
-   *  identity (same name, same group). Useful when most equations
-   *  agree on a part's rendering but one needs a tweak (e.g.
-   *  `c.with("c²")`) or when a single value gets substituted in
-   *  (`a.with("2")` for a concrete-number form). */
+   *  identity. The new marker is a child of `this` (group = this), so
+   *  morph still treats them as one identity AND color cascades —
+   *  `a.color = RED` tints `a.with("2")` automatically. */
   with(content: PartContent): PartMarker<N> {
-    return new PartMarker(this.name, content, this.group);
+    return new PartMarker(this.name, content, this);
   }
 
-  /** Expand this marker into named child markers that share its
-   *  identity for morph purposes. Each child has its own name (so it's
-   *  individually addressable as `eq.parts.vx`, `eq.parts.vy`, …) and
-   *  its own content, but morph treats them as components of this
-   *  marker. Morphing between an equation containing `this` and one
-   *  containing the children fans out 1→N (source fades in place, N
-   *  riders emerge from its position and slide to their respective
-   *  slots) — and the reverse direction folds N→1.
+  /** Expand into named child markers that share this marker's
+   *  identity. Each child has its own name (addressable as
+   *  `eq.parts.vx`) and its own content; morph treats them as
+   *  components of `this` (1↔N fan-out / fan-in). Children inherit
+   *  this marker's color via the `group` chain.
    *
    *      const v = part("v", "\\vec{v}");
-   *      const { vx, vy, vz } = v.expand({
-   *        vx: "v_x", vy: "v_y", vz: "v_z",
-   *      });
-   *      const sym  = tex`${v}`;
-   *      const comp = tex`(${vx}, ${vy}, ${vz})`;
-   *      yield* morph(sym, comp);   // v fans out into vx, vy, vz
+   *      const { vx, vy, vz } = v.expand({ vx: "v_x", vy: "v_y", vz: "v_z" });
+   *      // Coloring v also colors vx, vy, vz:
+   *      v.color.value = RED;
    */
   expand<T extends Record<string, PartContent>>(
     spec: T,
@@ -179,11 +171,7 @@ export class PartMarker<N extends string = string> {
 }
 
 /** Tag a single sub-formula by name. Content defaults to the name
- *  itself for the common identity case (`part("a")` ≡ `part("a", "a")`):
- *
- *      tex`${part("a")} + ${part("b")} = ${part("c")}`
- *      tex`${part("min", "x_{\\min}")} < ${part("max", "x_{\\max}")}`
- */
+ *  itself for the common identity case (`part("a")` ≡ `part("a", "a")`). */
 export function part<N extends string>(
   name: N,
   content: PartContent = name,
@@ -191,16 +179,14 @@ export function part<N extends string>(
   return new PartMarker(name, content);
 }
 
-/** Bulk factory: declare a set of named parts to share across multiple
- *  equations, retaining identity for `morph`. Three forms, freely
- *  mixable so the common "name == content" case stays terse:
+/** Bulk factory. Three forms, freely mixable:
  *
  *      parts("a", "b", "c")                        // names; content = name
  *      parts({ x: "x_{\\min}", y: "y_{\\max}" })   // explicit content
- *      parts("a", "b", { x: "x_{\\min}" })         // mixed: a, b default; x custom
+ *      parts("a", "b", { x: "x_{\\min}" })         // mixed
  *
- *  Names flow into the result's keys so `tex`${a} + ${b}`` infers
- *  `TexShape<"a" | "b">` and `eq.parts.x` is a TS error. */
+ *  Names flow into the result's keys so `tex\`${a} + ${b}\`` infers
+ *  `TexShape<"a" | "b">`. */
 export function parts<T extends readonly (string | Record<string, PartContent>)[]>(
   ...specs: T
 ): MarkersFromSpecs<T> {
@@ -215,9 +201,6 @@ export function parts<T extends readonly (string | Record<string, PartContent>)[
   return out as MarkersFromSpecs<T>;
 }
 
-/** Type-level union of marker keys produced by a `parts(...specs)`
- *  call. String specs contribute their literal name; object specs
- *  contribute their own keys. */
 type MarkersFromSpecs<T extends readonly (string | Record<string, PartContent>)[]> = {
   readonly [K in NameOf<T[number]>]: PartMarker<K>;
 };
@@ -227,9 +210,20 @@ type NameOf<S> = S extends string
     ? K & string
     : never;
 
-/** Iterable in positional order, indexable by name. The `Names`
- *  generic carries the union of declared part names so `eq.parts.a`
- *  is typed and `eq.parts.x` (undeclared) is a compile error. */
+/** Set the same color on N markers at once. Plain imperative: writes
+ *  `color.value = c` on each. Use `null` to clear. Equivalent to a
+ *  for-loop, just terser:
+ *
+ *      tint(RED, a, b, c);   // ≡ for (const m of [a,b,c]) m.color.value = RED;
+ */
+export function tint(
+  color: string | null,
+  ...markers: readonly PartMarker[]
+): void {
+  for (const m of markers) m.color.value = color;
+}
+
+/** Iterable in positional order, indexable by name. */
 export type PartList<Names extends string = string> = readonly Part[] & {
   readonly [K in Names]: Part<K>;
 };

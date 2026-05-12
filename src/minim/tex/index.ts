@@ -24,6 +24,7 @@ export {
   PartMarker,
   part,
   parts,
+  tint,
   type PartContent,
   type PartList,
 } from "./parts";
