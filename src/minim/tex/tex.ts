@@ -12,7 +12,7 @@
 // sub-formula is.
 
 import temml from "temml";
-import { signal, type ReadonlySignal } from "../core/signal";
+import { signal, type ReadonlySignal, type Signal } from "../core/signal";
 import { Shape, type ShapeOpts } from "../scene/shape";
 import { aabb, type AABB } from "../scene/box";
 import { tokens } from "../shapes/tokens";
@@ -165,6 +165,19 @@ const measureMathML = (
   try {
     const root = (mathEl ?? (div.firstElementChild as HTMLElement) ?? div);
     const rootRect = root.getBoundingClientRect();
+    // Anchor part rects to the *wrapper* (= the inline-block `div`,
+    // which sits at (0,0) of the live foreignObject), not the math
+    // element. With `<mfrac>` and other constructs the math content
+    // can overflow its line-box vertically — math's BCR top sits
+    // *above* the wrapper's BCR top — so a math-relative aabb would
+    // be off by that overflow when used for analytical positioning.
+    // Wrapper-relative makes `aabb.tl` exactly the matched mrow's
+    // position in shape-local frame (since shape-local = fO-local =
+    // wrapper-local), so `morph` can derive screen positions as
+    // `shape.translate + aabb.tl` without knowing math's
+    // intra-wrapper offset. Width/height keep using the math BCR so
+    // the foreignObject is sized to math content, not the line-box.
+    const wrapperRect = div.getBoundingClientRect();
     const rects = new Map<string, AABB>();
     div.querySelectorAll<HTMLElement>("[class*='minim-part-']").forEach(
       (el) => {
@@ -176,8 +189,8 @@ const measureMathML = (
         rects.set(
           cls,
           aabb(
-            r.left - rootRect.left,
-            r.top - rootRect.top,
+            r.left - wrapperRect.left,
+            r.top - wrapperRect.top,
             r.width,
             r.height,
           ),
@@ -274,11 +287,17 @@ export class TexShape extends Shape {
 
     const list: Part[] = [];
     const byName: Record<string, Part> = {};
+    /** Writable handles to each part's bounds, kept here so we can
+     *  refresh them once webfonts have actually loaded — see the
+     *  `document.fonts.ready` block below. */
+    const aabbWriters: Array<{ className: string; sig: Signal<AABB> }> = [];
     for (const m of meta) {
       const r = measured.rects.get(m.className) ?? aabb(0, 0, 0, 0);
       const liveEl = inner.querySelector<HTMLElement>(`.${m.className}`);
       if (liveEl) stabilizePart(liveEl);
-      const p = new Part(m.name, m.content, signal(r), liveEl);
+      const aabbSig = signal(r);
+      aabbWriters.push({ className: m.className, sig: aabbSig });
+      const p = new Part(m.name, m.content, aabbSig, liveEl);
       list.push(p);
       byName[m.name] = p;
       if (liveEl) {
@@ -296,6 +315,37 @@ export class TexShape extends Shape {
     const out = list.slice() as Part[] & Record<string, Part>;
     for (const k in byName) (out as Record<string, Part>)[k] = byName[k];
     this.parts = out as unknown as PartList;
+
+    // Refresh bounds after webfonts have settled. The synchronous
+    // measurement above runs before `New CM Math` (loaded from a CDN
+    // via @font-face) is necessarily ready, so it can fall back to
+    // browser-default math metrics — which differ from the live
+    // render's metrics once the real font arrives. The analytical
+    // `morph` reads `Part.aabb` directly (no live BCR), so a stale
+    // measurement shows up as a position pop on first morph. One
+    // re-measure on `document.fonts.ready` closes this race; the
+    // signal write is a no-op if metrics happen to match.
+    const fonts = (document as { fonts?: FontFaceSet }).fonts;
+    if (fonts?.ready) {
+      void fonts.ready.then(() => {
+        const fresh = measureMathML(mathml, fontSize, fontFamily);
+        if (fresh.width !== w.peek()) w.value = fresh.width;
+        if (fresh.height !== h.peek()) h.value = fresh.height;
+        for (const { className, sig } of aabbWriters) {
+          const r = fresh.rects.get(className);
+          if (!r) continue;
+          const cur = sig.peek();
+          if (
+            r.x !== cur.x ||
+            r.y !== cur.y ||
+            r.w !== cur.w ||
+            r.h !== cur.h
+          ) {
+            sig.value = r;
+          }
+        }
+      });
+    }
   }
 
   /** Sugar: `eq.highlight("a")` → `eq.parts.a.highlighted.value = true`. */

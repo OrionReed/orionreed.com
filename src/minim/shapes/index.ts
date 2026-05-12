@@ -19,6 +19,8 @@ export {
 } from "./annular-sector";
 export { connect, arrow, ensureArrowMarker, type ArrowOpts } from "./connect";
 export { clipPath } from "./clip";
+export { debug } from "./debug";
+export { handle, type HandleOpts } from "./handle";
 
 export { dashedPath } from "./dashed";
 export { tokens, type Tokens } from "./tokens";

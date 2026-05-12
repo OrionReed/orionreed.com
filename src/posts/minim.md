@@ -35,6 +35,8 @@ A small library for generator-driven animated SVG diagrams with reactive primiti
 
 <md-anchors></md-anchors>
 
+<md-handles></md-handles>
+
 <md-waapi-demo></md-waapi-demo>
 
 <md-aggregates></md-aggregates>
