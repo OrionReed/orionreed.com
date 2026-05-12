@@ -29,6 +29,7 @@ import {
   pt,
   signal,
   tex,
+  tint,
   type Content,
 } from "../../minim";
 
@@ -118,21 +119,16 @@ export class MdTexLive extends Diagram {
       }),
     );
 
-    // ── The equation ────────────────────────────────────────────────
-    // Two reactive parts: `nBound` (the upper limit of the sum) and
-    // `result` (the closed-form value). Both contents are computed
-    // signals over `t`; the tex shape re-renders whenever they
-    // change.
+    // Two reactive parts: the sum's upper bound and the closed-form
+    // result. Both contents are signals over `t`, so the tex shape
+    // re-renders whenever the slider moves.
     const nBound = part("n", nStr);
     const result = part("s", sumStr);
     const eq = s(big`${SUM_LOWER}^{${nBound}} i = ${result}`);
     eq.center.set(pt(W / 2, 90));
 
-    // Color the live parts so the eye knows which glyphs change with
-    // the slider. (The static `\sum_{i=1}^{}` operator and the `i`
-    // and `=` glyphs aren't parts — they stay default color.)
-    const ACCENT = "#5b8def";
-    eq.parts.n.color.value = ACCENT;
-    eq.parts.s.color.value = ACCENT;
+    // Tag the live parts with an accent color so the eye knows
+    // which glyphs respond to the slider.
+    tint("#5b8def", nBound, result);
   }
 }

@@ -207,6 +207,7 @@ export {
   PartMarker,
   part,
   parts,
+  tint,
   brace,
   box,
   underline,

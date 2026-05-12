@@ -1,15 +1,9 @@
 // minim/tex demo: matrix × vector, written compact then evaluated.
 //
-// Exercises:
-//   • Display mode (`tex({ display: "block" })`) — required for
-//     `\begin{pmatrix}…\end{pmatrix}` to render with proper bracket
-//     sizing and row spacing.
-//   • Per-cell identity carried across structurally different forms.
-//     Each matrix cell (a, b, c, d) and each vector cell (x, y) is
-//     a part — they ride from their compact slots into the result
-//     vector's expressions on the right.
-//   • Color tagging the row-vector pairings (top row red, bottom row
-//     blue) so the user sees which letters land where.
+// Exercises display mode (for `\begin{pmatrix}` rendering),
+// per-cell identity across structural rewrites, and 1↔2 fan-out
+// for cells that appear once on the compact side and twice on the
+// evaluated side (vector cells x, y, used by both result rows).
 
 import {
   Anchor,
@@ -23,6 +17,7 @@ import {
   signal,
   snapshot,
   tex,
+  tint,
   write,
   writeOut,
   type Content,
@@ -30,10 +25,9 @@ import {
 
 const RED = "#e25c5c";
 const BLUE = "#5b8def";
+const GREEN = "#3aa56b";
 
-// LaTeX commands held as JS-string constants — avoids triggering
-// Cursor's TS grammar bug when raw-template literals contain `\b…`,
-// `\p…`, `_{…=…}` etc. (See md-tex-correspond for prior art.)
+// JS-string constants — avoids Cursor TS grammar trips.
 const PMATRIX_OPEN = "\\begin{pmatrix}";
 const PMATRIX_CLOSE = "\\end{pmatrix}";
 
@@ -58,81 +52,48 @@ export class MdTexMatrix extends Diagram {
       }),
     );
 
-    // Cells: top row {a, b}, bottom row {c, d}; vector {x, y}.
-    // a, b, c, d each appear once on each side → simple 1↔1 ride.
-    // x and y each appear ONCE on the compact side but TWICE on the
-    // evaluated side (once per row). So they need `expand` — the
-    // top-row use and the bottom-row use are *components of the same
-    // identity*, individually addressable by their derived names.
-    // Morph then sees x's identity as 1↔2 and fans it out (forward)
-    // / folds it in (reverse).
+    // a, b, c, d appear once on each side — simple 1↔1 ride.
+    // x and y appear once on the compact side but twice on the
+    // evaluated side, so we `expand` them: the two evaluated
+    // appearances are components of one identity → 1↔2 fan-out.
     const { a, b, c, d } = parts("a", "b", "c", "d");
     const x = part("x");
     const y = part("y");
     const { xTop, xBot } = x.expand({ xTop: "x", xBot: "x" });
     const { yTop, yBot } = y.expand({ yTop: "y", yBot: "y" });
 
-    // Compact: 2×2 matrix times a 2-vector. The `\\` between rows
-    // is LaTeX's row separator (raw-template mode preserves both
-    // backslashes verbatim — temml sees `\\`).
+    // `\\` between rows is LaTeX's row separator (raw-template mode
+    // preserves both backslashes — temml sees `\\`).
     const compact = s(
       block`${PMATRIX_OPEN} ${a} & ${b} \\ ${c} & ${d} ${PMATRIX_CLOSE} ${PMATRIX_OPEN} ${x} \\ ${y} ${PMATRIX_CLOSE}`,
     );
-
-    // Evaluated: each component of the result is a sum of products.
-    // Top row uses xTop / yTop; bottom row uses xBot / yBot. These
-    // are 4 distinct named parts but share x's and y's identity.
     const evaluated = s(
       block`${PMATRIX_OPEN} ${a}${xTop} + ${b}${yTop} \\ ${c}${xBot} + ${d}${yBot} ${PMATRIX_CLOSE}`,
     );
 
     const eqs = [compact, evaluated];
-
     for (const eq of eqs) {
       eq.center.set(view.center);
       eq.opacity.value = 0;
     }
 
-    // Color by row: a, b in top row red; c, d in bottom row blue.
-    // x and y are vector cells — color them green so the user sees
-    // the column vector contributing to BOTH result rows. The
-    // expanded copies (xTop, xBot, yTop, yBot) on the evaluated side
-    // also get green so the tagging follows the fan-out.
-    const GREEN = "#3aa56b";
+    // Color by row: a, b red; c, d blue. x, y green and cascade to
+    // their expanded children (xTop/xBot, yTop/yBot).
     const tagColors = (): void => {
-      compact.parts.a.color.value = RED;
-      compact.parts.b.color.value = RED;
-      compact.parts.c.color.value = BLUE;
-      compact.parts.d.color.value = BLUE;
-      compact.parts.x.color.value = GREEN;
-      compact.parts.y.color.value = GREEN;
-      evaluated.parts.a.color.value = RED;
-      evaluated.parts.b.color.value = RED;
-      evaluated.parts.c.color.value = BLUE;
-      evaluated.parts.d.color.value = BLUE;
-      evaluated.parts.xTop.color.value = GREEN;
-      evaluated.parts.xBot.color.value = GREEN;
-      evaluated.parts.yTop.color.value = GREEN;
-      evaluated.parts.yBot.color.value = GREEN;
+      tint(RED, a, b);
+      tint(BLUE, c, d);
+      tint(GREEN, x, y);
     };
 
     const reset = snapshot(
       compact.opacity,
       evaluated.opacity,
-      compact.parts.a.color,
-      compact.parts.b.color,
-      compact.parts.c.color,
-      compact.parts.d.color,
-      compact.parts.x.color,
-      compact.parts.y.color,
-      evaluated.parts.a.color,
-      evaluated.parts.b.color,
-      evaluated.parts.c.color,
-      evaluated.parts.d.color,
-      evaluated.parts.xTop.color,
-      evaluated.parts.xBot.color,
-      evaluated.parts.yTop.color,
-      evaluated.parts.yBot.color,
+      a.color,
+      b.color,
+      c.color,
+      d.color,
+      x.color,
+      y.color,
       status,
     );
 
