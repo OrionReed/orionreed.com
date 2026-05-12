@@ -26,6 +26,7 @@ import { MdTexDemo } from "./optical-centering/md-tex-demo";
 import { MdWaapiDemo } from "./optical-centering/md-waapi-demo";
 import { MdAnchors } from "./optical-centering/md-anchors";
 import { MdHandles } from "./optical-centering/md-handles";
+import { MdMirror } from "./optical-centering/md-mirror";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -55,3 +56,4 @@ MdTexDemo.define();
 MdWaapiDemo.define();
 MdAnchors.define();
 MdHandles.define();
+MdMirror.define();

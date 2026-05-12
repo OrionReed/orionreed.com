@@ -31,6 +31,7 @@ export {
   DerivedPoint,
   pt,
   toPoint,
+  lensPoint,
   isPoint,
   vecEquals,
   type Pointlike,
