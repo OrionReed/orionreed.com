@@ -193,9 +193,7 @@ export {
   orbit,
   pulse,
   every,
-  // `swap` is re-exported from ./tex below — it's a single overloaded
-  // function that handles both Part and Shape arguments, dispatching to
-  // the original motion-stdlib position-swap when given shapes.
+  swap,
   stagger,
   splay,
   assemble,
@@ -216,13 +214,9 @@ export {
   highlight,
   write,
   writeOut,
-  writeParts,
-  unwriteParts,
   morph,
-  substitute,
   pluck,
   unpluck,
-  swap,
   Plucked,
   type TexInterp,
   type TexOpts,
