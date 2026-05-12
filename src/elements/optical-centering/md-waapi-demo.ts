@@ -15,7 +15,7 @@
 import {
   Anchor,
   Diagram,
-  Point,
+  polar,
   Scene,
   circle,
   computed,
@@ -73,7 +73,7 @@ export class MdWaapiDemo extends Diagram {
     const vp = viewProgress(this);
     bar(86, "view", vp);
 
-    // Prolate cycloid via `Point.polar(center, radius, angle)`:
+    // Prolate cycloid via `polar(center, radius, angle)`:
     // - `center` advances linearly along the bar with view progress.
     // - `tracker` orbits it at fixed radius; angular speed scales as
     //   `2π · LOOPS` over the [0,1] progress range.
@@ -86,7 +86,7 @@ export class MdWaapiDemo extends Diagram {
       computed(() => X + BW * vp.value),
       150,
     );
-    const tracker = Point.polar(
+    const tracker = polar(
       center,
       R,
       vp.derive((p) => p * 2 * Math.PI * LOOPS),

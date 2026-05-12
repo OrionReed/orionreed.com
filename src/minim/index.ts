@@ -24,18 +24,23 @@ export { toSig, when, type Arg } from "./core/arg";
 
 export { snapshot, counter } from "./core/store";
 
-export { type Vec } from "./core/vec";
-
+// `Vec` is the registered struct (value + type-witness via
+// `instanceof`). The plain `{x, y}` value type is exported as `V` —
+// what the legacy code called `type Vec` is now `type V`.
 export {
-  Point,
-  DerivedPoint,
+  Vec,
   pt,
+  polar,
   toPoint,
   lensPoint,
   isPoint,
   vecEquals,
+  type V,
+  type Point,
+  type DerivedPoint,
   type Pointlike,
-} from "./scene/point";
+  type ResolveVec,
+} from "./signals/vec";
 
 export {
   centroid,
@@ -45,7 +50,7 @@ export {
   meanNum,
 } from "./scene/aggregates";
 
-export { makeBox, aabb, type AABB, type Box } from "./scene/box";
+export { aabb, expandAABB, unionAABB, aabbEdgeFrom, type AABB, type Box } from "./scene/box";
 
 export {
   Shape,

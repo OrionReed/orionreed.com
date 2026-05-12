@@ -1,27 +1,23 @@
-// `Box` is the structural type for any reactive rectangular region.
-// Implemented by `Shape`, by `s.view()`, and by the layout helpers
-// (`split` / `grid` / `expand`). The name is structural, not a class —
-// authors never construct a "Box" directly; they receive one from a
-// Shape, the scene, or layout sugar.
+// `Box` is the structural reactive-rectangular-region surface used
+// across minim. It's implemented by:
 //
-// `aabb` is the source-of-truth Signal; `x/y/w/h` are convenience
-// signals; `center/top/bottom/left/right` are read-only anchor Points;
-// `at(u, v)` is the parametric escape hatch. Named corners (tl/tr/...)
-// are deliberately absent — use `at(0, 0)` etc. on the rare occasion
-// you want one.
+//   - Shape (class with an `.aabb` Signal field + cardinal anchors)
+//   - Part  (class with an `.aabb` Signal field + cardinal anchors)
+//   - any `Reactive<AABB>` from `signals/aabb` (the framework's
+//     prototype provides `.aabb` as a self-reference, plus the
+//     cardinals and `.at(u, v)` via `.getters({...})`)
 //
-// For placement (writing through anchors to position a Shape), see the
-// future writable-anchor plan; today, write `shape.translate` directly.
+// All three types satisfy this interface structurally — consumers
+// take `Box` and don't care which one they got.
+//
+// `aabb` (the value-level helpers below) and `Box` (the type) live
+// here together because they're conceptually paired. The reactive
+// AABB primitive itself lives in `signals/aabb`.
 
-import { DerivedPoint, type Pointlike } from "./point";
-import { computed, type ReadonlySignal } from "../core/signal";
+import type { ReadonlySignal } from "../core/signal";
+import type { Pointlike } from "../signals/vec";
 
-export interface AABB {
-  readonly x: number;
-  readonly y: number;
-  readonly w: number;
-  readonly h: number;
-}
+export type AABB = { x: number; y: number; w: number; h: number };
 
 export const aabb = (x: number, y: number, w: number, h: number): AABB =>
   ({ x, y, w, h });
@@ -64,11 +60,14 @@ export function aabbEdgeFrom(
 }
 
 /** Reactive rectangular region. Anchor types are `Pointlike` so
- *  implementations can narrow: views / splits return read-only
- *  `DerivedPoint`s, while `Shape` returns writable `Point`s (lens-
- *  backed through `translate`). */
+ *  implementations can narrow: views, splits, parts return read-only
+ *  `DerivedPoint`s; `Shape` returns writable `Point`s (lens-backed
+ *  through `translate`). */
 export interface Box {
-  /** Source-of-truth AABB Signal; everything else derives from it. */
+  /** Source-of-truth AABB Signal; everything else derives from it.
+   *  For `Reactive<AABB>` values from the framework, this is a
+   *  self-reference (`box.aabb === box`); for `Shape`/`Part`, it's
+   *  a real field. */
   readonly aabb: ReadonlySignal<AABB>;
 
   readonly x: ReadonlySignal<number>;
@@ -85,29 +84,4 @@ export interface Box {
   /** Reactive Point at normalized fraction `(u, v)`: `(0, 0)` is
    *  top-left, `(1, 1)` is bottom-right. Cardinals are sugar. */
   at(u: number, v: number): Pointlike;
-}
-
-/** Build a Box from a reactive AABB Signal. The 5 cardinal anchors are
- *  created eagerly (each is a tiny DerivedPoint); `at(u, v)` constructs
- *  fresh DerivedPoints on demand. */
-export function makeBox(sig: ReadonlySignal<AABB>): Box {
-  const at = (u: number, v: number): DerivedPoint =>
-    new DerivedPoint(() => {
-      const b = sig.value;
-      return { x: b.x + u * b.w, y: b.y + v * b.h };
-    });
-
-  return {
-    aabb: sig,
-    x: computed(() => sig.value.x),
-    y: computed(() => sig.value.y),
-    w: computed(() => sig.value.w),
-    h: computed(() => sig.value.h),
-    center: at(0.5, 0.5),
-    top: at(0.5, 0),
-    bottom: at(0.5, 1),
-    left: at(0, 0.5),
-    right: at(1, 0.5),
-    at,
-  };
 }

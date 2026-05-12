@@ -1,7 +1,7 @@
 import { computed, toSig, type Arg, type NumSig } from "../core";
 import {
   Shape,
-  DerivedPoint,
+  Vec,
   aabb,
   type Pointlike,
   type Segment,
@@ -87,7 +87,7 @@ export class AnnularSector<
     const a0 = () => this.a0.value;
     const a1 = () => this.a1.value;
     const polar = (rfn: () => number, afn: () => number) =>
-      new DerivedPoint(() => ({
+      Vec.derived(() => ({
         x: cx() + rfn() * Math.cos(afn()),
         y: cy() + rfn() * Math.sin(afn()),
       }));

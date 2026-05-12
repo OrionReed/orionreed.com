@@ -16,8 +16,9 @@ import {
   type ReadonlySignal,
 } from "../core/signal";
 import { toSig, type Arg } from "../core/arg";
-import { type AABB, type Box, makeBox } from "../scene/box";
-import type { Pointlike } from "../scene/point";
+import { type AABB, type Box } from "../scene/box";
+import { AABB as AABBStruct } from "../signals/aabb";
+import type { Pointlike } from "../signals/vec";
 import type { TexShape } from "./tex";
 
 /** A part's content can be a literal string, a signal, or a thunk. */
@@ -72,7 +73,7 @@ export class Part<N extends string = string> implements Box {
     readonly marker: PartMarker,
     readonly host: TexShape,
   ) {
-    const b = makeBox(aabb);
+    const b = AABBStruct.derived(() => aabb.value);
     this.x = b.x;
     this.y = b.y;
     this.w = b.w;

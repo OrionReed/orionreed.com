@@ -37,7 +37,7 @@ import type { Animator } from "../core/anim";
 import type { Vec } from "../core/vec";
 import { type AABB, type Box } from "../scene/box";
 import { circle } from "../shapes/circle";
-import { pt, type Pointlike } from "../scene/point";
+import { pt, type Pointlike } from "../signals/vec";
 
 // ── Types ────────────────────────────────────────────────────────────
 

@@ -11,6 +11,11 @@ import { struct } from "./struct";
 export type M = { a: number; b: number; c: number; d: number; e: number; f: number };
 
 export const Matrix2D = struct<M>("Matrix2D", { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 })
+  .construct(
+    (a: number, b: number, c: number, d: number, e: number, f: number): M => ({
+      a, b, c, d, e, f,
+    }),
+  )
   .equals(
     (m, n) =>
       m.a === n.a && m.b === n.b && m.c === n.c &&

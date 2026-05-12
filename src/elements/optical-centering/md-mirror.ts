@@ -30,12 +30,12 @@ import {
   meanVec,
   pt,
   type Point,
-  type Vec,
+  type V,
 } from "../../minim";
 
 /** Reflect point `p` across the line through `a` and `b`. Degenerate
  *  line (a == b) returns `p` unchanged. */
-function reflect(p: Vec, a: Vec, b: Vec): Vec {
+function reflect(p: V, a: V, b: V): V {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const len2 = dx * dx + dy * dy;

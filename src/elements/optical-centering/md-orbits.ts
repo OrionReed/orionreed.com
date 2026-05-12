@@ -3,7 +3,7 @@
 
 import {
   Diagram,
-  Point,
+  polar,
   Scene,
   type AnyShape,
   bounceIn,
@@ -57,7 +57,7 @@ export class MdOrbits extends Diagram {
     ) => {
       orbitRing(parent, r);
       const angle = angularMotion(period);
-      const p = group({ translate: Point.polar(pt(0, 0), r, angle) });
+      const p = group({ translate: polar(pt(0, 0), r, angle) });
       p.add(circle(pt(0, 0), size, { fill: true }));
 
       if (opts.ring) {

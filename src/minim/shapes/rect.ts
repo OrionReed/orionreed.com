@@ -1,11 +1,11 @@
 import { computed, toSig, type Arg, type NumSig } from "../core";
 import {
   Shape,
-  DerivedPoint,
-  Point,
+  Vec,
   aabb,
   isPoint,
   type Box,
+  type DerivedPoint,
   type Pointlike,
   type Segment,
 } from "../scene";
@@ -63,7 +63,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   }
 
   override boundary(toward: Pointlike): DerivedPoint {
-    return new DerivedPoint(() => {
+    return Vec.derived(() => {
       const c = this.center.value;
       const b = this.aabb.value;
       const sc = this.scale.value;
@@ -102,7 +102,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     const y = b.y;
     const w = b.w;
     const h = b.h;
-    const p = (px: number, py: number) => new Point({ x: px, y: py });
+    const p = (px: number, py: number) => Vec.signal({ x: px, y: py });
     if (r <= 0) {
       return [
         { type: "line", from: p(x, y), to: p(x + w, y) },

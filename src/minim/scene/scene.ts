@@ -1,7 +1,8 @@
 // Callable scene handle: `s(shape)` mounts under root; `s.view(...)`
 // or `s.fit(...)` sets the SVG viewBox.
 
-import { aabb, makeBox, type AABB, type Box } from "./box";
+import { aabb, type AABB, type Box } from "./box";
+import { AABB as AABBStruct } from "../signals/aabb";
 import { effect, signal } from "../core/signal";
 import { toSig, type Arg } from "../core/arg";
 import type { AnyShape } from "./shape";
@@ -49,7 +50,7 @@ export function makeScene(
 ): Scene {
   let viewSet = false;
   const viewSig = signal<AABB>(aabb(0, 0, 0, 0));
-  const viewBox = makeBox(viewSig);
+  const viewBox = AABBStruct.derived(() => viewSig.value);
 
   const fn = ((...shapes: AnyShape[]) => {
     for (const shape of shapes) root.add(shape);

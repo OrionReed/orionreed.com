@@ -13,7 +13,8 @@ import {
   type AABB,
   type Box,
 } from "./box";
-import type { Vec } from "../core/vec";
+import { AABB as AABBStruct } from "../signals/aabb";
+import type { Vec as Vlike } from "../core/vec";
 import {
   compose,
   invert,
@@ -24,14 +25,20 @@ import {
   type Matrix2D,
 } from "./matrix";
 import {
-  DerivedPoint,
-  Point,
+  Vec,
   lensPoint,
   pt,
   toPoint,
+  type DerivedPoint,
+  type Point,
   type Pointlike,
   type ResolveVec,
-} from "./point";
+} from "../signals/vec";
+
+// Vec is imported as the new struct (signals/vec).
+// Vlike (the legacy `{x, y}` plain interface) is kept as a type alias
+// for parameter typing where we don't need the reactive surface.
+type Vec = Vlike;
 import { suspend, type Animator } from "../core/anim";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
@@ -116,25 +123,43 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
   readonly opacity: ResolveSig<Lookup<O, "opacity">, number>;
 
   // ── Box interface ────────────────────────────────────────────────────
+  //
+  // Source-of-truth: `aabb` (local-frame AABB Signal). Everything else
+  // is derived lazily — `x/y/w/h` axis projections via the AABB
+  // struct's framework field accessors; `center/top/bottom/left/right`
+  // via writable lens-backed anchors built on first access (cached as
+  // own-properties via the same own-property pattern). Most shapes
+  // never read most anchors; the ones that do pay only for what they
+  // touch.
+
   /** Local-frame AABB Signal; source-of-truth for the scalar fields
    *  below. For groups, the union of non-aside children's AABBs (each
    *  composed through its transform). */
   readonly aabb: ReadonlySignal<AABB>;
+  /** Axis projections of the AABB. Eager so subclasses (Rect) can
+   *  override with source signals. Cheap — the AABB Reactive's field
+   *  accessors are themselves lazy at the framework level, so these
+   *  forward to whatever's currently the cheapest path. */
   readonly x: ReadonlySignal<number>;
   readonly y: ReadonlySignal<number>;
   readonly w: ReadonlySignal<number>;
   readonly h: ReadonlySignal<number>;
 
-  /** Writable parent-frame anchor: reads return the post-transform
-   *  position (so connectors and labels track translate/rotate/scale);
-   *  writes shift `translate` so the anchor lands at the target. Writes
-   *  fail if `translate` is readonly. */
-  readonly center: Point;
-  readonly top: Point;
-  readonly bottom: Point;
-  readonly left: Point;
-  readonly right: Point;
-  at: (u: number, v: number) => Point;
+  /** Lens-backed writable cardinal anchors. Reads return the
+   *  post-transform parent-frame position (so connectors and labels
+   *  track translate/rotate/scale); writes shift `translate` by
+   *  (target - currentWorldAnchor) so the anchor lands at the target.
+   *  Lazy: built on first access, cached as own-property — most
+   *  shapes only ever read 1-2 anchors, the rest never allocate. */
+  get center(): Point { return this.#anchor("center", 0.5, 0.5); }
+  get top(): Point    { return this.#anchor("top",    0.5, 0); }
+  get bottom(): Point { return this.#anchor("bottom", 0.5, 1); }
+  get left(): Point   { return this.#anchor("left",   0,   0.5); }
+  get right(): Point  { return this.#anchor("right",  1,   0.5); }
+  /** Reactive Point at normalized fraction `(u, v)` in parent frame.
+   *  Cardinals are sugar over this. Each call constructs a fresh
+   *  anchor (no caching since `(u, v)` may differ per call). */
+  at(u: number, v: number): Point { return this.#makeAnchor(u, v); }
 
   /** Composed `translate × pivoted-rotate × pivoted-scale`. Decoupled
    *  from `aabb` so transforms don't trigger AABB recomputation. */
@@ -195,7 +220,11 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
 
     // Group default: union of non-aside children's AABBs, each composed
     // through its transform. Lazy — `this._children` is read on access.
-    const aabbSig = computed(
+    // Built as a Reactive<AABB> via the framework: `aabbSig.x` /
+    // `.y` / `.w` / `.h` are lazy field accessors at the framework
+    // level (built on first access, cached as own-property), which
+    // is what we forward to below.
+    const aabbSig = AABBStruct.derived(
       aabbFn ??
         (() => {
           const cs = this._children.value
@@ -204,11 +233,11 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
           return cs.length ? unionAABB(...cs) : aabb(0, 0, 0, 0);
         }),
     );
-    this.aabb = aabbSig;
-    this.x = computed(() => aabbSig.value.x);
-    this.y = computed(() => aabbSig.value.y);
-    this.w = computed(() => aabbSig.value.w);
-    this.h = computed(() => aabbSig.value.h);
+    this.aabb = aabbSig as ReadonlySignal<AABB>;
+    this.x = aabbSig.x;
+    this.y = aabbSig.y;
+    this.w = aabbSig.w;
+    this.h = aabbSig.h;
 
     this.transform = computed(() => {
       const t = this.translate.value;
@@ -219,39 +248,6 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
       }
       return compose(t, r, sc, this.origin.value);
     });
-
-    // Lens-backed writable anchors. Reads project the local AABB anchor
-    // through `transform` (post-transform parent-frame). Writes shift
-    // `translate` by (target - currentWorldAnchor) — exact under any
-    // rotation/scale, since `translate` is purely additive after the
-    // linear part of the compose. Writes assume `translate` is writable;
-    // if a caller passed a `computed` translate, the assignment throws.
-    const makeAnchor = (u: number, v: number): Point =>
-      lensPoint(
-        () => {
-          const b = aabbSig.value;
-          return transformPoint(this.transform.value, {
-            x: b.x + u * b.w,
-            y: b.y + v * b.h,
-          });
-        },
-        (target) => {
-          const b = aabbSig.peek();
-          const local = { x: b.x + u * b.w, y: b.y + v * b.h };
-          const currentWorld = transformPoint(this.transform.peek(), local);
-          const tNow = this.translate.peek();
-          (this.translate as Signal<Vec>).value = {
-            x: tNow.x + (target.x - currentWorld.x),
-            y: tNow.y + (target.y - currentWorld.y),
-          };
-        },
-      );
-    this.at = makeAnchor;
-    this.center = makeAnchor(0.5, 0.5);
-    this.top = makeAnchor(0.5, 0);
-    this.bottom = makeAnchor(0.5, 1);
-    this.left = makeAnchor(0, 0.5);
-    this.right = makeAnchor(1, 0.5);
 
     this.disposers.push(
       effect(() => {
@@ -264,16 +260,62 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
   }
 
   /** Perimeter point in the direction of `toward`. In parent-frame, so
-   *  it matches the new anchor reads: connectors land on the visual
-   *  edge after translate/rotate/scale. Default is AABB-edge math;
-   *  tighter shapes (Circle, Rect) override. */
+   *  it matches the anchor reads: connectors land on the visual edge
+   *  after translate/rotate/scale. Default is AABB-edge math; tighter
+   *  shapes (Circle, Rect) override. */
   boundary(toward: Pointlike): DerivedPoint {
-    return new DerivedPoint(() =>
+    return Vec.derived(() =>
       aabbEdgeFrom(
         transformAABB(this.transform.value, this.aabb.value),
         toward.value,
       ),
     );
+  }
+
+  // ── Lazy anchor construction ────────────────────────────────────────
+  //
+  // `#makeAnchor(u, v)` builds a writable lens-backed Point: reads
+  // project the local AABB anchor through `transform` (parent-frame
+  // post-transform); writes shift `translate` by the delta so the
+  // anchor lands at the target. Writes throw if `translate` is
+  // readonly (e.g. caller passed a `computed`).
+  //
+  // `#anchor(name, u, v)` is the cardinal cache: builds via
+  // `#makeAnchor` on first access and installs the result as an
+  // own-property on `this`, so subsequent `shape.center` reads bypass
+  // the getter entirely (own-property fast path).
+  #makeAnchor(u: number, v: number): Point {
+    const aabbSig = this.aabb;
+    return lensPoint(
+      () => {
+        const b = aabbSig.value;
+        return transformPoint(this.transform.value, {
+          x: b.x + u * b.w,
+          y: b.y + v * b.h,
+        });
+      },
+      (target) => {
+        const b = aabbSig.peek();
+        const local = { x: b.x + u * b.w, y: b.y + v * b.h };
+        const currentWorld = transformPoint(this.transform.peek(), local);
+        const tNow = this.translate.peek();
+        (this.translate as Signal<Vec>).value = {
+          x: tNow.x + (target.x - currentWorld.x),
+          y: tNow.y + (target.y - currentWorld.y),
+        };
+      },
+    );
+  }
+
+  #anchor(name: string, u: number, v: number): Point {
+    const val = this.#makeAnchor(u, v);
+    Object.defineProperty(this, name, {
+      value: val,
+      writable: false,
+      configurable: false,
+      enumerable: false,
+    });
+    return val;
   }
 
   /** Stroke segments — used by the dashed renderer. Default is the

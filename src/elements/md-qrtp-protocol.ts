@@ -1,6 +1,5 @@
 import {
   Diagram,
-  Point,
   Scene,
   annularSector,
   attr,
@@ -8,6 +7,7 @@ import {
   computed,
   label,
   line,
+  polar,
   signal,
   snapshot,
   when,
@@ -99,7 +99,7 @@ export class MdQrtpProtocol extends Diagram {
     for (let i = 0; i < N; i++) {
       const a = start + (i * TAU) / N;
       s(
-        line(Point.polar(center, rIn, a), Point.polar(center, rOut, a), {
+        line(polar(center, rIn, a), polar(center, rOut, a), {
           thin: true,
         }),
       );

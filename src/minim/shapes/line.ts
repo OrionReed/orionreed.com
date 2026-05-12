@@ -1,8 +1,9 @@
 import { computed, type Arg, type ReadonlySignal } from "../core";
 import {
   Shape,
-  DerivedPoint,
+  Vec,
   aabb,
+  type DerivedPoint,
   type Pointlike,
   type Segment,
 } from "../scene";
@@ -89,7 +90,7 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
 
   /** Closer endpoint to `toward`. */
   override boundary(toward: Pointlike): DerivedPoint {
-    return new DerivedPoint(() => {
+    return Vec.derived(() => {
       const t = toward.value;
       const a = this.from.value;
       const b = this.to.value;

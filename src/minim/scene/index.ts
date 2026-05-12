@@ -2,16 +2,19 @@
 // matrix math + the `Scene` callable. `../shapes/` is built on this.
 
 export {
-  Point,
-  DerivedPoint,
+  Vec,
   pt,
+  polar,
   toPoint,
   lensPoint,
   isPoint,
   vecEquals,
+  type V,
+  type Point,
+  type DerivedPoint,
   type Pointlike,
   type ResolveVec,
-} from "./point";
+} from "../signals/vec";
 
 export {
   centroid,
@@ -25,7 +28,6 @@ export {
   aabb,
   aabbEdgeFrom,
   expandAABB,
-  makeBox,
   unionAABB,
   type AABB,
   type Box,

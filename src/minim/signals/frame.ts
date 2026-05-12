@@ -45,7 +45,8 @@ export const Frame = {
   /** Child frame: `parent · local`. The result is a derived
    *  Reactive<M> that updates when either input changes. */
   child: (parent: Frame, local: Frame | M): Frame => {
-    const localR = local instanceof Signal ? local : Matrix2D.signal(local);
+    const localR =
+      local instanceof Signal ? (local as Frame) : Matrix2D.signal(local as M);
     return parent.multiply(localR);
   },
 };

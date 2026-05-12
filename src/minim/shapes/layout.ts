@@ -1,10 +1,10 @@
 // Spatial composition primitives. Reference points for growth:
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
-import { computed } from "../core/signal";
 import { toSig, type Arg } from "../core/arg";
 import { transformAABB } from "../scene/matrix";
-import { aabb, expandAABB, makeBox, type Box } from "../scene/box";
+import { aabb, expandAABB, type Box } from "../scene/box";
+import { AABB } from "../signals/aabb";
 import type { Shape } from "../scene";
 
 export interface ArrangeOpts {
@@ -63,7 +63,7 @@ export function arrange(
 /** Inflate a Box on each side by `by`. */
 export function expand(box: Box, by: Arg<number>): Box {
   const bys = toSig(by);
-  return makeBox(computed(() => expandAABB(box.aabb.value, bys.value)));
+  return AABB.derived(() => expandAABB(box.aabb.value, bys.value));
 }
 
 /** Split a Box along an axis into N reactive sub-Boxes.
@@ -85,21 +85,19 @@ export function split(
   );
   const gapSig = toSig(opts.gap ?? 0);
   return ratios.map((r, i) =>
-    makeBox(
-      computed(() => {
-        const b = box.aabb.value;
-        const gap = gapSig.value;
-        const gapTotal = gap * (ratios.length - 1);
-        if (axis === "x") {
-          const free = b.w - gapTotal;
-          const offset = (cumBefore[i] / total) * free + gap * i;
-          return aabb(b.x + offset, b.y, (r / total) * free, b.h);
-        }
-        const free = b.h - gapTotal;
+    AABB.derived(() => {
+      const b = box.aabb.value;
+      const gap = gapSig.value;
+      const gapTotal = gap * (ratios.length - 1);
+      if (axis === "x") {
+        const free = b.w - gapTotal;
         const offset = (cumBefore[i] / total) * free + gap * i;
-        return aabb(b.x, b.y + offset, b.w, (r / total) * free);
-      }),
-    ),
+        return aabb(b.x + offset, b.y, (r / total) * free, b.h);
+      }
+      const free = b.h - gapTotal;
+      const offset = (cumBefore[i] / total) * free + gap * i;
+      return aabb(b.x, b.y + offset, b.w, (r / total) * free);
+    }),
   );
 }
 

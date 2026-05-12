@@ -8,9 +8,10 @@ import {
 } from "../core";
 import {
   Shape,
-  DerivedPoint,
+  Vec,
   aabb,
   isPoint,
+  type DerivedPoint,
   type Pointlike,
   type Segment,
 } from "../scene";
@@ -55,7 +56,7 @@ function sampler(pts: Signal<readonly Pointlike[]>) {
   };
 
   const sampleAt = (ds: ReadonlySignal<number>): DerivedPoint =>
-    new DerivedPoint(() => {
+    Vec.derived(() => {
       const points = pts.value;
       if (points.length === 0) return { x: 0, y: 0 };
       if (points.length === 1) return points[0].value;
@@ -75,7 +76,7 @@ function sampler(pts: Signal<readonly Pointlike[]>) {
 
   const tangentAt = (t: Arg<number>): DerivedPoint => {
     const ts = toSig(t);
-    return new DerivedPoint(() => {
+    return Vec.derived(() => {
       const points = pts.value;
       if (points.length < 2) return { x: 1, y: 0 };
       const total = length.value;

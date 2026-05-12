@@ -14,14 +14,14 @@
 
 import { computed } from "../core";
 import {
-  DerivedPoint,
+  Vec,
   Shape,
   isPoint,
-  makeBox,
   type AnyShape,
   type Box,
   type Pointlike,
 } from "../scene";
+import { AABB } from "../signals/aabb";
 import { transformAABB, transformPoint } from "../scene/matrix";
 import { circle } from "./circle";
 import { line } from "./line";
@@ -46,9 +46,7 @@ const outlineOpts = {
  *  through. */
 function parentBox(b: Box): Box {
   if (b instanceof Shape) {
-    return makeBox(
-      computed(() => transformAABB(b.transform.value, b.aabb.value)),
-    );
+    return AABB.derived(() => transformAABB(b.transform.value, b.aabb.value));
   }
   return b;
 }
@@ -66,7 +64,7 @@ const dot = (p: Pointlike | Box, r = 2.5) =>
 
 /** Crosshair at a Shape's rotate/scale pivot, in parent frame. */
 const origin = (s: Shape, size = 8) => {
-  const pivot = new DerivedPoint(() =>
+  const pivot = Vec.derived(() =>
     transformPoint(s.transform.value, s.origin.value),
   );
   const half = size / 2;
@@ -138,7 +136,7 @@ const path = (p: Path, ticks = 5) => {
     const t = ticks === 1 ? 0 : i / (ticks - 1);
     const head = p.pointAt(t);
     const tan = p.tangentAt(t);
-    const tip = new DerivedPoint(() => ({
+    const tip = Vec.derived(() => ({
       x: head.value.x + tan.value.x * 6,
       y: head.value.y + tan.value.y * 6,
     }));

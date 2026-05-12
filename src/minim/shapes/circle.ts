@@ -1,8 +1,9 @@
 import { toSig, type Arg, type NumSig } from "../core";
 import {
   Shape,
-  DerivedPoint,
+  Vec,
   aabb,
+  type DerivedPoint,
   type Pointlike,
   type Segment,
 } from "../scene";
@@ -42,7 +43,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   /** Point on perimeter at angle θ (radians, y-down). */
   atAngle(angle: Arg<number>): DerivedPoint {
     const a = toSig(angle);
-    return new DerivedPoint(() => ({
+    return Vec.derived(() => ({
       x: this.center.x.value + this.radius.value * Math.cos(a.value),
       y: this.center.y.value + this.radius.value * Math.sin(a.value),
     }));
@@ -50,14 +51,14 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   /** Unit tangent at angle θ. */
   tangentAt(angle: Arg<number>): DerivedPoint {
     const a = toSig(angle);
-    return new DerivedPoint(() => ({
+    return Vec.derived(() => ({
       x: -Math.sin(a.value),
       y: Math.cos(a.value),
     }));
   }
 
   override boundary(toward: Pointlike): DerivedPoint {
-    return new DerivedPoint(() => {
+    return Vec.derived(() => {
       const t = toward.value;
       const c = this.center.value;
       const sc = this.scale.value;

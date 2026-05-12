@@ -4,10 +4,9 @@
 
 import {
   Anim,
-  DerivedPoint,
   Diagram,
   EventBus,
-  Point,
+  Vec,
   Scene,
   Anchor,
   assemble,
@@ -864,10 +863,10 @@ const TESTS: TestCase[] = [
     name: "pt(literal) → Point; pt(signal) → DerivedPoint",
     run: (assert) => {
       const lit = pt(1, 2);
-      assert(lit instanceof Point, `pt(num,num) should be Point`);
+      assert(Vec.isWritable(lit), `pt(num,num) should be writable Vec`);
       const s = signal(5);
       const der = pt(s, 10);
-      assert(der instanceof DerivedPoint, `pt(sig,num) should be DerivedPoint`);
+      assert(Vec.is(der) && !Vec.isWritable(der), `pt(sig,num) should be derived Vec`);
       assert(der.x.value === 5 && der.y.value === 10, `derived read off`);
       s.value = 99;
       assert(der.x.value === 99, `derived didn't follow source: ${der.x.value}`);
@@ -879,7 +878,7 @@ const TESTS: TestCase[] = [
       const a = pt(1, 2);
       const b = pt(3, 4);
       const sum = a.add(b);
-      assert(sum instanceof DerivedPoint, `add result not DerivedPoint`);
+      assert(Vec.is(sum) && !Vec.isWritable(sum), `add result must be derived Vec`);
       assert(sum.value.x === 4 && sum.value.y === 6, `sum value off`);
       a.value = { x: 10, y: 20 };
       assert(sum.value.x === 13 && sum.value.y === 24, `sum didn't react`);
@@ -891,7 +890,7 @@ const TESTS: TestCase[] = [
       const a = { translate: pt(0, 0) };
       const b = { translate: pt(100, 50) };
       const c = centroid(a, b);
-      assert(c instanceof Point, `centroid should be a Point`);
+      assert(Vec.isWritable(c), `centroid should be a writable Vec`);
       assert(c.value.x === 50 && c.value.y === 25, `initial avg off`);
       c.value = { x: 60, y: 35 };
       assert(a.translate.peek().x === 10, `a.x after write: ${a.translate.peek().x}`);
@@ -926,7 +925,7 @@ const TESTS: TestCase[] = [
       const a = signal({ x: 0, y: 0 });
       const b = signal({ x: 100, y: 50 });
       const m = meanVec(a, b);
-      assert(m instanceof Point, `meanVec should return a Point`);
+      assert(Vec.isWritable(m), `meanVec should return a writable Vec`);
       assert(m.value.x === 50 && m.value.y === 25, `initial mean off`);
       m.value = { x: 60, y: 35 }; // delta (10, 10)
       assert(a.peek().x === 10 && a.peek().y === 10, `a not shifted: ${JSON.stringify(a.peek())}`);
@@ -964,7 +963,7 @@ const TESTS: TestCase[] = [
       // 100×60 rect at (50, 70). Identity transform → local center
       // == post-transform center == (100, 100).
       const r = rect(50, 70, 100, 60);
-      assert(r.center instanceof Point, `shape.center must be a Point`);
+      assert(Vec.isWritable(r.center), `shape.center must be a writable Vec`);
       assert(r.center.value.x === 100 && r.center.value.y === 100,
         `center initial: ${JSON.stringify(r.center.value)}`);
       // Write target (250, 300). Translate should shift by (150, 200).
