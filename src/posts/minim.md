@@ -9,8 +9,6 @@ A small library for generator-driven animated SVG diagrams with reactive primiti
 
 <md-centering></md-centering>
 
-<md-anim-demo></md-anim-demo>
-
 <md-transitions></md-transitions>
 
 <md-orbits></md-orbits>
