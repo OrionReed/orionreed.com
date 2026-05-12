@@ -10,7 +10,6 @@ import {
   Anchor,
   button,
   circle,
-  css,
   endOn,
   fadeOut,
   label,
@@ -46,12 +45,6 @@ function* lifecycle(
 }
 
 export class MdCancel extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 420px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     s.view(W, H);
 

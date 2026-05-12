@@ -14,7 +14,6 @@ import {
   attract,
   centroid,
   circle,
-  css,
   drift,
   endOn,
   forEach,
@@ -1166,12 +1165,6 @@ const HEADER_H = 36;
 const PAD_X = 16;
 
 export class MdRuntimeTests extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 640px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     const W = 600;
     const H = HEADER_H + TESTS.length * ROW_H + 36;

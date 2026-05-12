@@ -33,19 +33,11 @@ export class Diagram extends HTMLElement {
   static styles = css`
     :host {
       display: block;
-      margin: 1rem 0;
-    }
-    .scene-container {
-      padding: 1rem;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    .scene-vis {
+      margin: 1rem auto;
       width: 100%;
-      max-width: var(--scene-max-width, 600px);
+      max-width: calc(var(--d-w, 600) * 1px);
     }
-    .scene-vis svg {
+    svg {
       display: block;
       width: 100%;
       height: auto;
@@ -70,7 +62,7 @@ export class Diagram extends HTMLElement {
     const root = new Shape();
     this.svg.replaceChildren(root.el);
     ensureArrowMarker(this.svg);
-    this.s = makeScene(this.svg, root);
+    this.s = makeScene(this.svg, root, this);
     this.scene(this.s);
     if (this.s._viewPending) this.s.fit();
   }
@@ -93,13 +85,7 @@ export class Diagram extends HTMLElement {
 
   private mountSvg(): void {
     this.svg = document.createElementNS(SVG_NS, "svg") as SVGSVGElement;
-    const container = document.createElement("div");
-    container.className = "scene-container";
-    const vis = document.createElement("div");
-    vis.className = "scene-vis";
-    vis.appendChild(this.svg);
-    container.appendChild(vis);
-    this.shadow.appendChild(container);
+    this.shadow.appendChild(this.svg);
   }
 
   /** Combine base + subclass styles. Cached per subclass. */

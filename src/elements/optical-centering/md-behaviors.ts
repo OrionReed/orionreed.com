@@ -9,7 +9,6 @@ import {
   Anchor,
   attract,
   circle,
-  css,
   drift,
   label,
   oscillate,
@@ -25,12 +24,6 @@ const H = 320;
 const N_TRAIL = 14;
 
 export class MdBehaviors extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 640px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     s.view(W, H);
 

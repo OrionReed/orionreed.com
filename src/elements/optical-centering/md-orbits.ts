@@ -8,7 +8,6 @@ import {
   type AnyShape,
   bounceIn,
   circle,
-  css,
   group,
   pt,
   stagger,
@@ -19,12 +18,6 @@ import {
 } from "../../minim";
 
 export class MdOrbits extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 480px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     const view = s.view(400, 320);
 

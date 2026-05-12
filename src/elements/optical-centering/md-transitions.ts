@@ -7,7 +7,6 @@ import {
   Scene,
   Shape,
   circle,
-  css,
   label,
   stagger,
   pt,
@@ -41,12 +40,6 @@ interface LaneSpec {
 }
 
 export class MdTransitions extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 640px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     const W = LEFT_PAD + RIGHT_PAD + 360;
     const H = LANES * LANE_GAP + 30;

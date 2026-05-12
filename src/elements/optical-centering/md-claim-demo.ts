@@ -21,7 +21,6 @@ import {
   Scene,
   circle,
   claim,
-  css,
   fadeIn,
   fadeOut,
   forEach,
@@ -32,12 +31,6 @@ import {
 } from "../../minim";
 
 export class MdClaimDemo extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 540px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     const W = 520;
     const H = 330;

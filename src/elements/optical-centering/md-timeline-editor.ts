@@ -10,7 +10,6 @@ import {
   Anchor,
   circle,
   computed,
-  css,
   draggable,
   label,
   line,
@@ -27,12 +26,6 @@ const COLORS = ["#5b8def", "#f5a623", "#e25c5c"];
 const MAX_DUR = 2.5;
 
 export class MdTimelineEditor extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 640px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     const W = 600;
     const H = 320;

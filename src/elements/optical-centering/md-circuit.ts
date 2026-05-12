@@ -20,7 +20,6 @@ import {
   circle,
   computed,
   counter,
-  css,
   label,
   linear,
   path,
@@ -33,12 +32,6 @@ import {
 import * as R from "../rand";
 
 export class MdCircuit extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 660px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     s.view(600, 360);
     const anim = this.anim;

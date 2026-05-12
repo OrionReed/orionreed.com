@@ -2,7 +2,6 @@
 
 import {
   circle,
-  css,
   Diagram,
   easeInOut,
   label,
@@ -29,12 +28,6 @@ function* setTextFor(
 }
 
 export class MdAnimDemo extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 640px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     s.view(600, 280);
 

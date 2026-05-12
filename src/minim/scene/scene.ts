@@ -40,7 +40,11 @@ export interface Scene {
   readonly _viewPending: boolean;
 }
 
-export function makeScene(svg: SVGSVGElement, root: AnyShape): Scene {
+export function makeScene(
+  svg: SVGSVGElement,
+  root: AnyShape,
+  host?: HTMLElement,
+): Scene {
   let viewSet = false;
   const viewSig = signal<AABB>(aabb(0, 0, 0, 0));
   const viewBounds = new Bounds(viewSig);
@@ -56,6 +60,13 @@ export function makeScene(svg: SVGSVGElement, root: AnyShape): Scene {
     svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     svg.setAttribute("width", String(w));
     svg.setAttribute("height", String(h));
+    // Drive host sizing from viewBox: `:host` reads `--d-w` to set
+    // max-width, so author calls `s.view(W, H)` once and the layout
+    // follows. Authors can override per-element via `style="--d-w: N"`.
+    if (host) {
+      host.style.setProperty("--d-w", String(w));
+      host.style.setProperty("--d-h", String(h));
+    }
   };
 
   Object.defineProperty(fn, "svg", { value: svg });

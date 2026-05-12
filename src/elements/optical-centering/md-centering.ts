@@ -4,7 +4,6 @@ import {
   Text,
   Anchor,
   circle,
-  css,
   easeInOut,
   easeOut,
   label,
@@ -35,12 +34,6 @@ function tick(a: Pointlike, b: Pointlike, f: number, h: number, opts: LineOpts =
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 export class MdCentering extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 640px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     s.view(640, 240);
 

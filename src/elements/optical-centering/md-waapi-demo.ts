@@ -19,7 +19,6 @@ import {
   Scene,
   circle,
   computed,
-  css,
   inView,
   label,
   pt,
@@ -30,12 +29,6 @@ import {
 } from "../../minim";
 
 export class MdWaapiDemo extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 580px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     const view = s.view(560, 230);
     const X = 56;

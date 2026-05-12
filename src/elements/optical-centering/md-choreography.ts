@@ -8,7 +8,6 @@ import {
   assemble,
   centroid,
   circle,
-  css,
   easeInOut,
   label,
   orbit,
@@ -62,12 +61,6 @@ const PAIRS: [number, number][] = [
 ];
 
 export class MdChoreography extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 640px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     s.view(W, H);
 

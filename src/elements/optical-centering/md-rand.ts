@@ -10,7 +10,6 @@ import {
   bounceIn,
   circle,
   computed,
-  css,
   easeIn,
   easeInOut,
   easeOut,
@@ -104,12 +103,6 @@ const MOVES: Move[] = [
 ];
 
 export class MdRand extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 640px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     s.view(W, H);
 

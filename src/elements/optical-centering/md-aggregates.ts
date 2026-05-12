@@ -8,7 +8,6 @@ import {
   Scene,
   Anchor,
   centroid,
-  css,
   easeInOut,
   label,
   meanRotation,
@@ -31,12 +30,6 @@ const SHAPES = [
 ];
 
 export class MdAggregates extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 640px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     s.view(W, H);
 

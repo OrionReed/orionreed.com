@@ -7,7 +7,6 @@ import {
   Anchor,
   circle,
   computed,
-  css,
   draggable,
   label,
   line,
@@ -25,12 +24,6 @@ const TRACK_COUNT = 3;
 const STRIP_H_TOTAL = TRACK_H * TRACK_COUNT + STRIP_PAD * 2;
 
 export class MdMultitrack extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 640px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     const W = 600;
     const H = 320;

@@ -14,7 +14,6 @@ import {
   circle,
   computed,
   counter,
-  css,
   easeOut,
   fadeIn,
   fadeOut,
@@ -73,12 +72,6 @@ function assignLanes(tree: TraceTree): {
 const t = tagAll({ fadeIn, fadeUp, fadeOut, fadeUpOut, spinIn, zoomOut });
 
 export class MdTraceDemo extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 640px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     const H = ROWS_Y + MAX_LANES * (ROW_H + ROW_GAP) + 24;
     s.view(W, H);

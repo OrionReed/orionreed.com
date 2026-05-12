@@ -11,7 +11,6 @@ import {
   button,
   circle,
   computed,
-  css,
   fadeOut,
   label,
   pt,
@@ -51,12 +50,6 @@ function trackedClick(target: EventTarget): Animator<MouseEvent> {
 }
 
 export class MdReact extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 420px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     s.view(W, H);
 

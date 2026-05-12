@@ -8,7 +8,6 @@ import {
   Anchor,
   arrange,
   circle,
-  css,
   drift,
   easeInOut,
   label,
@@ -20,12 +19,6 @@ import {
 } from "../../minim";
 
 export class MdLayoutDemo extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 560px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     s.view(520, 360);
 

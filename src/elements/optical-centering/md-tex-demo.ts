@@ -9,7 +9,6 @@ import {
   Scene,
   brace,
   box,
-  css,
   highlight,
   label,
   morph,
@@ -25,12 +24,6 @@ import {
 } from "../../minim";
 
 export class MdTexDemo extends Diagram {
-  static styles = css`
-    :host {
-      --scene-max-width: 580px;
-    }
-  `;
-
   protected scene(s: Scene): void {
     const view = s.view(560, 240);
 
@@ -51,33 +44,32 @@ export class MdTexDemo extends Diagram {
       }),
     );
 
-    // Pythagorean theorem and its solved form for `c`. Both share
-    // named parts `a`, `b`, `c` so morph can match them across.
-    const eq1 = s(
-      tex({
-        size: 28,
-      })`${part("a", "a^2")} + ${part("b", "b^2")} = ${part("c", "c^2")}`,
-    );
-    const eq2 = s(
-      tex({
-        size: 28,
-      })`${part("c", "c")} = \\sqrt{${part("a", "a^2")} + ${part("b", "b^2")}}`,
-    );
+    // Pythagorean theorem in three equivalent forms. Each shares
+    // the named parts `a`, `b`, `c`, so morph can carry their
+    // identity across — and the parts traverse three different
+    // ambient MathML contexts (top-level mrow, inside `<msqrt>`,
+    // inside `<mfrac>` numerator/denominator), which is the real
+    // stress test for context-independent rendering.
+    const tex28 = tex({ size: 28 });
+    const eq1 =
+      s(tex28`${part("a", "a^2")} + ${part("b", "b^2")} = ${part("c", "c^2")}`);
+    const eq2 =
+      s(tex28`${part("c", "c")} = \\sqrt{${part("a", "a^2")} + ${part("b", "b^2")}}`);
+    const eq3 =
+      s(tex28`\\frac{${part("a", "a^2")} + ${part("b", "b^2")}}{${part("c", "c^2")}} = 1`);
+
+    const eqs = [eq1, eq2, eq3];
 
     // note: translate is a Point not a Bounds, so centering is hand-math.
     // A placement API on Shape (or a `centerAt(point)` sugar) would close this.
     const c = view.center.value;
-    eq1.translate.value = {
-      x: c.x - eq1.width.peek() / 2,
-      y: c.y - eq1.height.peek() / 2,
-    };
-    eq2.translate.value = {
-      x: c.x - eq2.width.peek() / 2,
-      y: c.y - eq2.height.peek() / 2,
-    };
-
-    eq1.opacity.value = 0;
-    eq2.opacity.value = 0;
+    for (const eq of eqs) {
+      eq.translate.value = {
+        x: c.x - eq.width.peek() / 2,
+        y: c.y - eq.height.peek() / 2,
+      };
+      eq.opacity.value = 0;
+    }
 
     // Decorations as children of eq1 so they ride its transform.
     const cBrace = brace(eq1.parts.c, { placement: "below" });
@@ -94,6 +86,7 @@ export class MdTexDemo extends Diagram {
     const reset = snapshot(
       eq1.opacity,
       eq2.opacity,
+      eq3.opacity,
       cBrace.opacity,
       aBox.opacity,
       bUnderline.opacity,
@@ -102,8 +95,7 @@ export class MdTexDemo extends Diagram {
 
     this.anim.loop(function* () {
       reset();
-      eq1.el.style.clipPath = "";
-      eq2.el.style.clipPath = "";
+      for (const eq of eqs) eq.el.style.clipPath = "";
       yield 0.4;
 
       status.value = "write — clip-path sweep, left → right";
@@ -134,13 +126,19 @@ export class MdTexDemo extends Diagram {
       ];
       yield 0.25;
 
-      status.value = "morph — matched parts a, b, c carry across";
+      status.value = "morph — top-level → inside √";
       yield* morph(eq1, eq2, 0.7);
-      yield 1.0;
+      yield 0.8;
+
+      status.value = "morph — inside √ → inside fraction";
+      yield* morph(eq2, eq3, 0.7);
+      yield 0.8;
+
+      status.value = "morph — inside fraction → top-level";
+      yield* morph(eq3, eq1, 0.7);
+      yield 0.6;
 
       status.value = "writeParts — staggered fade across named parts";
-      yield* morph(eq2, eq1, 0.6);
-      yield 0.4;
       yield* writeParts(eq1, 0.7);
       yield 0.6;
 

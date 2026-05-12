@@ -52,7 +52,7 @@ export class MdCodec extends Diagram {
 
   protected scene(s: Scene): void {
     const w = this.width.value;
-    if (w) this.style.setProperty("--scene-max-width", w);
+    if (w) this.style.setProperty("--d-w", w.replace(/px$/, ""));
 
     const parts = parseContent(this.textContent?.trim() ?? "");
     if (parts.length === 0) return;
