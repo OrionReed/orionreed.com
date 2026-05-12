@@ -50,7 +50,7 @@ export class MdTransitions extends Diagram {
   protected scene(s: Scene): void {
     const W = LEFT_PAD + RIGHT_PAD + 360;
     const H = LANES * LANE_GAP + 30;
-    s.view(0, 0, W, H);
+    s.view(W, H);
 
     const lanes: LaneSpec[] = [
       {

@@ -32,7 +32,7 @@ export class MdLubyTransform extends Diagram {
     const stride = computed(() => (W.value - SIZE) / (N.value - 1));
     const indices = N.derive((n) => Array.from({ length: n }, (_, i) => i));
 
-    const view = s.view(0, 0, W, 200);
+    const view = s.view(W, 200);
 
     // Re-roll the cell pattern and source-edge gating each tick.
     const tick = pulse(this.anim, 0.5);

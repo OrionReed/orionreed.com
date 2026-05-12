@@ -111,7 +111,7 @@ export class MdRand extends Diagram {
   `;
 
   protected scene(s: Scene): void {
-    s.view(0, 0, W, H);
+    s.view(W, H);
 
     // ── State ────────────────────────────────────────────────────────
     const current = signal<Pick | null>(null);

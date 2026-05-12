@@ -27,6 +27,8 @@ const CHUNK_H = 50;
 const CHUNK_GAP = 15;
 const DEVICE_GAP = 130;
 const PITCH = CHUNK_W + CHUNK_GAP;
+const PAD_X = 40;
+const PAD_Y = 8;
 
 function initialChunks(prefix: string, n: number): ChunkState[] {
   return Array.from({ length: n }, (_, i) => ({
@@ -43,7 +45,7 @@ export class MdQrtpHandshake extends Diagram {
     const N = this.chunks.value;
     const W = N * PITCH - CHUNK_GAP;
     const H = CHUNK_H * 2 + DEVICE_GAP;
-    s.view(-40, -8, W + 50, H + 16);
+    s.view(W + 50, H + 2 * PAD_Y);
 
     // Single source of truth — both rows + arrow visibility derive from
     // the chunk arrays. Arrows fire iff the corresponding chunk's `ack`
@@ -57,7 +59,7 @@ export class MdQrtpHandshake extends Diagram {
     // the [data, ack] bounds per chunk so arrows can land on them.
     const buildRow = (device: "A" | "B", y: number) =>
       Array.from({ length: N }, (_, i) => {
-        const r = s(rect(i * PITCH, y, CHUNK_W, CHUNK_H));
+        const r = s(rect(i * PITCH + PAD_X, y + PAD_Y, CHUNK_W, CHUNK_H));
         const [data, ack] = r.bounds.split("x", [3, 2]);
         s(line(data.tr, data.br, { thin: true }));
 
@@ -88,10 +90,12 @@ export class MdQrtpHandshake extends Diagram {
     const slotsA = buildRow("A", 0);
     const slotsB = buildRow("B", CHUNK_H + DEVICE_GAP);
 
-    s(label(pt(-25, CHUNK_H / 2), t("A").bold(), { size: 18 }));
-    s(label(pt(-25, CHUNK_H + DEVICE_GAP + CHUNK_H / 2), t("B").bold(), {
-      size: 18,
-    }));
+    s(label(pt(PAD_X - 25, CHUNK_H / 2 + PAD_Y), t("A").bold(), { size: 18 }));
+    s(label(
+      pt(PAD_X - 25, CHUNK_H + DEVICE_GAP + CHUNK_H / 2 + PAD_Y),
+      t("B").bold(),
+      { size: 18 },
+    ));
 
     // 2N pre-built arrows (A→B and B→A per chunk index). Visibility
     // derives directly from the source chunk's `ack` — no separate

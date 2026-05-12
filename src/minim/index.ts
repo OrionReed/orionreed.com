@@ -223,3 +223,14 @@ export { Anchor, Dir } from "./anchor";
 export { Diagram, css } from "./diagram";
 export { attr, observedAttributesOf } from "./attr";
 export { viewport } from "./viewport";
+
+// ── WAAPI / scroll / viewport bridges ───────────────────────────────
+export {
+  untilAnimation,
+  untilInView,
+  untilOutOfView,
+  scrollProgress,
+  viewProgress,
+  inView,
+  type ViewRange,
+} from "./waapi";

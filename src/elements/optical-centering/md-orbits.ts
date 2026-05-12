@@ -26,7 +26,7 @@ export class MdOrbits extends Diagram {
   `;
 
   protected scene(s: Scene): void {
-    const view = s.view(0, 0, 400, 320);
+    const view = s.view(400, 320);
 
     const sun = s(group({ translate: view.center }));
     sun.add(circle(pt(0, 0), 12, { fill: true }));

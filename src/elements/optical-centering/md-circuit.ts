@@ -40,7 +40,7 @@ export class MdCircuit extends Diagram {
   `;
 
   protected scene(s: Scene): void {
-    s.view(0, 0, 600, 360);
+    s.view(600, 360);
     const anim = this.anim;
     const bus = new EventBus();
 

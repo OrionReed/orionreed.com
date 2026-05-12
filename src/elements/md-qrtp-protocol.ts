@@ -48,7 +48,7 @@ export class MdQrtpProtocol extends Diagram {
     const rIn = rOut * (1 - RING_WIDTH_RATIO);
     const start = -Math.PI / 2;
 
-    s.view(0, 0, rOut * 2, rOut * 2);
+    s.view(rOut * 2, rOut * 2);
     const center = pt(rOut, rOut);
 
     // ── State ───────────────────────────────────────────────────────

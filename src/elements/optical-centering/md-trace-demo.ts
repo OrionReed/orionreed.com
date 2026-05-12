@@ -81,7 +81,7 @@ export class MdTraceDemo extends Diagram {
 
   protected scene(s: Scene): void {
     const H = ROWS_Y + MAX_LANES * (ROW_H + ROW_GAP) + 24;
-    s.view(0, 0, W, H);
+    s.view(W, H);
 
     // ── Top: three circles the demo animates ───────────────────────
     const cy = TOP_H / 2;

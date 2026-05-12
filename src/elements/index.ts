@@ -24,6 +24,7 @@ import { MdAggregates } from "./optical-centering/md-aggregates";
 import { MdRand } from "./optical-centering/md-rand";
 import { MdClaimDemo } from "./optical-centering/md-claim-demo";
 import { MdTexDemo } from "./optical-centering/md-tex-demo";
+import { MdWaapiDemo } from "./optical-centering/md-waapi-demo";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -51,3 +52,4 @@ MdAggregates.define();
 MdRand.define();
 MdClaimDemo.define();
 MdTexDemo.define();
+MdWaapiDemo.define();

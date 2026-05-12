@@ -1175,7 +1175,7 @@ export class MdRuntimeTests extends Diagram {
   protected scene(s: Scene): void {
     const W = 600;
     const H = HEADER_H + TESTS.length * ROW_H + 36;
-    s.view(0, 0, W, H);
+    s.view(W, H);
 
     const statuses = TESTS.map(() => signal<Status>("pending"));
     const messages = TESTS.map(() => signal<string>(""));

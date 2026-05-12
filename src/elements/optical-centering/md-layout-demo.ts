@@ -27,7 +27,7 @@ export class MdLayoutDemo extends Diagram {
   `;
 
   protected scene(s: Scene): void {
-    s.view(0, 0, 520, 360);
+    s.view(520, 360);
 
     // ── arrange + pulsing widths ───────────────────────────────────
     const w0 = signal(40);

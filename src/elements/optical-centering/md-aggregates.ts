@@ -38,7 +38,7 @@ export class MdAggregates extends Diagram {
   `;
 
   protected scene(s: Scene): void {
-    s.view(0, 0, W, H);
+    s.view(W, H);
 
     const shapes = SHAPES.map((p) =>
       s(

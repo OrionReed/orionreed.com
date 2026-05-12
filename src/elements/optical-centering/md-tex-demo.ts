@@ -14,8 +14,8 @@ import {
   label,
   morph,
   part,
-  pt,
   signal,
+  snapshot,
   tex,
   underline,
   write,
@@ -25,8 +25,6 @@ import {
 } from "../../minim";
 
 export class MdTexDemo extends Diagram {
-  // note: I think it would be nice to not need to have static styles like this in diagrams.
-  // its worth thinking about how diagrams should be integrated into webpages, for sure. Atm we're kinda YOLOing it and dont have a good principled approach
   static styles = css`
     :host {
       --scene-max-width: 580px;
@@ -34,19 +32,10 @@ export class MdTexDemo extends Diagram {
   `;
 
   protected scene(s: Scene): void {
-    const W = 560;
-    const H = 240;
-    // note: we should probably update s.view to just take W/H, we never use the x/y
-    s.view(0, 0, W, H);
+    const view = s.view(560, 240);
 
-    // note: this is the same as getting the bounds (from s.view) and then getting the center, no?
-    const cx = W / 2;
-    const cy = H / 2;
-
-    // note: for builtin shapes, we may want to add s.label (etc) to avoid the extra newlines created from formatting...
-    // idk if there's some way to let custom shapes (like tex) do this in a sane way too, or if it'd only work for priveledged/default shapes...
     s(
-      label(pt(cx, 22), "tex — write, decorate, morph", {
+      label(view.top.down(22), "tex — write, decorate, morph", {
         size: 12,
         opacity: 0.55,
         align: Anchor.Center,
@@ -55,7 +44,7 @@ export class MdTexDemo extends Diagram {
 
     const status = signal<Content>("");
     s(
-      label(pt(cx, H - 22), status, {
+      label(view.bottom.up(22), status, {
         size: 11,
         opacity: 0.45,
         align: Anchor.Center,
@@ -75,14 +64,16 @@ export class MdTexDemo extends Diagram {
       })`${part("c", "c")} = \\sqrt{${part("a", "a^2")} + ${part("b", "b^2")}}`,
     );
 
-    // note: i guess we have to do this here because its not a Bounds.. probs okay, hm.
+    // note: translate is a Point not a Bounds, so centering is hand-math.
+    // A placement API on Shape (or a `centerAt(point)` sugar) would close this.
+    const c = view.center.value;
     eq1.translate.value = {
-      x: cx - eq1.width.peek() / 2,
-      y: cy - eq1.height.peek() / 2,
+      x: c.x - eq1.width.peek() / 2,
+      y: c.y - eq1.height.peek() / 2,
     };
     eq2.translate.value = {
-      x: cx - eq2.width.peek() / 2,
-      y: cy - eq2.height.peek() / 2,
+      x: c.x - eq2.width.peek() / 2,
+      y: c.y - eq2.height.peek() / 2,
     };
 
     eq1.opacity.value = 0;
@@ -97,34 +88,29 @@ export class MdTexDemo extends Diagram {
     bUnderline.opacity.value = 0;
     eq1.add(cBrace, aBox, bUnderline);
 
-    // hypothetical util:
-    // setVals(cBrace.opacity, aBox.opacity, bUnderline.opacity)(0)
-    // or maybe snapshot() could also accept a value (if TS can infer: all signals are T, then accept T, else accept no value)
-    // so snapshot(cBrace.opacity, aBox.opacity, bUnderline.opacity)(0)
-    // or:
-    // const reset = snapshot(cBrace.opacity, aBox.opacity, bUnderline.opacity)
-    // reset(0)
+    // Snapshot the just-initialized "everything hidden, status blank" state
+    // so each loop iteration restores it in one call. Clip-path is a
+    // direct DOM mutation (not a signal), so it's reset alongside.
+    const reset = snapshot(
+      eq1.opacity,
+      eq2.opacity,
+      cBrace.opacity,
+      aBox.opacity,
+      bUnderline.opacity,
+      status,
+    );
 
     this.anim.loop(function* () {
-      // note: stage comments are redundant, given that we have labels...
-      // ── Reset ────────────────────────────────────────────────
-      eq1.opacity.value = 0;
-      eq2.opacity.value = 0;
-      cBrace.opacity.value = 0;
-      aBox.opacity.value = 0;
-      bUnderline.opacity.value = 0;
-      status.value = "";
+      reset();
       eq1.el.style.clipPath = "";
       eq2.el.style.clipPath = "";
       yield 0.4;
 
-      // ── 1. Write the formula in (clip-path sweep) ────────────
       status.value = "write — clip-path sweep, left → right";
       eq1.opacity.value = 1;
       yield* write(eq1, 0.7);
       yield 0.5;
 
-      // ── 2. Highlight cycle (per-part bg flash) ───────────────
       status.value = "highlight — per-part flash";
       yield* highlight(eq1.parts.a, 0.4);
       yield 0.08;
@@ -133,7 +119,6 @@ export class MdTexDemo extends Diagram {
       yield* highlight(eq1.parts.c, 0.4);
       yield 0.4;
 
-      // ── 3. Decorations stagger in ────────────────────────────
       status.value = "decorations — brace, box, underline track parts";
       yield* cBrace.opacity.to(1, 0.3);
       yield 0.18;
@@ -142,7 +127,6 @@ export class MdTexDemo extends Diagram {
       yield* bUnderline.opacity.to(1, 0.3);
       yield 0.7;
 
-      // ── 4. Decorations fade out together ─────────────────────
       yield [
         cBrace.opacity.to(0, 0.3),
         aBox.opacity.to(0, 0.3),
@@ -150,19 +134,16 @@ export class MdTexDemo extends Diagram {
       ];
       yield 0.25;
 
-      // ── 5. Morph to solved form (matched by name: a, b, c) ──
       status.value = "morph — matched parts a, b, c carry across";
       yield* morph(eq1, eq2, 0.7);
       yield 1.0;
 
-      // ── 6. Show writeParts on a fresh re-entry ───────────────
       status.value = "writeParts — staggered fade across named parts";
       yield* morph(eq2, eq1, 0.6);
       yield 0.4;
       yield* writeParts(eq1, 0.7);
       yield 0.6;
 
-      // ── 7. WriteOut sweep ────────────────────────────────────
       status.value = "writeOut — sweep back, formula clipped to nothing";
       yield* writeOut(eq1, 0.5);
       yield 0.6;

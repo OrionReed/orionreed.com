@@ -36,7 +36,7 @@ export class MdTimelineEditor extends Diagram {
   protected scene(s: Scene): void {
     const W = 600;
     const H = 320;
-    s.view(0, 0, W, H);
+    s.view(W, H);
 
     // ── Editable timeline ──────────────────────────────────────────
     const tl = timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));

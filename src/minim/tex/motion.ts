@@ -138,34 +138,14 @@ export function* unwriteParts(
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MML_NS = "http://www.w3.org/1998/Math/MathML";
 
-/** Move `node` under `parent`, preferring `Element.moveBefore` when
- *  present (preserves animation, focus, iframe, custom-element state
- *  across the move). Falls back to `insertBefore` otherwise. */
-function moveNode(parent: Node, node: Node, before: Node | null): void {
-  const p = parent as Node & {
-    moveBefore?: (n: Node, b: Node | null) => void;
-  };
-  if (typeof p.moveBefore === "function") {
-    try {
-      p.moveBefore(node, before);
-      return;
-    } catch {
-      // Some browsers throw if move would change containing-block etc.;
-      // fall through to plain insertBefore in that case.
-    }
-  }
-  parent.insertBefore(node, before);
-}
-
 interface MorphTransit {
   fo: SVGForeignObjectElement;
   pEl: HTMLElement;
   qEl: HTMLElement;
-  origParent: Node;
-  origNext: Node | null;
   prevMathStyle: string;
   prevMathDepth: string;
-  prevQVisibility: string;
+  prevPOpacity: string;
+  prevQOpacity: string;
   offX: Signal<number>;
   offY: Signal<number>;
   baseX: number;
@@ -176,38 +156,44 @@ interface MorphTransit {
 
 /** Animate from `from` to `to`, matching parts by name.
  *
- *  Strategy ("morphable MathML via context-replicated transits"):
- *  for each matched part with identical content, we lift the *live*
- *  source DOM node out of `from` into a transit `<foreignObject>`
- *  that's a sibling of `from` and `to`. The transit replicates the
- *  surrounding MathML rendering context (font-family/size/weight/
- *  style, color, plus the MathML Core CSS properties `math-style`
- *  and `math-depth`) so the lifted node renders pixel-identically to
- *  its original placement. We then translate the transit from the
- *  source's screen position to the dest's, while crossfading
- *  `from.opacity` and `to.opacity` as wholes — the matched parts
- *  no longer live inside `from`, so they don't fade with it. After
- *  the tween we move the lifted node back to its original slot
- *  (preferring `Element.moveBefore`).
+ *  Strategy ("morphable MathML via context-replicated cloned riders"):
+ *  for each matched part with identical content, the *original*
+ *  source and dest nodes (`p.el`, `q.el`) are kept in place — just
+ *  rendered transparent (opacity:0) so they continue to occupy
+ *  layout space without being visible. Removing them would reflow
+ *  surrounding operators (the `+` shifting, the radical shrinking)
+ *  and produce visible jumps. Instead, we render a *clone* of the
+ *  matched part inside a transit `<foreignObject>` that's a sibling
+ *  of `from`/`to`. The transit replicates the MathML rendering
+ *  context (font-family/size/weight/style, color, plus MathML Core's
+ *  `math-depth` and `math-style`) and we measure-and-compensate the
+ *  clone's actual rendered TL within the transit so it lands at the
+ *  same pixel as the original. The transit is then translated from
+ *  the source position to the dest position while `from.opacity`
+ *  fades to 0 and `to.opacity` fades to 1.
  *
- *  Why this works where naïve crossfades don't: MathML renders the
- *  same content with subtly different metrics in different ambient
- *  contexts (scriptlevel cascades, displaystyle, mathvariant). A
- *  source-and-dest crossfade therefore juxtaposes two slightly
- *  different renderings of "the same" sub-formula and produces a
- *  visible pop at the handoff. By rendering the matched part exactly
- *  once (in its source context, frozen via inline `math-depth` /
- *  `math-style` on the node itself) we eliminate the cross-context
- *  rendering disagreement entirely.
+ *  Why cloning instead of the original: keeping `p.el` in place
+ *  preserves source-side layout (no `+` jump, no operator-spacing
+ *  shift), and keeping `q.el` in place preserves dest-side layout
+ *  (no radical-resizing, no missing-content gaps). The clone is the
+ *  only animated visible copy of the matched glyphs throughout the
+ *  morph.
+ *
+ *  Why context replication instead of trusting cascade: MathML
+ *  renders the same content differently in different ambient
+ *  contexts. By locking the source's resolved CSS values onto the
+ *  clone (and onto its wrapping `<math>`), the clone renders
+ *  pixel-identically to the original and there's no cross-context
+ *  disagreement to produce a pop.
  *
  *  Parts whose content *differs* (e.g. `c^2` ↔ `c`) aren't ridden —
  *  they crossfade with their parent shapes at their natural source
  *  and dest positions.
  *
- *  Assumptions: both shapes share a parent and that parent's user
- *  frame is translate-only relative to screen (no rotation or
- *  non-uniform scale). After completion, `from.opacity` is 0 and
- *  `to.opacity` is 1. */
+ *  Assumptions: both shapes share a parent whose frame is
+ *  translate-only relative to screen (no rotation or non-uniform
+ *  scale). After completion, `from.opacity` is 0 and `to.opacity`
+ *  is 1. */
 export function* morph(
   from: TexShape,
   to: TexShape,
@@ -256,9 +242,11 @@ export function* morph(
     mathStyle: string;
   }
 
-  // Pass 1 — measure every match before mutating either tree. Mutations
-  // (moving p.el out of `from`) reflow surrounding operators and would
-  // shift later measurements if interleaved with reads.
+  // Pass 1 — measure every match before any DOM/style mutations. We
+  // hide originals via opacity:0 in Pass 2 (preserves layout), and
+  // `getComputedStyle` returns the same values regardless, so this
+  // ordering is mostly defensive: it keeps reads grouped before
+  // writes for clarity and to avoid forcing extra layouts.
   const plans: Plan[] = [];
   for (const p of from.parts) {
     const q = (to.parts as Record<string, Part>)[p.name];
@@ -294,18 +282,28 @@ export function* morph(
 
   const transits: MorphTransit[] = [];
 
-  // Pass 2 — build transits, lift each `p.el` out of `from` into its
-  // transit. Done in plan order; subsequent iterations don't read from
-  // `from`'s layout, so reflow there is harmless.
+  // Pass 2 — build transits with cloned riders. The original `p.el`
+  // and `q.el` stay in place to preserve source/dest layout; only
+  // their opacity is dropped to 0.
   for (const pl of plans) {
+    // Lock the source's MathML context onto `p.el` BEFORE cloning, so
+    // the clone inherits the same locked values and renders identical-
+    // ly to the live source.
+    const prevMathStyle = pl.pEl.style.getPropertyValue("math-style");
+    const prevMathDepth = pl.pEl.style.getPropertyValue("math-depth");
+    if (pl.mathStyle) pl.pEl.style.setProperty("math-style", pl.mathStyle);
+    if (pl.mathDepth) pl.pEl.style.setProperty("math-depth", pl.mathDepth);
+
+    const clone = pl.pEl.cloneNode(true) as HTMLElement;
+
     const fo = document.createElementNS(
       SVG_NS,
       "foreignObject",
     ) as SVGForeignObjectElement;
     fo.setAttribute("x", "0");
     fo.setAttribute("y", "0");
-    fo.setAttribute("width", String(Math.max(pl.widthLocal, 1)));
-    fo.setAttribute("height", String(Math.max(pl.heightLocal, 1)));
+    fo.setAttribute("width", String(Math.max(pl.widthLocal * 2, 1)));
+    fo.setAttribute("height", String(Math.max(pl.heightLocal * 2, 1)));
     fo.style.overflow = "visible";
     fo.style.pointerEvents = "none";
 
@@ -340,38 +338,49 @@ export function* morph(
     if (pl.mathStyle) mathEl.style.setProperty("math-style", pl.mathStyle);
     if (pl.mathDepth) mathEl.style.setProperty("math-depth", pl.mathDepth);
 
+    mathEl.appendChild(clone);
     wrapper.appendChild(mathEl);
     fo.appendChild(wrapper);
 
-    // Freeze the matched part's MathML context onto itself so its
-    // rendering doesn't shift when its ancestor chain changes from
-    // `from`'s tree to the transit's `<math>`.
-    const prevMathStyle = pl.pEl.style.getPropertyValue("math-style");
-    const prevMathDepth = pl.pEl.style.getPropertyValue("math-depth");
-    if (pl.mathStyle) pl.pEl.style.setProperty("math-style", pl.mathStyle);
-    if (pl.mathDepth) pl.pEl.style.setProperty("math-depth", pl.mathDepth);
-
+    // Mount with no transform yet so we can read the clone's natural
+    // rendered position within the parent frame.
+    fo.setAttribute("transform", "translate(0 0)");
     parent.el.appendChild(fo);
-    const origParent = pl.pEl.parentNode!;
-    const origNext = pl.pEl.nextSibling;
-    moveNode(mathEl, pl.pEl, null);
 
-    const prevQVisibility = pl.qEl.style.visibility;
-    pl.qEl.style.visibility = "hidden";
+    // Compensate for the clone's offset within the foreignObject. The
+    // clone's TL inside the transit isn't necessarily at the fo's TL —
+    // there's wrapper padding, math baseline alignment, etc. By
+    // measuring where the clone actually rendered we can pick a
+    // transit translate that places the clone's TL exactly at the
+    // source position.
+    const cloneRect = clone.getBoundingClientRect();
+    const cloneInParentX =
+      cloneRect.left * inv.a + cloneRect.top * inv.c + inv.e;
+    const cloneInParentY =
+      cloneRect.left * inv.b + cloneRect.top * inv.d + inv.f;
+    const baseX = pl.sPosX - cloneInParentX;
+    const baseY = pl.sPosY - cloneInParentY;
+
+    // Hide originals (preserves layout, since opacity:0 doesn't affect
+    // box sizing). The clone in the transit is now the only visible
+    // copy of this matched part.
+    const prevPOpacity = pl.pEl.style.opacity;
+    const prevQOpacity = pl.qEl.style.opacity;
+    pl.pEl.style.opacity = "0";
+    pl.qEl.style.opacity = "0";
 
     transits.push({
       fo,
       pEl: pl.pEl,
       qEl: pl.qEl,
-      origParent,
-      origNext,
       prevMathStyle,
       prevMathDepth,
-      prevQVisibility,
+      prevPOpacity,
+      prevQOpacity,
       offX: signal(0) as Signal<number>,
       offY: signal(0) as Signal<number>,
-      baseX: pl.sPosX,
-      baseY: pl.sPosY,
+      baseX,
+      baseY,
       dx: pl.dPosX - pl.sPosX,
       dy: pl.dPosY - pl.sPosY,
     });
@@ -401,7 +410,14 @@ export function* morph(
   } finally {
     for (const s of stops) s();
     for (const t of transits) {
-      moveNode(t.origParent, t.pEl, t.origNext);
+      // Restore opacities on the live originals.
+      t.pEl.style.opacity = t.prevPOpacity;
+      t.qEl.style.opacity = t.prevQOpacity;
+      // Restore the locked MathML context attributes on `p.el` (we
+      // set them eagerly so the clone would inherit identical
+      // rendering; the originals were rendering with these values via
+      // cascade anyway, but we don't want to leave inline overrides
+      // hanging around).
       if (t.prevMathStyle) {
         t.pEl.style.setProperty("math-style", t.prevMathStyle);
       } else {
@@ -412,7 +428,6 @@ export function* morph(
       } else {
         t.pEl.style.removeProperty("math-depth");
       }
-      t.qEl.style.visibility = t.prevQVisibility;
       t.fo.remove();
     }
     from.opacity.value = 0;

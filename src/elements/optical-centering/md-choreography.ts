@@ -69,7 +69,7 @@ export class MdChoreography extends Diagram {
   `;
 
   protected scene(s: Scene): void {
-    s.view(0, 0, W, H);
+    s.view(W, H);
 
     const shapes = SCATTER.map((p, i) =>
       s(circle(pt(0, 0), 18, { translate: p, fill: COLORS[i] })),

@@ -32,7 +32,7 @@ export class MdBehaviors extends Diagram {
   `;
 
   protected scene(s: Scene): void {
-    s.view(0, 0, W, H);
+    s.view(W, H);
 
     // Each head: x drifts wall-to-wall (flipping vel at boundaries
     // via a tiny loop), y oscillates around its lane.

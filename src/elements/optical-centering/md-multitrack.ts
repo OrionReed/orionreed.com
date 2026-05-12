@@ -34,7 +34,7 @@ export class MdMultitrack extends Diagram {
   protected scene(s: Scene): void {
     const W = 600;
     const H = 320;
-    s.view(0, 0, W, H);
+    s.view(W, H);
 
     // Overlap is fine; each clip has its own at + dur.
     const tl = timeline({

@@ -42,7 +42,7 @@ export class MdCentering extends Diagram {
   `;
 
   protected scene(s: Scene): void {
-    s.view(-20, -20, 640, 240);
+    s.view(640, 240);
 
     const tl = timeline({
       intro: { at: 0, dur: 1.1 },
@@ -59,9 +59,9 @@ export class MdCentering extends Diagram {
     const boxT = tl.box.t;
     const centroidT = tl.centroid.t;
 
-    const O = pt(60, 170);
-    const xEnd = pt(570, 170);
-    const yEnd = pt(60, 30);
+    const O = pt(80, 190);
+    const xEnd = pt(590, 190);
+    const yEnd = pt(80, 50);
     const F = [0.2, 0.45, 0.7];
     const subs = ["min", "c", "max"];
 

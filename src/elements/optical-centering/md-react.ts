@@ -58,7 +58,7 @@ export class MdReact extends Diagram {
   `;
 
   protected scene(s: Scene): void {
-    s.view(0, 0, W, H);
+    s.view(W, H);
 
     s(
       rect(PAD - 6, PAD - 6, W - 2 * (PAD - 6), PLAYFIELD_H - 2 * (PAD - 6) + 12, {

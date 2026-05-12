@@ -41,7 +41,7 @@ export class MdClaimDemo extends Diagram {
   protected scene(s: Scene): void {
     const W = 520;
     const H = 330;
-    s.view(0, 0, W, H);
+    s.view(W, H);
 
     // ── The shape under test ─────────────────────────────────────
     const c = s(circle(pt(W / 2, 56), 24, { fill: true, opacity: 0 }));

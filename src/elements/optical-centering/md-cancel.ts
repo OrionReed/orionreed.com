@@ -53,7 +53,7 @@ export class MdCancel extends Diagram {
   `;
 
   protected scene(s: Scene): void {
-    s.view(0, 0, W, H);
+    s.view(W, H);
 
     const status = signal<Content>("running");
     s(
