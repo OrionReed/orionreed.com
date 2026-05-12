@@ -8,9 +8,9 @@
 //      const eq = s(tex`${part("a", "...")} ...`);
 //      eq.add(brace(eq.parts.a));
 
-import { computed } from "../core/signal";
+import { computed, type ReadonlySignal } from "../core/signal";
 import { Shape } from "../scene/shape";
-import { aabb } from "../scene/bounds";
+import { aabb, type AABB } from "../scene/bounds";
 import { tokens } from "../shapes/tokens";
 import type { Part } from "./parts";
 
@@ -19,7 +19,8 @@ export interface DecorationOpts {
   stroke?: string;
   /** Stroke width. Default: `tokens.thinWeight`. */
   weight?: number;
-  /** Pad between the part's bounds and the decoration. Default: 2. */
+  /** Pad between the part's bounds and the decoration. Default per
+   *  decoration (see `tokens.decoration`). */
   gap?: number;
 }
 
@@ -30,19 +31,53 @@ const applyStroke = (s: Shape, opts: DecorationOpts) => {
   s.attr("fill", "none");
 };
 
+/** A `<rect>` whose x/y/w/h and bounds all derive from the same
+ *  layout signal — single source of truth, one re-render per change. */
+function rectFromBounds(layout: ReadonlySignal<AABB>): Shape {
+  const s = new Shape("rect", () => layout.value);
+  s.attr("x", () => layout.value.x);
+  s.attr("y", () => layout.value.y);
+  s.attr("width", () => layout.value.w);
+  s.attr("height", () => layout.value.h);
+  return s;
+}
+
+interface LineEnds {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/** A `<line>` whose endpoints (and bounds) derive from the same
+ *  layout signal. */
+function lineFromBounds(layout: ReadonlySignal<LineEnds>): Shape {
+  const s = new Shape("line", () => {
+    const e = layout.value;
+    const x = Math.min(e.x1, e.x2);
+    const y = Math.min(e.y1, e.y2);
+    return aabb(x, y, Math.abs(e.x2 - e.x1), Math.abs(e.y2 - e.y1));
+  });
+  s.attr("x1", () => layout.value.x1);
+  s.attr("y1", () => layout.value.y1);
+  s.attr("x2", () => layout.value.x2);
+  s.attr("y2", () => layout.value.y2);
+  return s;
+}
+
 /** Curly brace below (or above) a part. Reactive on `part.bounds`. */
 export function brace(
   part: Part,
   opts: DecorationOpts & {
     /** "below" (default) or "above". */
     placement?: "above" | "below";
-    /** Brace amplitude in local-frame units. Default: 5. */
+    /** Brace amplitude in local-frame units. */
     height?: number;
   } = {},
 ): Shape {
   const placement = opts.placement ?? "below";
-  const height = opts.height ?? 5;
-  const gap = opts.gap ?? 3;
+  const height = opts.height ?? tokens.decoration.braceHeight;
+  const gap = opts.gap ?? tokens.decoration.braceGap;
 
   const d = computed(() => {
     const b = part.bounds.value;
@@ -65,16 +100,12 @@ export function brace(
     ].join(" ");
   });
 
-  const s = new Shape(
-    "path",
-    () => {
-      const b = part.bounds.value;
-      const baseY = placement === "below" ? b.y + b.h + gap : b.y - gap;
-      const tip = baseY + (placement === "below" ? height : -height);
-      return aabb(b.x, Math.min(baseY, tip), b.w, Math.abs(tip - baseY));
-    },
-    {},
-  );
+  const s = new Shape("path", () => {
+    const b = part.bounds.value;
+    const baseY = placement === "below" ? b.y + b.h + gap : b.y - gap;
+    const tip = baseY + (placement === "below" ? height : -height);
+    return aabb(b.x, Math.min(baseY, tip), b.w, Math.abs(tip - baseY));
+  });
   s.attr("d", d);
   s.attr("stroke-linecap", "round");
   s.attr("stroke-linejoin", "round");
@@ -87,20 +118,13 @@ export function box(
   part: Part,
   opts: DecorationOpts & { corner?: number } = {},
 ): Shape {
-  const gap = opts.gap ?? 2;
-  const corner = opts.corner ?? 2;
-  const s = new Shape(
-    "rect",
-    () => {
-      const b = part.bounds.value;
-      return aabb(b.x - gap, b.y - gap, b.w + 2 * gap, b.h + 2 * gap);
-    },
-    {},
-  );
-  s.attr("x", computed(() => part.bounds.value.x - gap));
-  s.attr("y", computed(() => part.bounds.value.y - gap));
-  s.attr("width", computed(() => part.bounds.value.w + 2 * gap));
-  s.attr("height", computed(() => part.bounds.value.h + 2 * gap));
+  const gap = opts.gap ?? tokens.decoration.gap;
+  const corner = opts.corner ?? tokens.corner;
+  const layout = computed(() => {
+    const b = part.bounds.value;
+    return aabb(b.x - gap, b.y - gap, b.w + 2 * gap, b.h + 2 * gap);
+  });
+  const s = rectFromBounds(layout);
   s.attr("rx", corner);
   s.attr("ry", corner);
   applyStroke(s, opts);
@@ -108,32 +132,14 @@ export function box(
 }
 
 /** Underline at the baseline of a part. */
-export function underline(
-  part: Part,
-  opts: DecorationOpts = {},
-): Shape {
-  const gap = opts.gap ?? 2;
-  const s = new Shape(
-    "line",
-    () => {
-      const b = part.bounds.value;
-      return aabb(b.x, b.y + b.h + gap, b.w, 0);
-    },
-    {},
-  );
-  s.attr("x1", computed(() => part.bounds.value.x));
-  s.attr(
-    "y1",
-    computed(() => part.bounds.value.y + part.bounds.value.h + gap),
-  );
-  s.attr(
-    "x2",
-    computed(() => part.bounds.value.x + part.bounds.value.w),
-  );
-  s.attr(
-    "y2",
-    computed(() => part.bounds.value.y + part.bounds.value.h + gap),
-  );
+export function underline(part: Part, opts: DecorationOpts = {}): Shape {
+  const gap = opts.gap ?? tokens.decoration.gap;
+  const layout = computed(() => {
+    const b = part.bounds.value;
+    const y = b.y + b.h + gap;
+    return { x1: b.x, y1: y, x2: b.x + b.w, y2: y };
+  });
+  const s = lineFromBounds(layout);
   s.attr("stroke-linecap", "round");
   applyStroke(s, opts);
   return s;
@@ -141,22 +147,18 @@ export function underline(
 
 /** Diagonal strikethrough across a part (from bottom-left to
  *  top-right). */
-export function cross(
-  part: Part,
-  opts: DecorationOpts = {},
-): Shape {
-  const gap = opts.gap ?? 1;
-  const s = new Shape("line", () => part.bounds.value, {});
-  s.attr("x1", computed(() => part.bounds.value.x - gap));
-  s.attr(
-    "y1",
-    computed(() => part.bounds.value.y + part.bounds.value.h + gap),
-  );
-  s.attr(
-    "x2",
-    computed(() => part.bounds.value.x + part.bounds.value.w + gap),
-  );
-  s.attr("y2", computed(() => part.bounds.value.y - gap));
+export function cross(part: Part, opts: DecorationOpts = {}): Shape {
+  const gap = opts.gap ?? tokens.decoration.crossGap;
+  const layout = computed(() => {
+    const b = part.bounds.value;
+    return {
+      x1: b.x - gap,
+      y1: b.y + b.h + gap,
+      x2: b.x + b.w + gap,
+      y2: b.y - gap,
+    };
+  });
+  const s = lineFromBounds(layout);
   s.attr("stroke-linecap", "round");
   applyStroke(s, opts);
   return s;

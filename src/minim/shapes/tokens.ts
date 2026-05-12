@@ -17,6 +17,27 @@ export const tokens = {
   charWidth: 0.6,
   subFontSize: "0.75em",
   mutedOpacity: 0.5,
+  /** TexShape-specific defaults (highlight visual, etc.). */
+  tex: {
+    /** Background tint applied while a part's `highlighted` is true. */
+    highlightColor: "rgba(255, 220, 80, 0.45)",
+    /** Background-color transition duration on parts (ms). */
+    highlightDurationMs: 120,
+    /** Corner radius applied to the part background tint. */
+    highlightCorner: 2,
+  },
+  /** Defaults for derived decorations (`brace`, `box`, `underline`,
+   *  `cross`). Per-call options always override. */
+  decoration: {
+    /** Pad between target bounds and the decoration. */
+    gap: 2,
+    /** Brace amplitude in local-frame units. */
+    braceHeight: 5,
+    /** Brace gap (slightly larger so the brace tips don't touch text). */
+    braceGap: 3,
+    /** Cross / strikethrough gap. */
+    crossGap: 1,
+  },
 } as const;
 
 export type Tokens = typeof tokens;

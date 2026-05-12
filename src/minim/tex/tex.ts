@@ -26,10 +26,10 @@ export type TexInterp = string | PartMarker;
 export interface TexOpts extends ShapeOpts {
   /** Font size in user units. Defaults to `tokens.fontSize`. */
   size?: number;
-  /** Font family. Defaults to `tokens.font` (matches Label). */
+  /** Font family. Defaults to `tokens.mathFont`. */
   font?: string;
   /** Background tint applied while a part's `highlighted` signal is
-   *  true. Default: warm yellow at low alpha. */
+   *  true. Default: `tokens.tex.highlightColor`. */
   highlightColor?: string;
 }
 
@@ -39,19 +39,32 @@ interface PartMeta {
   content: string;
 }
 
+/** Class on the rendered `<mrow>` for `part(name, …)`. Naming by the
+ *  user-supplied `name` (rather than by template position) is
+ *  deliberate: morph matches parts across two TexShapes by name, and
+ *  using the same class on both sides means we can re-find a part in
+ *  any cloned subtree without juggling separate per-shape index maps. */
+const partClass = (name: string): string => `minim-part-${name}`;
+
 const buildSource = (
   strings: readonly string[],
   values: readonly TexInterp[],
   meta: PartMeta[],
 ): string => {
   let src = "";
-  let idx = 0;
+  const seen = new Set<string>();
   for (let i = 0; i < strings.length; i++) {
     src += strings[i];
     if (i < values.length) {
       const v = values[i];
       if (v instanceof PartMarker) {
-        const className = `minim-part-${idx++}`;
+        if (seen.has(v.name)) {
+          throw new Error(
+            `tex: duplicate part name "${v.name}" — names must be unique within a single template`,
+          );
+        }
+        seen.add(v.name);
+        const className = partClass(v.name);
         meta.push({ name: v.name, className, content: v.content });
         src += `\\class{${className}}{${v.content}}`;
       } else {
@@ -61,6 +74,21 @@ const buildSource = (
   }
   return src;
 };
+
+/** CSS for the wrapper div that hosts the rendered `<math>`. Same in
+ *  the hidden measurement node and the live foreignObject child, so
+ *  measured offsets and live offsets agree byte-for-byte. */
+const wrapperCss = (fontSize: number, fontFamily: string): string =>
+  [
+    `font-family:${fontFamily}`,
+    `font-size:${fontSize}px`,
+    `color:${tokens.stroke}`,
+    "line-height:1",
+    "white-space:nowrap",
+    "padding:0",
+    "margin:0",
+    "display:inline-block",
+  ].join(";");
 
 /** Apply our preferred math styling directly to the rendered `<math>`
  *  element. Browsers (especially Chromium) don't reliably inherit
@@ -84,28 +112,40 @@ const styleMathRoot = (
   mathEl.style.fontWeight = "normal";
 };
 
+/** Force a part's `<msup>` (and friends) to lay out the same regardless
+ *  of ambient context. `<msqrt>` and other constructs cascade
+ *  `math-shift: compact` (TeX's "cramped" style), which shifts
+ *  superscripts by `superscriptShiftUpCramped` instead of
+ *  `superscriptShiftUp` — typically 1–3px in New CM Math. Resetting
+ *  to `normal` on the part's mrow makes a matched fragment render
+ *  with the *same* glyph offsets in eq1's top-level position and
+ *  eq2's `<msqrt>` interior, so morph is pixel-perfect at both
+ *  endpoints. The visual cost is that radical interiors are a hair
+ *  less tucked; in body-text math at our default size it's
+ *  imperceptible. */
+const stabilizePart = (el: HTMLElement): void => {
+  el.style.setProperty("math-shift", "normal");
+  el.style.borderRadius = `${tokens.tex.highlightCorner}px`;
+  el.style.transition = `background-color ${tokens.tex.highlightDurationMs}ms ease-out`;
+};
+
 const measureMathML = (
   mathml: string,
   fontSize: number,
   fontFamily: string,
 ): { width: number; height: number; rects: Map<string, AABB> } => {
   const div = document.createElement("div");
-  div.style.cssText = [
-    "position:absolute",
-    "left:-99999px",
-    "top:0",
-    "visibility:hidden",
-    `font-family:${fontFamily}`,
-    `font-size:${fontSize}px`,
-    "line-height:1",
-    "white-space:nowrap",
-    "padding:0",
-    "margin:0",
-    "display:inline-block",
-  ].join(";");
+  div.style.cssText =
+    "position:absolute;left:-99999px;top:0;visibility:hidden;" +
+    wrapperCss(fontSize, fontFamily);
   div.innerHTML = mathml;
   const mathEl = div.querySelector("math") as HTMLElement | null;
   if (mathEl) styleMathRoot(mathEl, fontSize, fontFamily);
+  // Measure with the same `math-shift: normal` override that the live
+  // tree will use, so part bounds reflect what the user sees.
+  div
+    .querySelectorAll<HTMLElement>("[class*='minim-part-']")
+    .forEach(stabilizePart);
   document.body.appendChild(div);
   try {
     const root = (mathEl ?? (div.firstElementChild as HTMLElement) ?? div);
@@ -166,8 +206,7 @@ export class TexShape extends Shape {
   ) {
     const fontSize = opts.size ?? tokens.fontSize;
     const fontFamily = opts.font ?? tokens.mathFont;
-    const highlightColor =
-      opts.highlightColor ?? "rgba(255, 220, 80, 0.45)";
+    const highlightColor = opts.highlightColor ?? tokens.tex.highlightColor;
 
     const meta: PartMeta[] = [];
     const source = buildSource(strings, values, meta);
@@ -212,14 +251,7 @@ export class TexShape extends Shape {
     // `<math>` lands at the same TL within its container in both
     // contexts — measurements and live-render agree.
     const inner = document.createElement("div");
-    inner.style.fontFamily = fontFamily;
-    inner.style.fontSize = `${fontSize}px`;
-    inner.style.lineHeight = "1";
-    inner.style.color = tokens.stroke;
-    inner.style.whiteSpace = "nowrap";
-    inner.style.display = "inline-block";
-    inner.style.padding = "0";
-    inner.style.margin = "0";
+    inner.style.cssText = wrapperCss(fontSize, fontFamily);
     inner.innerHTML = mathml;
     const mathEl = inner.querySelector("math") as HTMLElement | null;
     if (mathEl) styleMathRoot(mathEl, fontSize, fontFamily);
@@ -230,10 +262,7 @@ export class TexShape extends Shape {
     for (const m of meta) {
       const r = measured.rects.get(m.className) ?? aabb(0, 0, 0, 0);
       const liveEl = inner.querySelector<HTMLElement>(`.${m.className}`);
-      if (liveEl) {
-        liveEl.style.borderRadius = "2px";
-        liveEl.style.transition = "background-color 120ms ease-out";
-      }
+      if (liveEl) stabilizePart(liveEl);
       const p = new Part(m.name, m.content, signal(r), liveEl);
       list.push(p);
       byName[m.name] = p;
@@ -242,6 +271,9 @@ export class TexShape extends Shape {
           liveEl.style.backgroundColor = p.highlighted.value
             ? highlightColor
             : "transparent";
+        });
+        this.effect(() => {
+          liveEl.style.opacity = String(p.opacity.value);
         });
       }
     }

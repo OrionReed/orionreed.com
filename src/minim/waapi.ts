@@ -81,32 +81,51 @@ export function untilOutOfView(
 // listener, rAF-coalesced. Capture phase picks up scrolls on nested
 // overflow containers (the `scroll` event doesn't bubble), so signals
 // stay live for elements inside scrollable parents.
+//
+// `pageTotal` (scrollable height) is cached and only refreshed on
+// resize — it doesn't change on scroll. Slight staleness if the page
+// grows from async content loads between resizes; `clamp01` on the
+// reader side caps the visible effect to "fills slightly early."
 
 const subscribers = new Set<() => void>();
 let rafId = 0;
 let attached = false;
+let pageTotal = 0;
+
+function refreshPageTotal(): void {
+  pageTotal = document.documentElement.scrollHeight - window.innerHeight;
+}
 
 function tick(): void {
   rafId = 0;
-  for (const cb of subscribers) cb();
+  // Snapshot before iterating: a callback may dispose another scroll
+  // signal (`unwatched` → `unwatchTick`), mutating the live set.
+  const snapshot = [...subscribers];
+  for (let i = 0; i < snapshot.length; i++) snapshot[i]();
 }
 
 function schedule(): void {
   if (rafId === 0) rafId = requestAnimationFrame(tick);
 }
 
+function onResize(): void {
+  refreshPageTotal();
+  schedule();
+}
+
 function attach(): void {
   if (attached) return;
   attached = true;
+  refreshPageTotal();
   window.addEventListener("scroll", schedule, { passive: true, capture: true });
-  window.addEventListener("resize", schedule, { passive: true });
+  window.addEventListener("resize", onResize, { passive: true });
 }
 
 function detach(): void {
   if (!attached) return;
   attached = false;
   window.removeEventListener("scroll", schedule, { capture: true });
-  window.removeEventListener("resize", schedule);
+  window.removeEventListener("resize", onResize);
   if (rafId !== 0) {
     cancelAnimationFrame(rafId);
     rafId = 0;
@@ -146,12 +165,14 @@ function scrollSignal<T>(read: () => T, initial: T): ReadonlySignal<T> {
 // ── Scroll signals ──────────────────────────────────────────────────
 
 /** Global page scroll progress in `[0, 1]`. `0` at top, `1` at the
- *  bottom of the scrollable area; `0` when the page doesn't scroll. */
+ *  bottom of the scrollable area; `0` when the page doesn't scroll.
+ *  Uses the cached `pageTotal` — refreshed on resize, not on every
+ *  scroll tick. */
 export function scrollProgress(): ReadonlySignal<number> {
-  return scrollSignal(() => {
-    const total = document.documentElement.scrollHeight - window.innerHeight;
-    return total > 0 ? clamp01(window.scrollY / total) : 0;
-  }, 0);
+  return scrollSignal(
+    () => (pageTotal > 0 ? clamp01(window.scrollY / pageTotal) : 0),
+    0,
+  );
 }
 
 /** Which slice of the element's traversal through the viewport maps
@@ -196,15 +217,26 @@ function rangeProgress(rect: DOMRect, vp: number, range: ViewRange): number {
 
 /** Element view-progress in `[0, 1]` over the given `range` (default
  *  `cover`). Tracks `getBoundingClientRect` against the viewport on
- *  every scroll/resize. */
+ *  every scroll/resize.
+ *
+ *  Memoized by `(el, range)` — repeat calls return the same signal,
+ *  so N consumers share one layout read per tick. WeakMap entries
+ *  are GC'd when `el` is dropped. */
+const viewCache = new WeakMap<
+  Element,
+  Partial<Record<ViewRange, ReadonlySignal<number>>>
+>();
+
 export function viewProgress(
   el: Element,
   range: ViewRange = "cover",
 ): ReadonlySignal<number> {
-  return scrollSignal(
+  let entry = viewCache.get(el);
+  if (!entry) viewCache.set(el, (entry = {}));
+  return (entry[range] ??= scrollSignal(
     () => rangeProgress(el.getBoundingClientRect(), window.innerHeight, range),
     0,
-  );
+  ));
 }
 
 // ── Visibility signal ───────────────────────────────────────────────

@@ -1,13 +1,16 @@
 // Motion combinators over tex shapes. Pure compositions on top of
-// the existing motion stdlib (`tween`, `stagger`, `fadeIn`/`fadeOut`,
-// effects on signals); zero new runtime mechanism.
+// the existing motion stdlib (`tween`, `stagger`, signal effects);
+// no per-tex animation primitives.
 
 import { effect, signal, type Signal } from "../core/signal";
 import { stagger } from "../motion/choreographers";
 import { easeInOut, easeOut } from "../motion/easings";
 import type { Animator, Easing } from "../core";
+import { transformPoint } from "../scene/matrix";
 import type { Part } from "./parts";
 import type { TexShape } from "./tex";
+
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 // ── Highlight ───────────────────────────────────────────────────────
 
@@ -46,9 +49,7 @@ export function* write(
 
 /** Reverse of `write` — sweep back from right to left. After natural
  *  completion the formula is fully clipped (visually hidden); this
- *  pairs with `write` for round-trip reveal/hide. The caller can drop
- *  the clip-path explicitly via `eq.el.style.clipPath = ""` if they
- *  want it back without another `write`. */
+ *  pairs with `write` for round-trip reveal/hide. */
 export function* writeOut(
   eq: TexShape,
   dt = 0.4,
@@ -67,29 +68,6 @@ export function* writeOut(
 
 // ── Per-part stagger ───────────────────────────────────────────────
 
-function* fadePart(
-  p: Part,
-  target: number,
-  dt: number,
-  ease: Easing,
-): Animator {
-  if (!p.el) {
-    yield dt;
-    return;
-  }
-  const a = signal(target === 1 ? 0 : 1);
-  const el = p.el;
-  const stop = effect(() => {
-    el.style.opacity = String(a.value);
-  });
-  try {
-    yield* a.to(target, dt, ease);
-  } finally {
-    stop();
-    el.style.opacity = "";
-  }
-}
-
 /** Stagger a fade-in across the named parts of a tex shape. Touches
  *  only the parts' opacity — text outside parts stays visible (use
  *  `eq.opacity` for whole-shape fades). */
@@ -99,18 +77,16 @@ export function* writeParts(
   opts: { stride?: number; ease?: Easing } = {},
 ): Animator {
   const parts = eq.parts;
+  const ease = opts.ease ?? easeOut;
   if (parts.length === 0) {
-    yield* eq.opacity.to(1, dt, opts.ease ?? easeOut);
+    yield* eq.opacity.to(1, dt, ease);
     return;
   }
-  for (const p of parts) {
-    if (p.el) p.el.style.opacity = "0";
-  }
+  for (const p of parts) p.opacity.value = 0;
   const stride =
     opts.stride ?? Math.max(0.04, dt / Math.max(2, parts.length * 1.5));
-  const ease = opts.ease ?? easeOut;
   yield* stagger(stride, parts as readonly Part[], (p) =>
-    fadePart(p, 1, dt * 0.7, ease),
+    p.opacity.to(1, dt * 0.7, ease),
   );
 }
 
@@ -121,79 +97,123 @@ export function* unwriteParts(
   opts: { stride?: number; ease?: Easing } = {},
 ): Animator {
   const parts = eq.parts;
+  const ease = opts.ease ?? easeOut;
   if (parts.length === 0) {
-    yield* eq.opacity.to(0, dt, opts.ease ?? easeOut);
+    yield* eq.opacity.to(0, dt, ease);
     return;
   }
   const stride =
     opts.stride ?? Math.max(0.03, dt / Math.max(2, parts.length * 1.5));
-  const ease = opts.ease ?? easeOut;
   yield* stagger(stride, parts as readonly Part[], (p) =>
-    fadePart(p, 0, dt * 0.7, ease),
+    p.opacity.to(0, dt * 0.7, ease),
   );
 }
 
 // ── Morph (matched by name) ────────────────────────────────────────
 
-const SVG_NS = "http://www.w3.org/2000/svg";
-const MML_NS = "http://www.w3.org/1998/Math/MathML";
-
 interface MorphTransit {
+  /** Transit foreignObject holding a clone of source's wrapper, with
+   *  only the matched mrow visible. */
   fo: SVGForeignObjectElement;
-  pEl: HTMLElement;
-  qEl: HTMLElement;
-  prevMathStyle: string;
-  prevMathDepth: string;
-  prevPOpacity: string;
-  prevQOpacity: string;
-  offX: Signal<number>;
-  offY: Signal<number>;
+  pPart: Part;
+  qPart: Part;
+  /** Saved part opacities so we restore whatever the author had set,
+   *  not just blindly bump back to 1. */
+  prevP: number;
+  prevQ: number;
+  /** Translate (in parent-frame user units) that places the cloned
+   *  matched mrow at sourcePos. The wrapper's matched-mrow offset
+   *  equals `p.bounds.tl` analytically (the clone is a deep copy of
+   *  the same wrapper), so no DOM measurement is needed. */
   baseX: number;
   baseY: number;
+  /** Trajectory in parent-frame user units. */
   dx: number;
   dy: number;
+  offX: Signal<number>;
+  offY: Signal<number>;
+}
+
+/** Walk up to the nearest `<math>` and return its parent (the wrapper
+ *  div that tex.ts mounts in the foreignObject) — what we deep-clone
+ *  to give the morph rider its byte-identical context. */
+function findMathWrapper(matchedEl: HTMLElement): HTMLElement | null {
+  let mathEl: Element | null = matchedEl.parentElement;
+  while (mathEl && mathEl.tagName.toLowerCase() !== "math") {
+    mathEl = mathEl.parentElement;
+  }
+  if (!mathEl) return null;
+  const wrapper = mathEl.parentElement;
+  return wrapper instanceof HTMLElement ? wrapper : null;
+}
+
+/** Build a transit foreignObject containing a deep clone of `wrapper`
+ *  with only the descendant carrying `matchedClass` rendered. */
+function buildTransit(
+  wrapper: HTMLElement,
+  matchedClass: string,
+  width: number,
+  height: number,
+): SVGForeignObjectElement | null {
+  const wrapperClone = wrapper.cloneNode(true) as HTMLElement;
+  const matchedClone = wrapperClone.querySelector(
+    `.${matchedClass}`,
+  ) as HTMLElement | null;
+  const mathClone = wrapperClone.querySelector("math") as HTMLElement | null;
+  if (!matchedClone || !mathClone) return null;
+  // Hide the whole math tree, then re-show just the matched mrow.
+  // Visibility preserves layout, so the matched mrow lands at exactly
+  // the same offset within the clone as it does in the source — the
+  // surrounding glyphs are present (so layout is untouched) but
+  // invisible.
+  mathClone.style.visibility = "hidden";
+  matchedClone.style.visibility = "visible";
+
+  const fo = document.createElementNS(
+    SVG_NS,
+    "foreignObject",
+  ) as SVGForeignObjectElement;
+  fo.setAttribute("x", "0");
+  fo.setAttribute("y", "0");
+  fo.setAttribute("width", String(Math.max(width, 1)));
+  fo.setAttribute("height", String(Math.max(height, 1)));
+  fo.style.overflow = "visible";
+  fo.style.pointerEvents = "none";
+  fo.appendChild(wrapperClone);
+  return fo;
 }
 
 /** Animate from `from` to `to`, matching parts by name.
  *
- *  Strategy ("morphable MathML via context-replicated cloned riders"):
- *  for each matched part with identical content, the *original*
- *  source and dest nodes (`p.el`, `q.el`) are kept in place — just
- *  rendered transparent (opacity:0) so they continue to occupy
- *  layout space without being visible. Removing them would reflow
- *  surrounding operators (the `+` shifting, the radical shrinking)
- *  and produce visible jumps. Instead, we render a *clone* of the
- *  matched part inside a transit `<foreignObject>` that's a sibling
- *  of `from`/`to`. The transit replicates the MathML rendering
- *  context (font-family/size/weight/style, color, plus MathML Core's
- *  `math-depth` and `math-style`) and we measure-and-compensate the
- *  clone's actual rendered TL within the transit so it lands at the
- *  same pixel as the original. The transit is then translated from
- *  the source position to the dest position while `from.opacity`
- *  fades to 0 and `to.opacity` fades to 1.
- *
- *  Why cloning instead of the original: keeping `p.el` in place
- *  preserves source-side layout (no `+` jump, no operator-spacing
- *  shift), and keeping `q.el` in place preserves dest-side layout
- *  (no radical-resizing, no missing-content gaps). The clone is the
- *  only animated visible copy of the matched glyphs throughout the
- *  morph.
- *
- *  Why context replication instead of trusting cascade: MathML
- *  renders the same content differently in different ambient
- *  contexts. By locking the source's resolved CSS values onto the
- *  clone (and onto its wrapping `<math>`), the clone renders
- *  pixel-identically to the original and there's no cross-context
- *  disagreement to produce a pop.
+ *  Strategy ("single source-context rider"):
+ *    1. Each matched part's mrow is stabilized at construction time
+ *       (`math-shift: normal` in tex.ts), so it renders with the same
+ *       glyph offsets in *any* ambient context — top-level, inside an
+ *       `<msqrt>`, inside an `<mfrac>` denominator, etc.
+ *    2. For each match we clone the source's `<math>` wrapper into a
+ *       transit `<foreignObject>` and use CSS visibility to render
+ *       only the matched mrow. Because the clone is a deep copy of
+ *       the source tree, the matched mrow's offset within the wrapper
+ *       equals `p.bounds.tl` analytically — no DOM measurement.
+ *    3. The transit translates from sourcePos to destPos in the
+ *       parent's local frame. The originals (`p.el`, `q.el`) hold
+ *       their slots at `opacity: 0` (preserving source/dest layout
+ *       so the surrounding glyphs don't reflow), and `from.opacity` /
+ *       `to.opacity` cross-fade the structural background.
+ *    4. At t=0 the rider matches `p.el` byte-for-byte (it *is* a clone
+ *       of the same tree); at t=1 it matches `q.el` byte-for-byte
+ *       because the stabilization removed the only context-dependent
+ *       layout knob. Both handoffs are pixel-perfect; no ghosting.
  *
  *  Parts whose content *differs* (e.g. `c^2` ↔ `c`) aren't ridden —
- *  they crossfade with their parent shapes at their natural source
+ *  they cross-fade with their parent shapes at their natural source
  *  and dest positions.
  *
  *  Assumptions: both shapes share a parent whose frame is
  *  translate-only relative to screen (no rotation or non-uniform
  *  scale). After completion, `from.opacity` is 0 and `to.opacity`
- *  is 1. */
+ *  is 1.
+ */
 export function* morph(
   from: TexShape,
   to: TexShape,
@@ -201,52 +221,35 @@ export function* morph(
   ease: Easing = easeInOut,
 ): Animator {
   const parent = from.parent;
+  const fallback = (): [Animator, Animator] => {
+    if (to.opacity.peek() < 1) to.opacity.value = 0;
+    return [from.opacity.to(0, dt, ease), to.opacity.to(1, dt, ease)];
+  };
 
   if (!parent || from.parent !== to.parent) {
-    if (to.opacity.peek() < 1) to.opacity.value = 0;
-    yield [from.opacity.to(0, dt, ease), to.opacity.to(1, dt, ease)];
+    yield fallback();
     return;
   }
 
-  // Force fresh layout — opacity:0 doesn't suppress layout, so part
-  // bounding rects are valid regardless of current visibility.
-  to.el.getBoundingClientRect();
-  from.el.getBoundingClientRect();
-
-  const sgEl = parent.el as unknown as SVGGraphicsElement;
-  const ctm = sgEl.getScreenCTM?.();
-  if (!ctm) {
-    if (to.opacity.peek() < 1) to.opacity.value = 0;
-    yield [from.opacity.to(0, dt, ease), to.opacity.to(1, dt, ease)];
-    return;
-  }
-  const inv = ctm.inverse();
+  // Compose source/dest positions in the parent's local frame
+  // analytically — `Part.bounds` is in each TexShape's local frame,
+  // and `Shape.transform` lifts that into the parent frame. No
+  // `getBoundingClientRect` needed; we read pure signal state.
+  const fromMat = from.transform.value;
+  const toMat = to.transform.value;
 
   interface Plan {
-    p: Part;
-    q: Part;
+    pPart: Part;
+    qPart: Part;
     pEl: HTMLElement;
     qEl: HTMLElement;
-    sPosX: number;
-    sPosY: number;
-    dPosX: number;
-    dPosY: number;
-    widthLocal: number;
-    heightLocal: number;
-    fontSize: string;
-    fontFamily: string;
-    color: string;
-    fontWeight: string;
-    fontStyle: string;
-    mathDepth: string;
-    mathStyle: string;
+    sPos: { x: number; y: number };
+    dPos: { x: number; y: number };
+    pBoundsTL: { x: number; y: number };
+    width: number;
+    height: number;
   }
 
-  // Pass 1 — measure every match before any DOM/style mutations. We
-  // hide originals via opacity:0 in Pass 2 (preserves layout), and
-  // `getComputedStyle` returns the same values regardless, so this
-  // ordering is mostly defensive: it keeps reads grouped before
-  // writes for clarity and to avoid forcing extra layouts.
   const plans: Plan[] = [];
   for (const p of from.parts) {
     const q = (to.parts as Record<string, Part>)[p.name];
@@ -254,145 +257,74 @@ export function* morph(
     if (p.content !== q.content) continue;
     if (!p.el || !q.el) continue;
 
-    const sRect = p.el.getBoundingClientRect();
-    const dRect = q.el.getBoundingClientRect();
-    if (sRect.width === 0 || dRect.width === 0) continue;
+    const pb = p.bounds.value;
+    const qb = q.bounds.value;
+    if (pb.w === 0 || qb.w === 0) continue;
 
-    const cs = getComputedStyle(p.el);
     plans.push({
-      p,
-      q,
+      pPart: p,
+      qPart: q,
       pEl: p.el,
       qEl: q.el,
-      sPosX: sRect.left * inv.a + sRect.top * inv.c + inv.e,
-      sPosY: sRect.left * inv.b + sRect.top * inv.d + inv.f,
-      dPosX: dRect.left * inv.a + dRect.top * inv.c + inv.e,
-      dPosY: dRect.left * inv.b + dRect.top * inv.d + inv.f,
-      widthLocal: sRect.width * Math.abs(inv.a),
-      heightLocal: sRect.height * Math.abs(inv.d),
-      fontSize: cs.fontSize,
-      fontFamily: cs.fontFamily,
-      color: cs.color,
-      fontWeight: cs.fontWeight,
-      fontStyle: cs.fontStyle,
-      mathDepth: cs.getPropertyValue("math-depth").trim(),
-      mathStyle: cs.getPropertyValue("math-style").trim(),
+      sPos: transformPoint(fromMat, { x: pb.x, y: pb.y }),
+      dPos: transformPoint(toMat, { x: qb.x, y: qb.y }),
+      pBoundsTL: { x: pb.x, y: pb.y },
+      width: pb.w,
+      height: pb.h,
     });
   }
 
   const transits: MorphTransit[] = [];
+  const stops: Array<() => void> = [];
 
-  // Pass 2 — build transits with cloned riders. The original `p.el`
-  // and `q.el` stay in place to preserve source/dest layout; only
-  // their opacity is dropped to 0.
   for (const pl of plans) {
-    // Lock the source's MathML context onto `p.el` BEFORE cloning, so
-    // the clone inherits the same locked values and renders identical-
-    // ly to the live source.
-    const prevMathStyle = pl.pEl.style.getPropertyValue("math-style");
-    const prevMathDepth = pl.pEl.style.getPropertyValue("math-depth");
-    if (pl.mathStyle) pl.pEl.style.setProperty("math-style", pl.mathStyle);
-    if (pl.mathDepth) pl.pEl.style.setProperty("math-depth", pl.mathDepth);
+    const wrapper = findMathWrapper(pl.pEl);
+    if (!wrapper) continue;
+    const matchedClass = `minim-part-${pl.pPart.name}`;
+    // Generous transit canvas so the surrounding (invisible) glyphs
+    // have room to lay out without clipping the visible mrow.
+    const fo = buildTransit(
+      wrapper,
+      matchedClass,
+      Math.max(pl.width * 8 + 16, 64),
+      Math.max(pl.height * 4 + 8, 32),
+    );
+    if (!fo) continue;
 
-    const clone = pl.pEl.cloneNode(true) as HTMLElement;
-
-    const fo = document.createElementNS(
-      SVG_NS,
-      "foreignObject",
-    ) as SVGForeignObjectElement;
-    fo.setAttribute("x", "0");
-    fo.setAttribute("y", "0");
-    fo.setAttribute("width", String(Math.max(pl.widthLocal * 2, 1)));
-    fo.setAttribute("height", String(Math.max(pl.heightLocal * 2, 1)));
-    fo.style.overflow = "visible";
-    fo.style.pointerEvents = "none";
-
-    const wrapper = document.createElement("div");
-    wrapper.style.cssText = [
-      `font-family:${pl.fontFamily}`,
-      `font-size:${pl.fontSize}`,
-      `color:${pl.color}`,
-      `font-weight:${pl.fontWeight}`,
-      `font-style:${pl.fontStyle}`,
-      "line-height:1",
-      "white-space:nowrap",
-      "display:inline-block",
-      "padding:0",
-      "margin:0",
-    ].join(";");
-
-    const mathEl = document.createElementNS(MML_NS, "math") as Element &
-      ElementCSSInlineStyle;
-    mathEl.setAttribute("display", "inline");
-    // Browsers (Chromium especially) don't reliably inherit font-family
-    // for MathML rendering — the surd glyph & vinculum thickness come
-    // from the OpenType MATH table of the *element's own* font. So we
-    // re-apply every style that affects intrinsic rendering directly
-    // on the `<math>` element, mirroring `styleMathRoot` in tex.ts.
-    mathEl.style.fontFamily = pl.fontFamily;
-    mathEl.style.fontSize = pl.fontSize;
-    mathEl.style.color = pl.color;
-    mathEl.style.fontWeight = pl.fontWeight;
-    mathEl.style.fontStyle = pl.fontStyle;
-    mathEl.style.lineHeight = "1";
-    if (pl.mathStyle) mathEl.style.setProperty("math-style", pl.mathStyle);
-    if (pl.mathDepth) mathEl.style.setProperty("math-depth", pl.mathDepth);
-
-    mathEl.appendChild(clone);
-    wrapper.appendChild(mathEl);
-    fo.appendChild(wrapper);
-
-    // Mount with no transform yet so we can read the clone's natural
-    // rendered position within the parent frame.
-    fo.setAttribute("transform", "translate(0 0)");
+    // Place the foreignObject so its content's matched-mrow lands at
+    // sourcePos. Matched-mrow offset within the wrapper equals
+    // `p.bounds.tl` (the wrapper is a deep clone of the same DOM
+    // tree); foreignObject TL = sourcePos − boundsTL.
+    const baseX = pl.sPos.x - pl.pBoundsTL.x;
+    const baseY = pl.sPos.y - pl.pBoundsTL.y;
+    fo.setAttribute("transform", `translate(${baseX} ${baseY})`);
     parent.el.appendChild(fo);
 
-    // Compensate for the clone's offset within the foreignObject. The
-    // clone's TL inside the transit isn't necessarily at the fo's TL —
-    // there's wrapper padding, math baseline alignment, etc. By
-    // measuring where the clone actually rendered we can pick a
-    // transit translate that places the clone's TL exactly at the
-    // source position.
-    const cloneRect = clone.getBoundingClientRect();
-    const cloneInParentX =
-      cloneRect.left * inv.a + cloneRect.top * inv.c + inv.e;
-    const cloneInParentY =
-      cloneRect.left * inv.b + cloneRect.top * inv.d + inv.f;
-    const baseX = pl.sPosX - cloneInParentX;
-    const baseY = pl.sPosY - cloneInParentY;
+    const prevP = pl.pPart.opacity.peek();
+    const prevQ = pl.qPart.opacity.peek();
+    pl.pPart.opacity.value = 0;
+    pl.qPart.opacity.value = 0;
 
-    // Hide originals (preserves layout, since opacity:0 doesn't affect
-    // box sizing). The clone in the transit is now the only visible
-    // copy of this matched part.
-    const prevPOpacity = pl.pEl.style.opacity;
-    const prevQOpacity = pl.qEl.style.opacity;
-    pl.pEl.style.opacity = "0";
-    pl.qEl.style.opacity = "0";
-
-    transits.push({
+    const transit: MorphTransit = {
       fo,
-      pEl: pl.pEl,
-      qEl: pl.qEl,
-      prevMathStyle,
-      prevMathDepth,
-      prevPOpacity,
-      prevQOpacity,
-      offX: signal(0) as Signal<number>,
-      offY: signal(0) as Signal<number>,
+      pPart: pl.pPart,
+      qPart: pl.qPart,
+      prevP,
+      prevQ,
       baseX,
       baseY,
-      dx: pl.dPosX - pl.sPosX,
-      dy: pl.dPosY - pl.sPosY,
-    });
-  }
+      dx: pl.dPos.x - pl.sPos.x,
+      dy: pl.dPos.y - pl.sPos.y,
+      offX: signal(0) as Signal<number>,
+      offY: signal(0) as Signal<number>,
+    };
+    transits.push(transit);
 
-  const stops: Array<() => void> = [];
-  for (const t of transits) {
     stops.push(
       effect(() => {
-        t.fo.setAttribute(
+        transit.fo.setAttribute(
           "transform",
-          `translate(${t.baseX + t.offX.value} ${t.baseY + t.offY.value})`,
+          `translate(${transit.baseX + transit.offX.value} ${transit.baseY + transit.offY.value})`,
         );
       }),
     );
@@ -410,24 +342,8 @@ export function* morph(
   } finally {
     for (const s of stops) s();
     for (const t of transits) {
-      // Restore opacities on the live originals.
-      t.pEl.style.opacity = t.prevPOpacity;
-      t.qEl.style.opacity = t.prevQOpacity;
-      // Restore the locked MathML context attributes on `p.el` (we
-      // set them eagerly so the clone would inherit identical
-      // rendering; the originals were rendering with these values via
-      // cascade anyway, but we don't want to leave inline overrides
-      // hanging around).
-      if (t.prevMathStyle) {
-        t.pEl.style.setProperty("math-style", t.prevMathStyle);
-      } else {
-        t.pEl.style.removeProperty("math-style");
-      }
-      if (t.prevMathDepth) {
-        t.pEl.style.setProperty("math-depth", t.prevMathDepth);
-      } else {
-        t.pEl.style.removeProperty("math-depth");
-      }
+      t.pPart.opacity.value = t.prevP;
+      t.qPart.opacity.value = t.prevQ;
       t.fo.remove();
     }
     from.opacity.value = 0;

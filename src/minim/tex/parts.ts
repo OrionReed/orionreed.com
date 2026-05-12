@@ -14,13 +14,20 @@ import { signal, type Signal, type ReadonlySignal } from "../core/signal";
 import type { AABB } from "../scene/bounds";
 
 /** A named, addressable region of a TexShape. `bounds` is in the
- *  parent TexShape's local frame; `highlighted` is wired by the parent
- *  to a default visual (see `TexShape` for the highlight effect). */
+ *  parent TexShape's local frame; `highlighted` and `opacity` are
+ *  wired by the parent TexShape to the live MathML element so authors
+ *  can drive per-part visuals reactively without reaching for the
+ *  DOM. */
 export class Part {
   /** Toggle to flash the default highlight visual (a translucent
    *  background tint). Authors can also drive their own visuals off
    *  this signal. */
   readonly highlighted: Signal<boolean>;
+  /** Opacity in [0, 1]. The parent TexShape wires this to
+   *  `el.style.opacity`, so per-part fades compose with `stagger` /
+   *  `signal.to` like any other minim animation — no per-part
+   *  animation primitives required. */
+  readonly opacity: Signal<number>;
 
   constructor(
     readonly name: string,
@@ -35,6 +42,7 @@ export class Part {
     readonly el: HTMLElement | null = null,
   ) {
     this.highlighted = signal(false);
+    this.opacity = signal(1);
   }
 }
 
