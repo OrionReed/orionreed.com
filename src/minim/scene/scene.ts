@@ -1,8 +1,8 @@
 // Callable scene handle: `s(shape)` mounts under root; `s.view(...)`
 // or `s.fit(...)` sets the SVG viewBox.
 
-import { aabb, type AABB, type Box } from "./box";
-import { AABB as AABBStruct } from "../signals/aabb";
+import { aabb, type Box, type Boxlike } from "./box";
+import { Box as BoxStruct } from "../signals/aabb";
 import { effect, signal } from "../core/signal";
 import { toSig, type Arg } from "../core/arg";
 import type { AnyShape } from "./shape";
@@ -31,12 +31,12 @@ export interface Scene {
   readonly root: AnyShape;
 
   /** Set viewBox to `(0, 0, w, h)` (reactive in any input). First call
-   *  wins; returns a Box representing the viewBox for layout use.
+   *  wins; returns a Boxlike representing the viewBox for layout use.
    *  If you ever need a non-zero origin, add a 4-arg overload — none
    *  of the current diagrams do. */
-  view(w: Arg<number>, h: Arg<number>): Box;
+  view(w: Arg<number>, h: Arg<number>): Boxlike;
   /** Auto-fit viewBox to root bounds + optional padding. */
-  fit(padding?: Padding): Box;
+  fit(padding?: Padding): Boxlike;
 
   /** True until `view()` or `fit()` is called — `Diagram` auto-fits
    *  when `scene()` doesn't set a view explicitly. */
@@ -49,8 +49,8 @@ export function makeScene(
   host?: HTMLElement,
 ): Scene {
   let viewSet = false;
-  const viewSig = signal<AABB>(aabb(0, 0, 0, 0));
-  const viewBox = AABBStruct.derived(() => viewSig.value);
+  const viewSig = signal<Box>(aabb(0, 0, 0, 0));
+  const viewBox = BoxStruct.derived(() => viewSig.value);
 
   const fn = ((...shapes: AnyShape[]) => {
     for (const shape of shapes) root.add(shape);

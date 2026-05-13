@@ -4,10 +4,10 @@
 // uses a shared visual idiom: dashed magenta strokes, low opacity, small
 // markers. Drop `s(debug.aabb(thing))` while developing, delete when done.
 //
-// All debug shapes report in PARENT frame: for a `Shape`, the AABB is
+// All debug shapes report in PARENT frame: for a `Shape`, the Box is
 // transformed through the shape's transform first (so you see the visual
 // footprint, not the pre-transform local one); for non-Shape Boxes (a
-// view, a split, a grid cell), the AABB is already parent-frame.
+// view, a split, a grid cell), the Box is already parent-frame.
 //
 // The `--minim-debug` CSS var lets authors theme; the fallback is
 // magenta so debug shapes always read as "scaffolding".
@@ -18,10 +18,10 @@ import {
   Shape,
   isPoint,
   type AnyShape,
-  type Box,
+  type Boxlike,
   type Pointlike,
 } from "../scene";
-import { AABB } from "../signals/aabb";
+import { Box } from "../signals/aabb";
 import { transformAABB, transformPoint } from "../signals/matrix";
 import { circle } from "./circle";
 import { line } from "./line";
@@ -41,21 +41,21 @@ const outlineOpts = {
   ...baseOpts,
 };
 
-/** Parent-frame Box for any Box. Shapes get their transform applied
- *  (so the AABB reflects the visual footprint); non-Shape Boxes pass
+/** Parent-frame Box for any Boxlike. Shapes get their transform applied
+ *  (so the Box reflects the visual footprint); non-Shape Boxes pass
  *  through. */
-function parentBox(b: Box): Box {
+function parentBox(b: Boxlike): Boxlike {
   if (b instanceof Shape) {
-    return AABB.derived(() => transformAABB(b.transform.value, b.aabb.value));
+    return Box.derived(() => transformAABB(b.transform.value, b.aabb.value));
   }
   return b;
 }
 
-/** Dashed rect on a Box's parent-frame AABB. */
-const aabb = (b: Box) => rect(parentBox(b), outlineOpts);
+/** Dashed rect on a Box's parent-frame Box. */
+const aabb = (b: Boxlike) => rect(parentBox(b), outlineOpts);
 
 /** Small filled dot at a point or a Box's center. */
-const dot = (p: Pointlike | Box, r = 2.5) =>
+const dot = (p: Pointlike | Boxlike, r = 2.5) =>
   circle(isPoint(p) ? p : p.center, r, {
     fill: COLOR,
     stroke: "none",
@@ -85,7 +85,7 @@ const origin = (s: Shape, size = 8) => {
 
 /** Dots at the 9 standard anchor positions: corners, edge midpoints,
  *  center. */
-const anchors = (b: Box, r = 2.5) => {
+const anchors = (b: Boxlike, r = 2.5) => {
   const g = group({ aside: true, opacity: 0.7 });
   for (const u of [0, 0.5, 1]) {
     for (const v of [0, 0.5, 1]) {

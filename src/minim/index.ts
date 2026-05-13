@@ -1,6 +1,6 @@
 // minim — generator-driven SVG diagrams with reactive primitives.
 //   core/   — signals, Anim, suspensions, composers, drive, timeline, …
-//   scene/  — Shape, Point, Box (AABB), aggregates, …
+//   scene/  — Shape, Point, Box, aggregates, …
 //   shapes/ — visuals + layout + list (space stdlib)
 //   motion/ — easings, transitions, integrators (time stdlib)
 //   assert/ — trace (spans/tree/tag) + claim (assertions)
@@ -25,7 +25,7 @@ export {
   type Lerp,
 } from "./core/tween";
 
-// Built-in struct value types beyond Vec/AABB/Matrix.
+// Built-in struct value types beyond Vec/Box/Matrix.
 export { Color, rgb, rgba, type C } from "./signals/color";
 
 export { toSig, when, type Arg } from "./core/arg";
@@ -58,7 +58,18 @@ export {
   meanNum,
 } from "./scene/aggregates";
 
-export { aabb, expandAABB, unionAABB, aabbEdgeFrom, type AABB, type Box } from "./scene/box";
+export {
+  aabb,
+  expandAABB,
+  unionAABB,
+  aabbEdgeFrom,
+  type Boxlike,
+} from "./scene/box";
+// `Box` here re-exports BOTH the value (the registered struct, used
+// as `Box.signal({...})`, `instanceof Box`, etc.) AND the type alias
+// for the plain `{x, y, w, h}` shape — same name, two namespaces.
+// Mirrors how `Vec` works.
+export { Box } from "./signals/aabb";
 
 export {
   Shape,

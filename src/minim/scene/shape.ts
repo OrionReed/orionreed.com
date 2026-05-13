@@ -10,10 +10,10 @@ import {
   aabb,
   aabbEdgeFrom,
   unionAABB,
-  type AABB,
   type Box,
+  type Boxlike,
 } from "./box";
-import { AABB as AABBStruct } from "../signals/aabb";
+import { Box as BoxStruct } from "../signals/aabb";
 import {
   compose,
   invert,
@@ -107,7 +107,7 @@ export type Writable<K extends AnimatableKey> = {
  *  `computed` field becomes readonly (writes are compile errors),
  *  Signal/value stays writable. Plain `Shape` is writable everywhere;
  *  for the mixed case see `Writable<K>`. */
-export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
+export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
   readonly el: SVGGElement;
   readonly intrinsic?: SVGElement;
 
@@ -117,22 +117,22 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
   readonly origin: ResolveVec<Lookup<O, "origin">>;
   readonly opacity: ResolveSig<Lookup<O, "opacity">, number>;
 
-  // ── Box interface ────────────────────────────────────────────────────
+  // ── Boxlike interface ───────────────────────────────────────────────
   //
-  // Source-of-truth: `aabb` (local-frame AABB Signal). Everything else
-  // is derived lazily — `x/y/w/h` axis projections via the AABB
-  // struct's framework field accessors; `center/top/bottom/left/right`
-  // via writable lens-backed anchors built on first access (cached as
+  // Source-of-truth: `aabb` (local-frame Box Signal). Everything else
+  // is derived lazily — `x/y/w/h` axis projections via the Box struct's
+  // framework field accessors; `center/top/bottom/left/right` via
+  // writable lens-backed anchors built on first access (cached as
   // own-properties via the same own-property pattern). Most shapes
   // never read most anchors; the ones that do pay only for what they
   // touch.
 
-  /** Local-frame AABB Signal; source-of-truth for the scalar fields
-   *  below. For groups, the union of non-aside children's AABBs (each
+  /** Local-frame Box Signal; source-of-truth for the scalar fields
+   *  below. For groups, the union of non-aside children's boxes (each
    *  composed through its transform). */
-  readonly aabb: ReadonlySignal<AABB>;
-  /** Axis projections of the AABB. Eager so subclasses (Rect) can
-   *  override with source signals. Cheap — the AABB Reactive's field
+  readonly aabb: ReadonlySignal<Box>;
+  /** Axis projections of the Box. Eager so subclasses (Rect) can
+   *  override with source signals. Cheap — the Box Reactive's field
    *  accessors are themselves lazy at the framework level, so these
    *  forward to whatever's currently the cheapest path. */
   readonly x: ReadonlySignal<number>;
@@ -157,7 +157,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
   at(u: number, v: number): Point { return this.#makeAnchor(u, v); }
 
   /** Composed `translate × pivoted-rotate × pivoted-scale`. Decoupled
-   *  from `aabb` so transforms don't trigger AABB recomputation. */
+   *  from `aabb` so transforms don't trigger Box recomputation. */
   readonly transform: ReadonlySignal<Matrix2D>;
   readonly aside: boolean;
 
@@ -173,7 +173,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
 
   constructor(
     intrinsicType?: string,
-    aabbFn?: () => AABB,
+    aabbFn?: () => Box,
     opts: O = {} as O,
     /** Subclass per-prop defaults (kept off `O` so the field types
      *  stay driven by user input only). */
@@ -213,13 +213,13 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
     ) as CastNum<"opacity">;
     this.aside = opts.aside ?? defaults.aside ?? false;
 
-    // Group default: union of non-aside children's AABBs, each composed
+    // Group default: union of non-aside children's boxes, each composed
     // through its transform. Lazy — `this._children` is read on access.
-    // Built as a Reactive<AABB> via the framework: `aabbSig.x` /
+    // Built as a Reactive<Box> via the framework: `aabbSig.x` /
     // `.y` / `.w` / `.h` are lazy field accessors at the framework
     // level (built on first access, cached as own-property), which
     // is what we forward to below.
-    const aabbSig = AABBStruct.derived(
+    const aabbSig = BoxStruct.derived(
       aabbFn ??
         (() => {
           const cs = this._children.value
@@ -228,7 +228,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
           return cs.length ? unionAABB(...cs) : aabb(0, 0, 0, 0);
         }),
     );
-    this.aabb = aabbSig as ReadonlySignal<AABB>;
+    this.aabb = aabbSig as ReadonlySignal<Box>;
     this.x = aabbSig.x;
     this.y = aabbSig.y;
     this.w = aabbSig.w;
@@ -256,7 +256,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
 
   /** Perimeter point in the direction of `toward`. In parent-frame, so
    *  it matches the anchor reads: connectors land on the visual edge
-   *  after translate/rotate/scale. Default is AABB-edge math; tighter
+   *  after translate/rotate/scale. Default is Box-edge math; tighter
    *  shapes (Circle, Rect) override. */
   boundary(toward: Pointlike): DerivedPoint {
     return Vec.derived(() =>
@@ -270,7 +270,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
   // ── Lazy anchor construction ────────────────────────────────────────
   //
   // `#makeAnchor(u, v)` builds a writable lens-backed Point: reads
-  // project the local AABB anchor through `transform` (parent-frame
+  // project the local Box anchor through `transform` (parent-frame
   // post-transform); writes shift `translate` by the delta so the
   // anchor lands at the target. Writes throw if `translate` is
   // readonly (e.g. caller passed a `computed`).
@@ -442,8 +442,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
 
 // ── Cross-frame helpers ─────────────────────────────────────────────
 
-/** `shape`'s AABB in the scene-root frame. */
-export function aabbInRoot(shape: AnyShape): ReadonlySignal<AABB> {
+/** `shape`'s Box in the scene-root frame. */
+export function aabbInRoot(shape: AnyShape): ReadonlySignal<Box> {
   return computed(() => {
     let m = shape.transform.value;
     let p = shape.parent;
@@ -455,11 +455,11 @@ export function aabbInRoot(shape: AnyShape): ReadonlySignal<AABB> {
   });
 }
 
-/** `shape`'s AABB in `observer`'s local frame. */
+/** `shape`'s Box in `observer`'s local frame. */
 export function aabbIn(
   shape: AnyShape,
   observer: AnyShape,
-): ReadonlySignal<AABB> {
+): ReadonlySignal<Box> {
   return computed(() => {
     let mShape = shape.transform.value;
     for (let p = shape.parent; p; p = p.parent) {

@@ -57,14 +57,20 @@ export type Op<S, R> = (self: S, ...args: any[]) => R;
  *
  *   add: (a: V, b: V) => V
  *     ⤳ (b: V | Signal<V> | ReadonlySignal<V> | Reactive<V>) => Reactive<V, "ro">
- */
+ *
+ *  Threads `G` (getters) through to the result so cardinals/lazy
+ *  projections survive lifted derivations (e.g. `vec.add(b).length`
+ *  works because the derived also has `.length`). `M` is dropped —
+ *  free-form methods (`.set`, `.bind`) are writable-only by design,
+ *  and lifted ops always return read-only Reactives. */
 export type LiftStruct<
   F,
   S extends Schema,
   O extends Ops<S>,
   X extends Scalars<S>,
+  G,
 > = F extends (self: any, ...args: infer A) => any
-  ? (...args: ReactiveArgs<A>) => Reactive<S, O, X, "ro">
+  ? (...args: ReactiveArgs<A>) => Reactive<S, O, X, "ro", {}, G>
   : never;
 
 /** Lift a scalar-returning op into a `ReadonlySignal<R>` method. */
@@ -92,8 +98,8 @@ type Fields<S extends Schema, W extends RW> = {
 type Ops<S extends Schema> = Record<string, (self: ValueOf<S>, ...args: any[]) => ValueOf<S>>;
 type Scalars<S extends Schema> = Record<string, (self: ValueOf<S>, ...args: any[]) => unknown>;
 
-type Methods<S extends Schema, O extends Ops<S>, X extends Scalars<S>> =
-  & { [K in keyof O]: LiftStruct<O[K], S, O, X> }
+type Methods<S extends Schema, O extends Ops<S>, X extends Scalars<S>, G> =
+  & { [K in keyof O]: LiftStruct<O[K], S, O, X, G> }
   & { [K in keyof X]: LiftScalar<X[K]> };
 
 /** When the struct's ops include a `lerp(a, b, t) → S`, the framework
@@ -127,7 +133,7 @@ export type Reactive<
 > =
   & (W extends "rw" ? Signal<ValueOf<S>> : ReadonlySignal<ValueOf<S>>)
   & Fields<S, W>
-  & Methods<S, O, X>
+  & Methods<S, O, X, G>
   & Tweenable<S, O, W>
   & (W extends "rw" ? M : {})
   & GetterTypes<G>;
@@ -296,9 +302,9 @@ class Builder<
    *  reads bypass the getter (own-property fast path).
    *
    *  Use for projections that should read as properties rather than
-   *  method calls. Example: AABB uses this for `.center`, `.top`,
+   *  method calls. Example: Box uses this for `.center`, `.top`,
    *  `.bottom`, `.left`, `.right` — each returns a `Reactive<V>`
-   *  derived from the AABB. */
+   *  derived from the Box. */
   getters<G2 extends GettersBag<S, O, X, M, G>>(gettersObj: G2): Builder<S, O, X, M, G & G2> {
     const merged = { ...this.gettersObj, ...gettersObj } as G & G2 & Record<string, (...args: any[]) => any>;
     return new Builder<S, O, X, M, G & G2>(

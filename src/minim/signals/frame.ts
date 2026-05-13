@@ -5,8 +5,8 @@
 //
 //   - `Matrix2D.multiply(other)` is the composition operation; calling
 //     it on a reactive matrix yields a reactive composed matrix.
-//   - `pt.in(matrix)` and `aabb.in(matrix)` are the cross-frame
-//     operations, registered as ops on Vec/AABB.
+//   - `pt.in(matrix)` and `box.in(matrix)` are the cross-frame
+//     operations, registered as ops on Vec/Box.
 //
 // So a "Frame" is just a Reactive<Matrix2D>, and `parent.child(local)`
 // is just `parent.multiply(local)`. The module exists to give those
@@ -16,8 +16,8 @@
 //   const local = Matrix2D.signal(...);
 //   const child = Frame.child(root, local);   // Reactive<M>
 //
-//   const ptInWorld   = pt.in(child);          // Reactive<Vec>
-//   const aabbInWorld = aabb.in(child);        // Reactive<AABB>
+//   const ptInWorld   = pt.in(child);          // Reactive<V>
+//   const boxInWorld  = box.in(child);         // Reactive<Box>
 //
 // Replaces: Shape.transform composition, aabbInRoot, aabbIn, the
 // cross-frame logic in Shape.boundary and Shape.toLocal. All of those

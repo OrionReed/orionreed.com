@@ -7,11 +7,12 @@
 //   - Color ops: blend, withAlpha, lighten — chainable, derived
 //   - Scalar projections: luminance, css string
 //   - Generic `.to(target, dur)` tween, automatically derived from
-//     the registered `lerp` op — same engine that tweens Vec/AABB
+//     the registered `lerp` op — same engine that tweens Vec/Box
 //
 // Compare to writing this from scratch (~150-200 lines bespoke).
 
 import { struct } from "./struct";
+import { computed, type ReadonlySignal } from "../core/signal";
 
 export type C = { r: number; g: number; b: number; a: number };
 
@@ -43,12 +44,23 @@ export const Color = struct<C>("Color", { r: 0, g: 0, b: 0, a: 1 })
       a: c.a,
     }),
   })
-  .scalars({
-    /** Perceptual luminance ≈ 0..1. */
-    luminance: (c): number => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b,
-    /** CSS rgba() string. */
-    css: (c): string =>
-      `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${c.a})`,
+  .getters({
+    /** Perceptual luminance ≈ 0..1. Lazy + cached as own-property. */
+    luminance(this: { value: C }): ReadonlySignal<number> {
+      const self = this;
+      return computed(() => {
+        const c = self.value;
+        return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+      });
+    },
+    /** CSS `rgba(...)` string, reactive. Lazy + cached as own-property. */
+    css(this: { value: C }): ReadonlySignal<string> {
+      const self = this;
+      return computed(() => {
+        const c = self.value;
+        return `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${c.a})`;
+      });
+    },
   })
   .build();
 

@@ -77,7 +77,7 @@ export class AnnularSector<
   }
 
   /** Rendered inside the shape's own `<g transform>` so coords are
-   *  local-frame — derived from the AABB (whose center matches the
+   *  local-frame — derived from the Box (whose center matches the
    *  user-supplied center). */
   override segments(): Segment[] {
     const cx = () => this.aabb.value.x + this.aabb.value.w / 2;

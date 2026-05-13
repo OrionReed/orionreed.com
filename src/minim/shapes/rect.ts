@@ -4,7 +4,7 @@ import {
   Vec,
   aabb,
   isPoint,
-  type Box,
+  type Boxlike,
   type DerivedPoint,
   type Pointlike,
   type Segment,
@@ -124,10 +124,10 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   }
 }
 
-/** Detect a `Box`-shaped value structurally (anything with `aabb` and
+/** Detect a `Boxlike` value structurally (anything with `aabb` and
  *  `at`). Used by the `rect(box, opts?)` overload — Shape, view, and
  *  split/grid results all qualify. */
-function isBox(v: unknown): v is Box {
+function isBox(v: unknown): v is Boxlike {
   return (
     typeof v === "object" &&
     v !== null &&
@@ -139,11 +139,11 @@ function isBox(v: unknown): v is Box {
 /** Rect factory:
  *
  *   rect(x, y, w, h, opts?)             — corner-based (canonical)
- *   rect(box: Box, opts?)               — fill another Box (Shape, view, split…)
+ *   rect(box: Boxlike, opts?)           — fill another Box (Shape, view, split…)
  *   rect(center: Point, w, h, opts?)    — centered on a Point
  *   rect(p1: Point, p2: Point, opts?)   — between two corner Points
  */
-export function rect<const O extends RectOpts>(b: Box, opts?: O): Rect<O>;
+export function rect<const O extends RectOpts>(b: Boxlike, opts?: O): Rect<O>;
 export function rect<const O extends RectOpts>(
   p1: Pointlike,
   p2: Pointlike,
@@ -163,7 +163,7 @@ export function rect<const O extends RectOpts>(
   opts?: O,
 ): Rect<O>;
 export function rect(
-  a: Arg<number> | Box | Pointlike,
+  a: Arg<number> | Boxlike | Pointlike,
   b?: Arg<number> | Pointlike | RectOpts,
   c?: Arg<number>,
   d?: Arg<number> | RectOpts,

@@ -25,9 +25,9 @@ export type M = { a: number; b: number; c: number; d: number; e: number; f: numb
 // Backwards-compatible alias for the legacy `Matrix2D` interface name.
 export type Matrix2D = M;
 
-// Plain AABB shape (kept local to avoid a circular import with
-// `./aabb`). Same shape as the AABB struct's value type.
-type AABB = { x: number; y: number; w: number; h: number };
+// Plain Box shape (kept local to avoid a circular import with
+// `./aabb`). Same shape as the `Box` struct's value type (`B`).
+type Box = { x: number; y: number; w: number; h: number };
 
 // ── Plain-value helpers ────────────────────────────────────────────
 
@@ -97,8 +97,8 @@ export const transformPoint = (m: M, p: V): V => ({
   y: m.b * p.x + m.d * p.y + m.f,
 });
 
-/** Loose AABB enclosing the four transformed corners of `b`. */
-export function transformAABB(m: M, b: AABB): AABB {
+/** Loose Box enclosing the four transformed corners of `b`. */
+export function transformAABB(m: M, b: Box): Box {
   if (isIdentity(m)) return b;
   const x0 = b.x;
   const y0 = b.y;

@@ -8,7 +8,7 @@
 import temml from "temml";
 import { signal, type ReadonlySignal, type Signal } from "../core/signal";
 import { Shape, type ShapeOpts } from "../scene/shape";
-import { aabb, type AABB } from "../scene/box";
+import { aabb, type Box } from "../scene/box";
 import { tokens } from "../shapes/tokens";
 import { Part, PartMarker, type PartList } from "./parts";
 
@@ -144,7 +144,7 @@ const stabilizePart = (el: HTMLElement): void => {
 interface Measurement {
   width: number;
   height: number;
-  rects: Map<string, AABB>;
+  rects: Map<string, Box>;
 }
 
 const measureMathML = (
@@ -170,7 +170,7 @@ const measureMathML = (
     // not to `<math>` — `<mfrac>` can overflow its line-box upward,
     // so math-relative bounds would be off by that overflow.
     const wrapperRect = div.getBoundingClientRect();
-    const rects = new Map<string, AABB>();
+    const rects = new Map<string, Box>();
     div.querySelectorAll<HTMLElement>("[class*='minim-part-']").forEach((el) => {
       const cls = Array.from(el.classList).find((c) =>
         c.startsWith("minim-part-"),
@@ -245,7 +245,7 @@ export class TexShape<Names extends string = string> extends Shape {
     // and binds each Part to its live el. `aabbWriters` holds the
     // writable handles to each part's bounds for re-measure.
     const list: Part[] = [];
-    const aabbWriters = new Map<string, Signal<AABB>>();
+    const aabbWriters = new Map<string, Signal<Box>>();
     for (const m of markers) {
       const cls = partClass(m.name);
       const aabbSig = signal(measured.rects.get(cls) ?? aabb(0, 0, 0, 0));

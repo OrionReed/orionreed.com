@@ -30,7 +30,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
     );
     this.radius = r;
     // Note: the inherited Box `this.center` (a DerivedPoint computed
-    // from the AABB) resolves to the same point as `center` reactively;
+    // from the Box) resolves to the same point as `center` reactively;
     // internal methods read it via `this.center` rather than capturing
     // the constructor parameter.
     wireStroke(this, opts, true, () => {
@@ -75,7 +75,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
 
   /** Two half-arcs so each span stays ≤ π (keeps `largeArc` unambiguous).
    *  Rendered inside the shape's own `<g transform>` so coords are in
-   *  local frame — derived from the AABB rather than `this.center`
+   *  local frame — derived from the Box rather than `this.center`
    *  (which is now parent-frame). */
   override segments(): Segment[] {
     const cx = () => this.aabb.value.x + this.aabb.value.w / 2;

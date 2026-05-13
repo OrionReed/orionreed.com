@@ -1,5 +1,5 @@
-// Scene graph: `Shape` + spatial primitives (Point, Box, AABB) +
-// matrix math + the `Scene` callable. `../shapes/` is built on this.
+// Scene graph: `Shape` + spatial primitives (Point, Box) + matrix
+// math + the `Scene` callable. `../shapes/` is built on this.
 
 export {
   Vec,
@@ -24,13 +24,16 @@ export {
   meanNum,
 } from "./aggregates";
 
+// `Box` re-export carries BOTH the value (the struct) and the type
+// alias (the `{x, y, w, h}` shape) — same name, two namespaces, like
+// a class.
+export { Box } from "../signals/aabb";
 export {
   aabb,
   aabbEdgeFrom,
   expandAABB,
   unionAABB,
-  type AABB,
-  type Box,
+  type Boxlike,
 } from "./box";
 
 export {

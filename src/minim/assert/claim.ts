@@ -34,7 +34,7 @@ import {
 } from "../core/signal";
 import { race } from "../core/suspensions";
 import type { Animator } from "../core/anim";
-import { type AABB, type Box } from "../scene/box";
+import { type Box, type Boxlike } from "../scene/box";
 import { circle } from "../shapes/circle";
 import { pt, type V, type Pointlike } from "../signals/vec";
 
@@ -379,13 +379,13 @@ export class Predicates<T> {
 
   // ── Point / Vec ────────────────────────────────────────────────────
 
-  /** Predicate that the point lies inside `region`. Accepts a `Box`
-   *  (Shape, view, split result…) or a `ReadonlySignal<AABB>`. */
+  /** Predicate that the point lies inside `region`. Accepts a
+   *  `Boxlike` (Shape, view, split result…) or a `ReadonlySignal<Box>`. */
   inside(
     this: Predicates<V>,
-    region: Box | ReadonlySignal<AABB>,
+    region: Boxlike | ReadonlySignal<Box>,
   ): Claim {
-    const aabbSig: ReadonlySignal<AABB> =
+    const aabbSig: ReadonlySignal<Box> =
       "aabb" in region ? region.aabb : region;
     return this.build(
       computed(() => {

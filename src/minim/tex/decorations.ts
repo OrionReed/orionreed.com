@@ -10,7 +10,7 @@
 
 import { computed, type ReadonlySignal } from "../core/signal";
 import { Shape } from "../scene/shape";
-import { aabb, type AABB } from "../scene/box";
+import { aabb, type Box } from "../scene/box";
 import { tokens } from "../shapes/tokens";
 import type { Part } from "./parts";
 
@@ -31,9 +31,9 @@ const applyStroke = (s: Shape, opts: DecorationOpts) => {
   s.attr("fill", "none");
 };
 
-/** A `<rect>` whose x/y/w/h and AABB all derive from the same layout
+/** A `<rect>` whose x/y/w/h and Box all derive from the same layout
  *  signal — single source of truth, one re-render per change. */
-function rectFromAABB(layout: ReadonlySignal<AABB>): Shape {
+function rectFromAABB(layout: ReadonlySignal<Box>): Shape {
   const s = new Shape("rect", () => layout.value);
   s.attr("x", () => layout.value.x);
   s.attr("y", () => layout.value.y);
@@ -49,7 +49,7 @@ interface LineEnds {
   y2: number;
 }
 
-/** A `<line>` whose endpoints (and AABB) derive from the same layout
+/** A `<line>` whose endpoints (and Box) derive from the same layout
  *  signal. */
 function lineFromEnds(layout: ReadonlySignal<LineEnds>): Shape {
   const s = new Shape("line", () => {

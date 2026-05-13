@@ -6,7 +6,7 @@
 // Identity for morph is by *marker reference*, not name. Visuals
 // (highlight, opacity, color) are signal-driven; color cascades
 // through `marker.group` so coloring `v` colors its `expand`-ed
-// children. `Part` implements `Box`, so `eq.parts.a.center` etc.
+// children. `Part` implements `Boxlike`, so `eq.parts.a.center` etc.
 // are usable Pointlikes.
 
 import {
@@ -16,8 +16,8 @@ import {
   type ReadonlySignal,
 } from "../core/signal";
 import { toSig, type Arg } from "../core/arg";
-import { type AABB, type Box } from "../scene/box";
-import { AABB as AABBStruct } from "../signals/aabb";
+import { type Box, type Boxlike } from "../scene/box";
+import { Box as BoxStruct } from "../signals/aabb";
 import type { Pointlike } from "../signals/vec";
 import type { TexShape } from "./tex";
 
@@ -36,17 +36,17 @@ const effectiveColor = (m: PartMarker): string | null => {
   return null;
 };
 
-/** A named, addressable region of a TexShape. Implements `Box` so
- *  `part.center`, `part.top`, etc. are Pointlikes in the TexShape's
+/** A named, addressable region of a TexShape. Implements `Boxlike`
+ *  so `part.center`, `part.top`, etc. are Pointlikes in the TexShape's
  *  local frame (read-only — parts are template-bound). */
-export class Part<N extends string = string> implements Box {
+export class Part<N extends string = string> implements Boxlike {
   /** Toggle the default highlight visual (a translucent background
    *  tint). Authors can also drive their own visuals off this signal. */
   readonly highlighted: Signal<boolean> = signal(false);
   /** Opacity in [0, 1]. Wired to `el.style.opacity`. */
   readonly opacity: Signal<number> = signal(1);
 
-  // Box interface — derived from `aabb` via `makeBox`.
+  // Boxlike interface — derived from `aabb` via the Box struct.
   readonly x: ReadonlySignal<number>;
   readonly y: ReadonlySignal<number>;
   readonly w: ReadonlySignal<number>;
@@ -67,13 +67,13 @@ export class Part<N extends string = string> implements Box {
   constructor(
     readonly name: N,
     readonly content: ReadonlySignal<string>,
-    readonly aabb: ReadonlySignal<AABB>,
+    readonly aabb: ReadonlySignal<Box>,
     /** The marker this Part was instantiated from. Morph identifies
      *  same-identity parts by reference equality on this. */
     readonly marker: PartMarker,
     readonly host: TexShape,
   ) {
-    const b = AABBStruct.derived(() => aabb.value);
+    const b = BoxStruct.derived(() => aabb.value);
     this.x = b.x;
     this.y = b.y;
     this.w = b.w;

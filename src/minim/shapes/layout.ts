@@ -3,8 +3,8 @@
 
 import { toSig, type Arg } from "../core/arg";
 import { transformAABB } from "../signals/matrix";
-import { aabb, expandAABB, type Box } from "../scene/box";
-import { AABB } from "../signals/aabb";
+import { aabb, expandAABB, type Boxlike } from "../scene/box";
+import { Box } from "../signals/aabb";
 import type { Shape } from "../scene";
 
 export interface ArrangeOpts {
@@ -56,14 +56,14 @@ export function arrange(
 }
 
 // ── Box operations ──────────────────────────────────────────────────
-// Pure functions over `Box`. Inputs: any reactive rectangle (a Shape, a
-// `view`, another result of these helpers). Outputs: derived `Box`(es)
-// that update reactively as the source changes.
+// Pure functions over `Boxlike`. Inputs: any reactive rectangle (a
+// Shape, a `view`, another result of these helpers). Outputs: derived
+// Reactive<Box>(es) that update reactively as the source changes.
 
 /** Inflate a Box on each side by `by`. */
-export function expand(box: Box, by: Arg<number>): Box {
+export function expand(box: Boxlike, by: Arg<number>): Boxlike {
   const bys = toSig(by);
-  return AABB.derived(() => expandAABB(box.aabb.value, bys.value));
+  return Box.derived(() => expandAABB(box.aabb.value, bys.value));
 }
 
 /** Split a Box along an axis into N reactive sub-Boxes.
@@ -73,11 +73,11 @@ export function expand(box: Box, by: Arg<number>): Box {
  *   split(b, "x", 3, { gap: 4 })  — 4px between
  */
 export function split(
-  box: Box,
+  box: Boxlike,
   axis: "x" | "y",
   parts: number | number[],
   opts: { gap?: Arg<number> } = {},
-): Box[] {
+): Boxlike[] {
   const ratios = typeof parts === "number" ? new Array(parts).fill(1) : parts;
   const total = ratios.reduce((a, b) => a + b, 0);
   const cumBefore = ratios.map((_, i) =>
@@ -85,7 +85,7 @@ export function split(
   );
   const gapSig = toSig(opts.gap ?? 0);
   return ratios.map((r, i) =>
-    AABB.derived(() => {
+    Box.derived(() => {
       const b = box.aabb.value;
       const gap = gapSig.value;
       const gapTotal = gap * (ratios.length - 1);
@@ -104,10 +104,10 @@ export function split(
 /** Two-axis split into a `rows × cols` grid (sugar over `split`).
  *  Returns `[row][col]`. */
 export function grid(
-  box: Box,
+  box: Boxlike,
   rows: number,
   cols: number,
   opts: { gap?: Arg<number> } = {},
-): Box[][] {
+): Boxlike[][] {
   return split(box, "y", rows, opts).map((row) => split(row, "x", cols, opts));
 }

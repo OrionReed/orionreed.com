@@ -4,7 +4,7 @@
 
 import { struct } from "./struct";
 import type { M } from "./matrix";
-import { effect, Signal, type ReadonlySignal } from "../core/signal";
+import { computed, effect, Signal, type ReadonlySignal } from "../core/signal";
 import { toSig, type Arg } from "../core/arg";
 
 /** The struct's value type — declared up-front so ops can reference
@@ -40,8 +40,16 @@ export const Vec = struct<V>("Vec", { x: 0, y: 0 })
     }),
   })
   .scalars({
-    length: (a): number => Math.hypot(a.x, a.y),
+    /** Distance to `b`. Method (takes an arg) — call as `v.distance(b)`. */
     distance: (a, b: V): number => Math.hypot(a.x - b.x, a.y - b.y),
+  })
+  .getters({
+    /** Magnitude of this Vec. Lazy + cached as own-property; reads as
+     *  a signal property (`v.length`), not a method call. */
+    length(this: { value: V }): ReadonlySignal<number> {
+      const self = this;
+      return computed(() => Math.hypot(self.value.x, self.value.y));
+    },
   })
   .methods({
     /** Copy `target.value` into this point — convenience over
