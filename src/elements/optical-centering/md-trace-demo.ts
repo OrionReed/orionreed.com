@@ -9,7 +9,7 @@
 
 import {
   Diagram,
-  Scene,
+  Mount,
   Anchor,
   circle,
   computed,
@@ -72,8 +72,8 @@ function assignLanes(tree: TraceTree): {
 const t = tagAll({ fadeIn, fadeUp, fadeOut, fadeUpOut, spinIn, zoomOut });
 
 export class MdTraceDemo extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(W, ROWS_Y + MAX_LANES * (ROW_H + ROW_GAP) + 24);
+  protected scene(s: Mount): void {
+    const view = this.view(W, ROWS_Y + MAX_LANES * (ROW_H + ROW_GAP) + 24);
 
     // ── Top: three circles the demo animates ───────────────────────
     const row = view.top.down(TOP_H / 2);

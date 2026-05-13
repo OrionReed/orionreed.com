@@ -5,7 +5,7 @@
 
 import {
   Diagram,
-  Scene,
+  Mount,
   Anchor,
   attract,
   circle,
@@ -22,8 +22,8 @@ import {
 const N_TRAIL = 14;
 
 export class MdBehaviors extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(600, 320);
+  protected scene(s: Mount): void {
+    const view = this.view(600, 320);
     const wall = view.w.value - 40;
 
     // Each head: x drifts wall-to-wall (flipping vel at boundaries

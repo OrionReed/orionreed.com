@@ -1,6 +1,6 @@
 import {
   Diagram,
-  Scene,
+  Mount,
   Text,
   Anchor,
   circle,
@@ -34,8 +34,8 @@ function tick(a: Pointlike, b: Pointlike, f: number, h: number, opts: LineOpts =
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 export class MdCentering extends Diagram {
-  protected scene(s: Scene): void {
-    s.view(640, 240);
+  protected scene(s: Mount): void {
+    this.view(640, 240);
 
     const tl = timeline({
       intro: { at: 0, dur: 1.1 },

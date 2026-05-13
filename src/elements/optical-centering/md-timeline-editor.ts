@@ -6,7 +6,7 @@
 import {
   Diagram,
   EventBus,
-  Scene,
+  Mount,
   Anchor,
   circle,
   computed,
@@ -26,8 +26,8 @@ const COLORS = ["#5b8def", "#f5a623", "#e25c5c"];
 const MAX_DUR = 2.5;
 
 export class MdTimelineEditor extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(600, 320);
+  protected scene(s: Mount): void {
+    const view = this.view(600, 320);
 
     // ── Editable timeline ──────────────────────────────────────────
     const tl = timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));

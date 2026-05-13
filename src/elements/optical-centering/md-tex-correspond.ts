@@ -15,7 +15,7 @@
 import {
   Anchor,
   Diagram,
-  Scene,
+  Mount,
   highlight,
   label,
   morph,
@@ -40,8 +40,8 @@ const VEC_V = "\\vec{v}";
 const SUM_RANGE = "\\sum_{i=1}^{3}";
 
 export class MdTexCorrespond extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(640, 260);
+  protected scene(s: Mount): void {
+    const view = this.view(640, 260);
 
     const status = signal<Content>("");
 

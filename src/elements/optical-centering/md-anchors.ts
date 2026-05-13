@@ -6,7 +6,7 @@
 import {
   Anchor,
   Diagram,
-  Scene,
+  Mount,
   circle,
   easeInOut,
   label,
@@ -16,8 +16,8 @@ import {
 } from "../../minim";
 
 export class MdAnchors extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(560, 320);
+  protected scene(s: Mount): void {
+    const view = this.view(560, 320);
 
     // One-shot placement: `set` writes a delta to translate so r's
     // post-transform center lands on view.center exactly.

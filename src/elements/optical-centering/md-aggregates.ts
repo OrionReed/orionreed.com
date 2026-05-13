@@ -5,7 +5,7 @@
 import * as R from "../rand";
 import {
   Diagram,
-  Scene,
+  Mount,
   Anchor,
   centroid,
   easeInOut,
@@ -27,8 +27,8 @@ const SHAPES = [
 ];
 
 export class MdAggregates extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(600, 360);
+  protected scene(s: Mount): void {
+    const view = this.view(600, 360);
 
     const shapes = SHAPES.map((p) =>
       s(

@@ -82,7 +82,7 @@ export {
 
 export { draggable } from "./scene/interaction";
 
-export { makeScene, type Scene } from "./scene/scene";
+export { mount, type Mount } from "./scene/mount";
 
 export {
   Anim,

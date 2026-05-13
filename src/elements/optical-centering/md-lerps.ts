@@ -24,7 +24,7 @@ import {
   Box,
   Color,
   Diagram,
-  Scene,
+  Mount,
   Vec,
   circle,
   computed,
@@ -75,8 +75,8 @@ const fmtColor = (c: { r: number; g: number; b: number }) =>
 const rowY = (i: number) => TOP + ROW_H * i;
 
 export class MdLerps extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(W, H);
+  protected scene(s: Mount): void {
+    const view = this.view(W, H);
 
     s(
       label(view.top.down(22), "one .to(), every value type", {

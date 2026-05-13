@@ -14,7 +14,7 @@
 import {
   Anchor,
   Diagram,
-  Scene,
+  Mount,
   circle,
   debug,
   handle,
@@ -24,8 +24,8 @@ import {
 } from "../../minim";
 
 export class MdHandles extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(680, 360);
+  protected scene(s: Mount): void {
+    const view = this.view(680, 360);
 
     // ── Left: manipulable triangle ─────────────────────────────────
     // Initial vertex positions form a balanced triangle around (165, 180).

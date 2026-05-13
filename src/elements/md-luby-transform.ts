@@ -1,6 +1,6 @@
 import {
   Diagram,
-  Scene,
+  Mount,
   circle,
   clipPath,
   computed,
@@ -23,7 +23,7 @@ const QR_GRID = 5;
 const SIZE = 32;
 
 export class MdLubyTransform extends Diagram {
-  protected scene(s: Scene): void {
+  protected scene(s: Mount): void {
     // Reactive layout: viewport breakpoint drives both cell count and
     // viewBox width. Surviving cells keep their animation state across
     // breakpoint flips — no rebuild.
@@ -33,7 +33,7 @@ export class MdLubyTransform extends Diagram {
     const stride = computed(() => (W.value - SIZE) / (N.value - 1));
     const indices = N.derive((n) => Array.from({ length: n }, (_, i) => i));
 
-    const view = s.view(W, 200);
+    const view = this.view(W, 200);
 
     // Re-roll the cell pattern and source-edge gating each tick.
     const tick = pulse(this.anim, 0.5);
@@ -75,7 +75,7 @@ export class MdLubyTransform extends Diagram {
     );
 
     const cellsLayer = s(group());
-    cellsLayer.attr("clip-path", clipPath(s, qr), "wrapper");
+    cellsLayer.attr("clip-path", clipPath(qr), "wrapper");
     grid(qr, QR_GRID, QR_GRID).flat().forEach((cellB, i) =>
       cellsLayer.add(rect(cellB, {
         fill: true,

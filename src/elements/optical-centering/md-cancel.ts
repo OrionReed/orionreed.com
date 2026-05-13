@@ -6,7 +6,7 @@
 
 import {
   Diagram,
-  Scene,
+  Mount,
   Anchor,
   button,
   circle,
@@ -43,8 +43,8 @@ function* lifecycle(
 }
 
 export class MdCancel extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(380, 160);
+  protected scene(s: Mount): void {
+    const view = this.view(380, 160);
 
     const status = signal<Content>("running");
     s(

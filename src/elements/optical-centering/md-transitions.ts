@@ -4,7 +4,7 @@
 import {
   Diagram,
   Anchor,
-  Scene,
+  Mount,
   Shape,
   circle,
   label,
@@ -34,16 +34,16 @@ const COUNT = 6;
 
 interface LaneSpec {
   name: string;
-  shape: (s: Scene, x: number, y: number) => Shape;
+  shape: (s: Mount, x: number, y: number) => Shape;
   intro: (s: Shape) => Animator;
   outro: (s: Shape) => Animator;
 }
 
 export class MdTransitions extends Diagram {
-  protected scene(s: Scene): void {
+  protected scene(s: Mount): void {
     const W = LEFT_PAD + RIGHT_PAD + 360;
     const H = LANES * LANE_GAP + 30;
-    s.view(W, H);
+    this.view(W, H);
 
     const lanes: LaneSpec[] = [
       {

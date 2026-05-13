@@ -7,7 +7,7 @@ import {
   Diagram,
   EventBus,
   Vec,
-  Scene,
+  Mount,
   Anchor,
   assemble,
   attract,
@@ -1267,10 +1267,10 @@ const HEADER_H = 36;
 const PAD_X = 16;
 
 export class MdRuntimeTests extends Diagram {
-  protected scene(s: Scene): void {
+  protected scene(s: Mount): void {
     const W = 600;
     const H = HEADER_H + TESTS.length * ROW_H + 36;
-    s.view(W, H);
+    this.view(W, H);
 
     const statuses = TESTS.map(() => signal<Status>("pending"));
     const messages = TESTS.map(() => signal<string>(""));

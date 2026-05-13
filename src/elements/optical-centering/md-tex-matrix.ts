@@ -8,7 +8,7 @@
 import {
   Anchor,
   Diagram,
-  Scene,
+  Mount,
   highlight,
   label,
   morph,
@@ -34,8 +34,8 @@ const PMATRIX_CLOSE = "\\end{pmatrix}";
 const block = tex({ display: "block" });
 
 export class MdTexMatrix extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(640, 280);
+  protected scene(s: Mount): void {
+    const view = this.view(640, 280);
 
     const status = signal<Content>("");
 

@@ -19,7 +19,7 @@
 import {
   Anchor,
   Diagram,
-  Scene,
+  Mount,
   computed,
   handle,
   label,
@@ -52,8 +52,8 @@ const big = tex({ size: 30, display: "block" });
 const SUM_LOWER = "\\sum_{i=1}";
 
 export class MdTexLive extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(W, H);
+  protected scene(s: Mount): void {
+    const view = this.view(W, H);
 
     s(
       label(view.top.down(20), "tex — live data into an equation", {

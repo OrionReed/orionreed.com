@@ -1,12 +1,37 @@
 // Custom-element scaffold. Subclasses override `scene(s)` to build
-// the graph; signals drive updates.
+// the graph; signals drive updates. Owns the SVG element, the
+// viewBox (`view`/`fit`), and the host CSS sizing (`--d-w`/`--d-h`).
 
-import { Anim } from "./core";
-import { Shape, SVG_NS, makeScene, type Scene } from "./scene";
+import { Anim, effect, toSig, type Arg } from "./core";
+import {
+  Shape,
+  SVG_NS,
+  mount,
+  type Mount,
+  aabb,
+  type Boxlike,
+} from "./scene";
+import { Box as BoxStruct } from "./signals/aabb";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
 import { ensureArrowMarker } from "./shapes/connect";
 
 export const css = String.raw;
+
+export type Padding =
+  | number
+  | { top?: number; right?: number; bottom?: number; left?: number };
+
+function resolvePadding(p?: Padding) {
+  if (p === undefined || p === 0)
+    return { top: 0, right: 0, bottom: 0, left: 0 };
+  if (typeof p === "number") return { top: p, right: p, bottom: p, left: p };
+  return {
+    top: p.top ?? 0,
+    right: p.right ?? 0,
+    bottom: p.bottom ?? 0,
+    left: p.left ?? 0,
+  };
+}
 
 export class Diagram extends HTMLElement {
   static get observedAttributes(): string[] {
@@ -25,9 +50,16 @@ export class Diagram extends HTMLElement {
   protected shadow: ShadowRoot;
   protected anim = new Anim();
   protected svg!: SVGSVGElement;
-  /** Same handle passed to `scene(s)` — available in event handlers
-   *  and lifecycle hooks. */
-  protected s!: Scene;
+  /** Scene-graph root. All user-mounted shapes are children of this. */
+  protected root!: Shape;
+  /** Callable mount handle passed into `scene(s)`. `s(shape)` adds to root. */
+  protected s!: Mount;
+
+  // Viewport state. `#viewSet` flips on the first explicit `view()`/`fit()`
+  // call; `connectedCallback` auto-fits if it's still false.
+  #viewSet = false;
+  #viewSig = signal0Box();
+  #viewBox = BoxStruct.derived(() => this.#viewSig.value);
 
   private static styleSheets = new Map<string, CSSStyleSheet>();
   static styles = css`
@@ -53,23 +85,53 @@ export class Diagram extends HTMLElement {
 
   /** Build the scene graph. Runs once per element-connect; signals
    *  handle dynamic behavior. Override in subclasses. */
-  protected scene(_s: Scene): void {}
+  protected scene(_s: Mount): void {}
 
   connectedCallback(): void {
     if (!this.svg) this.mountSvg();
     this.anim.stop();
-    this.s?.root.dispose();
-    const root = new Shape();
-    this.svg.replaceChildren(root.el);
+    this.root?.dispose();
+    this.#viewSet = false;
+    this.root = new Shape();
+    this.svg.replaceChildren(this.root.el);
     ensureArrowMarker(this.svg);
-    this.s = makeScene(this.svg, root, this);
+    this.s = mount(this.root);
     this.scene(this.s);
-    if (this.s._viewPending) this.s.fit();
+    if (!this.#viewSet) this.fit();
   }
 
   disconnectedCallback(): void {
     this.anim.stop();
-    this.s?.root.dispose();
+    this.root?.dispose();
+  }
+
+  /** Set the SVG viewBox to `(0, 0, w, h)` (reactive in either input).
+   *  First call wins; subsequent calls (and the auto-fit fallback) are
+   *  no-ops. Returns a Reactive `Box` for layout use (`view.w.value`,
+   *  `view.center`, etc.). */
+  view(w: Arg<number>, h: Arg<number>): Boxlike {
+    if (this.#viewSet) return this.#viewBox;
+    const ws = toSig(w);
+    const hs = toSig(h);
+    effect(() => this.setViewBox(0, 0, ws.value, hs.value));
+    this.#viewSet = true;
+    return this.#viewBox;
+  }
+
+  /** Auto-fit viewBox to the root's bounds + optional padding. Called
+   *  automatically after `scene()` when `view()` wasn't invoked. */
+  fit(padding?: Padding): Boxlike {
+    if (this.#viewSet) return this.#viewBox;
+    const p = resolvePadding(padding);
+    const b = this.root.aabb.value;
+    this.setViewBox(
+      b.x - p.left,
+      b.y - p.top,
+      b.w + p.left + p.right,
+      b.h + p.top + p.bottom,
+    );
+    this.#viewSet = true;
+    return this.#viewBox;
   }
 
   static get tagName(): string {
@@ -81,6 +143,18 @@ export class Diagram extends HTMLElement {
 
   static define(): void {
     customElements.define(this.tagName, this);
+  }
+
+  private setViewBox(x: number, y: number, w: number, h: number): void {
+    this.#viewSig.value = aabb(x, y, w, h);
+    this.svg.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
+    this.svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    this.svg.setAttribute("width", String(w));
+    this.svg.setAttribute("height", String(h));
+    // Drive host sizing from viewBox: `:host` reads `--d-w` to set
+    // max-width. Authors can override per-element via `style="--d-w: N"`.
+    this.style.setProperty("--d-w", String(w));
+    this.style.setProperty("--d-h", String(h));
   }
 
   private mountSvg(): void {
@@ -101,4 +175,10 @@ export class Diagram extends HTMLElement {
     }
     this.shadow.adoptedStyleSheets = [Diagram.styleSheets.get(cacheKey)!];
   }
+}
+
+// Helper: a fresh writable Box-valued signal seeded with the zero box.
+// Inlined here to avoid a dep on `signals/aabb` ergonomics.
+function signal0Box() {
+  return BoxStruct.signal(aabb(0, 0, 0, 0));
 }

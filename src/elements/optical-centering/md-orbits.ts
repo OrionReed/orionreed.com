@@ -4,7 +4,7 @@
 import {
   Diagram,
   polar,
-  Scene,
+  Mount,
   type AnyShape,
   bounceIn,
   circle,
@@ -18,8 +18,8 @@ import {
 } from "../../minim";
 
 export class MdOrbits extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(400, 320);
+  protected scene(s: Mount): void {
+    const view = this.view(400, 320);
 
     const sun = s(group({ translate: view.center }));
     sun.add(circle(pt(0, 0), 12, { fill: true }));

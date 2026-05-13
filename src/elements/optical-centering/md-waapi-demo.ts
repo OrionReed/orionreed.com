@@ -16,7 +16,7 @@ import {
   Anchor,
   Diagram,
   polar,
-  Scene,
+  Mount,
   circle,
   computed,
   inView,
@@ -29,8 +29,8 @@ import {
 } from "../../minim";
 
 export class MdWaapiDemo extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(560, 230);
+  protected scene(s: Mount): void {
+    const view = this.view(560, 230);
     const X = 56;
     const BW = 440;
 

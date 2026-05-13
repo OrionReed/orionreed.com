@@ -27,7 +27,7 @@
 import {
   Anchor,
   Diagram,
-  Scene,
+  Mount,
   brace,
   box,
   highlight,
@@ -47,8 +47,8 @@ import {
 } from "../../minim";
 
 export class MdTexDemo extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(640, 280);
+  protected scene(s: Mount): void {
+    const view = this.view(640, 280);
 
     const status = signal<Content>("");
 

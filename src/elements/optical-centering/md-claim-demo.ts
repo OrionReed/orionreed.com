@@ -18,7 +18,7 @@
 import {
   Anchor,
   Diagram,
-  Scene,
+  Mount,
   circle,
   claim,
   fadeIn,
@@ -31,9 +31,9 @@ import {
 } from "../../minim";
 
 export class MdClaimDemo extends Diagram {
-  protected scene(s: Scene): void {
+  protected scene(s: Mount): void {
     const W = 520;
-    const view = s.view(W, 330);
+    const view = this.view(W, 330);
 
     // ── The shape under test ─────────────────────────────────────
     const c = s(circle(view.top.down(56), 24, { fill: true, opacity: 0 }));

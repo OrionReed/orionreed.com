@@ -5,7 +5,7 @@
 
 import {
   Diagram,
-  Scene,
+  Mount,
   Anchor,
   bounceIn,
   button,
@@ -49,8 +49,8 @@ function trackedClick(target: EventTarget): Animator<MouseEvent> {
 }
 
 export class MdReact extends Diagram {
-  protected scene(s: Scene): void {
-    s.view(W, 260);
+  protected scene(s: Mount): void {
+    this.view(W, 260);
 
     s(
       rect(PAD - 6, PAD - 6, W - 2 * (PAD - 6), PLAYFIELD_H - 2 * (PAD - 6) + 12, {

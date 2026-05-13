@@ -1,6 +1,6 @@
 import {
   Diagram,
-  Scene,
+  Mount,
   arrow,
   attr,
   label,
@@ -42,11 +42,11 @@ function initialChunks(prefix: string, n: number): ChunkState[] {
 export class MdQrtpHandshake extends Diagram {
   @attr.num(4) declare chunks: Signal<number>;
 
-  protected scene(s: Scene): void {
+  protected scene(s: Mount): void {
     const N = this.chunks.value;
     const W = N * PITCH - CHUNK_GAP;
     const H = CHUNK_H * 2 + DEVICE_GAP;
-    s.view(W + 50, H + 2 * PAD_Y);
+    this.view(W + 50, H + 2 * PAD_Y);
 
     // Single source of truth — both rows + arrow visibility derive from
     // the chunk arrays. Arrows fire iff the corresponding chunk's `ack`

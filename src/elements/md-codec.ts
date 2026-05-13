@@ -1,6 +1,6 @@
 import {
   Diagram,
-  Scene,
+  Mount,
   Anchor,
   attr,
   label,
@@ -51,7 +51,7 @@ function parseContent(text: string): CodecPart[] {
 export class MdCodec extends Diagram {
   @attr.str() declare width: Signal<string | undefined>;
 
-  protected scene(s: Scene): void {
+  protected scene(s: Mount): void {
     const w = this.width.value;
     if (w) this.style.setProperty("--d-w", w.replace(/px$/, ""));
 

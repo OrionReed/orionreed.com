@@ -12,7 +12,7 @@
 import {
   Diagram,
   EventBus,
-  Scene,
+  Mount,
   type AnyShape,
   type Arg,
   type Path,
@@ -32,8 +32,8 @@ import {
 import * as R from "../rand";
 
 export class MdCircuit extends Diagram {
-  protected scene(s: Scene): void {
-    s.view(600, 360);
+  protected scene(s: Mount): void {
+    this.view(600, 360);
     const anim = this.anim;
     const bus = new EventBus();
 

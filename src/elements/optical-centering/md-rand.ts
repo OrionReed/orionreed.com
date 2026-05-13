@@ -5,7 +5,7 @@
 
 import {
   Diagram,
-  Scene,
+  Mount,
   Anchor,
   bounceIn,
   circle,
@@ -99,8 +99,8 @@ const MOVES: Move[] = [
 ];
 
 export class MdRand extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(600, 280);
+  protected scene(s: Mount): void {
+    const view = this.view(600, 280);
 
     // ── State ────────────────────────────────────────────────────────
     const current = signal<Pick | null>(null);

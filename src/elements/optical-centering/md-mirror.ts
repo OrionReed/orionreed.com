@@ -22,7 +22,7 @@
 import {
   Anchor,
   Diagram,
-  Scene,
+  Mount,
   handle,
   label,
   lensPoint,
@@ -47,8 +47,8 @@ function reflect(p: V, a: V, b: V): V {
 }
 
 export class MdMirror extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(720, 360);
+  protected scene(s: Mount): void {
+    const view = this.view(720, 360);
 
     // Mirror endpoints — two free Points. Everything reflects through
     // the line they define, so dragging either re-aligns the world.

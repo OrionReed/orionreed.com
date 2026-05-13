@@ -3,7 +3,7 @@
 
 import {
   Diagram,
-  Scene,
+  Mount,
   Anchor,
   circle,
   computed,
@@ -24,8 +24,8 @@ const TRACK_COUNT = 3;
 const STRIP_H_TOTAL = TRACK_H * TRACK_COUNT + STRIP_PAD * 2;
 
 export class MdMultitrack extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(600, 320);
+  protected scene(s: Mount): void {
+    const view = this.view(600, 320);
 
     // Overlap is fine; each clip has its own at + dur.
     const tl = timeline({

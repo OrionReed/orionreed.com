@@ -1,6 +1,6 @@
 import {
   Diagram,
-  Scene,
+  Mount,
   annularSector,
   attr,
   circle,
@@ -38,7 +38,7 @@ export class MdQrtpProtocol extends Diagram {
   @attr.num(60) declare cells: Signal<number>;
   @attr.bool() declare backchannel: Signal<boolean>;
 
-  protected scene(s: Scene): void {
+  protected scene(s: Mount): void {
     const N = this.cells.value;
     const backchannel = this.backchannel.value;
     const labelText = this.textContent?.trim() ?? "";
@@ -47,7 +47,7 @@ export class MdQrtpProtocol extends Diagram {
     const rIn = rOut * (1 - RING_WIDTH_RATIO);
     const start = -Math.PI / 2;
 
-    const view = s.view(rOut * 2, rOut * 2);
+    const view = this.view(rOut * 2, rOut * 2);
     const center = view.center;
 
     // ── State ───────────────────────────────────────────────────────

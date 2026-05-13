@@ -4,7 +4,7 @@
 
 import {
   Diagram,
-  Scene,
+  Mount,
   Anchor,
   arrange,
   circle,
@@ -19,8 +19,8 @@ import {
 } from "../../minim";
 
 export class MdLayoutDemo extends Diagram {
-  protected scene(s: Scene): void {
-    s.view(520, 360);
+  protected scene(s: Mount): void {
+    this.view(520, 360);
 
     // ── arrange + pulsing widths ───────────────────────────────────
     const w0 = signal(40);

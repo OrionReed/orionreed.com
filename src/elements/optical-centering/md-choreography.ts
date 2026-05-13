@@ -3,7 +3,7 @@
 
 import {
   Diagram,
-  Scene,
+  Mount,
   Anchor,
   assemble,
   centroid,
@@ -61,8 +61,8 @@ const PAIRS: [number, number][] = [
 ];
 
 export class MdChoreography extends Diagram {
-  protected scene(s: Scene): void {
-    const view = s.view(W, H);
+  protected scene(s: Mount): void {
+    const view = this.view(W, H);
 
     const shapes = SCATTER.map((p, i) =>
       s(circle(pt(0, 0), 18, { translate: p, fill: COLORS[i] })),

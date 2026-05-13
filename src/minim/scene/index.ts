@@ -1,5 +1,5 @@
 // Scene graph: `Shape` + spatial primitives (Point, Box) + matrix
-// math + the `Scene` callable. `../shapes/` is built on this.
+// math + the `Mount` callable. `../shapes/` is built on this.
 
 export {
   Vec,
@@ -50,4 +50,4 @@ export {
 
 export { draggable } from "./interaction";
 
-export { makeScene, type Scene, type Padding } from "./scene";
+export { mount, type Mount } from "./mount";
