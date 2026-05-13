@@ -82,12 +82,14 @@ export class MdBehaviors extends Diagram {
     });
 
     // ── Lane 1: spring (red), pauses ────────────────────────────────
-    // Separate wall-flip and pause loops so neither needs to own dt.
+    // byAmp is reactive so the pause loop can tween it to zero — this
+    // stops both axes so the head truly freezes, not just on x.
     const bx = signal(cx);
     const by = signal(laneY(1));
     const bv = signal(-150);
+    const byAmp = signal(32);
     this.anim.run(() => drift(bx, bv));
-    this.anim.run(() => oscillate(by, 32, 0.7));
+    this.anim.run(() => oscillate(by, byAmp, 0.7));
     // Wall flip runs every frame; bv=0 during pauses keeps it dormant.
     this.anim.run(function* () {
       while (true) {
@@ -96,16 +98,17 @@ export class MdBehaviors extends Diagram {
         else if (bx.value < 40 && bv.value < 0) bv.value = -bv.value;
       }
     });
-    // Pause loop: run for ~1.5 s → slow to zero → hold → pick direction.
+    // Pause: both axes stop together, hold, then snap back to motion.
     this.anim.loop(function* () {
       yield 1.5;
-      yield* bv.to(0, 0.4, easeInOut);
+      yield [bv.to(0, 0.4, easeInOut), byAmp.to(0, 0.4, easeInOut)];
       yield 0.7;
+      byAmp.value = 32;
       bv.value = bx.value < cx ? 155 : -155;
     });
     s(circle(pt(bx, by), 9, { fill: "#1a1a1a" }));
     trail(bx, by, "#e25c5c", (sig, target) => {
-      this.anim.run(() => spring(sig, target, { stiffness: 180, damping: 18 }));
+      this.anim.run(() => spring(sig, target, { stiffness: 200, damping: 15 }));
     });
 
     // ── Lane 2: fixed-link chain (teal) ─────────────────────────────

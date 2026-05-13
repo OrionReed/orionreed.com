@@ -14,11 +14,9 @@ import {
   easeInOut,
   easeOut,
   fadeOut,
-  forEach,
   label,
   pt,
   rand,
-  rect,
   signal,
   snapshot,
   type Animator,
@@ -29,9 +27,6 @@ import {
 const STAGE_X = 240;
 const STAGE_Y = 120;
 
-const HISTORY_LEN = 16;
-const HISTORY_DOT_R = 7;
-const HISTORY_GAP = 4;
 
 interface Pick {
   name: string;
@@ -106,7 +101,6 @@ export class MdRand extends Diagram {
     const current = signal<Pick | null>(null);
     const currentName = computed<Content>(() => current.value?.name ?? "—");
     const currentColor = computed(() => current.value?.color ?? "#1a1a1a");
-    const history = signal<Pick[]>([]);
 
     // ── Header ───────────────────────────────────────────────────────
     s(
@@ -170,66 +164,11 @@ export class MdRand extends Diagram {
       );
     });
 
-    // ── History strip (rolling, oldest left) ─────────────────────────
-    const HISTORY_STRIDE = HISTORY_DOT_R * 2 + HISTORY_GAP;
-    const HISTORY_Y = view.bottom.y.value - 36;
-    const HISTORY_X0 = view.center.x.value - ((HISTORY_LEN - 1) * HISTORY_STRIDE) / 2;
-
-    s(
-      label(view.bottom.up(58), "history (newest →)", {
-        size: 10,
-        align: Anchor.Center,
-        opacity: 0.5,
-      }),
-    );
-
-    forEach(
-      s.root,
-      // Pad-left to a fixed width; chips slide right as the strip
-      // fills, empty slots render as faint outlines.
-      computed(() => {
-        const h = history.value;
-        const pad = HISTORY_LEN - h.length;
-        const slots: (Pick | null)[] = [];
-        for (let i = 0; i < pad; i++) slots.push(null);
-        for (const p of h) slots.push(p);
-        return slots;
-      }),
-      (item, i) => {
-        if (!item) {
-          return rect(
-            pt(
-              HISTORY_X0 + i * HISTORY_STRIDE - HISTORY_DOT_R,
-              HISTORY_Y - HISTORY_DOT_R,
-            ),
-            HISTORY_DOT_R * 2,
-            HISTORY_DOT_R * 2,
-            { stroke: "#1a1a1a", opacity: 0.1, corner: 2 },
-          );
-        }
-        // Older entries fade so the eye tracks the recent tail.
-        const age = HISTORY_LEN - 1 - i;
-        const opacity = Math.max(0.25, 1 - age * 0.06);
-        return circle(
-          pt(HISTORY_X0 + i * HISTORY_STRIDE, HISTORY_Y),
-          HISTORY_DOT_R,
-          { fill: item.color, opacity },
-        );
-      },
-      // Slot-index keys — slots don't change identity, only their
-      // underlying item does.
-      { key: (_, i) => i },
-    );
-
     // ── Loop ────────────────────────────────────────────────────────
     // `record` sets the current pick + appends to history, then runs
     // the move body. Only the selected wrapper's side-effects fire.
     function* record(move: Move, body: Animator): Animator {
-      const pick: Pick = { name: move.name, color: move.color };
-      current.value = pick;
-      const next = [...history.peek(), pick];
-      if (next.length > HISTORY_LEN) next.shift();
-      history.value = next;
+      current.value = { name: move.name, color: move.color };
       yield* body;
     }
 
