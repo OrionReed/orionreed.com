@@ -1,4 +1,4 @@
-import { computed, toSig, type Arg, type NumSig } from "../core";
+import { cell, toSig, type Arg, type NumSig } from "../core";
 import {
   Shape,
   Vec,
@@ -8,7 +8,7 @@ import {
   type Pointlike,
   type Segment,
 } from "../scene";
-import { box } from "../signals/box";
+import { box, isBox } from "../signals/box";
 import { tokens } from "./tokens";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
@@ -86,11 +86,11 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   outline(by: Arg<number>, opts?: RectOpts): Rect {
     const bys = toSig(by);
     return new Rect(
-      computed(() => this.x.value - bys.value),
-      computed(() => this.y.value - bys.value),
-      computed(() => this.w.value + 2 * bys.value),
-      computed(() => this.h.value + 2 * bys.value),
-      { corner: computed(() => this.corner.value + bys.value), ...opts } as RectOpts,
+      cell.derived(() => this.x.value - bys.value),
+      cell.derived(() => this.y.value - bys.value),
+      cell.derived(() => this.w.value + 2 * bys.value),
+      cell.derived(() => this.h.value + 2 * bys.value),
+      { corner: cell.derived(() => this.corner.value + bys.value), ...opts } as RectOpts,
     );
   }
 
@@ -122,18 +122,6 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
       { type: "arc", cx: () => x + r, cy: () => y + r, r: () => r, a0: () => Math.PI, a1: () => 3 * HALF_PI },
     ];
   }
-}
-
-/** Detect a `Boxlike` value structurally (anything with `box` and
- *  `at`). Used by the `rect(box, opts?)` overload — Shape, view, and
- *  split/grid results all qualify. */
-function isBox(v: unknown): v is Boxlike {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    "box" in v &&
-    typeof (v as { at?: unknown }).at === "function"
-  );
 }
 
 /** Rect factory:
@@ -175,10 +163,10 @@ export function rect(
   if (isPoint(a) && isPoint(b)) {
     // Bounding rect of two points (any orientation).
     return new Rect(
-      computed(() => Math.min(a.x.value, b.x.value)),
-      computed(() => Math.min(a.y.value, b.y.value)),
-      computed(() => Math.abs(b.x.value - a.x.value)),
-      computed(() => Math.abs(b.y.value - a.y.value)),
+      cell.derived(() => Math.min(a.x.value, b.x.value)),
+      cell.derived(() => Math.min(a.y.value, b.y.value)),
+      cell.derived(() => Math.abs(b.x.value - a.x.value)),
+      cell.derived(() => Math.abs(b.y.value - a.y.value)),
       c as RectOpts | undefined,
     );
   }
@@ -188,8 +176,8 @@ export function rect(
     const ws = toSig(w);
     const hs = toSig(h);
     return new Rect(
-      computed(() => a.x.value - ws.value / 2),
-      computed(() => a.y.value - hs.value / 2),
+      cell.derived(() => a.x.value - ws.value / 2),
+      cell.derived(() => a.y.value - hs.value / 2),
       ws,
       hs,
       d as RectOpts | undefined,

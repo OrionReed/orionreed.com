@@ -15,7 +15,7 @@
 // combinators (see `core/suspensions.ts:race`).
 //
 // `anim.timeScale` is a writable signal (`1` real-time, `0` paused,
-// `0.5` slow-mo, `-1` reverse for integrators). `anim.clock` is the
+// `0.5` slow-mo, `-1` reverse for behaviors). `anim.clock` is the
 // reactive logical-time signal — `step(dt)` and `next(dt)` both write
 // `dt × timeScale`. `Anim` satisfies the Animator protocol, so yield*
 // a sub-Anim to compose runtimes and scope time independently.
@@ -134,7 +134,7 @@ export class Anim {
    *  `dt × timeScale`. Read-only. */
   readonly clock: ReadonlySignal<number> = this._clock;
   /** Time-flow rate. `1` real-time, `0` paused, `0.5` slow-mo,
-   *  `-1` reverse (integrators only). Applied inside `step(dt)`. */
+   *  `-1` reverse (behaviors only). Applied inside `step(dt)`. */
   readonly timeScale = signal(1);
   private listeners = new Set<ObserveListeners>();
   private nextActiveId = 0;

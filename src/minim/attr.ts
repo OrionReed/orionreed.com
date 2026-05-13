@@ -1,23 +1,19 @@
-// HTML attributes mapped to reactive Signals on a custom element. The
-// decorated field IS the signal — pass it to animations, computeds,
-// or `forEach` sources directly.
+// HTML attributes mapped to reactive cells on a custom element. The
+// decorated field IS the cell.
 //
-//   @attr.str()      declare width: Signal<string | undefined>;
-//   @attr.str("a")   declare mode:  Signal<string>;          // default "a"
-//   @attr.num(4)     declare cells: Signal<number>;          // default 4
-//   @attr.bool()     declare flag:  Signal<boolean>;         // default false
-//
-// `attr.bool` is always `Signal<boolean>` since HTML boolean attrs
-// are presence-based.
+//   @attr.str()      declare width: Cell<string | undefined>;
+//   @attr.str("a")   declare mode:  Cell<string>;          // default "a"
+//   @attr.num(4)     declare cells: Cell<number>;          // default 4
+//   @attr.bool()     declare flag:  Cell<boolean>;         // default false
 
-import { signal, type Signal } from "./core";
+import { cell, type Cell } from "./core";
 
 type AttrType = "string" | "number" | "boolean";
 
 const SIGNALS = Symbol("attrSignals");
 
 interface AttrCarrier {
-  [SIGNALS]?: Map<string, Signal<unknown>>;
+  [SIGNALS]?: Map<string, Cell<unknown>>;
 }
 
 interface AttrCtor {
@@ -41,7 +37,7 @@ function coerce(
   return raw === null ? default_ : raw;
 }
 
-function bagOf(instance: object): Map<string, Signal<unknown>> {
+function bagOf(instance: object): Map<string, Cell<unknown>> {
   const carrier = instance as AttrCarrier;
   let bag = carrier[SIGNALS];
   if (!bag) {
@@ -72,7 +68,7 @@ function register(
       const bag = bagOf(this);
       let sig = bag.get(propertyKey);
       if (!sig) {
-        sig = signal(coerce(this.getAttribute(propertyKey), type, default_));
+        sig = cell(coerce(this.getAttribute(propertyKey), type, default_));
         bag.set(propertyKey, sig);
       }
       return sig;
@@ -138,6 +134,6 @@ export function syncAttrSignal(
   if (sig) {
     sig.value = next;
   } else {
-    bag.set(name, signal(next));
+    bag.set(name, cell(next));
   }
 }

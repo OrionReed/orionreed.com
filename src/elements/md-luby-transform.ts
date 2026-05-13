@@ -1,9 +1,9 @@
 import {
   Diagram,
   Mount,
+  cell,
   circle,
   clipPath,
-  computed,
   connect,
   forEach,
   grid,
@@ -27,11 +27,11 @@ export class MdLubyTransform extends Diagram {
     // Reactive layout: viewport breakpoint drives both cell count and
     // viewBox width. Surviving cells keep their animation state across
     // breakpoint flips — no rebuild.
-    const isMobile = computed(() => viewport().value.w < 768);
-    const W = isMobile.derive((m) => (m ? 300 : 400));
-    const N = isMobile.derive((m) => (m ? 7 : 10));
-    const stride = computed(() => (W.value - SIZE) / (N.value - 1));
-    const indices = N.derive((n) => Array.from({ length: n }, (_, i) => i));
+    const isMobile = cell.derived(() => viewport().value.w < 768);
+    const W = isMobile.derive((m: boolean) => (m ? 300 : 400));
+    const N = isMobile.derive((m: boolean) => (m ? 7 : 10));
+    const stride = cell.derived(() => (W.value - SIZE) / (N.value - 1));
+    const indices = N.derive((n: number) => Array.from({ length: n }, (_, i) => i));
 
     const view = this.view(W, 200);
 

@@ -17,15 +17,14 @@ import {
   type Arg,
   type Path,
   type Pointlike,
+  cell,
   circle,
-  computed,
   counter,
   label,
   linear,
   path,
   pt,
   rect,
-  signal,
   toSig,
   tokens,
 } from "../../minim";
@@ -131,7 +130,7 @@ export class MdCircuit extends Diagram {
         // diagonal leg covers exactly |dy|/2 horizontally.
         const m = aRef.lerp(bRef, 0.5);
         const dirX = bRefV.x > aRefV.x ? 1 : -1;
-        const halfDy = computed(() => Math.abs(m.y.value - aRef.y.value));
+        const halfDy = cell.derived(() => Math.abs(m.y.value - aRef.y.value));
         const pA = pt(() => aRef.x.value + dirX * halfDy.value, m.y);
         const pB = pt(() => bRef.x.value - dirX * halfDy.value, m.y);
         const start = opts.from ?? a.boundary(pA);
@@ -150,7 +149,7 @@ export class MdCircuit extends Diagram {
     const pulse = (w: Path, onArrive?: () => void) => {
       const total = w.length.value;
       const sec = total / SPEED;
-      const dist = signal(0);
+      const dist = cell(0);
       const dot = circle(w.atDistance(dist), 5, { fill: true });
       s(dot);
       anim.run(function* () {
@@ -183,8 +182,8 @@ export class MdCircuit extends Diagram {
      *  fire `out` and consume one of each. Slot-dot visuals derive
      *  from the counts (no manual mirroring). */
     const andSync = (evA: string, evB: string, out: string, gate: AnyShape) => {
-      const a = signal(0);
-      const b = signal(0);
+      const a = cell(0);
+      const b = cell(0);
       gate.add(
         lit(gate.center.offset(-14, 14), () => a.value > 0),
         lit(gate.center.offset(+14, 14), () => b.value > 0),
@@ -214,7 +213,7 @@ export class MdCircuit extends Diagram {
       out: string,
       gate: AnyShape,
     ) => {
-      const holding = signal(false);
+      const holding = cell(false);
       gate.add(lit(gate.center.down(6), holding));
       anim.loop(function* () {
         yield bus.until(from);

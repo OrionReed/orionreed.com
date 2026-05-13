@@ -3,7 +3,7 @@
 // `sig.to(target, sec, ease)` for outros. Each compound `yield`s an
 // array of those calls; the body shows exactly which atoms stack.
 
-import { tween, type Duration, type Easing, type Signal } from "../core";
+import { tween, type Cell, type Duration, type Easing } from "../core";
 import type { Animator, V } from "../core";
 import type { Writable } from "../scene";
 import { Dir } from "../anchor";
@@ -15,7 +15,7 @@ type Lerpable = number | V;
 
 /** Pose-then-tween. Sets `sig.value = start` then tweens to `end`. */
 export function* from<T extends Lerpable>(
-  sig: Signal<T>,
+  sig: Cell<T>,
   start: T,
   end: T,
   sec: Duration = 0.3,

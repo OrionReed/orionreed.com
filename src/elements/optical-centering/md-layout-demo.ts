@@ -7,11 +7,11 @@ import {
   Mount,
   Anchor,
   arrange,
+  cell,
   handle,
   label,
   lensPoint,
   rect,
-  signal,
   spring,
 } from "../../minim";
 
@@ -27,7 +27,7 @@ export class MdLayoutDemo extends Diagram {
     const view = this.view(560, 200);
     const cy = view.h.value / 2;
 
-    const widths = WIDTHS.map((w) => signal(w));
+    const widths = WIDTHS.map((w) => cell(w));
     widths[SPRING_IDX].value = SPRING_REST;
 
     const cards = widths.map((w, i) =>

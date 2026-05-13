@@ -1,5 +1,5 @@
 // The frame-loop substrate: `drive(step)` runs `step(dt, t)` once per
-// frame. Foundation under integrators, clocks, and bounded transitions —
+// frame. Foundation under behaviors, clocks, and bounded transitions —
 // every "yield dt; update signal" pattern in this stdlib reduces to a
 // `drive` call. Return `false` to stop naturally; any other return
 // (including `void`) keeps driving. Cancellation from outside still

@@ -1,4 +1,4 @@
-import { computed, type Arg, type ReadonlySignal } from "../core";
+import { cell, type Arg, type ReadonlyCell } from "../core";
 import {
   Shape,
   Vec,
@@ -51,8 +51,8 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
   // for API symmetry with Path but ignored. Cached lazily.
   #tangent?: DerivedPoint;
   #normal?: DerivedPoint;
-  #angle?: ReadonlySignal<number>;
-  #length?: ReadonlySignal<number>;
+  #angle?: ReadonlyCell<number>;
+  #length?: ReadonlyCell<number>;
 
   /** Position at fraction `t` (0=from, 1=to). Symmetric with
    *  `Path.pointAt`. */
@@ -72,16 +72,16 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
     return (this.#normal ??= this.tangentAt().perp());
   }
 
-  angleAt(_t: Arg<number> = 0): ReadonlySignal<number> {
+  angleAt(_t: Arg<number> = 0): ReadonlyCell<number> {
     if (this.#angle) return this.#angle;
     const tan = this.tangentAt();
-    return (this.#angle = computed(() =>
+    return (this.#angle = cell.derived(() =>
       Math.atan2(tan.y.value, tan.x.value),
     ));
   }
 
-  length(): ReadonlySignal<number> {
-    return (this.#length ??= computed(() => {
+  length(): ReadonlyCell<number> {
+    return (this.#length ??= cell.derived(() => {
       const a = this.from.value;
       const b = this.to.value;
       return Math.hypot(b.x - a.x, b.y - a.y);

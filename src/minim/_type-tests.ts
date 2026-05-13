@@ -3,14 +3,13 @@ import {
   rect,
   group,
   pt,
-  signal,
-  computed,
+  cell,
   Anim,
-  Signal,
   Point,
   DerivedPoint,
   type Animator,
-  type ReadonlySignal,
+  type Cell,
+  type ReadonlyCell,
 } from "./index";
 import { bounceIn, fadeUp } from "./motion";
 
@@ -24,7 +23,7 @@ type Equals<A, B> =
 function assert<_T extends true>(): void {}
 
 function* run(): Animator {
-  // ── Case 1: default — opacity is writable Signal<number>. ────────────
+  // ── Case 1: default — opacity is writable Cell<number>. ────────────
   const c1 = circle(pt(0, 0), 5);
   yield* c1.opacity.to(0, 1); // OK
   c1.opacity.value = 0.5; // OK
@@ -34,37 +33,37 @@ function* run(): Animator {
   const c2 = circle(pt(0, 0), 5, { opacity: 0.5 });
   yield* c2.opacity.to(1, 1); // OK
 
-  // ── Case 3: caller-owned Signal — writable. ──────────────────────────
-  const o = signal(0.5);
+  // ── Case 3: caller-owned cell — writable. ──────────────────────────
+  const o = cell(0.5);
   const c3 = circle(pt(0, 0), 5, { opacity: o });
   yield* c3.opacity.to(1, 1); // OK
   c3.opacity.value = 0.2; // OK
 
-  // ── Case 4: computed — readonly. Animation must be a TS error. ──────
-  const c4 = circle(pt(0, 0), 5, { opacity: computed(() => 0.5) });
-  // @ts-expect-error — opacity is ReadonlySignal, has no `.to`.
+  // ── Case 4: derived cell — readonly. Animation must be a TS error. ──────
+  const c4 = circle(pt(0, 0), 5, { opacity: cell.derived(() => 0.5) });
+  // @ts-expect-error — opacity is ReadonlyCell, has no `.to`.
   yield* c4.opacity.to(0, 1);
-  // @ts-expect-error — `.value` is readonly on ReadonlySignal.
+  // @ts-expect-error — `.value` is readonly on ReadonlyCell.
   c4.opacity.value = 0.2;
   // Reading is fine (subscribers / effects).
   const _read = c4.opacity.value;
   void _read;
 
-  // ── Case 5: thunk — also readonly (sugar for computed). ─────────────
+  // ── Case 5: thunk — also readonly (sugar for derived). ─────────────
   const c5 = circle(pt(0, 0), 5, { opacity: () => 0.5 });
-  // @ts-expect-error — thunk → ReadonlySignal.
+  // @ts-expect-error — thunk → ReadonlyCell.
   yield* c5.opacity.to(0, 1);
 
   // ── Case 6: Rect / Group / others propagate the same way. ───────────
   const r1 = rect(0, 0, 100, 50, {
-    translate: computed(() => ({ x: 0, y: 0 })),
+    translate: cell.derived(() => ({ x: 0, y: 0 })),
   });
-  // @ts-expect-error — translate is ReadonlySignal.
+  // @ts-expect-error — translate is ReadonlyCell.
   yield* r1.translate.to({ x: 50, y: 0 }, 1);
   // But other animatable props are still fine.
   yield* r1.opacity.to(0.5, 1); // OK
 
-  const g1 = group({ translate: computed(() => ({ x: 0, y: 0 })) });
+  const g1 = group({ translate: cell.derived(() => ({ x: 0, y: 0 })) });
   // @ts-expect-error
   yield* g1.translate.to({ x: 0, y: 0 }, 1);
   // Other props still writable.
@@ -72,12 +71,12 @@ function* run(): Animator {
   yield* g1.opacity.to(0, 1); // OK
 
   // ── Case 7: structural transition helpers — only need the props they touch. ─
-  const orbiter = group({ translate: computed(() => ({ x: 0, y: 0 })) });
+  const orbiter = group({ translate: cell.derived(() => ({ x: 0, y: 0 })) });
   // bounceIn only animates scale + opacity; orbiter has both writable. OK.
   yield* bounceIn(orbiter, 0.5);
 
   // fadeUp animates translate + opacity; orbiter's translate is readonly.
-  // @ts-expect-error — translate is ReadonlySignal, doesn't satisfy WithTranslate.
+  // @ts-expect-error — translate is ReadonlyCell, doesn't satisfy WithTranslate.
   yield* fadeUp(orbiter, 0.5);
 }
 
@@ -87,83 +86,73 @@ anim.run(run);
 // ── Pure type-level assertions ────────────────────────────────────────
 
 // Default no-opts: every animatable prop is writable. Vec props
-// resolve to `Point` (writable lens-backed axes); scalar props to
-// `Signal<number>`.
+// resolve to `Point` (writable lens-backed axes); scalar props to `Cell<number>`.
 {
   const c = circle(pt(0, 0), 5);
-  assert<Equals<typeof c.opacity, Signal<number>>>();
+  assert<Equals<typeof c.opacity, Cell<number>>>();
   assert<Equals<typeof c.translate, Point>>();
 }
 
 // Plain-value opts: still writable.
 {
   const c = circle(pt(0, 0), 5, { opacity: 0.5 });
-  assert<Equals<typeof c.opacity, Signal<number>>>();
+  assert<Equals<typeof c.opacity, Cell<number>>>();
 }
 
-// User Signal: writable.
+// User cell: writable.
 {
-  const o = signal(0.5);
+  const o = cell(0.5);
   const c = circle(pt(0, 0), 5, { opacity: o });
-  assert<Equals<typeof c.opacity, Signal<number>>>();
+  assert<Equals<typeof c.opacity, Cell<number>>>();
 }
 
-// computed → ReadonlySignal field.
+// derived → ReadonlyCell field.
 {
-  const c = circle(pt(0, 0), 5, { opacity: computed(() => 0.5) });
-  assert<Equals<typeof c.opacity, ReadonlySignal<number>>>();
+  const c = circle(pt(0, 0), 5, { opacity: cell.derived(() => 0.5) });
+  assert<Equals<typeof c.opacity, ReadonlyCell<number>>>();
 }
 
-// Thunk → ReadonlySignal field.
+// Thunk → ReadonlyCell field.
 {
   const c = circle(pt(0, 0), 5, { opacity: () => 0.5 });
-  assert<Equals<typeof c.opacity, ReadonlySignal<number>>>();
+  assert<Equals<typeof c.opacity, ReadonlyCell<number>>>();
 }
 
-// Mixed: one prop readonly, others default-writable. Vec props use
-// `Point`/`DerivedPoint` instead of bare `Signal<Vec>`.
+// Mixed: one prop readonly, others default-writable.
 {
-  const g = group({ translate: computed(() => ({ x: 0, y: 0 })) });
+  const g = group({ translate: cell.derived(() => ({ x: 0, y: 0 })) });
   assert<Equals<typeof g.translate, DerivedPoint>>();
-  assert<Equals<typeof g.opacity, Signal<number>>>();
+  assert<Equals<typeof g.opacity, Cell<number>>>();
   assert<Equals<typeof g.scale, Point>>();
 }
 
 // ── Ergonomics: generic helpers over "any shape" ───────────────────────
 
 // Pattern A: user writes `function f(s: Shape)` — with default O = ShapeOpts.
-// Default-typed shapes (created without the conditional-narrowing kicking
-// in) should be assignable. circle(p, r) returns Circle<{}>, so this is
-// the litmus test for "is the empty-opts case structurally compatible
-// with the default-opts case?".
 {
   function highlight(s: import("./scene/shape").Shape) {
     s.opacity.value = 0.5;
     return s;
   }
   const c = circle(pt(0, 0), 5);
-  highlight(c); // works — both resolve to Signal-typed props.
+  highlight(c); // works — both resolve to Cell-typed props.
 
   // But a shape with a readonly prop is NOT assignable here, by design.
-  const g = group({ opacity: computed(() => 0.5) });
-  // @ts-expect-error — g.opacity is ReadonlySignal, not Signal.
+  const g = group({ opacity: cell.derived(() => 0.5) });
+  // @ts-expect-error — g.opacity is ReadonlyCell, not Cell.
   highlight(g);
 }
 
-// Pattern B: user wants to accept any shape and read (not write).
-// Use AnyShape — IsAny widens prop types to the union, so reads work
-// uniformly without narrowing.
+// Pattern B: read-only access via AnyShape.
 {
   function flashOnce(s: import("./scene/shape").AnyShape) {
     return s.opacity.value;
   }
   flashOnce(circle(pt(0, 0), 5)); // OK
-  flashOnce(group({ opacity: computed(() => 0.5) })); // OK
+  flashOnce(group({ opacity: cell.derived(() => 0.5) })); // OK
 }
 
-// Pattern C: user wants to accept any shape AND animate. Use the
-// `Writable<K>` utility — only the props the helper touches must be
-// writable. Combinable via union of keys.
+// Pattern C: `Writable<K>` for "I touch these props".
 {
   function pulse(s: import("./scene/shape").Writable<"opacity">): Animator {
     return (function* () {
@@ -172,7 +161,7 @@ anim.run(run);
     })();
   }
   void pulse(circle(pt(0, 0), 5)); // OK
-  void pulse(group({ translate: computed(() => ({ x: 0, y: 0 })) })); // OK — only translate is readonly
+  void pulse(group({ translate: cell.derived(() => ({ x: 0, y: 0 })) })); // OK — only translate is readonly
   // @ts-expect-error — opacity is readonly here.
-  void pulse(group({ opacity: computed(() => 0.5) }));
+  void pulse(group({ opacity: cell.derived(() => 0.5) }));
 }

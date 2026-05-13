@@ -3,7 +3,7 @@
 // classes (343 lines) into one ~80-line declaration.
 
 import { struct } from "./struct";
-import type { M } from "./matrix";
+import type { Matrix2D } from "./matrix";
 import { computed, effect, Signal, type ReadonlySignal } from "../core/signal";
 import { toSig, type Arg } from "../core/arg";
 
@@ -34,7 +34,7 @@ export const Vec = struct<V>("Vec", { x: 0, y: 0 })
     right: (a, n: number): V => ({ x: a.x + n, y: a.y }),
     /** This point in the frame `m`. Replaces hand-rolled
      *  `transformPoint(matrix.value, point.value)` calls. */
-    in: (p, m: M): V => ({
+    in: (p, m: Matrix2D): V => ({
       x: m.a * p.x + m.c * p.y + m.e,
       y: m.b * p.x + m.d * p.y + m.f,
     }),

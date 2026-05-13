@@ -1,27 +1,15 @@
-// Core: time (Anim) + reactivity (vendored signals) + utilities.
-// Pair with `../scene/`, `../shapes/`, `../motion/`.
+// Core: time (Anim) + reactivity (`cell`) + utilities. Pair with
+// `../scene/`, `../shapes/`, `../motion/`.
 
-export {
-  signal,
-  computed,
-  effect,
-  batch,
-  untracked,
-  lens,
-  Signal,
-  type ReadonlySignal,
-} from "./signal";
-
-// `cell` — unified user-facing entry for reactive state:
-//   cell(v)               — writable        (was signal(v))
-//   cell.derived(fn)      — read-only       (was computed(fn))
-//   cell.lens(read, w)    — writable lens   (was lens(read, w))
-// `Cell<T, W>` is the unified type; signal/computed/lens stay as
-// aliases for back-compat.
+// `cell` is the unified reactive primitive:
+//   cell(v)                — writable
+//   cell.derived(fn)       — read-only
+//   cell.lens(read, w)     — writable lens
+// `Cell<T, W>` is the type; the underlying preact factories stay internal.
 export { cell, type Cell, type ReadonlyCell, type RW } from "./cell";
+export { effect, batch, untracked } from "./signal";
 
-// Importing this module installs `Signal.prototype.to` and registers
-// the tween types. Re-exported below.
+// Tween: `Signal.prototype.to` is installed as a side-effect of importing.
 export {
   tween,
   type Tween,
@@ -37,8 +25,7 @@ export {
   type ResolveSig,
 } from "./arg";
 
-// Plain `{x, y}` value type. Renamed from `Vec` (which now refers to
-// the registered struct value in `signals/vec`).
+// Plain `{x, y}` value type. `Vec` (in `signals/vec`) is the registered struct.
 export type { V } from "../signals/vec";
 
 export { lerpable } from "./tween";

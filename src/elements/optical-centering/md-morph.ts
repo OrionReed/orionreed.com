@@ -1,16 +1,6 @@
-// "Schema, unconstrained" — a polygon morph through several shapes,
-// where the polygon IS a reactive value type carrying an array of
-// vertices. This was impossible before the struct redesign:
-//
-//   Old framework: Schema = Record<string, number | StructType>
-//   → arrays disallowed; you'd have to wrap each vertex as its own
-//     signal, lose `.to(target, dur)` for the whole shape, and
-//     hand-roll any animation.
-//
-//   New framework: T = anything with a `lerp` op
-//   → `Polygon = { vertices: V[] }` is just a struct. Component-wise
-//     lerp interpolates each vertex pairwise. `.to(targetPolygon,
-//     dur)` falls out automatically.
+// Polygon morph — the polygon is a reactive value type whose value
+// carries an array of vertices. `Polygon = { vertices: V[] }` is just
+// a struct with a custom `lerp` op; `.to(targetPolygon, dur)` falls out.
 //
 // The demo walks circle → square → triangle → 5-point star →
 // hexagon → back-to-circle, all via the same `polygon.to(...)` API
@@ -22,9 +12,9 @@ import {
   Diagram,
   Path,
   Vec,
+  cell,
   circle,
   label,
-  signal,
   struct,
   type Content,
   type Mount,
@@ -142,7 +132,7 @@ export class MdMorph extends Diagram {
       }),
       label(
         view.bottom.up(20),
-        "polygon.to(targetShape, dur) — same one-call tween as Vec / Box / Color, on a value type that's an array of points (impossible under the old Record<string, number | StructType> Schema).",
+        "polygon.to(targetShape, dur) — same one-call tween as Vec / Box / Color, on a value type that's an array of points.",
         { size: 10, align: Anchor.Center, opacity: 0.45 },
       ),
     );
@@ -184,7 +174,7 @@ export class MdMorph extends Diagram {
     }
 
     // Status label updates as we cycle through keyframes.
-    const status = signal<Content>(KEYFRAMES[0].name);
+    const status = cell<Content>(KEYFRAMES[0].name);
     s(
       label(view.top.down(46), status, {
         size: 11,

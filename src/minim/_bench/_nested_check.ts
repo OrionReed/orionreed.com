@@ -8,10 +8,13 @@
 //   4. `.derived()` and `.lens()` flavors expose nested-struct typed
 //      projections on nested keys.
 //   5. `instanceof` works across all flavors.
+//   6. Smart adoption — passing a Reactive of the right type adopts
+//      it (same reference); a generic Signal wraps in lens; a derived
+//      wraps as derived; a thunk wraps as derived; a literal allocates.
 
-import { effect, signal } from "../core/signal";
+import { computed, effect, signal } from "../core/signal";
 import { struct } from "../signals/struct";
-import { Vec, type V } from "../signals/vec";
+import { Vec, pt, type V } from "../signals/vec";
 
 type Tr = {
   translate: V;
@@ -181,6 +184,90 @@ check("lens-flavor nested write round-trips through src.value",
 
 // 12. Tween available because lerp was provided.
 check("trl.to is installed (lerp present)", typeof (trl as any).to === "function");
+
+// 13. Smart adoption — pass an existing Vec.signal as `translate`. Should
+//     adopt by reference (same identity, two-way sharing).
+const sharedPt = pt(7, 11);
+const tr2 = Transform.signal({
+  translate: sharedPt,
+  rotate: 0,
+  scale: { x: 1, y: 1 },
+  origin: { x: 0, y: 0 },
+  opacity: 1,
+});
+check("adoption: tr2.translate === sharedPt", tr2.translate === sharedPt);
+sharedPt.x.value = 999;
+check("adoption: write-through (sharedPt → tr2.translate.x)",
+  tr2.translate.x.value === 999);
+tr2.translate.x.value = 5;
+check("adoption: write-through (tr2.translate.x → sharedPt)",
+  sharedPt.x.value === 5);
+
+// 14. Smart adoption — pass a derived Vec; result is read-only flavor.
+const derivedTranslate = Vec.derived(() => ({ x: 10, y: 20 }));
+const tr3 = Transform.signal({
+  translate: derivedTranslate,
+  rotate: 0,
+  scale: { x: 1, y: 1 },
+  origin: { x: 0, y: 0 },
+  opacity: 1,
+});
+check("adoption: derived input → derived field", tr3.translate === derivedTranslate);
+
+// 15. Smart adoption — pass a generic Signal<V> (not a Vec); should be
+//     wrapped in Vec.lens so axes/methods work, with two-way pass-through.
+const rawSig = signal<V>({ x: 100, y: 200 });
+const tr4 = Transform.signal({
+  translate: rawSig,
+  rotate: 0,
+  scale: { x: 1, y: 1 },
+  origin: { x: 0, y: 0 },
+  opacity: 1,
+});
+check("adoption: generic Signal<V> → Vec lens", Vec.is(tr4.translate));
+check("adoption: lens reads through", tr4.translate.x.value === 100);
+tr4.translate.x.value = 7;
+check("adoption: lens write reaches source", rawSig.peek().x === 7);
+rawSig.value = { x: 33, y: 44 };
+check("adoption: source change reaches lens",
+  tr4.translate.x.value === 33);
+
+// 16. Smart adoption — pass a function (thunk). Treated as derived.
+const tr5 = Transform.signal({
+  translate: () => ({ x: 1, y: 2 }),
+  rotate: 0,
+  scale: { x: 1, y: 1 },
+  origin: { x: 0, y: 0 },
+  opacity: 1,
+});
+check("adoption: thunk → derived flavor", Vec.is(tr5.translate));
+check("adoption: thunk reads correctly", tr5.translate.x.value === 1);
+
+// 17. Smart adoption — pass a generic Signal<number> for the rotate
+//     (non-nested scalar) field. Should adopt directly.
+const rotSrc = signal(0.5);
+const tr6 = Transform.signal({
+  translate: { x: 0, y: 0 },
+  rotate: rotSrc,
+  scale: { x: 1, y: 1 },
+  origin: { x: 0, y: 0 },
+  opacity: 1,
+});
+check("adoption: scalar Signal<number> → adopted", tr6.rotate === rotSrc);
+rotSrc.value = 1.0;
+check("adoption: scalar source → tr.value composed",
+  tr6.value.rotate === 1.0);
+
+// 18. Smart adoption — non-nested computed adopts as derived (read-only).
+const opacitySrc = computed(() => 0.7);
+const tr7 = Transform.signal({
+  translate: { x: 0, y: 0 },
+  rotate: 0,
+  scale: { x: 1, y: 1 },
+  origin: { x: 0, y: 0 },
+  opacity: opacitySrc,
+});
+check("adoption: scalar computed → adopted", tr7.opacity === opacitySrc);
 
 console.log(`\n${pass} passed / ${fail} failed`);
 if (fail > 0) process.exit(1);

@@ -1,35 +1,28 @@
 // Aggregates over N reactive signals — writable views where reads
-// merge inputs and writes distribute the change. Built on `combine`
-// from the lens module.
+// merge inputs and writes distribute the change.
 //
-// `mean<T>` is generic over any value type `T` whose registered
-// struct exposes a vector-space algebra (add / sub / scale via the
-// `[ALGEBRA]` prototype slot). That gives you `mean(...vecSigs)`,
-// `mean(...numSigs)`, `mean(...colorSigs)`, `mean(...boxSigs)`,
-// `mean(...matrixSigs)` — all from one definition.
-//
-// `meanVec` and `meanNum` remain as named aliases for back-compat
-// and discoverability; both are now one-line specializations.
+// Generic over any value type with a registered struct algebra (Vec,
+// Box, Color, Matrix2D, Transform) AND raw `Signal<number>`. When the
+// sources carry a struct identity (`[STRUCT]` slot), the result wraps
+// in that struct's lens flavor so the rich surface (axes, ops, getters)
+// rides along — `mean(...vecs)` is a Vec, `mean(...nums)` is a plain
+// number signal.
 
 import { combine } from "./lens";
 import { algebraOf } from "./algebra";
-import { Vec, type V } from "./vec";
+import { STRUCT, type StructType } from "./struct";
 import type { Signal } from "../core/signal";
 
-/** Mean of N writable signals as a writable signal. Reads return the
- *  arithmetic mean; writes apply the delta to every input — moving
- *  the group rigidly so the mean lands at the new value.
- *
- *  Generic over the value type's algebra: works for any registered
- *  struct that declares `add` / `sub` / `scale` (Vec, Box, Color,
- *  Matrix2D, Transform, …) AND for raw `Signal<number>`. Falls back
- *  to scalar arithmetic when no struct algebra is registered. */
+/** Mean of N signals as a writable signal. Reads return the arithmetic
+ *  mean; writes apply the delta to every input (group moves rigidly so
+ *  the mean lands at the new value). Result wraps in the source's
+ *  struct lens flavor when present. */
 export function mean<T>(...sigs: Signal<T>[]): Signal<T> {
   if (sigs.length === 0) {
     throw new Error("mean: requires at least one signal");
   }
   const { add, sub, scale } = algebraOf(sigs[0]);
-  return combine<T>(
+  const inner = combine<T>(
     sigs,
     (vs) => {
       let acc = vs[0];
@@ -44,22 +37,9 @@ export function mean<T>(...sigs: Signal<T>[]): Signal<T> {
       return prev.map((v) => add(v, delta));
     },
   );
-}
-
-/** Mean of N writable Vec signals as a writable `Reactive<V>` (Vec
- *  surface — `.x`, `.y`, `.add`, `.scale`, …). Sugar over `mean`
- *  with the result wrapped to expose the Vec methods. */
-export function meanVec(...sigs: Signal<V>[]) {
-  const m = mean(...sigs);
-  return Vec.lens(
-    () => m.value,
-    (v) => {
-      m.value = v;
-    },
-  );
-}
-
-/** Mean of N writable scalar signals. Alias for `mean(...sigs)`. */
-export function meanNum(...sigs: Signal<number>[]): Signal<number> {
-  return mean(...sigs);
+  // If sources carry a struct identity, wrap so the rich surface rides along.
+  const struct = (sigs[0] as { [STRUCT]?: StructType<T> })[STRUCT];
+  return struct
+    ? struct.lens(() => inner.value, (v) => { inner.value = v; })
+    : inner;
 }

@@ -15,19 +15,17 @@ import {
   circle,
   drift,
   endOn,
+  cell,
   forEach,
   label,
-  lens,
-  meanNum,
+  mean,
   meanRotation,
   meanScale,
-  meanVec,
   oscillate,
   pt,
   pulse,
   race,
   rect,
-  signal,
   splay,
   spring,
   swap,
@@ -593,7 +591,7 @@ const TESTS: TestCase[] = [
     name: "endOn: cancels work on trigger, sequel runs",
     run: (assert) => {
       const a = new Anim();
-      const stop = signal(false);
+      const stop = cell(false);
       let phase = 0;
       a.run(function* () {
         yield endOn(
@@ -762,9 +760,9 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "signal equals option suppresses no-op writes",
+    name: "cell equals option suppresses no-op writes",
     run: (assert) => {
-      const s = signal(
+      const s = cell(
         { x: 1, y: 2 },
         { equals: (a, b) => a.x === b.x && a.y === b.y },
       );
@@ -778,10 +776,10 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "lens reads through and writes back",
+    name: "cell.lens reads through and writes back",
     run: (assert) => {
-      const parent = signal({ a: 1, b: 2 });
-      const lensA = lens(
+      const parent = cell({ a: 1, b: 2 });
+      const lensA = cell.lens(
         () => parent.value.a,
         (n) => {
           parent.value = { ...parent.peek(), a: n };
@@ -795,11 +793,11 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "lens aggregates multiple parents (centroid-style)",
+    name: "cell.lens aggregates multiple parents (centroid-style)",
     run: (assert) => {
-      const a = signal(0);
-      const b = signal(10);
-      const avg = lens(
+      const a = cell(0);
+      const b = cell(10);
+      const avg = cell.lens(
         () => (a.value + b.value) / 2,
         (n) => {
           const delta = n - (a.peek() + b.peek()) / 2;
@@ -864,7 +862,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const lit = pt(1, 2);
       assert(Vec.isWritable(lit), `pt(num,num) should be writable Vec`);
-      const s = signal(5);
+      const s = cell(5);
       const der = pt(s, 10);
       assert(Vec.is(der) && !Vec.isWritable(der), `pt(sig,num) should be derived Vec`);
       assert(der.x.value === 5 && der.y.value === 10, `derived read off`);
@@ -905,12 +903,12 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "meanNum: read avg, write distributes",
+    name: "mean (numbers): read avg, write distributes",
     run: (assert) => {
-      const a = signal(0);
-      const b = signal(10);
-      const c = signal(20);
-      const m = meanNum(a, b, c);
+      const a = cell(0);
+      const b = cell(10);
+      const c = cell(20);
+      const m = mean(a, b, c);
       assert(m.value === 10, `initial mean: ${m.value}`);
       m.value = 13; // delta = 3 → each += 3
       assert(a.peek() === 3, `a after: ${a.peek()}`);
@@ -920,12 +918,12 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "meanVec: drop-in centroid for raw signals",
+    name: "mean (Vecs): drop-in centroid for raw Vec signals",
     run: (assert) => {
-      const a = signal({ x: 0, y: 0 });
-      const b = signal({ x: 100, y: 50 });
-      const m = meanVec(a, b);
-      assert(Vec.isWritable(m), `meanVec should return a writable Vec`);
+      const a = Vec.signal({ x: 0, y: 0 });
+      const b = Vec.signal({ x: 100, y: 50 });
+      const m = mean(a, b);
+      assert(Vec.isWritable(m), `mean of Vecs should return a writable Vec`);
       assert(m.value.x === 50 && m.value.y === 25, `initial mean off`);
       m.value = { x: 60, y: 35 }; // delta (10, 10)
       assert(a.peek().x === 10 && a.peek().y === 10, `a not shifted: ${JSON.stringify(a.peek())}`);
@@ -1114,7 +1112,7 @@ const TESTS: TestCase[] = [
     name: "spring: settles at target with precision",
     run: (assert) => {
       const a = new Anim();
-      const sig = signal(0);
+      const sig = cell(0);
       let done = false;
       a.run(function* () {
         yield* spring(sig, 100, { precision: 0.01 });
@@ -1131,7 +1129,7 @@ const TESTS: TestCase[] = [
     name: "oscillate: returns to base across one period",
     run: (assert) => {
       const a = new Anim();
-      const sig = signal(50);
+      const sig = cell(50);
       a.run(() => oscillate(sig, 10, 1)); // amp=10, freq=1Hz
       a.step(0);
       a.step(0.25); // quarter period → near base + amp
@@ -1145,7 +1143,7 @@ const TESTS: TestCase[] = [
     name: "drift: integrates velocity over time",
     run: (assert) => {
       const a = new Anim();
-      const sig = signal(0);
+      const sig = cell(0);
       a.run(() => drift(sig, 100));
       a.step(0);
       a.step(0.5);
@@ -1157,7 +1155,7 @@ const TESTS: TestCase[] = [
     name: "attract: exponential pull toward target",
     run: (assert) => {
       const a = new Anim();
-      const sig = signal(0);
+      const sig = cell(0);
       a.run(() => attract(sig, 100, 1));
       a.step(0);
       // After t=1 at rate=1, approaches 1 - e^-1 ≈ 0.632.
@@ -1173,7 +1171,7 @@ const TESTS: TestCase[] = [
     name: "untilChange: wakes on next signal change",
     run: (assert) => {
       const a = new Anim();
-      const sig = signal(0);
+      const sig = cell(0);
       let woke = false;
       a.run(function* () {
         yield untilChange(sig);
@@ -1190,7 +1188,7 @@ const TESTS: TestCase[] = [
     name: "untilChange: ignores baseline read",
     run: (assert) => {
       const a = new Anim();
-      const sig = signal(42);
+      const sig = cell(42);
       let woke = false;
       a.run(function* () {
         yield untilChange(sig);
@@ -1230,8 +1228,8 @@ const TESTS: TestCase[] = [
   {
     name: "meanRotation: distributes delta across shapes",
     run: (assert) => {
-      const sh1 = { rotate: signal(0) };
-      const sh2 = { rotate: signal(Math.PI / 2) };
+      const sh1 = { rotate: cell(0) };
+      const sh2 = { rotate: cell(Math.PI / 2) };
       const m = meanRotation(sh1, sh2);
       assert(
         Math.abs(m.value - Math.PI / 4) < 1e-9,
@@ -1272,9 +1270,9 @@ export class MdRuntimeTests extends Diagram {
     const H = HEADER_H + TESTS.length * ROW_H + 36;
     this.view(W, H);
 
-    const statuses = TESTS.map(() => signal<Status>("pending"));
-    const messages = TESTS.map(() => signal<string>(""));
-    const summary = signal<string>("");
+    const statuses = TESTS.map(() => cell<Status>("pending"));
+    const messages = TESTS.map(() => cell<string>(""));
+    const summary = cell<string>("");
 
     s(
       label(pt(PAD_X, 18), "minim runtime tests", {

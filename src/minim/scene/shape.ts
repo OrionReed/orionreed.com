@@ -1,10 +1,10 @@
 import {
-  computed,
+  cell,
   effect,
-  signal,
-  Signal,
-  type ReadonlySignal,
-} from "../core/signal";
+  type Cell,
+  type ReadonlyCell,
+} from "../core";
+import { Signal } from "../core/signal";
 import { toSig, type Arg, type ResolveSig } from "../core/arg";
 import {
   Box as BoxStruct,
@@ -27,19 +27,19 @@ import {
   Vec,
   lensPoint,
   pt,
-  toPoint,
   type V,
   type DerivedPoint,
   type Point,
   type Pointlike,
   type ResolveVec,
 } from "../signals/vec";
+import { struct } from "../signals/struct";
 import { suspend, type Animator } from "../core/anim";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
-/** A stroke segment — line or arc. Subclasses override `segments()`
- *  to expose their geometry to the dashed renderer. */
+/** Stroke segment — line or arc. Subclasses override `segments()` to
+ *  expose geometry to the dashed renderer. */
 export type Segment =
   | { type: "line"; from: Pointlike; to: Pointlike }
   | {
@@ -51,13 +51,67 @@ export type Segment =
       a1: () => number;
     };
 
-/** Construction options shared by every Shape.
- *
- *  - Animatable props accept `Arg<T>` (value / Signal / thunk).
- *  - `origin` is the local-frame pivot for `rotate` / `scale`;
- *    subclasses pick sensible defaults.
- *  - `aside` excludes this shape from its parent's bounds (and
- *    auto-fit) — for decorative overlays. */
+// ── Transform: the animatable surface as a single struct ─────────────
+//
+// Every Shape's animatable state lives in one `Reactive<Transform>`.
+// `.nested({translate, scale, origin: Vec})` puts every field in its
+// own per-field signal (full SoA), so per-axis writes are isolated and
+// `shape.transform.to(target, dur)` tweens the whole pose.
+
+export type Transform = {
+  translate: V;
+  rotate: number;
+  scale: V;
+  origin: V;
+  opacity: number;
+};
+
+const TR_DEFAULTS: Transform = {
+  translate: { x: 0, y: 0 },
+  rotate: 0,
+  scale: { x: 1, y: 1 },
+  origin: { x: 0, y: 0 },
+  opacity: 1,
+};
+
+export const Transform = struct<Transform>("Transform", TR_DEFAULTS)
+  .equals(
+    (a, b) =>
+      a.translate.x === b.translate.x &&
+      a.translate.y === b.translate.y &&
+      a.rotate === b.rotate &&
+      a.scale.x === b.scale.x &&
+      a.scale.y === b.scale.y &&
+      a.origin.x === b.origin.x &&
+      a.origin.y === b.origin.y &&
+      a.opacity === b.opacity,
+  )
+  .nested({ translate: Vec, scale: Vec, origin: Vec })
+  .ops({
+    /** Component-wise lerp; enables `shape.transform.to(target, dur)`. */
+    lerp: (a, b: Transform, t: number): Transform => ({
+      translate: {
+        x: a.translate.x + (b.translate.x - a.translate.x) * t,
+        y: a.translate.y + (b.translate.y - a.translate.y) * t,
+      },
+      rotate: a.rotate + (b.rotate - a.rotate) * t,
+      scale: {
+        x: a.scale.x + (b.scale.x - a.scale.x) * t,
+        y: a.scale.y + (b.scale.y - a.scale.y) * t,
+      },
+      origin: {
+        x: a.origin.x + (b.origin.x - a.origin.x) * t,
+        y: a.origin.y + (b.origin.y - a.origin.y) * t,
+      },
+      opacity: a.opacity + (b.opacity - a.opacity) * t,
+    }),
+  })
+  .build();
+
+/** Construction options shared by every Shape. Each prop accepts
+ *  `Arg<T>` (literal / Signal / thunk / matching Reactive — adopted
+ *  by the Transform's per-field signal). `aside` excludes from
+ *  parent's bounds. */
 export interface ShapeOpts {
   translate?: Arg<V>;
   rotate?: Arg<number>;
@@ -71,9 +125,7 @@ type Lookup<O, K extends keyof ShapeOpts> = K extends keyof O
   ? O[K]
   : undefined;
 
-/** Wide-form escape hatch for heterogeneous shape collections — sidesteps
- *  the conditional-prop generic. Prefer `Shape` or `Writable<K>` when
- *  you can. */
+/** Wide-form escape hatch for heterogeneous shape collections. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyShape = Shape<any>;
 
@@ -84,87 +136,84 @@ export type AnimatableKey =
   | "origin"
   | "opacity";
 
-/** Resolved field type per animatable prop. */
 type AnimatableField<K extends AnimatableKey> = K extends
   | "translate"
   | "scale"
   | "origin"
   ? Point
-  : Signal<number>;
+  : Cell<number>;
 
-/** "Any shape whose listed props are writable." Combinable via union —
- *  use in helpers that animate specific props but should still accept
- *  shapes with other props readonly. */
+/** "Any shape whose listed props are writable." Combinable via union. */
 export type Writable<K extends AnimatableKey> = {
   readonly [P in K]: AnimatableField<P>;
 };
 
 /** Universal scene-graph node. Wraps an SVG `<g>` (transform + opacity
- *  + children); subclasses add an intrinsic element and geometry.
- *  A bare `new Shape()` is a group.
+ *  + children); subclasses add an intrinsic element and geometry. A
+ *  bare `new Shape()` is a group.
  *
- *  Generic over `O` so user-supplied prop types flow through — a
- *  `computed` field becomes readonly (writes are compile errors),
- *  Signal/value stays writable. Plain `Shape` is writable everywhere;
- *  for the mixed case see `Writable<K>`. */
+ *  Animatable state lives in `this.transform: Reactive<Transform>`.
+ *  Field aliases (`translate`, `rotate`, …) forward to the transform's
+ *  nested signals — same reference, no extra allocation. */
 export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
   readonly el: SVGGElement;
   readonly intrinsic?: SVGElement;
 
+  /** Animatable surface: a single `Reactive<Transform>`. Tween whole
+   *  pose with `shape.transform.to(target, dur)`. Field signals are
+   *  smart-adopted from `opts`: pass a `pt` and `transform.translate`
+   *  IS that signal (two-way share); pass a `computed` and the field
+   *  becomes the derived flavor. */
+  readonly transform: ReturnType<typeof Transform.signal>;
+
+  // Field aliases — direct references to transform's nested signals.
+  // Casts narrow per-prop based on user input flavor (the type contract
+  // in `_type-tests.ts`).
   readonly translate: ResolveVec<Lookup<O, "translate">>;
   readonly rotate: ResolveSig<Lookup<O, "rotate">, number>;
   readonly scale: ResolveVec<Lookup<O, "scale">>;
   readonly origin: ResolveVec<Lookup<O, "origin">>;
   readonly opacity: ResolveSig<Lookup<O, "opacity">, number>;
 
+  /** Composed local-frame matrix: `T(t) T(p) R(r) S(s) T(-p)`. Recomputes
+   *  when any animatable prop changes. */
+  readonly localFrame: ReadonlyCell<Matrix2D>;
+
+  /** Cumulative scene-root frame: `parent.worldFrame × localFrame`.
+   *  Reactive — when any ancestor's localFrame updates, this recomputes.
+   *  Use `shape.box.in(shape.worldFrame)` for cross-frame Box queries. */
+  readonly worldFrame: ReadonlyCell<Matrix2D>;
+
   // ── Boxlike interface ───────────────────────────────────────────────
   //
-  // Source-of-truth: `box` (local-frame Box Signal). Everything else
-  // is derived lazily — `x/y/w/h` axis projections via the Box struct's
-  // framework field accessors; `center/top/bottom/left/right` via
-  // writable lens-backed anchors built on first access (cached as
-  // own-properties via the same own-property pattern). Most shapes
-  // never read most anchors; the ones that do pay only for what they
-  // touch.
+  // Source-of-truth: `box` (local-frame Box). `x/y/w/h` are eager
+  // axis projections so subclasses (Rect) can override with sources.
+  // Cardinals (`center`, `top`, …) build lazily on first access.
 
-  /** Local-frame Box Signal; source-of-truth for the scalar fields
-   *  below. For groups, the union of non-aside children's boxes (each
-   *  composed through its transform). */
-  readonly box: ReadonlySignal<Box>;
-  /** Axis projections of the Box. Eager so subclasses (Rect) can
-   *  override with source signals. Cheap — the Box Reactive's field
-   *  accessors are themselves lazy at the framework level, so these
-   *  forward to whatever's currently the cheapest path. */
-  readonly x: ReadonlySignal<number>;
-  readonly y: ReadonlySignal<number>;
-  readonly w: ReadonlySignal<number>;
-  readonly h: ReadonlySignal<number>;
+  readonly box: ReadonlyCell<Box>;
+  readonly x: ReadonlyCell<number>;
+  readonly y: ReadonlyCell<number>;
+  readonly w: ReadonlyCell<number>;
+  readonly h: ReadonlyCell<number>;
 
-  /** Lens-backed writable cardinal anchors. Reads return the
-   *  post-transform parent-frame position (so connectors and labels
-   *  track translate/rotate/scale); writes shift `translate` by
-   *  (target - currentWorldAnchor) so the anchor lands at the target.
-   *  Lazy: built on first access, cached as own-property — most
-   *  shapes only ever read 1-2 anchors, the rest never allocate. */
+  /** Lens-backed cardinal anchors. Reads return parent-frame post-
+   *  transform position (so connectors track the visual edge); writes
+   *  shift `translate` by (target - currentWorldAnchor). Cached as
+   *  own-property on first access. */
   get center(): Point { return this.#anchor("center", 0.5, 0.5); }
   get top(): Point    { return this.#anchor("top",    0.5, 0); }
   get bottom(): Point { return this.#anchor("bottom", 0.5, 1); }
   get left(): Point   { return this.#anchor("left",   0,   0.5); }
   get right(): Point  { return this.#anchor("right",  1,   0.5); }
-  /** Reactive Point at normalized fraction `(u, v)` in parent frame.
-   *  Cardinals are sugar over this. Each call constructs a fresh
-   *  anchor (no caching since `(u, v)` may differ per call). */
+  /** Reactive Point at normalized fraction `(u, v)` in parent frame. */
   at(u: number, v: number): Point { return this.#makeAnchor(u, v); }
 
-  /** Composed `translate × pivoted-rotate × pivoted-scale`. Decoupled
-   *  from `box` so transforms don't trigger Box recomputation. */
-  readonly transform: ReadonlySignal<Matrix2D>;
   readonly aside: boolean;
 
   protected disposers: (() => void)[] = [];
 
-  private readonly _children = signal<readonly AnyShape[]>([]);
-  readonly children: ReadonlySignal<readonly AnyShape[]> = this._children;
+  private readonly _children = cell<readonly AnyShape[]>([]);
+  readonly children: ReadonlyCell<readonly AnyShape[]> = this._children;
 
   #parent: AnyShape | null = null;
   get parent(): AnyShape | null {
@@ -175,14 +224,13 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
     intrinsicType?: string,
     boxFn?: () => Box,
     opts: O = {} as O,
-    /** Subclass per-prop defaults (kept off `O` so the field types
-     *  stay driven by user input only). */
+    /** Subclass per-prop defaults (kept off `O` so field types stay
+     *  driven by user input only). */
     defaults: ShapeOpts = {},
   ) {
     this.el = document.createElementNS(SVG_NS, "g") as SVGGElement;
-    // CSS transforms (vs SVG `transform`) hit the GPU composite path —
-    // significantly faster for many animating shapes. Pin
-    // transform-origin to the SVG userspace origin so our composed
+    // CSS transforms (vs SVG `transform`) hit the GPU composite path.
+    // Pin transform-origin to the SVG userspace origin so our composed
     // pivot math is correct (browser defaults vary).
     this.el.style.transformOrigin = "0 0";
     if (intrinsicType) {
@@ -190,63 +238,71 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
       this.el.appendChild(this.intrinsic);
     }
 
-    // Cast narrows the field type from `toPoint`'s wider return; the
-    // runtime is unchanged.
+    // Build Transform via smart adoption — each field input flows
+    // through `.nested()`'s adoption (literal → fresh signal; matching
+    // Reactive → adopt; Signal/computed/thunk → wrap).
+    this.transform = Transform.signal({
+      translate: opts.translate ?? defaults.translate ?? { x: 0, y: 0 },
+      rotate: opts.rotate ?? defaults.rotate ?? 0,
+      scale: opts.scale ?? defaults.scale ?? { x: 1, y: 1 },
+      origin: opts.origin ?? defaults.origin ?? { x: 0, y: 0 },
+      opacity: opts.opacity ?? defaults.opacity ?? 1,
+    });
+
+    // Field aliases — direct references; reads bypass the prototype.
     type CastVec<K extends keyof ShapeOpts> = ResolveVec<Lookup<O, K>>;
     type CastNum<K extends keyof ShapeOpts> = ResolveSig<Lookup<O, K>, number>;
-    this.translate = toPoint(opts.translate ?? defaults.translate, {
-      x: 0,
-      y: 0,
-    }) as CastVec<"translate">;
-    this.rotate = toSig(opts.rotate ?? defaults.rotate, 0) as CastNum<"rotate">;
-    this.scale = toPoint(opts.scale ?? defaults.scale, {
-      x: 1,
-      y: 1,
-    }) as CastVec<"scale">;
-    this.origin = toPoint(opts.origin ?? defaults.origin, {
-      x: 0,
-      y: 0,
-    }) as CastVec<"origin">;
-    this.opacity = toSig(
-      opts.opacity ?? defaults.opacity,
-      1,
-    ) as CastNum<"opacity">;
+    this.translate = this.transform.translate as CastVec<"translate">;
+    this.rotate = this.transform.rotate as CastNum<"rotate">;
+    this.scale = this.transform.scale as CastVec<"scale">;
+    this.origin = this.transform.origin as CastVec<"origin">;
+    this.opacity = this.transform.opacity as CastNum<"opacity">;
     this.aside = opts.aside ?? defaults.aside ?? false;
 
     // Group default: union of non-aside children's boxes, each composed
-    // through its transform. Lazy — `this._children` is read on access.
-    // Built as a Reactive<Box> via the framework: `boxSig.x` /
-    // `.y` / `.w` / `.h` are lazy field accessors at the framework
-    // level (built on first access, cached as own-property), which
-    // is what we forward to below.
+    // through its localFrame. Built as Reactive<Box> for axis access.
     const boxSig = BoxStruct.derived(
       boxFn ??
         (() => {
           const cs = this._children.value
             .filter((c) => !c.aside)
-            .map((c) => transformBox(c.transform.value, c.box.value));
+            .map((c) => transformBox(c.localFrame.value, c.box.value));
           return cs.length ? unionBox(...cs) : box(0, 0, 0, 0);
         }),
     );
-    this.box = boxSig as ReadonlySignal<Box>;
+    this.box = boxSig as ReadonlyCell<Box>;
     this.x = boxSig.x;
     this.y = boxSig.y;
     this.w = boxSig.w;
     this.h = boxSig.h;
 
-    this.transform = computed(() => {
-      const t = this.translate.value;
-      const r = this.rotate.value;
-      const sc = this.scale.value;
+    // Local frame: composed matrix from per-field signals. The
+    // identity short-circuit avoids touching `origin` when there's no
+    // pivoted op — saves a per-frame read for huge no-transform groups.
+    const tr = this.transform;
+    this.localFrame = cell.derived(() => {
+      const t = tr.translate.value;
+      const r = tr.rotate.value;
+      const sc = tr.scale.value;
       if (t.x === 0 && t.y === 0 && r === 0 && sc.x === 1 && sc.y === 1) {
         return compose(t, r, sc, { x: 0, y: 0 });
       }
-      return compose(t, r, sc, this.origin.value);
+      return compose(t, r, sc, tr.origin.value);
+    });
+
+    // World frame: cumulative through ancestors. Reads parent.worldFrame
+    // reactively, so any ancestor's transform change propagates here.
+    // Re-parenting is NOT reactive (parent ref is plain); rebuild the
+    // cell via `boxIn(...)` if you need that.
+    this.worldFrame = cell.derived(() => {
+      const local = this.localFrame.value;
+      const p = this.#parent;
+      return p ? multiply(p.worldFrame.value, local) : local;
     });
 
     this.disposers.push(
       effect(() => {
-        this.el.style.transform = matrixToString(this.transform.value);
+        this.el.style.transform = matrixToString(this.localFrame.value);
       }),
       effect(() => {
         this.el.style.opacity = String(this.opacity.value);
@@ -254,37 +310,28 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
     );
   }
 
-  /** Perimeter point in the direction of `toward`. In parent-frame, so
-   *  it matches the anchor reads: connectors land on the visual edge
-   *  after translate/rotate/scale. Default is Box-edge math; tighter
-   *  shapes (Circle, Rect) override. */
+  /** Perimeter point in the direction of `toward` (parent frame, so
+   *  connectors land on the visual edge after translate/rotate/scale).
+   *  Default is Box-edge math; tighter shapes (Circle, Rect) override. */
   boundary(toward: Pointlike): DerivedPoint {
     return Vec.derived(() =>
       boxEdgeFrom(
-        transformBox(this.transform.value, this.box.value),
+        transformBox(this.localFrame.value, this.box.value),
         toward.value,
       ),
     );
   }
 
   // ── Lazy anchor construction ────────────────────────────────────────
-  //
-  // `#makeAnchor(u, v)` builds a writable lens-backed Point: reads
-  // project the local Box anchor through `transform` (parent-frame
-  // post-transform); writes shift `translate` by the delta so the
-  // anchor lands at the target. Writes throw if `translate` is
-  // readonly (e.g. caller passed a `computed`).
-  //
-  // `#anchor(name, u, v)` is the cardinal cache: builds via
-  // `#makeAnchor` on first access and installs the result as an
-  // own-property on `this`, so subsequent `shape.center` reads bypass
-  // the getter entirely (own-property fast path).
+
   #makeAnchor(u: number, v: number): Point {
     const boxSig = this.box;
+    const lf = this.localFrame;
+    const tr = this.transform;
     return lensPoint(
       () => {
         const b = boxSig.value;
-        return transformPoint(this.transform.value, {
+        return transformPoint(lf.value, {
           x: b.x + u * b.w,
           y: b.y + v * b.h,
         });
@@ -292,9 +339,9 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
       (target) => {
         const b = boxSig.peek();
         const local = { x: b.x + u * b.w, y: b.y + v * b.h };
-        const currentWorld = transformPoint(this.transform.peek(), local);
-        const tNow = this.translate.peek();
-        (this.translate as Signal<V>).value = {
+        const currentWorld = transformPoint(lf.peek(), local);
+        const tNow = tr.translate.peek();
+        (tr.translate as Cell<V>).value = {
           x: tNow.x + (target.x - currentWorld.x),
           y: tNow.y + (target.y - currentWorld.y),
         };
@@ -313,8 +360,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
     return val;
   }
 
-  /** Stroke segments — used by the dashed renderer. Default is the
-   *  bounding rect. */
+  /** Stroke segments — used by the dashed renderer. Default = bounding rect. */
   segments(): Segment[] {
     const b = this.box.value;
     const tl = pt(b.x, b.y);
@@ -329,8 +375,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
     ];
   }
 
-  /** Bind one SVG attribute. Static value sets once; Signal/thunk
-   *  runs as a reactive effect. */
+  /** Bind one SVG attribute; static value sets once, reactive runs as effect. */
   attr(
     name: string,
     value: Arg<string | number>,
@@ -360,8 +405,6 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
 
   // ── DOM events ──────────────────────────────────────────────────────
 
-  /** Subscribe to a DOM event on the wrapper `<g>`. Returns a disposer;
-   *  also auto-detaches on shape dispose. */
   on(
     name: string,
     handler: (e: Event) => void,
@@ -374,9 +417,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
     return dispose;
   }
 
-  /** Wake on the next `name` event; resume with the event. Use
-   *  `const evt = yield* s.until("click")` to receive the typed event,
-   *  or `yield s.until("click")` to ignore it. */
+  /** Wake on the next `name` event; resume with the event. */
   until(name: string): Animator<Event> {
     return suspend<Event>((wake) => {
       const handler = (e: Event) => wake(e);
@@ -384,8 +425,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
     });
   }
 
-  /** Map client-space coords (e.g. `evt.clientX/clientY`) into this
-   *  shape's local frame via `getScreenCTM`. */
+  /** Map client-space coords into this shape's local frame via `getScreenCTM`. */
   toLocal(evt: { clientX: number; clientY: number }): V {
     const target = (this.intrinsic ?? this.el) as SVGGraphicsElement;
     const ctm = target.getScreenCTM();
@@ -442,34 +482,20 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
 
 // ── Cross-frame helpers ─────────────────────────────────────────────
 
-/** `shape`'s Box in the scene-root frame. */
-export function boxInRoot(shape: AnyShape): ReadonlySignal<Box> {
-  return computed(() => {
-    let m = shape.transform.value;
-    let p = shape.parent;
-    while (p) {
-      m = multiply(p.transform.value, m);
-      p = p.parent;
-    }
-    return transformBox(m, shape.box.value);
-  });
+/** `shape`'s Box in scene-root frame. Sugar over `box.in(worldFrame)`. */
+export function boxInRoot(shape: AnyShape): ReadonlyCell<Box> {
+  return cell.derived(() =>
+    transformBox(shape.worldFrame.value, shape.box.value),
+  );
 }
 
-/** `shape`'s Box in `observer`'s local frame. */
+/** `shape`'s Box in `observer`'s local frame: `inv(observer→root) ⋅ shape→root`. */
 export function boxIn(
   shape: AnyShape,
   observer: AnyShape,
-): ReadonlySignal<Box> {
-  return computed(() => {
-    let mShape = shape.transform.value;
-    for (let p = shape.parent; p; p = p.parent) {
-      mShape = multiply(p.transform.value, mShape);
-    }
-    let mObs = observer.transform.value;
-    for (let p = observer.parent; p; p = p.parent) {
-      mObs = multiply(p.transform.value, mObs);
-    }
-    // shape-local → observer-local = inv(observer→root) ⋅ shape→root
-    return transformBox(multiply(invert(mObs), mShape), shape.box.value);
+): ReadonlyCell<Box> {
+  return cell.derived(() => {
+    const m = multiply(invert(observer.worldFrame.value), shape.worldFrame.value);
+    return transformBox(m, shape.box.value);
   });
 }

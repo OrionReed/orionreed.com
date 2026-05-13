@@ -4,9 +4,8 @@ export {
   oscillate,
   drift,
   attract,
-  orbit,
   type SpringOpts,
-} from "./integrators";
+} from "./behaviors";
 export {
   from,
   fadeIn,
@@ -21,4 +20,4 @@ export {
   spinIn,
 } from "./transitions";
 export { pulse, every } from "./clocks";
-export { swap, stagger, splay, assemble } from "./choreographers";
+export { swap, stagger, splay, assemble, orbit } from "./choreographers";

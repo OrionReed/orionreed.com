@@ -15,9 +15,8 @@
 //     txt.to("goodbye", 0.6),
 //   ]
 //
-// Strings don't fit the Schema (which is `Record<string, number |
-// StructType>`), so they use `lerpable(initial, lerp)` — a tiny
-// helper that stamps the same `[LERP]` slot on a plain Signal.
+// Strings (and other non-record types) use `lerpable(initial, lerp)` —
+// a tiny helper that stamps the same `[LERP]` slot on a plain Signal.
 
 import {
   Anchor,
@@ -26,14 +25,13 @@ import {
   Diagram,
   Mount,
   Vec,
+  cell,
   circle,
-  computed,
   label,
   lerpable,
   pt,
   rect,
   rgb,
-  signal,
   type Lerp,
 } from "../../minim";
 
@@ -99,7 +97,7 @@ export class MdLerps extends Diagram {
     // `Signal<string>` whose lerp was wired via `lerpable(...)`. They
     // ALL expose `.to(target, dur)` because they all carry a [LERP] slot.
     const baseY = (i: number) => rowY(i) + 9;
-    const num = signal(0.15);
+    const num = cell(0.15);
     const pos = Vec.signal({ x: VIS_X + 12, y: baseY(1) });
     const box = Box.signal({ x: VIS_X + 4, y: rowY(2) - 6, w: 30, h: 20 });
     const col = rgb(0.4, 0.6, 0.9);
@@ -139,7 +137,7 @@ export class MdLerps extends Diagram {
     s(
       rowLabel(0, "number"),
       track(VIS_X, rowY(0) + 4, VIS_W, 10, 0.18),
-      rect(VIS_X, rowY(0) + 4, computed(() => num.value * VIS_W), 10, {
+      rect(VIS_X, rowY(0) + 4, cell.derived(() => num.value * VIS_W), 10, {
         stroke: "transparent",
         fill: true,
       }),

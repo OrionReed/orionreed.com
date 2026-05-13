@@ -32,8 +32,8 @@ export function arrange(
     cur.effect(() => {
       // prev/anchor in the parent frame so upstream transforms
       // cascade; cur stays local since we're writing its own translate.
-      const pBox = transformBox(prev.transform.value, prev.box.value);
-      const aBox = transformBox(anchor.transform.value, anchor.box.value);
+      const pBox = transformBox(prev.localFrame.value, prev.box.value);
+      const aBox = transformBox(anchor.localFrame.value, anchor.box.value);
       const cb = cur.box.value;
       if (axis === "row") {
         const targetX = pBox.x + pBox.w + gap;

@@ -1,29 +1,10 @@
-// minim's reactive value-type framework. Build a `Reactive<T>` for
-// any T via the fluent `struct()` Builder, or drop to `defineCell`
-// when you need a custom shape (arrays, variants, strings…).
+// Reactive value-type framework. `struct(name, defaults)` is the fluent
+// Builder for record-shaped value types; internally it lifts ops and scalars,
+// installs lazy axis/getter descriptors, and calls a per-type cell factory.
+// `.nested(map)` opts into full SoA storage (per-field signals).
 //
-// Three layers, each independently usable:
-//
-//   1. `defineCell(name, methods, descriptors, opts)` — primitive.
-//      Builds a Signal-subtype with a custom prototype, V8-friendly
-//      (Object.create + ctor.call against per-type protos). The
-//      escape hatch for non-record value types.
-//
-//   2. Helpers (`lift`, `liftScalar`, `axes`, `lazies`, `withAlgebra`,
-//      `construct`) — compose into the methods/descriptors bags
-//      `defineCell` consumes. Per-arity unrolling lives in `lift` /
-//      `liftScalar` / `construct`.
-//
-//   3. `struct(name, defaults)` — fluent Builder that collects ops/
-//      scalars/getters/methods, then calls `defineCell` once on
-//      `.build()`. The common case for record-shaped value types.
-//
-// Why this shape: the cell primitive is small (~50 LOC) and fully
-// general (T = any type). The helpers each do one well-named thing.
-// The Builder is a thin facade — no `Schema = Record<string, number
-// | StructType>` constraint, just `T`. The benches show this design
-// at parity-or-faster than the old monolithic finalize across the
-// whole Vec/Box surface, while the framework itself shrinks ~35%.
+// `lerpable(initial, lerp)` (in core/tween.ts) is the escape hatch for
+// value types you don't want to declare as a full struct.
 
 import {
   Signal,
@@ -103,12 +84,9 @@ type Axes<T, W extends RW, N> = T extends Record<string, any>
     }
   : {};
 
-/** When the struct's ops bag includes `lerp`, `.to(target, dur, ease?)`
- *  is installed on writable Reactives via the prototype `[LERP]` slot.
- *  One method auto-derived from one canonical op (lerp → tween-toward).
- *  Other animation strategies (spring, oscillate, …) are free
- *  functions in `signals/integrators.ts` that read `[ALGEBRA]` from
- *  the prototype slot. */
+/** When the ops bag includes `lerp`, `.to(target, dur, ease?)` is installed
+ *  on writable Reactives via the `[LERP]` slot. Other behaviors
+ *  (spring, oscillate, …) are free functions reading `[ALGEBRA]`. */
 type Tweenable<T, O, W extends RW> = W extends "rw"
   ? O extends { lerp: (a: any, b: any, t: number) => T }
     ? { to(target: T, dur: Duration, ease?: Easing): Tween<T> }
@@ -154,12 +132,33 @@ export type NestedMap<T> = {
   [K in keyof T]?: StructType<T[K], any, any, any, any, any>;
 };
 
+/** Per-field input for a `.nested()` struct's `signal({...})` call.
+ *  Each field accepts a literal, a Signal, a ReadonlySignal, or a
+ *  thunk; nested fields additionally accept a Reactive of the nested
+ *  type (which is adopted directly — same reference, two-way share). */
+export type NestedInput<T, N = {}> = {
+  [K in keyof T]: K extends keyof N
+    ? N[K] extends StructType<infer NT, any, any, any, any, any>
+      ?
+          | NT
+          | Signal<NT>
+          | ReadonlySignal<NT>
+          | (() => NT)
+          | Reactive<NT, any, any, any, any, any, any>
+      : never
+    : T[K] | Signal<T[K]> | ReadonlySignal<T[K]> | (() => T[K]);
+};
+
 /** A registered struct: factory namespace + identity-as-instanceof.
  *  `v instanceof MyStruct` is O(1) via the [STRUCT] prototype slot. */
 export interface StructType<T, O = {}, X = {}, G = {}, M = {}, N = {}> {
   readonly name: string;
   readonly defaults: T;
-  signal(v: T): Reactive<T, O, X, G, M, "rw", N>;
+  /** Build a writable reactive cell. Each field accepts a literal OR a
+   *  matching reactive value: pass a `pt` (or any `Vec.signal`) and the
+   *  result's `.translate` IS that signal — same reference, two-way share.
+   *  Pass a `computed` and the field becomes the derived flavor. */
+  signal(v: NestedInput<T, N>): Reactive<T, O, X, G, M, "rw", N>;
   derived(fn: () => T): Reactive<T, O, X, G, M, "ro", N>;
   lens(read: () => T, write: (v: T) => void): Reactive<T, O, X, G, M, "rw", N>;
   is(v: unknown): v is Reactive<T, O, X, G, M, RW, N>;
@@ -206,7 +205,7 @@ function readerFor(a: unknown): () => unknown {
 /** Lift a pure struct-op into a method that returns a derived cell.
  *  Per-arity unrolled (0/1/2; 3+ generic). Arity-1 further specializes
  *  by arg shape so the per-call closure is monomorphic. */
-export function lift<T>(
+function lift<T>(
   fn: (self: T, ...args: any[]) => T,
   derived: (fn: () => T) => unknown,
 ) {
@@ -249,7 +248,7 @@ export function lift<T>(
 /** Lift a scalar-returning op into a method that returns a
  *  `ReadonlySignal<R>` (via `computed`). Same per-arity dispatch
  *  as `lift`. */
-export function liftScalar<T>(fn: (self: T, ...args: any[]) => unknown) {
+function liftScalar<T>(fn: (self: T, ...args: any[]) => unknown) {
   const arity = Math.max(0, fn.length - 1);
   if (arity === 0) {
     return function (this: ReadonlySignal<T>) {
@@ -289,7 +288,7 @@ export function liftScalar<T>(fn: (self: T, ...args: any[]) => unknown) {
 /** Per-arity-unrolled axis writer factory. Bench winner: 1.6-2.2× over
  *  the generic args-array fallback. arity 1/2/4/6 unrolled (the cases
  *  Vec / Box / Matrix2D need); 3/5/7+ use the generic loop. */
-export function construct<T>(
+function construct<T>(
   fn: (...args: any[]) => T,
 ): (v: T, k: keyof T, n: T[keyof T]) => T {
   // Lazy: discover field order from the first call's `v`. Then build
@@ -351,7 +350,7 @@ function spreadWriter<T>(): (v: T, k: keyof T, n: T[keyof T]) => T {
 /** Build per-axis lazy property descriptors. Each first-read installs
  *  a `lens` as own-property on the instance; subsequent reads bypass
  *  the proto getter entirely (own-property fast path). */
-export function axes<T>(
+function axes<T>(
   fields: readonly (keyof T)[],
   write: (v: T, k: keyof T, n: T[keyof T]) => T,
 ): PropertyDescriptorMap {
@@ -382,7 +381,7 @@ export function axes<T>(
 
 /** Build lazy-getter descriptors. First read calls `fn`, caches the
  *  result as own-property; subsequent reads are at memory speed. */
-export function lazies(
+function lazies(
   defs: Record<string, (this: any) => unknown>,
 ): PropertyDescriptorMap {
   const out: PropertyDescriptorMap = {};
@@ -405,24 +404,6 @@ export function lazies(
   return out;
 }
 
-/** Stamp `[LERP]` and `[ALGEBRA]` symbols on the methods bag. The
- *  tween engine reads `[LERP]` to dispatch `.to(target, dur)`;
- *  integrators read `[ALGEBRA]` to find add/sub/scale for the value
- *  type. The Builder calls this automatically when ops include
- *  `lerp` (for `[LERP]`) or `add`+`sub`+`scale` (for `[ALGEBRA]`). */
-export function withAlgebra<T>(alg: {
-  add: (a: T, b: T) => T;
-  sub: (a: T, b: T) => T;
-  scale: (a: T, k: number) => T;
-  lerp?: (a: T, b: T, t: number) => T;
-}): Record<PropertyKey, unknown> {
-  const out: Record<PropertyKey, unknown> = {
-    [ALGEBRA]: { add: alg.add, sub: alg.sub, scale: alg.scale },
-  };
-  if (alg.lerp) out[LERP] = alg.lerp;
-  return out;
-}
-
 // ── The cell primitive ────────────────────────────────────────────
 
 interface CellOpts<T> {
@@ -430,24 +411,10 @@ interface CellOpts<T> {
   equals?: (a: T, b: T) => boolean;
 }
 
-/** Build a Signal-subtype family with custom prototype contents.
- *  Used internally by the Builder; exposed publicly as the escape
- *  hatch for non-record value types (strings, arrays, variants).
- *
- *  Two arg slots intentional:
- *
- *    - `methods`: regular object whose values are assigned to the
- *      proto. Best for functions, symbol slots ([LERP], [ALGEBRA]),
- *      simple values.
- *
- *    - `descriptors`: PropertyDescriptorMap installed via
- *      `Object.defineProperties`. The axes/lazies helpers return
- *      these.
- *
- *  Why split: spreading a PropertyDescriptorMap into a plain object
- *  copies the descriptor *as a value* (not as a real getter/setter)
- *  — silent no-op footgun. Two slots makes that impossible. */
-export function defineCell<T, M extends object>(
+/** Builds a Signal-subtype family with a custom per-type prototype.
+ *  `methods` are assigned plain (functions, `[LERP]`/`[ALGEBRA]` slots);
+ *  `descriptors` go through `defineProperties` so getters stay getters. */
+function defineCell<T, M extends object>(
   name: string,
   methods: M,
   descriptors: PropertyDescriptorMap = {},
@@ -609,10 +576,8 @@ class Builder<T, O = {}, X = {}, G = {}, M = {}, N = {}> {
   }
 
   /** Struct-returning ops `(self, ...args) => T`. Each becomes a
-   *  reactive method. If you provide `add` / `sub` / `scale`, the
-   *  framework auto-stamps `[ALGEBRA]` so integrators (spring etc.)
-   *  work on this type. If you provide `lerp`, the framework auto-
-   *  stamps `[LERP]` so `.to(target, dur)` is installed. */
+   *  reactive method. `add`/`sub`/`scale` auto-stamps `[ALGEBRA]`;
+   *  `lerp` auto-stamps `[LERP]`. */
   ops<O2 extends OpsBag<T>>(bag: O2): Builder<T, O & O2, X, G, M, N> {
     return new Builder<T, O & O2, X, G, M, N>(
       this.state,
@@ -775,6 +740,64 @@ function finalize<T>(
   } as StructType<T>;
 }
 
+// ── Per-field input adoption ─────────────────────────────────────
+//
+// Each `.signal({...})` field input is normalized to a backing signal:
+//
+//   - Already a Reactive of the matching nested type     → adopt as-is
+//   - Some other Signal<T[K]>                            → wrap in `.lens` (rw)
+//                                                          or `.derived` (ro)
+//   - A function () => T[K]                              → wrap in derived
+//   - A literal T[K]                                     → fresh signal
+//
+// Writability of a generic Signal is detected via the value descriptor's
+// setter (Computed and Lens-via-Signal have no setter; plain Signal does).
+
+function isWritableSig(s: object): boolean {
+  let proto: object | null = Object.getPrototypeOf(s);
+  while (proto) {
+    const desc = Object.getOwnPropertyDescriptor(proto, "value");
+    if (desc) return typeof desc.set === "function";
+    proto = Object.getPrototypeOf(proto);
+  }
+  return false;
+}
+
+function adoptField(
+  initial: unknown,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  nested: StructType<any, any, any, any, any, any> | undefined,
+): Signal<unknown> {
+  if (nested) {
+    if (nested.is(initial)) return initial as unknown as Signal<unknown>;
+    if (initial != null && (initial as object) instanceof Signal) {
+      const sig = initial as Signal<unknown>;
+      return (
+        isWritableSig(sig)
+          ? nested.lens(
+              () => sig.value,
+              (v) => {
+                sig.value = v;
+              },
+            )
+          : nested.derived(() => sig.value)
+      ) as unknown as Signal<unknown>;
+    }
+    if (typeof initial === "function") {
+      return nested.derived(initial as () => unknown) as unknown as Signal<unknown>;
+    }
+    return nested.signal(initial) as unknown as Signal<unknown>;
+  }
+  // Non-nested field
+  if (initial != null && (initial as object) instanceof Signal) {
+    return initial as Signal<unknown>;
+  }
+  if (typeof initial === "function") {
+    return computed(initial as () => unknown) as Signal<unknown>;
+  }
+  return signal(initial);
+}
+
 // ── The nested-aware cell factory ────────────────────────────────
 //
 // Storage layout for `.signal()` flavor: full SoA. Every field —
@@ -811,7 +834,7 @@ function defineNestedCell<T, M extends object>(
   nestedMap: NestedMap<T>,
   opts: CellOpts<T> = {},
 ): {
-  signal(v: T): Signal<T> & M;
+  signal(v: NestedInput<T>): Signal<T> & M;
   derived(fn: () => T): ReadonlySignal<T> & M;
   lens(read: () => T, write: (v: T) => void): Signal<T> & M;
   is(v: unknown): v is Signal<T> & M;
@@ -890,7 +913,7 @@ function defineNestedCell<T, M extends object>(
     isFn(v) && (v as any)[WRITABLE] === true;
 
   self = {
-    signal(v: T): Signal<T> & M {
+    signal(v: NestedInput<T>): Signal<T> & M {
       const inst = Object.create(rwProto);
       // Initialize Signal's instance fields (so `_equals`, `_targets`,
       // etc. exist for any preact code that walks them). The
@@ -902,9 +925,7 @@ function defineNestedCell<T, M extends object>(
       for (const k of fieldKeys) {
         const nested = nestedMap[k];
         const initial = obj[k as string];
-        const sig = nested
-          ? nested.signal(initial as never)
-          : signal(initial);
+        const sig = adoptField(initial, nested);
         Object.defineProperty(inst, k as PropertyKey, {
           value: sig,
           enumerable: false,

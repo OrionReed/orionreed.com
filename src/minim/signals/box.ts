@@ -18,17 +18,12 @@
 
 import { struct } from "./struct";
 import { Vec, type V, type Pointlike, type DerivedPoint } from "./vec";
-import { transformBox, type M } from "./matrix";
+import { transformBox, type Matrix2D } from "./matrix";
 import { computed, type ReadonlySignal } from "../core/signal";
 
-/** Plain Box value — `{x, y, w, h}`. The struct's value type. The
- *  identifier `Box` is BOTH this type AND the registered struct value
- *  below — same trick a `class` uses by default (a class declaration
- *  introduces both a value and a type under one name). `B` is an alias
- *  for the value type, kept for symmetry with `V` (Vec) and `C`
- *  (Color). */
+/** `{x, y, w, h}`. `Box` is both this type and the registered struct value
+ *  (same trick `class` uses by default). */
 export type Box = { x: number; y: number; w: number; h: number };
-export type B = Box;
 
 // ── Plain-value helpers ────────────────────────────────────────────
 //
@@ -89,9 +84,8 @@ export const Box = struct<Box>("Box", { x: 0, y: 0, w: 0, h: 0 })
   )
   .equals((a, b) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h)
   .ops({
-    /** Component-wise add. Stamps `[ALGEBRA]` (with sub/scale below)
-     *  so integrators (spring/oscillate/drift/attract) and aggregates
-     *  (mean) work on `Reactive<Box>`. */
+    /** Component-wise add. With `sub`+`scale` stamps `[ALGEBRA]` so
+     *  behaviors and aggregates work on `Reactive<Box>`. */
     add: (a, b: Box): Box => ({
       x: a.x + b.x,
       y: a.y + b.y,
@@ -121,7 +115,7 @@ export const Box = struct<Box>("Box", { x: 0, y: 0, w: 0, h: 0 })
     }),
     /** This box in the frame `m`. Loose box around the four transformed
      *  corners. */
-    in: (b: Box, m: M): Box => transformBox(m, b),
+    in: (b: Box, m: Matrix2D): Box => transformBox(m, b),
   })
   .scalars({
     contains: (a, p: V): boolean =>
@@ -202,27 +196,13 @@ export const boxAt = (
 
 // ── Boxlike — structural surface ───────────────────────────────────
 //
-// Implemented by:
-//
-//   - Shape (class with a `.box` field + transform-aware anchors)
-//   - Part  (class with a `.box` field; cardinals via `delegate`)
-//   - any `Reactive<Box>` from this module (the framework's prototype
-//     provides `.box` as a self-reference, plus the cardinals and
-//     `.at(u, v)` via `.getters({...})`)
-//
-// All three types satisfy this interface structurally — consumers
-// take `Boxlike` and don't care which one they got. (Mirrors how
-// `Pointlike` unifies Vec.signal / Vec.derived / Vec.lens results.)
+// Implemented by `Shape`, `Part`, and any `Reactive<Box>` from this
+// module. Consumers take `Boxlike` and don't care which.
 
-/** Reactive rectangular region. Anchor types are `Pointlike` so
- *  implementations can narrow: views, splits, parts return read-only
- *  `DerivedPoint`s; `Shape` returns writable `Point`s (lens-backed
- *  through `translate`). */
+/** Reactive rectangular region with cardinals + `at(u, v)`. */
 export interface Boxlike {
-  /** Source-of-truth Box signal; everything else derives from it.
-   *  For `Reactive<Box>` values from the framework, this is a
-   *  self-reference (`box.box === box`); for `Shape`/`Part`, it's
-   *  a real field. */
+  /** Source-of-truth Box signal; everything else derives from it. For
+   *  `Reactive<Box>`, `box === box.box` (self-reference). */
   readonly box: ReadonlySignal<Box>;
 
   readonly x: ReadonlySignal<number>;
@@ -236,7 +216,18 @@ export interface Boxlike {
   readonly left: Pointlike;
   readonly right: Pointlike;
 
-  /** Reactive Point at normalized fraction `(u, v)`: `(0, 0)` is
-   *  top-left, `(1, 1)` is bottom-right. Cardinals are sugar. */
+  /** Reactive Point at `(u, v)`: `(0, 0)` is top-left, `(1, 1)` bottom-right. */
   at(u: number, v: number): Pointlike;
 }
+
+/** Detect a `Boxlike` value structurally — anything with `box` and `at`.
+ *  Matches `Reactive<Box>`, `Shape`, `Part`, splits/grids, etc. */
+export function isBox(v: unknown): v is Boxlike {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    "box" in v &&
+    typeof (v as { at?: unknown }).at === "function"
+  );
+}
+

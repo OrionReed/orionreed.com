@@ -9,7 +9,7 @@ import {
   rect,
   split,
   t,
-  type Signal,
+  type Cell,
 } from "../minim";
 
 interface CodecPart {
@@ -49,7 +49,7 @@ function parseContent(text: string): CodecPart[] {
 }
 
 export class MdCodec extends Diagram {
-  @attr.str() declare width: Signal<string | undefined>;
+  @attr.str() declare width: Cell<string | undefined>;
 
   protected scene(s: Mount): void {
     const w = this.width.value;

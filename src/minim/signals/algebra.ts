@@ -1,11 +1,8 @@
 // Vector-space algebra accessors. The struct framework stamps an
-// `[ALGEBRA]` slot on each per-type prototype carrying `add` / `sub`
-// / `scale`; integrators (`spring`, `oscillate`, …) and aggregates
-// (`mean`) read it from the prototype to find ops for the value type
-// without the user passing them explicitly.
-//
-// Default fallback is the scalar (number) algebra — so anything
-// generic over T defaults to scalar behavior on raw `Signal<number>`.
+// `[ALGEBRA]` slot on each per-type prototype carrying `add`/`sub`/
+// `scale`; behaviors (`spring`, `oscillate`, …) and aggregates (`mean`)
+// read it to find the right ops for the value type. Raw `Signal<number>`
+// falls back to scalar arithmetic.
 
 import type { Signal } from "../core/signal";
 import { ALGEBRA } from "./struct";

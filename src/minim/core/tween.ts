@@ -25,10 +25,8 @@ export interface Tween<T> extends Generator<Yieldable, void, number> {
   to(target: T, dur: Duration, ease?: Easing): Tween<T>;
 }
 
-/** Lerp function for a value type. The struct framework registers one
- *  per struct via the `[LERP]` prototype slot; integrators read it
- *  via the same slot. The default (used for raw `Signal<number>`)
- *  is the scalar lerp. */
+/** Per-value-type lerp; the struct framework registers via the `[LERP]`
+ *  prototype slot. Default for raw `Signal<number>` is the scalar lerp. */
 export type Lerp<T> = (a: T, b: T, t: number) => T;
 
 const numberLerp: Lerp<number> = (a, b, t) => a + (b - a) * t;
@@ -90,21 +88,8 @@ export function tween<T>(
   return makeTween(sig, target, dur, e, l);
 }
 
-/** Construct a `Signal<T>` that knows how to tween itself. The value
- *  type can be anything — strings, dates, custom objects — as long as
- *  you provide a `lerp(a, b, t) → T`. The returned signal's `.to(...)`
- *  uses your lerp via the same prototype `[LERP]` slot the struct
- *  framework uses for Vec / Color / etc.
- *
- *  Use when you have a value type that doesn't fit the struct schema
- *  (Schema is `Record<string, number | StructType>` — strings, enums,
- *  arrays, etc. don't qualify) but you still want generic `.to`.
- *
- *  Example:
- *
- *      const text = lerpable("hello", typewriterLerp);
- *      yield* text.to("goodbye", 0.6);
- */
+/** Plain Signal whose `.to(...)` uses your `lerp` via the `[LERP]` slot.
+ *  Escape hatch for value types you don't want to declare as a full struct. */
 export function lerpable<T>(initial: T, lerp: Lerp<T>): Signal<T> {
   const s = signal(initial);
   (s as any)[LERP] = lerp;

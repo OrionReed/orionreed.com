@@ -20,9 +20,8 @@ export {
   centroid,
   meanRotation,
   meanScale,
-  meanVec,
-  meanNum,
 } from "./aggregates";
+export { mean } from "../signals/aggregates";
 
 // `Box` re-export carries BOTH the value (the struct) and the type
 // alias (the `{x, y, w, h}` shape) — same name, two namespaces, like
@@ -32,6 +31,7 @@ export {
   expandBox,
   unionBox,
   boxEdgeFrom,
+  isBox,
   type Boxlike,
 } from "../signals/box";
 

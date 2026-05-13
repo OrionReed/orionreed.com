@@ -53,8 +53,8 @@ export function iso<A, B>(
 }
 
 /** N-to-1 combinator. Reads merge inputs; writes distribute the change.
- *  This is the engine behind `meanVec`, `meanRotation`, `centroid` —
- *  all of which become 1-2 line factories over `combine`. */
+ *  This is the engine behind `mean`, `meanRotation`, `centroid` —
+ *  all of which are 1-2 line factories over `combine`. */
 export function combine<T>(
   parts: readonly Signal<T>[],
   merge: (vs: readonly T[]) => T,

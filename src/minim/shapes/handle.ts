@@ -9,11 +9,11 @@
 // All handles are `aside: true` (no autofit contribution) and themable
 // via the `--minim-handle` CSS var.
 
-import { type Signal } from "../core";
+import { type Cell } from "../core";
 import {
   Shape,
   lensPoint,
-  meanVec,
+  mean,
   type AnyShape,
   type Point,
   type Writable,
@@ -87,12 +87,12 @@ const anchor = (
  *  of translate deltas — see `scene/aggregates.ts` for that variant). */
 const centroidHandle = (
   ...shapes: (AnyShape & Writable<"translate">)[]
-): Shape => handleFn(meanVec(...shapes.map((s) => s.center)) as Point);
+): Shape => handleFn(mean(...shapes.map((s) => s.center)) as Point);
 
 /** Drag handle at the midpoint of two writable Points — drags both
  *  along with it. */
 const midpoint = (a: Point, b: Point, opts?: HandleOpts): Shape =>
-  handleFn(meanVec(a, b), opts);
+  handleFn(mean(a, b) as Point, opts);
 
 /** Rotation knob orbiting the shape's center at `radius`. The knob
  *  position is `center + (r cos θ, r sin θ)` for `θ = shape.rotate`;
@@ -143,7 +143,7 @@ const scaleHandle = (
  *  parameter. Re-projects every drag step, so works on animated paths. */
 const tOnPath = (
   p: Path,
-  t: Signal<number>,
+  t: Cell<number>,
   opts?: HandleOpts & { samples?: number },
 ): Shape => {
   const N = opts?.samples ?? 64;

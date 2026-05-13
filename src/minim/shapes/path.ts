@@ -1,10 +1,9 @@
 import {
-  computed,
-  signal,
+  cell,
   toSig,
   type Arg,
-  type ReadonlySignal,
-  type Signal,
+  type Cell,
+  type ReadonlyCell,
 } from "../core";
 import {
   Shape,
@@ -25,8 +24,8 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /** Geometry sampler over a reactive list of Points. `pts` is tracked
  *  by every computed, so mutating the list re-runs sampling. */
-function sampler(pts: Signal<readonly Pointlike[]>) {
-  const cumLen = computed(() => {
+function sampler(pts: Cell<readonly Pointlike[]>) {
+  const cumLen = cell.derived(() => {
     const points = pts.value;
     const lens = [0];
     for (let i = 1; i < points.length; i++) {
@@ -37,7 +36,7 @@ function sampler(pts: Signal<readonly Pointlike[]>) {
     return lens;
   });
 
-  const length: ReadonlySignal<number> = computed(() => {
+  const length: ReadonlyCell<number> = cell.derived(() => {
     const lens = cumLen.value;
     return lens[lens.length - 1] ?? 0;
   });
@@ -55,7 +54,7 @@ function sampler(pts: Signal<readonly Pointlike[]>) {
     return { i: i - 1, segT };
   };
 
-  const sampleAt = (ds: ReadonlySignal<number>): DerivedPoint =>
+  const sampleAt = (ds: ReadonlyCell<number>): DerivedPoint =>
     Vec.derived(() => {
       const points = pts.value;
       if (points.length === 0) return { x: 0, y: 0 };
@@ -68,7 +67,7 @@ function sampler(pts: Signal<readonly Pointlike[]>) {
 
   const at = (t: Arg<number>): DerivedPoint => {
     const ts = toSig(t);
-    return sampleAt(computed(() => clamp01(ts.value) * length.value));
+    return sampleAt(cell.derived(() => clamp01(ts.value) * length.value));
   };
 
   /** Sample at absolute arc-length (px from start). */
@@ -92,9 +91,9 @@ function sampler(pts: Signal<readonly Pointlike[]>) {
 
   const normalAt = (t: Arg<number>): DerivedPoint => tangentAt(t).perp();
 
-  const angleAt = (t: Arg<number>): ReadonlySignal<number> => {
+  const angleAt = (t: Arg<number>): ReadonlyCell<number> => {
     const tan = tangentAt(t);
-    return computed(() => Math.atan2(tan.y.value, tan.x.value));
+    return cell.derived(() => Math.atan2(tan.y.value, tan.x.value));
   };
 
   return { length, at, atDistance, tangentAt, normalAt, angleAt };
@@ -109,22 +108,21 @@ function sampler(pts: Signal<readonly Pointlike[]>) {
  *  place and return `this`. The `d` attribute and all sampling methods
  *  react to point changes automatically. */
 export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
-  private readonly _points: Signal<readonly Pointlike[]>;
+  private readonly _points: Cell<readonly Pointlike[]>;
   readonly closed: boolean;
 
-  readonly length: ReadonlySignal<number>;
-  /** Sample the path at parameter `t ∈ [0, 1]`. Named to avoid
-   *  shadowing the Box `at(u, v)` anchor — same `t` symmetry as
-   *  `tangentAt` / `normalAt` / `angleAt`. */
+  readonly length: ReadonlyCell<number>;
+  /** Sample at `t ∈ [0, 1]`. Named to avoid shadowing the Box `at(u, v)`
+   *  anchor — same symmetry as `tangentAt` / `normalAt` / `angleAt`. */
   readonly pointAt: (t: Arg<number>) => DerivedPoint;
   readonly atDistance: (d: Arg<number>) => DerivedPoint;
   readonly tangentAt: (t: Arg<number>) => DerivedPoint;
   readonly normalAt: (t: Arg<number>) => DerivedPoint;
-  readonly angleAt: (t: Arg<number>) => ReadonlySignal<number>;
+  readonly angleAt: (t: Arg<number>) => ReadonlyCell<number>;
 
   constructor(start: Pointlike | readonly Pointlike[] = [], opts: O = {} as O) {
     const init: readonly Pointlike[] = isPoint(start) ? [start] : start;
-    const points = signal<readonly Pointlike[]>(init);
+    const points = cell<readonly Pointlike[]>(init);
     const closed = opts.closed ?? false;
 
     super(
@@ -170,7 +168,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
     wireStroke(this, opts, closed, () => {
       this.attr(
         "d",
-        computed(() => {
+        cell.derived(() => {
           const ps = points.value;
           if (ps.length === 0) return "";
           const parts: string[] = [`M ${ps[0].x.value} ${ps[0].y.value}`];
@@ -227,8 +225,8 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
     const d = toSig(dist);
     return this.extend(
       this.last.offset(
-        computed(() => Math.cos(a.value) * d.value),
-        computed(() => Math.sin(a.value) * d.value),
+        cell.derived(() => Math.cos(a.value) * d.value),
+        cell.derived(() => Math.sin(a.value) * d.value),
       ),
     );
   }

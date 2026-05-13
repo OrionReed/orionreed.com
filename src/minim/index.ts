@@ -2,7 +2,7 @@
 //   core/   — signals, Anim, suspensions, composers, drive, timeline, …
 //   scene/  — Shape, Point, Box, aggregates, Mount, …
 //   shapes/ — visuals + layout + list (space stdlib)
-//   motion/ — easings, transitions, integrators (time stdlib)
+//   motion/ — easings, transitions, behaviors, choreographers, clocks
 //   anchor, diagram, attr, viewport — top-level utilities + scaffold
 //
 // Sibling subpath modules — import explicitly:
@@ -12,22 +12,13 @@
 
 // ── Core ────────────────────────────────────────────────────────────
 
-// `cell` is the unified user-facing primitive for reactive state:
-//   cell(v)            — writable        (alias for `signal(v)`)
-//   cell.derived(fn)   — read-only       (alias for `computed(fn)`)
-//   cell.lens(r, w)    — writable lens   (alias for `lens(r, w)`)
-// `Cell<T, W>` is the unified type. The older `signal`/`computed`/
-// `lens` and `Signal`/`ReadonlySignal` names remain for back-compat.
+// `cell` is the unified reactive primitive:
+//   cell(v)            — writable
+//   cell.derived(fn)   — read-only
+//   cell.lens(r, w)    — writable lens
+// `Cell<T, W>` is the type; underlying preact factories stay internal.
 export { cell, type Cell, type ReadonlyCell, type RW } from "./core/cell";
-
-export {
-  signal,
-  computed,
-  effect,
-  lens,
-  Signal,
-  type ReadonlySignal,
-} from "./core/signal";
+export { effect, batch, untracked } from "./core/signal";
 
 export {
   tween,
@@ -38,13 +29,11 @@ export {
   type Lerp,
 } from "./core/tween";
 
-// Reactive value-type framework. `struct(name, defaults)` is the
-// fluent Builder for record types; `defineCell` is the underlying
-// primitive (escape hatch for non-record types: arrays, variants,
-// strings — see `lerpable` for the simplest case).
+// Reactive value-type framework. `struct(name, defaults)` is the fluent
+// Builder for record value types. For arrays/strings/variants use
+// `lerpable(initial, lerp)` from `core/tween.ts`.
 export {
   struct,
-  defineCell,
   type Reactive,
   type StructType,
 } from "./signals/struct";
@@ -56,9 +45,8 @@ export { toSig, when, type Arg } from "./core/arg";
 
 export { snapshot, counter } from "./core/store";
 
-// `Vec` is the registered struct (value + type-witness via
-// `instanceof`). The plain `{x, y}` value type is exported as `V` —
-// what the legacy code called `type Vec` is now `type V`.
+// `Vec` is the registered struct (value + type-witness via `instanceof`);
+// `V` is the plain `{x, y}` value type.
 export {
   Vec,
   pt,
@@ -78,16 +66,13 @@ export {
   centroid,
   meanRotation,
   meanScale,
-  meanVec,
-  meanNum,
 } from "./scene/aggregates";
-// Generic mean<T> — works for any value type with a registered
-// vector-space algebra. meanVec/meanNum/centroid are sugar over it.
+/** Generic mean over any signals with a registered struct algebra
+ *  (Vec/Box/Color/Matrix2D/…) or raw `Signal<number>`. `centroid`
+ *  etc. are sugar. */
 export { mean } from "./signals/aggregates";
 
-// `Box` re-exports BOTH the value (the registered struct, used as
-// `Box.signal({...})`, `instanceof Box`, etc.) AND the type alias for
-// the plain `{x, y, w, h}` shape — same name, two namespaces.
+// `Box` is both the registered struct and the plain `{x, y, w, h}` type.
 // Mirrors how `Vec` works. The plain `box(x,y,w,h)` constructor is
 // kept internal (would collide with `box(part)` decoration).
 export {
@@ -95,6 +80,7 @@ export {
   expandBox,
   unionBox,
   boxEdgeFrom,
+  isBox,
   type Boxlike,
 } from "./signals/box";
 

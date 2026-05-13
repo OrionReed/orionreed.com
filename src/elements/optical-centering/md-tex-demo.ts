@@ -28,8 +28,8 @@ import {
   Anchor,
   Diagram,
   Mount,
+  cell,
   label,
-  signal,
   snapshot,
   stagger,
   type Content,
@@ -52,7 +52,7 @@ export class MdTexDemo extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(640, 280);
 
-    const status = signal<Content>("");
+    const status = cell<Content>("");
 
     s(
       label(view.top.down(22), "tex — derivations, representations, identity", {

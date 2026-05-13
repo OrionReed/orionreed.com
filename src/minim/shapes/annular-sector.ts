@@ -1,4 +1,4 @@
-import { computed, toSig, type Arg, type NumSig } from "../core";
+import { cell, toSig, type Arg, type NumSig } from "../core";
 import {
   Shape,
   Vec,
@@ -51,7 +51,7 @@ export class AnnularSector<
     wireStroke(this, opts, true, () => {
       this.attr(
         "d",
-        computed(() => {
+        cell.derived(() => {
           const cx = center.x.value;
           const cy = center.y.value;
           const _ro = ro.value;

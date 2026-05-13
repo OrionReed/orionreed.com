@@ -27,7 +27,6 @@ import {
   label,
   lensPoint,
   line,
-  meanVec,
   pt,
   type Point,
   type V,

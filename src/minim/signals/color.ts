@@ -22,9 +22,8 @@ export const Color = struct<C>("Color", { r: 0, g: 0, b: 0, a: 1 })
   )
   .equals((x, y) => x.r === y.r && x.g === y.g && x.b === y.b && x.a === y.a)
   .ops({
-    /** Component-wise add. Stamps `[ALGEBRA]` (with sub/scale below)
-     *  so integrators (spring/oscillate/drift/attract) and aggregates
-     *  (mean) work on `Reactive<C>`. */
+    /** Component-wise add. With `sub`+`scale` stamps `[ALGEBRA]` so
+     *  behaviors and aggregates work on `Reactive<C>`. */
     add: (a, b: C): C => ({
       r: a.r + b.r,
       g: a.g + b.g,

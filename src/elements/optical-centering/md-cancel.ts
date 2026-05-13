@@ -9,17 +9,17 @@ import {
   Mount,
   Anchor,
   button,
+  cell,
   circle,
   endOn,
   fadeOut,
   label,
   oscillate,
   pt,
-  signal,
   untilChange,
   type Animator,
+  type Cell,
   type Content,
-  type Signal,
   type Writable,
 } from "../../minim";
 
@@ -33,10 +33,10 @@ const BTN_GAP = 12;
 
 function* lifecycle(
   shape: Writable<"opacity">,
-  y: Signal<number>,
+  y: Cell<number>,
   amp: number,
   freq: number,
-  stop: Signal<boolean>,
+  stop: Cell<boolean>,
 ): Animator {
   yield endOn(untilChange(stop), oscillate(y, amp, freq));
   yield* fadeOut(shape, 0.4);
@@ -46,7 +46,7 @@ export class MdCancel extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(380, 160);
 
-    const status = signal<Content>("running");
+    const status = cell<Content>("running");
     s(
       label(view.top.down(STATUS_Y), status, {
         size: 11,
@@ -57,14 +57,14 @@ export class MdCancel extends Diagram {
 
     type Slot = {
       x: number;
-      y: Signal<number>;
+      y: Cell<number>;
       shape: Writable<"opacity">;
     };
     const slots: Slot[] = [];
     const stride = (view.w.value - 60) / (N - 1);
     for (let i = 0; i < N; i++) {
       const x = 30 + i * stride;
-      const y = signal(SHAPE_Y);
+      const y = cell(SHAPE_Y);
       const shape = s(circle(pt(x, y), 8, { fill: true }));
       slots.push({ x, y, shape });
     }
@@ -72,13 +72,13 @@ export class MdCancel extends Diagram {
     // Per-cycle stop signal + collected disposers. EXIT flips stop;
     // STOP calls every disposer.
     const anim = this.anim;
-    let stop: Signal<boolean> = signal(false);
+    let stop: Cell<boolean> = cell(false);
     let disposers: (() => void)[] = [];
 
     const startCycle = (): void => {
       for (const slot of slots) slot.shape.opacity.value = 1;
       for (const slot of slots) slot.y.value = SHAPE_Y;
-      stop = signal(false);
+      stop = cell(false);
       const localStop = stop;
       disposers = slots.map((slot, i) =>
         anim.run(() =>

@@ -1,7 +1,7 @@
 // Labelled, clickable region — group + tinted-rect + label, with
 // hover/click handlers wired.
 
-import { signal, toSig, type Arg, type Signal } from "../core";
+import { cell, toSig, type Arg, type Cell } from "../core";
 import { type AnyShape, type Pointlike, pt } from "../scene";
 import { Anchor } from "../anchor";
 import { tokens } from "./tokens";
@@ -14,9 +14,8 @@ export interface ButtonOpts {
   width?: number;
   height?: number;
   size?: Arg<number>;
-  /** Externally-controlled hover signal — useful for sharing state
-   *  across shapes. Defaults to a fresh internal signal. */
-  hovered?: Signal<boolean>;
+  /** Externally-controlled hover cell — share across shapes if needed. */
+  hovered?: Cell<boolean>;
 }
 
 /** A clickable, labelled region positioned at `pos` (top-left). The
@@ -31,7 +30,7 @@ export function button(
   const w = opts.width ?? 80;
   const h = opts.height ?? 26;
   const size = toSig(opts.size ?? 11);
-  const hovered = opts.hovered ?? signal(false);
+  const hovered = opts.hovered ?? cell(false);
 
   const g = group({ translate: pos });
 

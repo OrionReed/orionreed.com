@@ -1,14 +1,13 @@
-// Clock constructors — use `anim` to spawn loops that advance a
-// signal (or call a fn) at a fixed interval. For per-frame integration
-// (including continuous clock advancement at a rate), see
-// `motion/integrators.ts:drift`.
+// Clock constructors — spawn loops on `anim` that advance a signal
+// (or call a fn) at a fixed interval. For continuous per-frame
+// advancement at a rate, see `motion/behaviors:drift`.
 
-import { signal, type Signal } from "../core";
+import { cell, type Cell } from "../core";
 import type { Anim } from "../core";
 
-/** Tick signal — increments every `sec` seconds while `anim` is active. */
-export function pulse(anim: Anim, sec: number): Signal<number> {
-  const sig = signal(0);
+/** Tick cell — increments every `sec` seconds while `anim` is active. */
+export function pulse(anim: Anim, sec: number): Cell<number> {
+  const sig = cell(0);
   anim.loop(function* () {
     yield sec;
     sig.value = sig.peek() + 1;

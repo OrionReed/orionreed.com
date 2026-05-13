@@ -1,6 +1,6 @@
 // Shared style options + applier for stroked/filled shapes.
 
-import { computed, toSig, type Arg } from "../core";
+import { cell, toSig, type Arg } from "../core";
 import type { AnyShape, ShapeOpts } from "../scene";
 import { tokens } from "./tokens";
 import { dashedPath } from "./dashed";
@@ -76,6 +76,6 @@ export function setupDashed<S extends AnyShape>(
 
   s.attr(
     "d",
-    computed(() => dashedPath(s.segments(), { closed, capExtension: capExt })),
+    cell.derived(() => dashedPath(s.segments(), { closed, capExtension: capExt })),
   );
 }

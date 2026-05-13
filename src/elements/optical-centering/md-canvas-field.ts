@@ -29,11 +29,11 @@
 
 import {
   Anim,
+  cell,
   drive,
   effect,
   every,
   pt,
-  signal,
   type Point,
 } from "../../minim";
 
@@ -130,14 +130,14 @@ export class MdCanvasField extends HTMLElement {
   private disposers: Array<() => void> = [];
 
   // Reactive knobs — the *renderer-agnostic* state.
-  private phaseIdx = signal(0);
-  private hueBase = signal(210);
-  private hueSpread = signal(80);
-  private size = signal(2.1);
+  private phaseIdx = cell(0);
+  private hueBase = cell(210);
+  private hueSpread = cell(80);
+  private size = cell(2.1);
   private pointer: Point = pt(W / 2, H / 2);
-  private statusText = signal("");
+  private statusText = cell("");
   // Rolling-average fps, refreshed every 0.5s via `every(...)`.
-  private fpsSmoothed = signal(0);
+  private fpsSmoothed = cell(0);
 
   // Per-particle state — typed arrays. 1500 reactives would be
   // wasteful; reactivity lives in the knobs that *shape* the particles.

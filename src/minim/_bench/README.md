@@ -73,8 +73,11 @@ addresses most of this already, but the cross-process script remains
 the gold standard for "is this number real?" investigations.
 
 ```sh
-node node_modules/.bin/vite-node src/minim/_bench/_isolated_check.ts -- direct x.value
-node node_modules/.bin/vite-node src/minim/_bench/_isolated_check.ts -- cached center.x.value
-# variants: direct | cached | naive | bound
+node node_modules/.bin/vite-node src/minim/_bench/_isolated_check.ts direct x.value
+node node_modules/.bin/vite-node src/minim/_bench/_isolated_check.ts delegate center.x.value
+# variants: direct | delegate | lazy
 # targets:  x.value | center.x.value | mixed
 ```
+
+`_nested_check.ts` is a regression probe for `.nested()` SoA storage —
+35 assertions across all three flavors. Run with `vite-node` directly.

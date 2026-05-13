@@ -18,19 +18,18 @@ import { computed, effect, signal } from "../core/signal";
 import {
   identity,
   multiply,
-  type M,
+  Matrix2D,
 } from "../signals/matrix";
-import { Matrix2D } from "../signals/matrix";
 import { bench, group } from "mitata";
 
 const N = 1000;
-const STEP: M = { a: 1, b: 0, c: 0, d: 1, e: 1, f: 0 };
+const STEP: Matrix2D = { a: 1, b: 0, c: 0, d: 1, e: 1, f: 0 };
 
 // ── Strategy A: reactive chain (proposed Frames-in-Shapes)
 //   Each level: world[i] = world[i-1].multiply(local[i])
 function buildReactiveChain(n: number) {
-  const local = Array.from({ length: n }, () => signal<M>({ ...STEP }));
-  const world: { value: M }[] = [];
+  const local = Array.from({ length: n }, () => signal<Matrix2D>({ ...STEP }));
+  const world: { value: Matrix2D }[] = [];
   world.push(local[0]);
   for (let i = 1; i < n; i++) {
     const prev = world[i - 1];
@@ -43,9 +42,9 @@ function buildReactiveChain(n: number) {
 // ── Strategy B: on-demand walk (current Shape behavior)
 //   Each shape stores a parent ref; reading worldFrame walks up.
 function buildWalkChain(n: number) {
-  const local = Array.from({ length: n }, () => signal<M>({ ...STEP }));
+  const local = Array.from({ length: n }, () => signal<Matrix2D>({ ...STEP }));
   const parent = (i: number): number | null => (i === 0 ? null : i - 1);
-  const worldOf = (i: number): M => {
+  const worldOf = (i: number): Matrix2D => {
     let m = local[i].value;
     let p = parent(i);
     while (p !== null) {

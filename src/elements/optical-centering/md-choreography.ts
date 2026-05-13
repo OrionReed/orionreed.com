@@ -11,8 +11,8 @@ import {
   easeInOut,
   label,
   orbit,
+  cell,
   pt,
-  signal,
   snapshot,
   splay,
   stagger,
@@ -68,7 +68,7 @@ export class MdChoreography extends Diagram {
       s(circle(pt(0, 0), 18, { translate: p, fill: COLORS[i] })),
     );
 
-    const phase = signal<Content>("assemble (row)");
+    const phase = cell<Content>("assemble (row)");
     const c = centroid(...shapes);
     s(
       label(view.top.down(24), phase, {
@@ -85,7 +85,7 @@ export class MdChoreography extends Diagram {
     const reset = snapshot(...shapes.map((sh) => sh.translate));
 
     // Orbit speed as a signal — tween for ease-in / hold / ease-out.
-    const orbitRate = signal(0);
+    const orbitRate = cell(0);
     const orbitCentre = pt(ORBIT_CENTRE.x, ORBIT_CENTRE.y);
 
     const anim = this.anim;

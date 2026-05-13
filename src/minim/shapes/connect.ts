@@ -1,7 +1,7 @@
 // Connectors. Uses `shape.boundary` so analytic edges work without
 // per-kind dispatch.
 
-import { computed, toSig, type Arg } from "../core";
+import { cell, toSig, type Arg } from "../core";
 import { Shape, SVG_NS, type Pointlike } from "../scene";
 import { tokens } from "./tokens";
 import { Line, type LineOpts } from "./line";
@@ -42,8 +42,8 @@ export function arrow(
 
   const gapSig = toSig(opts.gap ?? ARROW_GAP_DEFAULT);
   const dir = bBase.sub(aBase).normalize();
-  const aP = aBase.add(dir.scale(computed(() => gapSig.value + tokens.weight)));
-  const bP = bBase.sub(dir.scale(computed(() => gapSig.value + ARROW_W)));
+  const aP = aBase.add(dir.scale(cell.derived(() => gapSig.value + tokens.weight)));
+  const bP = bBase.sub(dir.scale(cell.derived(() => gapSig.value + ARROW_W)));
 
   const line = new Line(aP, bP, opts);
   line.attr("marker-end", `url(#${ARROW_ID})`);

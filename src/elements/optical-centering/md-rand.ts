@@ -8,8 +8,8 @@ import {
   Mount,
   Anchor,
   bounceIn,
+  cell,
   circle,
-  computed,
   easeIn,
   easeInOut,
   easeOut,
@@ -17,7 +17,6 @@ import {
   label,
   pt,
   rand,
-  signal,
   snapshot,
   type Animator,
   type Content,
@@ -98,9 +97,9 @@ export class MdRand extends Diagram {
     const view = this.view(600, 280);
 
     // ── State ────────────────────────────────────────────────────────
-    const current = signal<Pick | null>(null);
-    const currentName = computed<Content>(() => current.value?.name ?? "—");
-    const currentColor = computed(() => current.value?.color ?? "#1a1a1a");
+    const current = cell<Pick | null>(null);
+    const currentName = cell.derived<Content>(() => current.value?.name ?? "—");
+    const currentColor = cell.derived(() => current.value?.color ?? "#1a1a1a");
 
     // ── Header ───────────────────────────────────────────────────────
     s(
@@ -149,8 +148,8 @@ export class MdRand extends Diagram {
       }),
     );
     MOVES.forEach((m, i) => {
-      const isActive = computed(() => current.value?.name === m.name);
-      const opacity = computed(() => (isActive.value ? 1 : 0.4));
+      const isActive = cell.derived(() => current.value?.name === m.name);
+      const opacity = cell.derived(() => (isActive.value ? 1 : 0.4));
       s(
         circle(pt(MENU_X, MENU_Y + i * ROW_H), 5, {
           fill: m.color,

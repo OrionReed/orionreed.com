@@ -7,13 +7,13 @@ import {
   Mount,
   type AnyShape,
   bounceIn,
+  cell,
   circle,
   group,
   pt,
   stagger,
   rect,
-  signal,
-  type Signal,
+  type Cell,
   zoomOut,
 } from "../../minim";
 
@@ -26,8 +26,8 @@ export class MdOrbits extends Diagram {
 
     // Integrate ω = 2π/period per frame. Returns the angle Signal
     // (radians, wraps mod 2π).
-    const angularMotion = (period: number, sig?: Signal<number>) => {
-      const a = sig ?? signal(Math.random() * 2 * Math.PI);
+    const angularMotion = (period: number, sig?: Cell<number>) => {
+      const a = sig ?? cell(Math.random() * 2 * Math.PI);
       const omega = (2 * Math.PI) / period;
       this.anim.loop(function* () {
         while (true) {

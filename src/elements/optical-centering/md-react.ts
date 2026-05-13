@@ -9,14 +9,13 @@ import {
   Anchor,
   bounceIn,
   button,
+  cell,
   circle,
-  computed,
   fadeOut,
   label,
   pt,
   race,
   rect,
-  signal,
   suspend,
   zoomOut,
   type Animator,
@@ -59,9 +58,9 @@ export class MdReact extends Diagram {
       }),
     );
 
-    const hits = signal(0);
-    const misses = signal(0);
-    const status = signal<Content>("running");
+    const hits = cell(0);
+    const misses = cell(0);
+    const status = cell<Content>("running");
 
     s(
       label(pt(PAD, STATS_Y), hits.derive((n) => `hits: ${n}`), {
@@ -75,7 +74,7 @@ export class MdReact extends Diagram {
       ),
       label(
         pt(W / 2, STATS_Y),
-        computed(() => {
+        cell.derived(() => {
           const h = hits.value;
           const m = misses.value;
           const total = h + m;

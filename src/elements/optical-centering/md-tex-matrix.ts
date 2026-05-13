@@ -9,8 +9,8 @@ import {
   Anchor,
   Diagram,
   Mount,
+  cell,
   label,
-  signal,
   snapshot,
   type Content,
 } from "../../minim";
@@ -39,7 +39,7 @@ export class MdTexMatrix extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(640, 280);
 
-    const status = signal<Content>("");
+    const status = cell<Content>("");
 
     s(
       label(view.top.down(22), "tex — matrix × vector, compact ↔ evaluated", {

@@ -7,12 +7,12 @@ import {
   line,
   pt,
   rect,
-  signal,
+  cell,
   snapshot,
   split,
   t,
   when,
-  type Signal,
+  type Cell,
 } from "../minim";
 
 import * as R from "./rand";
@@ -40,7 +40,7 @@ function initialChunks(prefix: string, n: number): ChunkState[] {
 }
 
 export class MdQrtpHandshake extends Diagram {
-  @attr.num(4) declare chunks: Signal<number>;
+  @attr.num(4) declare chunks: Cell<number>;
 
   protected scene(s: Mount): void {
     const N = this.chunks.value;
@@ -52,8 +52,8 @@ export class MdQrtpHandshake extends Diagram {
     // the chunk arrays. Arrows fire iff the corresponding chunk's `ack`
     // is set.
     const state = {
-      A: signal(initialChunks("A", N)),
-      B: signal(initialChunks("B", N)),
+      A: cell(initialChunks("A", N)),
+      B: cell(initialChunks("B", N)),
     };
 
     // Build one row of N chunks reading from `state[device]`. Returns

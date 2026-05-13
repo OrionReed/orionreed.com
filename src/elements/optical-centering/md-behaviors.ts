@@ -11,17 +11,17 @@ import {
   Mount,
   Anchor,
   attract,
+  cell,
   circle,
   drift,
   easeInOut,
   label,
   oscillate,
   pt,
-  signal,
   spring,
   type Arg,
+  type Cell,
   type Point,
-  type Signal,
 } from "../../minim";
 
 const N_TRAIL = 14;
@@ -40,16 +40,16 @@ export class MdBehaviors extends Diagram {
     // ── Shared trail factory ─────────────────────────────────────────
     // N circles, each chasing the previous link's position.
     const trail = (
-      seedX: Signal<number>,
-      seedY: Signal<number>,
+      seedX: Cell<number>,
+      seedY: Cell<number>,
       color: string,
-      attach: (sig: Signal<number>, target: Arg<number>) => void,
+      attach: (sig: Cell<number>, target: Arg<number>) => void,
     ) => {
       let prevX: Arg<number> = seedX;
       let prevY: Arg<number> = seedY;
       for (let i = 0; i < N_TRAIL; i++) {
-        const x = signal(seedX.peek());
-        const y = signal(seedY.peek());
+        const x = cell(seedX.peek());
+        const y = cell(seedY.peek());
         attach(x, prevX);
         attach(y, prevY);
         s(
@@ -64,9 +64,9 @@ export class MdBehaviors extends Diagram {
     };
 
     // ── Lane 0: attract (blue) ──────────────────────────────────────
-    const ax = signal(cx);
-    const ay = signal(laneY(0));
-    const av = signal(180);
+    const ax = cell(cx);
+    const ay = cell(laneY(0));
+    const av = cell(180);
     this.anim.run(() => drift(ax, av));
     this.anim.run(() => oscillate(ay, 32, 0.4));
     this.anim.run(function* () {
@@ -84,10 +84,10 @@ export class MdBehaviors extends Diagram {
     // ── Lane 1: spring (red), pauses ────────────────────────────────
     // byAmp is reactive so the pause loop can tween it to zero — this
     // stops both axes so the head truly freezes, not just on x.
-    const bx = signal(cx);
-    const by = signal(laneY(1));
-    const bv = signal(-150);
-    const byAmp = signal(32);
+    const bx = cell(cx);
+    const by = cell(laneY(1));
+    const bv = cell(-150);
+    const byAmp = cell(32);
     this.anim.run(() => drift(bx, bv));
     this.anim.run(() => oscillate(by, byAmp, 0.7));
     // Wall flip runs every frame; bv=0 during pauses keeps it dormant.
@@ -115,7 +115,7 @@ export class MdBehaviors extends Diagram {
     // Head wanders on a Lissajous path; each frame the chain is solved
     // forward: link[i] is placed exactly LINK_LEN from link[i-1].
     const lc = { x: cx, y: laneY(2) };
-    const phase = signal(0);
+    const phase = cell(0);
     this.anim.run(() => drift(phase, 1));
     const headPos = pt(
       () => lc.x + 90 * Math.sin(phase.value * 1.6),

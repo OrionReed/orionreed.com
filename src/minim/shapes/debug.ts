@@ -12,7 +12,6 @@
 // The `--minim-debug` CSS var lets authors theme; the fallback is
 // magenta so debug shapes always read as "scaffolding".
 
-import { computed } from "../core";
 import {
   Vec,
   Shape,
@@ -46,7 +45,7 @@ const outlineOpts = {
  *  through. */
 function parentBox(b: Boxlike): Boxlike {
   if (b instanceof Shape) {
-    return Box.derived(() => transformBox(b.transform.value, b.box.value));
+    return Box.derived(() => transformBox(b.localFrame.value, b.box.value));
   }
   return b;
 }
@@ -65,7 +64,7 @@ const dot = (p: Pointlike | Boxlike, r = 2.5) =>
 /** Crosshair at a Shape's rotate/scale pivot, in parent frame. */
 const origin = (s: Shape, size = 8) => {
   const pivot = Vec.derived(() =>
-    transformPoint(s.transform.value, s.origin.value),
+    transformPoint(s.localFrame.value, s.origin.value),
   );
   const half = size / 2;
   const g = group({ aside: true, opacity: 0.75 });

@@ -8,15 +8,14 @@ import {
   EventBus,
   Mount,
   Anchor,
+  cell,
   circle,
-  computed,
   draggable,
   label,
   line,
   pt,
   rect,
   sequential,
-  signal,
   snapshot,
   timeline,
 } from "../../minim";
@@ -33,12 +32,12 @@ export class MdTimelineEditor extends Diagram {
     const tl = timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));
     const reset = snapshot(tl.clock);
 
-    const phaseName = computed(() => {
+    const phaseName = cell.derived(() => {
       for (const name of PHASES) if (tl[name].active.value) return name;
       return tl.clock.value >= tl.duration.value ? "rest" : PHASES[0];
     });
     const bus = new EventBus();
-    const taps = signal(0);
+    const taps = cell(0);
     bus.on("ping", () => {
       taps.value = taps.peek() + 1;
     });
@@ -47,7 +46,7 @@ export class MdTimelineEditor extends Diagram {
     s(
       label(
         view.top.down(24),
-        computed(() => `phase: ${phaseName.value}   ·   taps: ${taps.value}`),
+        cell.derived(() => `phase: ${phaseName.value}   ·   taps: ${taps.value}`),
         { size: 14, opacity: 0.75 },
       ),
     );
@@ -57,7 +56,7 @@ export class MdTimelineEditor extends Diagram {
     const STRIP_W = view.w.value - 120;
     const STRIP_Y = 60;
     const STRIP_H = 36;
-    const scale = computed(() => STRIP_W / tl.duration.value);
+    const scale = cell.derived(() => STRIP_W / tl.duration.value);
 
     PHASES.forEach((name, i) => {
       const c = tl[name];
@@ -73,13 +72,13 @@ export class MdTimelineEditor extends Diagram {
       s(
         label(
           body.center,
-          computed(() => `${name} ${c.dur.value.toFixed(2)}s`),
+          cell.derived(() => `${name} ${c.dur.value.toFixed(2)}s`),
           { size: 11, opacity: 0.95 },
         ),
       );
     });
 
-    const playX = computed(() => STRIP_X + tl.t.value * STRIP_W);
+    const playX = cell.derived(() => STRIP_X + tl.t.value * STRIP_W);
     s(
       line(pt(playX, STRIP_Y - 6), pt(playX, STRIP_Y + STRIP_H + 6), {
         strokeWidth: 2,

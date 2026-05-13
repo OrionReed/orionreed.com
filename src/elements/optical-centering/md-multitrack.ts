@@ -5,8 +5,8 @@ import {
   Diagram,
   Mount,
   Anchor,
+  cell,
   circle,
-  computed,
   draggable,
   label,
   line,
@@ -47,7 +47,7 @@ export class MdMultitrack extends Diagram {
 
     // ── Strip ─────────────────────────────────────────────────────
     const STRIP_W = view.w.value - 2 * STRIP_X;
-    const SCALE = computed(() =>
+    const SCALE = cell.derived(() =>
       tl.duration.value > 0 ? STRIP_W / tl.duration.value : 0,
     );
 
@@ -139,13 +139,13 @@ export class MdMultitrack extends Diagram {
     //   scale.t   → radius oscillates (sin: 0 at endpoints)
     //   shift.t   → x oscillates the same way
     //   fadeOut.t → opacity ramps down
-    const ballX = computed(
+    const ballX = cell.derived(
       () => STAGE_X + Math.sin(tl.shift.t.value * Math.PI) * 110,
     );
-    const ballR = computed(
+    const ballR = cell.derived(
       () => 18 + Math.sin(tl.scale.t.value * Math.PI) * 28,
     );
-    const ballOpacity = computed(
+    const ballOpacity = cell.derived(
       () => tl.fadeIn.t.value * (1 - tl.fadeOut.t.value),
     );
 
@@ -158,7 +158,7 @@ export class MdMultitrack extends Diagram {
     s(
       label(
         view.bottom.up(32),
-        computed(() =>
+        cell.derived(() =>
           `time: ${tl.clock.value.toFixed(2)}s / ${tl.duration.value.toFixed(2)}s`,
         ),
         { size: 11, opacity: 0.65, align: Anchor.Center },

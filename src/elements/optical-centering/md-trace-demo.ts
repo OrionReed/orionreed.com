@@ -11,8 +11,8 @@ import {
   Diagram,
   Mount,
   Anchor,
+  cell,
   circle,
-  computed,
   counter,
   easeOut,
   fadeIn,
@@ -113,15 +113,15 @@ export class MdTraceDemo extends Diagram {
     // and layout only recompute when structure changes.
     const version = counter(trace.onChange);
 
-    const tree = computed(() => {
+    const tree = cell.derived(() => {
       version.value;
       return traceTree(trace.spans);
     });
-    const layout = computed(() => assignLanes(tree.value));
+    const layout = cell.derived(() => assignLanes(tree.value));
 
     const GANTT_W = W - 2 * PAD;
     // SCALE depends on `now` so the gantt re-fits as in-flight time grows.
-    const SCALE = computed(() => {
+    const SCALE = cell.derived(() => {
       now.value;
       version.value;
       return GANTT_W / Math.max(trace.duration(), SCALE_MIN);
@@ -136,7 +136,7 @@ export class MdTraceDemo extends Diagram {
       }),
       label(
         pt(W - PAD, HEADER_Y),
-        computed(() => {
+        cell.derived(() => {
           version.value;
           now.value;
           const n = tree.value.size;
@@ -150,7 +150,7 @@ export class MdTraceDemo extends Diagram {
     // ── Rows ───────────────────────────────────────────────────────
     // A fresh slice per version-bump forces forEach to diff when new
     // spans appear; per-frame growth flows through per-row computeds.
-    const spansSig = computed(() => {
+    const spansSig = cell.derived(() => {
       version.value;
       return trace.spans.slice();
     });
@@ -159,24 +159,24 @@ export class MdTraceDemo extends Diagram {
       s.root,
       spansSig,
       (span) => {
-        const x = computed(() => PAD + span.spawnedAt * SCALE.value);
-        const width = computed(() => {
+        const x = cell.derived(() => PAD + span.spawnedAt * SCALE.value);
+        const width = cell.derived(() => {
           const end = span.completedAt ?? now.value;
           return Math.max(2, (end - span.spawnedAt) * SCALE.value);
         });
-        const y = computed(() => {
+        const y = cell.derived(() => {
           const lane = layout.value.lanes.get(span.id) ?? 0;
           return ROWS_Y + lane * (ROW_H + ROW_GAP);
         });
-        const isRunning = computed(() => {
+        const isRunning = cell.derived(() => {
           version.value;
           return span.completedAt === undefined;
         });
-        const fill = computed(() => {
+        const fill = cell.derived(() => {
           const d = tree.value.byId.get(span.id)?.depth ?? 0;
           return ROW_FILL[Math.min(d, ROW_FILL.length - 1)];
         });
-        const opacity = computed(() => (isRunning.value ? 0.55 : 0.85));
+        const opacity = cell.derived(() => (isRunning.value ? 0.55 : 0.85));
 
         const bar = rect(x, y, width, ROW_H, {
           fill,

@@ -3,16 +3,15 @@ import {
   Mount,
   annularSector,
   attr,
+  cell,
   circle,
-  computed,
   label,
   line,
   polar,
-  signal,
   snapshot,
   when,
   type Animator,
-  type Signal,
+  type Cell,
 } from "../minim";
 import { grey, ink, stroke } from "./color";
 import * as R from "./rand";
@@ -35,8 +34,8 @@ const T = {
 };
 
 export class MdQrtpProtocol extends Diagram {
-  @attr.num(60) declare cells: Signal<number>;
-  @attr.bool() declare backchannel: Signal<boolean>;
+  @attr.num(60) declare cells: Cell<number>;
+  @attr.bool() declare backchannel: Cell<boolean>;
 
   protected scene(s: Mount): void {
     const N = this.cells.value;
@@ -55,16 +54,16 @@ export class MdQrtpProtocol extends Diagram {
     // and write. `snapshot(state)` flattens all signal-valued
     // properties for one-call reset.
     const state = {
-      cells: signal(new Map<number, CellState>()),
-      overrides: signal(new Map<number, string>()),
-      broadcast: signal(0),
-      lastBroadcast: signal(-1),
+      cells: cell(new Map<number, CellState>()),
+      overrides: cell(new Map<number, string>()),
+      broadcast: cell(0),
+      lastBroadcast: cell(-1),
     };
 
     // Per-cell color: override > broadcast highlight > state-based.
     // Returns null when the cell should be invisible.
     const cellColor = (i: number) =>
-      computed((): string | null => {
+      cell.derived((): string | null => {
         const ov = state.overrides.value.get(i);
         if (ov !== undefined) return ov;
         if (i === state.lastBroadcast.value) return stroke.toString();

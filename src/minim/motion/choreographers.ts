@@ -1,11 +1,10 @@
-// Multi-shape recipes — yield-array compositions over N shapes that
-// each animate one signal per shape. Pure sugar over `.to(...)` and
-// `yield [...]`; named for the intent. For rigid group translate,
-// reach for `centroid(...shapes).to(...)` instead. For continuous
-// circular motion, see `orbit` in `motion/integrators.ts`.
+// Multi-shape recipes. `swap`/`splay`/`assemble`/`stagger` are bounded
+// (yield-array compositions over `.to(...)`); `orbit` is continuous (a
+// `drive` step over N translates). For rigid group translate, reach for
+// `centroid(...shapes).to(...)` instead.
 
-import type { Animator, Easing, V } from "../core";
-import { delay } from "../core";
+import type { Animator, Arg, Easing, V } from "../core";
+import { delay, drive, toSig } from "../core";
 import { isPoint, type Pointlike, type Writable } from "../scene";
 
 /** Swap two shapes' positions over `sec`. */
@@ -54,8 +53,7 @@ export function* splay(
   });
 }
 
-/** Tween each shape to its paired target (matched by index). Targets
- *  may be `V` literals or any `Pointlike`. */
+/** Tween each shape to its paired target (matched by index). */
 export function* assemble(
   shapes: readonly Writable<"translate">[],
   targets: readonly (V | Pointlike)[],
@@ -65,5 +63,39 @@ export function* assemble(
   yield shapes.map((s, i) => {
     const t = targets[i];
     return s.translate.to(isPoint(t) ? t.value : t, sec, ease);
+  });
+}
+
+/** Continuous orbit around `center`, one revolution per `period` seconds.
+ *  Picks up each shape's current radius/angle (no jump). Never returns.
+ *  `rate` is a reactive multiplier — tween for ease-in/out; negative
+ *  reverses; 0 pauses. */
+export function orbit(
+  center: Pointlike,
+  shapes: readonly Writable<"translate">[],
+  opts: { period?: number; rate?: Arg<number> } = {},
+): Animator {
+  const period = opts.period ?? 4;
+  const rate = toSig(opts.rate ?? 1);
+  const omega = (2 * Math.PI) / period;
+  const N = shapes.length;
+  const c0 = center.value;
+  const init = shapes.map((sh) => {
+    const v = sh.translate.peek();
+    const dx = v.x - c0.x;
+    const dy = v.y - c0.y;
+    return { angle: Math.atan2(dy, dx), radius: Math.hypot(dx, dy) };
+  });
+  let t = 0;
+  return drive((dt) => {
+    t += dt * rate.value;
+    const c = center.value;
+    for (let i = 0; i < N; i++) {
+      const angle = init[i].angle + omega * t;
+      shapes[i].translate.value = {
+        x: c.x + init[i].radius * Math.cos(angle),
+        y: c.y + init[i].radius * Math.sin(angle),
+      };
+    }
   });
 }

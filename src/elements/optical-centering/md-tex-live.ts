@@ -7,9 +7,9 @@
 //
 // Authoring shape:
 //
-//      const n = signal(5);
-//      const nStr = computed(() => String(n.value));
-//      const sumStr = computed(() => String(n.value * (n.value + 1) / 2));
+//      const n = cell(5);
+//      const nStr = cell.derived(() => String(n.value));
+//      const sumStr = cell.derived(() => String(n.value * (n.value + 1) / 2));
 //      const eq = tex`\sum_{i=1}^{${part("n", nStr)}} i = ${part("s", sumStr)}`;
 //
 // The reactive content path lives in `tex.ts` — when any part's
@@ -20,13 +20,12 @@ import {
   Anchor,
   Diagram,
   Mount,
-  computed,
+  cell,
   handle,
   label,
   lensPoint,
   line,
   pt,
-  signal,
   type Content,
 } from "../../minim";
 import { part, tex, tint } from "../../minim/tex";
@@ -70,12 +69,12 @@ export class MdTexLive extends Diagram {
     // `t` ∈ [0, 1] is the raw slider position. `n` quantizes it to
     // an integer in [N_MIN, N_MAX]. `nStr` and `sumStr` are the
     // string forms spliced into the equation as part contents.
-    const t = signal(0.4);
-    const n = computed(() =>
+    const t = cell(0.4);
+    const n = cell.derived(() =>
       Math.round(N_MIN + t.value * (N_MAX - N_MIN)),
     );
-    const nStr = computed(() => String(n.value));
-    const sumStr = computed(() =>
+    const nStr = cell.derived(() => String(n.value));
+    const sumStr = cell.derived(() =>
       String((n.value * (n.value + 1)) / 2),
     );
 

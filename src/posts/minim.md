@@ -132,6 +132,8 @@ Anywhere a writable Point exists, a handle can sit on it.
 
 <md-handles></md-handles>
 
+<md-layout-demo></md-layout-demo>
+
 `debug.*` goes the other way — read-only derived shapes. `debug.box(thing)` reads a shape's transform and box, derives a parent-frame outline, and renders dashed magenta. Drop them in while developing, delete when done:
 
 ```ts
@@ -230,8 +232,6 @@ Live-checked specs without a separate test framework.
 <md-claim-demo></md-claim-demo>
 
 <md-trace-demo></md-trace-demo>
-
-<md-layout-demo></md-layout-demo>
 
 <md-centering></md-centering>
 

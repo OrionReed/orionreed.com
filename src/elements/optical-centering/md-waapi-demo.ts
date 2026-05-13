@@ -17,12 +17,12 @@ import {
   Diagram,
   polar,
   Mount,
+  cell,
   circle,
-  computed,
   label,
   pt,
   rect,
-  type ReadonlySignal,
+  type ReadonlyCell,
 } from "../../minim";
 import { inView, scrollProgress, viewProgress } from "../../minim/waapi";
 
@@ -32,7 +32,7 @@ export class MdWaapiDemo extends Diagram {
     const X = 56;
     const BW = 440;
 
-    const bar = (y: number, name: string, p: ReadonlySignal<number>): void => {
+    const bar = (y: number, name: string, p: ReadonlyCell<number>): void => {
       s(
         label(view.at(0, 0).right(20).down(y + 4), name, {
           size: 11,
@@ -43,7 +43,7 @@ export class MdWaapiDemo extends Diagram {
         rect(
           X,
           y,
-          computed(() => BW * p.value),
+          cell.derived(() => BW * p.value),
           6,
           { fill: true },
         ),
@@ -81,7 +81,7 @@ export class MdWaapiDemo extends Diagram {
     const LOOPS = 15;
     const R = 15;
     const center = pt(
-      computed(() => X + BW * vp.value),
+      cell.derived(() => X + BW * vp.value),
       150,
     );
     const tracker = polar(
