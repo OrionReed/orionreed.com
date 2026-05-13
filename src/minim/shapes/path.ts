@@ -13,7 +13,7 @@ import {
   type Pointlike,
   type Segment,
 } from "../scene";
-import { box } from "../signals/box";
+import { box } from "../values/box";
 import { wireStroke, type CommonOpts } from "./common";
 
 export interface PathOpts extends CommonOpts {

@@ -2,8 +2,8 @@
 // hover/click handlers wired.
 
 import { cell, toSig, type Arg, type Cell } from "../core";
-import { type AnyShape, type Pointlike, pt } from "../scene";
-import { Anchor } from "../anchor";
+import { type AnyShape, type Pointlike, vec } from "../scene";
+import { Anchor } from "../values/anchor";
 import { tokens } from "./tokens";
 import { group } from "./group";
 import { rect } from "./rect";
@@ -43,7 +43,7 @@ export function button(
     }),
   );
   g.add(rect(0, 0, w, h, { thin: true }));
-  g.add(label(pt(w / 2, h / 2), content, { size, align: Anchor.Center }));
+  g.add(label(vec(w / 2, h / 2), content, { size, align: Anchor.Center }));
 
   g.on("pointerover", () => {
     hovered.value = true;

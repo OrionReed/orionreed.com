@@ -12,7 +12,7 @@ import {
   label,
   meanRotation,
   meanScale,
-  pt,
+  vec,
   rect,
 } from "../../minim";
 
@@ -32,7 +32,7 @@ export class MdAggregates extends Diagram {
 
     const shapes = SHAPES.map((p) =>
       s(
-        rect(pt(-p.w / 2, -p.h / 2), p.w, p.h, {
+        rect(vec(-p.w / 2, -p.h / 2), p.w, p.h, {
           translate: { x: p.x, y: p.y },
           rotate: p.rot,
           fill: p.fill,

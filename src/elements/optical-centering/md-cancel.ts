@@ -15,7 +15,7 @@ import {
   fadeOut,
   label,
   oscillate,
-  pt,
+  vec,
   untilChange,
   type Animator,
   type Cell,
@@ -65,7 +65,7 @@ export class MdCancel extends Diagram {
     for (let i = 0; i < N; i++) {
       const x = 30 + i * stride;
       const y = cell(SHAPE_Y);
-      const shape = s(circle(pt(x, y), 8, { fill: true }));
+      const shape = s(circle(vec(x, y), 8, { fill: true }));
       slots.push({ x, y, shape });
     }
 
@@ -111,8 +111,8 @@ export class MdCancel extends Diagram {
     const btnsW = BTN_W * 2 + BTN_GAP;
     const btnsX = view.center.x.value - btnsW / 2;
     s(
-      button(pt(btnsX, BTN_Y), "EXIT", onExit, { width: BTN_W, height: BTN_H }),
-      button(pt(btnsX + BTN_W + BTN_GAP, BTN_Y), "STOP", onStop, {
+      button(vec(btnsX, BTN_Y), "EXIT", onExit, { width: BTN_W, height: BTN_H }),
+      button(vec(btnsX + BTN_W + BTN_GAP, BTN_Y), "STOP", onStop, {
         width: BTN_W,
         height: BTN_H,
       }),

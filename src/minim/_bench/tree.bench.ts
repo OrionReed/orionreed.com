@@ -19,7 +19,7 @@ import {
   identity,
   multiply,
   Matrix2D,
-} from "../signals/matrix";
+} from "../values/matrix";
 import { bench, group } from "mitata";
 
 const N = 1000;

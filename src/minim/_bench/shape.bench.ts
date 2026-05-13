@@ -13,9 +13,9 @@ import {
   compose,
   multiply,
   type Matrix2D,
-} from "../signals/matrix";
-import { Vec, pt, type V } from "../signals/vec";
-import { struct, type WriteOf } from "../signals/struct";
+} from "../values/matrix";
+import { Vec, vec, type V } from "../values/vec";
+import { struct, type WriteOf } from "../values/struct";
 import { bench, group } from "mitata";
 
 // ── The Transform struct (matches scene/shape.ts) ─────────────────
@@ -107,8 +107,8 @@ class ShapeLike {
 
 group("shape: construction (reactive bits)", () => {
   bench("ShapeLike()", () => new ShapeLike());
-  bench("ShapeLike() with translate=pt(0,0) (adopted)", () => {
-    const p = pt(0, 0);
+  bench("ShapeLike() with translate=vec(0,0) (adopted)", () => {
+    const p = vec(0, 0);
     return new ShapeLike({ translate: p as unknown as V });
   });
 });
@@ -241,8 +241,8 @@ group("nested: smart-adoption overhead", () => {
   bench("Transform.signal({literal})", () =>
     Transform.signal({ ...TR0 }),
   ).baseline(true);
-  bench("Transform.signal({translate: pt(0,0)}) (adopt Vec)", () => {
-    const p = pt(0, 0);
+  bench("Transform.signal({translate: vec(0,0)}) (adopt Vec)", () => {
+    const p = vec(0, 0);
     return Transform.signal({ ...TR0, translate: p as unknown as V });
   });
   bench("Transform.signal({translate: cell({x,y})}) (wrap raw Signal)", () => {

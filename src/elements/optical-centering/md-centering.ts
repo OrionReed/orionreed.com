@@ -8,7 +8,7 @@ import {
   easeOut,
   label,
   line,
-  pt,
+  vec,
   rect,
   snapshot,
   t,
@@ -52,9 +52,9 @@ export class MdCentering extends Diagram {
     const boxT = tl.box.t;
     const centroidT = tl.centroid.t;
 
-    const O = pt(80, 190);
-    const xEnd = pt(590, 190);
-    const yEnd = pt(80, 50);
+    const O = vec(80, 190);
+    const xEnd = vec(590, 190);
+    const yEnd = vec(80, 50);
     const F = [0.2, 0.45, 0.7];
     const subs = ["min", "c", "max"];
 
@@ -86,10 +86,10 @@ export class MdCentering extends Diagram {
 
     const [xMin, xMid, xMax] = F.map((f) => O.lerp(xEnd, f));
     const [yMin, yMid, yMax] = F.map((f) => O.lerp(yEnd, f));
-    const c = pt(xMid.x, yMid.y);
+    const c = vec(xMid.x, yMid.y);
 
     s(
-      rect(pt(xMin.x, yMax.y), pt(xMax.x, yMin.y), {
+      rect(vec(xMin.x, yMax.y), vec(xMax.x, yMin.y), {
         thin: true,
         corner: 4,
         opacity: boxT.derive((v) => v * 0.5),

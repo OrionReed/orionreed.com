@@ -23,7 +23,7 @@ import {
   label,
   linear,
   path,
-  pt,
+  vec,
   rect,
   toSig,
   tokens,
@@ -40,7 +40,7 @@ export class MdCircuit extends Diagram {
 
     /** Circle + label that scale-pulses on `ev`. */
     const source = (x: number, y: number, lbl: string, ev: string) => {
-      const c = circle(pt(x, y), 18);
+      const c = circle(vec(x, y), 18);
       s(c, label(c.center, lbl, { size: 13, bold: true }));
       anim.loop(function* () {
         yield bus.until(ev);
@@ -51,7 +51,7 @@ export class MdCircuit extends Diagram {
 
     /** Counting sink — live count + scale-pulse on each fire. */
     const sink = (x: number, y: number, lbl: string, ev: string) => {
-      const c = circle(pt(x, y), 18);
+      const c = circle(vec(x, y), 18);
       s(
         c,
         label(
@@ -81,7 +81,7 @@ export class MdCircuit extends Diagram {
       lbl: string,
       lblY = 0,
     ) => {
-      const r = rect(pt(x, y), w, h);
+      const r = rect(vec(x, y), w, h);
       s(
         r,
         label(r.center.offset(0, lblY), lbl, { size: 10, opacity: 0.7 }),
@@ -91,7 +91,7 @@ export class MdCircuit extends Diagram {
 
     /** Junction circle. */
     const node = (x: number, y: number) => {
-      const c = circle(pt(x, y), 9);
+      const c = circle(vec(x, y), 9);
       s(c);
       return c;
     };
@@ -131,8 +131,8 @@ export class MdCircuit extends Diagram {
         const m = aRef.lerp(bRef, 0.5);
         const dirX = bRefV.x > aRefV.x ? 1 : -1;
         const halfDy = cell.derived(() => Math.abs(m.y.value - aRef.y.value));
-        const pA = pt(() => aRef.x.value + dirX * halfDy.value, m.y);
-        const pB = pt(() => bRef.x.value - dirX * halfDy.value, m.y);
+        const pA = vec(() => aRef.x.value + dirX * halfDy.value, m.y);
+        const pB = vec(() => bRef.x.value - dirX * halfDy.value, m.y);
         const start = opts.from ?? a.boundary(pA);
         const end = opts.to ?? b.boundary(pB);
         w = path(start).to(pA).to(pB).to(end);

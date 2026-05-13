@@ -6,7 +6,7 @@ import {
   type Pointlike,
   type Segment,
 } from "../scene";
-import { box } from "../signals/box";
+import { box } from "../values/box";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
 export interface LineOpts extends CommonOpts {}

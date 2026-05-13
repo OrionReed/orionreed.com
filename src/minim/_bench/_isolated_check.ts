@@ -3,8 +3,8 @@
 // suites running. Run each variant separately by editing VARIANT.
 
 import { signal } from "../core/signal";
-import { Box, type Box as B } from "../signals/box";
-import { delegate, delegateLazy } from "../signals/delegate";
+import { Box, type Box as B } from "../values/box";
+import { delegate, delegateLazy } from "../values/delegate";
 
 const ITERS = 30_000_000;
 

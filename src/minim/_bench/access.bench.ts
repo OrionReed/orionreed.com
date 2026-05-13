@@ -1,5 +1,5 @@
 import { computed, effect, signal } from "../core/signal";
-import { Vec } from "../signals/vec";
+import { Vec } from "../values/vec";
 import { bench, group } from "mitata";
 
 // ── Reads ───────────────────────────────────────────────────────────

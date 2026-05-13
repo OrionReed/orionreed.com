@@ -1,6 +1,6 @@
 # minim bench
 
-Micro-benchmarks for the `signals/struct` framework. Built on
+Micro-benchmarks for the `values/struct` framework. Built on
 [mitata](https://github.com/evanwashere/mitata) — per-bench JIT
 isolation keeps inline-cache state from leaking across variants
 (a real problem we hit with a custom harness).

@@ -10,7 +10,7 @@ import {
   type Mount,
   type Boxlike,
 } from "./scene";
-import { Box as BoxStruct, box } from "./signals/box";
+import { Box as BoxStruct, box } from "./values/box";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
 import { ensureArrowMarker } from "./shapes/connect";
 

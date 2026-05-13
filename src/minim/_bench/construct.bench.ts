@@ -1,15 +1,16 @@
-import { signal, computed } from "../core/signal";
-import { Vec, pt } from "../signals/vec";
-import { Box } from "../signals/box";
-import { Color, rgb } from "../signals/color";
-import { Matrix2D } from "../signals/matrix";
+import { signal, computed, effect } from "../core/signal";
+import { Vec, vec } from "../values/vec";
+import { Box } from "../values/box";
+import { Color, rgb } from "../values/color";
+import { Matrix2D } from "../values/matrix";
+import { Num, num } from "../values/num";
 import { bench, group } from "mitata";
 import { memory } from "./memory";
 
 group("construction (cost per instance)", () => {
   bench("raw signal({x,y})", () => signal({ x: 0, y: 0 })).baseline(true);
   bench("Vec.signal({x,y})", () => Vec.signal({ x: 0, y: 0 }));
-  bench("pt(0, 0)", () => pt(0, 0));
+  bench("vec(0, 0)", () => vec(0, 0));
   bench("Vec.derived(thunk)", () => {
     const a = signal({ x: 0, y: 0 });
     return Vec.derived(() => a.value);
@@ -31,6 +32,50 @@ group("construction (cost per instance)", () => {
   bench("Matrix2D.signal(identity)", () =>
     Matrix2D.signal({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
   );
+});
+
+// ── Num vs raw scalar signal — the perf cost of using `num(0)` for
+//    every numeric cell instead of `signal(0)`.
+
+group("Num vs raw scalar signal", () => {
+  bench("raw signal(0)", () => signal(0)).baseline(true);
+  bench("Num.signal(0)", () => Num.signal(0));
+  bench("num(0)", () => num(0));
+});
+
+group("Num vs raw scalar — read .value (warmed)", () => {
+  const r = signal(0);
+  const n = num(0);
+  bench("raw signal: r.value", () => r.value).baseline(true);
+  bench("Num: n.value", () => n.value);
+});
+
+group("Num vs raw scalar — write .value (no subscribers)", () => {
+  const r = signal(0);
+  const n = num(0);
+  let i = 0;
+  bench("raw signal: r.value = ++i", () => {
+    r.value = ++i;
+  }).baseline(true);
+  bench("Num: n.value = ++i", () => {
+    n.value = ++i;
+  });
+});
+
+group("Num vs raw scalar — write with 1 subscriber", () => {
+  const r = signal(0);
+  const n = num(0);
+  let observed = 0;
+  const e1 = effect(() => { observed += r.value; });
+  const e2 = effect(() => { observed += n.value; });
+  let i = 0;
+  bench("raw signal: r.value = ++i", () => {
+    r.value = ++i;
+  }).baseline(true);
+  bench("Num: n.value = ++i", () => {
+    n.value = ++i;
+  });
+  void e1; void e2; void observed;
 });
 
 // Construction cost paid AT TIME OF FIRST AXIS ACCESS — measures the
@@ -67,6 +112,8 @@ group("computed construction (baseline)", () => {
 //
 // Baseline first; relative numbers show overhead-over-baseline.
 memory("plain {x,y} object", (i) => ({ x: i, y: i }));
+memory("signal(0) (raw scalar)", (i) => signal(i));
+memory("Num.signal(0)", (i) => Num.signal(i));
 memory("signal({x,y})", (i) => signal({ x: i, y: i }));
 memory("Vec.signal({x,y})", (i) => Vec.signal({ x: i, y: i }));
 memory("Box.signal({x,y,w,h})", (i) =>

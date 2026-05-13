@@ -11,7 +11,7 @@ import {
   circle,
   drive,
   group,
-  pt,
+  vec,
   stagger,
   rect,
   type Cell,
@@ -23,7 +23,7 @@ export class MdOrbits extends Diagram {
     const view = this.view(400, 320);
 
     const sun = s(group({ translate: view.center }));
-    sun.add(circle(pt(0, 0), 12, { fill: true }));
+    sun.add(circle(vec(0, 0), 12, { fill: true }));
 
     // Integrate ω = 2π/period per frame. Returns the angle Signal
     // (radians, wraps mod 2π).
@@ -35,12 +35,12 @@ export class MdOrbits extends Diagram {
     };
 
     // Sun spins — the sunspot reveals its rotation.
-    sun.add(circle(pt(7, 0), 2, { fill: true, opacity: 0.3 }));
+    sun.add(circle(vec(7, 0), 2, { fill: true, opacity: 0.3 }));
     angularMotion(8, sun.rotate);
 
     const orbitRing = (parent: AnyShape, r: number) => {
       parent.add(
-        circle(pt(0, 0), r, { thin: true, dashed: true, opacity: 0.2 }),
+        circle(vec(0, 0), r, { thin: true, dashed: true, opacity: 0.2 }),
       );
     };
 
@@ -53,14 +53,14 @@ export class MdOrbits extends Diagram {
     ) => {
       orbitRing(parent, r);
       const angle = angularMotion(period);
-      const p = group({ translate: polar(pt(0, 0), r, angle) });
-      p.add(circle(pt(0, 0), size, { fill: true }));
+      const p = group({ translate: polar(vec(0, 0), r, angle) });
+      p.add(circle(vec(0, 0), size, { fill: true }));
 
       if (opts.ring) {
-        p.add(circle(pt(0, 0), size + 4, { thin: true, opacity: 0.4 }));
+        p.add(circle(vec(0, 0), size + 4, { thin: true, opacity: 0.4 }));
       }
       if (opts.spin) {
-        p.add(rect(pt(size - 1, 0), 4, 1.5, { fill: true }));
+        p.add(rect(vec(size - 1, 0), 4, 1.5, { fill: true }));
         angularMotion(opts.spin, p.rotate);
       }
 

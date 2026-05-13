@@ -1,6 +1,6 @@
 import { toSig, type Arg, type V } from "../core";
 import { Shape, type ShapeOpts, type Pointlike } from "../scene";
-import { box } from "../signals/box";
+import { box } from "../values/box";
 import { tokens } from "./tokens";
 import { renderContent, flattenText, type Content } from "./text";
 

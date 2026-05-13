@@ -2,8 +2,8 @@
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
 import { toSig, type Arg } from "../core/arg";
-import { transformBox } from "../signals/matrix";
-import { Box, box, expandBox, type Boxlike } from "../signals/box";
+import { transformBox } from "../values/matrix";
+import { Box, box, expandBox, type Boxlike } from "../values/box";
 import type { Shape } from "../scene";
 
 export interface ArrangeOpts {

@@ -10,7 +10,7 @@ import {
   group,
   label,
   line,
-  pt,
+  vec,
   pulse,
   rect,
   t,
@@ -56,7 +56,7 @@ export class MdLubyTransform extends Diagram {
     // "..." trailing the last source — anchored to the last rect's
     // right edge via `sources.at(N - 1)`, so it tracks N reactively.
     s(label(
-      pt(
+      vec(
         () => (sources.at(N.value - 1)?.right.x.value ?? 0) + 14,
         24 + SIZE / 2,
       ),

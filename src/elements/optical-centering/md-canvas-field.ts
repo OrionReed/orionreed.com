@@ -16,7 +16,7 @@
 //   - `signal(...)` carries reactive knobs (phase index, hue base,
 //     particle size). `.to(...)` on a raw `Signal<number>` works
 //     here exactly as on a shape's `opacity` — same engine.
-//   - `pt(...)` builds the pointer as a reactive Point. It behaves
+//   - `vec(...)` builds the pointer as a reactive Point. It behaves
 //     identically to one feeding an SVG shape's `translate`; input →
 //     value-type doesn't care what's rendering.
 //   - Generators (`anim.loop`) drive the phase progression with the
@@ -33,7 +33,7 @@ import {
   drive,
   effect,
   every,
-  pt,
+  vec,
   type Point,
 } from "../../minim";
 
@@ -134,7 +134,7 @@ export class MdCanvasField extends HTMLElement {
   private hueBase = cell(210);
   private hueSpread = cell(80);
   private size = cell(2.1);
-  private pointer: Point = pt(W / 2, H / 2);
+  private pointer: Point = vec(W / 2, H / 2);
   private statusText = cell("");
   // Rolling-average fps, refreshed every 0.5s via `every(...)`.
   private fpsSmoothed = cell(0);

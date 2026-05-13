@@ -25,8 +25,8 @@ export {
   type ResolveSig,
 } from "./arg";
 
-// Plain `{x, y}` value type. `Vec` (in `signals/vec`) is the registered struct.
-export type { V } from "../signals/vec";
+// Plain `{x, y}` value type. `Vec` (in `values/vec`) is the registered struct.
+export type { V } from "../values/vec";
 
 export { lerpable } from "./tween";
 

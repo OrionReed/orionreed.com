@@ -22,7 +22,7 @@ import {
   meanRotation,
   meanScale,
   oscillate,
-  pt,
+  vec,
   pulse,
   race,
   rect,
@@ -815,7 +815,7 @@ const TESTS: TestCase[] = [
   {
     name: "lens: independent axes don't cross-fire",
     run: (assert) => {
-      const p = pt(1, 2);
+      const p = vec(1, 2);
       let xFires = 0;
       let yFires = 0;
       p.x.subscribe(() => xFires++);
@@ -832,7 +832,7 @@ const TESTS: TestCase[] = [
   {
     name: "point: parent write reaches lenses",
     run: (assert) => {
-      const p = pt(1, 2);
+      const p = vec(1, 2);
       assert(p.x.value === 1 && p.y.value === 2, `read mismatch`);
       p.value = { x: 10, y: 20 };
       assert(p.x.value === 10, `lens x didn't update: ${p.x.value}`);
@@ -843,7 +843,7 @@ const TESTS: TestCase[] = [
     name: "point: per-axis tween + parallel composition",
     run: (assert) => {
       const a = new Anim();
-      const p = pt(0, 0);
+      const p = vec(0, 0);
       a.run(function* () {
         yield [p.x.to(10, 0.1), p.y.to(20, 0.1)];
       });
@@ -858,13 +858,13 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "pt(literal) → Point; pt(signal) → DerivedPoint",
+    name: "vec(literal) → Point; vec(signal) → DerivedPoint",
     run: (assert) => {
-      const lit = pt(1, 2);
-      assert(Vec.isWritable(lit), `pt(num,num) should be writable Vec`);
+      const lit = vec(1, 2);
+      assert(Vec.isWritable(lit), `vec(num,num) should be writable Vec`);
       const s = cell(5);
-      const der = pt(s, 10);
-      assert(Vec.is(der) && !Vec.isWritable(der), `pt(sig,num) should be derived Vec`);
+      const der = vec(s, 10);
+      assert(Vec.is(der) && !Vec.isWritable(der), `vec(sig,num) should be derived Vec`);
       assert(der.x.value === 5 && der.y.value === 10, `derived read off`);
       s.value = 99;
       assert(der.x.value === 99, `derived didn't follow source: ${der.x.value}`);
@@ -873,8 +873,8 @@ const TESTS: TestCase[] = [
   {
     name: "point math returns DerivedPoint",
     run: (assert) => {
-      const a = pt(1, 2);
-      const b = pt(3, 4);
+      const a = vec(1, 2);
+      const b = vec(3, 4);
       const sum = a.add(b);
       assert(Vec.is(sum) && !Vec.isWritable(sum), `add result must be derived Vec`);
       assert(sum.value.x === 4 && sum.value.y === 6, `sum value off`);
@@ -885,8 +885,8 @@ const TESTS: TestCase[] = [
   {
     name: "centroid: read averages, write distributes delta",
     run: (assert) => {
-      const a = { translate: pt(0, 0) };
-      const b = { translate: pt(100, 50) };
+      const a = { translate: vec(0, 0) };
+      const b = { translate: vec(100, 50) };
       const c = centroid(a, b);
       assert(Vec.isWritable(c), `centroid should be a writable Vec`);
       assert(c.value.x === 50 && c.value.y === 25, `initial avg off`);
@@ -933,8 +933,8 @@ const TESTS: TestCase[] = [
   {
     name: "Point.set: copies target's value",
     run: (assert) => {
-      const a = pt(0, 0);
-      const b = pt(10, 20);
+      const a = vec(0, 0);
+      const b = vec(10, 20);
       a.set(b);
       assert(a.value.x === 10 && a.value.y === 20, `a after set: ${JSON.stringify(a.value)}`);
       b.value = { x: 30, y: 40 };
@@ -944,8 +944,8 @@ const TESTS: TestCase[] = [
   {
     name: "Point.bind: reactive mirror with disposer",
     run: (assert) => {
-      const a = pt(0, 0);
-      const b = pt(10, 20);
+      const a = vec(0, 0);
+      const b = vec(10, 20);
       const dispose = a.bind(b);
       assert(a.value.x === 10 && a.value.y === 20, `a after bind: ${JSON.stringify(a.value)}`);
       b.value = { x: 30, y: 40 };
@@ -977,7 +977,7 @@ const TESTS: TestCase[] = [
     name: "shape.center.set: pure sugar over .value =",
     run: (assert) => {
       const r = rect(0, 0, 50, 50);
-      r.center.set(pt(100, 100));
+      r.center.set(vec(100, 100));
       assert(r.translate.peek().x === 75 && r.translate.peek().y === 75,
         `translate: ${JSON.stringify(r.translate.peek())}`);
     },
@@ -1036,8 +1036,8 @@ const TESTS: TestCase[] = [
     name: "swap: tweens exchange translates",
     run: (assert) => {
       const a = new Anim();
-      const sh1 = { translate: pt(0, 0) };
-      const sh2 = { translate: pt(100, 50) };
+      const sh1 = { translate: vec(0, 0) };
+      const sh2 = { translate: vec(100, 50) };
       a.run(function* () {
         yield* swap(sh1, sh2, 0.1);
       });
@@ -1054,12 +1054,12 @@ const TESTS: TestCase[] = [
     name: "splay: distributes radially around centre",
     run: (assert) => {
       const a = new Anim();
-      const centre = pt(100, 100);
+      const centre = vec(100, 100);
       const shapes = [
-        { translate: pt(0, 0) },
-        { translate: pt(0, 0) },
-        { translate: pt(0, 0) },
-        { translate: pt(0, 0) },
+        { translate: vec(0, 0) },
+        { translate: vec(0, 0) },
+        { translate: vec(0, 0) },
+        { translate: vec(0, 0) },
       ];
       a.run(function* () {
         yield* splay(centre, 50, shapes, 0.1);
@@ -1079,8 +1079,8 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       const shapes = [
-        { translate: pt(0, 0) },
-        { translate: pt(0, 0) },
+        { translate: vec(0, 0) },
+        { translate: vec(0, 0) },
       ];
       const targets = [
         { x: 100, y: 0 },
@@ -1249,8 +1249,8 @@ const TESTS: TestCase[] = [
   {
     name: "meanScale: writable Point over scale fields",
     run: (assert) => {
-      const sh1 = { scale: pt(1, 1) };
-      const sh2 = { scale: pt(2, 2) };
+      const sh1 = { scale: vec(1, 1) };
+      const sh2 = { scale: vec(2, 2) };
       const m = meanScale(sh1, sh2);
       assert(m.value.x === 1.5, `mean.x: ${m.value.x}`);
       m.value = { x: 3, y: 3 }; // delta = +1.5 each
@@ -1275,14 +1275,14 @@ export class MdRuntimeTests extends Diagram {
     const summary = cell<string>("");
 
     s(
-      label(pt(PAD_X, 18), "minim runtime tests", {
+      label(vec(PAD_X, 18), "minim runtime tests", {
         size: 14,
         bold: true,
         align: Anchor.Left,
       }),
     );
     s(
-      label(pt(W - PAD_X, 18), summary, {
+      label(vec(W - PAD_X, 18), summary, {
         size: 12,
         align: Anchor.Right,
         opacity: 0.8,
@@ -1291,15 +1291,15 @@ export class MdRuntimeTests extends Diagram {
 
     forEach(s.root, TESTS, (t, i) => {
       const y = HEADER_H + i * ROW_H + ROW_H / 2;
-      const dot = circle(pt(PAD_X + 6, y), 5, {
+      const dot = circle(vec(PAD_X + 6, y), 5, {
         fill: statuses[i].derive((st) => COLOR[st]),
       });
-      const name = label(pt(PAD_X + 22, y), t.name, {
+      const name = label(vec(PAD_X + 22, y), t.name, {
         size: 12,
         align: Anchor.Left,
         opacity: statuses[i].derive((st) => (st === "pending" ? 0.5 : 1)),
       });
-      const msg = label(pt(W - PAD_X, y), messages[i], {
+      const msg = label(vec(W - PAD_X, y), messages[i], {
         size: 11,
         align: Anchor.Right,
         opacity: 0.65,
@@ -1309,7 +1309,7 @@ export class MdRuntimeTests extends Diagram {
 
     s(
       label(
-        pt(W / 2, H - 12),
+        vec(W / 2, H - 12),
         "all tests run on a fresh Anim driven by step(dt)",
         { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),

@@ -8,7 +8,7 @@ import {
   type Pointlike,
   type Segment,
 } from "../scene";
-import { box, isBox } from "../signals/box";
+import { box, isBox } from "../values/box";
 import { tokens } from "./tokens";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 

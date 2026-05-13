@@ -14,6 +14,13 @@
     "isolatedModules": true,
     "noEmit": true,
 
+    /* Sub-package aliases — `@minim/values` etc. resolve to
+     * `src/minim/values/index.ts`, etc. Mirrored in vite.config.ts. */
+    "baseUrl": ".",
+    "paths": {
+      "@minim/*": ["src/minim/*"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": false,

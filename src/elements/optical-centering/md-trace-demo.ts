@@ -21,7 +21,7 @@ import {
   fadeUpOut,
   forEach,
   label,
-  pt,
+  vec,
   rect,
   spinIn,
   zoomOut,
@@ -129,13 +129,13 @@ export class MdTraceDemo extends Diagram {
 
     // ── Header ─────────────────────────────────────────────────────
     s(
-      label(pt(PAD, HEADER_Y), "trace", {
+      label(vec(PAD, HEADER_Y), "trace", {
         size: 12,
         bold: true,
         align: Anchor.Left,
       }),
       label(
-        pt(W - PAD, HEADER_Y),
+        vec(W - PAD, HEADER_Y),
         cell.derived(() => {
           version.value;
           now.value;

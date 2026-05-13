@@ -2,7 +2,7 @@ import {
   circle,
   rect,
   group,
-  pt,
+  vec,
   cell,
   Anim,
   Point,
@@ -24,23 +24,23 @@ function assert<_T extends true>(): void {}
 
 function* run(): Animator {
   // ── Case 1: default — opacity is writable Cell<number>. ────────────
-  const c1 = circle(pt(0, 0), 5);
+  const c1 = circle(vec(0, 0), 5);
   yield* c1.opacity.to(0, 1); // OK
   c1.opacity.value = 0.5; // OK
   yield* c1.translate.to({ x: 10, y: 0 }, 1); // OK
 
   // ── Case 2: literal value — still writable. ──────────────────────────
-  const c2 = circle(pt(0, 0), 5, { opacity: 0.5 });
+  const c2 = circle(vec(0, 0), 5, { opacity: 0.5 });
   yield* c2.opacity.to(1, 1); // OK
 
   // ── Case 3: caller-owned cell — writable. ──────────────────────────
   const o = cell(0.5);
-  const c3 = circle(pt(0, 0), 5, { opacity: o });
+  const c3 = circle(vec(0, 0), 5, { opacity: o });
   yield* c3.opacity.to(1, 1); // OK
   c3.opacity.value = 0.2; // OK
 
   // ── Case 4: derived cell — readonly. Animation must be a TS error. ──────
-  const c4 = circle(pt(0, 0), 5, { opacity: cell.derived(() => 0.5) });
+  const c4 = circle(vec(0, 0), 5, { opacity: cell.derived(() => 0.5) });
   // @ts-expect-error — opacity is ReadonlyCell, has no `.to`.
   yield* c4.opacity.to(0, 1);
   // @ts-expect-error — `.value` is readonly on ReadonlyCell.
@@ -50,7 +50,7 @@ function* run(): Animator {
   void _read;
 
   // ── Case 5: thunk — also readonly (sugar for derived). ─────────────
-  const c5 = circle(pt(0, 0), 5, { opacity: () => 0.5 });
+  const c5 = circle(vec(0, 0), 5, { opacity: () => 0.5 });
   // @ts-expect-error — thunk → ReadonlyCell.
   yield* c5.opacity.to(0, 1);
 
@@ -88,33 +88,33 @@ anim.run(run);
 // Default no-opts: every animatable prop is writable. Vec props
 // resolve to `Point` (writable lens-backed axes); scalar props to `Cell<number>`.
 {
-  const c = circle(pt(0, 0), 5);
+  const c = circle(vec(0, 0), 5);
   assert<Equals<typeof c.opacity, Cell<number>>>();
   assert<Equals<typeof c.translate, Point>>();
 }
 
 // Plain-value opts: still writable.
 {
-  const c = circle(pt(0, 0), 5, { opacity: 0.5 });
+  const c = circle(vec(0, 0), 5, { opacity: 0.5 });
   assert<Equals<typeof c.opacity, Cell<number>>>();
 }
 
 // User cell: writable.
 {
   const o = cell(0.5);
-  const c = circle(pt(0, 0), 5, { opacity: o });
+  const c = circle(vec(0, 0), 5, { opacity: o });
   assert<Equals<typeof c.opacity, Cell<number>>>();
 }
 
 // derived → ReadonlyCell field.
 {
-  const c = circle(pt(0, 0), 5, { opacity: cell.derived(() => 0.5) });
+  const c = circle(vec(0, 0), 5, { opacity: cell.derived(() => 0.5) });
   assert<Equals<typeof c.opacity, ReadonlyCell<number>>>();
 }
 
 // Thunk → ReadonlyCell field.
 {
-  const c = circle(pt(0, 0), 5, { opacity: () => 0.5 });
+  const c = circle(vec(0, 0), 5, { opacity: () => 0.5 });
   assert<Equals<typeof c.opacity, ReadonlyCell<number>>>();
 }
 
@@ -134,7 +134,7 @@ anim.run(run);
     s.opacity.value = 0.5;
     return s;
   }
-  const c = circle(pt(0, 0), 5);
+  const c = circle(vec(0, 0), 5);
   highlight(c); // works — both resolve to Cell-typed props.
 
   // But a shape with a readonly prop is NOT assignable here, by design.
@@ -148,7 +148,7 @@ anim.run(run);
   function flashOnce(s: import("./scene/shape").AnyShape) {
     return s.opacity.value;
   }
-  flashOnce(circle(pt(0, 0), 5)); // OK
+  flashOnce(circle(vec(0, 0), 5)); // OK
   flashOnce(group({ opacity: cell.derived(() => 0.5) })); // OK
 }
 
@@ -160,7 +160,7 @@ anim.run(run);
       yield* s.opacity.to(1, 0.5);
     })();
   }
-  void pulse(circle(pt(0, 0), 5)); // OK
+  void pulse(circle(vec(0, 0), 5)); // OK
   void pulse(group({ translate: cell.derived(() => ({ x: 0, y: 0 })) })); // OK — only translate is readonly
   // @ts-expect-error — opacity is readonly here.
   void pulse(group({ opacity: cell.derived(() => 0.5) }));

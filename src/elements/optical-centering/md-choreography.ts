@@ -12,7 +12,7 @@ import {
   label,
   orbit,
   cell,
-  pt,
+  vec,
   snapshot,
   splay,
   stagger,
@@ -65,7 +65,7 @@ export class MdChoreography extends Diagram {
     const view = this.view(W, H);
 
     const shapes = SCATTER.map((p, i) =>
-      s(circle(pt(0, 0), 18, { translate: p, fill: COLORS[i] })),
+      s(circle(vec(0, 0), 18, { translate: p, fill: COLORS[i] })),
     );
 
     const phase = cell<Content>("assemble (row)");
@@ -86,7 +86,7 @@ export class MdChoreography extends Diagram {
 
     // Orbit speed as a signal — tween for ease-in / hold / ease-out.
     const orbitRate = cell(0);
-    const orbitCentre = pt(ORBIT_CENTRE.x, ORBIT_CENTRE.y);
+    const orbitCentre = vec(ORBIT_CENTRE.x, ORBIT_CENTRE.y);
 
     const anim = this.anim;
     anim.loop(function* () {

@@ -5,7 +5,7 @@ import {
   attr,
   label,
   line,
-  pt,
+  vec,
   rect,
   cell,
   snapshot,
@@ -91,9 +91,9 @@ export class MdQrtpHandshake extends Diagram {
     const slotsB = buildRow("B", CHUNK_H + DEVICE_GAP);
 
     s(
-      label(pt(PAD_X - 25, CHUNK_H / 2 + PAD_Y), t("A").bold(), { size: 18 }),
+      label(vec(PAD_X - 25, CHUNK_H / 2 + PAD_Y), t("A").bold(), { size: 18 }),
       label(
-        pt(PAD_X - 25, CHUNK_H + DEVICE_GAP + CHUNK_H / 2 + PAD_Y),
+        vec(PAD_X - 25, CHUNK_H + DEVICE_GAP + CHUNK_H / 2 + PAD_Y),
         t("B").bold(),
         { size: 18 },
       ),

@@ -12,9 +12,8 @@
 //      it (same reference); a generic Signal wraps in lens; a derived
 //      wraps as derived; a thunk wraps as derived; a literal allocates.
 
-import { computed, effect, signal } from "../core/signal";
-import { struct } from "../signals/struct";
-import { Vec, pt, type V } from "../signals/vec";
+import { computed, effect, signal } from "@minim/core/signal";
+import { struct, Vec, vec, type V } from "@minim/values";
 
 type Tr = {
   translate: V;
@@ -187,7 +186,7 @@ check("trl.to is installed (lerp present)", typeof (trl as any).to === "function
 
 // 13. Smart adoption — pass an existing Vec.signal as `translate`. Should
 //     adopt by reference (same identity, two-way sharing).
-const sharedPt = pt(7, 11);
+const sharedPt = vec(7, 11);
 const tr2 = Transform.signal({
   translate: sharedPt,
   rotate: 0,

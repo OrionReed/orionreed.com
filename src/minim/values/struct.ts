@@ -183,7 +183,7 @@ export interface StructType<T, O = {}, X = {}, G = {}, M = {}, N = {}> {
   /** Build a writable reactive cell. Each field accepts a literal OR a
    *  matching reactive value; the output's per-axis writability narrows
    *  to match the input flavor (literal/Signal → writable, computed/
-   *  thunk → readonly). Pass a `pt` (or any `Vec.signal`) and the
+   *  thunk → readonly). Pass a `vec(...)` (or any `Vec.signal`) and the
    *  result's `.translate` IS that signal — same reference, two-way
    *  share. */
   signal(v: NestedInput<T, N>): Reactive<T, O, X, G, M, "rw", N>;

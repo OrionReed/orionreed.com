@@ -24,7 +24,7 @@ import {
   fadeOut,
   forEach,
   label,
-  pt,
+  vec,
 } from "../../minim";
 import { claim, process, verdictDot } from "../../minim/assert";
 
@@ -82,13 +82,13 @@ export class MdClaimDemo extends Diagram {
 
     // ── Header (aggregate verdict) ───────────────────────────────
     s(
-      label(pt(20, 22), "claims", {
+      label(vec(20, 22), "claims", {
         size: 12, bold: true, align: Anchor.Left,
       }),
-      label(pt(W - 34, 22), fullSpec.derive((v) => (v ? "ALL HOLD" : "VIOLATED")), {
+      label(vec(W - 34, 22), fullSpec.derive((v) => (v ? "ALL HOLD" : "VIOLATED")), {
         size: 11, align: Anchor.Right, opacity: 0.85,
       }),
-      verdictDot(fullSpec, { at: pt(W - 18, 22), r: 6 }),
+      verdictDot(fullSpec, { at: vec(W - 18, 22), r: 6 }),
     );
 
     // ── Claim rows: atomics on top, composites bold below ────────
@@ -106,8 +106,8 @@ export class MdClaimDemo extends Diagram {
       const y = ROW_Y + i * ROW_H;
       const composite = i >= 4;
       return [
-        verdictDot(cl, { at: pt(28, y), r: 5 }),
-        label(pt(44, y), cl.label ?? "?", {
+        verdictDot(cl, { at: vec(28, y), r: 5 }),
+        label(vec(44, y), cl.label ?? "?", {
           size: 12,
           align: Anchor.Left,
           opacity: composite ? 1 : 0.85,

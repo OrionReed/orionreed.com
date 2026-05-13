@@ -11,7 +11,7 @@ import { effect, signal } from "../core/signal";
 import { easeInOut, easeOut } from "../motion/easings";
 import type { Animator, Easing } from "../core";
 import { Shape } from "../scene/shape";
-import { box } from "../signals/box";
+import { box } from "../values/box";
 import { Part, type PartMarker } from "./parts";
 import type { TexShape } from "./tex";
 

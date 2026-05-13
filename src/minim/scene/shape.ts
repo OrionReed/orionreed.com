@@ -13,7 +13,7 @@ import {
   unionBox,
   type Box,
   type Boxlike,
-} from "../signals/box";
+} from "../values/box";
 import {
   compose,
   multiply,
@@ -21,18 +21,19 @@ import {
   transformBox,
   transformPoint,
   type Matrix2D,
-} from "../signals/matrix";
-import { mean } from "../signals/aggregates";
+} from "../values/matrix";
+import { mean } from "../values/aggregates";
 import {
   Vec,
-  pt,
+  vec,
   type V,
   type DerivedPoint,
   type Point,
   type Pointlike,
   type ResolveVec,
-} from "../signals/vec";
-import { struct, type WriteOf } from "../signals/struct";
+} from "../values/vec";
+import { type WriteOf } from "../values/struct";
+import { Transform } from "../values/transform";
 import { suspend, type Animator } from "../core/anim";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
@@ -49,63 +50,6 @@ export type Segment =
       a0: () => number;
       a1: () => number;
     };
-
-// ── Transform: the animatable surface as a single struct ─────────────
-//
-// Every Shape's animatable state lives in one `Reactive<Transform>`.
-// `.nested({translate, scale, origin: Vec})` puts every field in its
-// own per-field signal (full SoA), so per-axis writes are isolated and
-// `shape.transform.to(target, dur)` tweens the whole pose.
-
-export type Transform = {
-  translate: V;
-  rotate: number;
-  scale: V;
-  origin: V;
-  opacity: number;
-};
-
-const TR_DEFAULTS: Transform = {
-  translate: { x: 0, y: 0 },
-  rotate: 0,
-  scale: { x: 1, y: 1 },
-  origin: { x: 0, y: 0 },
-  opacity: 1,
-};
-
-export const Transform = struct<Transform>("Transform", TR_DEFAULTS)
-  .equals(
-    (a, b) =>
-      a.translate.x === b.translate.x &&
-      a.translate.y === b.translate.y &&
-      a.rotate === b.rotate &&
-      a.scale.x === b.scale.x &&
-      a.scale.y === b.scale.y &&
-      a.origin.x === b.origin.x &&
-      a.origin.y === b.origin.y &&
-      a.opacity === b.opacity,
-  )
-  .nested({ translate: Vec, scale: Vec, origin: Vec })
-  .ops({
-    /** Component-wise lerp; enables `shape.transform.to(target, dur)`. */
-    lerp: (a, b: Transform, t: number): Transform => ({
-      translate: {
-        x: a.translate.x + (b.translate.x - a.translate.x) * t,
-        y: a.translate.y + (b.translate.y - a.translate.y) * t,
-      },
-      rotate: a.rotate + (b.rotate - a.rotate) * t,
-      scale: {
-        x: a.scale.x + (b.scale.x - a.scale.x) * t,
-        y: a.scale.y + (b.scale.y - a.scale.y) * t,
-      },
-      origin: {
-        x: a.origin.x + (b.origin.x - a.origin.x) * t,
-        y: a.origin.y + (b.origin.y - a.origin.y) * t,
-      },
-      opacity: a.opacity + (b.opacity - a.opacity) * t,
-    }),
-  })
-  .build();
 
 /** Construction options shared by every Shape. Each prop accepts
  *  `Arg<T>` (literal / Signal / thunk / matching Reactive — adopted
@@ -160,7 +104,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
 
   /** Animatable surface: a single `Reactive<Transform>`. Tween whole
    *  pose with `shape.transform.to(target, dur)`. Field signals are
-   *  smart-adopted from `opts`: pass a `pt` and `transform.translate`
+   *  smart-adopted from `opts`: pass a `vec(...)` and `transform.translate`
    *  IS that signal (two-way share); pass a `computed` and the field
    *  becomes the derived flavor. */
   readonly transform: WriteOf<typeof Transform>;
@@ -362,10 +306,10 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
   /** Stroke segments — used by the dashed renderer. Default = bounding rect. */
   segments(): Segment[] {
     const b = this.box.value;
-    const tl = pt(b.x, b.y);
-    const tr = pt(b.x + b.w, b.y);
-    const br = pt(b.x + b.w, b.y + b.h);
-    const bl = pt(b.x, b.y + b.h);
+    const tl = vec(b.x, b.y);
+    const tr = vec(b.x + b.w, b.y);
+    const br = vec(b.x + b.w, b.y + b.h);
+    const bl = vec(b.x, b.y + b.h);
     return [
       { type: "line", from: tl, to: tr },
       { type: "line", from: tr, to: br },
@@ -482,7 +426,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
 // ── Aggregates over multiple shapes ─────────────────────────────────
 //
 // Each is a writable view via `mean`: tween the result to move the
-// group rigidly. Generic `mean(...sigs)` is in `signals/aggregates.ts`;
+// group rigidly. Generic `mean(...sigs)` is in `values/aggregates.ts`;
 // these are shape-specific sugar (one-liners over the right field).
 
 /** Centroid of N shapes' translates, as a writable Point. */

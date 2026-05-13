@@ -1,6 +1,6 @@
 import { signal } from "../core/signal";
-import { Vec } from "../signals/vec";
-import { Color } from "../signals/color";
+import { Vec } from "../values/vec";
+import { Color } from "../values/color";
 import { lerpable } from "../core/tween";
 import { bench, group } from "mitata";
 

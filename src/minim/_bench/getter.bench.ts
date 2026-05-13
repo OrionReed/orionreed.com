@@ -1,5 +1,5 @@
-import { Vec } from "../signals/vec";
-import { Box } from "../signals/box";
+import { Vec } from "../values/vec";
+import { Box } from "../values/box";
 import { bench, do_not_optimize, group } from "mitata";
 
 // ── Lazy getter: first-access (build) cost vs cached (own-property) ─

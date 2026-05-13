@@ -15,7 +15,7 @@ import {
   easeOut,
   fadeOut,
   label,
-  pt,
+  vec,
   rand,
   snapshot,
   type Animator,
@@ -103,14 +103,14 @@ export class MdRand extends Diagram {
 
     // ── Header ───────────────────────────────────────────────────────
     s(
-      label(pt(20, 24), "rand", {
+      label(vec(20, 24), "rand", {
         size: 13,
         bold: true,
         align: Anchor.Left,
         opacity: 0.85,
       }),
       label(
-        pt(20, 42),
+        vec(20, 42),
         "yield* rand(...gens) — pick one branch each loop",
         { size: 10, align: Anchor.Left, opacity: 0.5 },
       ),
@@ -118,7 +118,7 @@ export class MdRand extends Diagram {
 
     // ── Stage ────────────────────────────────────────────────────────
     const subject = s(
-      circle(pt(STAGE_X, STAGE_Y), 22, { fill: currentColor }),
+      circle(vec(STAGE_X, STAGE_Y), 22, { fill: currentColor }),
     );
     s(
       label(subject.center.up(60), currentName, {
@@ -141,7 +141,7 @@ export class MdRand extends Diagram {
     const MENU_Y = 70;
     const ROW_H = 22;
     s(
-      label(pt(MENU_X, MENU_Y - 22), "candidates", {
+      label(vec(MENU_X, MENU_Y - 22), "candidates", {
         size: 10,
         align: Anchor.Left,
         opacity: 0.5,
@@ -151,11 +151,11 @@ export class MdRand extends Diagram {
       const isActive = cell.derived(() => current.value?.name === m.name);
       const opacity = cell.derived(() => (isActive.value ? 1 : 0.4));
       s(
-        circle(pt(MENU_X, MENU_Y + i * ROW_H), 5, {
+        circle(vec(MENU_X, MENU_Y + i * ROW_H), 5, {
           fill: m.color,
           opacity,
         }),
-        label(pt(MENU_X + 14, MENU_Y + i * ROW_H), m.name, {
+        label(vec(MENU_X + 14, MENU_Y + i * ROW_H), m.name, {
           size: 12,
           align: Anchor.Left,
           opacity,

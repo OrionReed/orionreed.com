@@ -1,5 +1,5 @@
 // Continuous behaviors over a single signal — re-export from
-// `signals/behaviors`. Lives in `motion/` for discoverability alongside
+// `values/behaviors`. Lives in `motion/` for discoverability alongside
 // transitions/easings/clocks/choreographers.
 
 export {
@@ -8,4 +8,4 @@ export {
   drift,
   attract,
   type SpringOpts,
-} from "../signals/behaviors";
+} from "../values/behaviors";

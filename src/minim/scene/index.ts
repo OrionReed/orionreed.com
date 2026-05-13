@@ -3,7 +3,7 @@
 
 export {
   Vec,
-  pt,
+  vec,
   polar,
   isPoint,
   vecEquals,
@@ -12,9 +12,9 @@ export {
   type DerivedPoint,
   type Pointlike,
   type ResolveVec,
-} from "../signals/vec";
+} from "../values/vec";
 
-export { mean } from "../signals/aggregates";
+export { mean } from "../values/aggregates";
 
 // `Box` re-export carries BOTH the value (the struct) and the type
 // alias (the `{x, y, w, h}` shape) — same name, two namespaces, like
@@ -26,7 +26,7 @@ export {
   boxEdgeFrom,
   isBox,
   type Boxlike,
-} from "../signals/box";
+} from "../values/box";
 
 export {
   Shape,

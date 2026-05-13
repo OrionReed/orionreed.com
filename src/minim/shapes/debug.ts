@@ -20,8 +20,8 @@ import {
   type Boxlike,
   type Pointlike,
 } from "../scene";
-import { Box } from "../signals/box";
-import { transformBox, transformPoint } from "../signals/matrix";
+import { Box } from "../values/box";
+import { transformBox, transformPoint } from "../values/matrix";
 import { circle } from "./circle";
 import { line } from "./line";
 import { label } from "./label";

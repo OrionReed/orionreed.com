@@ -1,8 +1,16 @@
 import { defineConfig } from "vite";
 import { buildPosts } from "./scripts/build";
 import mkcert from "vite-plugin-mkcert";
+import { fileURLToPath } from "node:url";
+
+const minimRoot = fileURLToPath(new URL("./src/minim", import.meta.url));
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@minim": minimRoot,
+    },
+  },
   server: {
     port: 5555,
   },

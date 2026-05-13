@@ -18,9 +18,9 @@
 // _isolated_check.ts sanity script is still around for spot-checks.
 
 import { signal, type ReadonlySignal, type Signal } from "../core/signal";
-import { Box, type Box as B } from "../signals/box";
-import { delegate, delegateLazy } from "../signals/delegate";
-import type { Pointlike } from "../signals/vec";
+import { Box, type Box as B } from "../values/box";
+import { delegate, delegateLazy } from "../values/delegate";
+import type { Pointlike } from "../values/vec";
 import { bench, group } from "mitata";
 
 // ── Fixtures ───────────────────────────────────────────────────────

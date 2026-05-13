@@ -23,7 +23,7 @@ import {
   endOn,
   line,
   oscillate,
-  pt,
+  vec,
   tokens,
   untilFalse,
   untilTrue,
@@ -128,7 +128,7 @@ export class MdOscillator extends Diagram {
     this.root.track(bindParts(eq, { A, gamma, omega }));
 
     // ── Centerline ────────────────────────────────────────────────────────────
-    const cl = s(line(pt(TL, CY), pt(TR, CY)));
+    const cl = s(line(vec(TL, CY), vec(TR, CY)));
     cl.attr("stroke", tokens.stroke);
     cl.attr("stroke-width", "0.5");
     cl.opacity.value = 0.12;
@@ -139,14 +139,14 @@ export class MdOscillator extends Diagram {
     trace.attr("stroke-width", "1.5");
 
     // ── Ball ─────────────────────────────────────────────────────────────────
-    const ball = s(circle(pt(TR, cell.derived(() => CY - disp.value)), 5.5, { fill: true }));
+    const ball = s(circle(vec(TR, cell.derived(() => CY - disp.value)), 5.5, { fill: true }));
     ball.attr("fill", cell.derived(() => A.color.value ?? tokens.stroke));
 
     // ── Amplitude bound lines (A) ─────────────────────────────────────────────
     const ampStroke = cell.derived(() => A.color.value ?? tokens.stroke);
     const ampOpacity = A.active.derive((on) => (on ? 0.7 : 0.18));
     [CY - A_AMP, CY + A_AMP].forEach((y) => {
-      const l = s(line(pt(TL, y), pt(TR, y), { stroke: ampStroke, opacity: ampOpacity }));
+      const l = s(line(vec(TL, y), vec(TR, y), { stroke: ampStroke, opacity: ampOpacity }));
       l.attr("stroke-dasharray", "3 5");
     });
 

@@ -12,7 +12,7 @@
 // but model different things — keeping them separate keeps each call
 // site honest about whether it means a point or a vector.
 
-import type { V } from "./signals/vec";
+import type { V } from "./vec";
 
 /** Anchor points on a unit box. `TopLeft` = `{0, 0}`, `Center` =
  *  `{0.5, 0.5}`, `BottomRight` = `{1, 1}`. Pass to anything that takes

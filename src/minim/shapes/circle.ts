@@ -6,7 +6,7 @@ import {
   type Pointlike,
   type Segment,
 } from "../scene";
-import { box } from "../signals/box";
+import { box } from "../values/box";
 import { TWO_PI } from "./dashed";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 

@@ -12,7 +12,7 @@ import { computed, type ReadonlySignal } from "../core/signal";
 import { Shape } from "../scene/shape";
 // Plain Box constructor — imported renamed to avoid shadowing the
 // `box(part)` decoration exported below.
-import { box as mkBox, type Box } from "../signals/box";
+import { box as mkBox, type Box } from "../values/box";
 import { tokens } from "../shapes/tokens";
 import type { Part } from "./parts";
 

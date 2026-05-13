@@ -27,7 +27,7 @@ import {
   handle,
   label,
   line,
-  pt,
+  vec,
   type Point,
   type V,
 } from "../../minim";
@@ -51,8 +51,8 @@ export class MdMirror extends Diagram {
 
     // Mirror endpoints — two free Points. Everything reflects through
     // the line they define, so dragging either re-aligns the world.
-    const mA = pt(360, 30);
-    const mB = pt(360, 330);
+    const mA = vec(360, 30);
+    const mB = vec(360, 330);
 
     // The reflection lens. `read` reflects the source across the
     // current mirror; `write` reflects back — the same formula, since
@@ -67,10 +67,10 @@ export class MdMirror extends Diagram {
       );
 
     // ── Original F: four free vertices, three lines ──────────────────
-    const stemTop = pt(200, 90);
-    const stemBot = pt(200, 270);
-    const topRight = pt(280, 90);
-    const midRight = pt(260, 180);
+    const stemTop = vec(200, 90);
+    const stemBot = vec(200, 270);
+    const topRight = vec(280, 90);
+    const midRight = vec(260, 180);
     const F = "#5b8def";
 
     // Middle bar attaches to the stem's midpoint — derived, so the bar

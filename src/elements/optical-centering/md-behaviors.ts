@@ -17,7 +17,7 @@ import {
   easeInOut,
   label,
   oscillate,
-  pt,
+  vec,
   spring,
   type Arg,
   type Cell,
@@ -53,7 +53,7 @@ export class MdBehaviors extends Diagram {
         attach(x, prevX);
         attach(y, prevY);
         s(
-          circle(pt(x, y), 7 - i * 0.3, {
+          circle(vec(x, y), 7 - i * 0.3, {
             fill: color,
             opacity: 0.85 - i * 0.045,
           }),
@@ -76,7 +76,7 @@ export class MdBehaviors extends Diagram {
         else if (ax.value < 40 && av.value < 0) av.value = -av.value;
       }
     });
-    s(circle(pt(ax, ay), 9, { fill: "#1a1a1a" }));
+    s(circle(vec(ax, ay), 9, { fill: "#1a1a1a" }));
     trail(ax, ay, "#5b8def", (sig, target) => {
       this.anim.run(() => attract(sig, target, 9));
     });
@@ -106,7 +106,7 @@ export class MdBehaviors extends Diagram {
       byAmp.value = 32;
       bv.value = bx.value < cx ? 155 : -155;
     });
-    s(circle(pt(bx, by), 9, { fill: "#1a1a1a" }));
+    s(circle(vec(bx, by), 9, { fill: "#1a1a1a" }));
     trail(bx, by, "#e25c5c", (sig, target) => {
       this.anim.run(() => spring(sig, target, { stiffness: 200, damping: 15 }));
     });
@@ -117,14 +117,14 @@ export class MdBehaviors extends Diagram {
     const lc = { x: cx, y: laneY(2) };
     const phase = cell(0);
     this.anim.run(() => drift(phase, 1));
-    const headPos = pt(
+    const headPos = vec(
       () => lc.x + 90 * Math.sin(phase.value * 1.6),
       () => lc.y + 26 * Math.sin(phase.value * 2.3 + 0.6),
     );
     s(circle(headPos, 9, { fill: "#1a1a1a" }));
 
     const links: Point[] = Array.from({ length: N_CHAIN }, (_, i) =>
-      pt(lc.x - i * LINK_LEN, lc.y),
+      vec(lc.x - i * LINK_LEN, lc.y),
     );
     this.anim.run(function* () {
       while (true) {

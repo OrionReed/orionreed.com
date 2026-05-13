@@ -25,7 +25,7 @@ import {
   handle,
   label,
   line,
-  pt,
+  vec,
   type Content,
 } from "../../minim";
 import { part, tex, tint } from "../../minim/tex";
@@ -81,7 +81,7 @@ export class MdTexLive extends Diagram {
     // ── Slider track + handle ───────────────────────────────────────
     const trackW = TRACK_X1 - TRACK_X0;
     s(
-      line(pt(TRACK_X0, TRACK_Y), pt(TRACK_X1, TRACK_Y), {
+      line(vec(TRACK_X0, TRACK_Y), vec(TRACK_X1, TRACK_Y), {
         thin: true,
         opacity: 0.4,
       }),
@@ -102,14 +102,14 @@ export class MdTexLive extends Diagram {
 
     // Live readout next to the slider.
     s(
-      label(pt(TRACK_X0 - 16, TRACK_Y), nStr, {
+      label(vec(TRACK_X0 - 16, TRACK_Y), nStr, {
         size: 13,
         align: Anchor.Right,
         opacity: 0.7,
       }),
     );
     s(
-      label(pt(TRACK_X1 + 16, TRACK_Y), `1..${N_MAX}` as Content, {
+      label(vec(TRACK_X1 + 16, TRACK_Y), `1..${N_MAX}` as Content, {
         size: 11,
         align: Anchor.Left,
         opacity: 0.4,
@@ -122,7 +122,7 @@ export class MdTexLive extends Diagram {
     const nBound = part("n", nStr);
     const result = part("s", sumStr);
     const eq = s(big`${SUM_LOWER}^{${nBound}} i = ${result}`);
-    eq.center.set(pt(W / 2, 90));
+    eq.center.set(vec(W / 2, 90));
 
     // Tag the live parts with an accent color so the eye knows
     // which glyphs respond to the slider.

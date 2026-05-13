@@ -29,7 +29,7 @@ import {
   circle,
   label,
   lerpable,
-  pt,
+  vec,
   rect,
   rgb,
   type Lerp,
@@ -109,13 +109,13 @@ export class MdLerps extends Diagram {
     // and a right-aligned live readout. The visuals are bound to the
     // state above; nothing reads through `this`.
     const rowLabel = (i: number, name: string) =>
-      label(pt(LABEL_X, baseY(i)), name, {
+      label(vec(LABEL_X, baseY(i)), name, {
         size: 11,
         align: Anchor.Left,
         opacity: 0.7,
       });
     const readout = (i: number, content: Parameters<typeof label>[1]) =>
-      label(pt(READ_X, baseY(i)), content, {
+      label(vec(READ_X, baseY(i)), content, {
         size: 11,
         align: Anchor.Left,
         opacity: 0.65,
@@ -183,7 +183,7 @@ export class MdLerps extends Diagram {
     s(
       rowLabel(4, "string"),
       track(VIS_X, rowY(4) - 6, VIS_W, 22, 0.08),
-      label(pt(VIS_X + 10, baseY(4)), txt, {
+      label(vec(VIS_X + 10, baseY(4)), txt, {
         size: 13,
         align: Anchor.Left,
       }),

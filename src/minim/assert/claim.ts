@@ -34,9 +34,9 @@ import {
 } from "../core/signal";
 import { race } from "../core/suspensions";
 import type { Animator } from "../core/anim";
-import { type Box, type Boxlike } from "../signals/box";
+import { type Box, type Boxlike } from "../values/box";
 import { circle } from "../shapes/circle";
-import { pt, type V, type Pointlike } from "../signals/vec";
+import { vec, type V, type Pointlike } from "../values/vec";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -576,7 +576,7 @@ export function verdictDot(
     fail?: string;
   } = {},
 ) {
-  const at = opts.at ?? pt(0, 0);
+  const at = opts.at ?? vec(0, 0);
   const r = opts.r ?? 5;
   const pass = opts.pass ?? "#2ecc71";
   const fail = opts.fail ?? "#e74c3c";

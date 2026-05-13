@@ -102,9 +102,9 @@ export const vecEquals = (a: V, b: V): boolean =>
   a === b || (a.x === b.x && a.y === b.y);
 
 /** Construct a Point. Two numbers → writable; any reactive input → derived. */
-export function pt(x: number, y: number): Point;
-export function pt(x: Arg<number>, y: Arg<number>): Pointlike;
-export function pt(x: Arg<number>, y: Arg<number>): Pointlike {
+export function vec(x: number, y: number): Point;
+export function vec(x: Arg<number>, y: Arg<number>): Pointlike;
+export function vec(x: Arg<number>, y: Arg<number>): Pointlike {
   if (typeof x === "number" && typeof y === "number") {
     return Vec.signal({ x, y });
   }

@@ -8,8 +8,8 @@
 import temml from "temml";
 import { signal, type ReadonlySignal } from "../core/signal";
 import { Shape, type ShapeOpts } from "../scene/shape";
-import { Box as BoxStruct, box, type Box } from "../signals/box";
-import type { WriteOf } from "../signals/struct";
+import { Box as BoxStruct, box, type Box } from "../values/box";
+import type { WriteOf } from "../values/struct";
 import { tokens } from "../shapes/tokens";
 import { Part, PartMarker, type PartList } from "./parts";
 

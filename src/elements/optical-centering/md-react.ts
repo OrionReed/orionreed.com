@@ -13,7 +13,7 @@ import {
   circle,
   fadeOut,
   label,
-  pt,
+  vec,
   race,
   rect,
   suspend,
@@ -63,17 +63,17 @@ export class MdReact extends Diagram {
     const status = cell<Content>("running");
 
     s(
-      label(pt(PAD, STATS_Y), hits.derive((n) => `hits: ${n}`), {
+      label(vec(PAD, STATS_Y), hits.derive((n) => `hits: ${n}`), {
         size: 12,
         align: Anchor.Left,
       }),
       label(
-        pt(W - PAD, STATS_Y),
+        vec(W - PAD, STATS_Y),
         misses.derive((n) => `misses: ${n}`),
         { size: 12, align: Anchor.Right },
       ),
       label(
-        pt(W / 2, STATS_Y),
+        vec(W / 2, STATS_Y),
         cell.derived(() => {
           const h = hits.value;
           const m = misses.value;
@@ -83,7 +83,7 @@ export class MdReact extends Diagram {
         }),
         { size: 12, align: Anchor.Center, opacity: 0.6 },
       ),
-      label(pt(W / 2, STATUS_Y), status, {
+      label(vec(W / 2, STATUS_Y), status, {
         size: 11,
         align: Anchor.Center,
         opacity: 0.5,
@@ -105,7 +105,7 @@ export class MdReact extends Diagram {
       const x = PAD + Math.random() * (W - 2 * PAD);
       const y =
         PAD + Math.random() * (PLAYFIELD_H - 2 * PAD);
-      return s(circle(pt(x, y), TARGET_R, { fill: true, opacity: 0 }));
+      return s(circle(vec(x, y), TARGET_R, { fill: true, opacity: 0 }));
     };
 
     function* round(target: Target): Animator {
@@ -155,8 +155,8 @@ export class MdReact extends Diagram {
     const btnsW = BTN_W * 2 + BTN_GAP;
     const btnsX = (W - btnsW) / 2;
     s(
-      button(pt(btnsX, BTN_Y), "STOP", onStop, { width: BTN_W, height: BTN_H }),
-      button(pt(btnsX + BTN_W + BTN_GAP, BTN_Y), "RESET", onReset, {
+      button(vec(btnsX, BTN_Y), "STOP", onStop, { width: BTN_W, height: BTN_H }),
+      button(vec(btnsX + BTN_W + BTN_GAP, BTN_Y), "RESET", onReset, {
         width: BTN_W,
         height: BTN_H,
       }),

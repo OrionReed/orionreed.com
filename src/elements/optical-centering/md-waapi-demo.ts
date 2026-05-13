@@ -19,7 +19,7 @@ import {
   Mount,
   circle,
   label,
-  pt,
+  vec,
   rect,
   type ReadonlyCell,
 } from "../../minim";
@@ -73,7 +73,7 @@ export class MdWaapiDemo extends Diagram {
     // motion. With BW=440, LOOPS=4, R=25 we clear that by ~40%.
     const LOOPS = 15;
     const R = 15;
-    const center = pt(vp.derive((p) => X + BW * p), 150);
+    const center = vec(vp.derive((p) => X + BW * p), 150);
     const tracker = polar(
       center,
       R,

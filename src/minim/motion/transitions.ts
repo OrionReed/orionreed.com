@@ -6,7 +6,7 @@
 import { tween, type Cell, type Duration, type Easing } from "../core";
 import type { Animator, V } from "../core";
 import type { Writable } from "../scene";
-import { Dir } from "../anchor";
+import { Dir } from "../values/anchor";
 import { easeIn, easeInOut, easeOut } from "./easings";
 
 type Lerpable = number | V;

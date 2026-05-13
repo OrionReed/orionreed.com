@@ -197,3 +197,8 @@ export const Matrix2D = struct<Matrix2D>(
     determinant: (m): number => m.a * m.d - m.b * m.c,
   })
   .build();
+
+/** Sugar for `Matrix2D.signal({a, b, c, d, e, f})`. */
+export const matrix = (
+  a: number, b: number, c: number, d: number, e: number, f: number,
+) => Matrix2D.signal({ a, b, c, d, e, f });

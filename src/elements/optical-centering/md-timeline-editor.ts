@@ -13,7 +13,7 @@ import {
   draggable,
   label,
   line,
-  pt,
+  vec,
   rect,
   sequential,
   snapshot,
@@ -80,7 +80,7 @@ export class MdTimelineEditor extends Diagram {
 
     const playX = cell.derived(() => STRIP_X + tl.t.value * STRIP_W);
     s(
-      line(pt(playX, STRIP_Y - 6), pt(playX, STRIP_Y + STRIP_H + 6), {
+      line(vec(playX, STRIP_Y - 6), vec(playX, STRIP_Y + STRIP_H + 6), {
         strokeWidth: 2,
       }),
     );
@@ -95,7 +95,7 @@ export class MdTimelineEditor extends Diagram {
       const dur = tl[name].dur;
 
       s(
-        line(pt(x0, SLIDER_Y), pt(x0 + SLIDER_W, SLIDER_Y), {
+        line(vec(x0, SLIDER_Y), vec(x0 + SLIDER_W, SLIDER_Y), {
           thin: true,
           opacity: 0.3,
           cap: "round",
@@ -104,7 +104,7 @@ export class MdTimelineEditor extends Diagram {
 
       const knob = s(
         circle(
-          pt(() => x0 + (dur.value / MAX_DUR) * SLIDER_W, SLIDER_Y),
+          vec(() => x0 + (dur.value / MAX_DUR) * SLIDER_W, SLIDER_Y),
           9,
           { fill: COLORS[i] },
         ),
@@ -119,7 +119,7 @@ export class MdTimelineEditor extends Diagram {
     // ── Stage actors ───────────────────────────────────────────────
     const STAGE_Y = 240;
     const actors = PHASES.map((name, i) => {
-      const c = circle(pt(120 + i * 180, STAGE_Y), 24, {
+      const c = circle(vec(120 + i * 180, STAGE_Y), 24, {
         fill: COLORS[i],
         opacity: tl[name].t.derive((t) => 0.1 + t * 0.9),
       });

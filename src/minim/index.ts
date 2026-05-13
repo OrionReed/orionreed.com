@@ -36,10 +36,22 @@ export {
   struct,
   type Reactive,
   type StructType,
-} from "./signals/struct";
+} from "./values/struct";
 
-// Built-in struct value types beyond Vec/Box/Matrix.
-export { Color, rgb, rgba, type C } from "./signals/color";
+// Built-in struct value types — each exposes:
+//   - the struct value (e.g. `Vec`) for advanced use (.signal/.derived/.lens/.is)
+//   - a lowercase factory shorthand (`vec`, `num`, `rgb`, `matrix`, `transform`)
+//   - the plain value type alias (`V`, `C`, `Box`, `Matrix2D`, `Transform`)
+//   - rw/ro flavor aliases where useful (`Point`/`DerivedPoint`, `N`/`DerivedN`)
+export { Color, rgb, rgba, type C } from "./values/color";
+export { Num, num, type N, type DerivedN } from "./values/num";
+export {
+  Transform,
+  transform,
+  type Tr,
+  type DerivedTr,
+} from "./values/transform";
+export { Matrix2D, matrix } from "./values/matrix";
 
 export { toSig, when, type Arg } from "./core/arg";
 
@@ -49,7 +61,7 @@ export { snapshot, counter } from "./core/store";
 // `V` is the plain `{x, y}` value type.
 export {
   Vec,
-  pt,
+  vec,
   polar,
   isPoint,
   vecEquals,
@@ -58,11 +70,11 @@ export {
   type DerivedPoint,
   type Pointlike,
   type ResolveVec,
-} from "./signals/vec";
+} from "./values/vec";
 
 /** Generic mean over any signals with a registered struct algebra
  *  (Vec/Box/Color/Matrix2D/…) or raw `Signal<number>`. */
-export { mean } from "./signals/aggregates";
+export { mean } from "./values/aggregates";
 
 // `Box` is both the registered struct and the plain `{x, y, w, h}` type.
 export {
@@ -72,7 +84,7 @@ export {
   boxEdgeFrom,
   isBox,
   type Boxlike,
-} from "./signals/box";
+} from "./values/box";
 
 export {
   Shape,
@@ -211,7 +223,7 @@ export {
 } from "./motion";
 
 // ── Spatial constants ───────────────────────────────────────────────
-export { Anchor, Dir } from "./anchor";
+export { Anchor, Dir } from "./values/anchor";
 
 // ── Consumer scaffold ───────────────────────────────────────────────
 export { Diagram, css } from "./diagram";

@@ -18,7 +18,7 @@
 // makes marker.active drive part.highlighted.
 //
 // The Boxlike surface on `Part` is installed at module load via
-// `delegate(Part.prototype, "box", Box)` — see `signals/delegate.ts`.
+// `delegate(Part.prototype, "box", Box)` — see `values/delegate.ts`.
 
 import {
   effect,
@@ -29,12 +29,12 @@ import {
 import { cell, type Cell, type ReadonlyCell } from "../core/cell";
 import { marker, hover, registerMarker, type Marker } from "../core/marker";
 import { toSig, type Arg } from "../core/arg";
-import { Box as BoxStruct, type Box, type Boxlike } from "../signals/box";
-import type { WriteOf } from "../signals/struct";
+import { Box as BoxStruct, type Box, type Boxlike } from "../values/box";
+import type { WriteOf } from "../values/struct";
 
 type BoxCell = WriteOf<typeof BoxStruct>;
-import { delegate } from "../signals/delegate";
-import type { Pointlike } from "../signals/vec";
+import { delegate } from "../values/delegate";
+import type { Pointlike } from "../values/vec";
 import type { TexShape } from "./tex";
 
 export type { Marker } from "../core/marker";

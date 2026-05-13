@@ -10,7 +10,7 @@ import {
   draggable,
   label,
   line,
-  pt,
+  vec,
   rect,
   snapshot,
   timeline,
@@ -58,7 +58,7 @@ export class MdMultitrack extends Diagram {
     }));
     for (let i = 1; i < TRACK_COUNT; i++) {
       const y = STRIP_Y + STRIP_PAD + i * TRACK_H;
-      s(line(pt(STRIP_X, y), pt(STRIP_X + STRIP_W, y), {
+      s(line(vec(STRIP_X, y), vec(STRIP_X + STRIP_W, y), {
         thin: true, opacity: 0.25,
       }));
     }
@@ -126,8 +126,8 @@ export class MdMultitrack extends Diagram {
 
     const playX = tl.t.derive((t) => STRIP_X + t * STRIP_W);
     s(line(
-      pt(playX, STRIP_Y - 4),
-      pt(playX, STRIP_Y + STRIP_H_TOTAL + 4),
+      vec(playX, STRIP_Y - 4),
+      vec(playX, STRIP_Y + STRIP_H_TOTAL + 4),
       { strokeWidth: 1.5, aside: true },
     ));
 
@@ -148,7 +148,7 @@ export class MdMultitrack extends Diagram {
       () => tl.fadeIn.t.value * (1 - tl.fadeOut.t.value),
     );
 
-    s(circle(pt(ballX, STAGE_Y), ballR, {
+    s(circle(vec(ballX, STAGE_Y), ballR, {
       fill: "#1a1a1a",
       opacity: ballOpacity,
     }));

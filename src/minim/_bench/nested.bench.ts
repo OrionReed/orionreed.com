@@ -20,12 +20,12 @@
 //     when external Signals were passed in via opts).
 //
 // Reference for matrix-compose: a tiny inline `compose(t, r, s, o)`
-// that mirrors what `signals/matrix.ts` does, so we measure the cost
+// that mirrors what `values/matrix.ts` does, so we measure the cost
 // of the *reads* not the matrix math.
 
 import { Signal, signal } from "../core/signal";
-import { struct } from "../signals/struct";
-import { Vec, type V } from "../signals/vec";
+import { struct } from "../values/struct";
+import { Vec, type V } from "../values/vec";
 import { bench, group } from "mitata";
 
 // ── The candidate: Transform-as-struct with nested Vec fields ────
@@ -109,7 +109,7 @@ class FiveFieldsLensed {
 // ── Matrix compose helper (read-cost dominated) ──────────────────
 
 function composeRead(t: V, r: number, s: V, o: V): number {
-  // Mirrors `signals/matrix.ts` `compose` shape, but returns a single
+  // Mirrors `values/matrix.ts` `compose` shape, but returns a single
   // number so the JIT can't dead-code-eliminate the reads.
   const c = Math.cos(r);
   const sn = Math.sin(r);
