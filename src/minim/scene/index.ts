@@ -27,14 +27,13 @@ export {
 // `Box` re-export carries BOTH the value (the struct) and the type
 // alias (the `{x, y, w, h}` shape) — same name, two namespaces, like
 // a class.
-export { Box } from "../signals/aabb";
 export {
-  aabb,
-  aabbEdgeFrom,
-  expandAABB,
-  unionAABB,
+  Box,
+  expandBox,
+  unionBox,
+  boxEdgeFrom,
   type Boxlike,
-} from "./box";
+} from "../signals/box";
 
 export {
   Shape,
@@ -44,8 +43,8 @@ export {
   type AnimatableKey,
   type Writable,
   type Segment,
-  aabbInRoot,
-  aabbIn,
+  boxInRoot,
+  boxIn,
 } from "./shape";
 
 export { draggable } from "./interaction";

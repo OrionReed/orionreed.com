@@ -33,7 +33,7 @@ Compare this to a hand-crafted encoding which takes advantage of the known schem
 Writing these optimized encodings by hand can be a pain when the layout keeps changing, so I wrote a small `codec.ts` utility with a tiny DSL which infers types and compacts the data as much as possible, removing redundant delimiters, creating smaller alphabets for enums and so on…
 
 ```ts
-const codec = codec("QRTP&lt;index:num&gt;/&lt;total:num&gt;:&lt;ack:text&gt;");
+const codec = codec("QRTP<index:num>/<total:num>:<ack:text>");
 ```
 
 The codec's `encode` and `decode` functions convert objects which match the schema to/from compact strings like "QRTP4/5:abc123".
@@ -42,17 +42,17 @@ To infer the types from the string took some work. Leading to this gnarly utilit
 
 ```ts
 type PatternType = 'text' | 'num' | 'bool' | 'list' | 'nums' | 'pairs' | 'numPairs' | 'enum';
-type ExtractEnumValues&lt;T extends string&gt; = T extends `enum[${infer Values}]`
+type ExtractEnumValues<T extends string> = T extends `enum[${infer Values}]`
   ? Values extends string
     ? Values extends ''
       ? never
       : Values extends `${infer First},${infer Rest}`
-        ? First | ExtractEnumValues&lt;`enum[${Rest}]`&gt;
+        ? First | ExtractEnumValues<`enum[${Rest}]`>
         : Values
     : never
   : never;
-type ParseType&lt;T extends string&gt; = T extends `${infer Base}-${string}`
-  ? ParseType&lt;Base&gt;
+type ParseType<T extends string> = T extends `${infer Base}-${string}`
+  ? ParseType<Base>
   : T extends 'text'
     ? string
     : T extends 'num'
@@ -64,24 +64,24 @@ type ParseType&lt;T extends string&gt; = T extends `${infer Base}-${string}`
           : T extends 'nums'
             ? number[]
             : T extends 'pairs'
-              ? Array&lt;[string, string]&gt;
+              ? Array<[string, string]>
               : T extends 'numPairs'
-                ? Array&lt;[number, number]&gt;
+                ? Array<[number, number]>
                 : T extends `enum[${string}]`
-                  ? ExtractEnumValues&lt;T&gt;
+                  ? ExtractEnumValues<T>
                   : string;
-type ExtractFields&lt;T extends string&gt; = T extends `${string}&lt;${infer Field}:${infer Type}&gt;${infer Rest}`
-  ? { [K in Field]: ParseType&lt;Type&gt; } &amp; ExtractFields&lt;Rest&gt;
-  : T extends `${string}&lt;${infer Field}&gt;${infer Rest}`
-    ? { [K in Field]: string } &amp; ExtractFields&lt;Rest&gt;
+type ExtractFields<T extends string> = T extends `${string}<${infer Field}:${infer Type}>${infer Rest}`
+  ? { [K in Field]: ParseType<Type> } & ExtractFields<Rest>
+  : T extends `${string}<${infer Field}>${infer Rest}`
+    ? { [K in Field]: string } & ExtractFields<Rest>
     : {};
-type Expand&lt;T&gt; = T extends infer O ? { [K in keyof O]: O[K] } : never;
+type Expand<T> = T extends infer O ? { [K in keyof O]: O[K] } : never;
 
-type CodecData&lt;T extends string&gt; = Expand&lt;
-  ExtractFields&lt;T&gt; &amp; {
+type CodecData<T extends string> = Expand<
+  ExtractFields<T> & {
     payload?: string;
   }
-&gt;;
+>;
 ```
 
 And that's it, that's the whole post! Thank you for coming to my TED talk. The codec utility can be found [here](https://github.com/folk-js/folkjs/blob/main/packages/labs/src/utils/codecString.ts) though I wouldn't recommend it for anything too important at time of writing.

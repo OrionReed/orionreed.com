@@ -26,7 +26,7 @@ export class MdAnchors extends Diagram {
 
     // Two reactive composers — rotate goes round once per loop, scale
     // breathes through three sizes. Both pivot around r's default
-    // origin (AABB center), so the LOCAL center is invariant while
+    // origin (box center), so the LOCAL center is invariant while
     // every corner/edge anchor sweeps through PARENT frame.
     const reset = snapshot(r.rotate, r.scale);
     this.anim.loop(function* () {

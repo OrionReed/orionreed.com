@@ -3,8 +3,8 @@
 // suites running. Run each variant separately by editing VARIANT.
 
 import { signal } from "../core/signal";
-import { Box, type Box as B } from "../signals/aabb";
-import { delegateCached, delegateNaive, delegateBound } from "../signals/delegate";
+import { Box, type Box as B } from "../signals/box";
+import { delegate, delegateLazy } from "../signals/delegate";
 
 const ITERS = 30_000_000;
 
@@ -36,29 +36,21 @@ class DirectPart {
   }
 }
 
-class CachedPart {
+class DelegPart {
   readonly inner: any;
   constructor(src: any) {
     this.inner = Box.derived(() => src.value);
   }
 }
-delegateCached(CachedPart.prototype, "inner", Box);
+delegate(DelegPart.prototype, "inner", Box);
 
-class NaivePart {
+class LazyPart {
   readonly inner: any;
   constructor(src: any) {
     this.inner = Box.derived(() => src.value);
   }
 }
-delegateNaive(NaivePart.prototype, "inner", Box);
-
-class BoundPart {
-  readonly inner: any;
-  constructor(src: any) {
-    this.inner = Box.derived(() => src.value);
-  }
-}
-delegateBound(BoundPart.prototype, "inner", Box);
+delegateLazy(LazyPart.prototype, "inner", Box);
 
 const src = signal<B>({ x: 0, y: 0, w: 100, h: 60 });
 
@@ -67,10 +59,9 @@ const TARGET = process.argv[3] ?? "x.value";
 
 const make = (() => {
   switch (VARIANT) {
-    case "direct": return new DirectPart(src);
-    case "cached": return new CachedPart(src);
-    case "naive":  return new NaivePart(src);
-    case "bound":  return new BoundPart(src);
+    case "direct":   return new DirectPart(src);
+    case "delegate": return new DelegPart(src);
+    case "lazy":     return new LazyPart(src);
     default: throw new Error(`unknown variant: ${VARIANT}`);
   }
 })() as any;

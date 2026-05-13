@@ -2,7 +2,7 @@
 //
 // Three flavors of a `Part`-like class, each holding a Reactive<Box>
 // and exposing the Box surface (x/y/w/h, center, top, bottom, left,
-// right, at, area, aabb):
+// right, at, area, box):
 //
 //   DirectPart   — today's pattern. Constructor assigns
 //                  `this.x = inner.x`, etc. Eagerly allocates 12
@@ -18,7 +18,7 @@
 // _isolated_check.ts sanity script is still around for spot-checks.
 
 import { signal, type ReadonlySignal, type Signal } from "../core/signal";
-import { Box, type Box as B } from "../signals/aabb";
+import { Box, type Box as B } from "../signals/box";
 import { delegate, delegateLazy } from "../signals/delegate";
 import type { Pointlike } from "../signals/vec";
 import { bench, group } from "mitata";
@@ -40,14 +40,13 @@ class DirectPart {
   readonly right: Pointlike;
   readonly at: (u: number, v: number) => Pointlike;
   readonly area: ReadonlySignal<number>;
-  readonly aabb: ReadonlySignal<B>;
   constructor(src: ReadonlySignal<B>) {
     const b = Box.derived(() => src.value);
     this.inner = b;
     this.x = b.x; this.y = b.y; this.w = b.w; this.h = b.h;
     this.center = b.center; this.top = b.top;
     this.bottom = b.bottom; this.left = b.left; this.right = b.right;
-    this.at = b.at; this.area = b.area; this.aabb = b.aabb;
+    this.at = b.at; this.area = b.area;
   }
 }
 
@@ -86,7 +85,6 @@ function assertParity(): void {
     ["right.y.value",          (p) => p.right.y.value],
     ["at(0.25, 0.75).x.value", (p) => p.at(0.25, 0.75).x.value],
     ["area.value",             (p) => p.area.value],
-    ["aabb.x.value",           (p) => p.aabb.x.value],
   ];
 
   for (const [label, read] of probes) {

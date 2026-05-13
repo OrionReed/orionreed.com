@@ -10,6 +10,7 @@
 // via the prototype slot.
 
 import { Signal, computed, signal, type ReadonlySignal } from "./signal";
+import { drive } from "./drive";
 import type { Animator, Yieldable } from "./anim";
 
 export type Easing = (t: number) => number;
@@ -36,9 +37,9 @@ const numberLerp: Lerp<number> = (a, b, t) => a + (b - a) * t;
  *  @internal — exported for the struct framework only. */
 export const LERP = Symbol("minim.lerp");
 
-// ── The engine: one generator function ──────────────────────────────
+// ── The engine: one tween-step on top of `drive` ────────────────────
 
-function* tweenStep<T>(
+function tweenStep<T>(
   sig: Signal<T>,
   target: T,
   dur: Duration,
@@ -46,16 +47,15 @@ function* tweenStep<T>(
   lerp: Lerp<T>,
 ): Animator {
   const start = sig.peek();
-  let elapsed = 0;
-  while (true) {
+  return drive((_dt, t) => {
     const total = typeof dur === "number" ? dur : dur.value;
-    if (elapsed >= total) break;
-    const dt: number = yield;
-    elapsed += dt;
-    const t = total > 0 ? Math.min(elapsed / total, 1) : 1;
-    sig.value = lerp(start, target, ease(t));
-  }
-  sig.value = target;
+    if (t >= total) {
+      sig.value = target;
+      return false;
+    }
+    const u = total > 0 ? t / total : 1;
+    sig.value = lerp(start, target, ease(u));
+  });
 }
 
 function makeTween<T>(

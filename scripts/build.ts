@@ -231,9 +231,14 @@ function processMarkdownFile(filePath: string): PostData {
     .use({
       renderer: {
         code(code: string, language?: string) {
-          // Convert code blocks to md-syntax elements
+          // md-syntax tokenizes innerText, so we must HTML-escape the
+          // raw source before embedding (parse5 treats `<` as a tag start).
+          const escaped = code
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
           const lang = language ? ` lang="${language}"` : "";
-          return `<md-syntax${lang}>${code}</md-syntax>`;
+          return `<md-syntax${lang}>${escaped}</md-syntax>`;
         },
         image(href: string, title: string | null, text: string) {
           const mediaPath = href.startsWith("/")

@@ -1,6 +1,6 @@
 import { signal, computed } from "../core/signal";
 import { Vec, pt } from "../signals/vec";
-import { Box } from "../signals/aabb";
+import { Box } from "../signals/box";
 import { Color, rgb } from "../signals/color";
 import { Matrix2D } from "../signals/matrix";
 import { bench, group } from "mitata";

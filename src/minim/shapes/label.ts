@@ -1,5 +1,6 @@
 import { toSig, type Arg, type V } from "../core";
-import { Shape, aabb, type ShapeOpts, type Pointlike } from "../scene";
+import { Shape, type ShapeOpts, type Pointlike } from "../scene";
+import { box } from "../signals/box";
 import { tokens } from "./tokens";
 import { renderContent, flattenText, type Content } from "./text";
 
@@ -35,7 +36,7 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
         const text = flattenText(contentSig.value);
         const fs = sizeSig.value;
         const w = fs * Math.max(1, text.length) * tokens.charWidth;
-        return aabb(anchor.x.value - a.x * w, anchor.y.value - a.y * fs, w, fs);
+        return box(anchor.x.value - a.x * w, anchor.y.value - a.y * fs, w, fs);
       },
       opts,
       // Pivot rotations on the anchor, not the bbox center.

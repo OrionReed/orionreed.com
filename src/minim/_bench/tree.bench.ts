@@ -10,7 +10,7 @@
 //
 //   1. Read all  — every descendant is consumed (renderer pass).
 //   2. Read one  — only the deepest descendant is read (cross-frame
-//                  query like `aabbInRoot(leaf)`).
+//                  query like `boxInRoot(leaf)`).
 //   3. No read   — write only, never observe (most ancestors during
 //                  drag operations).
 

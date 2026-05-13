@@ -11,7 +11,7 @@ import { effect, signal } from "../core/signal";
 import { easeInOut, easeOut } from "../motion/easings";
 import type { Animator, Easing } from "../core";
 import { Shape } from "../scene/shape";
-import { aabb } from "../scene/box";
+import { box } from "../signals/box";
 import { Part, type PartMarker } from "./parts";
 import type { TexShape } from "./tex";
 
@@ -94,7 +94,7 @@ const findMathWrapper = (matchedEl: HTMLElement): HTMLElement | null => {
 /** Part's matched-mrow position in parent-frame coords. */
 const partPose = (part: Part): { x: number; y: number } => {
   const tr = part.host.translate.value;
-  const a = part.aabb.value;
+  const a = part.box.value;
   return { x: tr.x + a.x, y: tr.y + a.y };
 };
 
@@ -108,8 +108,8 @@ export class Plucked extends Shape {
   readonly #sourcePrevOpacity: number;
 
   constructor(source: Part) {
-    const a = source.aabb.peek();
-    const local = aabb(0, 0, a.w, a.h);
+    const a = source.box.peek();
+    const local = box(0, 0, a.w, a.h);
     super("foreignObject", () => local);
     this.source = source;
     this.#sourcePrevOpacity = source.opacity.peek();
@@ -135,7 +135,7 @@ export function pluck(part: Part): Plucked {
   const wrapper = findMathWrapper(liveEl);
   if (!wrapper) throw new Error("pluck: cannot find <math> wrapper");
 
-  const aabbLocal = part.aabb.value;
+  const boxLocal = part.box.value;
   const pose = partPose(part);
 
   // Deep-clone the wrapper, then hide-via-visibility everything
@@ -153,10 +153,10 @@ export function pluck(part: Part): Plucked {
   mathClone.style.visibility = "hidden";
   matchedClone.style.visibility = "visible";
   // CSS-shift the wrapper so the matched mrow lands at (0, 0) of
-  // our local frame — combined with `Plucked.aabb = (0,0,w,h)`, this
+  // our local frame — combined with `Plucked.box = (0,0,w,h)`, this
   // makes `plucked.translate` semantically equal to "matched mrow TL
   // in parent coords."
-  clonedWrapper.style.transform = `translate(${-aabbLocal.x}px, ${-aabbLocal.y}px)`;
+  clonedWrapper.style.transform = `translate(${-boxLocal.x}px, ${-boxLocal.y}px)`;
   clonedWrapper.style.transformOrigin = "0 0";
 
   const plucked = new Plucked(part);
@@ -270,7 +270,7 @@ const groupByRoot = (parts: readonly Part[]): Map<PartMarker, Part[]> => {
   const out = new Map<PartMarker, Part[]>();
   for (const p of parts) {
     if (!p.el) continue;
-    const a = p.aabb.value;
+    const a = p.box.value;
     if (a.w === 0 || a.h === 0) continue;
     const r = groupRoot(p.marker);
     const list = out.get(r);
@@ -290,8 +290,8 @@ const ride = (
   animators: Animator[],
   cleanups: Array<() => void>,
 ): void => {
-  const pa = p.aabb.value;
-  const qa = q.aabb.value;
+  const pa = p.box.value;
+  const qa = q.box.value;
   const destPose = partPose(q);
   const sameContent = p.content.peek() === q.content.peek();
 
@@ -336,7 +336,7 @@ const fanOut = (
   animators: Animator[],
   cleanups: Array<() => void>,
 ): void => {
-  const pa = p.aabb.value;
+  const pa = p.box.value;
   const pPose = partPose(p);
 
   const src = pluck(p);
@@ -344,7 +344,7 @@ const fanOut = (
   cleanups.push(() => src.dispose());
 
   for (const q of qs) {
-    const qa = q.aabb.value;
+    const qa = q.box.value;
     const dst = pluck(q);
     dst.translate.value = pPose;
     dst.scale.value = { x: pa.w / qa.w, y: pa.h / qa.h };
@@ -368,11 +368,11 @@ const fanIn = (
   animators: Animator[],
   cleanups: Array<() => void>,
 ): void => {
-  const qa = q.aabb.value;
+  const qa = q.box.value;
   const qPose = partPose(q);
 
   for (const p of ps) {
-    const pa = p.aabb.value;
+    const pa = p.box.value;
     const src = pluck(p);
     animators.push(
       src.translate.to(qPose, dt, ease),

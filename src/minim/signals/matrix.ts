@@ -8,10 +8,10 @@
 // `transform="A B C"` order.
 //
 // This file is the single source of truth for matrix math: the
-// plain-value helpers (`compose`, `transformPoint`, `transformAABB`,
+// plain-value helpers (`compose`, `transformPoint`, `transformBox`,
 // etc.) used in hot paths (Shape's per-frame transform composition)
 // AND the registered `Matrix2D` struct used for reactive matrix
-// signals (e.g. Frame composition, `aabb.in(matrix)` cross-struct).
+// signals (e.g. Frame composition, `box.in(matrix)` cross-struct).
 //
 // The struct's `multiply`/`invert` ops reuse the same plain-value
 // implementations as the standalone exports — one source of truth,
@@ -26,7 +26,7 @@ export type M = { a: number; b: number; c: number; d: number; e: number; f: numb
 export type Matrix2D = M;
 
 // Plain Box shape (kept local to avoid a circular import with
-// `./aabb`). Same shape as the `Box` struct's value type (`B`).
+// `./box`). Same shape as the `Box` struct's value type (`B`).
 type Box = { x: number; y: number; w: number; h: number };
 
 // ── Plain-value helpers ────────────────────────────────────────────
@@ -97,8 +97,9 @@ export const transformPoint = (m: M, p: V): V => ({
   y: m.b * p.x + m.d * p.y + m.f,
 });
 
-/** Loose Box enclosing the four transformed corners of `b`. */
-export function transformAABB(m: M, b: Box): Box {
+/** Loose Box enclosing the four transformed corners of `b`. Identity
+ *  matrices short-circuit (common: untransformed groups). */
+export function transformBox(m: M, b: Box): Box {
   if (isIdentity(m)) return b;
   const x0 = b.x;
   const y0 = b.y;

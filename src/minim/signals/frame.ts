@@ -19,7 +19,7 @@
 //   const ptInWorld   = pt.in(child);          // Reactive<V>
 //   const boxInWorld  = box.in(child);         // Reactive<Box>
 //
-// Replaces: Shape.transform composition, aabbInRoot, aabbIn, the
+// Replaces: Shape.transform composition, boxInRoot, boxIn, the
 // cross-frame logic in Shape.boundary and Shape.toLocal. All of those
 // reduce to `value.in(targetFrame)`.
 

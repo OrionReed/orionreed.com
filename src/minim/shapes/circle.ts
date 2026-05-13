@@ -2,11 +2,11 @@ import { toSig, type Arg, type NumSig } from "../core";
 import {
   Shape,
   Vec,
-  aabb,
   type DerivedPoint,
   type Pointlike,
   type Segment,
 } from "../scene";
+import { box } from "../signals/box";
 import { TWO_PI } from "./dashed";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
@@ -24,7 +24,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
     super(
       intrinsicType(opts, "circle"),
       () =>
-        aabb(center.x.value - r.value, center.y.value - r.value, 2 * r.value, 2 * r.value),
+        box(center.x.value - r.value, center.y.value - r.value, 2 * r.value, 2 * r.value),
       opts,
       { origin: () => center.value },
     );
@@ -78,8 +78,8 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
    *  local frame — derived from the Box rather than `this.center`
    *  (which is now parent-frame). */
   override segments(): Segment[] {
-    const cx = () => this.aabb.value.x + this.aabb.value.w / 2;
-    const cy = () => this.aabb.value.y + this.aabb.value.h / 2;
+    const cx = () => this.box.value.x + this.box.value.w / 2;
+    const cy = () => this.box.value.y + this.box.value.h / 2;
     const r = () => this.radius.value;
     return [
       { type: "arc", cx, cy, r, a0: () => 0, a1: () => Math.PI },

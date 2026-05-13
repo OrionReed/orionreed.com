@@ -8,10 +8,9 @@ import {
   SVG_NS,
   mount,
   type Mount,
-  aabb,
   type Boxlike,
 } from "./scene";
-import { Box as BoxStruct } from "./signals/aabb";
+import { Box as BoxStruct, box } from "./signals/box";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
 import { ensureArrowMarker } from "./shapes/connect";
 
@@ -123,7 +122,7 @@ export class Diagram extends HTMLElement {
   fit(padding?: Padding): Boxlike {
     if (this.#viewSet) return this.#viewBox;
     const p = resolvePadding(padding);
-    const b = this.root.aabb.value;
+    const b = this.root.box.value;
     this.setViewBox(
       b.x - p.left,
       b.y - p.top,
@@ -146,7 +145,7 @@ export class Diagram extends HTMLElement {
   }
 
   private setViewBox(x: number, y: number, w: number, h: number): void {
-    this.#viewSig.value = aabb(x, y, w, h);
+    this.#viewSig.value = box(x, y, w, h);
     this.svg.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
     this.svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     this.svg.setAttribute("width", String(w));
@@ -178,7 +177,6 @@ export class Diagram extends HTMLElement {
 }
 
 // Helper: a fresh writable Box-valued signal seeded with the zero box.
-// Inlined here to avoid a dep on `signals/aabb` ergonomics.
 function signal0Box() {
-  return BoxStruct.signal(aabb(0, 0, 0, 0));
+  return BoxStruct.signal(box(0, 0, 0, 0));
 }

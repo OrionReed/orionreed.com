@@ -4,7 +4,7 @@
 // Triangle:                         Rect:
 //   3 vertices, drag each            move handle (center)
 //   3 edges that track them          rotate handle (orbits center)
-//   1 centroid handle (rigid move)   debug.aabb + debug.origin overlay
+//   1 centroid handle (rigid move)   debug.box + debug.origin overlay
 //   debug.distance on each edge
 //
 // Every handle is just a lens with a visible UI shadow: read its source,
@@ -51,9 +51,9 @@ export class MdHandles extends Diagram {
     const r = s(rect(0, 0, 110, 76, { thin: true, corner: 4 }));
     r.center.set(view.right.left(120));
 
-    // Debug overlay — dashed parent-frame AABB (axis-aligned, tracks
+    // Debug overlay — dashed parent-frame box (axis-aligned, tracks
     // the rotated rect) + crosshair at the rotate/scale pivot.
-    s(debug.aabb(r), debug.origin(r));
+    s(debug.box(r), debug.origin(r));
 
     // Move handle on the rect's center; rotate knob orbits the center
     // at a fixed radius. Drag the orbit handle to spin the rect.

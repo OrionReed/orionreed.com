@@ -11,6 +11,15 @@
 //   `minim/waapi`   — Web Animations / scroll / view-timeline bridges
 
 // ── Core ────────────────────────────────────────────────────────────
+
+// `cell` is the unified user-facing primitive for reactive state:
+//   cell(v)            — writable        (alias for `signal(v)`)
+//   cell.derived(fn)   — read-only       (alias for `computed(fn)`)
+//   cell.lens(r, w)    — writable lens   (alias for `lens(r, w)`)
+// `Cell<T, W>` is the unified type. The older `signal`/`computed`/
+// `lens` and `Signal`/`ReadonlySignal` names remain for back-compat.
+export { cell, type Cell, type ReadonlyCell, type RW } from "./core/cell";
+
 export {
   signal,
   computed,
@@ -38,7 +47,6 @@ export {
   defineCell,
   type Reactive,
   type StructType,
-  type RW,
 } from "./signals/struct";
 
 // Built-in struct value types beyond Vec/Box/Matrix.
@@ -73,27 +81,30 @@ export {
   meanVec,
   meanNum,
 } from "./scene/aggregates";
+// Generic mean<T> — works for any value type with a registered
+// vector-space algebra. meanVec/meanNum/centroid are sugar over it.
+export { mean } from "./signals/aggregates";
 
+// `Box` re-exports BOTH the value (the registered struct, used as
+// `Box.signal({...})`, `instanceof Box`, etc.) AND the type alias for
+// the plain `{x, y, w, h}` shape — same name, two namespaces.
+// Mirrors how `Vec` works. The plain `box(x,y,w,h)` constructor is
+// kept internal (would collide with `box(part)` decoration).
 export {
-  aabb,
-  expandAABB,
-  unionAABB,
-  aabbEdgeFrom,
+  Box,
+  expandBox,
+  unionBox,
+  boxEdgeFrom,
   type Boxlike,
-} from "./scene/box";
-// `Box` here re-exports BOTH the value (the registered struct, used
-// as `Box.signal({...})`, `instanceof Box`, etc.) AND the type alias
-// for the plain `{x, y, w, h}` shape — same name, two namespaces.
-// Mirrors how `Vec` works.
-export { Box } from "./signals/aabb";
+} from "./signals/box";
 
 export {
   Shape,
   type ShapeOpts,
   type AnyShape,
   type Writable,
-  aabbInRoot,
-  aabbIn,
+  boxInRoot,
+  boxIn,
 } from "./scene/shape";
 
 export { draggable } from "./scene/interaction";

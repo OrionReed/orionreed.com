@@ -22,6 +22,27 @@ export const Color = struct<C>("Color", { r: 0, g: 0, b: 0, a: 1 })
   )
   .equals((x, y) => x.r === y.r && x.g === y.g && x.b === y.b && x.a === y.a)
   .ops({
+    /** Component-wise add. Stamps `[ALGEBRA]` (with sub/scale below)
+     *  so integrators (spring/oscillate/drift/attract) and aggregates
+     *  (mean) work on `Reactive<C>`. */
+    add: (a, b: C): C => ({
+      r: a.r + b.r,
+      g: a.g + b.g,
+      b: a.b + b.b,
+      a: a.a + b.a,
+    }),
+    sub: (a, b: C): C => ({
+      r: a.r - b.r,
+      g: a.g - b.g,
+      b: a.b - b.b,
+      a: a.a - b.a,
+    }),
+    scale: (a, k: number): C => ({
+      r: a.r * k,
+      g: a.g * k,
+      b: a.b * k,
+      a: a.a * k,
+    }),
     /** Component-wise lerp in linear RGBA. Registering this enables
      *  the framework to derive `.to(target, dur)` automatically. */
     lerp: (a, b: C, t: number): C => ({

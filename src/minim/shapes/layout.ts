@@ -2,9 +2,8 @@
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
 import { toSig, type Arg } from "../core/arg";
-import { transformAABB } from "../signals/matrix";
-import { aabb, expandAABB, type Boxlike } from "../scene/box";
-import { Box } from "../signals/aabb";
+import { transformBox } from "../signals/matrix";
+import { Box, box, expandBox, type Boxlike } from "../signals/box";
 import type { Shape } from "../scene";
 
 export interface ArrangeOpts {
@@ -33,19 +32,19 @@ export function arrange(
     cur.effect(() => {
       // prev/anchor in the parent frame so upstream transforms
       // cascade; cur stays local since we're writing its own translate.
-      const pAABB = transformAABB(prev.transform.value, prev.aabb.value);
-      const aAABB = transformAABB(anchor.transform.value, anchor.aabb.value);
-      const cb = cur.aabb.value;
+      const pBox = transformBox(prev.transform.value, prev.box.value);
+      const aBox = transformBox(anchor.transform.value, anchor.box.value);
+      const cb = cur.box.value;
       if (axis === "row") {
-        const targetX = pAABB.x + pAABB.w + gap;
-        const targetY = aAABB.y + cross * aAABB.h - cross * cb.h;
+        const targetX = pBox.x + pBox.w + gap;
+        const targetY = aBox.y + cross * aBox.h - cross * cb.h;
         cur.translate.value = {
           x: targetX - cb.x,
           y: targetY - cb.y,
         };
       } else {
-        const targetY = pAABB.y + pAABB.h + gap;
-        const targetX = aAABB.x + cross * aAABB.w - cross * cb.w;
+        const targetY = pBox.y + pBox.h + gap;
+        const targetX = aBox.x + cross * aBox.w - cross * cb.w;
         cur.translate.value = {
           x: targetX - cb.x,
           y: targetY - cb.y,
@@ -61,9 +60,9 @@ export function arrange(
 // Reactive<Box>(es) that update reactively as the source changes.
 
 /** Inflate a Box on each side by `by`. */
-export function expand(box: Boxlike, by: Arg<number>): Boxlike {
+export function expand(b: Boxlike, by: Arg<number>): Boxlike {
   const bys = toSig(by);
-  return Box.derived(() => expandAABB(box.aabb.value, bys.value));
+  return Box.derived(() => expandBox(b.box.value, bys.value));
 }
 
 /** Split a Box along an axis into N reactive sub-Boxes.
@@ -73,7 +72,7 @@ export function expand(box: Boxlike, by: Arg<number>): Boxlike {
  *   split(b, "x", 3, { gap: 4 })  — 4px between
  */
 export function split(
-  box: Boxlike,
+  source: Boxlike,
   axis: "x" | "y",
   parts: number | number[],
   opts: { gap?: Arg<number> } = {},
@@ -86,17 +85,17 @@ export function split(
   const gapSig = toSig(opts.gap ?? 0);
   return ratios.map((r, i) =>
     Box.derived(() => {
-      const b = box.aabb.value;
+      const b = source.box.value;
       const gap = gapSig.value;
       const gapTotal = gap * (ratios.length - 1);
       if (axis === "x") {
         const free = b.w - gapTotal;
         const offset = (cumBefore[i] / total) * free + gap * i;
-        return aabb(b.x + offset, b.y, (r / total) * free, b.h);
+        return box(b.x + offset, b.y, (r / total) * free, b.h);
       }
       const free = b.h - gapTotal;
       const offset = (cumBefore[i] / total) * free + gap * i;
-      return aabb(b.x, b.y + offset, b.w, (r / total) * free);
+      return box(b.x, b.y + offset, b.w, (r / total) * free);
     }),
   );
 }
@@ -104,10 +103,12 @@ export function split(
 /** Two-axis split into a `rows × cols` grid (sugar over `split`).
  *  Returns `[row][col]`. */
 export function grid(
-  box: Boxlike,
+  source: Boxlike,
   rows: number,
   cols: number,
   opts: { gap?: Arg<number> } = {},
 ): Boxlike[][] {
-  return split(box, "y", rows, opts).map((row) => split(row, "x", cols, opts));
+  return split(source, "y", rows, opts).map((row) =>
+    split(row, "x", cols, opts),
+  );
 }

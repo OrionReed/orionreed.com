@@ -8,6 +8,13 @@
 // through `marker.group` so coloring `v` colors its `expand`-ed
 // children. `Part` implements `Boxlike`, so `eq.parts.a.center` etc.
 // are usable Pointlikes.
+//
+// The Boxlike surface (x/y/w/h, center/top/bottom/left/right, at,
+// area) is installed at module load via
+// `delegate(Part.prototype, "box", Box)` — see `signals/delegate.ts`.
+// Each Boxlike axis or anchor materializes lazily on first read and
+// caches as an own-property, matching the framework's own pattern.
+// The `declare`-only field declarations below give TS the same view.
 
 import {
   effect,
@@ -16,8 +23,8 @@ import {
   type ReadonlySignal,
 } from "../core/signal";
 import { toSig, type Arg } from "../core/arg";
-import { type Box, type Boxlike } from "../scene/box";
-import { Box as BoxStruct } from "../signals/aabb";
+import { Box as BoxStruct, type Box, type Boxlike } from "../signals/box";
+import { delegate } from "../signals/delegate";
 import type { Pointlike } from "../signals/vec";
 import type { TexShape } from "./tex";
 
@@ -46,17 +53,26 @@ export class Part<N extends string = string> implements Boxlike {
   /** Opacity in [0, 1]. Wired to `el.style.opacity`. */
   readonly opacity: Signal<number> = signal(1);
 
-  // Boxlike interface — derived from `aabb` via the Box struct.
-  readonly x: ReadonlySignal<number>;
-  readonly y: ReadonlySignal<number>;
-  readonly w: ReadonlySignal<number>;
-  readonly h: ReadonlySignal<number>;
-  readonly center: Pointlike;
-  readonly top: Pointlike;
-  readonly bottom: Pointlike;
-  readonly left: Pointlike;
-  readonly right: Pointlike;
-  readonly at: (u: number, v: number) => Pointlike;
+  // The canonical Box surface — passed in by the host, written by the
+  // host on re-measure. Boxlike fields below are delegated from this.
+  readonly box: ReturnType<typeof BoxStruct.signal>;
+
+  // Boxlike axes + anchors. `declare`-only — installed at runtime by
+  // `delegate(Part.prototype, "box", Box)` below, declared here so TS
+  // sees them without emitting field initializers (which would shadow
+  // the prototype getters at runtime).
+  declare readonly x: ReadonlySignal<number>;
+  declare readonly y: ReadonlySignal<number>;
+  declare readonly w: ReadonlySignal<number>;
+  declare readonly h: ReadonlySignal<number>;
+  declare readonly center: Pointlike;
+  declare readonly top: Pointlike;
+  declare readonly bottom: Pointlike;
+  declare readonly left: Pointlike;
+  declare readonly right: Pointlike;
+  declare readonly at: (u: number, v: number) => Pointlike;
+  /** Reactive area (lazy + cached as own-property). */
+  declare readonly area: ReadonlySignal<number>;
 
   /** Current live MathML node carrying `class="minim-part-N"`, or
    *  `null` if the host failed to mount it. Set by `bind`. */
@@ -67,23 +83,13 @@ export class Part<N extends string = string> implements Boxlike {
   constructor(
     readonly name: N,
     readonly content: ReadonlySignal<string>,
-    readonly aabb: ReadonlySignal<Box>,
+    box: ReturnType<typeof BoxStruct.signal>,
     /** The marker this Part was instantiated from. Morph identifies
      *  same-identity parts by reference equality on this. */
     readonly marker: PartMarker,
     readonly host: TexShape,
   ) {
-    const b = BoxStruct.derived(() => aabb.value);
-    this.x = b.x;
-    this.y = b.y;
-    this.w = b.w;
-    this.h = b.h;
-    this.center = b.center;
-    this.top = b.top;
-    this.bottom = b.bottom;
-    this.left = b.left;
-    this.right = b.right;
-    this.at = b.at;
+    this.box = box;
   }
 
   /** @internal Wire reactive state to `el`'s inline styles. Called by
@@ -117,6 +123,12 @@ export class Part<N extends string = string> implements Boxlike {
     this.el = null;
   }
 }
+
+// Install the Box surface as passthrough getters on Part.prototype.
+// `exclude: ["box"]` keeps the struct's `box` self-reference from
+// shadowing our own `box` field at the type level (at runtime the
+// own-property would win anyway, but excluding is cleaner).
+delegate(Part.prototype, "box", BoxStruct, { exclude: ["box"] });
 
 /** Marker emitted by `part(name, content)` and `parts({...})`. Only
  *  valid inside `tex\`…\`` template holes. Identity for morph is by
@@ -228,3 +240,7 @@ export function tint(
 export type PartList<Names extends string = string> = readonly Part[] & {
   readonly [K in Names]: Part<K>;
 };
+
+// Silence unused-import warning — `Box` type is needed for the
+// `BoxStruct.signal` return type but not directly referenced.
+void (null as unknown as Box);

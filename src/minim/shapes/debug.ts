@@ -2,7 +2,7 @@
 //
 // Every debug shape is `aside: true` (so it's excluded from autofit) and
 // uses a shared visual idiom: dashed magenta strokes, low opacity, small
-// markers. Drop `s(debug.aabb(thing))` while developing, delete when done.
+// markers. Drop `s(debug.box(thing))` while developing, delete when done.
 //
 // All debug shapes report in PARENT frame: for a `Shape`, the Box is
 // transformed through the shape's transform first (so you see the visual
@@ -21,8 +21,8 @@ import {
   type Boxlike,
   type Pointlike,
 } from "../scene";
-import { Box } from "../signals/aabb";
-import { transformAABB, transformPoint } from "../signals/matrix";
+import { Box } from "../signals/box";
+import { transformBox, transformPoint } from "../signals/matrix";
 import { circle } from "./circle";
 import { line } from "./line";
 import { label } from "./label";
@@ -46,13 +46,13 @@ const outlineOpts = {
  *  through. */
 function parentBox(b: Boxlike): Boxlike {
   if (b instanceof Shape) {
-    return Box.derived(() => transformAABB(b.transform.value, b.aabb.value));
+    return Box.derived(() => transformBox(b.transform.value, b.box.value));
   }
   return b;
 }
 
 /** Dashed rect on a Box's parent-frame Box. */
-const aabb = (b: Boxlike) => rect(parentBox(b), outlineOpts);
+const boxOutline = (b: Boxlike) => rect(parentBox(b), outlineOpts);
 
 /** Small filled dot at a point or a Box's center. */
 const dot = (p: Pointlike | Boxlike, r = 2.5) =>
@@ -151,7 +151,7 @@ const path = (p: Path, ticks = 5) => {
 /** debug.* — diagnostic overlays. All are `aside: true` so they don't
  *  infect autofit. Drop in during development, remove when done. */
 export const debug = {
-  aabb,
+  box: boxOutline,
   dot,
   origin,
   anchors,

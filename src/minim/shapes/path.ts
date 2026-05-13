@@ -9,12 +9,12 @@ import {
 import {
   Shape,
   Vec,
-  aabb,
   isPoint,
   type DerivedPoint,
   type Pointlike,
   type Segment,
 } from "../scene";
+import { box } from "../signals/box";
 import { wireStroke, type CommonOpts } from "./common";
 
 export interface PathOpts extends CommonOpts {
@@ -131,7 +131,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
       "path",
       () => {
         const ps = points.value;
-        if (ps.length === 0) return aabb(0, 0, 0, 0);
+        if (ps.length === 0) return box(0, 0, 0, 0);
         let xMin = Infinity,
           yMin = Infinity,
           xMax = -Infinity,
@@ -143,7 +143,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
           if (v.x > xMax) xMax = v.x;
           if (v.y > yMax) yMax = v.y;
         }
-        return aabb(xMin, yMin, xMax - xMin, yMax - yMin);
+        return box(xMin, yMin, xMax - xMin, yMax - yMin);
       },
       opts,
       {

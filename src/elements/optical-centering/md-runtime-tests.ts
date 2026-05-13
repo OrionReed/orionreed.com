@@ -987,7 +987,7 @@ const TESTS: TestCase[] = [
   {
     name: "shape anchor writes are exact under rotation",
     run: (assert) => {
-      // 100×60 rect, origin at center (50, 30 local; AABB center).
+      // 100×60 rect, origin at center (50, 30 local; box center).
       // Apply 90° rotation. The corner at(1, 0) — local (100, 0) —
       // rotates to (30, 50) in parent frame (relative to origin
       // (50, 30): (50, -30) → rotate 90° → (30, 50) → +origin → (80, 80)).
@@ -1016,7 +1016,7 @@ const TESTS: TestCase[] = [
   {
     name: "shape anchor reads track scale around center",
     run: (assert) => {
-      // 100×60 rect, default origin = AABB center (50, 30). Scale 2×
+      // 100×60 rect, default origin = box center (50, 30). Scale 2×
       // around center → local corner (100, 60) lands at center +
       // 2 × (corner - center) = (50, 30) + 2·(50, 30) = (150, 90).
       const r = rect(0, 0, 100, 60);

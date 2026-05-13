@@ -141,7 +141,7 @@ export class MdTexDemo extends Diagram {
       yield* highlight(p1.parts.c, 0.4);
       yield 0.4;
 
-      status.value = "decorations — one per part, all reactive on aabb";
+      status.value = "decorations — one per part, all reactive on box";
       yield* aBox.opacity.to(1, 0.3);
       yield 0.18;
       yield* bUnderline.opacity.to(1, 0.3);

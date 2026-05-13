@@ -2,10 +2,10 @@ import { computed, toSig, type Arg, type NumSig } from "../core";
 import {
   Shape,
   Vec,
-  aabb,
   type Pointlike,
   type Segment,
 } from "../scene";
+import { box } from "../signals/box";
 import { wireStroke, type CommonOpts } from "./common";
 
 export interface AnnularSectorOpts extends CommonOpts {}
@@ -34,7 +34,7 @@ export class AnnularSector<
     super(
       "path",
       () =>
-        aabb(
+        box(
           center.x.value - ro.value,
           center.y.value - ro.value,
           2 * ro.value,
@@ -80,8 +80,8 @@ export class AnnularSector<
    *  local-frame — derived from the Box (whose center matches the
    *  user-supplied center). */
   override segments(): Segment[] {
-    const cx = () => this.aabb.value.x + this.aabb.value.w / 2;
-    const cy = () => this.aabb.value.y + this.aabb.value.h / 2;
+    const cx = () => this.box.value.x + this.box.value.w / 2;
+    const cy = () => this.box.value.y + this.box.value.h / 2;
     const ro = () => this.rOuter.value;
     const ri = () => this.rInner.value;
     const a0 = () => this.a0.value;

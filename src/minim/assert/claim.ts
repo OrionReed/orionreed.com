@@ -34,7 +34,7 @@ import {
 } from "../core/signal";
 import { race } from "../core/suspensions";
 import type { Animator } from "../core/anim";
-import { type Box, type Boxlike } from "../scene/box";
+import { type Box, type Boxlike } from "../signals/box";
 import { circle } from "../shapes/circle";
 import { pt, type V, type Pointlike } from "../signals/vec";
 
@@ -385,12 +385,12 @@ export class Predicates<T> {
     this: Predicates<V>,
     region: Boxlike | ReadonlySignal<Box>,
   ): Claim {
-    const aabbSig: ReadonlySignal<Box> =
-      "aabb" in region ? region.aabb : region;
+    const boxSig: ReadonlySignal<Box> =
+      "box" in region ? region.box : region;
     return this.build(
       computed(() => {
         const v = this.sig.value;
-        const b = aabbSig.value;
+        const b = boxSig.value;
         return v.x >= b.x && v.x <= b.x + b.w && v.y >= b.y && v.y <= b.y + b.h;
       }),
       `inside bounds`,

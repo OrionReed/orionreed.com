@@ -12,6 +12,14 @@ export {
   type ReadonlySignal,
 } from "./signal";
 
+// `cell` — unified user-facing entry for reactive state:
+//   cell(v)               — writable        (was signal(v))
+//   cell.derived(fn)      — read-only       (was computed(fn))
+//   cell.lens(read, w)    — writable lens   (was lens(read, w))
+// `Cell<T, W>` is the unified type; signal/computed/lens stay as
+// aliases for back-compat.
+export { cell, type Cell, type ReadonlyCell, type RW } from "./cell";
+
 // Importing this module installs `Signal.prototype.to` and registers
 // the tween types. Re-exported below.
 export {

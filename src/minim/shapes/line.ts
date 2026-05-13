@@ -2,11 +2,11 @@ import { computed, type Arg, type ReadonlySignal } from "../core";
 import {
   Shape,
   Vec,
-  aabb,
   type DerivedPoint,
   type Pointlike,
   type Segment,
 } from "../scene";
+import { box } from "../signals/box";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
 export interface LineOpts extends CommonOpts {}
@@ -22,7 +22,7 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
       () => {
         const a = from.value;
         const b = to.value;
-        return aabb(
+        return box(
           Math.min(a.x, b.x),
           Math.min(a.y, b.y),
           Math.abs(b.x - a.x),

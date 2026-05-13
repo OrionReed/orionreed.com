@@ -4,7 +4,7 @@
 //
 // Motivation: today `Part`/`Shape` hand-roll 11+ forwarder field
 // assignments per class to expose the Box surface (x/y/w/h, center,
-// top, bottom, left, right, at, area, aabb). With `delegate(...)`,
+// top, bottom, left, right, at, area, box). With `delegate(...)`,
 // one declarative call replaces the whole block AND any future
 // addition to the inner struct's surface propagates automatically.
 //

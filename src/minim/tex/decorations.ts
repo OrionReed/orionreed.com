@@ -1,5 +1,5 @@
 // Derived shapes that decorate a tex Part. Each one re-derives from
-// `part.aabb` so the decoration tracks its target through any
+// `part.box` so the decoration tracks its target through any
 // re-measurement or animation.
 //
 // Mount as a child of the parent TexShape if you want the decoration
@@ -10,7 +10,9 @@
 
 import { computed, type ReadonlySignal } from "../core/signal";
 import { Shape } from "../scene/shape";
-import { aabb, type Box } from "../scene/box";
+// Plain Box constructor — imported renamed to avoid shadowing the
+// `box(part)` decoration exported below.
+import { box as mkBox, type Box } from "../signals/box";
 import { tokens } from "../shapes/tokens";
 import type { Part } from "./parts";
 
@@ -33,7 +35,7 @@ const applyStroke = (s: Shape, opts: DecorationOpts) => {
 
 /** A `<rect>` whose x/y/w/h and Box all derive from the same layout
  *  signal — single source of truth, one re-render per change. */
-function rectFromAABB(layout: ReadonlySignal<Box>): Shape {
+function rectFromBox(layout: ReadonlySignal<Box>): Shape {
   const s = new Shape("rect", () => layout.value);
   s.attr("x", () => layout.value.x);
   s.attr("y", () => layout.value.y);
@@ -56,7 +58,7 @@ function lineFromEnds(layout: ReadonlySignal<LineEnds>): Shape {
     const e = layout.value;
     const x = Math.min(e.x1, e.x2);
     const y = Math.min(e.y1, e.y2);
-    return aabb(x, y, Math.abs(e.x2 - e.x1), Math.abs(e.y2 - e.y1));
+    return mkBox(x, y, Math.abs(e.x2 - e.x1), Math.abs(e.y2 - e.y1));
   });
   s.attr("x1", () => layout.value.x1);
   s.attr("y1", () => layout.value.y1);
@@ -65,7 +67,7 @@ function lineFromEnds(layout: ReadonlySignal<LineEnds>): Shape {
   return s;
 }
 
-/** Curly brace below (or above) a part. Reactive on `part.aabb`. */
+/** Curly brace below (or above) a part. Reactive on `part.box`. */
 export function brace(
   part: Part,
   opts: DecorationOpts & {
@@ -80,7 +82,7 @@ export function brace(
   const gap = opts.gap ?? tokens.decoration.braceGap;
 
   const d = computed(() => {
-    const b = part.aabb.value;
+    const b = part.box.value;
     const x0 = b.x;
     const x1 = b.x + b.w;
     const baseY = placement === "below" ? b.y + b.h + gap : b.y - gap;
@@ -101,10 +103,10 @@ export function brace(
   });
 
   const s = new Shape("path", () => {
-    const b = part.aabb.value;
+    const b = part.box.value;
     const baseY = placement === "below" ? b.y + b.h + gap : b.y - gap;
     const tip = baseY + (placement === "below" ? height : -height);
-    return aabb(b.x, Math.min(baseY, tip), b.w, Math.abs(tip - baseY));
+    return mkBox(b.x, Math.min(baseY, tip), b.w, Math.abs(tip - baseY));
   });
   s.attr("d", d);
   s.attr("stroke-linecap", "round");
@@ -121,10 +123,10 @@ export function box(
   const gap = opts.gap ?? tokens.decoration.gap;
   const corner = opts.corner ?? tokens.corner;
   const layout = computed(() => {
-    const b = part.aabb.value;
-    return aabb(b.x - gap, b.y - gap, b.w + 2 * gap, b.h + 2 * gap);
+    const b = part.box.value;
+    return mkBox(b.x - gap, b.y - gap, b.w + 2 * gap, b.h + 2 * gap);
   });
-  const s = rectFromAABB(layout);
+  const s = rectFromBox(layout);
   s.attr("rx", corner);
   s.attr("ry", corner);
   applyStroke(s, opts);
@@ -135,7 +137,7 @@ export function box(
 export function underline(part: Part, opts: DecorationOpts = {}): Shape {
   const gap = opts.gap ?? tokens.decoration.gap;
   const layout = computed(() => {
-    const b = part.aabb.value;
+    const b = part.box.value;
     const y = b.y + b.h + gap;
     return { x1: b.x, y1: y, x2: b.x + b.w, y2: y };
   });
@@ -150,7 +152,7 @@ export function underline(part: Part, opts: DecorationOpts = {}): Shape {
 export function cross(part: Part, opts: DecorationOpts = {}): Shape {
   const gap = opts.gap ?? tokens.decoration.crossGap;
   const layout = computed(() => {
-    const b = part.aabb.value;
+    const b = part.box.value;
     return {
       x1: b.x - gap,
       y1: b.y + b.h + gap,

@@ -7,19 +7,19 @@ import {
 } from "../core/signal";
 import { toSig, type Arg, type ResolveSig } from "../core/arg";
 import {
-  aabb,
-  aabbEdgeFrom,
-  unionAABB,
+  Box as BoxStruct,
+  box,
+  boxEdgeFrom,
+  unionBox,
   type Box,
   type Boxlike,
-} from "./box";
-import { Box as BoxStruct } from "../signals/aabb";
+} from "../signals/box";
 import {
   compose,
   invert,
   multiply,
   toString as matrixToString,
-  transformAABB,
+  transformBox,
   transformPoint,
   type Matrix2D,
 } from "../signals/matrix";
@@ -119,7 +119,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
 
   // ── Boxlike interface ───────────────────────────────────────────────
   //
-  // Source-of-truth: `aabb` (local-frame Box Signal). Everything else
+  // Source-of-truth: `box` (local-frame Box Signal). Everything else
   // is derived lazily — `x/y/w/h` axis projections via the Box struct's
   // framework field accessors; `center/top/bottom/left/right` via
   // writable lens-backed anchors built on first access (cached as
@@ -130,7 +130,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
   /** Local-frame Box Signal; source-of-truth for the scalar fields
    *  below. For groups, the union of non-aside children's boxes (each
    *  composed through its transform). */
-  readonly aabb: ReadonlySignal<Box>;
+  readonly box: ReadonlySignal<Box>;
   /** Axis projections of the Box. Eager so subclasses (Rect) can
    *  override with source signals. Cheap — the Box Reactive's field
    *  accessors are themselves lazy at the framework level, so these
@@ -157,7 +157,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
   at(u: number, v: number): Point { return this.#makeAnchor(u, v); }
 
   /** Composed `translate × pivoted-rotate × pivoted-scale`. Decoupled
-   *  from `aabb` so transforms don't trigger Box recomputation. */
+   *  from `box` so transforms don't trigger Box recomputation. */
   readonly transform: ReadonlySignal<Matrix2D>;
   readonly aside: boolean;
 
@@ -173,7 +173,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
 
   constructor(
     intrinsicType?: string,
-    aabbFn?: () => Box,
+    boxFn?: () => Box,
     opts: O = {} as O,
     /** Subclass per-prop defaults (kept off `O` so the field types
      *  stay driven by user input only). */
@@ -215,24 +215,24 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
 
     // Group default: union of non-aside children's boxes, each composed
     // through its transform. Lazy — `this._children` is read on access.
-    // Built as a Reactive<Box> via the framework: `aabbSig.x` /
+    // Built as a Reactive<Box> via the framework: `boxSig.x` /
     // `.y` / `.w` / `.h` are lazy field accessors at the framework
     // level (built on first access, cached as own-property), which
     // is what we forward to below.
-    const aabbSig = BoxStruct.derived(
-      aabbFn ??
+    const boxSig = BoxStruct.derived(
+      boxFn ??
         (() => {
           const cs = this._children.value
             .filter((c) => !c.aside)
-            .map((c) => transformAABB(c.transform.value, c.aabb.value));
-          return cs.length ? unionAABB(...cs) : aabb(0, 0, 0, 0);
+            .map((c) => transformBox(c.transform.value, c.box.value));
+          return cs.length ? unionBox(...cs) : box(0, 0, 0, 0);
         }),
     );
-    this.aabb = aabbSig as ReadonlySignal<Box>;
-    this.x = aabbSig.x;
-    this.y = aabbSig.y;
-    this.w = aabbSig.w;
-    this.h = aabbSig.h;
+    this.box = boxSig as ReadonlySignal<Box>;
+    this.x = boxSig.x;
+    this.y = boxSig.y;
+    this.w = boxSig.w;
+    this.h = boxSig.h;
 
     this.transform = computed(() => {
       const t = this.translate.value;
@@ -260,8 +260,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
    *  shapes (Circle, Rect) override. */
   boundary(toward: Pointlike): DerivedPoint {
     return Vec.derived(() =>
-      aabbEdgeFrom(
-        transformAABB(this.transform.value, this.aabb.value),
+      boxEdgeFrom(
+        transformBox(this.transform.value, this.box.value),
         toward.value,
       ),
     );
@@ -280,17 +280,17 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
   // own-property on `this`, so subsequent `shape.center` reads bypass
   // the getter entirely (own-property fast path).
   #makeAnchor(u: number, v: number): Point {
-    const aabbSig = this.aabb;
+    const boxSig = this.box;
     return lensPoint(
       () => {
-        const b = aabbSig.value;
+        const b = boxSig.value;
         return transformPoint(this.transform.value, {
           x: b.x + u * b.w,
           y: b.y + v * b.h,
         });
       },
       (target) => {
-        const b = aabbSig.peek();
+        const b = boxSig.peek();
         const local = { x: b.x + u * b.w, y: b.y + v * b.h };
         const currentWorld = transformPoint(this.transform.peek(), local);
         const tNow = this.translate.peek();
@@ -316,7 +316,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
   /** Stroke segments — used by the dashed renderer. Default is the
    *  bounding rect. */
   segments(): Segment[] {
-    const b = this.aabb.value;
+    const b = this.box.value;
     const tl = pt(b.x, b.y);
     const tr = pt(b.x + b.w, b.y);
     const br = pt(b.x + b.w, b.y + b.h);
@@ -443,7 +443,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
 // ── Cross-frame helpers ─────────────────────────────────────────────
 
 /** `shape`'s Box in the scene-root frame. */
-export function aabbInRoot(shape: AnyShape): ReadonlySignal<Box> {
+export function boxInRoot(shape: AnyShape): ReadonlySignal<Box> {
   return computed(() => {
     let m = shape.transform.value;
     let p = shape.parent;
@@ -451,12 +451,12 @@ export function aabbInRoot(shape: AnyShape): ReadonlySignal<Box> {
       m = multiply(p.transform.value, m);
       p = p.parent;
     }
-    return transformAABB(m, shape.aabb.value);
+    return transformBox(m, shape.box.value);
   });
 }
 
 /** `shape`'s Box in `observer`'s local frame. */
-export function aabbIn(
+export function boxIn(
   shape: AnyShape,
   observer: AnyShape,
 ): ReadonlySignal<Box> {
@@ -470,6 +470,6 @@ export function aabbIn(
       mObs = multiply(p.transform.value, mObs);
     }
     // shape-local → observer-local = inv(observer→root) ⋅ shape→root
-    return transformAABB(multiply(invert(mObs), mShape), shape.aabb.value);
+    return transformBox(multiply(invert(mObs), mShape), shape.box.value);
   });
 }

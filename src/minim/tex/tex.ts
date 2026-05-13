@@ -6,11 +6,13 @@
 // the type so `eq.parts.a` is typed and `eq.parts.x` is a TS error.
 
 import temml from "temml";
-import { signal, type ReadonlySignal, type Signal } from "../core/signal";
+import { signal, type ReadonlySignal } from "../core/signal";
 import { Shape, type ShapeOpts } from "../scene/shape";
-import { aabb, type Box } from "../scene/box";
+import { Box as BoxStruct, box, type Box } from "../signals/box";
 import { tokens } from "../shapes/tokens";
 import { Part, PartMarker, type PartList } from "./parts";
+
+type BoxReactive = ReturnType<typeof BoxStruct.signal>;
 
 /** Anything legal in a `tex\`…\`` interpolation slot. Strings splice
  *  through to the LaTeX source verbatim; PartMarkers wrap content in
@@ -179,7 +181,7 @@ const measureMathML = (
       const r = el.getBoundingClientRect();
       rects.set(
         cls,
-        aabb(
+        box(
           r.left - wrapperRect.left,
           r.top - wrapperRect.top,
           r.width,
@@ -221,7 +223,7 @@ export class TexShape<Names extends string = string> extends Shape {
 
     super(
       "foreignObject",
-      () => aabb(0, 0, w.value, h.value),
+      () => box(0, 0, w.value, h.value),
       opts,
       { origin: () => ({ x: w.value / 2, y: h.value / 2 }) },
     );
@@ -242,15 +244,17 @@ export class TexShape<Names extends string = string> extends Shape {
     fo.appendChild(wrapper);
 
     // Parts are built up front; `mountInto` populates the wrapper
-    // and binds each Part to its live el. `aabbWriters` holds the
+    // and binds each Part to its live el. `boxWriters` holds the
     // writable handles to each part's bounds for re-measure.
     const list: Part[] = [];
-    const aabbWriters = new Map<string, Signal<Box>>();
+    const boxWriters = new Map<string, BoxReactive>();
     for (const m of markers) {
       const cls = partClass(m.name);
-      const aabbSig = signal(measured.rects.get(cls) ?? aabb(0, 0, 0, 0));
-      aabbWriters.set(cls, aabbSig);
-      list.push(new Part(m.name, m.content, aabbSig, m, this as TexShape));
+      const boxSig = BoxStruct.signal(
+        measured.rects.get(cls) ?? box(0, 0, 0, 0),
+      );
+      boxWriters.set(cls, boxSig);
+      list.push(new Part(m.name, m.content, boxSig, m, this as TexShape));
     }
     this.parts = buildPartList(list);
 
@@ -270,7 +274,7 @@ export class TexShape<Names extends string = string> extends Shape {
       for (const p of list) {
         const cls = partClass(p.name);
         const r = fresh.rects.get(cls);
-        const sig = aabbWriters.get(cls);
+        const sig = boxWriters.get(cls);
         if (r && sig) {
           const cur = sig.peek();
           if (r.x !== cur.x || r.y !== cur.y || r.w !== cur.w || r.h !== cur.h)
@@ -308,7 +312,7 @@ export class TexShape<Names extends string = string> extends Shape {
         );
         if (fresh.width !== w.peek()) w.value = fresh.width;
         if (fresh.height !== h.peek()) h.value = fresh.height;
-        for (const [cls, sig] of aabbWriters) {
+        for (const [cls, sig] of boxWriters) {
           const r = fresh.rects.get(cls);
           if (!r) continue;
           const c = sig.peek();

@@ -3,8 +3,8 @@
 // One `tex\`…\`` template is one Shape (a foreignObject hosting
 // browser-rendered MathML). Sub-formulas are addressable via
 // `${part(name, content)}` interpolations: lightweight handles with
-// reactive `aabb`, `opacity`, `color`, `highlighted` signals.
-// Decorations re-derive from `part.aabb`; motion combinators
+// reactive `box`, `opacity`, `color`, `highlighted` signals.
+// Decorations re-derive from `part.box`; motion combinators
 // (`write`, `morph`, `pluck`/`unpluck`) compose over the existing
 // motion stdlib. Per-part stagger is the standard `stagger`
 // combinator from `motion/`:

@@ -2,13 +2,13 @@ import { computed, toSig, type Arg, type NumSig } from "../core";
 import {
   Shape,
   Vec,
-  aabb,
   isPoint,
   type Boxlike,
   type DerivedPoint,
   type Pointlike,
   type Segment,
 } from "../scene";
+import { box } from "../signals/box";
 import { tokens } from "./tokens";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
@@ -38,7 +38,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     const hs = toSig(h);
     super(
       intrinsicType(opts, "rect"),
-      () => aabb(xs.value, ys.value, ws.value, hs.value),
+      () => box(xs.value, ys.value, ws.value, hs.value),
       opts,
       {
         origin: () => ({
@@ -65,7 +65,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   override boundary(toward: Pointlike): DerivedPoint {
     return Vec.derived(() => {
       const c = this.center.value;
-      const b = this.aabb.value;
+      const b = this.box.value;
       const sc = this.scale.value;
       const t = toward.value;
       const halfW = (b.w / 2) * sc.x;
@@ -96,7 +96,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
 
   /** 4 sides + 4 corner quarter-arcs (or just sides when `corner === 0`). */
   override segments(): Segment[] {
-    const b = this.aabb.value;
+    const b = this.box.value;
     const r = Math.min(this.corner.value, b.w / 2, b.h / 2);
     const x = b.x;
     const y = b.y;
@@ -124,14 +124,14 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   }
 }
 
-/** Detect a `Boxlike` value structurally (anything with `aabb` and
+/** Detect a `Boxlike` value structurally (anything with `box` and
  *  `at`). Used by the `rect(box, opts?)` overload — Shape, view, and
  *  split/grid results all qualify. */
 function isBox(v: unknown): v is Boxlike {
   return (
     typeof v === "object" &&
     v !== null &&
-    "aabb" in v &&
+    "box" in v &&
     typeof (v as { at?: unknown }).at === "function"
   );
 }
