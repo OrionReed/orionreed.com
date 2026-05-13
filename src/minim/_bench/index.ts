@@ -9,9 +9,6 @@ import "./arity.bench";
 import "./getter.bench";
 import "./tween.bench";
 import "./tree.bench";
-import "./cell.bench";
-import "./cell-full.bench";
-import "./three-way.bench";
 import { runAll, sinkVal } from "./harness";
 
 runAll();
