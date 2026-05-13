@@ -1028,26 +1028,12 @@ export {
   Computed,
 };
 
-// ── minim extensions: type-level declarations ──────────────────────
+// ── minim extensions ────────────────────────────────────────────────
 //
-// `.derive(fn)` is the only Signal.prototype patch — RUNTIME install
-// lives in `core/tween.ts` (auto-loaded via `core/index.ts`). The
-// type-level interface merge lives HERE; TS allows merging a class
-// with same-file interface declarations reliably, but cross-file
-// `declare module` augmentations against declare-class are flaky.
+// minim no longer patches `Signal.prototype`. `.to(target, dur, ease?)`
+// is installed by the struct framework on each registered writable
+// Reactive's prototype (see `values/struct.ts`), so `num(0).to(...)`
+// works but `cell(0).to(...)` does not.
 //
-// `.to(target, dur, ease?)` is NOT on plain Signal — the struct
-// framework installs it on each registered writable Reactive's
-// prototype, so `Num.signal(0).to(...)` works but `signal(0).to(...)`
-// does not. See `core/tween.ts` and `values/struct.ts`. For plain
-// signals whose value type isn't a registered struct, use the
-// standalone `tween(sig, target, dur, ease, lerp)`.
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-interface Signal<T = any> {
-  derive<U>(fn: (v: T) => U): ReadonlySignal<U>;
-}
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-interface ReadonlySignal<T = any> {
-  derive<U>(fn: (v: T) => U): ReadonlySignal<U>;
-}
+// For derived signals, use `cell.derived(() => ...)` or the standalone
+// `derive(sig, fn)` helper from `core/cell.ts`.

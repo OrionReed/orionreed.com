@@ -119,13 +119,12 @@ class Active {
   observeId: number | undefined = undefined;
 
   // ── Per-Active time scoping ─────────────────────────────────────
-  // Either `ownScale` (static) or `scaleFn` (reactive, called each
-  // step). `effectiveScale = parent.effectiveScale × ownScale` is
-  // cached and refreshed once per step in spawn order — parents
+  // `scale` is either a static `number` or a thunk `() => number`
+  // (read each step). `effectiveScale = parent.effectiveScale × resolved`
+  // is cached and refreshed once per step in spawn order — parents
   // before children, so the parent's eff is up-to-date by the time
   // any child reads it.
-  ownScale: number = 1;
-  scaleFn: (() => number) | undefined = undefined;
+  scale: number | (() => number) = 1;
   effectiveScale: number = 1;
   clock: number = 0;                           // per-Active scaled time
 
@@ -231,7 +230,7 @@ export class Anim {
       if (a.state === DEAD) continue;
 
       // Refresh effective scale. Parents come first → up-to-date.
-      const own = a.scaleFn ? a.scaleFn() : a.ownScale;
+      const own = typeof a.scale === "number" ? a.scale : a.scale();
       a.effectiveScale = (a.parent ? a.parent.effectiveScale : 1) * own;
       const scaled = dt * a.effectiveScale;
       a.clock += scaled;
@@ -268,12 +267,9 @@ export class Anim {
   ): Active {
     const a = new Active(gen, parent);
     a.onComplete = onComplete;
-    if (scale !== undefined) {
-      if (typeof scale === "number") a.ownScale = scale;
-      else a.scaleFn = scale;
-    }
+    if (scale !== undefined) a.scale = scale;
     // Initial eff: parent's eff × resolved own.
-    const own = a.scaleFn ? a.scaleFn() : a.ownScale;
+    const own = typeof a.scale === "number" ? a.scale : a.scale();
     a.effectiveScale = (parent ? parent.effectiveScale : 1) * own;
 
     this.active.push(a);

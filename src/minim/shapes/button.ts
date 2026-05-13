@@ -1,7 +1,7 @@
 // Labelled, clickable region — group + tinted-rect + label, with
 // hover/click handlers wired.
 
-import { cell, toSig, type Val, type Cell } from "@minim/core";
+import { cell, derive, toSig, type Val, type Cell } from "@minim/core";
 import { type AnyShape } from "./shape";
 import { Anchor, vec, type Pointlike } from "@minim/values";
 import { tokens } from "./tokens";
@@ -38,7 +38,7 @@ export function button(
   g.add(
     rect(0, 0, w, h, {
       fill: tokens.stroke,
-      opacity: hovered.derive((h) => (h ? 0.08 : 0)),
+      opacity: derive(hovered, (h) => (h ? 0.08 : 0)),
       stroke: "none",
     }),
   );

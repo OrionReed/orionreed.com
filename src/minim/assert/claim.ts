@@ -28,6 +28,7 @@
 import {
   signal,
   computed,
+  derive,
   effect,
   race,
   Signal,
@@ -580,7 +581,7 @@ export function verdictDot(
   const pass = opts.pass ?? "#2ecc71";
   const fail = opts.fail ?? "#e74c3c";
   return circle(at, r, {
-    fill: source.derive((v) => (v ? pass : fail)),
+    fill: derive(source, (v) => (v ? pass : fail)),
     stroke: "none",
   });
 }

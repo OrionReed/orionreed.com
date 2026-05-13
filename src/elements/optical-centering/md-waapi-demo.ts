@@ -18,6 +18,7 @@ import {
   polar,
   Mount,
   circle,
+  derive,
   label,
   vec,
   rect,
@@ -39,10 +40,10 @@ export class MdWaapiDemo extends Diagram {
           opacity: 0.6,
         }),
         rect(X, y, BW, 6, { fill: "rgba(127, 127, 127, 0.18)" }),
-        rect(X, y, p.derive((v) => BW * v), 6, { fill: true }),
+        rect(X, y, derive(p, (v) => BW * v), 6, { fill: true }),
         label(
           view.at(1, 0).left(20).down(y + 4),
-          p.derive((v) => v.toFixed(2)),
+          derive(p, (v) => v.toFixed(2)),
           {
             size: 11,
             align: Anchor.Right,
@@ -73,11 +74,11 @@ export class MdWaapiDemo extends Diagram {
     // motion. With BW=440, LOOPS=4, R=25 we clear that by ~40%.
     const LOOPS = 15;
     const R = 15;
-    const center = vec(vp.derive((p) => X + BW * p), 150);
+    const center = vec(derive(vp, (p) => X + BW * p), 150);
     const tracker = polar(
       center,
       R,
-      vp.derive((p) => p * 2 * Math.PI * LOOPS),
+      derive(vp, (p) => p * 2 * Math.PI * LOOPS),
     );
 
     s(
@@ -93,7 +94,7 @@ export class MdWaapiDemo extends Diagram {
       ),
       label(
         view.top.down(217),
-        inView(this).derive((v) => (v ? "in view" : "offscreen")),
+        derive(inView(this), (v) => (v ? "in view" : "offscreen")),
         { size: 11, align: Anchor.Center, opacity: 0.6 },
       ),
     );

@@ -8,9 +8,9 @@ import {
   Anchor,
   Vec,
   arrange,
-  cell,
   handle,
   label,
+  num,
   rect,
   spring,
 } from "../../minim";
@@ -27,7 +27,9 @@ export class MdLayoutDemo extends Diagram {
     const view = this.view(560, 200);
     const cy = view.h.value / 2;
 
-    const widths = WIDTHS.map((w) => cell(w));
+    // `num(w)` (vs `cell(w)`) so `spring(...)` can read the `[ALGEBRA]`
+    // slot — plain Signal<number> has no algebra installed.
+    const widths = WIDTHS.map((w) => num(w));
     widths[SPRING_IDX].value = SPRING_REST;
 
     const cards = widths.map((w, i) =>

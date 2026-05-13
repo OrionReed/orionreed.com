@@ -11,6 +11,7 @@ import {
   button,
   cell,
   circle,
+  derive,
   fadeOut,
   label,
   loop,
@@ -64,13 +65,13 @@ export class MdReact extends Diagram {
     const status = cell<Content>("running");
 
     s(
-      label(vec(PAD, STATS_Y), hits.derive((n) => `hits: ${n}`), {
+      label(vec(PAD, STATS_Y), derive(hits, (n) => `hits: ${n}`), {
         size: 12,
         align: Anchor.Left,
       }),
       label(
         vec(W - PAD, STATS_Y),
-        misses.derive((n) => `misses: ${n}`),
+        derive(misses, (n) => `misses: ${n}`),
         { size: 12, align: Anchor.Right },
       ),
       label(

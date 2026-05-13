@@ -12,6 +12,7 @@
 // The `--minim-debug` CSS var lets authors theme; the fallback is
 // magenta so debug shapes always read as "scaffolding".
 
+import { derive } from "@minim/core";
 import { Shape, type AnyShape } from "./shape";
 import {
   Vec,
@@ -120,7 +121,7 @@ const distance = (a: AnyShape | Pointlike, b: AnyShape | Pointlike) => {
   const g = group({ aside: true });
   g.add(
     connect(aP, bP),
-    label(mid.up(6), d.derive((v) => v.toFixed(0)), {
+    label(mid.up(6), derive(d, (v) => v.toFixed(0)), {
       size: 10,
       opacity: 0.85,
     }),

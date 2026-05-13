@@ -13,6 +13,7 @@ import {
   attract,
   centroid,
   circle,
+  derive,
   drift,
   endOn,
   cell,
@@ -1114,7 +1115,7 @@ const TESTS: TestCase[] = [
     name: "spring: settles at target with precision",
     run: (assert) => {
       const a = new Anim();
-      const sig = cell(0);
+      const sig = num(0);
       let done = false;
       a.run(function* () {
         yield* spring(sig, 100, { precision: 0.01 });
@@ -1131,7 +1132,7 @@ const TESTS: TestCase[] = [
     name: "oscillate: returns to base across one period",
     run: (assert) => {
       const a = new Anim();
-      const sig = cell(50);
+      const sig = num(50);
       a.run(() => oscillate(sig, 10, 1)); // amp=10, freq=1Hz
       a.step(0);
       a.step(0.25); // quarter period → near base + amp
@@ -1145,7 +1146,7 @@ const TESTS: TestCase[] = [
     name: "drift: integrates velocity over time",
     run: (assert) => {
       const a = new Anim();
-      const sig = cell(0);
+      const sig = num(0);
       a.run(() => drift(sig, 100));
       a.step(0);
       a.step(0.5);
@@ -1157,7 +1158,7 @@ const TESTS: TestCase[] = [
     name: "attract: exponential pull toward target",
     run: (assert) => {
       const a = new Anim();
-      const sig = cell(0);
+      const sig = num(0);
       a.run(() => attract(sig, 100, 1));
       a.step(0);
       // After t=1 at rate=1, approaches 1 - e^-1 ≈ 0.632.
@@ -1294,12 +1295,12 @@ export class MdRuntimeTests extends Diagram {
     forEach(s.root, TESTS, (t, i) => {
       const y = HEADER_H + i * ROW_H + ROW_H / 2;
       const dot = circle(vec(PAD_X + 6, y), 5, {
-        fill: statuses[i].derive((st) => COLOR[st]),
+        fill: derive(statuses[i], (st) => COLOR[st]),
       });
       const name = label(vec(PAD_X + 22, y), t.name, {
         size: 12,
         align: Anchor.Left,
-        opacity: statuses[i].derive((st) => (st === "pending" ? 0.5 : 1)),
+        opacity: derive(statuses[i], (st) => (st === "pending" ? 0.5 : 1)),
       });
       const msg = label(vec(W - PAD_X, y), messages[i], {
         size: 11,

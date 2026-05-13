@@ -7,6 +7,7 @@ import {
   Anchor,
   cell,
   circle,
+  derive,
   draggable,
   label,
   line,
@@ -72,9 +73,9 @@ export class MdMultitrack extends Diagram {
 
       // Body — drag to move the clip.
       const body = s(rect(
-        clip.at.derive(a => STRIP_X + a * SCALE.value),
+        derive(clip.at, a => STRIP_X + a * SCALE.value),
         bodyY,
-        clip.dur.derive(d => Math.max(d * SCALE.value, 8)),
+        derive(clip.dur, d => Math.max(d * SCALE.value, 8)),
         bodyH,
         { fill: color, opacity: 0.78, corner: 3, stroke: "none" },
       ));
@@ -125,7 +126,7 @@ export class MdMultitrack extends Diagram {
       }));
     });
 
-    const playX = tl.t.derive((t) => STRIP_X + t * STRIP_W);
+    const playX = derive(tl.t, (t) => STRIP_X + t * STRIP_W);
     s(line(
       vec(playX, STRIP_Y - 4),
       vec(playX, STRIP_Y + STRIP_H_TOTAL + 4),

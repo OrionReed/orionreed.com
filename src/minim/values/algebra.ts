@@ -1,8 +1,11 @@
 // Vector-space algebra accessors. The struct framework stamps an
 // `[ALGEBRA]` slot on each per-type prototype carrying `add`/`sub`/
 // `scale`; behaviors (`spring`, `oscillate`, …) and aggregates (`mean`)
-// read it to find the right ops for the value type. Raw `Signal<number>`
-// falls back to scalar arithmetic.
+// read it to find the right ops for the value type.
+//
+// There is NO scalar-number fallback — pass a `Num.signal` (which has
+// the algebra installed) or any other struct cell. Plain `Signal<T>`
+// without an `[ALGEBRA]` slot throws.
 
 import type { Signal } from "@minim/core";
 import { ALGEBRA } from "./struct";
@@ -15,17 +18,16 @@ export interface VectorSpace<T> {
   scale: (a: T, k: number) => T;
 }
 
-/** Scalar (number) algebra — the default when no struct algebra is
- *  registered on the signal's prototype. */
-const NumberVS: VectorSpace<number> = {
-  add: (a, b) => a + b,
-  sub: (a, b) => a - b,
-  scale: (a, k) => a * k,
-};
-
-/** Resolve the algebra for a signal: prefer the struct-installed one
- *  (via the hidden `[ALGEBRA]` prototype slot), fall back to scalar. */
+/** Resolve the algebra for a signal via the `[ALGEBRA]` slot.
+ *  Throws if the signal isn't a struct cell with algebra registered. */
 export function algebraOf<T>(sig: Signal<T>): VectorSpace<T> {
   const a = (sig as any)[ALGEBRA] as VectorSpace<T> | undefined;
-  return a ?? (NumberVS as unknown as VectorSpace<T>);
+  if (!a) {
+    throw new Error(
+      "algebraOf: signal has no [ALGEBRA] slot. Use a struct cell " +
+        "(e.g. `num(0)`, `Vec.signal({x,y})`) for behaviors like " +
+        "spring/oscillate/drift/attract.",
+    );
+  }
+  return a;
 }

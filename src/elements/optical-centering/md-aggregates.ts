@@ -8,6 +8,7 @@ import {
   Mount,
   Anchor,
   centroid,
+  derive,
   easeInOut,
   label,
   loop,
@@ -48,7 +49,8 @@ export class MdAggregates extends Diagram {
     s(
       label(
         view.top.down(30),
-        r.derive(
+        derive(
+          r,
           (rad) =>
             `mean rotation: ${((rad * 180) / Math.PI).toFixed(0)}°    mean scale: ${k.peek().x.toFixed(2)}`,
         ),

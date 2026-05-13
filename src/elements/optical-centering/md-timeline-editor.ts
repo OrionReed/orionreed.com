@@ -10,6 +10,7 @@ import {
   Anchor,
   cell,
   circle,
+  derive,
   draggable,
   label,
   line,
@@ -63,9 +64,9 @@ export class MdTimelineEditor extends Diagram {
       const c = tl[name];
       const body = s(
         rect(
-          c.at.derive((a) => STRIP_X + a * scale.value),
+          derive(c.at, (a) => STRIP_X + a * scale.value),
           STRIP_Y,
-          c.dur.derive((d) => d * scale.value),
+          derive(c.dur, (d) => d * scale.value),
           STRIP_H,
           { fill: COLORS[i] },
         ),
@@ -122,7 +123,7 @@ export class MdTimelineEditor extends Diagram {
     const actors = PHASES.map((name, i) => {
       const c = circle(vec(120 + i * 180, STAGE_Y), 24, {
         fill: COLORS[i],
-        opacity: tl[name].t.derive((t) => 0.1 + t * 0.9),
+        opacity: derive(tl[name].t, (t) => 0.1 + t * 0.9),
       });
       c.on("click", () => bus.emit("ping"));
       return c;

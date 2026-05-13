@@ -17,15 +17,11 @@ import {
   type SignalOptions,
 } from "./signal";
 
-export type RW = "rw" | "ro";
+/** Reactive cell carrying a `T`. Writable. */
+export type Cell<T> = Signal<T>;
 
-/** Reactive cell carrying a `T`. Writable by default; `"ro"` for the
- *  read-only flavor (returned by `cell.derived`). */
-export type Cell<T, W extends RW = "rw"> = W extends "rw"
-  ? Signal<T>
-  : ReadonlySignal<T>;
-
-export type ReadonlyCell<T> = Cell<T, "ro">;
+/** Read-only reactive cell carrying a `T`. */
+export type ReadonlyCell<T> = ReadonlySignal<T>;
 
 /** Options accepted by `cell(value, opts)`. `equals` suppresses no-op writes. */
 export type CellOptions<T> = SignalOptions<T>;
@@ -34,7 +30,7 @@ interface CellFactory {
   <T>(value: T, opts?: CellOptions<T>): Cell<T>;
   <T = undefined>(): Cell<T | undefined>;
   /** Read-only cell from a function of dependencies. */
-  derived<T>(fn: () => T): Cell<T, "ro">;
+  derived<T>(fn: () => T): ReadonlyCell<T>;
   /** Writable lens — reads via `read`, writes via `write`. */
   lens<T>(read: () => T, write: (v: T) => void): Cell<T>;
 }
@@ -43,3 +39,16 @@ export const cell: CellFactory = Object.assign(signal, {
   derived: computed,
   lens,
 }) as CellFactory;
+
+/** Derive a read-only cell by mapping a single source cell's value.
+ *
+ *      derive(hovered, (h) => h ? 0.08 : 0)
+ *      // ≡ cell.derived(() => (hovered.value ? 0.08 : 0))
+ *
+ *  Replaces the deprecated `sig.derive(fn)` method. */
+export function derive<T, U>(
+  sig: ReadonlyCell<T>,
+  fn: (v: T) => U,
+): ReadonlyCell<U> {
+  return computed(() => fn(sig.value));
+}

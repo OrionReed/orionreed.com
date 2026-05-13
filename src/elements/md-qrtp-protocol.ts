@@ -5,6 +5,7 @@ import {
   attr,
   cell,
   circle,
+  derive,
   label,
   line,
   loop,
@@ -86,7 +87,7 @@ export class MdQrtpProtocol extends Diagram {
       s(
         annularSector(center, rOut, rIn, a0, a1, {
           stroke: "none",
-          fill: colors[i].derive((c) => c ?? "transparent"),
+          fill: derive(colors[i], (c) => c ?? "transparent"),
           opacity: when(colors[i]),
         }),
       );

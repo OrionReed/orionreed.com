@@ -22,9 +22,10 @@ import {
   type SpawnFn,
 } from "./anim";
 import { type Signal, type ReadonlySignal } from "./signal";
+import { type Val } from "./arg";
 import { snapshot } from "./store";
 import { untilTrue } from "./suspensions";
-import { chain, type Chained } from "./chain";
+import { chain, sleepGen, yieldableGen, type Chained } from "./chain";
 
 // ── Tuple-typed parallel (raw, not Chained) ─────────────────────────
 
@@ -78,12 +79,8 @@ export function all<Cs extends readonly Yieldable[]>(
 // ── Chained factories ──────────────────────────────────────────────
 
 /** Wait `n` seconds. Chainable: `sleep(0.5).then(work)`. */
-export function sleep(n: number): Chained {
-  return chain(
-    (function* (): Animator {
-      if (n > 0) yield n;
-    })(),
-  );
+export function sleep(n: Val<number>): Chained {
+  return chain(sleepGen(n));
 }
 
 /** Run children in parallel; complete when all finish. The fluent
@@ -102,18 +99,7 @@ export function parallel(...children: Yieldable[]): Chained {
 export function sequence(...children: Yieldable[]): Chained {
   return chain(
     (function* (): Animator {
-      for (const c of children) {
-        if (c === undefined) continue;
-        if (typeof c === "number") {
-          if (c > 0) yield c;
-        } else if (Array.isArray(c)) {
-          yield c;
-        } else if (typeof c === "function" && !isGen(c)) {
-          yield c;
-        } else {
-          yield* c as Animator;
-        }
-      }
+      for (const c of children) yield* yieldableGen(c);
     })(),
   );
 }
@@ -141,20 +127,7 @@ export function after(
     (function* (): Animator {
       if (isGen(cond)) yield cond;
       else yield* untilTrue(cond);
-      if (work === undefined) return;
-      if (typeof work === "number") {
-        if (work > 0) yield work;
-        return;
-      }
-      if (Array.isArray(work)) {
-        yield work;
-        return;
-      }
-      if (typeof work === "function" && !isGen(work)) {
-        yield work;
-        return;
-      }
-      yield* work as Animator;
+      yield* yieldableGen(work);
     })(),
   );
 }
@@ -162,13 +135,13 @@ export function after(
 /** Run `fn` every `sec` seconds. `fn` may return a generator
  *  (awaited each cycle) or void (cycle is just sleep + fire). */
 export function every(
-  sec: number,
+  sec: Val<number>,
   fn: () => void | Animator,
 ): Chained {
   return chain(
     (function* (): Animator {
       while (true) {
-        if (sec > 0) yield sec;
+        yield* sleepGen(sec);
         const r = fn();
         if (r !== undefined && isGen(r)) yield* r;
       }

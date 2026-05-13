@@ -19,6 +19,7 @@ import {
   Shape,
   cell,
   circle,
+  derive,
   drive,
   endOn,
   line,
@@ -145,7 +146,7 @@ export class MdOscillator extends Diagram {
 
     // ── Amplitude bound lines (A) ─────────────────────────────────────────────
     const ampStroke = cell.derived(() => A.color.value ?? tokens.stroke);
-    const ampOpacity = A.active.derive((on) => (on ? 0.7 : 0.18));
+    const ampOpacity = derive(A.active, (on) => (on ? 0.7 : 0.18));
     [CY - A_AMP, CY + A_AMP].forEach((y) => {
       const l = s(line(vec(TL, y), vec(TR, y), { stroke: ampStroke, opacity: ampOpacity }));
       l.attr("stroke-dasharray", "3 5");

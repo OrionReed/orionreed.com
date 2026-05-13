@@ -1,20 +1,31 @@
 // Core: reactivity (`cell`) + time (Anim + generators) + low-level
-// utilities. The `@minim/core` barrel re-exports everything used by
-// other packages — including framework-internal preact things
-// (`Signal` class, `signal/computed/lens` factories) which downstream
-// `@minim/values` and `@minim/shapes` need for prototype machinery.
+// utilities. The `@minim/core` barrel re-exports the public surface
+// PLUS the framework-internal preact things (`Signal` class,
+// `signal/computed/lens` factories) which downstream `@minim/values`
+// and `@minim/shapes` need for prototype machinery. Public consumers
+// reach for `cell` and the value-type cells (`num`, `vec`, …) instead.
 
 // ── Reactive primitives ────────────────────────────────────────────
 //
-// `cell` is the unified user-facing primitive:
+// Public surface:
 //   cell(v)                — writable
 //   cell.derived(fn)       — read-only
 //   cell.lens(read, w)     — writable lens
-// `Cell<T, W>` is the type. `Signal` / `signal` / `computed` / `lens`
-// (preact internals) are exposed for framework code that needs the
-// classes for `instanceof` / prototype work — public consumers should
-// reach for `cell` instead.
-export { cell, type Cell, type ReadonlyCell, type RW } from "./cell";
+//   derive(sig, fn)        — single-source derived cell (sugar)
+//
+// `Cell<T>` / `ReadonlyCell<T>` are the unified type names.
+export {
+  cell,
+  derive,
+  type Cell,
+  type ReadonlyCell,
+} from "./cell";
+
+// Internal-but-needed: framework-prototype work uses `Signal` /
+// `Computed` classes and the `signal`/`computed`/`lens` factories.
+// Public callers should NOT import these — they're escape hatches
+// for the struct framework and other layers that build on the
+// preact primitives directly.
 export {
   effect,
   batch,

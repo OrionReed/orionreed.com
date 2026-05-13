@@ -23,6 +23,7 @@ import {
   fadeOut,
   label,
   loop,
+  num,
   oscillate,
   parallel,
   vec,
@@ -31,10 +32,11 @@ import {
   type Animator,
   type Cell,
   type Content,
+  type N,
   type Writable,
 } from "../../minim";
 
-const N = 12;
+const N_SLOTS = 12;
 const SHAPE_Y = 40;
 const STATUS_Y = 100;
 const BTN_Y = 116;
@@ -44,7 +46,7 @@ const BTN_GAP = 12;
 
 function* lifecycle(
   shape: Writable<"opacity">,
-  y: Cell<number>,
+  y: N,
   amp: number,
   freq: number,
   stop: Cell<boolean>,
@@ -68,14 +70,16 @@ export class MdCancel extends Diagram {
 
     type Slot = {
       x: number;
-      y: Cell<number>;
+      // `y` is a `Num.signal` (rather than plain `cell(...)`) so the
+      // oscillate integrator can read its `[ALGEBRA]` slot.
+      y: N;
       shape: Writable<"opacity">;
     };
     const slots: Slot[] = [];
-    const stride = (view.w.value - 60) / (N - 1);
-    for (let i = 0; i < N; i++) {
+    const stride = (view.w.value - 60) / (N_SLOTS - 1);
+    for (let i = 0; i < N_SLOTS; i++) {
       const x = 30 + i * stride;
-      const y = cell(SHAPE_Y);
+      const y = num(SHAPE_Y);
       const shape = s(circle(vec(x, y), 8, { fill: true }));
       slots.push({ x, y, shape });
     }

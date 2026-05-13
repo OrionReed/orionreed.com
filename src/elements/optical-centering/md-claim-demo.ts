@@ -20,6 +20,7 @@ import {
   Diagram,
   Mount,
   circle,
+  derive,
   fadeIn,
   fadeOut,
   forEach,
@@ -86,7 +87,7 @@ export class MdClaimDemo extends Diagram {
       label(vec(20, 22), "claims", {
         size: 12, bold: true, align: Anchor.Left,
       }),
-      label(vec(W - 34, 22), fullSpec.derive((v) => (v ? "ALL HOLD" : "VIOLATED")), {
+      label(vec(W - 34, 22), derive(fullSpec, (v) => (v ? "ALL HOLD" : "VIOLATED")), {
         size: 11, align: Anchor.Right, opacity: 0.85,
       }),
       verdictDot(fullSpec, { at: vec(W - 18, 22), r: 6 }),

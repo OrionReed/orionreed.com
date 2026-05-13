@@ -1,6 +1,6 @@
 // Single tween engine — one definition, one `[LERP]` slot, no
-// hardcoded type checks. The struct framework installs `.to` on each
-// registered writable Reactive's prototype, so:
+// hardcoded type checks and no implicit fallbacks. The struct framework
+// installs `.to` on each registered writable Reactive's prototype, so:
 //
 //   Num.signal(0).to(100, 0.5)        works
 //   Vec.signal({x,y}).to({...}, 0.5)  works
@@ -8,8 +8,11 @@
 //
 // Plain `signal()` (the bare preact factory) does not get `.to`
 // installed — minim no longer patches the signals library at all.
-// For value types you don't want to declare as a full struct, use the
-// standalone `tween(sig, target, dur, ease, lerp)` form.
+// For value types you don't want to declare as a full struct, either
+// pass `lerp` explicitly to `tween()` or use `lerpable(value, lerp)`
+// which stamps the `[LERP]` slot on a plain signal. There is NO
+// scalar-number fallback — `tween()` throws if neither path provides
+// a lerp.
 //
 // `Tween<T>` extends `Chained<void>`: `.to(...)` chains another
 // segment; `.until / .while / .for / .at` preserve `Tween<T>` so
@@ -17,24 +20,22 @@
 // `.then(y)` returns plain `Chained<unknown>` — leaves the tween
 // world.
 
-import { Signal, computed, signal, type ReadonlySignal } from "./signal";
+import { type Signal, signal } from "./signal";
 import { drive } from "./drive";
 import { ChainedImpl, type Chained } from "./chain";
-import { race, untilTrue, untilFalse } from "./suspensions";
-import { suspend, isGen, type Animator } from "./anim";
+import { type Animator } from "./anim";
+import { toSig, type Val } from "./arg";
+import { easeOut } from "./easings";
 
 export type Easing = (t: number) => number;
-const defaultEase: Easing = (t) => 1 - (1 - t) * (1 - t); // easeOut
+const defaultEase: Easing = easeOut;
 
-/** Seconds, fixed or reactive (read each frame). */
-export type Duration = number | ReadonlySignal<number>;
+/** Tween duration: number, signal, or thunk (read each frame). */
+export type Duration = Val<number>;
 
 /** Per-value-type lerp; the struct framework registers via the
- *  `[LERP]` prototype slot. Default for raw `Signal<number>` (used
- *  only by standalone `tween()`) is the scalar lerp. */
+ *  `[LERP]` prototype slot. */
 export type Lerp<T> = (a: T, b: T, t: number) => T;
-
-const numberLerp: Lerp<number> = (a, b, t) => a + (b - a) * t;
 
 /** Hidden prototype slot that carries the value type's lerp.
  *  @internal — exported for the struct framework only. */
@@ -50,8 +51,12 @@ function tweenStep<T>(
   lerp: Lerp<T>,
 ): Animator {
   const start = sig.peek();
+  // Capture the duration as a signal once at construction; literals
+  // get wrapped, signals/thunks pass through. Per-frame is just a
+  // `.value` read — no allocation.
+  const D = toSig(dur);
   return drive((_dt, t) => {
-    const total = typeof dur === "number" ? dur : dur.value;
+    const total = D.value;
     if (t >= total) {
       sig.value = target;
       return false;
@@ -70,10 +75,10 @@ export interface Tween<T> extends Chained<void> {
   /** Append another segment that runs after this one. */
   to(target: T, dur: Duration, ease?: Easing): Tween<T>;
   // Tween-preserving overrides of the Chained methods.
-  until(cond: ReadonlySignal<unknown> | Animator): Tween<T>;
-  while(sig: ReadonlySignal<unknown>): Tween<T>;
-  for(n: number | Animator): Tween<T>;
-  at(scale: number | ReadonlySignal<number> | (() => number)): Tween<T>;
+  until(cond: import("./signal").ReadonlySignal<unknown> | Animator): Tween<T>;
+  while(sig: import("./signal").ReadonlySignal<unknown>): Tween<T>;
+  for(n: Val<number> | Animator): Tween<T>;
+  at(scale: Val<number>): Tween<T>;
 }
 
 class TweenImpl<T> extends ChainedImpl<void> implements Tween<T> {
@@ -85,6 +90,13 @@ class TweenImpl<T> extends ChainedImpl<void> implements Tween<T> {
     g: Animator<void>,
   ) {
     super(g);
+  }
+
+  /** Re-wrap into a Tween (instead of plain Chained) so all the
+   *  inherited `until / while / for / at` methods preserve `Tween<T>`
+   *  automatically. */
+  protected override _rewrap(g: Animator<void>): Tween<T> {
+    return new TweenImpl(this._sig, this._lerp, g);
   }
 
   to(target: T, dur: Duration, ease?: Easing): Tween<T> {
@@ -99,53 +111,26 @@ class TweenImpl<T> extends ChainedImpl<void> implements Tween<T> {
     return new TweenImpl(sig, lerp, next);
   }
 
-  // ── Tween-preserving overrides ───────────────────────────────────
-  override until(cond: ReadonlySignal<unknown> | Animator): Tween<T> {
-    const trigger = isGen(cond) ? cond : untilTrue(cond);
-    return new TweenImpl(
-      this._sig,
-      this._lerp,
-      race(this._g, trigger) as Animator<void>,
-    );
-  }
-  override while(sig: ReadonlySignal<unknown>): Tween<T> {
-    return new TweenImpl(
-      this._sig,
-      this._lerp,
-      race(this._g, untilFalse(sig)) as Animator<void>,
-    );
-  }
-  override for(n: number | Animator): Tween<T> {
-    const bound =
-      typeof n === "number"
-        ? (function* (): Animator {
-            if (n > 0) yield n;
-          })()
-        : n;
-    return new TweenImpl(
-      this._sig,
-      this._lerp,
-      race(this._g, bound) as Animator<void>,
-    );
-  }
-  override at(
-    scale: number | ReadonlySignal<number> | (() => number),
+  // ── until/while/for/at narrow their return type to `Tween<T>`.
+  //    The runtime is fully inherited from ChainedImpl — these are
+  //    type-level passthroughs. (TS can't infer the narrowed return
+  //    purely from the `_rewrap` override; we declare the signature
+  //    here and rely on the runtime guarantee.)
+  override until(
+    cond: import("./signal").ReadonlySignal<unknown> | Animator,
   ): Tween<T> {
-    const arg: number | (() => number) =
-      typeof scale === "number"
-        ? scale
-        : typeof scale === "function"
-          ? (scale as () => number)
-          : () => (scale as ReadonlySignal<number>).value;
-    const g = this._g;
-    const scaled = suspend<void>((wake, spawn) => {
-      const finish = () => (wake as () => void)();
-      return spawn(g, finish, arg);
-    });
-    return new TweenImpl(this._sig, this._lerp, scaled);
+    return super.until(cond) as Tween<T>;
   }
-
-  // `.then(...)` leaves the tween world (inherited from ChainedImpl).
+  override while(sig: import("./signal").ReadonlySignal<unknown>): Tween<T> {
+    return super.while(sig) as Tween<T>;
+  }
+  override for(n: Val<number> | Animator): Tween<T> {
+    return super.for(n) as Tween<T>;
+  }
+  override at(scale: Val<number>): Tween<T> {
+    return super.at(scale) as Tween<T>;
+  }
+  // `.then(...)` exits to plain Chained<unknown> (inherited).
 }
 
 /** Build a fresh `Tween<T>` for a signal. The struct framework calls
@@ -162,8 +147,10 @@ export function makeTween<T>(
 }
 
 /** Free-function tween — escape hatch for value types whose signal
- *  doesn't have a registered struct algebra. Without `lerp`, looks up
- *  `[LERP]` on the signal's prototype; falls back to `numberLerp`. */
+ *  doesn't have a registered struct lerp via `.to`. Either pass `lerp`
+ *  explicitly, or attach one to the signal via `lerpable(value, lerp)`
+ *  and the prototype-slot lookup picks it up. Throws if neither path
+ *  provides a lerp. */
 export function tween<T>(
   sig: Signal<T>,
   target: T,
@@ -172,10 +159,14 @@ export function tween<T>(
   lerp?: Lerp<T>,
 ): Tween<T> {
   const e = ease ?? defaultEase;
-  const l =
-    lerp ??
-    ((sig as any)[LERP] as Lerp<T> | undefined) ??
-    (numberLerp as unknown as Lerp<T>);
+  const l = lerp ?? ((sig as any)[LERP] as Lerp<T> | undefined);
+  if (!l) {
+    throw new Error(
+      "tween: signal has no [LERP] slot and no `lerp` was provided. " +
+        "Use a struct cell (e.g. `num(0)`, `Vec.signal({x,y})`) or pass " +
+        "`lerp` explicitly / register one via `lerpable(value, lerp)`.",
+    );
+  }
   return makeTween(sig, target, dur, e, l);
 }
 
@@ -188,17 +179,3 @@ export function lerpable<T>(initial: T, lerp: Lerp<T>): Signal<T> {
   (s as any)[LERP] = lerp;
   return s;
 }
-
-// ── `.derive` is the only Signal.prototype patch that remains ──────
-//
-// Convenience for "compute a derived signal from this one in-place".
-// Used widely. Independent of the tween machinery; lives here only by
-// historical accident. Kept as a Signal.prototype install for now —
-// when we exit preact-signals entirely, this moves to a wrapper.
-
-(Signal.prototype as any).derive = function <T, U>(
-  this: Signal<T>,
-  fn: (v: T) => U,
-): ReadonlySignal<U> {
-  return computed(() => fn(this.value));
-};

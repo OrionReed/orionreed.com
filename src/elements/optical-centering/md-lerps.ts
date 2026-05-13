@@ -26,6 +26,7 @@ import {
   Mount,
   Vec,
   circle,
+  derive,
   label,
   lerpable,
   loop,
@@ -142,11 +143,11 @@ export class MdLerps extends Diagram {
     s(
       rowLabel(0, "number"),
       track(VIS_X, rowY(0) + 4, VIS_W, 10, 0.18),
-      rect(VIS_X, rowY(0) + 4, n.derive((v: number) => v * VIS_W), 10, {
+      rect(VIS_X, rowY(0) + 4, derive(n, (v: number) => v * VIS_W), 10, {
         stroke: "transparent",
         fill: true,
       }),
-      readout(0, n.derive(fmtNum)),
+      readout(0, derive(n, fmtNum)),
     );
 
     // Row 1 — Vec: a dot whose center IS the Vec signal.
@@ -154,7 +155,7 @@ export class MdLerps extends Diagram {
       rowLabel(1, "Vec"),
       track(VIS_X, rowY(1) + 5, VIS_W, 8, 0.1),
       circle(pos, 5, { fill: true, stroke: "transparent" }),
-      readout(1, pos.derive(fmtVec)),
+      readout(1, derive(pos, fmtVec)),
     );
 
     // Row 2 — Box: every axis (x, y, w, h) is a Signal<number> lens
@@ -167,7 +168,7 @@ export class MdLerps extends Diagram {
         fill: true,
         corner: 3,
       }),
-      readout(2, box.derive(fmtBox)),
+      readout(2, derive(box, fmtBox)),
     );
 
     // Row 3 — Color: `col.css` is a lazy getter (cached as own-prop on
@@ -179,7 +180,7 @@ export class MdLerps extends Diagram {
         fill: col.css,
         corner: 3,
       }),
-      readout(3, col.derive(fmtColor)),
+      readout(3, derive(col, fmtColor)),
     );
 
     // Row 4 — string: lerpable() stamps the [LERP] slot on a plain
@@ -192,7 +193,7 @@ export class MdLerps extends Diagram {
         size: 13,
         align: Anchor.Left,
       }),
-      readout(4, txt.derive((str) => `len=${str.length}`)),
+      readout(4, derive(txt, (str) => `len=${str.length}`)),
     );
 
     // ── Drive ──────────────────────────────────────────────────────

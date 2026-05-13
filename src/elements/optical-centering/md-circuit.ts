@@ -20,6 +20,7 @@ import {
   cell,
   circle,
   counter,
+  derive,
   label,
   linear,
   loop,
@@ -60,7 +61,7 @@ export class MdCircuit extends Diagram {
         c,
         label(
           c.center,
-          counter((cb) => bus.on(ev, () => cb())).derive(String),
+          derive(counter((cb) => bus.on(ev, () => cb())), String),
           {
             size: 13,
             bold: true,
@@ -103,7 +104,7 @@ export class MdCircuit extends Diagram {
     /** Indicator dot toggled by a reactive boolean. */
     const lit = (at: Pointlike, on: Val<boolean>) =>
       circle(at, 4, {
-        fill: toSig(on).derive((v) => (v ? tokens.stroke : "transparent")),
+        fill: derive(toSig(on), (v) => (v ? tokens.stroke : "transparent")),
       });
 
     // Reactive auto-route — endpoints track visual boundaries as

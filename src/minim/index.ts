@@ -16,6 +16,7 @@
 // ── Reactive primitives + time + utilities ──────────────────────────
 export {
   cell,
+  derive,
   effect,
   batch,
   untracked,
@@ -105,7 +106,6 @@ export {
   Dir,
   type Reactive,
   type StructType,
-  type RW,
   type V,
   type Point,
   type DerivedPoint,

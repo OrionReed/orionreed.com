@@ -4,6 +4,7 @@ import {
   Text,
   Anchor,
   circle,
+  derive,
   easeInOut,
   easeOut,
   label,
@@ -46,8 +47,8 @@ export class MdCentering extends Diagram {
       box: { at: 4.64, dur: 0.6 },
       centroid: { at: 5.64, dur: 0.5 },
     });
-    const lineT = tl.intro.t.derive(easeOut);
-    const morphT = tl.morph.t.derive(easeInOut);
+    const lineT = derive(tl.intro.t, easeOut);
+    const morphT = derive(tl.morph.t, easeInOut);
     const xLabelsT = tl.xLabels.t;
     const yLabelsT = tl.yLabels.t;
     const boxT = tl.box.t;
@@ -80,7 +81,7 @@ export class MdCentering extends Diagram {
         }),
         tick(O, yTip, f, 7, { opacity: yShown }),
         tick(O, xEnd, f, 7, {
-          opacity: lineT.derive((v) => clamp01((v - f) / 0.06)),
+          opacity: derive(lineT, (v) => clamp01((v - f) / 0.06)),
         }),
       ),
     );
@@ -93,17 +94,17 @@ export class MdCentering extends Diagram {
       rect(vec(xMin.x, yMax.y), vec(xMax.x, yMin.y), {
         thin: true,
         corner: 4,
-        opacity: boxT.derive((v) => v * 0.5),
+        opacity: derive(boxT, (v) => v * 0.5),
       }),
       line(xMid, c, {
         thin: true,
         dashed: true,
-        opacity: boxT.derive((v) => v * 0.6),
+        opacity: derive(boxT, (v) => v * 0.6),
       }),
       line(yMid, c, {
         thin: true,
         dashed: true,
-        opacity: boxT.derive((v) => v * 0.6),
+        opacity: derive(boxT, (v) => v * 0.6),
       }),
       circle(c, 4, { fill: true, opacity: centroidT }),
       label(

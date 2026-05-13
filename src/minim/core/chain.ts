@@ -29,18 +29,9 @@ import {
   type Animator,
   type Yieldable,
 } from "./anim";
-import { Signal, type ReadonlySignal } from "./signal";
+import { type ReadonlySignal } from "./signal";
+import { toSig, type Val } from "./arg";
 import { race, untilTrue, untilFalse } from "./suspensions";
-
-/** Local sleep — `compose.ts` exports the public `sleep(n)`; this
- *  file can't import it without a cycle. */
-function* _sleepGen(n: number): Animator {
-  if (n > 0) yield n;
-}
-
-function isSignalLike(v: unknown): v is ReadonlySignal<unknown> {
-  return v instanceof Signal;
-}
 
 /** A fluent Animator. Implements the iterator protocol identically
  *  to a plain generator, so `yield*` and the runtime treat it the
@@ -55,9 +46,9 @@ export interface Chained<R = void> extends Animator<R> {
    *  Read: "this, while sig". */
   while(sig: ReadonlySignal<unknown>): Chained<R>;
 
-  /** Run for at most `n` seconds (number) or until `other` completes
-   *  (Animator). */
-  for(n: number | Animator): Chained<R>;
+  /** Run for at most a duration (`Val<number>`) or until `other`
+   *  completes (Animator). */
+  for(n: Val<number> | Animator): Chained<R>;
 
   /** Sequence: run this, then `next`. Accepts any Yieldable —
    *  generator, number (sleep), array (parallel), raw suspend-fn,
@@ -65,9 +56,9 @@ export interface Chained<R = void> extends Animator<R> {
   then(next: Yieldable): Chained<unknown>;
 
   /** Scope time for this generator and all its children. `scale` may
-   *  be a `number`, a `ReadonlySignal<number>`, or a thunk
-   *  `() => number`. Reactive scales are read each frame. */
-  at(scale: number | ReadonlySignal<number> | (() => number)): Chained<R>;
+   *  be a number, signal, or thunk. Reactive scales are read each
+   *  frame. */
+  at(scale: Val<number>): Chained<R>;
 }
 
 export class ChainedImpl<R = void> implements Chained<R> {
@@ -88,62 +79,91 @@ export class ChainedImpl<R = void> implements Chained<R> {
     return this;
   }
 
+  /** Wrap a transformed generator in the same Chained subclass.
+   *  ChainedImpl wraps as plain Chained; subclasses (Tween) override
+   *  to preserve their type and carry per-subclass state forward. */
+  protected _rewrap(g: Animator<R>): Chained<R> {
+    return chain(g);
+  }
+
   until(cond: ReadonlySignal<unknown> | Animator): Chained<R> {
     const trigger = isGen(cond) ? cond : untilTrue(cond);
-    return chain(race(this._g, trigger) as Animator<R>);
+    return this._rewrap(race(this._g, trigger) as Animator<R>);
   }
 
   while(sig: ReadonlySignal<unknown>): Chained<R> {
-    return chain(race(this._g, untilFalse(sig)) as Animator<R>);
+    return this._rewrap(race(this._g, untilFalse(sig)) as Animator<R>);
   }
 
-  for(n: number | Animator): Chained<R> {
-    const bound = typeof n === "number" ? _sleepGen(n) : n;
-    return chain(race(this._g, bound) as Animator<R>);
+  for(n: Val<number> | Animator): Chained<R> {
+    const bound = isGen(n) ? n : sleepGen(n);
+    return this._rewrap(race(this._g, bound) as Animator<R>);
   }
 
   then(next: Yieldable): Chained<unknown> {
     const g = this._g;
+    // `.then` always exits to plain Chained<unknown> — subclasses
+    // (Tween) inherit this directly; no override needed.
     return chain((function* (): Animator<unknown> {
       yield* g;
-      if (next === undefined) return;
-      if (typeof next === "number") {
-        if (next > 0) yield next;
-        return;
-      }
-      if (Array.isArray(next)) {
-        yield next;
-        return;
-      }
-      if (typeof next === "function" && !isGen(next)) {
-        // Bare SuspendFn — yield it for the runtime to subscribe.
-        yield next;
-        return;
-      }
-      yield* next as Animator<unknown>;
+      yield* yieldableGen(next);
+      return undefined;
     })());
   }
 
-  at(scale: number | ReadonlySignal<number> | (() => number)): Chained<R> {
-    // Bridge user-facing forms to the runtime's `number | () => number`.
-    const arg: number | (() => number) =
-      typeof scale === "number"
-        ? scale
-        : typeof scale === "function"
-          ? (scale as () => number)
-          : () => (scale as ReadonlySignal<number>).value;
-    const g = this._g;
-    return chain(
-      suspend<R>((wake, spawn) => {
-        // wake's signature varies on `R extends void`. The runtime
-        // passes whatever the child returned; cast to a permissive
-        // shape for the call.
-        const finish = (v: unknown) =>
-          (wake as (v?: unknown) => void)(v);
-        return spawn(g, finish, arg);
-      }),
-    );
+  at(scale: Val<number>): Chained<R> {
+    return this._rewrap(scaledChild(this._g, scale));
   }
+}
+
+// ── Internal helpers ──────────────────────────────────────────────
+
+/** Wrap a gen so its child Active runs at `scale`. */
+export function scaledChild<R>(
+  g: Animator<R>,
+  scale: Val<number>,
+): Animator<R> {
+  // Bridge `Val<number>` to the runtime's `number | () => number`.
+  const arg: number | (() => number) =
+    typeof scale === "number"
+      ? scale
+      : typeof scale === "function"
+        ? (scale as () => number)
+        : (() => toSig(scale).value);
+  return suspend<R>((wake, spawn) => {
+    // wake's signature varies on `R extends void`. The runtime
+    // passes whatever the child returned; cast to a permissive
+    // shape for the call.
+    const finish = (v: unknown) => (wake as (v?: unknown) => void)(v);
+    return spawn(g, finish, arg);
+  });
+}
+
+/** `Val<number>` → a sleep-N generator. Resolves the value once at
+ *  construction; reactive durations read through `toSig`. */
+export function* sleepGen(n: Val<number>): Animator {
+  const v = typeof n === "number" ? n : toSig(n).value;
+  if (v > 0) yield v;
+}
+
+/** Yield-dispatch helper used by `.then`, `sequence`, and `after`.
+ *  Handles every `Yieldable` shape uniformly. */
+export function* yieldableGen(y: Yieldable): Animator<unknown> {
+  if (y === undefined) return undefined;
+  if (typeof y === "number") {
+    if (y > 0) yield y;
+    return undefined;
+  }
+  if (Array.isArray(y)) {
+    yield y;
+    return undefined;
+  }
+  if (typeof y === "function" && !isGen(y)) {
+    // Bare SuspendFn — yield it for the runtime to subscribe.
+    yield y;
+    return undefined;
+  }
+  return yield* y as Animator<unknown>;
 }
 
 /** Lift any Animator into the fluent vocabulary. Library factories
@@ -155,5 +175,3 @@ export function chain<R>(g: Animator<R>): Chained<R> {
   return new ChainedImpl(g);
 }
 
-// Re-exported so tween.ts can extend the chain machinery for `Tween<T>`.
-export { isSignalLike };
