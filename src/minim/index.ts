@@ -29,6 +29,18 @@ export {
   type Lerp,
 } from "./core/tween";
 
+// Reactive value-type framework. `struct(name, defaults)` is the
+// fluent Builder for record types; `defineCell` is the underlying
+// primitive (escape hatch for non-record types: arrays, variants,
+// strings — see `lerpable` for the simplest case).
+export {
+  struct,
+  defineCell,
+  type Reactive,
+  type StructType,
+  type RW,
+} from "./signals/struct";
+
 // Built-in struct value types beyond Vec/Box/Matrix.
 export { Color, rgb, rgba, type C } from "./signals/color";
 
