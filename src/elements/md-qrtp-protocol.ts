@@ -7,6 +7,7 @@ import {
   circle,
   label,
   line,
+  loop,
   polar,
   snapshot,
   when,
@@ -187,17 +188,17 @@ export class MdQrtpProtocol extends Diagram {
     }
 
     const startFloodFillLoop = () => {
-      floodDispose = this.anim.loop(function* () {
+      floodDispose = this.anim.run(loop(function* () {
         while (cellsWithState("retransmit").length === 0) yield;
         yield T.beforeFlood;
         yield* doFloodFill();
         yield T.betweenCycles;
-      });
+      }));
     };
 
     if (backchannel) startFloodFillLoop();
 
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       // Skip already-acknowledged cells.
       if (
         backchannel &&
@@ -223,6 +224,6 @@ export class MdQrtpProtocol extends Diagram {
       }
 
       yield T.broadcastStep;
-    });
+    }));
   }
 }

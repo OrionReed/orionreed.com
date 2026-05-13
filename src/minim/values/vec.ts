@@ -3,6 +3,7 @@
 // the underlying `Reactive<V>`.
 
 import { struct, type WriteOf, type ReadOf } from "./struct";
+import { Num } from "./num";
 import type { Matrix2D } from "./matrix";
 import {
   computed,
@@ -10,7 +11,7 @@ import {
   Signal,
   toSig,
   type ReadonlySignal,
-  type Arg,
+  type Val,
 } from "@minim/core";
 
 /** The struct's value type — declared up-front so ops can reference
@@ -20,6 +21,10 @@ export type V = { x: number; y: number };
 export const Vec = struct<V>("Vec", { x: 0, y: 0 })
   .construct((x: number, y: number): V => ({ x, y }))
   .equals((a, b) => a.x === b.x && a.y === b.y)
+  // `.x` and `.y` become `Num.signal`s (per-axis SoA), so per-axis
+  // tweens — `pos.x.to(100, 0.5)` — work via the per-struct `.to`
+  // install. Plain Signal<number> has no `.to`.
+  .nested({ x: Num, y: Num })
   .ops({
     add: (a, b: V): V => ({ x: a.x + b.x, y: a.y + b.y }),
     sub: (a, b: V): V => ({ x: a.x - b.x, y: a.y - b.y }),
@@ -109,8 +114,8 @@ export const vecEquals = (a: V, b: V): boolean =>
 
 /** Construct a Point. Two numbers → writable; any reactive input → derived. */
 export function vec(x: number, y: number): Point;
-export function vec(x: Arg<number>, y: Arg<number>): Pointlike;
-export function vec(x: Arg<number>, y: Arg<number>): Pointlike {
+export function vec(x: Val<number>, y: Val<number>): Pointlike;
+export function vec(x: Val<number>, y: Val<number>): Pointlike {
   if (typeof x === "number" && typeof y === "number") {
     return Vec.signal({ x, y });
   }
@@ -122,8 +127,8 @@ export function vec(x: Arg<number>, y: Arg<number>): Pointlike {
 /** Derived Point at radius `r` and angle `θ` (radians, y-down) from `c`. */
 export const polar = (
   c: Pointlike,
-  r: Arg<number>,
-  angle: Arg<number>,
+  r: Val<number>,
+  angle: Val<number>,
 ): DerivedPoint => {
   const rs = toSig(r);
   const as = toSig(angle);

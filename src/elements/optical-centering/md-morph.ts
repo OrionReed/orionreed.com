@@ -15,6 +15,7 @@ import {
   cell,
   circle,
   label,
+  loop,
   struct,
   type Content,
   type Mount,
@@ -183,7 +184,7 @@ export class MdMorph extends Diagram {
       }),
     );
 
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       for (let i = 0; i < KEYFRAMES.length; i++) {
         const next = KEYFRAMES[(i + 1) % KEYFRAMES.length];
         status.value = `→ ${next.name}`;
@@ -193,7 +194,7 @@ export class MdMorph extends Diagram {
         status.value = next.name;
         yield DWELL;
       }
-    });
+    }));
 
   }
 }

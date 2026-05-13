@@ -1,4 +1,4 @@
-import { toSig, type Arg, type NumSig } from "@minim/core";
+import { toSig, type Val, type NumSig } from "@minim/core";
 import { Shape, type Segment } from "./shape";
 import {
   Vec,
@@ -16,7 +16,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
 
   constructor(
     center: Pointlike,
-    radius: Arg<number>,
+    radius: Val<number>,
     opts: O = {} as O,
   ) {
     const r = toSig(radius);
@@ -40,7 +40,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   }
 
   /** Point on perimeter at angle θ (radians, y-down). */
-  atAngle(angle: Arg<number>): DerivedPoint {
+  atAngle(angle: Val<number>): DerivedPoint {
     const a = toSig(angle);
     return Vec.derived(() => ({
       x: this.center.x.value + this.radius.value * Math.cos(a.value),
@@ -48,7 +48,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
     }));
   }
   /** Unit tangent at angle θ. */
-  tangentAt(angle: Arg<number>): DerivedPoint {
+  tangentAt(angle: Val<number>): DerivedPoint {
     const a = toSig(angle);
     return Vec.derived(() => ({
       x: -Math.sin(a.value),
@@ -89,6 +89,6 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
 
 export const circle = <const O extends CircleOpts>(
   at: Pointlike,
-  r: Arg<number>,
+  r: Val<number>,
   opts?: O,
 ): Circle<O> => new Circle<O>(at, r, opts);

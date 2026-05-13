@@ -1,7 +1,7 @@
 // Reactive list rendering. Diffs `parent`'s children as `source`
 // changes; stable keys preserve per-shape state across updates.
 
-import { effect, toSig, untracked, type Arg } from "@minim/core";
+import { effect, toSig, untracked, type Val } from "@minim/core";
 import type { AnyShape } from "./shape";
 
 export interface ForEachOptions<T> {
@@ -28,7 +28,7 @@ export interface ForEachResult {
  *  is the render fn's job. */
 export function forEach<T>(
   parent: AnyShape,
-  source: Arg<readonly T[]>,
+  source: Val<readonly T[]>,
   render: (item: T, index: number) => AnyShape | AnyShape[],
   options: ForEachOptions<T> = {},
 ): ForEachResult {

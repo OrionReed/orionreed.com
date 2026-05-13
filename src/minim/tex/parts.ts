@@ -33,11 +33,12 @@ import {
   type Cell,
   type ReadonlyCell,
   type Marker,
-  type Arg,
+  type Val,
 } from "@minim/core";
 import {
   Box as BoxStruct,
   delegate,
+  num,
   type Box,
   type Boxlike,
   type WriteOf,
@@ -51,7 +52,7 @@ export type { Marker };
 export { getMarker } from "@minim/core";
 
 /** A part's content can be a literal string, a signal, or a thunk. */
-export type PartContent = Arg<string>;
+export type PartContent = Val<string>;
 
 /** Walk the `marker.group` chain to find the first marker with a
  *  non-null color. Setting `v.color` on a root marker tints `v` and
@@ -75,8 +76,9 @@ export class Part<N extends string = string> implements Boxlike {
    *  highlighting (from `Marker.active`) is wired externally via
    *  `bindParts()` which writes to this same signal. */
   readonly highlighted: Signal<boolean> = signal(false);
-  /** Opacity in [0, 1]. Wired to `el.style.opacity`. */
-  readonly opacity: Signal<number> = signal(1);
+  /** Opacity in [0, 1]. Wired to `el.style.opacity`. `Num.signal` so
+   *  `.to(target, dur)` is available for per-part tweens. */
+  readonly opacity = num(1);
 
   readonly box: BoxCell;
 

@@ -18,6 +18,7 @@ import {
   Mount,
   cell,
   label,
+  loop,
   snapshot,
   type Content,
 } from "../../minim";
@@ -98,7 +99,7 @@ export class MdTexCorrespond extends Diagram {
       status,
     );
 
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       reset();
       yield 0.3;
 
@@ -180,6 +181,6 @@ export class MdTexCorrespond extends Diagram {
       status.value = "writeOut";
       yield* writeOut(sym, 0.4);
       yield 0.4;
-    });
+    }));
   }
 }

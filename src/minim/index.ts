@@ -45,9 +45,14 @@ export {
   startOn,
   all,
   sequence,
-  delay,
+  parallel,
+  loop,
+  sleep,
+  after,
+  every,
   transaction,
   rand,
+  chain,
   drive,
   type Cell,
   type ReadonlyCell,
@@ -55,10 +60,11 @@ export {
   type Easing,
   type Duration,
   type Lerp,
-  type Arg,
+  type Val,
   type Marker,
   type Animator,
   type SpawnFn,
+  type Chained,
 } from "./core";
 
 // ── Reactive value types + struct framework ─────────────────────────
@@ -94,6 +100,7 @@ export {
   transform,
   mean,
   algebraOf,
+  clockSignal,
   Anchor,
   Dir,
   type Reactive,
@@ -184,7 +191,6 @@ export {
   easeIn,
   easeInOut,
   pulse,
-  every,
 } from "./core";
 export {
   spring,

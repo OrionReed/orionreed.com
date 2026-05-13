@@ -39,29 +39,28 @@ const next = yield * untilChange(signal);
 
 No polling, no per-frame work while suspended.
 
-The runtime never knows about combinators like `race` or `endOn`. They're generators, written in the same vocabulary as the animations they coordinate:
+Generators compose through a fluent vocabulary. `chain(g)` lifts any generator; library factories like `sequence`, `parallel`, `loop`, `sleep` already return one. Methods read subject-first — the running process comes first, the temporal qualifier follows:
 
 ```ts
-yield race(orbit(centre, planets), untilEvent(stop, "click"));
-yield endOn(untilChange(stopFlag), oscillate(y, 20, 1));
-yield * fadeOut(s, 0.4); // graceful exit, same generator
+spring(w, rest).until(dragging);             // spring, until dragging
+parallel(lane0, lane1, lane2).until(hardStop); // parallel lanes, until hardStop
+sleep(0.5).then(fadeIn(shape, 0.3));         // sleep, then fade in
+orbit(centre, shapes).at(playback);          // orbit at playback rate
 ```
 
-`race` is a dozen lines: spawn each child, wake on the first to finish, cancel the rest. `endOn(t, w)` is `race(w, t)` named so the trigger reads first. `firstN`, `all`, `sequence`, `stagger`, `splay` are all the same trick. Add your own and it composes the same way.
+`.until / .while / .for / .then / .at` are sugar — each composes with existing primitives (`race`, `untilTrue`, `untilFalse`, sleep). The runtime never sees the fluent surface; it sees the same `Yieldable` shapes it always has.
 
 <md-cancel></md-cancel>
 
-The reason this works at any depth is that `Anim` — the runtime — is itself a generator: `next(dt)`, `return()`, `[Symbol.iterator]`. You can `yield*` a sub-`Anim` from inside another generator, and each `Anim` has its own `timeScale`. Nesting an `Anim` is scoping time:
+Time scoping is per-generator. `.at(scale)` accepts a number, a signal, or a thunk; the child's `dt` becomes `dt × parent.scale × own`. No global `timeScale` — any subtree can run slow, fast, paused, or reversed independently:
 
 ```ts
-const slowmo = new Anim();
-slowmo.timeScale.value = 0.25;
-slowmo.run(orbit(centre, planets));
-
-yield * slowmo; // outer 1×, planets 0.25×
+const playback = num(1);
+yield* parallel(intro, hold, outro).at(playback); // whole scene rate-controlled
+playback.value = 0;                               // pause everything
 ```
 
-Pause, reverse playback, scrubbable timelines — same move, different `timeScale`.
+`Anim` itself has no Signal dependency: the runtime exposes time as `anim.clockMs` (a plain number) and `anim.onClock(cb)` (a callback subscription). For reactive access, the signals layer ships `clockSignal(anim)` — a tiny adapter that mirrors the number into a `ReadonlySignal<number>`.
 
 <md-orbits></md-orbits>
 
@@ -79,15 +78,22 @@ Every animatable property of every shape is a signal. The DOM is wired to them o
 
 <md-anchors></md-anchors>
 
-`Signal.prototype.to` returns a generator that steps from the signal's current value to a target over a duration:
+`.to(target, dur, ease?)` is installed by the struct framework on each registered Reactive's prototype — not on plain `Signal`. So `num(0).to(100, 0.5)` works (Num is a registered struct); plain `signal(0)` does not. The standalone `tween(sig, target, dur, ease?, lerp?)` is the escape hatch for value types you don't want to declare as a full struct.
 
 ```ts
-yield * x.to(100, 0.5, easeInOut);
+yield* x.to(100, 0.5, easeInOut);    // x is `Num.signal` (has `.to`)
+yield* tween(plainSig, 100, 0.5);    // escape hatch for plain Signal
 ```
 
-A signal just produced a generator, and the runtime already knew what to do with it.
+`.to(...)` returns a `Tween<T> extends Chained<void>` — it composes with the rest of the fluent vocabulary, and chains another segment via `.to`:
 
-You can register richer value types, and the same method works on those too:
+```ts
+yield* x.to(100, 0.5).to(0, 0.5).until(stop);
+//          ^ tween     ^ tween   ^ Chained method — stops whichever
+//                                  segment is currently running
+```
+
+Register value types and the same method works on those too:
 
 ```ts
 const Vec = struct<{ x: number; y: number }>("Vec", { x: 0, y: 0 })
@@ -98,7 +104,7 @@ const Vec = struct<{ x: number; y: number }>("Vec", { x: 0, y: 0 })
 yield * shape.translate.to({ x: 100, y: 50 }, 0.5, easeInOut);
 ```
 
-`.to` doesn't know about `Vec`. It looks up the value type's `lerp` through a prototype slot and steps through it. Register `Pose`, `Quat`, `Camera` with a `lerp` op and they tween the same day.
+`.to` doesn't know about `Vec`. It looks up the value type's `lerp` through the per-struct prototype slot and steps through it. Register `Pose`, `Quat`, `Camera` with a `lerp` op and they tween the same day.
 
 <md-lerps></md-lerps>
 
@@ -178,11 +184,13 @@ yield * tl;
 
 <md-rand></md-rand>
 
-The clock and `timeScale` are themselves signals, so the same `.to` works on them:
+Rate-controlled playback is just `.at(scale)` on whatever generator owns the work — the scale is a Num signal, so the same `.to` machinery eases it in and out:
 
 ```ts
-yield * anim.timeScale.to(0, 0.5, easeOut); // ease into pause
-slider.oninput = () => (anim.timeScale.value = +slider.value);
+const playback = num(1);
+yield* parallel(intro, hold, outro).at(playback);
+yield* playback.to(0, 0.5, easeOut);         // ease into pause
+slider.oninput = () => (playback.value = +slider.value);
 ```
 
 The same `(wake) => dispose` shape carries out to native browser primitives. `untilAnimation(a)` wakes on a WAAPI `finish` event; `untilInView(el)` wakes when an element starts intersecting; `scrollProgress()` is a lazy signal that subscribes to `scroll` only when something reads it. WAAPI animations and minim animations interleave naturally:

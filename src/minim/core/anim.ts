@@ -14,13 +14,17 @@
 // the impl shape that `suspend<T>()` wraps. Useful for custom
 // combinators (see `core/suspensions.ts:race`).
 //
-// `anim.timeScale` is a writable signal (`1` real-time, `0` paused,
-// `0.5` slow-mo, `-1` reverse for behaviors). `anim.clock` is the
-// reactive logical-time signal — `step(dt)` and `next(dt)` both write
-// `dt × timeScale`. `Anim` satisfies the Animator protocol, so yield*
-// a sub-Anim to compose runtimes and scope time independently.
-
-import { signal, type ReadonlySignal } from "./signal";
+// Time scoping: every spawn() accepts an optional `scale`
+// (`number | () => number`). The active's `dt` becomes `dtRaw ×
+// effectiveScale` where `effectiveScale = parent.effectiveScale ×
+// ownScale`. `.at(scale)` (in `core/chain.ts`) is the public surface;
+// the runtime just plumbs scale through `spawn()`. There is no global
+// `timeScale`.
+//
+// Anim has no Signal dependency. Time is exposed as a plain number
+// (`clockMs`) and a callback-shaped subscription (`onClock(cb)`). For
+// a `Signal<number>` view, see the `clockSignal(anim)` adapter in the
+// signals layer.
 
 // Cap any single frame's dt to this many ms. RAF normally delivers
 // 16-17 ms (60 Hz) down to ~8 ms (120 Hz). The clamp matters for tab
@@ -33,11 +37,14 @@ const FRAME_CAP_MS = 32;
 
 /** Spawn a generator parented to the suspended host. `onComplete`
  *  fires on natural completion only (not cancel), receiving the
- *  generator's `return`-value (the `R` in `Animator<R>`). Only valid
- *  during the suspension's initial subscribe call. */
+ *  generator's `return`-value (the `R` in `Animator<R>`). Optional
+ *  `scale` scopes time: `number` for static, `() => number` for
+ *  reactive (read each frame). Only valid during the suspension's
+ *  initial subscribe call. */
 export type SpawnFn = <R>(
   gen: Animator<R>,
   onComplete?: (value: R) => void,
+  scale?: number | (() => number),
 ) => () => void;
 
 // Bare subscribe-and-return-disposer shape. The runtime invokes this
@@ -92,24 +99,40 @@ type ObserveListeners = {
 // Active state — single int field. Cheap to store, cheap to dispatch
 // on, and the lifecycle is self-describing.
 const READY = 0;        // ran a frame yield (`yield;`); advance on next step
-const SLEEPING = 1;     // yielded N>0; wake when clock ≥ wakeAt
+const SLEEPING = 1;     // yielded N>0; wake when own clock ≥ wakeAt
 const SUBSCRIBED = 2;   // yielded a suspend-fn; wake via dispose callback
 const WAITING = 3;      // yielded gen/array; resume when child(ren) complete
 const DEAD = 4;         // cancelled or completed; skipped by step
 
-interface Active {
-  gen: Animator<any>;
-  state: number;                          // one of the constants above
-  wakeAt: number;                         // valid when state === SLEEPING
-  dispose: (() => void) | undefined;      // valid when state === SUBSCRIBED
+/** One running generator. Class (not interface) so the shape is
+ *  monomorphic — JIT-friendly hot path. */
+class Active {
+  state: number = READY;
+  wakeAt: number = 0;                          // in own scaled clock
+  dispose: (() => void) | undefined = undefined;
   // Parent's "child finished" callback. Called with the gen's
   // `return`-value on natural completion; not called on cancel.
-  onComplete: ((value: unknown) => void) | undefined;
-  parent: Active | undefined;
+  onComplete: ((value: unknown) => void) | undefined = undefined;
   // True while inside `advance`; defers `.return()` if cancelled re-entrantly.
-  onStack: boolean;
-  pendingReturn: boolean;
-  observeId: number | undefined;
+  onStack: boolean = false;
+  pendingReturn: boolean = false;
+  observeId: number | undefined = undefined;
+
+  // ── Per-Active time scoping ─────────────────────────────────────
+  // Either `ownScale` (static) or `scaleFn` (reactive, called each
+  // step). `effectiveScale = parent.effectiveScale × ownScale` is
+  // cached and refreshed once per step in spawn order — parents
+  // before children, so the parent's eff is up-to-date by the time
+  // any child reads it.
+  ownScale: number = 1;
+  scaleFn: (() => number) | undefined = undefined;
+  effectiveScale: number = 1;
+  clock: number = 0;                           // per-Active scaled time
+
+  constructor(
+    readonly gen: Animator<any>,
+    readonly parent: Active | undefined,
+  ) {}
 }
 
 export const isGen = (v: unknown): v is Animator<any> =>
@@ -126,41 +149,54 @@ export function asGen(v: Yieldable): Animator<any> {
 }
 
 export class Anim {
+  // Single ordered array. Spawn order matters: parents before
+  // children, so the per-step eff-scale walk reads up-to-date parent
+  // values in one linear pass. (A future refactor could partition by
+  // state to skip parked actives in advance — but the state branch is
+  // well-predicted and the gain is small versus the bookkeeping cost.)
   private active: Active[] = [];
   private rafId = 0;
-  private _clock = signal(0);
+  private _clockMs = 0;
   private lastFrame = 0;
-  /** Logical-time signal. Advanced by every `step(dt)` at
-   *  `dt × timeScale`. Read-only. */
-  readonly clock: ReadonlySignal<number> = this._clock;
-  /** Time-flow rate. `1` real-time, `0` paused, `0.5` slow-mo,
-   *  `-1` reverse (behaviors only). Applied inside `step(dt)`. */
-  readonly timeScale = signal(1);
+  private clockListeners: Set<(t: number) => void> | undefined;
   private listeners = new Set<ObserveListeners>();
   private nextActiveId = 0;
 
   // ── Public API ──────────────────────────────────────────────────────
 
-  /** Run a generator forever, restarting on completion. */
-  loop(factory: () => Animator): () => void {
-    return this.run(function* () {
-      while (true) yield* factory();
-    });
+  /** Current root-level elapsed time, in seconds. Plain number — no
+   *  Signal dependency. For a `Signal<number>` view that ticks each
+   *  step, use `clockSignal(anim)` from the signals adapter. */
+  get clockMs(): number {
+    return this._clockMs;
   }
 
-  /** Run a generator once. Returns a disposer that cancels it. */
-  run(arg: Animator | (() => Animator)): () => void {
+  /** Subscribe to per-step clock updates. Fired after each `step()`
+   *  with the new `clockMs`. Returns a disposer. */
+  onClock(cb: (t: number) => void): () => void {
+    if (!this.clockListeners) this.clockListeners = new Set();
+    this.clockListeners.add(cb);
+    const ls = this.clockListeners;
+    return () => {
+      ls.delete(cb);
+    };
+  }
+
+  /** Run a generator once. Returns a disposer that cancels it.
+   *  Accepts any return-type — `Animator<R>` for any `R` — because
+   *  top-level callers don't care about the return value. */
+  run(arg: Animator<any> | (() => Animator<any>)): () => void {
     const gen = typeof arg === "function" ? arg() : arg;
     const a = this.spawn(gen);
     return () => this.cancel(a);
   }
 
-  /** Cancel everything; reset `_clock` to 0. Leaves `timeScale`. */
+  /** Cancel everything; reset clock to 0. */
   stop(): void {
     cancelAnimationFrame(this.rafId);
     this.rafId = 0;
     this.lastFrame = 0;
-    this._clock.value = 0;
+    this._clockMs = 0;
     for (const a of this.active.slice()) this.cancel(a);
   }
 
@@ -173,49 +209,42 @@ export class Anim {
     };
   }
 
-  // ── Animator protocol ───────────────────────────────────────────────
-  //
-  // Anim satisfies Iterator<Yieldable, void, number> — yield* a
-  // sub-Anim into a parent gen to compose runtimes, give it its own
-  // timeScale to scope time, and cancellation cascades through the
-  // gen tree.
-
-  next(dt?: number): IteratorResult<Yieldable, void> {
-    this.step(dt ?? 0);
-    return { done: false, value: undefined };
-  }
-  return(): IteratorResult<Yieldable, void> {
-    this.stop();
-    return { done: true, value: undefined };
-  }
-  throw(e: unknown): IteratorResult<Yieldable, void> {
-    this.stop();
-    throw e;
-  }
-  [Symbol.iterator](): this {
-    return this;
-  }
-
-  /** Advance by `dt × timeScale`. Single advance primitive — RAF,
-   *  tests, and `next(dt)` all funnel here. No-op when paused. */
+  /** Advance by `dt` (seconds). Single advance primitive — RAF,
+   *  tests, and external drivers funnel here.
+   *
+   *  Scale handling: walk active[] in spawn order, refreshing each
+   *  active's `effectiveScale` from `parent.effectiveScale × own` and
+   *  scaling that active's `dt`. Because parents appear before
+   *  children in the array, the parent's eff is always current. */
   step(dt: number): void {
-    const scale = this.timeScale.peek();
-    if (scale === 0) return;
-    const scaled = dt * scale;
-    const clock = (this._clock.value += scaled);
+    if (dt > 0) {
+      this._clockMs += dt;
+      if (this.clockListeners) {
+        for (const cb of this.clockListeners) cb(this._clockMs);
+      }
+    }
     // Length-snapshot iteration: children spawned during the loop
     // wait for the next tick (matches RAF semantics).
     const len = this.active.length;
     for (let i = 0; i < len; i++) {
       const a = this.active[i];
+      if (a.state === DEAD) continue;
+
+      // Refresh effective scale. Parents come first → up-to-date.
+      const own = a.scaleFn ? a.scaleFn() : a.ownScale;
+      a.effectiveScale = (a.parent ? a.parent.effectiveScale : 1) * own;
+      const scaled = dt * a.effectiveScale;
+      a.clock += scaled;
+
       const s = a.state;
       if (s === READY) {
         this.advance(a, scaled);
-      } else if (s === SLEEPING && clock >= a.wakeAt) {
+      } else if (s === SLEEPING && a.clock >= a.wakeAt) {
         a.state = READY;
         this.advance(a, undefined);
       }
-      // SUBSCRIBED, WAITING, DEAD: skip.
+      // SUBSCRIBED / WAITING: skip the advance — their effectiveScale
+      // has been refreshed so any descendants see the right parent.
     }
     // Compact dead entries; new entries past `len` survive.
     let w = 0;
@@ -235,22 +264,22 @@ export class Anim {
     gen: Animator<any>,
     parent?: Active,
     onComplete?: (value: unknown) => void,
+    scale?: number | (() => number),
   ): Active {
-    const a: Active = {
-      gen,
-      state: READY,
-      wakeAt: 0,
-      dispose: undefined,
-      onComplete,
-      parent,
-      onStack: false,
-      pendingReturn: false,
-      observeId: undefined,
-    };
+    const a = new Active(gen, parent);
+    a.onComplete = onComplete;
+    if (scale !== undefined) {
+      if (typeof scale === "number") a.ownScale = scale;
+      else a.scaleFn = scale;
+    }
+    // Initial eff: parent's eff × resolved own.
+    const own = a.scaleFn ? a.scaleFn() : a.ownScale;
+    a.effectiveScale = (parent ? parent.effectiveScale : 1) * own;
+
     this.active.push(a);
     if (this.listeners.size > 0) {
       a.observeId = ++this.nextActiveId;
-      const t = this._clock.peek();
+      const t = this._clockMs;
       for (const l of this.listeners) {
         l.spawn?.(a.observeId, parent?.observeId, t, gen);
       }
@@ -267,7 +296,7 @@ export class Anim {
     const wasSubscribed = a.state === SUBSCRIBED;
     a.state = DEAD;
     if (this.listeners.size > 0 && a.observeId !== undefined) {
-      const t = this._clock.peek();
+      const t = this._clockMs;
       for (const l of this.listeners) l.cancel?.(a.observeId, t);
     }
     if (wasSubscribed) {
@@ -302,8 +331,7 @@ export class Anim {
         this.lastFrame === 0
           ? 0
           : Math.min(rafNow - this.lastFrame, FRAME_CAP_MS) / 1000;
-      // Paused: hold lastFrame at 0 so unpause computes dt=0.
-      this.lastFrame = this.timeScale.peek() === 0 ? 0 : rafNow;
+      this.lastFrame = rafNow;
       this.step(dt);
     } finally {
       this.kick();
@@ -314,11 +342,11 @@ export class Anim {
   //
   // `subscribe` handles the general SuspendFn path (callback-driven
   // wake). The three fast paths (`suspendSleep/All/Child`) aren't just
-  // perf — they need direct runtime state (_clock for sleeps, parent
+  // perf — they need direct runtime state (clock for sleeps, parent
   // linkage for child cascade) that the public `suspend<T>()` factory
   // can't reach. Expressing them in userland would require exposing
   // those internals or breaking semantics (e.g. setTimeout-based
-  // sleeps would ignore `timeScale`).
+  // sleeps would ignore per-Active scale).
 
   /** `spawn` is only valid during the initial subscribe — calling
    *  later throws. Sync-resolve safe. `wake(value)` forwards `value`
@@ -338,6 +366,7 @@ export class Anim {
     const spawn: SpawnFn = <R>(
       gen: Animator<R>,
       onComplete?: (value: R) => void,
+      scale?: number | (() => number),
     ) => {
       if (!setupActive) {
         throw new Error("minim: spawn() valid only during suspend setup");
@@ -349,6 +378,7 @@ export class Anim {
         gen,
         a,
         onComplete as ((value: unknown) => void) | undefined,
+        scale,
       );
       return () => this.cancel(child);
     };
@@ -364,7 +394,7 @@ export class Anim {
 
   private suspendSleep(a: Active, sec: number): void {
     a.state = SLEEPING;
-    a.wakeAt = this._clock.peek() + sec;
+    a.wakeAt = a.clock + sec;
   }
 
   /** Spawn each child; resume when all complete. Cancel cascade
@@ -454,7 +484,7 @@ export class Anim {
     if (a.state === DEAD) return;
     a.state = DEAD;
     if (this.listeners.size > 0 && a.observeId !== undefined) {
-      const t = this._clock.peek();
+      const t = this._clockMs;
       for (const l of this.listeners) l.complete?.(a.observeId, t);
     }
     if (a.onComplete) {

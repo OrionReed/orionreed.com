@@ -8,7 +8,7 @@ import {
   toSig,
   type Signal,
   type ReadonlySignal,
-  type Arg,
+  type Val,
   type NumSig,
   type ResolveSig,
   type Animator,
@@ -29,7 +29,7 @@ export type Clip<A = number, D = number> = {
   readonly active: ReadonlySignal<boolean>;
 };
 
-type ClipSpec = { at: Arg<number>; dur: Arg<number> };
+type ClipSpec = { at: Val<number>; dur: Val<number> };
 
 export interface Timeline {
   readonly clock: Signal<number>;
@@ -123,7 +123,7 @@ export function timeline<T extends Record<string, ClipSpec>>(
 
 // ── sequential ───────────────────────────────────────────────────────
 
-type Durations = Record<string, Arg<number>>;
+type Durations = Record<string, Val<number>>;
 
 /** Cumulative-start helper. Each clip's `at` is the reactive sum of
  *  prior durations, so editing one duration ripples through. `at` is
@@ -138,7 +138,7 @@ export function sequential<T extends Durations>(
 } {
   const keys = Object.keys(durs) as Array<keyof T>;
   const durSigs: NumSig[] = keys.map(
-    (k) => toSig(durs[k] as Arg<number>) as NumSig,
+    (k) => toSig(durs[k] as Val<number>) as NumSig,
   );
   const out = {} as Record<string, { at: ReadonlySignal<number>; dur: NumSig }>;
   keys.forEach((key, i) => {

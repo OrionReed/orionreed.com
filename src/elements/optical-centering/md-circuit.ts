@@ -14,7 +14,7 @@ import {
   EventBus,
   Mount,
   type AnyShape,
-  type Arg,
+  type Val,
   type Path,
   type Pointlike,
   cell,
@@ -22,9 +22,13 @@ import {
   counter,
   label,
   linear,
+  loop,
+  num,
   path,
+  parallel,
   vec,
   rect,
+  sleep,
   toSig,
   tokens,
 } from "../../minim";
@@ -42,10 +46,10 @@ export class MdCircuit extends Diagram {
     const source = (x: number, y: number, lbl: string, ev: string) => {
       const c = circle(vec(x, y), 18);
       s(c, label(c.center, lbl, { size: 13, bold: true }));
-      anim.loop(function* () {
+      anim.run(loop(function* () {
         yield bus.until(ev);
         yield* c.scale.to({ x: 1.4, y: 1.4 }, 0.08).to({ x: 1, y: 1 }, 0.3);
-      });
+      }));
       return c;
     };
 
@@ -64,10 +68,10 @@ export class MdCircuit extends Diagram {
         ),
         label(c.center.up(30), lbl, { size: 11, opacity: 0.7 }),
       );
-      anim.loop(function* () {
+      anim.run(loop(function* () {
         yield bus.until(ev);
         yield* c.scale.to({ x: 1.3, y: 1.3 }, 0.06).to({ x: 1, y: 1 }, 0.3);
-      });
+      }));
       return c;
     };
 
@@ -97,7 +101,7 @@ export class MdCircuit extends Diagram {
     };
 
     /** Indicator dot toggled by a reactive boolean. */
-    const lit = (at: Pointlike, on: Arg<boolean>) =>
+    const lit = (at: Pointlike, on: Val<boolean>) =>
       circle(at, 4, {
         fill: toSig(on).derive((v) => (v ? tokens.stroke : "transparent")),
       });
@@ -145,34 +149,40 @@ export class MdCircuit extends Diagram {
     /** Constant spatial speed (px/sec) — longer wires take longer. */
     const SPEED = 240;
 
-    /** Send one pulse along `w`; the wire's opacity flashes in lockstep. */
+    /** Send one pulse along `w`; the wire's opacity flashes in lockstep.
+     *  Composes the dot's distance tween and the wire's opacity flash
+     *  as a `parallel(...)` — one generator, one lifetime. */
     const pulse = (w: Path, onArrive?: () => void) => {
       const total = w.length.value;
       const sec = total / SPEED;
-      const dist = cell(0);
+      const dist = num(0);
       const dot = circle(w.atDistance(dist), 5, { fill: true });
       s(dot);
-      anim.run(function* () {
-        yield* dist.to(total, sec, linear);
-        dot.dispose();
-        onArrive?.();
-      });
-      anim.run(function* () {
-        yield* w.opacity.to(0.75, sec * 0.3).to(0.25, sec * 0.7);
-      });
+      anim.run(
+        parallel(
+          dist.to(total, sec, linear),
+          w.opacity.to(0.75, sec * 0.3).to(0.25, sec * 0.7),
+        ).then(
+          (function* () {
+            dot.dispose();
+            onArrive?.();
+          })(),
+        ),
+      );
     };
 
     // ── Behavior helpers ────────────────────────────────────────────
 
     /** Fire `ev` at random intervals. */
     const ticker = (ev: string, minGap: number, maxGap: number) =>
-      anim.run(function* () {
-        yield R.float(0.3, minGap);
-        while (true) {
-          bus.emit(ev);
-          yield R.float(minGap, maxGap);
-        }
-      });
+      anim.run(
+        sleep(R.float(0.3, minGap)).then(
+          loop(function* () {
+            bus.emit(ev);
+            yield R.float(minGap, maxGap);
+          }),
+        ),
+      );
 
     /** On `from`, send a pulse along `w`; on arrival fire `to`. */
     const relay = (from: string, w: Path, to: string) =>
@@ -215,13 +225,13 @@ export class MdCircuit extends Diagram {
     ) => {
       const holding = cell(false);
       gate.add(lit(gate.center.down(6), holding));
-      anim.loop(function* () {
+      anim.run(loop(function* () {
         yield bus.until(from);
         holding.value = true;
         yield R.float(holdRange[0], holdRange[1]);
         holding.value = false;
         pulse(w, () => bus.emit(out));
-      });
+      }));
     };
 
     /** Fan one input into N parallel pulses. */

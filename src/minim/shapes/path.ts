@@ -1,7 +1,7 @@
 import {
   cell,
   toSig,
-  type Arg,
+  type Val,
   type Cell,
   type ReadonlyCell,
 } from "@minim/core";
@@ -64,15 +64,15 @@ function sampler(pts: Cell<readonly Pointlike[]>) {
       return { x: a.x + (b.x - a.x) * segT, y: a.y + (b.y - a.y) * segT };
     });
 
-  const at = (t: Arg<number>): DerivedPoint => {
+  const at = (t: Val<number>): DerivedPoint => {
     const ts = toSig(t);
     return sampleAt(cell.derived(() => clamp01(ts.value) * length.value));
   };
 
   /** Sample at absolute arc-length (px from start). */
-  const atDistance = (d: Arg<number>): DerivedPoint => sampleAt(toSig(d));
+  const atDistance = (d: Val<number>): DerivedPoint => sampleAt(toSig(d));
 
-  const tangentAt = (t: Arg<number>): DerivedPoint => {
+  const tangentAt = (t: Val<number>): DerivedPoint => {
     const ts = toSig(t);
     return Vec.derived(() => {
       const points = pts.value;
@@ -88,9 +88,9 @@ function sampler(pts: Cell<readonly Pointlike[]>) {
     });
   };
 
-  const normalAt = (t: Arg<number>): DerivedPoint => tangentAt(t).perp();
+  const normalAt = (t: Val<number>): DerivedPoint => tangentAt(t).perp();
 
-  const angleAt = (t: Arg<number>): ReadonlyCell<number> => {
+  const angleAt = (t: Val<number>): ReadonlyCell<number> => {
     const tan = tangentAt(t);
     return cell.derived(() => Math.atan2(tan.y.value, tan.x.value));
   };
@@ -113,11 +113,11 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   readonly length: ReadonlyCell<number>;
   /** Sample at `t ∈ [0, 1]`. Named to avoid shadowing the Box `at(u, v)`
    *  anchor — same symmetry as `tangentAt` / `normalAt` / `angleAt`. */
-  readonly pointAt: (t: Arg<number>) => DerivedPoint;
-  readonly atDistance: (d: Arg<number>) => DerivedPoint;
-  readonly tangentAt: (t: Arg<number>) => DerivedPoint;
-  readonly normalAt: (t: Arg<number>) => DerivedPoint;
-  readonly angleAt: (t: Arg<number>) => ReadonlyCell<number>;
+  readonly pointAt: (t: Val<number>) => DerivedPoint;
+  readonly atDistance: (d: Val<number>) => DerivedPoint;
+  readonly tangentAt: (t: Val<number>) => DerivedPoint;
+  readonly normalAt: (t: Val<number>) => DerivedPoint;
+  readonly angleAt: (t: Val<number>) => ReadonlyCell<number>;
 
   constructor(start: Pointlike | readonly Pointlike[] = [], opts: O = {} as O) {
     const init: readonly Pointlike[] = isPoint(start) ? [start] : start;
@@ -200,26 +200,26 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
     return this.extend(p);
   }
   /** Step `n` up from the last vertex. */
-  u(n: Arg<number>) {
+  u(n: Val<number>) {
     return this.extend(this.last.up(n));
   }
   /** Step `n` down from the last vertex. */
-  d(n: Arg<number>) {
+  d(n: Val<number>) {
     return this.extend(this.last.down(n));
   }
   /** Step `n` left from the last vertex. */
-  l(n: Arg<number>) {
+  l(n: Val<number>) {
     return this.extend(this.last.left(n));
   }
   /** Step `n` right from the last vertex. */
-  r(n: Arg<number>) {
+  r(n: Val<number>) {
     return this.extend(this.last.right(n));
   }
-  offset(dx: Arg<number>, dy: Arg<number>) {
+  offset(dx: Val<number>, dy: Val<number>) {
     return this.extend(this.last.offset(dx, dy));
   }
   /** Walk `dist` at `angle` (radians, y-down). */
-  along(angle: Arg<number>, dist: Arg<number>) {
+  along(angle: Val<number>, dist: Val<number>) {
     const a = toSig(angle);
     const d = toSig(dist);
     return this.extend(

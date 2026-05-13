@@ -13,6 +13,7 @@ import {
   Anchor,
   cell,
   circle,
+  clockSignal,
   counter,
   easeOut,
   fadeIn,
@@ -83,9 +84,11 @@ export class MdTraceDemo extends Diagram {
     const b = s(circle(row, 18, { fill: "#f5a623" }));
     const c = s(circle(row.right(100), 18, { fill: "#e25c5c" }));
 
-    // `anim.clock` is the reactive logical-time signal — read it
-    // before `spans()` so we don't pull any loop into the trace.
-    const now = this.anim.clock;
+    // `clockSignal(anim)` projects `anim.clockMs` (plain number) into
+    // a reactive `Signal<number>` for use in `computed`. Anim itself
+    // has no signal dependency — the adapter lives in the signals
+    // layer. Built before `spans()` so it doesn't appear as a span.
+    const now = clockSignal(this.anim);
     const trace = spans(this.anim);
 
     this.anim.run(

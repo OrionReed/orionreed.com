@@ -16,7 +16,7 @@ import {
   type Easing,
 } from "@minim/core";
 import { Shape } from "@minim/shapes";
-import { box } from "@minim/values";
+import { box, num } from "@minim/values";
 import { Part, type PartMarker } from "./parts";
 import type { TexShape } from "./tex";
 
@@ -45,7 +45,7 @@ export function* write(
   ease: Easing = easeOut,
 ): Animator {
   const target = clipTarget(eq);
-  const progress = signal(0);
+  const progress = num(0);
   const stop = effect(() => {
     target.style.clipPath = `inset(0 ${(1 - progress.value) * 100}% 0 0)`;
   });
@@ -65,7 +65,7 @@ export function* writeOut(
   ease: Easing = easeOut,
 ): Animator {
   const target = clipTarget(eq);
-  const progress = signal(1);
+  const progress = num(1);
   const stop = effect(() => {
     target.style.clipPath = `inset(0 ${(1 - progress.value) * 100}% 0 0)`;
   });

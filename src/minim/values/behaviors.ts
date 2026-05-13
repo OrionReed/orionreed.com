@@ -8,7 +8,7 @@
 // frame, so a moving target makes the follower chase, a reactive `rate`
 // can ease the simulation, etc.
 
-import { drive, toSig, type Signal, type Animator, type Arg } from "@minim/core";
+import { drive, toSig, type Signal, type Animator, type Val } from "@minim/core";
 import { algebraOf } from "./algebra";
 
 /** Norm for `precision` auto-stop: `|x|` for scalar, hypot for Vec, else 0. */
@@ -34,7 +34,7 @@ export interface SpringOpts {
 /** Critically-damped spring chase. `target` may be reactive. */
 export function spring<T = number>(
   sig: Signal<T>,
-  target: Arg<T>,
+  target: Val<T>,
   opts: SpringOpts = {},
 ): Animator {
   const { add, sub, scale } = algebraOf(sig);
@@ -61,8 +61,8 @@ export function spring<T = number>(
 /** Sinusoidal oscillation around the signal's initial value. Never returns. */
 export function oscillate<T = number>(
   sig: Signal<T>,
-  amp: Arg<T>,
-  freq: Arg<number>,
+  amp: Val<T>,
+  freq: Val<number>,
 ): Animator {
   const { add, scale } = algebraOf(sig);
   const A = toSig(amp);
@@ -77,8 +77,8 @@ export function oscillate<T = number>(
  *  (k=1 closes ~63% of distance per second). No overshoot. */
 export function attract<T = number>(
   sig: Signal<T>,
-  target: Arg<T>,
-  k: Arg<number> = 1,
+  target: Val<T>,
+  k: Val<number> = 1,
 ): Animator {
   const { add, sub, scale } = algebraOf(sig);
   const T = toSig(target);
@@ -93,7 +93,7 @@ export function attract<T = number>(
 /** Constant-velocity advance. `velocity` may be reactive (flip live to reverse). */
 export function drift<T = number>(
   sig: Signal<T>,
-  velocity: Arg<T>,
+  velocity: Val<T>,
 ): Animator {
   const { add, scale } = algebraOf(sig);
   const V = toSig(velocity);

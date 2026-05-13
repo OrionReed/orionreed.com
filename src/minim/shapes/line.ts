@@ -1,4 +1,4 @@
-import { cell, type Arg, type ReadonlyCell } from "@minim/core";
+import { cell, type Val, type ReadonlyCell } from "@minim/core";
 import { Shape, type Segment } from "./shape";
 import {
   Vec,
@@ -55,7 +55,7 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
 
   /** Position at fraction `t` (0=from, 1=to). Symmetric with
    *  `Path.pointAt`. */
-  pointAt(t: Arg<number>): Pointlike {
+  pointAt(t: Val<number>): Pointlike {
     if (typeof t === "number") {
       if (t === 0) return this.from;
       if (t === 1) return this.to;
@@ -63,15 +63,15 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
     return this.from.lerp(this.to, t);
   }
 
-  tangentAt(_t: Arg<number> = 0): DerivedPoint {
+  tangentAt(_t: Val<number> = 0): DerivedPoint {
     return (this.#tangent ??= this.to.sub(this.from).normalize());
   }
 
-  normalAt(_t: Arg<number> = 0): DerivedPoint {
+  normalAt(_t: Val<number> = 0): DerivedPoint {
     return (this.#normal ??= this.tangentAt().perp());
   }
 
-  angleAt(_t: Arg<number> = 0): ReadonlyCell<number> {
+  angleAt(_t: Val<number> = 0): ReadonlyCell<number> {
     if (this.#angle) return this.#angle;
     const tan = this.tangentAt();
     return (this.#angle = cell.derived(() =>

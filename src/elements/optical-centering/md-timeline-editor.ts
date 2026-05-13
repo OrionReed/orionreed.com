@@ -13,6 +13,7 @@ import {
   draggable,
   label,
   line,
+  loop,
   vec,
   rect,
   sequential,
@@ -136,9 +137,9 @@ export class MdTimelineEditor extends Diagram {
       ),
     );
 
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       reset();
       yield* tl;
-    });
+    }));
   }
 }

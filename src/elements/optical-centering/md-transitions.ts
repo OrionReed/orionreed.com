@@ -13,6 +13,7 @@ import {
   fadeUp,
   fadeUpOut,
   label,
+  loop,
   vec,
   rect,
   scaleIn,
@@ -86,12 +87,12 @@ export class MdTransitions extends Diagram {
         lane.shape(s, LEFT_PAD + i * stride, y),
       );
 
-      this.anim.loop(function* () {
+      this.anim.run(loop(function* () {
         yield* stagger(0.07, shapes, lane.intro);
         yield 0.6;
         yield* stagger(0.04, shapes, lane.outro);
         yield 0.4;
-      });
+      }));
     });
   }
 }

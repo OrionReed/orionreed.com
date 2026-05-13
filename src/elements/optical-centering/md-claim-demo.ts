@@ -24,6 +24,7 @@ import {
   fadeOut,
   forEach,
   label,
+  loop,
   vec,
 } from "../../minim";
 import { claim, process, verdictDot } from "../../minim/assert";
@@ -124,9 +125,9 @@ export class MdClaimDemo extends Diagram {
     ));
 
     // ── Loop — just keep running `intro`. Variant cycles inside. ─
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       yield* intro.run();
       yield 0.8;
-    });
+    }));
   }
 }

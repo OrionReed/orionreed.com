@@ -1,7 +1,7 @@
 // Spatial composition primitives. Reference points for growth:
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
-import { toSig, type Arg } from "@minim/core";
+import { toSig, type Val } from "@minim/core";
 import {
   transformBox,
   Box,
@@ -65,7 +65,7 @@ export function arrange(
 // Reactive<Box>(es) that update reactively as the source changes.
 
 /** Inflate a Box on each side by `by`. */
-export function expand(b: Boxlike, by: Arg<number>): Boxlike {
+export function expand(b: Boxlike, by: Val<number>): Boxlike {
   const bys = toSig(by);
   return Box.derived(() => expandBox(b.box.value, bys.value));
 }
@@ -80,7 +80,7 @@ export function split(
   source: Boxlike,
   axis: "x" | "y",
   parts: number | number[],
-  opts: { gap?: Arg<number> } = {},
+  opts: { gap?: Val<number> } = {},
 ): Boxlike[] {
   const ratios = typeof parts === "number" ? new Array(parts).fill(1) : parts;
   const total = ratios.reduce((a, b) => a + b, 0);
@@ -111,7 +111,7 @@ export function grid(
   source: Boxlike,
   rows: number,
   cols: number,
-  opts: { gap?: Arg<number> } = {},
+  opts: { gap?: Val<number> } = {},
 ): Boxlike[][] {
   return split(source, "y", rows, opts).map((row) =>
     split(row, "x", cols, opts),

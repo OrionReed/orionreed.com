@@ -1,6 +1,6 @@
 // Shared style options + applier for stroked/filled shapes.
 
-import { cell, toSig, type Arg } from "@minim/core";
+import { cell, toSig, type Val } from "@minim/core";
 import type { AnyShape, ShapeOpts } from "./shape";
 import { tokens } from "./tokens";
 import { dashedPath } from "./dashed";
@@ -9,13 +9,13 @@ const NSS = "non-scaling-stroke";
 
 /** `fill: true` → stroke color; string → that color; omitted → no fill. */
 export interface CommonOpts extends ShapeOpts {
-  stroke?: Arg<string>;
-  strokeWidth?: Arg<number>;
+  stroke?: Val<string>;
+  strokeWidth?: Val<number>;
   thin?: boolean;
   dashed?: boolean;
   cap?: "butt" | "round" | "square";
   join?: "miter" | "round" | "bevel";
-  fill?: Arg<string> | true;
+  fill?: Val<string> | true;
 }
 
 /** SVG element name for the intrinsic — `"path"` if dashed (so we can

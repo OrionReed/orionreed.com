@@ -1,4 +1,4 @@
-import { cell, toSig, type Arg, type NumSig } from "@minim/core";
+import { cell, toSig, type Val, type NumSig } from "@minim/core";
 import { Shape, type Segment } from "./shape";
 import {
   Vec,
@@ -13,7 +13,7 @@ import { tokens } from "./tokens";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
 export interface RectOpts extends CommonOpts {
-  corner?: Arg<number>;
+  corner?: Val<number>;
 }
 
 const HALF_PI = Math.PI / 2;
@@ -26,10 +26,10 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   readonly corner: NumSig;
 
   constructor(
-    x: Arg<number>,
-    y: Arg<number>,
-    w: Arg<number>,
-    h: Arg<number>,
+    x: Val<number>,
+    y: Val<number>,
+    w: Val<number>,
+    h: Val<number>,
     opts: O = {} as O,
   ) {
     const xs = toSig(x);
@@ -83,7 +83,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
 
   /** Concentric outline — a new unmounted Rect inflated by `by` per
    *  side; corner radius bumps to keep curves parallel. */
-  outline(by: Arg<number>, opts?: RectOpts): Rect {
+  outline(by: Val<number>, opts?: RectOpts): Rect {
     const bys = toSig(by);
     return new Rect(
       cell.derived(() => this.x.value - bys.value),
@@ -139,22 +139,22 @@ export function rect<const O extends RectOpts>(
 ): Rect<O>;
 export function rect<const O extends RectOpts>(
   center: Pointlike,
-  w: Arg<number>,
-  h: Arg<number>,
+  w: Val<number>,
+  h: Val<number>,
   opts?: O,
 ): Rect<O>;
 export function rect<const O extends RectOpts>(
-  x: Arg<number>,
-  y: Arg<number>,
-  w: Arg<number>,
-  h: Arg<number>,
+  x: Val<number>,
+  y: Val<number>,
+  w: Val<number>,
+  h: Val<number>,
   opts?: O,
 ): Rect<O>;
 export function rect(
-  a: Arg<number> | Boxlike | Pointlike,
-  b?: Arg<number> | Pointlike | RectOpts,
-  c?: Arg<number>,
-  d?: Arg<number> | RectOpts,
+  a: Val<number> | Boxlike | Pointlike,
+  b?: Val<number> | Pointlike | RectOpts,
+  c?: Val<number>,
+  d?: Val<number> | RectOpts,
   e?: RectOpts,
 ): Rect {
   if (isBox(a)) {
@@ -171,8 +171,8 @@ export function rect(
     );
   }
   if (isPoint(a)) {
-    const w = b as Arg<number>;
-    const h = c as Arg<number>;
+    const w = b as Val<number>;
+    const h = c as Val<number>;
     const ws = toSig(w);
     const hs = toSig(h);
     return new Rect(
@@ -184,10 +184,10 @@ export function rect(
     );
   }
   return new Rect(
-    a as Arg<number>,
-    b as Arg<number>,
-    c as Arg<number>,
-    d as Arg<number>,
+    a as Val<number>,
+    b as Val<number>,
+    c as Val<number>,
+    d as Val<number>,
     e,
   );
 }

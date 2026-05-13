@@ -11,6 +11,7 @@ import {
   Mount,
   cell,
   label,
+  loop,
   snapshot,
   type Content,
 } from "../../minim";
@@ -99,7 +100,7 @@ export class MdTexMatrix extends Diagram {
       status,
     );
 
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       reset();
       yield 0.3;
 
@@ -133,6 +134,6 @@ export class MdTexMatrix extends Diagram {
       status.value = "writeOut";
       yield* writeOut(compact, 0.5);
       yield 0.4;
-    });
+    }));
   }
 }

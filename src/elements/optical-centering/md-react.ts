@@ -13,6 +13,7 @@ import {
   circle,
   fadeOut,
   label,
+  loop,
   vec,
   race,
   rect,
@@ -132,12 +133,12 @@ export class MdReact extends Diagram {
       hits.value = 0;
       misses.value = 0;
       status.value = "running";
-      dispose = anim.loop(function* () {
+      dispose = anim.run(loop(function* () {
         const target = spawnTarget();
         yield* bounceIn(target, 0.3);
         yield* round(target);
         yield RESPAWN;
-      });
+      }));
     };
 
     const onStop = (): void => {

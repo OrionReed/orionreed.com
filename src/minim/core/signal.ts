@@ -1030,24 +1030,22 @@ export {
 
 // ── minim extensions: type-level declarations ──────────────────────
 //
-// All Signal extensions (`.derive(fn)`, `.to(target, dur, ease?)`)
-// have their RUNTIME install in `core/tween.ts` (auto-loaded via
-// `core/index.ts`). The type-level interface merges live HERE — TS
-// allows merging a class with same-file interface declarations
-// reliably, but cross-file `declare module` augmentations against
-// declare-class are flaky (it sees them as redeclared exports).
+// `.derive(fn)` is the only Signal.prototype patch — RUNTIME install
+// lives in `core/tween.ts` (auto-loaded via `core/index.ts`). The
+// type-level interface merge lives HERE; TS allows merging a class
+// with same-file interface declarations reliably, but cross-file
+// `declare module` augmentations against declare-class are flaky.
 //
-// Tween machinery itself: `Easing`, `Duration`, `Tween`, the engine,
-// the `[LERP]` slot — all in `core/tween.ts`. One engine, dispatched
-// per value type via the prototype slot that the struct framework
-// sets at registration.
-
-import type { Easing, Duration, Tween } from "./tween";
+// `.to(target, dur, ease?)` is NOT on plain Signal — the struct
+// framework installs it on each registered writable Reactive's
+// prototype, so `Num.signal(0).to(...)` works but `signal(0).to(...)`
+// does not. See `core/tween.ts` and `values/struct.ts`. For plain
+// signals whose value type isn't a registered struct, use the
+// standalone `tween(sig, target, dur, ease, lerp)`.
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface Signal<T = any> {
   derive<U>(fn: (v: T) => U): ReadonlySignal<U>;
-  to(target: T, dur: Duration, ease?: Easing): Tween<T>;
 }
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface ReadonlySignal<T = any> {

@@ -18,9 +18,11 @@ import {
   cell,
   forEach,
   label,
+  loop,
   mean,
   meanRotation,
   meanScale,
+  num,
   oscillate,
   vec,
   pulse,
@@ -1228,8 +1230,8 @@ const TESTS: TestCase[] = [
   {
     name: "meanRotation: distributes delta across shapes",
     run: (assert) => {
-      const sh1 = { rotate: cell(0) };
-      const sh2 = { rotate: cell(Math.PI / 2) };
+      const sh1 = { rotate: num(0) };
+      const sh2 = { rotate: num(Math.PI / 2) };
       const m = meanRotation(sh1, sh2);
       assert(
         Math.abs(m.value - Math.PI / 4) < 1e-9,
@@ -1315,7 +1317,7 @@ export class MdRuntimeTests extends Diagram {
       ),
     );
 
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       for (let i = 0; i < TESTS.length; i++) {
         statuses[i].value = "pending";
         messages[i].value = "";
@@ -1359,6 +1361,6 @@ export class MdRuntimeTests extends Diagram {
           ? `${passed} / ${TESTS.length} pass`
           : `${passed} / ${TESTS.length} pass · ${failed} fail`;
       yield 5;
-    });
+    }));
   }
 }

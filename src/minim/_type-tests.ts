@@ -2,6 +2,7 @@ import {
   circle,
   rect,
   group,
+  num,
   vec,
   cell,
   Anim,
@@ -10,8 +11,8 @@ import {
   bounceIn,
   fadeUp,
   type Animator,
-  type Cell,
-  type ReadonlyCell,
+  type N,
+  type DerivedN,
 } from "./index";
 
 const anim = new Anim();
@@ -35,7 +36,10 @@ function* run(): Animator {
   yield* c2.opacity.to(1, 1); // OK
 
   // ── Case 3: caller-owned cell — writable. ──────────────────────────
-  const o = cell(0.5);
+  // Pass a `num(...)` (a Num.signal) so the resolved field is `N`
+  // and `.to(...)` is available. A plain `cell(0.5)` would be a
+  // `Signal<number>` with no per-struct `[LERP]` slot.
+  const o = num(0.5);
   const c3 = circle(vec(0, 0), 5, { opacity: o });
   yield* c3.opacity.to(1, 1); // OK
   c3.opacity.value = 0.2; // OK
@@ -87,43 +91,44 @@ anim.run(run);
 // ── Pure type-level assertions ────────────────────────────────────────
 
 // Default no-opts: every animatable prop is writable. Vec props
-// resolve to `Point` (writable lens-backed axes); scalar props to `Cell<number>`.
+// resolve to `Point` (writable lens-backed axes); scalar props to
+// `N` (writable Num — has `.to`).
 {
   const c = circle(vec(0, 0), 5);
-  assert<Equals<typeof c.opacity, Cell<number>>>();
+  assert<Equals<typeof c.opacity, N>>();
   assert<Equals<typeof c.translate, Point>>();
 }
 
 // Plain-value opts: still writable.
 {
   const c = circle(vec(0, 0), 5, { opacity: 0.5 });
-  assert<Equals<typeof c.opacity, Cell<number>>>();
+  assert<Equals<typeof c.opacity, N>>();
 }
 
-// User cell: writable.
+// User Num.signal: writable.
 {
-  const o = cell(0.5);
+  const o = num(0.5);
   const c = circle(vec(0, 0), 5, { opacity: o });
-  assert<Equals<typeof c.opacity, Cell<number>>>();
+  assert<Equals<typeof c.opacity, N>>();
 }
 
-// derived → ReadonlyCell field.
+// derived → DerivedN field.
 {
   const c = circle(vec(0, 0), 5, { opacity: cell.derived(() => 0.5) });
-  assert<Equals<typeof c.opacity, ReadonlyCell<number>>>();
+  assert<Equals<typeof c.opacity, DerivedN>>();
 }
 
-// Thunk → ReadonlyCell field.
+// Thunk → DerivedN field.
 {
   const c = circle(vec(0, 0), 5, { opacity: () => 0.5 });
-  assert<Equals<typeof c.opacity, ReadonlyCell<number>>>();
+  assert<Equals<typeof c.opacity, DerivedN>>();
 }
 
 // Mixed: one prop readonly, others default-writable.
 {
   const g = group({ translate: cell.derived(() => ({ x: 0, y: 0 })) });
   assert<Equals<typeof g.translate, DerivedPoint>>();
-  assert<Equals<typeof g.opacity, Cell<number>>>();
+  assert<Equals<typeof g.opacity, N>>();
   assert<Equals<typeof g.scale, Point>>();
 }
 
@@ -136,11 +141,11 @@ anim.run(run);
     return s;
   }
   const c = circle(vec(0, 0), 5);
-  highlight(c); // works — both resolve to Cell-typed props.
+  highlight(c); // works — both resolve to writable Num-typed props.
 
   // But a shape with a readonly prop is NOT assignable here, by design.
   const g = group({ opacity: cell.derived(() => 0.5) });
-  // @ts-expect-error — g.opacity is ReadonlyCell, not Cell.
+  // @ts-expect-error — g.opacity is DerivedN, not N (can't write).
   highlight(g);
 }
 

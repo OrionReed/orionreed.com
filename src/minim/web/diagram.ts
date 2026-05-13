@@ -2,7 +2,7 @@
 // the graph; signals drive updates. Owns the SVG element, the
 // viewBox (`view`/`fit`), and the host CSS sizing (`--d-w`/`--d-h`).
 
-import { Anim, effect, toSig, type Arg } from "@minim/core";
+import { Anim, effect, toSig, type Val } from "@minim/core";
 import {
   Shape,
   SVG_NS,
@@ -108,7 +108,7 @@ export class Diagram extends HTMLElement {
    *  First call wins; subsequent calls (and the auto-fit fallback) are
    *  no-ops. Returns a Reactive `Box` for layout use (`view.w.value`,
    *  `view.center`, etc.). */
-  view(w: Arg<number>, h: Arg<number>): Boxlike {
+  view(w: Val<number>, h: Val<number>): Boxlike {
     if (this.#viewSet) return this.#viewBox;
     const ws = toSig(w);
     const hs = toSig(h);

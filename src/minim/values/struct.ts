@@ -14,6 +14,7 @@ import {
   signal,
   batch,
   LERP,
+  tween,
   type ReadonlySignal,
   type Easing,
   type Duration,
@@ -30,15 +31,17 @@ type ReactiveArgs<A extends readonly unknown[]> = {
 
 /** Lift a struct-returning op `(self, ...args) => T` into its method
  *  form `(...args) => Reactive<T, ...>`. Threads `G` (lazy getters)
- *  through to the result so cardinals/lazy projections survive lifted
- *  derivations (e.g. `vec.add(b).length` works because the derived
- *  also has `.length`). `M` is dropped — free-form methods are
- *  writable-only by design and lifted ops always return read-only. */
-type LiftedStruct<F, T, O, X, G> = F extends (
+ *  and `N` (nested map) through to the result so cardinals/lazy
+ *  projections AND nested-struct axes survive lifted derivations
+ *  (e.g. `vec.add(b).x.to(...)` works because the derived's `.x`
+ *  is a `Num` reactive, not a plain `Signal<number>`). `M` is
+ *  dropped — free-form methods are writable-only by design and
+ *  lifted ops always return read-only. */
+type LiftedStruct<F, T, O, X, G, N> = F extends (
   self: any,
   ...args: infer A
 ) => any
-  ? (...args: ReactiveArgs<A>) => Reactive<T, O, X, G, {}, "ro">
+  ? (...args: ReactiveArgs<A>) => Reactive<T, O, X, G, {}, "ro", N>
   : never;
 
 /** Lift a scalar-returning op `(self, ...args) => R` into a method
@@ -50,8 +53,8 @@ type LiftedScalar<F> = F extends (self: any, ...args: infer A) => infer R
 /** Methods bag — lifted ops + lifted scalars. Verbatim free-form
  *  methods (`M`) are NOT included here; they're added separately by
  *  Reactive only on writable flavors. */
-type Methods<T, O, X, G> =
-  & { [K in keyof O]: LiftedStruct<O[K], T, O, X, G> }
+type Methods<T, O, X, G, N> =
+  & { [K in keyof O]: LiftedStruct<O[K], T, O, X, G, N> }
   & { [K in keyof X]: LiftedScalar<X[K]> };
 
 /** Lazy getter return types projected as readonly properties.
@@ -147,7 +150,7 @@ export type Reactive<
 > =
   & (W extends "rw" ? Signal<T> : ReadonlySignal<T>)
   & Axes<T, W, N>
-  & Methods<T, O, X, G>
+  & Methods<T, O, X, G, N>
   & GetterProps<G>
   & Tweenable<T, O, W>
   & (W extends "rw" ? M : {});
@@ -708,7 +711,22 @@ function finalize<T>(
   }
 
   // Auto-stamp algebra slots if user provided the canonical ops.
-  if (ops.lerp) methods[LERP] = ops.lerp;
+  // `.to(...)` is installed per-struct here (not on Signal.prototype)
+  // so plain `signal()` has no `.to` — minim does not patch the
+  // signals library. Tweenable<T, O, "rw"> in the type surface
+  // matches.
+  if (ops.lerp) {
+    methods[LERP] = ops.lerp;
+    const lerpFn = ops.lerp;
+    methods.to = function (
+      this: Signal<T>,
+      target: T,
+      dur: Duration,
+      ease?: Easing,
+    ): Tween<T> {
+      return tween(this, target, dur, ease, lerpFn);
+    };
+  }
   if (ops.add && ops.sub && ops.scale) {
     methods[ALGEBRA] = { add: ops.add, sub: ops.sub, scale: ops.scale };
   }

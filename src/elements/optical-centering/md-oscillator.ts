@@ -22,6 +22,7 @@ import {
   drive,
   endOn,
   line,
+  loop,
   oscillate,
   vec,
   tokens,
@@ -159,12 +160,12 @@ export class MdOscillator extends Diagram {
     tickPath.attr("stroke-width", "1");
     tickPath.opacity.value = 0;
 
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       yield* untilTrue(omega.active);
       yield* tickPath.opacity.to(0.65, 0.25);
       yield* untilFalse(omega.active);
       yield* tickPath.opacity.to(0, 0.3);
-    });
+    }));
 
     // ── Decay envelope (γ) ────────────────────────────────────────────────────
     // Fades in on hover, pulses while held, fades back out on release.
@@ -174,12 +175,12 @@ export class MdOscillator extends Diagram {
     envPath.attr("stroke-width", "1");
     envPath.opacity.value = 0;
 
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       yield* untilTrue(gamma.active);
       yield* envPath.opacity.to(0.85, 0.3);                         // fade in
       yield endOn(untilFalse(gamma.active), oscillate(envPath.opacity, 0.1, 1.6));
       yield* envPath.opacity.to(0, 0.4);                             // fade out
-    });
+    }));
 
   }
 }

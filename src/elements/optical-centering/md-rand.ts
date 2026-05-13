@@ -15,6 +15,7 @@ import {
   easeOut,
   fadeOut,
   label,
+  loop,
   vec,
   rand,
   snapshot,
@@ -171,11 +172,10 @@ export class MdRand extends Diagram {
       yield* body;
     }
 
-    const anim = this.anim;
-    anim.loop(function* () {
+    this.anim.run(loop(function* () {
       reset();
       yield* rand(...MOVES.map((m) => record(m, m.run(subject))));
       yield 0.35;
-    });
+    }));
   }
 }

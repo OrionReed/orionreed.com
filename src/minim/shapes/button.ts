@@ -1,7 +1,7 @@
 // Labelled, clickable region — group + tinted-rect + label, with
 // hover/click handlers wired.
 
-import { cell, toSig, type Arg, type Cell } from "@minim/core";
+import { cell, toSig, type Val, type Cell } from "@minim/core";
 import { type AnyShape } from "./shape";
 import { Anchor, vec, type Pointlike } from "@minim/values";
 import { tokens } from "./tokens";
@@ -13,7 +13,7 @@ import type { Content } from "./text";
 export interface ButtonOpts {
   width?: number;
   height?: number;
-  size?: Arg<number>;
+  size?: Val<number>;
   /** Externally-controlled hover cell — share across shapes if needed. */
   hovered?: Cell<boolean>;
 }
@@ -23,7 +23,7 @@ export interface ButtonOpts {
  *  it to drive ancillary visuals. */
 export function button(
   pos: Pointlike,
-  content: Arg<Content>,
+  content: Val<Content>,
   onClick: () => void,
   opts: ButtonOpts = {},
 ): AnyShape {

@@ -1,8 +1,16 @@
-// Two cancellation modes. EXIT cooperatively flips a `stop` signal —
-// each shape's `endOn(untilChange(stop), oscillate(...))` resumes,
-// and the next statement (`fadeOut`) runs as the sequel in the same
-// generator. STOP cancels via the run disposers — the cascade also
-// kills any in-flight fadeOut (shapes freeze mid-fade).
+// Two cancellation modes.
+//
+//   EXIT — cooperative: flip the `stop` signal; each lifecycle's
+//          `endOn(untilChange(stop), oscillate(...))` resumes, and
+//          `fadeOut` runs as the sequel in the same generator.
+//
+//   STOP — hard cancel: flip `hardStop`; the loop's outer scope
+//          (`endOn(untilTrue(hardStop), parallel(lifecycles))`) tears
+//          the entire subtree down, mid-fade if necessary.
+//
+// No `disposers[]` array, no `anim.run()` from button callbacks. Both
+// modes are signal-coordinated — buttons set signals, generators react
+// via the standard suspension vocabulary.
 
 import {
   Diagram,
@@ -14,9 +22,12 @@ import {
   endOn,
   fadeOut,
   label,
+  loop,
   oscillate,
+  parallel,
   vec,
   untilChange,
+  untilTrue,
   type Animator,
   type Cell,
   type Content,
@@ -69,55 +80,62 @@ export class MdCancel extends Diagram {
       slots.push({ x, y, shape });
     }
 
-    // Per-cycle stop signal + collected disposers. EXIT flips stop;
-    // STOP calls every disposer.
-    const anim = this.anim;
-    let stop: Cell<boolean> = cell(false);
-    let disposers: (() => void)[] = [];
+    // Two signals coordinate the outer loop. Buttons set them; the
+    // generator observes via `untilChange` / `untilTrue`.
+    const stop = cell(false);
+    const hardStop = cell(false);
 
-    const startCycle = (): void => {
-      for (const slot of slots) slot.shape.opacity.value = 1;
-      for (const slot of slots) slot.y.value = SHAPE_Y;
-      stop = cell(false);
-      const localStop = stop;
-      disposers = slots.map((slot, i) =>
-        anim.run(() =>
-          lifecycle(slot.shape, slot.y, 14, 0.45 + i * 0.04, localStop),
-        ),
-      );
-      status.value = "running";
-    };
-
-    const onExit = (): void => {
-      if (stop.peek()) return;
-      stop.value = true;
-      status.value = "exiting…";
-      anim.run(function* () {
-        yield 1.4;
-        startCycle();
-      });
-    };
-
-    const onStop = (): void => {
-      for (const d of disposers) d();
-      disposers = [];
-      status.value = "stopped — restarting…";
-      anim.run(function* () {
-        yield 1.6;
-        startCycle();
-      });
-    };
-
-    const btnsW = BTN_W * 2 + BTN_GAP;
-    const btnsX = view.center.x.value - btnsW / 2;
     s(
-      button(vec(btnsX, BTN_Y), "EXIT", onExit, { width: BTN_W, height: BTN_H }),
-      button(vec(btnsX + BTN_W + BTN_GAP, BTN_Y), "STOP", onStop, {
-        width: BTN_W,
-        height: BTN_H,
-      }),
+      button(
+        vec(view.center.x.value - BTN_W - BTN_GAP / 2, BTN_Y),
+        "EXIT",
+        () => {
+          if (!stop.peek() && !hardStop.peek()) {
+            stop.value = true;
+            status.value = "exiting…";
+          }
+        },
+        { width: BTN_W, height: BTN_H },
+      ),
+      button(
+        vec(view.center.x.value + BTN_GAP / 2, BTN_Y),
+        "STOP",
+        () => {
+          if (!hardStop.peek()) {
+            hardStop.value = true;
+            status.value = "stopped — restarting…";
+          }
+        },
+        { width: BTN_W, height: BTN_H },
+      ),
     );
 
-    startCycle();
+    // One outer loop. Each iteration:
+    //   1. Reset slots + signals.
+    //   2. Run all N lifecycles in parallel, with `endOn(hardStop, ...)`
+    //      wrapping the whole subtree — hardStop cascades cancellation
+    //      to every child instantly.
+    //   3. Decide post-cycle delay based on which signal fired.
+    //   4. Loop restarts; everything fresh.
+    this.anim.run(
+      loop(function* () {
+        for (const slot of slots) slot.shape.opacity.value = 1;
+        for (const slot of slots) slot.y.value = SHAPE_Y;
+        stop.value = false;
+        hardStop.value = false;
+        status.value = "running";
+
+        yield endOn(
+          untilTrue(hardStop),
+          parallel(
+            ...slots.map((slot, i) =>
+              lifecycle(slot.shape, slot.y, 14, 0.45 + i * 0.04, stop),
+            ),
+          ),
+        );
+
+        yield hardStop.peek() ? 1.6 : 1.4;
+      }),
+    );
   }
 }

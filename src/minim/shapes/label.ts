@@ -1,11 +1,11 @@
-import { toSig, type Arg } from "@minim/core";
+import { toSig, type Val } from "@minim/core";
 import { Shape, type ShapeOpts } from "./shape";
 import { box, type Pointlike, type V } from "@minim/values";
 import { tokens } from "./tokens";
 import { renderContent, flattenText, type Content } from "./text";
 
 export interface LabelOpts extends ShapeOpts {
-  size?: Arg<number>;
+  size?: Val<number>;
   /** Bbox point that sits at `at` — `{0, 0}` = top-left, `{0.5, 0.5}`
    *  (default) = center. See `Anchor` for named consts. */
   align?: V;
@@ -24,7 +24,7 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
 
   constructor(
     anchor: Pointlike,
-    content: Arg<Content>,
+    content: Val<Content>,
     opts: O = {} as O,
   ) {
     const contentSig = toSig(content);
@@ -60,6 +60,6 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
 
 export const label = <const O extends LabelOpts>(
   at: Pointlike,
-  content: Arg<Content>,
+  content: Val<Content>,
   opts?: O,
 ): Label<O> => new Label<O>(at, content, opts);

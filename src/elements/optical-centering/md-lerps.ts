@@ -25,10 +25,12 @@ import {
   Diagram,
   Mount,
   Vec,
-  cell,
   circle,
   label,
   lerpable,
+  loop,
+  num,
+  tween,
   vec,
   rect,
   rgb,
@@ -97,10 +99,13 @@ export class MdLerps extends Diagram {
     // `Signal<string>` whose lerp was wired via `lerpable(...)`. They
     // ALL expose `.to(target, dur)` because they all carry a [LERP] slot.
     const baseY = (i: number) => rowY(i) + 9;
-    const num = cell(0.15);
+    const n = num(0.15);
     const pos = Vec.signal({ x: VIS_X + 12, y: baseY(1) });
     const box = Box.signal({ x: VIS_X + 4, y: rowY(2) - 6, w: 30, h: 20 });
     const col = rgb(0.4, 0.6, 0.9);
+    // `lerpable(...)` stamps `[LERP]` on a plain Signal — no `.to()`
+    // method, but the standalone `tween(sig, target, dur)` still works
+    // because `tween()` reads the slot via prototype lookup.
     const txt = lerpable("hello", stringLerp);
 
     // ── Visuals ────────────────────────────────────────────────────
@@ -137,11 +142,11 @@ export class MdLerps extends Diagram {
     s(
       rowLabel(0, "number"),
       track(VIS_X, rowY(0) + 4, VIS_W, 10, 0.18),
-      rect(VIS_X, rowY(0) + 4, num.derive((n) => n * VIS_W), 10, {
+      rect(VIS_X, rowY(0) + 4, n.derive((v: number) => v * VIS_W), 10, {
         stroke: "transparent",
         fill: true,
       }),
-      readout(0, num.derive(fmtNum)),
+      readout(0, n.derive(fmtNum)),
     );
 
     // Row 1 — Vec: a dot whose center IS the Vec signal.
@@ -219,17 +224,19 @@ export class MdLerps extends Diagram {
       },
     ];
 
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       for (const f of FRAMES) {
         yield [
-          num.to(f.n, DUR),
+          n.to(f.n, DUR),
           pos.to(f.v, DUR),
           box.to(f.b, DUR),
           col.to(f.c, DUR),
-          txt.to(f.t, DUR),
+          // `txt` is a plain Signal<string> with a `[LERP]` slot
+          // (via `lerpable`). No `.to`; use the standalone `tween()`.
+          tween(txt, f.t, DUR),
         ];
         yield DWELL;
       }
-    });
+    }));
   }
 }

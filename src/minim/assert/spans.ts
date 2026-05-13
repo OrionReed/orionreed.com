@@ -66,11 +66,12 @@ export function spans(anim: Anim): Trace {
 
   return {
     spans: list,
-    // Use `anim.clock` directly so in-flight bars grow per-frame, not
-    // just on lifecycle events.
+    // Use `anim.clockMs` directly so in-flight bars grow per-frame,
+    // not just on lifecycle events. Plain number — no Signal lookup
+    // overhead.
     duration() {
       if (list.length === 0) return 0;
-      const now = anim.clock.peek();
+      const now = anim.clockMs;
       let min = Infinity;
       let max = 0;
       for (const s of list) {

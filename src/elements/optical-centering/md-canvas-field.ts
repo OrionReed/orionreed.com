@@ -7,19 +7,19 @@
 //
 // Every non-rendering piece comes straight from minim:
 //
-//   - `Anim` is the runtime — same instance type, same `timeScale`,
-//     same cancellation, just no SVG attached.
+//   - `Anim` is the runtime — same instance type, same per-Active
+//     time scaling, same cancellation, just no SVG attached.
 //   - `drive((dt, t) => ...)` is the per-frame substrate. The
 //     integration + render path is one closure, no manual yield loop.
-//   - `every(anim, sec, fn)` does the fixed-interval fps emit on the
-//     same clock everything else uses.
-//   - `signal(...)` carries reactive knobs (phase index, hue base,
-//     particle size). `.to(...)` on a raw `Signal<number>` works
-//     here exactly as on a shape's `opacity` — same engine.
+//   - `every(sec, fn)` is a Chained factory that loops the side
+//     effect at a fixed interval on the same clock.
+//   - `num(...)` / `cell(...)` carry reactive knobs (phase index,
+//     hue base, particle size). `Num.signal.to(...)` works here
+//     exactly as on a shape's `opacity` — same engine.
 //   - `vec(...)` builds the pointer as a reactive Point. It behaves
 //     identically to one feeding an SVG shape's `translate`; input →
 //     value-type doesn't care what's rendering.
-//   - Generators (`anim.loop`) drive the phase progression with the
+//   - Generators (`loop(...)`) drive the phase progression with the
 //     same `yield N` / `yield* sig.to(...)` vocabulary as the SVG
 //     demos.
 //
@@ -33,7 +33,10 @@ import {
   drive,
   effect,
   every,
+  loop,
+  num,
   vec,
+  type N,
   type Point,
 } from "../../minim";
 
@@ -130,8 +133,8 @@ export class MdCanvasField extends HTMLElement {
   private disposers: Array<() => void> = [];
 
   // Reactive knobs — the *renderer-agnostic* state.
-  private phaseIdx = cell(0);
-  private hueBase = cell(210);
+  private phaseIdx = num(0);
+  private hueBase: N = num(210);
   private hueSpread = cell(80);
   private size = cell(2.1);
   private pointer: Point = vec(W / 2, H / 2);
@@ -300,14 +303,15 @@ export class MdCanvasField extends HTMLElement {
   //
   //   - `drive((dt, t) => ...)` — the per-frame substrate. Integrate
   //     + render, no manual `while (true) { yield }` bookkeeping.
-  //   - `anim.loop(function* () { ... })` — phase cycler with
+  //   - `loop(function* () { ... })` — Chained factory, run as a
+  //     top-level child via `anim.run(loop(...))`. Phase cycler with
   //     `yield DWELL` / `yield* hueBase.to(...)`, same vocabulary as
   //     the SVG demos.
-  //   - `every(anim, 0.5, ...)` — fixed-interval fps emit, sharing
-  //     the same clock everything else does.
+  //   - `every(0.5, fn)` — Chained factory, fixed-interval fps emit
+  //     on the same clock everything else uses.
   //
-  // All three obey `anim.timeScale`, so one knob slows the entire
-  // demo in lockstep.
+  // All three share `anim.clockMs`, and any `.at(scale)` scope
+  // applied to the parent generator scales them in lockstep.
 
   private startLoops(): void {
     const self = this;
@@ -324,26 +328,24 @@ export class MdCanvasField extends HTMLElement {
     );
 
     // Phase cycler.
-    this.anim.loop(function* () {
-      while (true) {
-        self.statusText.value = `phase: ${PHASES[self.phaseIdx.peek()].name}`;
-        yield DWELL;
-        self.phaseIdx.value = (self.phaseIdx.peek() + 1) % PHASES.length;
-        // `.to(...)` on a raw `Signal<number>` uses the scalar lerp
-        // via the same `[LERP]`-prototype-slot engine that drives
-        // Vec/Box/Color tweens. No SVG, no Shape, same engine.
-        yield* self.hueBase.to((self.hueBase.peek() + 70) % 360, 0.9);
-      }
-    });
+    this.anim.run(loop(function* () {
+      self.statusText.value = `phase: ${PHASES[self.phaseIdx.peek()].name}`;
+      yield DWELL;
+      self.phaseIdx.value = (self.phaseIdx.peek() + 1) % PHASES.length;
+      // `hueBase` is a `Num.signal`, so `.to(...)` works via the
+      // per-struct prototype install — same engine that drives
+      // Vec/Box/Color tweens. No SVG, no Shape, same engine.
+      yield* self.hueBase.to((self.hueBase.peek() + 70) % 360, 0.9);
+    }));
 
     // Fps emit — averages over the last 0.5s window of frames.
-    every(this.anim, 0.5, () => {
+    this.anim.run(every(0.5, () => {
       if (self.fpsFrames > 0) {
         self.fpsSmoothed.value = self.fpsFrames / self.fpsAccum;
       }
       self.fpsAccum = 0;
       self.fpsFrames = 0;
-    });
+    }));
   }
 
   // ── Per-frame ─────────────────────────────────────────────────────

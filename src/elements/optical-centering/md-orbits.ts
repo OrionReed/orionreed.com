@@ -11,6 +11,7 @@ import {
   circle,
   drive,
   group,
+  loop,
   vec,
   stagger,
   rect,
@@ -86,11 +87,11 @@ export class MdOrbits extends Diagram {
     // Orbits keep integrating during the off-phase, so phases drift
     // freely and the next intro picks them up wherever they ended up.
     const bodies = [sun, mercury, venus, earth, saturn, outer];
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       yield* stagger(0.2, bodies, (b) => bounceIn(b, 0.9));
       yield 6;
       yield* stagger(0.1, [...bodies].reverse(), (b) => zoomOut(b, 0.6));
       yield 1;
-    });
+    }));
   }
 }

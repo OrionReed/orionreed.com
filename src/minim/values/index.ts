@@ -91,3 +91,10 @@ export { delegate, delegateLazy, type DelegateOpts } from "./delegate";
 
 // ── Spatial constants ───────────────────────────────────────────
 export { Anchor, Dir } from "./anchor";
+
+// ── Anim adapters ───────────────────────────────────────────────
+//
+// `clockSignal(anim)` projects `anim.clockMs` (a plain number) into
+// a `ReadonlySignal<number>`. Anim itself has no Signal dependency;
+// users who want reactive clock access bridge through this adapter.
+export { clockSignal } from "./anim-clock";

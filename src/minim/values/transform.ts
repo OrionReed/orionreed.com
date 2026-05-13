@@ -9,6 +9,7 @@
 
 import { struct, type WriteOf, type ReadOf } from "./struct";
 import { Vec, type V } from "./vec";
+import { Num } from "./num";
 
 export type Transform = {
   translate: V;
@@ -26,7 +27,18 @@ const TR_DEFAULTS: Transform = {
   opacity: 1,
 };
 
-const N_MAP = { translate: Vec, scale: Vec, origin: Vec };
+// All five fields are nested struct cells. Vec fields get the Vec
+// surface (`.x`/`.y`/`.add`/`.lerp`/…); scalar fields get the Num
+// surface — most importantly, `.to(target, dur)` so e.g.
+// `shape.opacity.to(0, 0.3)` works (Num.signal has `.to` installed
+// per-struct; plain Signal<number> does not).
+const N_MAP = {
+  translate: Vec,
+  scale: Vec,
+  origin: Vec,
+  rotate: Num,
+  opacity: Num,
+};
 
 export const Transform = struct<Transform>("Transform", TR_DEFAULTS)
   .equals(

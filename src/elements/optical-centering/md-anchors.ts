@@ -11,6 +11,7 @@ import {
   easeInOut,
   label,
   line,
+  loop,
   rect,
   snapshot,
 } from "../../minim";
@@ -29,7 +30,7 @@ export class MdAnchors extends Diagram {
     // origin (box center), so the LOCAL center is invariant while
     // every corner/edge anchor sweeps through PARENT frame.
     const reset = snapshot(r.rotate, r.scale);
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       reset();
       yield [
         r.rotate.to(Math.PI * 2, 6),
@@ -39,7 +40,7 @@ export class MdAnchors extends Diagram {
           .to({ x: 0.7, y: 0.7 }, 1.5, easeInOut)
           .to({ x: 1, y: 1 }, 1.5, easeInOut),
       ];
-    });
+    }));
 
     // Corner dots — `bind` reads r.at(u, v) every frame and writes it
     // through each dot's anchor lens, which collapses to a translate

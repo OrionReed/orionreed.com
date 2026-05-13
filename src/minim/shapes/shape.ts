@@ -6,8 +6,7 @@ import {
   Signal,
   type Cell,
   type ReadonlyCell,
-  type Arg,
-  type ResolveSig,
+  type Val,
   type Animator,
 } from "@minim/core";
 import {
@@ -33,6 +32,8 @@ import {
   type Pointlike,
   type ResolveVec,
   type WriteOf,
+  type N,
+  type DerivedN,
 } from "@minim/values";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
@@ -51,15 +52,15 @@ export type Segment =
     };
 
 /** Construction options shared by every Shape. Each prop accepts
- *  `Arg<T>` (literal / Signal / thunk / matching Reactive — adopted
+ *  `Val<T>` (literal / Signal / thunk / matching Reactive — adopted
  *  by the Transform's per-field signal). `aside` excludes from
  *  parent's bounds. */
 export interface ShapeOpts {
-  translate?: Arg<V>;
-  rotate?: Arg<number>;
-  scale?: Arg<V>;
-  origin?: Arg<V>;
-  opacity?: Arg<number>;
+  translate?: Val<V>;
+  rotate?: Val<number>;
+  scale?: Val<V>;
+  origin?: Val<V>;
+  opacity?: Val<number>;
   aside?: boolean;
 }
 
@@ -83,7 +84,18 @@ type AnimatableField<K extends AnimatableKey> = K extends
   | "scale"
   | "origin"
   ? Point
-  : Cell<number>;
+  : N;
+
+/** Resolve a scalar (rotate/opacity) field type from the input opt
+ *  flavor. Writable Signal / number / undefined → `N` (so `.to()` is
+ *  available); ReadonlySignal / thunk → `DerivedN`. */
+type ResolveNum<A> = [A] extends [() => number]
+  ? DerivedN
+  : [A] extends [import("@minim/core").ReadonlySignal<number>]
+    ? [A] extends [import("@minim/core").Signal<number>]
+      ? N
+      : DerivedN
+    : N;
 
 /** "Any shape whose listed props are writable." Combinable via union. */
 export type Writable<K extends AnimatableKey> = {
@@ -109,13 +121,14 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
   readonly transform: WriteOf<typeof Transform>;
 
   // Field aliases — direct references to transform's nested signals.
-  // Casts narrow per-prop based on user input flavor (the type contract
-  // in `_type-tests.ts`).
+  // Vec fields narrow per user input flavor (lit/Signal/computed/thunk);
+  // scalar fields narrow to `N` (writable Num — `.to(target, dur)`
+  // available) or `DerivedN` when opts pass in a read-only source.
   readonly translate: ResolveVec<Lookup<O, "translate">>;
-  readonly rotate: ResolveSig<Lookup<O, "rotate">, number>;
+  readonly rotate: ResolveNum<Lookup<O, "rotate">>;
   readonly scale: ResolveVec<Lookup<O, "scale">>;
   readonly origin: ResolveVec<Lookup<O, "origin">>;
-  readonly opacity: ResolveSig<Lookup<O, "opacity">, number>;
+  readonly opacity: ResolveNum<Lookup<O, "opacity">>;
 
   /** Composed local-frame matrix: `T(t) T(p) R(r) S(s) T(-p)`. Recomputes
    *  when any animatable prop changes. */
@@ -193,7 +206,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
 
     // Field aliases — direct references; reads bypass the prototype.
     type CastVec<K extends keyof ShapeOpts> = ResolveVec<Lookup<O, K>>;
-    type CastNum<K extends keyof ShapeOpts> = ResolveSig<Lookup<O, K>, number>;
+    type CastNum<K extends keyof ShapeOpts> = ResolveNum<Lookup<O, K>>;
     this.translate = this.transform.translate as CastVec<"translate">;
     this.rotate = this.transform.rotate as CastNum<"rotate">;
     this.scale = this.transform.scale as CastVec<"scale">;
@@ -320,7 +333,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
   /** Bind one SVG attribute; static value sets once, reactive runs as effect. */
   attr(
     name: string,
-    value: Arg<string | number>,
+    value: Val<string | number>,
     target: "intrinsic" | "wrapper" = "intrinsic",
   ): void {
     const el =
@@ -433,11 +446,13 @@ export function centroid(...shapes: Writable<"translate">[]): Point {
   return mean(...shapes.map((s) => s.translate)) as Point;
 }
 
-/** Mean rotation as a writable signal; writes rotate every shape by the same delta. */
+/** Mean rotation as a writable signal; writes rotate every shape by
+ *  the same delta. Returns an `N` (Num-flavored cell) so `.to(...)`
+ *  works for whole-group rotation tweens. */
 export function meanRotation(
   ...shapes: Writable<"rotate">[]
-): Cell<number> {
-  return mean(...shapes.map((s) => s.rotate));
+): N {
+  return mean(...shapes.map((s) => s.rotate)) as N;
 }
 
 /** Mean scale as a writable Point. */

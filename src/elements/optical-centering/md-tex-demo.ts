@@ -30,6 +30,7 @@ import {
   Mount,
   cell,
   label,
+  loop,
   snapshot,
   stagger,
   type Content,
@@ -122,7 +123,7 @@ export class MdTexDemo extends Diagram {
       status,
     );
 
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       reset();
       for (const eq of eqs) eq.el.style.clipPath = "";
       yield 0.3;
@@ -248,6 +249,6 @@ export class MdTexDemo extends Diagram {
       status.value = "writeOut — sweep back, formula clipped to nothing";
       yield* writeOut(m1, 0.5);
       yield 0.4;
-    });
+    }));
   }
 }

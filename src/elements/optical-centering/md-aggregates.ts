@@ -10,6 +10,7 @@ import {
   centroid,
   easeInOut,
   label,
+  loop,
   meanRotation,
   meanScale,
   vec,
@@ -60,7 +61,7 @@ export class MdAggregates extends Diagram {
       ),
     );
 
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       const sec = R.float(1.4, 2.0);
       const centre = view.center.value;
       yield [
@@ -76,6 +77,6 @@ export class MdAggregates extends Diagram {
         k.to({ x: R.float(0.7, 1.5), y: R.float(0.7, 1.5) }, sec, easeInOut),
       ];
       yield 0.3;
-    });
+    }));
   }
 }

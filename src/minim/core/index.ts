@@ -29,9 +29,12 @@ export {
 
 // ── Tween + easings + clocks ───────────────────────────────────────
 //
-// Importing `tween` installs `Signal.prototype.to` as a side-effect.
+// `.to(target, dur, ease?)` is installed per-struct (in `values/struct.ts`)
+// — not on Signal.prototype. Importing `tween` is safe to do early
+// (no global side-effects).
 export {
   tween,
+  makeTween,
   lerpable,
   type Tween,
   type Easing,
@@ -40,7 +43,7 @@ export {
   LERP,
 } from "./tween";
 export { linear, easeIn, easeOut, easeInOut } from "./easings";
-export { pulse, every } from "./clocks";
+export { pulse } from "./clocks";
 
 // ── Anim + suspensions + composers + drive ────────────────────────
 export {
@@ -63,14 +66,29 @@ export {
   endOn,
   startOn,
 } from "./suspensions";
-export { all, sequence, delay, transaction, rand } from "./compose";
+export {
+  all,
+  sequence,
+  parallel,
+  loop,
+  sleep,
+  after,
+  every,
+  transaction,
+  rand,
+} from "./compose";
+export { chain, type Chained } from "./chain";
 export { drive } from "./drive";
 
-// ── Arg coercions ──────────────────────────────────────────────────
+// ── Val coercions ──────────────────────────────────────────────────
+//
+// `Val<T>` = literal | Signal<T> | ReadonlySignal<T> | thunk; the
+// universal "value source" type for reactive args. Named to match
+// the values-layer (`Vec`, `Box`, `Num`, …).
 export {
   toSig,
   when,
-  type Arg,
+  type Val,
   type NumSig,
   type ResolveSig,
 } from "./arg";

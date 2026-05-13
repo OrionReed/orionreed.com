@@ -1,10 +1,15 @@
-// "Value or signal" interop. `Arg<T>` unifies literal, signal, and
+// "Value or signal" interop. `Val<T>` unifies literal, signal, and
 // thunk; `toSig` normalizes to a Signal/ReadonlySignal.
+//
+// The name `Val<T>` reflects the values-layer naming convention (`Vec`,
+// `Box`, `Num`, …): `Val<T>` is "any source of a value of type T",
+// whether literal, reactive, or computed. `Arg<T>` is preserved as a
+// deprecated alias for back-compat.
 
 import { signal, computed, Signal, type ReadonlySignal } from "./signal";
 
 /** Literal, signal, or `() => T` thunk (sugar for `computed`). */
-export type Arg<T> = T | Signal<T> | ReadonlySignal<T> | (() => T);
+export type Val<T> = T | Signal<T> | ReadonlySignal<T> | (() => T);
 
 export type NumSig = Signal<number> | ReadonlySignal<number>;
 
@@ -29,15 +34,15 @@ export type ResolveSig<A, T> = IsAny<A> extends true
       ? ReadonlySignal<T>
       : Signal<T>;
 
-function isSig<T>(v: Arg<T>): v is ReadOrWrite<T> {
+function isSig<T>(v: Val<T>): v is ReadOrWrite<T> {
   return v instanceof Signal;
 }
 
-/** Normalize an `Arg<T>` to a signal. With `fallback`, `undefined` →
+/** Normalize a `Val<T>` to a signal. With `fallback`, `undefined` →
  *  fresh writable seeded with it. */
-export function toSig<T>(arg: Arg<T>): ReadOrWrite<T>;
-export function toSig<T>(arg: Arg<T> | undefined, fallback: T): ReadOrWrite<T>;
-export function toSig<T>(arg: Arg<T> | undefined, fallback?: T): ReadOrWrite<T> {
+export function toSig<T>(arg: Val<T>): ReadOrWrite<T>;
+export function toSig<T>(arg: Val<T> | undefined, fallback: T): ReadOrWrite<T>;
+export function toSig<T>(arg: Val<T> | undefined, fallback?: T): ReadOrWrite<T> {
   if (arg === undefined) return signal(fallback as T);
   if (isSig(arg)) return arg;
   if (typeof arg === "function") return computed(arg as () => T);
@@ -46,7 +51,7 @@ export function toSig<T>(arg: Arg<T> | undefined, fallback?: T): ReadOrWrite<T> 
 
 /** Coerce reactive truthiness to `0`/`1` — e.g. `opacity: when(hovered)`. */
 export function when<T>(
-  arg: Arg<T>,
+  arg: Val<T>,
   predicate?: (v: T) => boolean,
 ): ReadonlySignal<number> {
   const sig = toSig(arg);

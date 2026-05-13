@@ -1,7 +1,7 @@
 // Connectors. Uses `shape.boundary` so analytic edges work without
 // per-kind dispatch.
 
-import { cell, toSig, type Arg } from "@minim/core";
+import { cell, toSig, type Val } from "@minim/core";
 import { Shape, SVG_NS } from "./shape";
 import { type Pointlike } from "@minim/values";
 import { tokens } from "./tokens";
@@ -25,7 +25,7 @@ export function connect(
 
 export interface ArrowOpts extends LineOpts {
   /** Standoff between visible line and source/target. Default 4. */
-  gap?: Arg<number>;
+  gap?: Val<number>;
 }
 
 /** Arrow from `a` to `b`. Endpoints are adjusted so the round cap lines

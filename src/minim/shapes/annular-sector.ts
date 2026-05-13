@@ -1,4 +1,4 @@
-import { cell, toSig, type Arg, type NumSig } from "@minim/core";
+import { cell, toSig, type Val, type NumSig } from "@minim/core";
 import { Shape, type Segment } from "./shape";
 import { Vec, box, type Pointlike } from "@minim/values";
 import { wireStroke, type CommonOpts } from "./common";
@@ -16,10 +16,10 @@ export class AnnularSector<
 
   constructor(
     center: Pointlike,
-    rOuter: Arg<number>,
-    rInner: Arg<number>,
-    a0: Arg<number>,
-    a1: Arg<number>,
+    rOuter: Val<number>,
+    rInner: Val<number>,
+    a0: Val<number>,
+    a1: Val<number>,
     opts: O = {} as O,
   ) {
     const ro = toSig(rOuter);
@@ -97,10 +97,10 @@ export class AnnularSector<
 
 export const annularSector = <const O extends AnnularSectorOpts>(
   center: Pointlike,
-  rOuter: Arg<number>,
-  rInner: Arg<number>,
-  a0: Arg<number>,
-  a1: Arg<number>,
+  rOuter: Val<number>,
+  rInner: Val<number>,
+  a0: Val<number>,
+  a1: Val<number>,
   opts?: O,
 ): AnnularSector<O> =>
   new AnnularSector<O>(center, rOuter, rInner, a0, a1, opts);

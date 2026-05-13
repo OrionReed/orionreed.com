@@ -5,6 +5,7 @@ import {
   attr,
   label,
   line,
+  loop,
   vec,
   rect,
   cell,
@@ -131,7 +132,7 @@ export class MdQrtpHandshake extends Diagram {
     // ── Animation ────────────────────────────────────────────────────
 
     const reset = snapshot(state);
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       reset();
       for (let i = 0; i < N; i++) {
         const [first, second] = R.shuffle(["A", "B"] as const);
@@ -148,6 +149,6 @@ export class MdQrtpHandshake extends Diagram {
       }
 
       yield 3;
-    });
+    }));
   }
 }

@@ -7,11 +7,15 @@ import {
   Anchor,
   assemble,
   centroid,
+  chain,
   circle,
   easeInOut,
   label,
+  loop,
+  num,
   orbit,
   cell,
+  sequence,
   vec,
   snapshot,
   splay,
@@ -84,12 +88,11 @@ export class MdChoreography extends Diagram {
     // slightly each cycle.
     const reset = snapshot(...shapes.map((sh) => sh.translate));
 
-    // Orbit speed as a signal — tween for ease-in / hold / ease-out.
-    const orbitRate = cell(0);
+    // Orbit speed as a Num signal — tween for ease-in / hold / ease-out.
+    const orbitRate = num(0);
     const orbitCentre = vec(ORBIT_CENTRE.x, ORBIT_CENTRE.y);
 
-    const anim = this.anim;
-    anim.loop(function* () {
+    this.anim.run(loop(function* () {
       reset();
       orbitRate.value = 0;
 
@@ -115,14 +118,17 @@ export class MdChoreography extends Diagram {
       yield* c.to(ORBIT_CENTRE, 0.7, easeInOut);
       yield 0.3;
 
+      // Orbit runs UNTIL the ramp sequence completes — no manual
+      // spawn/dispose pair. The orbit gets cancelled the moment
+      // rampSequence finishes, then the next phase continues.
       phase.value = "orbit (eased)";
-      const stopOrbit = anim.run(
-        orbit(orbitCentre, shapes, { period: 2.5, rate: orbitRate }),
+      const rampSequence = sequence(
+        orbitRate.to(1, 0.5, easeInOut),
+        1.4,
+        orbitRate.to(0, 0.5, easeInOut),
       );
-      yield* orbitRate.to(1, 0.5, easeInOut);
-      yield 1.4;
-      yield* orbitRate.to(0, 0.5, easeInOut);
-      stopOrbit();
+      yield* chain(orbit(orbitCentre, shapes, { period: 2.5, rate: orbitRate }))
+        .until(rampSequence);
       yield 0.2;
 
       phase.value = "centroid → centre";
@@ -132,6 +138,6 @@ export class MdChoreography extends Diagram {
       phase.value = "assemble (scatter)";
       yield* assemble(shapes, SCATTER, 0.7, easeInOut);
       yield 0.5;
-    });
+    }));
   }
 }

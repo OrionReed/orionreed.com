@@ -10,6 +10,7 @@ import {
   draggable,
   label,
   line,
+  loop,
   vec,
   rect,
   snapshot,
@@ -169,10 +170,10 @@ export class MdMultitrack extends Diagram {
       ),
     );
 
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       reset();
       yield* tl;
       yield 0.4;
-    });
+    }));
   }
 }

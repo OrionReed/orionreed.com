@@ -8,6 +8,7 @@ import {
   easeOut,
   label,
   line,
+  loop,
   vec,
   rect,
   snapshot,
@@ -113,10 +114,10 @@ export class MdCentering extends Diagram {
     );
 
     const reset = snapshot(tl.clock);
-    this.anim.loop(function* () {
+    this.anim.run(loop(function* () {
       reset();
       yield* tl;
       yield 4.5;
-    });
+    }));
   }
 }

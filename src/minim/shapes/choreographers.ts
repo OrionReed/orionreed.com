@@ -4,11 +4,11 @@
 // `centroid(...shapes).to(...)` instead.
 
 import {
-  delay,
   drive,
+  sleep,
   toSig,
   type Animator,
-  type Arg,
+  type Val,
   type Easing,
 } from "@minim/core";
 import { isPoint, type V, type Pointlike } from "@minim/values";
@@ -34,7 +34,7 @@ export function* stagger<S>(
   items: readonly S[],
   fn: (item: S, i: number) => Animator,
 ): Animator {
-  yield items.map((item, i) => delay(i * stride, fn(item, i)));
+  yield items.map((item, i) => sleep(i * stride).then(fn(item, i)));
 }
 
 /** Distribute shapes radially around `center` at `radius`, evenly
@@ -80,7 +80,7 @@ export function* assemble(
 export function orbit(
   center: Pointlike,
   shapes: readonly Writable<"translate">[],
-  opts: { period?: number; rate?: Arg<number> } = {},
+  opts: { period?: number; rate?: Val<number> } = {},
 ): Animator {
   const period = opts.period ?? 4;
   const rate = toSig(opts.rate ?? 1);
