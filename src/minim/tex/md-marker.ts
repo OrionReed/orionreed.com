@@ -28,7 +28,10 @@ export class MdMarker extends HTMLElement {
       effect(() => { this.style.color = m.color.value ?? ""; }),
       effect(() => {
         const color = m.color.value;
-        this.style.backgroundColor = m.active.value && color ? `${color}22` : "";
+        this.style.backgroundColor =
+          m.active.value && color
+            ? `color-mix(in srgb, ${color} 15%, transparent)`
+            : "";
       }),
     );
   }

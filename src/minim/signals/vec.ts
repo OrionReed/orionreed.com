@@ -2,7 +2,7 @@
 // framework. `Point`/`DerivedPoint`/`Pointlike` are flavor aliases over
 // the underlying `Reactive<V>`.
 
-import { struct } from "./struct";
+import { struct, type WriteOf, type ReadOf } from "./struct";
 import type { Matrix2D } from "./matrix";
 import { computed, effect, Signal, type ReadonlySignal } from "../core/signal";
 import { toSig, type Arg } from "../core/arg";
@@ -74,11 +74,12 @@ export const Vec = struct<V>("Vec", { x: 0, y: 0 })
   })
   .build();
 
-/** Writable reactive Vec. */
-export type Point = ReturnType<typeof Vec.signal>;
+/** Writable reactive Vec. The broad rw-flavor type — `Vec.signal({...})`
+ *  may return a narrower type with per-axis flavors derived from input. */
+export type Point = WriteOf<typeof Vec>;
 
 /** Read-only reactive Vec. */
-export type DerivedPoint = ReturnType<typeof Vec.derived>;
+export type DerivedPoint = ReadOf<typeof Vec>;
 
 /** Either flavor — writable or derived. */
 export type Pointlike = Point | DerivedPoint;

@@ -84,6 +84,32 @@ type Axes<T, W extends RW, N> = T extends Record<string, any>
     }
   : {};
 
+/** Decompose a `StructType` into the broad `Reactive<...>` of any
+ *  flavor. Use to derive type aliases (`Point = WriteOf<typeof Vec>`)
+ *  without depending on `signal()`'s ReturnType (which can widen
+ *  unhelpfully under generic inference). */
+export type WriteOf<S> = S extends StructType<
+  infer T,
+  infer O,
+  infer X,
+  infer G,
+  infer M,
+  infer N
+>
+  ? Reactive<T, O, X, G, M, "rw", N>
+  : never;
+
+export type ReadOf<S> = S extends StructType<
+  infer T,
+  infer O,
+  infer X,
+  infer G,
+  infer M,
+  infer N
+>
+  ? Reactive<T, O, X, G, M, "ro", N>
+  : never;
+
 /** When the ops bag includes `lerp`, `.to(target, dur, ease?)` is installed
  *  on writable Reactives via the `[LERP]` slot. Other behaviors
  *  (spring, oscillate, …) are free functions reading `[ALGEBRA]`. */
@@ -155,9 +181,11 @@ export interface StructType<T, O = {}, X = {}, G = {}, M = {}, N = {}> {
   readonly name: string;
   readonly defaults: T;
   /** Build a writable reactive cell. Each field accepts a literal OR a
-   *  matching reactive value: pass a `pt` (or any `Vec.signal`) and the
-   *  result's `.translate` IS that signal — same reference, two-way share.
-   *  Pass a `computed` and the field becomes the derived flavor. */
+   *  matching reactive value; the output's per-axis writability narrows
+   *  to match the input flavor (literal/Signal → writable, computed/
+   *  thunk → readonly). Pass a `pt` (or any `Vec.signal`) and the
+   *  result's `.translate` IS that signal — same reference, two-way
+   *  share. */
   signal(v: NestedInput<T, N>): Reactive<T, O, X, G, M, "rw", N>;
   derived(fn: () => T): Reactive<T, O, X, G, M, "ro", N>;
   lens(read: () => T, write: (v: T) => void): Reactive<T, O, X, G, M, "rw", N>;

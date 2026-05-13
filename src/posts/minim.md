@@ -213,9 +213,15 @@ yield * eq.parts.M.translate.to({ x: 0, y: -20 }, 0.4);
 
 <md-tex-live></md-tex-live>
 
-The <md-marker sym="minim:m">mass</md-marker>, <md-marker sym="minim:v">velocity</md-marker>, and <md-marker sym="minim:h">height</md-marker> each carry their own color and hover state. Hovering a term here highlights its counterpart in the diagram below, and hovering in the diagram highlights the prose.
+Marker identity extends past the diagram. `marker.register("id")` puts any marker into a global lookup; `<md-marker sym="id">` finds it on connect and subscribes to the same signals. Both ends share one `marker.active` cell — a derived OR over every bound rendering. Hover in either direction; neither can cancel the other.
+
+The <md-marker sym="minim:m">mass</md-marker>, <md-marker sym="minim:v">velocity</md-marker>, and <md-marker sym="minim:h">height</md-marker> terms in the formula below each have their own color and hover state. Hover any term here.
 
 <md-tex-prose></md-tex-prose>
+
+Because `marker.active` is a `ReadonlyCell<boolean>`, the full suspension vocabulary applies to it directly. `yield* untilTrue(marker.active)` pauses a generator until any rendering is activated — from prose, from the diagram, or from an animation holding the marker. The demo below uses this: hover <md-marker sym="osc:gamma">damping</md-marker> to reveal the decay envelope, or hover <md-marker sym="osc:A">amplitude</md-marker> to show the bounds. Hover <md-marker sym="osc:omega">frequency</md-marker> to see the period tick marks scrolling across the trace.
+
+<md-oscillator></md-oscillator>
 
 A `claim` is a labeled `Signal<boolean>` over some predicate. `claim(c.opacity).stays.in([0, 1])` is true while the predicate holds, false on first violation. Claims compose via `.and`, `.or`, `.during(process)` because they _are_ signals. A `process(factory, ...claims)` is an animator that resets the claims at scope entry and runs the body:
 

@@ -30,6 +30,9 @@ import { cell, type Cell, type ReadonlyCell } from "../core/cell";
 import { marker, hover, registerMarker, type Marker } from "../core/marker";
 import { toSig, type Arg } from "../core/arg";
 import { Box as BoxStruct, type Box, type Boxlike } from "../signals/box";
+import type { WriteOf } from "../signals/struct";
+
+type BoxCell = WriteOf<typeof BoxStruct>;
 import { delegate } from "../signals/delegate";
 import type { Pointlike } from "../signals/vec";
 import type { TexShape } from "./tex";
@@ -65,7 +68,7 @@ export class Part<N extends string = string> implements Boxlike {
   /** Opacity in [0, 1]. Wired to `el.style.opacity`. */
   readonly opacity: Signal<number> = signal(1);
 
-  readonly box: ReturnType<typeof BoxStruct.signal>;
+  readonly box: BoxCell;
 
   declare readonly x: ReadonlySignal<number>;
   declare readonly y: ReadonlySignal<number>;
@@ -85,7 +88,7 @@ export class Part<N extends string = string> implements Boxlike {
   constructor(
     readonly name: N,
     readonly content: ReadonlySignal<string>,
-    box: ReturnType<typeof BoxStruct.signal>,
+    box: BoxCell,
     readonly marker: PartMarker,
     readonly host: TexShape,
   ) {
@@ -100,9 +103,17 @@ export class Part<N extends string = string> implements Boxlike {
     if (!el) return;
     this.#disposers.push(
       effect(() => {
-        el.style.backgroundColor = this.highlighted.value
-          ? highlightColor
-          : "transparent";
+        if (this.highlighted.value) {
+          // Use the marker's identity color if set, otherwise fall back
+          // to the configured highlight token (e.g. from animation code
+          // that calls highlight() directly, where no color is set).
+          const color = effectiveColor(this.marker);
+          el.style.backgroundColor = color
+            ? `color-mix(in srgb, ${color} 15%, transparent)`
+            : highlightColor;
+        } else {
+          el.style.backgroundColor = "transparent";
+        }
       }),
       effect(() => {
         el.style.opacity = String(this.opacity.value);

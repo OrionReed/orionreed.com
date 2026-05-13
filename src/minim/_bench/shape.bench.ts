@@ -15,7 +15,7 @@ import {
   type Matrix2D,
 } from "../signals/matrix";
 import { Vec, pt, type V } from "../signals/vec";
-import { struct } from "../signals/struct";
+import { struct, type WriteOf } from "../signals/struct";
 import { bench, group } from "mitata";
 
 // ── The Transform struct (matches scene/shape.ts) ─────────────────
@@ -66,15 +66,15 @@ const TR0: Tr = {
 
 // ── A minimal "Shape-like" — the reactive bits only (no DOM). ────
 
+type TR = WriteOf<typeof Transform>;
+
 class ShapeLike {
-  readonly transform: ReturnType<typeof Transform.signal>;
-  // Field aliases — matches Shape's actual layout (direct refs to the
-  // Transform's per-field signals).
-  readonly translate: ReturnType<typeof Transform.signal>["translate"];
-  readonly rotate: ReturnType<typeof Transform.signal>["rotate"];
-  readonly scale: ReturnType<typeof Transform.signal>["scale"];
-  readonly origin: ReturnType<typeof Transform.signal>["origin"];
-  readonly opacity: ReturnType<typeof Transform.signal>["opacity"];
+  readonly transform: TR;
+  readonly translate: TR["translate"];
+  readonly rotate: TR["rotate"];
+  readonly scale: TR["scale"];
+  readonly origin: TR["origin"];
+  readonly opacity: TR["opacity"];
   readonly localFrame: ReadonlyCell<Matrix2D>;
   readonly worldFrame: ReadonlyCell<Matrix2D>;
   parent: ShapeLike | null = null;

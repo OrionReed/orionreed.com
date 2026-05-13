@@ -276,6 +276,8 @@ md-tex math {
 
 md-marker {
   display: inline;
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 /* Markdown / Marked */

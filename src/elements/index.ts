@@ -34,6 +34,7 @@ import { MdLerps } from "./optical-centering/md-lerps";
 import { MdMorph } from "./optical-centering/md-morph";
 import { MdCanvasField } from "./optical-centering/md-canvas-field";
 import { MdTexProse } from "./optical-centering/md-tex-prose";
+import { MdOscillator } from "./optical-centering/md-oscillator";
 import { MdTex } from "../minim/tex/md-tex";
 import { MdMarker } from "../minim/tex/md-marker";
 
@@ -73,5 +74,6 @@ MdLerps.define();
 MdMorph.define();
 MdCanvasField.define();
 MdTexProse.define();
+MdOscillator.define();
 MdTex.define();
 MdMarker.define();

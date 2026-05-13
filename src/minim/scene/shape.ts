@@ -32,7 +32,7 @@ import {
   type Pointlike,
   type ResolveVec,
 } from "../signals/vec";
-import { struct } from "../signals/struct";
+import { struct, type WriteOf } from "../signals/struct";
 import { suspend, type Animator } from "../core/anim";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
@@ -163,7 +163,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
    *  smart-adopted from `opts`: pass a `pt` and `transform.translate`
    *  IS that signal (two-way share); pass a `computed` and the field
    *  becomes the derived flavor. */
-  readonly transform: ReturnType<typeof Transform.signal>;
+  readonly transform: WriteOf<typeof Transform>;
 
   // Field aliases — direct references to transform's nested signals.
   // Casts narrow per-prop based on user input flavor (the type contract
