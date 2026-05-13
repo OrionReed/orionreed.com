@@ -8,10 +8,7 @@
 // frame, so a moving target makes the follower chase, a reactive `rate`
 // can ease the simulation, etc.
 
-import type { Signal } from "../core/signal";
-import type { Animator } from "../core/anim";
-import { drive } from "../core/drive";
-import { toSig, type Arg } from "../core/arg";
+import { drive, toSig, type Signal, type Animator, type Arg } from "@minim/core";
 import { algebraOf } from "./algebra";
 
 /** Norm for `precision` auto-stop: `|x|` for scalar, hypot for Vec, else 0. */

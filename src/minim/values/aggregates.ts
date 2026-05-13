@@ -8,7 +8,7 @@
 // rides along — `mean(...vecs)` is a Vec, `mean(...nums)` is a number
 // signal.
 
-import { lens, type Signal } from "../core/signal";
+import { lens, type Signal } from "@minim/core";
 import { algebraOf } from "./algebra";
 import { STRUCT, type StructType } from "./struct";
 

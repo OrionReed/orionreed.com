@@ -4,8 +4,14 @@
 
 import { struct, type WriteOf, type ReadOf } from "./struct";
 import type { Matrix2D } from "./matrix";
-import { computed, effect, Signal, type ReadonlySignal } from "../core/signal";
-import { toSig, type Arg } from "../core/arg";
+import {
+  computed,
+  effect,
+  Signal,
+  toSig,
+  type ReadonlySignal,
+  type Arg,
+} from "@minim/core";
 
 /** The struct's value type — declared up-front so ops can reference
  *  it in their signatures without circular type inference. */

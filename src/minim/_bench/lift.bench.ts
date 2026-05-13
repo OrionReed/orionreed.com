@@ -1,5 +1,5 @@
-import { computed, signal } from "../core/signal";
-import { Vec, type V } from "../values/vec";
+import { computed, signal } from "@minim/core";
+import { Vec, type V } from "@minim/values";
 import { bench, group } from "mitata";
 
 // ── Lifted struct op (vec.add — arity 1, the per-arity-unrolled hot

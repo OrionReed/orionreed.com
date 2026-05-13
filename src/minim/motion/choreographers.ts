@@ -3,9 +3,16 @@
 // `drive` step over N translates). For rigid group translate, reach for
 // `centroid(...shapes).to(...)` instead.
 
-import type { Animator, Arg, Easing, V } from "../core";
-import { delay, drive, toSig } from "../core";
-import { isPoint, type Pointlike, type Writable } from "../scene";
+import {
+  delay,
+  drive,
+  toSig,
+  type Animator,
+  type Arg,
+  type Easing,
+} from "@minim/core";
+import { isPoint, type V, type Pointlike } from "@minim/values";
+import type { Writable } from "@minim/scene";
 
 /** Swap two shapes' positions over `sec`. */
 export function* swap(

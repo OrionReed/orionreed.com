@@ -12,16 +12,16 @@
 // The `--minim-debug` CSS var lets authors theme; the fallback is
 // magenta so debug shapes always read as "scaffolding".
 
+import { Shape, type AnyShape } from "@minim/scene";
 import {
   Vec,
-  Shape,
   isPoint,
-  type AnyShape,
+  Box,
+  transformBox,
+  transformPoint,
   type Boxlike,
   type Pointlike,
-} from "../scene";
-import { Box } from "../values/box";
-import { transformBox, transformPoint } from "../values/matrix";
+} from "@minim/values";
 import { circle } from "./circle";
 import { line } from "./line";
 import { label } from "./label";

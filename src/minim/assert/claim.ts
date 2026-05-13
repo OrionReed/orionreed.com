@@ -29,14 +29,13 @@ import {
   signal,
   computed,
   effect,
+  race,
   Signal,
   type ReadonlySignal,
-} from "../core/signal";
-import { race } from "../core/suspensions";
-import type { Animator } from "../core/anim";
-import { type Box, type Boxlike } from "../values/box";
-import { circle } from "../shapes/circle";
-import { vec, type V, type Pointlike } from "../values/vec";
+  type Animator,
+} from "@minim/core";
+import { vec, type V, type Box, type Boxlike, type Pointlike } from "@minim/values";
+import { circle } from "@minim/shapes";
 
 // ── Types ────────────────────────────────────────────────────────────
 

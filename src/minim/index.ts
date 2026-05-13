@@ -1,126 +1,41 @@
 // minim — generator-driven SVG diagrams with reactive primitives.
-//   core/   — signals, Anim, suspensions, composers, drive, timeline, …
-//   scene/  — Shape, Point, Box, aggregates, Mount, …
-//   shapes/ — visuals + layout + list (space stdlib)
-//   motion/ — easings, transitions, behaviors, choreographers, clocks
-//   anchor, diagram, attr, viewport — top-level utilities + scaffold
 //
-// Sibling subpath modules — import explicitly:
-//   `minim/tex`     — LaTeX → MathML primitives via Temml
-//   `minim/assert`  — trace (spans/tree/tag) + claim (assertions)
-//   `minim/waapi`   — Web Animations / scroll / view-timeline bridges
+//   core/    reactivity (`cell`), Anim, suspensions, composers,
+//            drive, easings, clocks, tween, timeline, marker
+//   values/  reactive value-types (Vec, Box, Color, Matrix2D, Num,
+//            Transform) + struct framework + behaviors + algebra
+//   scene/   Shape, interaction, mount
+//   shapes/  visuals + layout + list (space stdlib)
+//   motion/  transitions + choreographers (re-exports easings/clocks/
+//            behaviors from their canonical homes)
+//
+// Sibling subpath modules:
+//   `minim/tex`     LaTeX → MathML primitives via Temml
+//   `minim/assert`  trace (spans/tree/tag) + claim (assertions)
+//   `minim/waapi`   Web Animations / scroll / view-timeline bridges
 
-// ── Core ────────────────────────────────────────────────────────────
-
-// `cell` is the unified reactive primitive:
-//   cell(v)            — writable
-//   cell.derived(fn)   — read-only
-//   cell.lens(r, w)    — writable lens
-// `Cell<T, W>` is the type; underlying preact factories stay internal.
-export { cell, type Cell, type ReadonlyCell, type RW } from "./core/cell";
-export { effect, batch, untracked } from "./core/signal";
-
+// ── Reactive primitives + time + utilities ──────────────────────────
 export {
+  cell,
+  effect,
+  batch,
+  untracked,
   tween,
   lerpable,
-  type Tween,
-  type Easing,
-  type Duration,
-  type Lerp,
-} from "./core/tween";
-
-// Reactive value-type framework. `struct(name, defaults)` is the fluent
-// Builder for record value types. For arrays/strings/variants use
-// `lerpable(initial, lerp)` from `core/tween.ts`.
-export {
-  struct,
-  type Reactive,
-  type StructType,
-} from "./values/struct";
-
-// Built-in struct value types — each exposes:
-//   - the struct value (e.g. `Vec`) for advanced use (.signal/.derived/.lens/.is)
-//   - a lowercase factory shorthand (`vec`, `num`, `rgb`, `matrix`, `transform`)
-//   - the plain value type alias (`V`, `C`, `Box`, `Matrix2D`, `Transform`)
-//   - rw/ro flavor aliases where useful (`Point`/`DerivedPoint`, `N`/`DerivedN`)
-export { Color, rgb, rgba, type C } from "./values/color";
-export { Num, num, type N, type DerivedN } from "./values/num";
-export {
-  Transform,
-  transform,
-  type Tr,
-  type DerivedTr,
-} from "./values/transform";
-export { Matrix2D, matrix } from "./values/matrix";
-
-export { toSig, when, type Arg } from "./core/arg";
-
-export { snapshot, counter } from "./core/store";
-
-// `Vec` is the registered struct (value + type-witness via `instanceof`);
-// `V` is the plain `{x, y}` value type.
-export {
-  Vec,
-  vec,
-  polar,
-  isPoint,
-  vecEquals,
-  type V,
-  type Point,
-  type DerivedPoint,
-  type Pointlike,
-  type ResolveVec,
-} from "./values/vec";
-
-/** Generic mean over any signals with a registered struct algebra
- *  (Vec/Box/Color/Matrix2D/…) or raw `Signal<number>`. */
-export { mean } from "./values/aggregates";
-
-// `Box` is both the registered struct and the plain `{x, y, w, h}` type.
-export {
-  Box,
-  expandBox,
-  unionBox,
-  boxEdgeFrom,
-  isBox,
-  type Boxlike,
-} from "./values/box";
-
-export {
-  Shape,
-  centroid,
-  meanRotation,
-  meanScale,
-  type ShapeOpts,
-  type AnyShape,
-  type Writable,
-} from "./scene/shape";
-
-export { draggable, hoverSignal } from "./scene/interaction";
-
-export {
+  toSig,
+  when,
+  snapshot,
+  counter,
   marker,
   palette,
   hover,
   getMarker,
   registerMarker,
-  type Marker,
-} from "./core/marker";
-
-export { mount, type Mount } from "./scene/mount";
-
-export {
   Anim,
   asGen,
   isGen,
   suspend,
-  type Animator,
-  type SpawnFn,
-} from "./core/anim";
-
-export { EventBus } from "./core/events";
-
-export {
+  EventBus,
   untilChange,
   untilTrue,
   untilFalse,
@@ -130,25 +45,95 @@ export {
   firstN,
   endOn,
   startOn,
-} from "./core/suspensions";
-
-export {
   all,
   sequence,
   delay,
   transaction,
   rand,
-} from "./core/compose";
-
-export { drive } from "./core/drive";
-
-export {
+  drive,
   timeline,
   sequential,
+  type Cell,
+  type ReadonlyCell,
+  type Tween,
+  type Easing,
+  type Duration,
+  type Lerp,
+  type Arg,
+  type Marker,
+  type Animator,
+  type SpawnFn,
   type Clip,
   type Timeline,
   type TimelineOf,
-} from "./core/timeline";
+} from "./core";
+
+// ── Reactive value types + struct framework ─────────────────────────
+//
+// Each value type ships:
+//   - the struct value (e.g. `Vec`) for advanced use
+//     (.signal/.derived/.lens/.is/.isWritable)
+//   - a lowercase factory shorthand (`vec`, `num`, `rgb`, `matrix`,
+//     `transform`)
+//   - the plain value type alias (`V`, `C`, `Box`, `Matrix2D`, …)
+//   - rw/ro flavor aliases where useful (`Point`/`DerivedPoint`,
+//     `N`/`DerivedN`)
+export {
+  struct,
+  Vec,
+  vec,
+  polar,
+  isPoint,
+  vecEquals,
+  Box,
+  expandBox,
+  unionBox,
+  boxEdgeFrom,
+  isBox,
+  Color,
+  rgb,
+  rgba,
+  Matrix2D,
+  matrix,
+  Num,
+  num,
+  Transform,
+  transform,
+  mean,
+  algebraOf,
+  Anchor,
+  Dir,
+  type Reactive,
+  type StructType,
+  type RW,
+  type V,
+  type Point,
+  type DerivedPoint,
+  type Pointlike,
+  type ResolveVec,
+  type Boxlike,
+  type C,
+  type N,
+  type DerivedN,
+  type Tr,
+  type DerivedTr,
+  type VectorSpace,
+} from "./values";
+
+// ── Scene graph ─────────────────────────────────────────────────────
+export {
+  Shape,
+  centroid,
+  meanRotation,
+  meanScale,
+  draggable,
+  hoverSignal,
+  mount,
+  type ShapeOpts,
+  type AnyShape,
+  type Writable,
+  type Mount,
+} from "./scene";
 
 // ── Shapes (space stdlib) ───────────────────────────────────────────
 export {
@@ -221,9 +206,6 @@ export {
   splay,
   assemble,
 } from "./motion";
-
-// ── Spatial constants ───────────────────────────────────────────────
-export { Anchor, Dir } from "./values/anchor";
 
 // ── Consumer scaffold ───────────────────────────────────────────────
 export { Diagram, css } from "./diagram";

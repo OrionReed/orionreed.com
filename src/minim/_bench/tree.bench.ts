@@ -14,12 +14,8 @@
 //   3. No read   — write only, never observe (most ancestors during
 //                  drag operations).
 
-import { computed, effect, signal } from "../core/signal";
-import {
-  identity,
-  multiply,
-  Matrix2D,
-} from "../values/matrix";
+import { computed, effect, signal } from "@minim/core";
+import { identity, multiply, Matrix2D } from "@minim/values";
 import { bench, group } from "mitata";
 
 const N = 1000;

@@ -4,7 +4,7 @@
 // read it to find the right ops for the value type. Raw `Signal<number>`
 // falls back to scalar arithmetic.
 
-import type { Signal } from "../core/signal";
+import type { Signal } from "@minim/core";
 import { ALGEBRA } from "./struct";
 
 /** The minimal vector-space algebra: enough for tween, spring,

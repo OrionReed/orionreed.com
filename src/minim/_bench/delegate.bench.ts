@@ -17,10 +17,14 @@
 // pollution we hit with the in-repo harness. The cross-process
 // _isolated_check.ts sanity script is still around for spot-checks.
 
-import { signal, type ReadonlySignal, type Signal } from "../core/signal";
-import { Box, type Box as B } from "../values/box";
-import { delegate, delegateLazy } from "../values/delegate";
-import type { Pointlike } from "../values/vec";
+import { signal, type ReadonlySignal, type Signal } from "@minim/core";
+import {
+  Box,
+  delegate,
+  delegateLazy,
+  type Box as B,
+  type Pointlike,
+} from "@minim/values";
 import { bench, group } from "mitata";
 
 // ── Fixtures ───────────────────────────────────────────────────────

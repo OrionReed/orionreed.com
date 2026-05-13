@@ -1,9 +1,9 @@
 // Labelled, clickable region — group + tinted-rect + label, with
 // hover/click handlers wired.
 
-import { cell, toSig, type Arg, type Cell } from "../core";
-import { type AnyShape, type Pointlike, vec } from "../scene";
-import { Anchor } from "../values/anchor";
+import { cell, toSig, type Arg, type Cell } from "@minim/core";
+import { type AnyShape } from "@minim/scene";
+import { Anchor, vec, type Pointlike } from "@minim/values";
 import { tokens } from "./tokens";
 import { group } from "./group";
 import { rect } from "./rect";

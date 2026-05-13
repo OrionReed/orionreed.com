@@ -9,16 +9,14 @@
 // All handles are `aside: true` (no autofit contribution) and themable
 // via the `--minim-handle` CSS var.
 
-import { type Cell } from "../core";
+import { type Cell } from "@minim/core";
 import {
   Shape,
-  Vec,
-  mean,
+  draggable,
   type AnyShape,
-  type Point,
   type Writable,
-} from "../scene";
-import { draggable } from "../scene/interaction";
+} from "@minim/scene";
+import { Vec, mean, type Point } from "@minim/values";
 import { circle } from "./circle";
 import type { Path } from "./path";
 

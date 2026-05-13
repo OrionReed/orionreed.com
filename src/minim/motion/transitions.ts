@@ -3,11 +3,18 @@
 // `sig.to(target, sec, ease)` for outros. Each compound `yield`s an
 // array of those calls; the body shows exactly which atoms stack.
 
-import { tween, type Cell, type Duration, type Easing } from "../core";
-import type { Animator, V } from "../core";
-import type { Writable } from "../scene";
-import { Dir } from "../values/anchor";
-import { easeIn, easeInOut, easeOut } from "./easings";
+import {
+  tween,
+  easeIn,
+  easeInOut,
+  easeOut,
+  type Cell,
+  type Duration,
+  type Easing,
+  type Animator,
+} from "@minim/core";
+import { type V, Dir } from "@minim/values";
+import type { Writable } from "@minim/scene";
 
 type Lerpable = number | V;
 

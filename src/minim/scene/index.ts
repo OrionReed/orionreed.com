@@ -7,26 +7,22 @@ export {
   polar,
   isPoint,
   vecEquals,
-  type V,
-  type Point,
-  type DerivedPoint,
-  type Pointlike,
-  type ResolveVec,
-} from "../values/vec";
-
-export { mean } from "../values/aggregates";
-
-// `Box` re-export carries BOTH the value (the struct) and the type
-// alias (the `{x, y, w, h}` shape) — same name, two namespaces, like
-// a class.
-export {
+  mean,
+  // `Box` re-export carries BOTH the value (the struct) and the type
+  // alias (the `{x, y, w, h}` shape) — same name, two namespaces, like
+  // a class.
   Box,
   expandBox,
   unionBox,
   boxEdgeFrom,
   isBox,
+  type V,
+  type Point,
+  type DerivedPoint,
+  type Pointlike,
+  type ResolveVec,
   type Boxlike,
-} from "../values/box";
+} from "@minim/values";
 
 export {
   Shape,

@@ -23,22 +23,32 @@
 import {
   effect,
   signal,
+  cell,
+  marker,
+  hover,
+  registerMarker,
+  toSig,
   type Signal,
   type ReadonlySignal,
-} from "../core/signal";
-import { cell, type Cell, type ReadonlyCell } from "../core/cell";
-import { marker, hover, registerMarker, type Marker } from "../core/marker";
-import { toSig, type Arg } from "../core/arg";
-import { Box as BoxStruct, type Box, type Boxlike } from "../values/box";
-import type { WriteOf } from "../values/struct";
-
-type BoxCell = WriteOf<typeof BoxStruct>;
-import { delegate } from "../values/delegate";
-import type { Pointlike } from "../values/vec";
+  type Cell,
+  type ReadonlyCell,
+  type Marker,
+  type Arg,
+} from "@minim/core";
+import {
+  Box as BoxStruct,
+  delegate,
+  type Box,
+  type Boxlike,
+  type WriteOf,
+  type Pointlike,
+} from "@minim/values";
 import type { TexShape } from "./tex";
 
-export type { Marker } from "../core/marker";
-export { getMarker } from "../core/marker";
+type BoxCell = WriteOf<typeof BoxStruct>;
+
+export type { Marker };
+export { getMarker } from "@minim/core";
 
 /** A part's content can be a literal string, a signal, or a thunk. */
 export type PartContent = Arg<string>;

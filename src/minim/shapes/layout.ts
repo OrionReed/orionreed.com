@@ -1,10 +1,15 @@
 // Spatial composition primitives. Reference points for growth:
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
-import { toSig, type Arg } from "../core/arg";
-import { transformBox } from "../values/matrix";
-import { Box, box, expandBox, type Boxlike } from "../values/box";
-import type { Shape } from "../scene";
+import { toSig, type Arg } from "@minim/core";
+import {
+  transformBox,
+  Box,
+  box,
+  expandBox,
+  type Boxlike,
+} from "@minim/values";
+import type { Shape } from "@minim/scene";
 
 export interface ArrangeOpts {
   /** Spacing between adjacent bounding boxes. Default 0. */

@@ -8,7 +8,7 @@
 // arity-6 vs arity-7) is small, the unrolling can be collapsed for a
 // significant LOC reduction.
 
-import { struct } from "../values/struct";
+import { struct } from "@minim/values";
 import { bench, group } from "mitata";
 
 // ── Lifter arity benches ────────────────────────────────────────────

@@ -1,12 +1,11 @@
-import { toSig, type Arg, type NumSig } from "../core";
+import { toSig, type Arg, type NumSig } from "@minim/core";
+import { Shape, type Segment } from "@minim/scene";
 import {
-  Shape,
   Vec,
+  box,
   type DerivedPoint,
   type Pointlike,
-  type Segment,
-} from "../scene";
-import { box } from "../values/box";
+} from "@minim/values";
 import { TWO_PI } from "./dashed";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 

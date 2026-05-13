@@ -7,7 +7,7 @@
 //       yield [t.fadeIn(a, 0.3), t.fadeUp(b, 0.5)];
 //     });
 
-import type { Animator } from "../core/anim";
+import type { Animator } from "@minim/core";
 
 /** Gen → tag table. WeakMap so dropped generators are collectable. */
 const tags = new WeakMap<Animator, string>();

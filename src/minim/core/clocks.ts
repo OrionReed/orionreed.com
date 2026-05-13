@@ -2,8 +2,8 @@
 // (or call a fn) at a fixed interval. For continuous per-frame
 // advancement at a rate, see `motion/behaviors:drift`.
 
-import { cell, type Cell } from "../core";
-import type { Anim } from "../core";
+import { cell, type Cell } from "./cell";
+import type { Anim } from "./anim";
 
 /** Tick cell — increments every `sec` seconds while `anim` is active. */
 export function pulse(anim: Anim, sec: number): Cell<number> {

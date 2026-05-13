@@ -12,7 +12,7 @@
 //      it (same reference); a generic Signal wraps in lens; a derived
 //      wraps as derived; a thunk wraps as derived; a literal allocates.
 
-import { computed, effect, signal } from "@minim/core/signal";
+import { computed, effect, signal } from "@minim/core";
 import { struct, Vec, vec, type V } from "@minim/values";
 
 type Tr = {

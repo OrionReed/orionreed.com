@@ -40,6 +40,8 @@ export {
 // ── Box ─────────────────────────────────────────────────────────
 export {
   Box,
+  box,
+  boxAt,
   expandBox,
   unionBox,
   boxEdgeFrom,

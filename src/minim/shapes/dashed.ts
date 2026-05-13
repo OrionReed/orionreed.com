@@ -2,7 +2,7 @@
 // corner artifacts by emitting explicit `<path>` commands at the
 // computed dash positions.
 
-import type { Segment } from "../scene";
+import type { Segment } from "@minim/scene";
 
 const TWO_PI = Math.PI * 2;
 

@@ -1,12 +1,11 @@
-import { cell, type Arg, type ReadonlyCell } from "../core";
+import { cell, type Arg, type ReadonlyCell } from "@minim/core";
+import { Shape, type Segment } from "@minim/scene";
 import {
-  Shape,
   Vec,
+  box,
   type DerivedPoint,
   type Pointlike,
-  type Segment,
-} from "../scene";
-import { box } from "../values/box";
+} from "@minim/values";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
 export interface LineOpts extends CommonOpts {}

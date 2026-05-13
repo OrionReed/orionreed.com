@@ -8,14 +8,17 @@
 //   5. worldFrame reactive chain — write root, observe leaves
 //   6. Smart-adoption overhead in `Transform.signal({...})`
 
-import { cell, type ReadonlyCell } from "../core";
+import { cell, type ReadonlyCell } from "@minim/core";
 import {
   compose,
   multiply,
+  Vec,
+  vec,
+  struct,
   type Matrix2D,
-} from "../values/matrix";
-import { Vec, vec, type V } from "../values/vec";
-import { struct, type WriteOf } from "../values/struct";
+  type V,
+  type WriteOf,
+} from "@minim/values";
 import { bench, group } from "mitata";
 
 // ── The Transform struct (matches scene/shape.ts) ─────────────────

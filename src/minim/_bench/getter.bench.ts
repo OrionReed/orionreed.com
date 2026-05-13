@@ -1,5 +1,4 @@
-import { Vec } from "../values/vec";
-import { Box } from "../values/box";
+import { Vec, Box } from "@minim/values";
 import { bench, do_not_optimize, group } from "mitata";
 
 // ── Lazy getter: first-access (build) cost vs cached (own-property) ─

@@ -1,7 +1,7 @@
 // DOM input → signal-world bridges that bind to scene-graph shapes.
 
-import { type Cell } from "../core/cell";
-import type { V } from "../values/vec";
+import { type Cell } from "@minim/core";
+import type { V } from "@minim/values";
 import type { AnyShape } from "./shape";
 
 /** Wire `mouseenter`/`mouseleave` on a shape to a writable boolean cell.

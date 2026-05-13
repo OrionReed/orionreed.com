@@ -13,9 +13,12 @@ import {
   lens,
   signal,
   batch,
+  LERP,
   type ReadonlySignal,
-} from "../core/signal";
-import { LERP, type Easing, type Duration, type Tween } from "../core/tween";
+  type Easing,
+  type Duration,
+  type Tween,
+} from "@minim/core";
 
 // ── Type surface ───────────────────────────────────────────────────
 

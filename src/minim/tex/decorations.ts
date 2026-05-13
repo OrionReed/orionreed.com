@@ -8,12 +8,12 @@
 //      const eq = s(tex`${part("a", "...")} ...`);
 //      eq.add(brace(eq.parts.a));
 
-import { computed, type ReadonlySignal } from "../core/signal";
-import { Shape } from "../scene/shape";
+import { computed, type ReadonlySignal } from "@minim/core";
+import { Shape } from "@minim/scene";
 // Plain Box constructor — imported renamed to avoid shadowing the
 // `box(part)` decoration exported below.
-import { box as mkBox, type Box } from "../values/box";
-import { tokens } from "../shapes/tokens";
+import { box as mkBox, type Box } from "@minim/values";
+import { tokens } from "@minim/shapes";
 import type { Part } from "./parts";
 
 export interface DecorationOpts {

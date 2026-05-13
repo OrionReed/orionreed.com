@@ -1,14 +1,14 @@
-import { cell, toSig, type Arg, type NumSig } from "../core";
+import { cell, toSig, type Arg, type NumSig } from "@minim/core";
+import { Shape, type Segment } from "@minim/scene";
 import {
-  Shape,
   Vec,
   isPoint,
+  box,
+  isBox,
   type Boxlike,
   type DerivedPoint,
   type Pointlike,
-  type Segment,
-} from "../scene";
-import { box, isBox } from "../values/box";
+} from "@minim/values";
 import { tokens } from "./tokens";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 

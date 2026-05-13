@@ -2,7 +2,7 @@
 // knows nothing about spans, only lifecycle events. Tags are looked
 // up from a WeakMap keyed on the spawned generator (see `./tag`).
 
-import type { Anim, Animator } from "../core/anim";
+import type { Anim, Animator } from "@minim/core";
 import { tagOf } from "./tag";
 
 /** One generator's lifecycle as flat data. `completedAt` is set on

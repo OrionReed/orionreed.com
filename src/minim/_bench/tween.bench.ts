@@ -1,7 +1,5 @@
-import { signal } from "../core/signal";
-import { Vec } from "../values/vec";
-import { Color } from "../values/color";
-import { lerpable } from "../core/tween";
+import { signal, lerpable } from "@minim/core";
+import { Vec, Color } from "@minim/values";
 import { bench, group } from "mitata";
 
 const stringLerp = (a: string, b: string, t: number): string => {

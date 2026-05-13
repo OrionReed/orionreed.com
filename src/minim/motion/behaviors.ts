@@ -8,4 +8,4 @@ export {
   drift,
   attract,
   type SpringOpts,
-} from "../values/behaviors";
+} from "@minim/values";

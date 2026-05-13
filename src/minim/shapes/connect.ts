@@ -1,8 +1,9 @@
 // Connectors. Uses `shape.boundary` so analytic edges work without
 // per-kind dispatch.
 
-import { cell, toSig, type Arg } from "../core";
-import { Shape, SVG_NS, type Pointlike } from "../scene";
+import { cell, toSig, type Arg } from "@minim/core";
+import { Shape, SVG_NS } from "@minim/scene";
+import { type Pointlike } from "@minim/values";
 import { tokens } from "./tokens";
 import { Line, type LineOpts } from "./line";
 

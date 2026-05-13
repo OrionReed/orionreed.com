@@ -1,40 +1,39 @@
 import {
   cell,
   effect,
+  suspend,
+  toSig,
+  Signal,
   type Cell,
   type ReadonlyCell,
-} from "../core";
-import { Signal } from "../core/signal";
-import { toSig, type Arg, type ResolveSig } from "../core/arg";
+  type Arg,
+  type ResolveSig,
+  type Animator,
+} from "@minim/core";
 import {
   Box as BoxStruct,
   box,
   boxEdgeFrom,
   unionBox,
-  type Box,
-  type Boxlike,
-} from "../values/box";
-import {
   compose,
   multiply,
-  toString as matrixToString,
+  matrixToString,
   transformBox,
   transformPoint,
-  type Matrix2D,
-} from "../values/matrix";
-import { mean } from "../values/aggregates";
-import {
+  mean,
   Vec,
   vec,
+  Transform,
+  type Box,
+  type Boxlike,
+  type Matrix2D,
   type V,
   type DerivedPoint,
   type Point,
   type Pointlike,
   type ResolveVec,
-} from "../values/vec";
-import { type WriteOf } from "../values/struct";
-import { Transform } from "../values/transform";
-import { suspend, type Animator } from "../core/anim";
+  type WriteOf,
+} from "@minim/values";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 

@@ -19,7 +19,7 @@
 import { struct } from "./struct";
 import { Vec, type V, type Pointlike, type DerivedPoint } from "./vec";
 import { transformBox, type Matrix2D } from "./matrix";
-import { computed, type ReadonlySignal } from "../core/signal";
+import { computed, type ReadonlySignal } from "@minim/core";
 
 /** `{x, y, w, h}`. `Box` is both this type and the registered struct value
  *  (same trick `class` uses by default). */

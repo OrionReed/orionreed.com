@@ -20,8 +20,7 @@
 // Effects read `marker.active` (OR of all bound locals) and `marker.color`.
 
 import temml from "temml";
-import { effect } from "../core/signal";
-import { hover, getMarker, type Marker } from "../core/marker";
+import { effect, hover, getMarker, type Marker } from "@minim/core";
 
 const SYM_RE = /\\sym\{([^}]+)\}\{([^}]*)\}/g;
 const symClass = (id: string): string =>

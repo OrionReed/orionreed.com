@@ -4,16 +4,15 @@ import {
   type Arg,
   type Cell,
   type ReadonlyCell,
-} from "../core";
+} from "@minim/core";
+import { Shape, type Segment } from "@minim/scene";
 import {
-  Shape,
   Vec,
   isPoint,
+  box,
   type DerivedPoint,
   type Pointlike,
-  type Segment,
-} from "../scene";
-import { box } from "../values/box";
+} from "@minim/values";
 import { wireStroke, type CommonOpts } from "./common";
 
 export interface PathOpts extends CommonOpts {
