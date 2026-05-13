@@ -32,6 +32,7 @@ import { MdHandles } from "./optical-centering/md-handles";
 import { MdMirror } from "./optical-centering/md-mirror";
 import { MdLerps } from "./optical-centering/md-lerps";
 import { MdMorph } from "./optical-centering/md-morph";
+import { MdCanvasField } from "./optical-centering/md-canvas-field";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -67,3 +68,4 @@ MdHandles.define();
 MdMirror.define();
 MdLerps.define();
 MdMorph.define();
+MdCanvasField.define();

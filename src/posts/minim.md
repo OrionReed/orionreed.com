@@ -49,6 +49,8 @@ A small library for generator-driven animated SVG diagrams with reactive primiti
 
 <md-morph></md-morph>
 
+<md-canvas-field></md-canvas-field>
+
 <md-waapi-demo></md-waapi-demo>
 
 <md-aggregates></md-aggregates>
