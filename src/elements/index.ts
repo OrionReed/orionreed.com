@@ -35,6 +35,7 @@ import { MdMorph } from "./optical-centering/md-morph";
 import { MdCanvasField } from "./optical-centering/md-canvas-field";
 import { MdTexProse } from "./optical-centering/md-tex-prose";
 import { MdTex } from "../minim/tex/md-tex";
+import { MdMarker } from "../minim/tex/md-marker";
 
 DarkModeToggle.define();
 MdQuote.define();
@@ -73,3 +74,4 @@ MdMorph.define();
 MdCanvasField.define();
 MdTexProse.define();
 MdTex.define();
+MdMarker.define();

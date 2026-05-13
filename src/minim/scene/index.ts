@@ -47,6 +47,6 @@ export {
   boxIn,
 } from "./shape";
 
-export { draggable } from "./interaction";
+export { draggable, hoverSignal } from "./interaction";
 
 export { mount, type Mount } from "./mount";

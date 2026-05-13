@@ -33,8 +33,8 @@ A few other shapes are accepted in yield position. Each is shorthand for somethi
 A function `(wake) => dispose` covers everything that doesn't have a fixed duration. Anything callback-shaped — DOM events, signal changes, promises, an event bus — fits the contract. Yield one and the runtime takes you off the tick loop entirely; when `wake(value)` fires it puts you back on, with `value` as the resume of the `yield`:
 
 ```ts
-const event = yield* untilEvent(button, "click");
-const next  = yield* untilChange(signal);
+const event = yield * untilEvent(button, "click");
+const next = yield * untilChange(signal);
 ```
 
 No polling, no per-frame work while suspended.
@@ -44,7 +44,7 @@ The runtime never knows about combinators like `race` or `endOn`. They're genera
 ```ts
 yield race(orbit(centre, planets), untilEvent(stop, "click"));
 yield endOn(untilChange(stopFlag), oscillate(y, 20, 1));
-yield* fadeOut(s, 0.4);   // graceful exit, same generator
+yield * fadeOut(s, 0.4); // graceful exit, same generator
 ```
 
 `race` is a dozen lines: spawn each child, wake on the first to finish, cancel the rest. `endOn(t, w)` is `race(w, t)` named so the trigger reads first. `firstN`, `all`, `sequence`, `stagger`, `splay` are all the same trick. Add your own and it composes the same way.
@@ -58,7 +58,7 @@ const slowmo = new Anim();
 slowmo.timeScale.value = 0.25;
 slowmo.run(orbit(centre, planets));
 
-yield* slowmo;   // outer 1×, planets 0.25×
+yield * slowmo; // outer 1×, planets 0.25×
 ```
 
 Pause, reverse playback, scrubbable timelines — same move, different `timeScale`.
@@ -82,7 +82,7 @@ Every animatable property of every shape is a signal. The DOM is wired to them o
 `Signal.prototype.to` returns a generator that steps from the signal's current value to a target over a duration:
 
 ```ts
-yield* x.to(100, 0.5, easeInOut);
+yield * x.to(100, 0.5, easeInOut);
 ```
 
 A signal just produced a generator, and the runtime already knew what to do with it.
@@ -90,12 +90,12 @@ A signal just produced a generator, and the runtime already knew what to do with
 You can register richer value types, and the same method works on those too:
 
 ```ts
-const Vec = struct<{x: number; y: number}>("Vec", { x: 0, y: 0 })
+const Vec = struct<{ x: number; y: number }>("Vec", { x: 0, y: 0 })
   .construct((x, y) => ({ x, y }))
   .ops({ add, sub, scale, lerp })
   .build();
 
-yield* shape.translate.to({ x: 100, y: 50 }, 0.5, easeInOut);
+yield * shape.translate.to({ x: 100, y: 50 }, 0.5, easeInOut);
 ```
 
 `.to` doesn't know about `Vec`. It looks up the value type's `lerp` through a prototype slot and steps through it. Register `Pose`, `Quat`, `Camera` with a `lerp` op and they tween the same day.
@@ -112,7 +112,7 @@ Aggregates aren't a feature, they're lenses:
 
 ```ts
 const c = centroid(a, b, c, d);
-yield* c.to({ x: 200, y: 100 }, 1);
+yield * c.to({ x: 200, y: 100 }, 1);
 ```
 
 `centroid` is a writable lens over four shapes' translates: read returns the mean, write distributes the delta. Tweening it is a rigid group translate. Roll your own in five lines: read returns whatever, write distributes whatever.
@@ -125,7 +125,7 @@ The same lens works as the read+write side of a UI primitive. `handle(point)` is
 
 ```ts
 const c = centroid(a, b, c, d);
-s(handle(c));        // drag the centroid; all four shapes move
+s(handle(c)); // drag the centroid; all four shapes move
 ```
 
 Anywhere a writable Point exists, a handle can sit on it.
@@ -144,8 +144,8 @@ They update with everything else, because they're just signals deriving from sig
 Generators can suspend on signals too. `untilChange`, `untilTrue`, `untilFalse` are short wrappers around `effect` — animations wait on reactive state without polling:
 
 ```ts
-yield* untilChange(stopFlag);
-yield* fadeOut(s, 0.4);
+yield * untilChange(stopFlag);
+yield * fadeOut(s, 0.4);
 ```
 
 <md-circuit></md-circuit>
@@ -153,7 +153,7 @@ yield* fadeOut(s, 0.4);
 Sources of intent that aren't built into the runtime are short to write, because the runtime doesn't impose anything on them. `EventBus` is the canonical example: `bus.emit(name, data)` fans out synchronously, `bus.until(name)` is one call to `suspend()`:
 
 ```ts
-const data = yield* bus.until<Payload>("ready");
+const data = yield * bus.until<Payload>("ready");
 ```
 
 Just another callback-shaped source. No special integration.
@@ -162,12 +162,12 @@ A timeline is the same kind of user-space primitive on the time axis. A clock si
 
 ```ts
 const tl = timeline({
-  intro: { at: 0,   dur: 0.5 },
-  hold:  { at: 0.5, dur: 1.0 },
+  intro: { at: 0, dur: 0.5 },
+  hold: { at: 0.5, dur: 1.0 },
   outro: { at: 1.5, dur: 0.4 },
 });
-effect(() => circle.opacity.value = tl.intro.t.value);
-yield* tl;
+effect(() => (circle.opacity.value = tl.intro.t.value));
+yield * tl;
 ```
 
 <md-multitrack></md-multitrack>
@@ -179,15 +179,15 @@ yield* tl;
 The clock and `timeScale` are themselves signals, so the same `.to` works on them:
 
 ```ts
-yield* anim.timeScale.to(0, 0.5, easeOut);   // ease into pause
-slider.oninput = () => anim.timeScale.value = +slider.value;
+yield * anim.timeScale.to(0, 0.5, easeOut); // ease into pause
+slider.oninput = () => (anim.timeScale.value = +slider.value);
 ```
 
 The same `(wake) => dispose` shape carries out to native browser primitives. `untilAnimation(a)` wakes on a WAAPI `finish` event; `untilInView(el)` wakes when an element starts intersecting; `scrollProgress()` is a lazy signal that subscribes to `scroll` only when something reads it. WAAPI animations and minim animations interleave naturally:
 
 ```ts
-yield* untilInView(el);
-yield* fadeIn(circle, 0.5);
+yield * untilInView(el);
+yield * fadeIn(circle, 0.5);
 ```
 
 <md-waapi-demo></md-waapi-demo>
@@ -200,7 +200,7 @@ A `tex` template returns a Shape rendering MathML through Temml. Interpolated `p
 
 ```ts
 const eq = tex`E = ${part("M")} c^2`;
-yield* eq.parts.M.translate.to({ x: 0, y: -20 }, 0.4);
+yield * eq.parts.M.translate.to({ x: 0, y: -20 }, 0.4);
 ```
 
 <md-tex-demo></md-tex-demo>
@@ -211,20 +211,18 @@ yield* eq.parts.M.translate.to({ x: 0, y: -20 }, 0.4);
 
 <md-tex-live></md-tex-live>
 
-Marker identity extends past the diagram. `PartMarker.register("id")` puts a marker into a global registry; `<md-tex sym="id">` looks it up on connect and subscribes to the same `color` and `highlighted` signals. Hover any term below and the corresponding part in the formula lights up — the diagram animation also drives the prose, because both ends share one signal:
-
-The kinetic term ½<md-tex sym="minim:m">m</md-tex><md-tex sym="minim:v">v^2</md-tex> and the potential term <md-tex sym="minim:m">m</md-tex>g<md-tex sym="minim:h">h</md-tex> balance to give the total mechanical energy $E$.
+The <md-marker sym="minim:m">mass</md-marker>, <md-marker sym="minim:v">velocity</md-marker>, and <md-marker sym="minim:h">height</md-marker> each carry their own color and hover state. Hovering a term here highlights its counterpart in the diagram below, and hovering in the diagram highlights the prose.
 
 <md-tex-prose></md-tex-prose>
 
-A `claim` is a labeled `Signal<boolean>` over some predicate. `claim(c.opacity).stays.in([0, 1])` is true while the predicate holds, false on first violation. Claims compose via `.and`, `.or`, `.during(process)` because they *are* signals. A `process(factory, ...claims)` is an animator that resets the claims at scope entry and runs the body:
+A `claim` is a labeled `Signal<boolean>` over some predicate. `claim(c.opacity).stays.in([0, 1])` is true while the predicate holds, false on first violation. Claims compose via `.and`, `.or`, `.during(process)` because they _are_ signals. A `process(factory, ...claims)` is an animator that resets the claims at scope entry and runs the body:
 
 ```ts
-const bounded  = claim(c.opacity).stays.in([0, 1]);
+const bounded = claim(c.opacity).stays.in([0, 1]);
 const reaches1 = claim(c.opacity).becomes.equal(1);
-const intro    = process(() => fadeIn(c, 0.3), bounded, reaches1);
+const intro = process(() => fadeIn(c, 0.3), bounded, reaches1);
 
-yield* intro.run();
+yield * intro.run();
 ```
 
 Live-checked specs without a separate test framework.

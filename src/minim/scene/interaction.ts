@@ -1,7 +1,22 @@
 // DOM input → signal-world bridges that bind to scene-graph shapes.
 
+import { type Signal } from "../core/signal";
 import type { V } from "../signals/vec";
 import type { AnyShape } from "./shape";
+
+/** Wire `mouseenter`/`mouseleave` on a shape to a writable boolean
+ *  signal. Typical use: link a shape's hover state to a `Marker`:
+ *
+ *      const m = new Marker().register("sim:mass");
+ *      scene.track(hoverSignal(ball, m.highlighted));
+ *      effect(() => ball.attr("fill", m.highlighted.value ? AMBER : DEFAULT));
+ *
+ *  Returns a disposer that removes the listeners. */
+export function hoverSignal(shape: AnyShape, sig: Signal<boolean>): () => void {
+  const off1 = shape.on("mouseenter", () => { sig.value = true; });
+  const off2 = shape.on("mouseleave", () => { sig.value = false; });
+  return () => { off1(); off2(); };
+}
 
 /** Wire `handle` for pointer-drag. Each pointermove while pressed
  *  calls `onDrag(local)` with the pointer in `handle`'s local frame;

@@ -155,11 +155,22 @@ export class Part<N extends string = string> implements Boxlike {
     if (!el) return;
     this.#disposers.push(
       effect(() => {
-        // Per-instance highlight (animation) OR identity-level highlight
-        // (prose linking via PartMarker.highlighted on the root marker).
-        const on =
-          this.highlighted.value || rootMarker(this.marker).highlighted.value;
-        el.style.backgroundColor = on ? highlightColor : "transparent";
+        const partHl     = this.highlighted.value;
+        const identityHl = rootMarker(this.marker).highlighted.value;
+        if (identityHl) {
+          // Identity-level (prose hover or diagram animation writing to the
+          // marker): tint with the marker's own color at ~13% alpha so the
+          // background matches the symbol's color identity, not a generic
+          // yellow. Falls back to the configured highlightColor if no color
+          // is set on the marker.
+          const color = effectiveColor(this.marker);
+          el.style.backgroundColor = color ? `${color}22` : highlightColor;
+        } else if (partHl) {
+          // Per-instance (animation-level): use the diagram token color.
+          el.style.backgroundColor = highlightColor;
+        } else {
+          el.style.backgroundColor = "transparent";
+        }
       }),
       effect(() => {
         el.style.opacity = String(this.opacity.value);

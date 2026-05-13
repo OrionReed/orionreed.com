@@ -260,6 +260,24 @@ p:has(+ md-syntax) {
   max-width: 100%;
 }
 
+/* Prose math / marker elements */
+md-tex {
+  display: inline-block;
+  /* New CM Math has a smaller x-height than Recursive; nudge up slightly
+     so the math baseline aligns with the surrounding text baseline. */
+  vertical-align: -0.15em;
+}
+
+md-tex math {
+  /* Counteract any browser UA math-font-size scaling so inline symbols
+     sit at the same visual size as the surrounding text. */
+  font-size: 1.05em;
+}
+
+md-marker {
+  display: inline;
+}
+
 /* Markdown / Marked */
 [data-footnote-ref] {
   font-variation-settings: "CASL" 1;

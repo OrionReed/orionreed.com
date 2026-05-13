@@ -47,3 +47,4 @@ export {
   Plucked,
 } from "./motion";
 export { MdTex } from "./md-tex";
+export { MdMarker } from "./md-marker";
