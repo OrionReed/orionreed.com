@@ -25,6 +25,7 @@ export {
   part,
   parts,
   tint,
+  getMarker,
   type PartContent,
   type PartList,
 } from "./parts";
@@ -44,3 +45,4 @@ export {
   unpluck,
   Plucked,
 } from "./motion";
+export { MdTex } from "./md-tex";

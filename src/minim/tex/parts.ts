@@ -15,6 +15,12 @@
 // Each Boxlike axis or anchor materializes lazily on first read and
 // caches as an own-property, matching the framework's own pattern.
 // The `declare`-only field declarations below give TS the same view.
+//
+// `PartMarker` carries two identity-level signals (`color`, `highlighted`)
+// that cascade up the `group` chain to the root marker. Both are also
+// readable from any `Part` via `part.highlighted` / `part.color` shims.
+// `register(id)` opts a marker into the global prose-linking registry so
+// `<md-tex sym="id">` can find and subscribe to it from outside a diagram.
 
 import {
   effect,
@@ -30,6 +36,24 @@ import type { TexShape } from "./tex";
 
 /** A part's content can be a literal string, a signal, or a thunk. */
 export type PartContent = Arg<string>;
+
+/** Module-level registry for prose-linking: `marker.register(id)` →
+ *  `getMarker(id)` so `<md-tex sym="id">` can find the marker without
+ *  a DOM query or diagram reference. */
+const markerRegistry = new Map<string, PartMarker>();
+
+export function getMarker(id: string): PartMarker | undefined {
+  return markerRegistry.get(id);
+}
+
+/** Walk to the root of a marker's `group` chain (the original marker
+ *  that `with()` / `expand()` derived from). `highlighted` lives on
+ *  the root so all derived instances share one toggle. */
+const rootMarker = (m: PartMarker): PartMarker => {
+  let cur = m;
+  while (cur.group) cur = cur.group;
+  return cur;
+};
 
 /** Walk the `marker.group` chain to find the first marker with a
  *  non-null color. This is what gives identity-level color: setting
@@ -102,9 +126,11 @@ export class Part<N extends string = string> implements Boxlike {
     if (!el) return;
     this.#disposers.push(
       effect(() => {
-        el.style.backgroundColor = this.highlighted.value
-          ? highlightColor
-          : "transparent";
+        // Per-instance highlight (animation) OR identity-level highlight
+        // (prose linking via PartMarker.highlighted on the root marker).
+        const on =
+          this.highlighted.value || rootMarker(this.marker).highlighted.value;
+        el.style.backgroundColor = on ? highlightColor : "transparent";
       }),
       effect(() => {
         el.style.opacity = String(this.opacity.value);
@@ -145,6 +171,28 @@ export class PartMarker<N extends string = string> {
    *  style). Set this to color every Part instantiated from this
    *  marker, in any TexShape, retroactively. */
   readonly color: Signal<string | null> = signal<string | null>(null);
+
+  /** Identity-level highlight toggle. Lives on the root marker (the
+   *  original, not `with()`/`expand()` derivatives); all derived
+   *  markers share it via `rootMarker()`. Setting this to `true`
+   *  highlights every `Part` instantiated from this marker identity,
+   *  in any TexShape — and any `<md-tex sym="...">` bound to the same
+   *  registry id. Per-instance animation highlight (`Part.highlighted`)
+   *  is independent and additive. */
+  readonly highlighted: Signal<boolean> = signal(false);
+
+  /** Register this marker in the global prose-linking registry under
+   *  `id`. `<md-tex sym="id">` will look it up on connect. Returns
+   *  `this` for chaining:
+   *
+   *      const { m, v } = parts("m", "v");
+   *      m.register("energy:m");
+   *      v.register("energy:v");
+   */
+  register(id: string): this {
+    markerRegistry.set(id, this);
+    return this;
+  }
 
   constructor(
     readonly name: N,

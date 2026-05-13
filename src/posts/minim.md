@@ -51,8 +51,6 @@ yield* fadeOut(s, 0.4);   // graceful exit, same generator
 
 <md-cancel></md-cancel>
 
-<md-react></md-react>
-
 The reason this works at any depth is that `Anim` — the runtime — is itself a generator: `next(dt)`, `return()`, `[Symbol.iterator]`. You can `yield*` a sub-`Anim` from inside another generator, and each `Anim` has its own `timeScale`. Nesting an `Anim` is scoping time:
 
 ```ts
@@ -65,11 +63,7 @@ yield* slowmo;   // outer 1×, planets 0.25×
 
 Pause, reverse playback, scrubbable timelines — same move, different `timeScale`.
 
-<md-multitrack></md-multitrack>
-
-<md-timeline-editor></md-timeline-editor>
-
-<span class="dinkus">\*\*\*</span>
+<md-orbits></md-orbits>
 
 The other primitive in minim is the signal — a reactive cell. Read it inside a `computed` or `effect` and you've subscribed; write it and the subscribers update.
 
@@ -127,6 +121,26 @@ yield* c.to({ x: 200, y: 100 }, 1);
 
 <md-choreography></md-choreography>
 
+The same lens works as the read+write side of a UI primitive. `handle(point)` is a draggable circle that reads its position from the point and writes back on drag — a few lines of pointer events around a writable Point. Drop one on a centroid and you've got rigid group dragging:
+
+```ts
+const c = centroid(a, b, c, d);
+s(handle(c));        // drag the centroid; all four shapes move
+```
+
+Anywhere a writable Point exists, a handle can sit on it.
+
+<md-handles></md-handles>
+
+`debug.*` goes the other way — read-only derived shapes. `debug.box(thing)` reads a shape's transform and box, derives a parent-frame outline, and renders dashed magenta. Drop them in while developing, delete when done:
+
+```ts
+s(debug.box(eq));
+s(debug.center(c));
+```
+
+They update with everything else, because they're just signals deriving from signals.
+
 Generators can suspend on signals too. `untilChange`, `untilTrue`, `untilFalse` are short wrappers around `effect` — animations wait on reactive state without polling:
 
 ```ts
@@ -135,6 +149,30 @@ yield* fadeOut(s, 0.4);
 ```
 
 <md-circuit></md-circuit>
+
+Sources of intent that aren't built into the runtime are short to write, because the runtime doesn't impose anything on them. `EventBus` is the canonical example: `bus.emit(name, data)` fans out synchronously, `bus.until(name)` is one call to `suspend()`:
+
+```ts
+const data = yield* bus.until<Payload>("ready");
+```
+
+Just another callback-shaped source. No special integration.
+
+A timeline is the same kind of user-space primitive on the time axis. A clock signal, a list of clips with `(at, dur)` ranges, each clip exposing a `t` signal in `[0, 1]` over its window. `yield* timeline` advances the clock to `duration`:
+
+```ts
+const tl = timeline({
+  intro: { at: 0,   dur: 0.5 },
+  hold:  { at: 0.5, dur: 1.0 },
+  outro: { at: 1.5, dur: 0.4 },
+});
+effect(() => circle.opacity.value = tl.intro.t.value);
+yield* tl;
+```
+
+<md-multitrack></md-multitrack>
+
+<md-timeline-editor></md-timeline-editor>
 
 <md-rand></md-rand>
 
@@ -145,15 +183,25 @@ yield* anim.timeScale.to(0, 0.5, easeOut);   // ease into pause
 slider.oninput = () => anim.timeScale.value = +slider.value;
 ```
 
-<span class="dinkus">\*\*\*</span>
+The same `(wake) => dispose` shape carries out to native browser primitives. `untilAnimation(a)` wakes on a WAAPI `finish` event; `untilInView(el)` wakes when an element starts intersecting; `scrollProgress()` is a lazy signal that subscribes to `scroll` only when something reads it. WAAPI animations and minim animations interleave naturally:
 
-<md-orbits></md-orbits>
+```ts
+yield* untilInView(el);
+yield* fadeIn(circle, 0.5);
+```
 
-<md-handles></md-handles>
+<md-waapi-demo></md-waapi-demo>
+
+Nothing in this story is SVG-specific. The same generator + signal pipeline drives a `<canvas>` element with a per-frame for-loop just as well — the runtime is renderer-agnostic, and the SVG `Shape` graph is a convenience.
 
 <md-canvas-field></md-canvas-field>
 
-<md-waapi-demo></md-waapi-demo>
+A `tex` template returns a Shape rendering MathML through Temml. Interpolated `part()` markers become addressable child shapes — `eq.parts.M` has its own translate, rotate, opacity, color. So a symbol in an inline equation can highlight on hover, pluck out and orbit, link to a corresponding circle on a diagram, or animate apart from the rest of the formula:
+
+```ts
+const eq = tex`E = ${part("M")} c^2`;
+yield* eq.parts.M.translate.to({ x: 0, y: -20 }, 0.4);
+```
 
 <md-tex-demo></md-tex-demo>
 
@@ -163,12 +211,30 @@ slider.oninput = () => anim.timeScale.value = +slider.value;
 
 <md-tex-live></md-tex-live>
 
-<md-layout-demo></md-layout-demo>
+Marker identity extends past the diagram. `PartMarker.register("id")` puts a marker into a global registry; `<md-tex sym="id">` looks it up on connect and subscribes to the same `color` and `highlighted` signals. Hover any term below and the corresponding part in the formula lights up — the diagram animation also drives the prose, because both ends share one signal:
 
-<md-centering></md-centering>
+The kinetic term ½<md-tex sym="minim:m">m</md-tex><md-tex sym="minim:v">v^2</md-tex> and the potential term <md-tex sym="minim:m">m</md-tex>g<md-tex sym="minim:h">h</md-tex> balance to give the total mechanical energy $E$.
+
+<md-tex-prose></md-tex-prose>
+
+A `claim` is a labeled `Signal<boolean>` over some predicate. `claim(c.opacity).stays.in([0, 1])` is true while the predicate holds, false on first violation. Claims compose via `.and`, `.or`, `.during(process)` because they *are* signals. A `process(factory, ...claims)` is an animator that resets the claims at scope entry and runs the body:
+
+```ts
+const bounded  = claim(c.opacity).stays.in([0, 1]);
+const reaches1 = claim(c.opacity).becomes.equal(1);
+const intro    = process(() => fadeIn(c, 0.3), bounded, reaches1);
+
+yield* intro.run();
+```
+
+Live-checked specs without a separate test framework.
+
+<md-claim-demo></md-claim-demo>
 
 <md-trace-demo></md-trace-demo>
 
-<md-claim-demo></md-claim-demo>
+<md-layout-demo></md-layout-demo>
+
+<md-centering></md-centering>
 
 <md-runtime-tests></md-runtime-tests>

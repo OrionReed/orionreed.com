@@ -30,7 +30,7 @@ export interface TexOpts extends ShapeOpts {
   /** "inline" (default) for inline-math style, "block" for display
    *  style — bigger fractions, sums with limits above/below, and
    *  multi-line constructs (`\begin{align}`, `\begin{pmatrix}`, …)
-   *  rendered properly. Equivalent to KaTeX/Temml's `displayMode`. */
+   *  rendered properly. Equivalent to Temml's `displayMode`. */
   display?: "inline" | "block";
 }
 

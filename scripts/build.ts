@@ -9,9 +9,52 @@ import {
 } from "fs";
 import { join, extname, basename } from "path";
 import matter from "gray-matter";
-import { marked } from "marked";
-import markedKatex from "marked-katex-extension";
+import {
+  marked,
+  type MarkedExtension,
+  type TokenizerExtension,
+  type RendererExtension,
+} from "marked";
+import temml from "temml";
 import markedFootnote from "marked-footnote";
+
+/** Marked extension that renders `$$...$$` (block) and `$...$` (inline)
+ *  math via Temml → MathML. No runtime CSS dependency — the New CM Math
+ *  font is loaded by `style.css`. */
+const markedTemml: MarkedExtension = {
+  extensions: [
+    {
+      name: "math_block",
+      level: "block",
+      start: (src) => src.indexOf("$$"),
+      tokenizer(src): ReturnType<TokenizerExtension["tokenizer"]> {
+        const match = /^\$\$([\s\S]+?)\$\$/.exec(src);
+        if (match) return { type: "math_block", raw: match[0], text: match[1].trim() };
+      },
+      renderer(token): ReturnType<RendererExtension["renderer"]> {
+        return `<p class="math-block">${temml.renderToString(token["text"], {
+          displayMode: true,
+          throwOnError: false,
+        })}</p>\n`;
+      },
+    } as TokenizerExtension & RendererExtension,
+    {
+      name: "math_inline",
+      level: "inline",
+      start: (src) => src.indexOf("$"),
+      tokenizer(src): ReturnType<TokenizerExtension["tokenizer"]> {
+        // Match $...$ but not $$...$$
+        const match = /^\$(?!\$)([^$\n]+?)\$(?!\$)/.exec(src);
+        if (match) return { type: "math_inline", raw: match[0], text: match[1] };
+      },
+      renderer(token): ReturnType<RendererExtension["renderer"]> {
+        return `<span class="math-inline">${temml.renderToString(token["text"], {
+          throwOnError: false,
+        })}</span>`;
+      },
+    } as TokenizerExtension & RendererExtension,
+  ],
+};
 
 const POSTS_DIR = "src/posts";
 const DIST_DIR = "dist";
@@ -140,9 +183,6 @@ function generatePostHTML(
       })();
     </script>
 
-    <!-- KaTeX for LaTeX rendering -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" integrity="sha384-GvrOXuhMATgEsSwCs4smul74iXGOixntILdUW9XmUC6+HX0sLNAK3q71HotJqlAn" crossorigin="anonymous">
-
     <!-- Social Meta Tags -->
     <meta
       name="description"
@@ -223,11 +263,7 @@ function processMarkdownFile(filePath: string): PostData {
   // Configure marked to handle media files and LaTeX
   marked
     .use(markedFootnote())
-    .use(
-      markedKatex({
-        throwOnError: false,
-      })
-    )
+    .use(markedTemml)
     .use({
       renderer: {
         code(code: string, language?: string) {
