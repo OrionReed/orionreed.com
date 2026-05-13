@@ -20,6 +20,7 @@ export {
   type NamesOf,
 } from "./tex";
 export {
+  Marker,
   Part,
   PartMarker,
   part,

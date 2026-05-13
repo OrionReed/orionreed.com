@@ -1,79 +1,107 @@
 // Inline math custom element with optional prose-linking.
 //
-// Usage in markdown (raw HTML passthrough):
+// Three usage modes:
+//
+// 1. Pure math — no linking, just Temml rendering:
 //
 //      <md-tex>a^2 + b^2 = c^2</md-tex>
 //
-// With a registered marker (hover highlights linked diagram parts):
+// 2. Single-symbol linking — text content is LaTeX for one symbol:
 //
 //      <md-tex sym="energy:v">v^2</md-tex>
 //
-// The element renders its text content as MathML via Temml on connect.
-// If `sym` is present and `getMarker(sym)` resolves, the element:
-//   - derives its text color from `marker.color` (identity color alphabet)
-//   - applies a tinted background when `marker.highlighted` is true
-//   - sets `marker.highlighted = true` on mouseenter / false on mouseleave
+// 3. Multi-symbol expression — full LaTeX with \sym{id}{content} macros,
+//    matching the diagram-side tex`...\${part}...` pattern:
 //
-// Both directions are live: hovering the element highlights the diagram,
-// and the diagram (or its animation) highlighting also highlights this element.
+//      <md-tex>\dfrac{1}{2}\sym{energy:m}{m}\sym{energy:v}{v^2}</md-tex>
 //
-// Author setup (post inline script or module-level in the demo element):
+// In modes 2 and 3, the element subscribes to `marker.color` (text color)
+// and `marker.highlighted` (background tint). Hovering sets
+// `marker.highlighted = true`, which propagates to any diagram parts
+// sharing the same registered marker — and vice versa.
 //
-//      import { parts } from "./parts";
-//      const { m, v } = parts("m", "v");
-//      m.color.value = "#d97706";
-//      m.register("energy:m");
-//      v.register("energy:v");
+// `\sym{id}{content}` is pre-processed before Temml: it becomes
+// `\class{minim-sym-ID}{content}` in the LaTeX source. After rendering,
+// the element queries for those class names and wires signal effects +
+// hover listeners per element.
 
 import temml from "temml";
 import { effect } from "../core/signal";
-import { getMarker } from "./parts";
+import { getMarker, type Marker } from "./parts";
+
+// Matches \sym{registry-id}{latex-content}. The id may contain any
+// character except `}` (colons, hyphens etc. are all fine in registry ids).
+const SYM_RE = /\\sym\{([^}]+)\}\{([^}]*)\}/g;
+
+// Encode a registry id as a safe CSS class name. Colons, slashes, etc.
+// are replaced with underscores so the class is valid in querySelectorAll.
+const symClass = (id: string): string =>
+  `minim-sym-${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+
+function applyMarkerStyles(el: HTMLElement): void {
+  el.style.borderRadius = "2px";
+  el.style.transition = "background-color 120ms ease-out";
+  el.style.cursor = "default";
+}
 
 export class MdTex extends HTMLElement {
   #disposers: Array<() => void> = [];
 
   connectedCallback(): void {
+    const singleId = this.getAttribute("sym");
     const src = this.textContent?.trim() ?? "";
-    if (src) {
-      this.innerHTML = temml.renderToString(src, {
-        throwOnError: false,
-        trust: true,
-      });
+
+    if (singleId) {
+      // ── Mode 2: single-symbol ────────────────────────────────────────
+      this.innerHTML = temml.renderToString(src, { throwOnError: false, trust: true });
+      const marker = getMarker(singleId);
+      if (marker) {
+        applyMarkerStyles(this as unknown as HTMLElement);
+        this.#wireEl(this as unknown as HTMLElement, marker);
+      }
+      return;
     }
 
-    const id = this.getAttribute("sym");
-    if (!id) return;
-    const marker = getMarker(id);
-    if (!marker) return;
+    // ── Modes 1 & 3: full expression ────────────────────────────────────
+    // Pre-process \sym{id}{content} → \class{minim-sym-ID}{content}.
+    const symIds = new Map<string, string>(); // cssClass → registryId
+    const processedSrc = src.replace(SYM_RE, (_, id: string, content: string) => {
+      const cls = symClass(id);
+      symIds.set(cls, id);
+      return `\\class{${cls}}{${content}}`;
+    });
 
-    this.style.display = "inline-block";
-    this.style.borderRadius = "2px";
-    this.style.transition = "background-color 120ms ease-out";
+    this.innerHTML = temml.renderToString(processedSrc, { throwOnError: false, trust: true });
 
+    // ── Mode 3: wire each \sym occurrence ───────────────────────────────
+    for (const [cls, id] of symIds) {
+      const marker = getMarker(id);
+      if (!marker) continue;
+      const els = Array.from(this.querySelectorAll<HTMLElement>(`.${cls}`));
+      for (const el of els) {
+        applyMarkerStyles(el);
+        this.#wireEl(el, marker);
+      }
+    }
+  }
+
+  /** Wire color + highlighted effects and hover listeners to `el`. */
+  #wireEl(el: HTMLElement, marker: Marker): void {
     this.#disposers.push(
-      effect(() => {
-        this.style.color = marker.color.value ?? "";
-      }),
+      effect(() => { el.style.color = marker.color.value ?? ""; }),
       effect(() => {
         const hl = marker.highlighted.value;
         const color = marker.color.value;
-        // Tint using the marker's own color at ~13% alpha so the
-        // background matches the symbol identity rather than a fixed yellow.
-        this.style.backgroundColor = hl && color ? `${color}22` : "";
+        el.style.backgroundColor = hl && color ? `${color}22` : "";
       }),
     );
-
-    const on = (): void => {
-      marker.highlighted.value = true;
-    };
-    const off = (): void => {
-      marker.highlighted.value = false;
-    };
-    this.addEventListener("mouseenter", on);
-    this.addEventListener("mouseleave", off);
+    const on  = (): void => { marker.highlighted.value = true; };
+    const off = (): void => { marker.highlighted.value = false; };
+    el.addEventListener("mouseenter", on);
+    el.addEventListener("mouseleave", off);
     this.#disposers.push(() => {
-      this.removeEventListener("mouseenter", on);
-      this.removeEventListener("mouseleave", off);
+      el.removeEventListener("mouseenter", on);
+      el.removeEventListener("mouseleave", off);
     });
   }
 

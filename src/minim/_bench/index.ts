@@ -13,6 +13,7 @@ import "./getter.bench";
 import "./tween.bench";
 import "./tree.bench";
 import "./delegate.bench";
+import "./nested.bench";
 import { run } from "mitata";
 import { printMemoryRows } from "./memory";
 

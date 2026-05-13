@@ -40,10 +40,39 @@ export type PartContent = Arg<string>;
 /** Module-level registry for prose-linking: `marker.register(id)` →
  *  `getMarker(id)` so `<md-tex sym="id">` can find the marker without
  *  a DOM query or diagram reference. */
-const markerRegistry = new Map<string, PartMarker>();
+const markerRegistry = new Map<string, Marker>();
 
-export function getMarker(id: string): PartMarker | undefined {
+export function getMarker(id: string): Marker | undefined {
   return markerRegistry.get(id);
+}
+
+/** Named visual identity: a `color` and a `highlighted` toggle that
+ *  any code can subscribe to. Used directly for non-tex shapes (circles,
+ *  arrows, annotations) as well as being the base for `PartMarker`.
+ *
+ *  Register with `marker.register("post:name")` and reference from prose
+ *  via `<md-tex sym="post:name">` or `<md-marker sym="post:name">`. */
+export class Marker {
+  /** Per-identity color. Applied to any `<md-tex sym>` or `<md-marker sym>`
+   *  that resolves to this marker. Set to drive shape fills/strokes in
+   *  `scene()` via `effect(() => shape.attr("fill", m.color.value ?? ""))`. */
+  readonly color: Signal<string | null> = signal<string | null>(null);
+
+  /** Identity-level highlight toggle. Setting this `true` highlights every
+   *  diagram part and prose element bound to this marker simultaneously. */
+  readonly highlighted: Signal<boolean> = signal(false);
+
+  /** Register in the global prose-linking registry under `id`. Returns
+   *  `this` for chaining:
+   *
+   *      const ballMarker = new Marker().register("sim:ball");
+   *      ballMarker.color.value = RED;
+   *      effect(() => ball.attr("fill", ballMarker.highlighted.value ? RED : DEFAULT));
+   */
+  register(id: string): this {
+    markerRegistry.set(id, this);
+    return this;
+  }
 }
 
 /** Walk to the root of a marker's `group` chain (the original marker
@@ -160,39 +189,13 @@ delegate(Part.prototype, "box", BoxStruct, { exclude: ["box"] });
  *  valid inside `tex\`…\`` template holes. Identity for morph is by
  *  marker reference; `group` threads parent-marker through derived
  *  markers so `v` and `v.expand({vx,vy,vz})` count as one identity
- *  (1↔3 morphs). `color` is per-marker and cascades to children. */
-export class PartMarker<N extends string = string> {
+ *  (1↔3 morphs). `color` and `highlighted` are inherited from `Marker`
+ *  and cascade through the `group` chain for the color and root-marker
+ *  behaviour respectively. */
+export class PartMarker<N extends string = string> extends Marker {
   /** Resolved content (literal strings normalize to a constant
    *  signal; real signals/thunks pass through). */
   readonly content: ReadonlySignal<string>;
-
-  /** Per-identity color override. `null` (default) walks up to the
-   *  parent marker, eventually falling back to inherited (no inline
-   *  style). Set this to color every Part instantiated from this
-   *  marker, in any TexShape, retroactively. */
-  readonly color: Signal<string | null> = signal<string | null>(null);
-
-  /** Identity-level highlight toggle. Lives on the root marker (the
-   *  original, not `with()`/`expand()` derivatives); all derived
-   *  markers share it via `rootMarker()`. Setting this to `true`
-   *  highlights every `Part` instantiated from this marker identity,
-   *  in any TexShape — and any `<md-tex sym="...">` bound to the same
-   *  registry id. Per-instance animation highlight (`Part.highlighted`)
-   *  is independent and additive. */
-  readonly highlighted: Signal<boolean> = signal(false);
-
-  /** Register this marker in the global prose-linking registry under
-   *  `id`. `<md-tex sym="id">` will look it up on connect. Returns
-   *  `this` for chaining:
-   *
-   *      const { m, v } = parts("m", "v");
-   *      m.register("energy:m");
-   *      v.register("energy:v");
-   */
-  register(id: string): this {
-    markerRegistry.set(id, this);
-    return this;
-  }
 
   constructor(
     readonly name: N,
@@ -200,6 +203,7 @@ export class PartMarker<N extends string = string> {
     /** Parent marker for derivation chains (`null` for roots). */
     readonly group: PartMarker | null = null,
   ) {
+    super();
     this.content = toSig(source) as ReadonlySignal<string>;
   }
 
