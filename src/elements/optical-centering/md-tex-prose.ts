@@ -1,27 +1,23 @@
-// Prose-linking demo: `PartMarker.register()` + `<md-tex sym="...">`.
+// Prose-linking demo: markers + tex parts wired bidirectionally.
 //
-// Interactive (not animated): hovering a part in the diagram drives
-// marker.highlighted, which highlights the matching <md-tex sym="...">
-// in the surrounding prose — and vice versa. Both directions share one
-// signal.
+// Hover any part in the formula or any word in the prose and the
+// corresponding parts in both light up simultaneously. Both ends
+// share one `marker.active` signal via `bindParts`.
 //
-// Markers are registered at module load time (top-level, not inside
-// `scene`), so any <md-tex sym="minim:..."> element resolves the
-// registry lookup before DOM elements connect, regardless of DOM order.
+// Markers are registered at module load time so <md-marker> elements
+// in the page resolve the lookup before DOM elements connect, regardless
+// of DOM order.
 
 import { Diagram, Mount } from "../../minim";
-import { parts, tex } from "../../minim/tex";
-import type { PartMarker } from "../../minim/tex";
+import { parts, tex, bindParts } from "../../minim/tex";
 
-const AMBER  = "#d97706";
-const CYAN   = "#0284c7";
-const VIOLET = "#7c3aed";
-
-// Module-level registration — runs at import time, before any element connects.
+// Module-level: create PartMarkers (needed for with/expand in tex templates)
+// and assign equidistant OKLCH colors. Three equally-spaced hues at a
+// comfortable lightness/chroma so they work on light and dark backgrounds.
 const { m, v, h } = parts("m", "v", "h");
-m.color.value = AMBER;
-v.color.value = CYAN;
-h.color.value = VIOLET;
+[m, v, h].forEach((p, i) => {
+  p.color.value = `oklch(0.65 0.15 ${((i / 3) * 360).toFixed(1)})`;
+});
 m.register("minim:m");
 v.register("minim:v");
 h.register("minim:h");
@@ -30,36 +26,16 @@ export class MdTexProse extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(600, 100);
 
-    // Two occurrences of m require distinct part names. m2's group chain
-    // points back to m, so rootMarker(m2) = m and m.highlighted drives both.
+    // Two occurrences of m in one template need distinct part names.
+    // m2's group chain points to m, so hover on either activates the m marker.
     const m2 = m.expand({ m2: "m" }).m2;
 
-    // \dfrac forces display-style fraction even in inline math mode.
-    // \mathit{g} explicitly renders the gravitational constant in math italic.
     const eq = s(
       tex`E = \dfrac{1}{2}${m.with("m")}${v.with("v^2")} + ${m2}\mathit{g}${h.with("h")}`,
     );
     eq.center.set(view.center);
 
-    // Map each part name to its root marker. Hovering any part writes to
-    // the root marker's highlighted signal — both diagram and prose react.
-    const partMarkers: Record<string, PartMarker> = { m, v, m2: m, h };
-    const cleanups: Array<() => void> = [];
-
-    for (const p of eq.parts) {
-      const marker = partMarkers[p.name];
-      if (!p.el || !marker) continue;
-      p.el.style.cursor = "default";
-      const on  = (): void => { marker.highlighted.value = true; };
-      const off = (): void => { marker.highlighted.value = false; };
-      p.el.addEventListener("mouseenter", on);
-      p.el.addEventListener("mouseleave", off);
-      cleanups.push(
-        () => p.el?.removeEventListener("mouseenter", on),
-        () => p.el?.removeEventListener("mouseleave", off),
-      );
-    }
-
-    this.root.track(() => { for (const fn of cleanups) fn(); });
+    // Wire hover on each Part.el → marker, and marker.active → part.highlighted.
+    this.root.track(bindParts(eq, { m, v, m2, h }));
   }
 }

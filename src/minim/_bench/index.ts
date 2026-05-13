@@ -14,6 +14,7 @@ import "./tween.bench";
 import "./tree.bench";
 import "./delegate.bench";
 import "./nested.bench";
+import "./shape.bench";
 import { run } from "mitata";
 import { printMemoryRows } from "./memory";
 

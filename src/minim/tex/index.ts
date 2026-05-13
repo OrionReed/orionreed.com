@@ -20,15 +20,16 @@ export {
   type NamesOf,
 } from "./tex";
 export {
-  Marker,
   Part,
   PartMarker,
   part,
   parts,
   tint,
-  getMarker,
+  bindParts,
+  type Marker,
   type PartContent,
   type PartList,
+  getMarker,
 } from "./parts";
 export {
   brace,

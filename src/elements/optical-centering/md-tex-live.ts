@@ -20,10 +20,10 @@ import {
   Anchor,
   Diagram,
   Mount,
+  Vec,
   cell,
   handle,
   label,
-  lensPoint,
   line,
   pt,
   type Content,
@@ -88,7 +88,7 @@ export class MdTexLive extends Diagram {
     );
     // Lens-backed Point: reads project `t` onto the track; writes
     // clamp the dragged x back into [0, 1] and store as `t`.
-    const knobPos = lensPoint(
+    const knobPos = Vec.lens(
       () => ({ x: TRACK_X0 + t.value * trackW, y: TRACK_Y }),
       (target) => {
         const clamped = Math.max(

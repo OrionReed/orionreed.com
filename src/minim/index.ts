@@ -51,8 +51,6 @@ export {
   Vec,
   pt,
   polar,
-  toPoint,
-  lensPoint,
   isPoint,
   vecEquals,
   type V,
@@ -93,7 +91,16 @@ export {
   boxIn,
 } from "./scene/shape";
 
-export { draggable } from "./scene/interaction";
+export { draggable, hoverSignal } from "./scene/interaction";
+
+export {
+  marker,
+  palette,
+  hover,
+  getMarker,
+  registerMarker,
+  type Marker,
+} from "./core/marker";
 
 export { mount, type Mount } from "./scene/mount";
 

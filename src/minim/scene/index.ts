@@ -5,8 +5,6 @@ export {
   Vec,
   pt,
   polar,
-  toPoint,
-  lensPoint,
   isPoint,
   vecEquals,
   type V,

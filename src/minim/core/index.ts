@@ -67,6 +67,15 @@ export {
 export { drive } from "./drive";
 
 export {
+  marker,
+  palette,
+  hover,
+  getMarker,
+  registerMarker,
+  type Marker,
+} from "./marker";
+
+export {
   timeline,
   sequential,
   type Clip,

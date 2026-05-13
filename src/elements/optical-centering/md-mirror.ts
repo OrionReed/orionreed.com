@@ -23,9 +23,9 @@ import {
   Anchor,
   Diagram,
   Mount,
+  Vec,
   handle,
   label,
-  lensPoint,
   line,
   pt,
   type Point,
@@ -59,7 +59,7 @@ export class MdMirror extends Diagram {
     // reflection is an involution (`R∘R = id`). One closure → both
     // directions of the handle for free.
     const mirrorOf = (src: Point): Point =>
-      lensPoint(
+      Vec.lens(
         () => reflect(src.value, mA.value, mB.value),
         (target) => {
           src.value = reflect(target, mA.value, mB.value);
@@ -128,7 +128,7 @@ export class MdMirror extends Diagram {
       ),
       label(
         view.bottom.up(16),
-        "lensPoint(read = reflect,  write = reflect)  ·  one formula, both directions",
+        "Vec.lens(read = reflect,  write = reflect)  ·  one formula, both directions",
         { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );

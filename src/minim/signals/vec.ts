@@ -1,6 +1,6 @@
 // Vec — the reactive 2D point primitive, declared via the struct
-// framework. Subsumes the old hand-rolled Point/DerivedPoint/Pointlike
-// classes (343 lines) into one ~80-line declaration.
+// framework. `Point`/`DerivedPoint`/`Pointlike` are flavor aliases over
+// the underlying `Reactive<V>`.
 
 import { struct } from "./struct";
 import type { Matrix2D } from "./matrix";
@@ -74,10 +74,10 @@ export const Vec = struct<V>("Vec", { x: 0, y: 0 })
   })
   .build();
 
-/** Writable reactive Vec. Replaces the old `Point` class. */
+/** Writable reactive Vec. */
 export type Point = ReturnType<typeof Vec.signal>;
 
-/** Read-only reactive Vec. Replaces the old `DerivedPoint` class. */
+/** Read-only reactive Vec. */
 export type DerivedPoint = ReturnType<typeof Vec.derived>;
 
 /** Either flavor — writable or derived. */
@@ -92,11 +92,6 @@ export type ResolveVec<A> = IsAny<A> extends true
     : [A] extends [DerivedPoint | Signal<V> | ReadonlySignal<V> | (() => V)]
       ? DerivedPoint
       : Point;
-
-/** Construct a writable Vec lens — reads via `read`, writes via `write`.
- *  The result has the full Vec method surface plus writable axes. */
-export const lensPoint = (read: () => V, write: (v: V) => void): Point =>
-  Vec.lens(read, write);
 
 /** Detect a Vec-shaped reactive at runtime. Sugar for `v instanceof Vec`. */
 export const isPoint = (v: unknown): v is Pointlike => Vec.is(v);
@@ -134,45 +129,3 @@ export const polar = (
   });
 };
 
-/** Normalize a Vec-style arg into a Pointlike. Used by `Shape` so
- *  every transform field gains per-axis tweens.
- *
- *  - `Pointlike` → pass-through
- *  - writable `Signal<V>` → writable Point delegating to source
- *  - `ReadonlySignal<V>` / thunk → derived
- *  - `V` literal / `undefined` → fresh writable Point */
-export function toPoint<P extends Pointlike>(arg: P, fallback?: V): P;
-export function toPoint(arg: Signal<V>, fallback?: V): Point;
-export function toPoint(
-  arg: ReadonlySignal<V> | (() => V),
-  fallback?: V,
-): DerivedPoint;
-export function toPoint(arg: V | undefined, fallback?: V): Point;
-export function toPoint(
-  arg: Arg<V> | Pointlike | undefined,
-  fallback?: V,
-): Pointlike;
-export function toPoint(
-  arg: Arg<V> | Pointlike | undefined,
-  fallback: V = { x: 0, y: 0 },
-): Pointlike {
-  if (arg === undefined) return Vec.signal({ ...fallback });
-  if (Vec.is(arg)) return arg;
-  if (arg instanceof Signal) {
-    const sig = arg as Signal<V>;
-    const isWritable =
-      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(sig), "value")?.set !==
-      undefined;
-    return isWritable
-      ? Vec.lens(
-          () => sig.value,
-          (v) => {
-            sig.value = v;
-          },
-        )
-      : Vec.derived(() => (sig as ReadonlySignal<V>).value);
-  }
-  if (typeof arg === "function") return Vec.derived(arg as () => V);
-  const v = arg as V;
-  return Vec.signal({ x: v.x, y: v.y });
-}

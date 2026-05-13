@@ -6,11 +6,11 @@ import {
   Diagram,
   Mount,
   Anchor,
+  Vec,
   arrange,
   cell,
   handle,
   label,
-  lensPoint,
   rect,
   spring,
 } from "../../minim";
@@ -53,7 +53,7 @@ export class MdLayoutDemo extends Diagram {
       const card = cards[i];
       const w = widths[i];
       const h = HEIGHTS[i];
-      const pos = lensPoint(
+      const pos = Vec.lens(
         () => ({
           x: card.translate.value.x + w.value,
           y: card.translate.value.y + h / 2,

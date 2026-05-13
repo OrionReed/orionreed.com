@@ -14,10 +14,10 @@
 //
 // Two baselines:
 //
-//   - "5 fields": today's Shape layout — Vec.signal × 3, signal × 2.
-//   - "5 fields + lens-Vec": same as today but the nested fields are
-//     wrapped in lens-flavored Vecs (matching what `toPoint(opts.scale
-//     ?? defaults.scale, …)` actually produces in Shape's ctor).
+//   - "5 fields": Vec.signal × 3, signal × 2.
+//   - "5 fields + lens-Vec": same but the nested fields are wrapped
+//     in lens-flavored Vecs (matching the pre-Transform Shape layout
+//     when external Signals were passed in via opts).
 //
 // Reference for matrix-compose: a tiny inline `compose(t, r, s, o)`
 // that mirrors what `signals/matrix.ts` does, so we measure the cost

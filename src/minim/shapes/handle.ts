@@ -12,7 +12,7 @@
 import { type Cell } from "../core";
 import {
   Shape,
-  lensPoint,
+  Vec,
   mean,
   type AnyShape,
   type Point,
@@ -102,7 +102,7 @@ const rotate = (
   radius = 40,
   opts?: HandleOpts,
 ): Shape => {
-  const pos = lensPoint(
+  const pos = Vec.lens(
     () => {
       const c = shape.center.value;
       const a = shape.rotate.value;
@@ -123,7 +123,7 @@ const scaleHandle = (
   radius = 40,
   opts?: HandleOpts,
 ): Shape => {
-  const pos = lensPoint(
+  const pos = Vec.lens(
     () => {
       const c = shape.center.value;
       const s = shape.scale.value;
@@ -161,7 +161,7 @@ const tOnPath = (
     }
     return bestT;
   };
-  const pos = lensPoint(
+  const pos = Vec.lens(
     () => p.pointAt(t.value).value,
     (target) => {
       t.value = project(target);

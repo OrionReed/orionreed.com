@@ -25,7 +25,6 @@ import {
 } from "../signals/matrix";
 import {
   Vec,
-  lensPoint,
   pt,
   type V,
   type DerivedPoint,
@@ -328,7 +327,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
     const boxSig = this.box;
     const lf = this.localFrame;
     const tr = this.transform;
-    return lensPoint(
+    return Vec.lens(
       () => {
         const b = boxSig.value;
         return transformPoint(lf.value, {
