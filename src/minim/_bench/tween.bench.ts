@@ -2,7 +2,7 @@ import { signal } from "../core/signal";
 import { Vec } from "../signals/vec";
 import { Color } from "../signals/color";
 import { lerpable } from "../core/tween";
-import { bench, suite } from "./harness";
+import { bench, group } from "mitata";
 
 const stringLerp = (a: string, b: string, t: number): string => {
   if (t <= 0.5) return a.slice(0, Math.round(a.length * (1 - t * 2)));
@@ -10,12 +10,12 @@ const stringLerp = (a: string, b: string, t: number): string => {
 };
 
 // One full 60-frame tween. Per-iter cost = construct + 60 frames.
-suite("tween throughput (60-frame .to, no subscribers)", () => {
+group("tween throughput (60-frame .to, no subscribers)", () => {
   bench("number: signal(0).to(100, 1)", () => {
     const s: any = signal(0);
     const t = s.to(100, 1);
     for (let f = 0; f < 60; f++) t.next(1 / 60);
-  });
+  }).baseline(true);
   bench("Vec: v.to({x:100,y:50}, 1)", () => {
     const v = Vec.signal({ x: 0, y: 0 });
     const t = v.to({ x: 100, y: 50 }, 1);
@@ -34,7 +34,7 @@ suite("tween throughput (60-frame .to, no subscribers)", () => {
 });
 
 // Per-frame cost only — construct once outside the loop.
-suite("tween per-frame step (signal.value = lerp(...))", () => {
+group("tween per-frame step (signal.value = lerp(...))", () => {
   // Hand-loop: just to see what raw "write per frame" looks like.
   bench("number per-frame: hand-written", () => {
     const s: any = signal(0);
@@ -43,7 +43,7 @@ suite("tween per-frame step (signal.value = lerp(...))", () => {
     for (let f = 0; f < 60; f++) {
       s.value = start + (target - start) * (f / 60);
     }
-  });
+  }).baseline(true);
 
   bench("Vec per-frame: hand-written whole-value write", () => {
     const v = Vec.signal({ x: 0, y: 0 });
@@ -60,7 +60,7 @@ suite("tween per-frame step (signal.value = lerp(...))", () => {
 });
 
 // 100 simultaneous tweens, common pattern when many shapes animate.
-suite("100 parallel tweens (60 frames)", () => {
+group("100 parallel tweens (60 frames)", () => {
   bench("100 number tweens", () => {
     const sigs = Array.from({ length: 100 }, () => signal(0));
     const tweens = sigs.map((s: any) => s.to(100, 1));
@@ -68,7 +68,7 @@ suite("100 parallel tweens (60 frames)", () => {
       const dt = 1 / 60;
       for (const t of tweens) t.next(dt);
     }
-  });
+  }).baseline(true);
   bench("100 Vec tweens", () => {
     const sigs = Array.from({ length: 100 }, () => Vec.signal({ x: 0, y: 0 }));
     const tweens = sigs.map((v) => v.to({ x: 100, y: 50 }, 1));

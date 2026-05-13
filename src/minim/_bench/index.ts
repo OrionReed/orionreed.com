@@ -1,6 +1,9 @@
-// Entry point — imports each .bench.ts (which register suites by
-// side-effect), then runs everything. Add new bench files to this
-// list.
+// Entry point — imports each .bench.ts (which register benches by
+// side-effect via mitata's global registry), then runs everything.
+// Add new bench files to this list.
+//
+// Run with:
+//   node --expose-gc node_modules/.bin/vite-node src/minim/_bench/index.ts
 
 import "./construct.bench";
 import "./access.bench";
@@ -9,8 +12,9 @@ import "./arity.bench";
 import "./getter.bench";
 import "./tween.bench";
 import "./tree.bench";
-import { runAll, sinkVal } from "./harness";
+import "./delegate.bench";
+import { run } from "mitata";
+import { printMemoryRows } from "./memory";
 
-runAll();
-// Force the JIT to keep the sink — printed at the end, never optimized away.
-console.log(`(final sink value: ${sinkVal()})`);
+await run({ format: "mitata" });
+printMemoryRows();

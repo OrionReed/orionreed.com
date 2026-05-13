@@ -1,5 +1,5 @@
 // Test the per-arity unrolling. struct.ts has unrolled cases for:
-//   - liftStruct: arity 0, 1, 2; arity 3+ falls back to generic (.map)
+//   - lift: arity 0, 1, 2; arity 3+ falls back to generic (.map)
 //   - axisWriters (with .construct): arity 1, 2, 4, 6; others use a
 //     fixed-size args-array fallback
 //
@@ -9,7 +9,7 @@
 // significant LOC reduction.
 
 import { struct } from "../signals/struct";
-import { bench, suite } from "./harness";
+import { bench, group } from "mitata";
 
 // ── Lifter arity benches ────────────────────────────────────────────
 //
@@ -31,7 +31,7 @@ const Str1 = struct<S1>("Str1", { a: 0 })
   })
   .build();
 
-suite("lifter arity (closure dispatch overhead)", () => {
+group("lifter arity (closure dispatch overhead)", () => {
   const v: any = Str1.signal({ a: 1 });
   // Pre-build the derived; iterate by writing + reading.
   const d0 = v.op0();
@@ -44,7 +44,7 @@ suite("lifter arity (closure dispatch overhead)", () => {
   bench("arity 0 (lifted0, unrolled)", () => {
     v.a.value = ++i;
     return d0.value;
-  });
+  }).baseline(true);
   bench("arity 1 (lifted1, unrolled)", () => {
     v.a.value = ++i;
     return d1.value;
@@ -64,10 +64,6 @@ suite("lifter arity (closure dispatch overhead)", () => {
 });
 
 // ── Axis-writer arity benches (with .construct) ─────────────────────
-//
-// makeConstructWriters has unrolled cases for arity 1, 2, 4, 6. 3, 5,
-// 7+ fall through to a generic per-arity loop that allocates a fixed
-// args array.
 
 const A1 = struct<{ a: number }>("A1", { a: 0 })
   .construct((a: number) => ({ a }))
@@ -120,7 +116,7 @@ const A7 = struct<{
   )
   .build();
 
-suite("axis writer arity (with .construct, no subscribers)", () => {
+group("axis writer arity (with .construct, no subscribers)", () => {
   const s1: any = A1.signal({ a: 0 });
   const s2: any = A2.signal({ a: 0, b: 0 });
   const s3: any = A3.signal({ a: 0, b: 0, c: 0 });
@@ -140,7 +136,7 @@ suite("axis writer arity (with .construct, no subscribers)", () => {
   let i = 0;
   bench("arity 1 (unrolled)", () => {
     s1.a.value = ++i;
-  });
+  }).baseline(true);
   bench("arity 2 (unrolled)", () => {
     s2.a.value = ++i;
   });
@@ -174,7 +170,7 @@ const Sp4 = struct<{ a: number; b: number; c: number; d: number }>("Sp4", {
   d: 0,
 }).build();
 
-suite("axis writer: construct-based vs spread fallback", () => {
+group("axis writer: construct-based vs spread fallback", () => {
   const c2: any = A2.signal({ a: 0, b: 0 });
   const sp2: any = Sp2.signal({ a: 0, b: 0 });
   const c4: any = A4.signal({ a: 0, b: 0, c: 0, d: 0 });
@@ -187,7 +183,7 @@ suite("axis writer: construct-based vs spread fallback", () => {
   let i = 0;
   bench("arity 2: construct-based", () => {
     c2.a.value = ++i;
-  });
+  }).baseline(true);
   bench("arity 2: spread fallback", () => {
     sp2.a.value = ++i;
   });

@@ -23,6 +23,7 @@
 		"@biomejs/biome": "1.4.1",
 		"@types/marked": "^5.0.2",
 		"@types/node": "^20.11.24",
+		"mitata": "^1.0.34",
 		"ts-node": "^10.9.2",
 		"typescript": "^5.0.2",
 		"vite": "^5.3.3",

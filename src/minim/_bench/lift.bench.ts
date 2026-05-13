@@ -1,11 +1,11 @@
 import { computed, signal } from "../core/signal";
 import { Vec, type V } from "../signals/vec";
-import { bench, suite } from "./harness";
+import { bench, group } from "mitata";
 
 // ── Lifted struct op (vec.add — arity 1, the per-arity-unrolled hot
 //    path). Compares: framework-lifted method vs hand-written computed.
 
-suite("lifted struct op (vec.add) — eval cost", () => {
+group("lifted struct op (vec.add) — eval cost", () => {
   // Dependencies fixed across iters so .value is cached after warmup.
   // Force re-eval via a fresh write each iter.
   const a: any = Vec.signal({ x: 1, y: 2 });
@@ -22,18 +22,18 @@ suite("lifted struct op (vec.add) — eval cost", () => {
   bench("write a.x → read sumLifted.value", () => {
     a.x.value = ++i;
     return sumLifted.value;
-  });
+  }).baseline(true);
   bench("write a.x → read sumHand.value", () => {
     a.x.value = ++i;
     return sumHand.value;
   });
 });
 
-suite("lifted struct op (vec.add) — construction (returns derived)", () => {
+group("lifted struct op (vec.add) — construction (returns derived)", () => {
   const a = Vec.signal({ x: 1, y: 2 });
   const b = Vec.signal({ x: 3, y: 4 });
 
-  bench("Vec a.add(b) [allocates derived]", () => a.add(b));
+  bench("Vec a.add(b) [allocates derived]", () => a.add(b)).baseline(true);
   bench("hand: computed(() => add)", () =>
     computed(() => ({
       x: a.value.x + b.value.x,
@@ -44,7 +44,7 @@ suite("lifted struct op (vec.add) — construction (returns derived)", () => {
 
 // ── Lifted scalar (vec.distance) ────────────────────────────────────
 
-suite("lifted scalar (vec.distance)", () => {
+group("lifted scalar (vec.distance)", () => {
   const a: any = Vec.signal({ x: 1, y: 2 });
   const b = Vec.signal({ x: 4, y: 6 });
   void a.x;
@@ -58,7 +58,7 @@ suite("lifted scalar (vec.distance)", () => {
   bench("write a.x → distLifted.value", () => {
     a.x.value = ++i;
     return distLifted.value;
-  });
+  }).baseline(true);
   bench("write a.x → distHand.value", () => {
     a.x.value = ++i;
     return distHand.value;
@@ -67,7 +67,7 @@ suite("lifted scalar (vec.distance)", () => {
 
 // ── Lifted op with reactive arg (signal-arg specialization) ─────────
 
-suite("lifted op — arg shapes (specialized at construction)", () => {
+group("lifted op — arg shapes (specialized at construction)", () => {
   const a: any = Vec.signal({ x: 1, y: 2 });
   void a.x;
   const literal: V = { x: 10, y: 20 };
@@ -82,7 +82,7 @@ suite("lifted op — arg shapes (specialized at construction)", () => {
   bench("a.add(literal).value (closure: literal)", () => {
     a.x.value = ++i;
     return dLit.value;
-  });
+  }).baseline(true);
   bench("a.add(sig).value (closure: signal-deref)", () => {
     a.x.value = ++i;
     return dSig.value;
@@ -95,7 +95,7 @@ suite("lifted op — arg shapes (specialized at construction)", () => {
 
 // ── Chain of lifted ops (closer to real-world derived chain) ────────
 
-suite("chained derived (a.add(b).scale(2).add(c))", () => {
+group("chained derived (a.add(b).scale(2).add(c))", () => {
   const a: any = Vec.signal({ x: 1, y: 2 });
   const b = Vec.signal({ x: 3, y: 4 });
   const c = Vec.signal({ x: 5, y: 6 });
@@ -117,7 +117,7 @@ suite("chained derived (a.add(b).scale(2).add(c))", () => {
   bench("Vec lifted chain: write a.x → out.value", () => {
     a.x.value = ++i;
     return out.value;
-  });
+  }).baseline(true);
   bench("Hand-merged computed: write a.x → handOut.value", () => {
     a.x.value = ++i;
     return handOut.value;

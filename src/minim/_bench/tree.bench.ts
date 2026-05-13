@@ -21,7 +21,7 @@ import {
   type M,
 } from "../signals/matrix";
 import { Matrix2D } from "../signals/matrix";
-import { bench, suite } from "./harness";
+import { bench, group } from "mitata";
 
 const N = 1000;
 const STEP: M = { a: 1, b: 0, c: 0, d: 1, e: 1, f: 0 };
@@ -57,7 +57,7 @@ function buildWalkChain(n: number) {
   return { local, worldOf };
 }
 
-suite("tree fan-out: write root, READ ALL N world frames", () => {
+group("tree fan-out: write root, READ ALL N world frames", () => {
   const A = buildReactiveChain(N);
   const B = buildWalkChain(N);
 
@@ -67,7 +67,7 @@ suite("tree fan-out: write root, READ ALL N world frames", () => {
     let s = 0;
     for (let k = 0; k < N; k++) s += A.world[k].value.e | 0;
     return s;
-  });
+  }).baseline(true);
   bench(`on-demand walk  (n=${N})`, () => {
     B.local[0].value = { ...STEP, e: ++i };
     let s = 0;
@@ -76,7 +76,7 @@ suite("tree fan-out: write root, READ ALL N world frames", () => {
   });
 });
 
-suite("tree fan-out: write root, READ ONE LEAF", () => {
+group("tree fan-out: write root, READ ONE LEAF", () => {
   const A = buildReactiveChain(N);
   const B = buildWalkChain(N);
 
@@ -84,21 +84,21 @@ suite("tree fan-out: write root, READ ONE LEAF", () => {
   bench(`reactive chain  (n=${N})`, () => {
     A.local[0].value = { ...STEP, e: ++i };
     return A.world[N - 1].value.e | 0;
-  });
+  }).baseline(true);
   bench(`on-demand walk  (n=${N})`, () => {
     B.local[0].value = { ...STEP, e: ++i };
     return B.worldOf(N - 1).e | 0;
   });
 });
 
-suite("tree fan-out: write root, NO READ (drag-only pattern)", () => {
+group("tree fan-out: write root, NO READ (drag-only pattern)", () => {
   const A = buildReactiveChain(N);
   const B = buildWalkChain(N);
 
   let i = 0;
   bench(`reactive chain  (n=${N})`, () => {
     A.local[0].value = { ...STEP, e: ++i };
-  });
+  }).baseline(true);
   bench(`on-demand walk  (n=${N})`, () => {
     B.local[0].value = { ...STEP, e: ++i };
   });
@@ -108,7 +108,7 @@ suite("tree fan-out: write root, NO READ (drag-only pattern)", () => {
 // effect (mimics each shape attaching its CSS transform to its
 // worldFrame). This is closer to how Shape uses transform today.
 
-suite(`tree fan-out: chain w/ subscribers on EVERY level (n=${N})`, () => {
+group(`tree fan-out: chain w/ subscribers on EVERY level (n=${N})`, () => {
   const A = buildReactiveChain(N);
   const B = buildWalkChain(N);
 
@@ -128,7 +128,7 @@ suite(`tree fan-out: chain w/ subscribers on EVERY level (n=${N})`, () => {
   let i = 0;
   bench(`reactive chain  (effects fire on write)`, () => {
     A.local[0].value = { ...STEP, e: ++i };
-  });
+  }).baseline(true);
   bench(`on-demand walk  (worldOf each child after write)`, () => {
     B.local[0].value = { ...STEP, e: ++i };
     for (let k = 0; k < N; k++) observed += B.worldOf(k).e | 0;
@@ -142,7 +142,7 @@ suite(`tree fan-out: chain w/ subscribers on EVERY level (n=${N})`, () => {
 //    would use). This is the most realistic measure of the proposed
 //    rework.
 
-suite(
+group(
   `tree fan-out: reactive chain via Matrix2D struct (n=${N}, READ ALL)`,
   () => {
     const local = Array.from({ length: N }, () => Matrix2D.signal({ ...STEP }));
@@ -156,7 +156,7 @@ suite(
       let s = 0;
       for (let k = 0; k < N; k++) s += world[k].value.e | 0;
       return s;
-    });
+    }).baseline(true);
   },
 );
 
