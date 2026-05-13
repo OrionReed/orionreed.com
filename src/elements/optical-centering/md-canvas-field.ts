@@ -5,32 +5,36 @@
 // orchestration; rendering is a per-frame for-loop with Canvas2D
 // calls.
 //
-// The point of the demo isn't the particle field — it's that every
-// non-rendering piece comes straight from minim:
+// Every non-rendering piece comes straight from minim:
 //
-//   - `Anim` is the runtime. One RAF loop runs both the per-frame
-//     integration and the phase-cycling generator.
-//   - `signal(...)` carries reactive knobs (current phase, hue base,
-//     particle size). Tweens via `.to(...)` work as on any other
-//     Signal<number> — same engine, no SVG required.
-//   - `Vec.signal(...)` carries the pointer position. A reactive Vec
-//     here behaves identically to one feeding an SVG shape's
-//     `translate` — the input → value-type story doesn't care what's
-//     rendering.
+//   - `Anim` is the runtime — same instance type, same `timeScale`,
+//     same cancellation, just no SVG attached.
+//   - `drive((dt, t) => ...)` is the per-frame substrate. The
+//     integration + render path is one closure, no manual yield loop.
+//   - `every(anim, sec, fn)` does the fixed-interval fps emit on the
+//     same clock everything else uses.
+//   - `signal(...)` carries reactive knobs (phase index, hue base,
+//     particle size). `.to(...)` on a raw `Signal<number>` works
+//     here exactly as on a shape's `opacity` — same engine.
+//   - `pt(...)` builds the pointer as a reactive Point. It behaves
+//     identically to one feeding an SVG shape's `translate`; input →
+//     value-type doesn't care what's rendering.
 //   - Generators (`anim.loop`) drive the phase progression with the
-//     same `yield N` / `yield* sig.to(...)` vocabulary used by the
-//     SVG demos.
+//     same `yield N` / `yield* sig.to(...)` vocabulary as the SVG
+//     demos.
 //
-// Per-particle position/velocity uses typed arrays (1500 reactives
-// would be silly). The reactivity is in the knobs that *drive* the
-// particles, not in each particle.
+// Per-particle position/velocity lives in typed arrays (1500
+// reactives would be silly). Reactivity is in the knobs that *shape*
+// the particles, not in each particle.
 
 import {
   Anim,
-  Vec,
+  drive,
   effect,
+  every,
+  pt,
   signal,
-  type Animator,
+  type Point,
 } from "../../minim";
 
 const N = 1500;
@@ -130,10 +134,9 @@ export class MdCanvasField extends HTMLElement {
   private hueBase = signal(210);
   private hueSpread = signal(80);
   private size = signal(2.1);
-  private pointer = Vec.signal({ x: W / 2, y: H / 2 });
-  private pointerActive = signal(false);
+  private pointer: Point = pt(W / 2, H / 2);
   private statusText = signal("");
-  // Rolling-average frame time, surfaced as fps in status.
+  // Rolling-average fps, refreshed every 0.5s via `every(...)`.
   private fpsSmoothed = signal(0);
 
   // Per-particle state — typed arrays. 1500 reactives would be
@@ -279,10 +282,8 @@ export class MdCanvasField extends HTMLElement {
     };
     const onMove = (e: PointerEvent): void => {
       this.pointer.value = localize(e);
-      this.pointerActive.value = true;
     };
     const onLeave = (): void => {
-      this.pointerActive.value = false;
       this.pointer.value = { x: W / 2, y: H / 2 };
     };
     this.canvas.addEventListener("pointermove", onMove);
@@ -295,49 +296,63 @@ export class MdCanvasField extends HTMLElement {
 
   // ── Animation ─────────────────────────────────────────────────────
   //
-  // Two generators. The first runs every frame: it pulls `dt` from
-  // the yield, integrates the spring step over all particles, then
-  // paints. The second cycles through phases and tweens the hue
-  // base between them.
+  // Three minim primitives, none of them SVG-aware:
   //
-  // Because both are anim.loop'd, anim.timeScale slows the whole
-  // demo — the same lever that works on SVG diagrams.
+  //   - `drive((dt, t) => ...)` — the per-frame substrate. Integrate
+  //     + render, no manual `while (true) { yield }` bookkeeping.
+  //   - `anim.loop(function* () { ... })` — phase cycler with
+  //     `yield DWELL` / `yield* hueBase.to(...)`, same vocabulary as
+  //     the SVG demos.
+  //   - `every(anim, 0.5, ...)` — fixed-interval fps emit, sharing
+  //     the same clock everything else does.
+  //
+  // All three obey `anim.timeScale`, so one knob slows the entire
+  // demo in lockstep.
 
   private startLoops(): void {
     const self = this;
 
-    // The hot loop. Integrate + render, every frame.
-    this.anim.loop(function* (): Animator {
-      while (true) {
-        const dt: number = yield;
-        self.integrate(dt);
+    // Hot loop — drive yields `dt` each frame; `t` is elapsed since
+    // start (used as the wave-phase clock). Never returns.
+    this.anim.run(
+      drive((dt, t) => {
+        self.integrate(dt, t);
         self.render();
-        self.tickFps(dt);
-      }
-    });
+        self.fpsAccum += dt;
+        self.fpsFrames += 1;
+      }),
+    );
 
-    // Phase cycler. Same yield-vocabulary as the SVG demos.
-    this.anim.loop(function* (): Animator {
+    // Phase cycler.
+    this.anim.loop(function* () {
       while (true) {
         self.statusText.value = `phase: ${PHASES[self.phaseIdx.peek()].name}`;
         yield DWELL;
         self.phaseIdx.value = (self.phaseIdx.peek() + 1) % PHASES.length;
-        // Tween the hue base on each transition. `.to(...)` on a
-        // raw `Signal<number>` falls back to the scalar lerp — no
-        // SVG, no Shape, same engine.
+        // `.to(...)` on a raw `Signal<number>` uses the scalar lerp
+        // via the same `[LERP]`-prototype-slot engine that drives
+        // Vec/Box/Color tweens. No SVG, no Shape, same engine.
         yield* self.hueBase.to((self.hueBase.peek() + 70) % 360, 0.9);
       }
+    });
+
+    // Fps emit — averages over the last 0.5s window of frames.
+    every(this.anim, 0.5, () => {
+      if (self.fpsFrames > 0) {
+        self.fpsSmoothed.value = self.fpsFrames / self.fpsAccum;
+      }
+      self.fpsAccum = 0;
+      self.fpsFrames = 0;
     });
   }
 
   // ── Per-frame ─────────────────────────────────────────────────────
 
-  private integrate(dt: number): void {
+  private integrate(dt: number, clock: number): void {
     if (dt <= 0) return;
     // Snapshot the reactive knobs once per frame — reading inside
     // the inner loop would track-on-read on every particle.
     const phaseFn = PHASES[this.phaseIdx.peek()].fn;
-    const clock = this.anim.clock.peek();
     const p = this.pointer.peek();
 
     const px = this.px,
@@ -397,20 +412,8 @@ export class MdCanvasField extends HTMLElement {
     }
   }
 
+  // Fps accumulator state — touched by the drive callback, drained
+  // by the `every(...)` tick.
   private fpsAccum = 0;
   private fpsFrames = 0;
-  private fpsLastEmit = 0;
-
-  private tickFps(dt: number): void {
-    this.fpsAccum += dt;
-    this.fpsFrames += 1;
-    const now = this.anim.clock.peek();
-    if (now - this.fpsLastEmit >= 0.5) {
-      const avg = this.fpsAccum / this.fpsFrames;
-      this.fpsSmoothed.value = avg > 0 ? 1 / avg : 0;
-      this.fpsAccum = 0;
-      this.fpsFrames = 0;
-      this.fpsLastEmit = now;
-    }
-  }
 }
