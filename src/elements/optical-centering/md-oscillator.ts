@@ -19,6 +19,7 @@ import {
   Shape,
   cell,
   circle,
+  drive,
   effect,
   endOn,
   line,
@@ -28,9 +29,7 @@ import {
   untilFalse,
   untilTrue,
 } from "../../minim";
-import { drive } from "../../minim/core/drive";
 import { parts, tex, bindParts } from "../../minim/tex";
-import { box } from "../../minim/signals/box";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -102,7 +101,7 @@ const computeTicks = (T: number): string => {
 // ── Path shape factory ────────────────────────────────────────────────────────
 
 function makePath(d: ReturnType<typeof cell.derived<string>>): Shape {
-  const s = new Shape("path", () => box(TL, CY - A_AMP - 12, TW, (A_AMP + 12) * 2));
+  const s = new Shape("path", () => ({ x: TL, y: CY - A_AMP - 12, w: TW, h: (A_AMP + 12) * 2 }));
   s.attr("fill", "none");
   s.attr("stroke-linecap", "round");
   s.attr("stroke-linejoin", "round");
@@ -142,7 +141,7 @@ export class MdOscillator extends Diagram {
 
     // ── Ball ─────────────────────────────────────────────────────────────────
     const ball = s(circle(pt(TR, cell.derived(() => CY - disp.value)), 5.5, { fill: true }));
-    effect(() => { ball.attr("fill", A.color.value ?? tokens.stroke); });
+    ball.attr("fill", cell.derived(() => A.color.value ?? tokens.stroke));
 
     // ── Amplitude bound lines (A) ─────────────────────────────────────────────
     const ampStroke = cell.derived(() => A.color.value ?? tokens.stroke);
