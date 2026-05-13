@@ -47,5 +47,6 @@ export {
   unpluck,
   Plucked,
 } from "./motion";
-export { MdTex } from "./md-tex";
-export { MdMarker } from "./md-marker";
+
+// `<md-tex>` and `<md-marker>` custom elements live in `@minim/web`
+// — `@minim/tex` is just the rendering primitives, no DOM scaffolding.

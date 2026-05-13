@@ -12,6 +12,7 @@ import {
 } from "@minim/shapes";
 import { Box as BoxStruct, box, type Boxlike } from "@minim/values";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
+// (other web/ files: relative imports stay local to keep the package self-contained)
 
 export const css = String.raw;
 

@@ -2,7 +2,7 @@
 // an `Animator<T>` that wakes the next time `name` fires, carrying the
 // emit data as the resume value.
 
-import { suspend, type Animator } from "./anim";
+import { suspend, type Animator } from "@minim/core";
 
 export class EventBus {
   private handlers = new Map<string, Set<(data: unknown) => void>>();

@@ -87,14 +87,3 @@ export {
   registerMarker,
   type Marker,
 } from "./marker";
-
-// ── Timeline + EventBus (will move to ext/ later) ──────────────────
-export { EventBus } from "./events";
-export {
-  timeline,
-  sequential,
-  type Clip,
-  type Timeline,
-  type TimelineOf,
-} from "./timeline";
-

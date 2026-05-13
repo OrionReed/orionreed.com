@@ -6,7 +6,7 @@
 //   @attr.num(4)     declare cells: Cell<number>;          // default 4
 //   @attr.bool()     declare flag:  Cell<boolean>;         // default false
 
-import { cell, type Cell } from "./core";
+import { cell, type Cell } from "@minim/core";
 
 type AttrType = "string" | "number" | "boolean";
 

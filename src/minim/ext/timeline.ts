@@ -2,9 +2,17 @@
 // `[at, at + dur)` interval); `yield* tl` advances the clock to
 // `duration`. `sequential({...})` produces cumulative-start specs.
 
-import { signal, computed, type Signal, type ReadonlySignal } from "./signal";
-import { toSig, type Arg, type NumSig, type ResolveSig } from "./arg";
-import type { Animator } from "./anim";
+import {
+  signal,
+  computed,
+  toSig,
+  type Signal,
+  type ReadonlySignal,
+  type Arg,
+  type NumSig,
+  type ResolveSig,
+  type Animator,
+} from "@minim/core";
 
 // ── Types ────────────────────────────────────────────────────────────
 

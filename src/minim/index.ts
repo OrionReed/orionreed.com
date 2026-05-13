@@ -34,7 +34,6 @@ export {
   asGen,
   isGen,
   suspend,
-  EventBus,
   untilChange,
   untilTrue,
   untilFalse,
@@ -50,8 +49,6 @@ export {
   transaction,
   rand,
   drive,
-  timeline,
-  sequential,
   type Cell,
   type ReadonlyCell,
   type Tween,
@@ -62,9 +59,6 @@ export {
   type Marker,
   type Animator,
   type SpawnFn,
-  type Clip,
-  type Timeline,
-  type TimelineOf,
 } from "./core";
 
 // ── Reactive value types + struct framework ─────────────────────────
@@ -218,7 +212,30 @@ export {
   assemble,
 } from "./shapes";
 
-// ── Consumer scaffold ───────────────────────────────────────────────
-export { Diagram, css } from "./diagram";
-export { attr, observedAttributesOf } from "./attr";
-export { viewport } from "./viewport";
+// ── Extras (opt-in) ─────────────────────────────────────────────────
+//
+// Independently useful modules that don't belong in `core`. Each can
+// also be imported directly via `@minim/ext` if you want to side-step
+// the root re-export.
+export {
+  timeline,
+  sequential,
+  EventBus,
+  type Clip,
+  type Timeline,
+  type TimelineOf,
+} from "./ext";
+
+// ── Consumer scaffold (`@minim/web`) ────────────────────────────────
+//
+// Custom-element host for embedding diagrams in HTML. Import directly
+// from `@minim/web` to skip the root re-export.
+export {
+  Diagram,
+  css,
+  attr,
+  observedAttributesOf,
+  viewport,
+  MdTex,
+  MdMarker,
+} from "./web";

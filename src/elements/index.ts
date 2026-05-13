@@ -35,7 +35,7 @@ import { MdMorph } from "./optical-centering/md-morph";
 import { MdCanvasField } from "./optical-centering/md-canvas-field";
 import { MdTexProse } from "./optical-centering/md-tex-prose";
 import { MdOscillator } from "./optical-centering/md-oscillator";
-import { MdTex, MdMarker } from "../minim/tex";
+import { MdTex, MdMarker } from "../minim/web";
 
 DarkModeToggle.define();
 MdQuote.define();

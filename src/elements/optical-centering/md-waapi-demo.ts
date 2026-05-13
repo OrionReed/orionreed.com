@@ -23,7 +23,7 @@ import {
   rect,
   type ReadonlyCell,
 } from "../../minim";
-import { inView, scrollProgress, viewProgress } from "../../minim/waapi";
+import { inView, scrollProgress, viewProgress } from "../../minim/ext";
 
 export class MdWaapiDemo extends Diagram {
   protected scene(s: Mount): void {

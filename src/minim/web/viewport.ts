@@ -1,6 +1,6 @@
 // Shared viewport cell — one lazy resize listener, re-emits on resize.
 
-import { cell, type Cell, type ReadonlyCell } from "./core";
+import { cell, type Cell, type ReadonlyCell } from "@minim/core";
 
 interface Viewport {
   w: number;
