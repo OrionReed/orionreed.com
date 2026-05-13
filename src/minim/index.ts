@@ -4,10 +4,9 @@
 //            drive, easings, clocks, tween, timeline, marker
 //   values/  reactive value-types (Vec, Box, Color, Matrix2D, Num,
 //            Transform) + struct framework + behaviors + algebra
-//   scene/   Shape, interaction, mount
-//   shapes/  visuals + layout + list (space stdlib)
-//   motion/  transitions + choreographers (re-exports easings/clocks/
-//            behaviors from their canonical homes)
+//   shapes/  Shape base + visuals + interaction + layout + mount +
+//            transitions + choreographers (the full space-and-time
+//            stdlib for shape-shaped things)
 //
 // Sibling subpath modules:
 //   `minim/tex`     LaTeX → MathML primitives via Temml
@@ -120,7 +119,12 @@ export {
   type VectorSpace,
 } from "./values";
 
-// ── Scene graph ─────────────────────────────────────────────────────
+// ── Shapes (space stdlib) ───────────────────────────────────────────
+//
+// `Shape` is the base SVG node — `translate` / `rotate` / `scale` /
+// `origin` / `opacity`, plus `aabb`, `localFrame` / `worldFrame`,
+// `add(child)`, and DOM event suspensions. Every concrete shape
+// (`line`, `circle`, `rect`, `path`, …) extends it.
 export {
   Shape,
   centroid,
@@ -129,14 +133,6 @@ export {
   draggable,
   hoverSignal,
   mount,
-  type ShapeOpts,
-  type AnyShape,
-  type Writable,
-  type Mount,
-} from "./scene";
-
-// ── Shapes (space stdlib) ───────────────────────────────────────────
-export {
   line,
   circle,
   rect,
@@ -159,6 +155,10 @@ export {
   forEach,
   debug,
   handle,
+  type ShapeOpts,
+  type AnyShape,
+  type Writable,
+  type Mount,
   type HandleOpts,
   type CommonOpts,
   type LineOpts,
@@ -176,18 +176,31 @@ export {
 // Classes exported as types only — construct via lowercase factories.
 export type { Line, Circle, Rect, Label, AnnularSector } from "./shapes";
 
-// ── Motion (time stdlib) ────────────────────────────────────────────
+// ── Time stdlib ─────────────────────────────────────────────────────
+//
+// Easings + clocks live in `./core` (see top of file).
+// Behaviors (spring / oscillate / drift / attract) live in `./values`
+// (see the values block above).
+// Transitions + choreographers (`fadeIn` / `slideIn` / `swap` /
+// `orbit` / …) live in `./shapes` (see the shapes block above) —
+// they're shape-shaped tweens.
 export {
   linear,
   easeOut,
   easeIn,
   easeInOut,
-  from,
+  pulse,
+  every,
+} from "./core";
+export {
   spring,
   oscillate,
   drift,
   attract,
   type SpringOpts,
+} from "./values";
+export {
+  from,
   fadeIn,
   fadeOut,
   fadeUp,
@@ -199,13 +212,11 @@ export {
   bounceIn,
   spinIn,
   orbit,
-  pulse,
-  every,
   swap,
   stagger,
   splay,
   assemble,
-} from "./motion";
+} from "./shapes";
 
 // ── Consumer scaffold ───────────────────────────────────────────────
 export { Diagram, css } from "./diagram";

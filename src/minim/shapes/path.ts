@@ -5,7 +5,7 @@ import {
   type Cell,
   type ReadonlyCell,
 } from "@minim/core";
-import { Shape, type Segment } from "@minim/scene";
+import { Shape, type Segment } from "./shape";
 import {
   Vec,
   isPoint,

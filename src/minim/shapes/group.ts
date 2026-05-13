@@ -1,4 +1,4 @@
-import { Shape, type ShapeOpts } from "@minim/scene";
+import { Shape, type ShapeOpts } from "./shape";
 
 /** Empty container — bundles children under one transform / opacity. */
 export const group = <const O extends ShapeOpts>(opts?: O): Shape<O> =>

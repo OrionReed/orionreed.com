@@ -1,5 +1,5 @@
 import { toSig, type Arg, type NumSig } from "@minim/core";
-import { Shape, type Segment } from "@minim/scene";
+import { Shape, type Segment } from "./shape";
 import {
   Vec,
   box,

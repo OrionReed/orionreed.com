@@ -15,7 +15,7 @@ import {
   type Animator,
   type Easing,
 } from "@minim/core";
-import { Shape } from "@minim/scene";
+import { Shape } from "@minim/shapes";
 import { box } from "@minim/values";
 import { Part, type PartMarker } from "./parts";
 import type { TexShape } from "./tex";

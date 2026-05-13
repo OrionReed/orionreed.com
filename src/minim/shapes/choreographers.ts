@@ -12,7 +12,7 @@ import {
   type Easing,
 } from "@minim/core";
 import { isPoint, type V, type Pointlike } from "@minim/values";
-import type { Writable } from "@minim/scene";
+import type { Writable } from "./shape";
 
 /** Swap two shapes' positions over `sec`. */
 export function* swap(

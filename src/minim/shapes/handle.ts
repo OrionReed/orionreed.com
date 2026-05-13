@@ -10,12 +10,8 @@
 // via the `--minim-handle` CSS var.
 
 import { type Cell } from "@minim/core";
-import {
-  Shape,
-  draggable,
-  type AnyShape,
-  type Writable,
-} from "@minim/scene";
+import { Shape, type AnyShape, type Writable } from "./shape";
+import { draggable } from "./interaction";
 import { Vec, mean, type Point } from "@minim/values";
 import { circle } from "./circle";
 import type { Path } from "./path";
@@ -81,8 +77,8 @@ const anchor = (
 /** Drag handle at the centroid of N shapes' visual centers — drags
  *  translate every shape by the same delta, so the group moves rigidly
  *  while preserving the original triangle/quad/whatever shape. Reads
- *  give the actual centroid of the visible positions (not the centroid
- *  of translate deltas — see `scene/aggregates.ts` for that variant). */
+ *  give the actual centroid of the visible positions (not of translate
+ *  deltas — see `centroid` in `shape.ts` for that variant). */
 const centroidHandle = (
   ...shapes: (AnyShape & Writable<"translate">)[]
 ): Shape => handleFn(mean(...shapes.map((s) => s.center)) as Point);

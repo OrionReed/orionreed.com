@@ -2,7 +2,7 @@
 // per-kind dispatch.
 
 import { cell, toSig, type Arg } from "@minim/core";
-import { Shape, SVG_NS } from "@minim/scene";
+import { Shape, SVG_NS } from "./shape";
 import { type Pointlike } from "@minim/values";
 import { tokens } from "./tokens";
 import { Line, type LineOpts } from "./line";

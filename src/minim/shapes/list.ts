@@ -2,7 +2,7 @@
 // changes; stable keys preserve per-shape state across updates.
 
 import { effect, toSig, untracked, type Arg } from "@minim/core";
-import type { AnyShape } from "@minim/scene";
+import type { AnyShape } from "./shape";
 
 export interface ForEachOptions<T> {
   /** Stable identity per item; defaults to index (fine for fixed

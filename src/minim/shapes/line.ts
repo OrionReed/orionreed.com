@@ -1,5 +1,5 @@
 import { cell, type Arg, type ReadonlyCell } from "@minim/core";
-import { Shape, type Segment } from "@minim/scene";
+import { Shape, type Segment } from "./shape";
 import {
   Vec,
   box,

@@ -9,7 +9,7 @@ import {
   expandBox,
   type Boxlike,
 } from "@minim/values";
-import type { Shape } from "@minim/scene";
+import type { Shape } from "./shape";
 
 export interface ArrangeOpts {
   /** Spacing between adjacent bounding boxes. Default 0. */

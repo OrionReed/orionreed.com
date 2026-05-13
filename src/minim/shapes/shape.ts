@@ -235,7 +235,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
     // World frame: cumulative through ancestors. Reads parent.worldFrame
     // reactively, so any ancestor's transform change propagates here.
     // Re-parenting is NOT reactive (parent ref is plain); rebuild the
-    // cell via `boxIn(...)` if you need that.
+    // computed manually if you need that.
     this.worldFrame = cell.derived(() => {
       const local = this.localFrame.value;
       const p = this.#parent;

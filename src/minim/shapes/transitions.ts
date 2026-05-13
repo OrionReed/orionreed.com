@@ -14,7 +14,7 @@ import {
   type Animator,
 } from "@minim/core";
 import { type V, Dir } from "@minim/values";
-import type { Writable } from "@minim/scene";
+import type { Writable } from "./shape";
 
 type Lerpable = number | V;
 

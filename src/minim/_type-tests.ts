@@ -7,11 +7,12 @@ import {
   Anim,
   Point,
   DerivedPoint,
+  bounceIn,
+  fadeUp,
   type Animator,
   type Cell,
   type ReadonlyCell,
 } from "./index";
-import { bounceIn, fadeUp } from "./motion";
 
 const anim = new Anim();
 
@@ -130,7 +131,7 @@ anim.run(run);
 
 // Pattern A: user writes `function f(s: Shape)` — with default O = ShapeOpts.
 {
-  function highlight(s: import("./scene/shape").Shape) {
+  function highlight(s: import("./shapes/shape").Shape) {
     s.opacity.value = 0.5;
     return s;
   }
@@ -145,7 +146,7 @@ anim.run(run);
 
 // Pattern B: read-only access via AnyShape.
 {
-  function flashOnce(s: import("./scene/shape").AnyShape) {
+  function flashOnce(s: import("./shapes/shape").AnyShape) {
     return s.opacity.value;
   }
   flashOnce(circle(vec(0, 0), 5)); // OK
@@ -154,7 +155,7 @@ anim.run(run);
 
 // Pattern C: `Writable<K>` for "I touch these props".
 {
-  function pulse(s: import("./scene/shape").Writable<"opacity">): Animator {
+  function pulse(s: import("./shapes/shape").Writable<"opacity">): Animator {
     return (function* () {
       yield* s.opacity.to(0.3, 0.5);
       yield* s.opacity.to(1, 0.5);

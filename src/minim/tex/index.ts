@@ -6,8 +6,8 @@
 // reactive `box`, `opacity`, `color`, `highlighted` signals.
 // Decorations re-derive from `part.box`; motion combinators
 // (`write`, `morph`, `pluck`/`unpluck`) compose over the existing
-// motion stdlib. Per-part stagger is the standard `stagger`
-// combinator from `motion/`:
+// tween + behavior stdlib. Per-part stagger uses the standard
+// `stagger` from `@minim/shapes`:
 //
 //      for (const p of eq.parts) p.opacity.value = 0;
 //      yield* stagger(0.1, eq.parts, p => p.opacity.to(1, 0.4));

@@ -21,7 +21,7 @@ import {
 } from "@minim/values";
 import { bench, group } from "mitata";
 
-// ── The Transform struct (matches scene/shape.ts) ─────────────────
+// ── The Transform struct (matches values/transform.ts) ───────────
 
 type Tr = {
   translate: V;

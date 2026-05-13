@@ -1,5 +1,5 @@
 import { cell, toSig, type Arg, type NumSig } from "@minim/core";
-import { Shape, type Segment } from "@minim/scene";
+import { Shape, type Segment } from "./shape";
 import { Vec, box, type Pointlike } from "@minim/values";
 import { wireStroke, type CommonOpts } from "./common";
 

@@ -1,6 +1,6 @@
 // Clock constructors — spawn loops on `anim` that advance a signal
 // (or call a fn) at a fixed interval. For continuous per-frame
-// advancement at a rate, see `motion/behaviors:drift`.
+// advancement at a rate, see `drift` in `@minim/values`.
 
 import { cell, type Cell } from "./cell";
 import type { Anim } from "./anim";

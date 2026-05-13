@@ -1,5 +1,5 @@
 import { toSig, type Arg } from "@minim/core";
-import { Shape, type ShapeOpts } from "@minim/scene";
+import { Shape, type ShapeOpts } from "./shape";
 import { box, type Pointlike, type V } from "@minim/values";
 import { tokens } from "./tokens";
 import { renderContent, flattenText, type Content } from "./text";

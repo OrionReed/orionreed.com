@@ -2,7 +2,7 @@
 // hover/click handlers wired.
 
 import { cell, toSig, type Arg, type Cell } from "@minim/core";
-import { type AnyShape } from "@minim/scene";
+import { type AnyShape } from "./shape";
 import { Anchor, vec, type Pointlike } from "@minim/values";
 import { tokens } from "./tokens";
 import { group } from "./group";

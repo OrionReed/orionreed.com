@@ -7,7 +7,7 @@
 
 import temml from "temml";
 import { signal, type ReadonlySignal } from "@minim/core";
-import { Shape, type ShapeOpts } from "@minim/scene";
+import { Shape, type ShapeOpts } from "@minim/shapes";
 import {
   Box as BoxStruct,
   box,
