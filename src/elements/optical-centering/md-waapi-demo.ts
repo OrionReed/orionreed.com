@@ -19,14 +19,12 @@ import {
   Mount,
   circle,
   computed,
-  inView,
   label,
   pt,
   rect,
-  scrollProgress,
-  viewProgress,
   type ReadonlySignal,
 } from "../../minim";
+import { inView, scrollProgress, viewProgress } from "../../minim/waapi";
 
 export class MdWaapiDemo extends Diagram {
   protected scene(s: Mount): void {

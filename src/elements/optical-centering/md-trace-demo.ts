@@ -23,15 +23,17 @@ import {
   label,
   pt,
   rect,
-  spans,
   spinIn,
+  zoomOut,
+} from "../../minim";
+import {
+  spans,
   tag,
   tagAll,
   traceTree,
-  zoomOut,
   type TraceNode,
   type TraceTree,
-} from "../../minim";
+} from "../../minim/assert";
 
 const W = 600;
 const TOP_H = 110;

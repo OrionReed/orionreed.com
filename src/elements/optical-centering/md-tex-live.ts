@@ -25,13 +25,11 @@ import {
   label,
   lensPoint,
   line,
-  part,
   pt,
   signal,
-  tex,
-  tint,
   type Content,
 } from "../../minim";
+import { part, tex, tint } from "../../minim/tex";
 
 const W = 640;
 const H = 220;

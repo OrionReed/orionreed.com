@@ -20,15 +20,13 @@ import {
   Diagram,
   Mount,
   circle,
-  claim,
   fadeIn,
   fadeOut,
   forEach,
   label,
-  process,
   pt,
-  verdictDot,
 } from "../../minim";
+import { claim, process, verdictDot } from "../../minim/assert";
 
 export class MdClaimDemo extends Diagram {
   protected scene(s: Mount): void {

@@ -28,23 +28,25 @@ import {
   Anchor,
   Diagram,
   Mount,
-  brace,
-  box,
-  highlight,
   label,
-  morph,
-  parts,
-  pluck,
   signal,
   snapshot,
   stagger,
+  type Content,
+} from "../../minim";
+import {
+  brace,
+  box,
+  highlight,
+  morph,
+  parts,
+  pluck,
   tex,
   underline,
   unpluck,
   write,
   writeOut,
-  type Content,
-} from "../../minim";
+} from "../../minim/tex";
 
 export class MdTexDemo extends Diagram {
   protected scene(s: Mount): void {

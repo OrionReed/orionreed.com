@@ -1,10 +1,14 @@
 // minim — generator-driven SVG diagrams with reactive primitives.
 //   core/   — signals, Anim, suspensions, composers, drive, timeline, …
-//   scene/  — Shape, Point, Box, aggregates, …
+//   scene/  — Shape, Point, Box, aggregates, Mount, …
 //   shapes/ — visuals + layout + list (space stdlib)
 //   motion/ — easings, transitions, integrators (time stdlib)
-//   assert/ — trace (spans/tree/tag) + claim (assertions)
 //   anchor, diagram, attr, viewport — top-level utilities + scaffold
+//
+// Sibling subpath modules — import explicitly:
+//   `minim/tex`     — LaTeX → MathML primitives via Temml
+//   `minim/assert`  — trace (spans/tree/tag) + claim (assertions)
+//   `minim/waapi`   — Web Animations / scroll / view-timeline bridges
 
 // ── Core ────────────────────────────────────────────────────────────
 export {
@@ -117,32 +121,6 @@ export {
 
 export { drive } from "./core/drive";
 
-// ── Assert (observability + assertions) ─────────────────────────────
-export {
-  spans,
-  traceTree,
-  tag,
-  tagAll,
-  tagOf,
-  type Span,
-  type Trace,
-  type TraceTree,
-  type TraceNode,
-  type TraceBatch,
-  claim,
-  process,
-  labelledProcess,
-  held,
-  any,
-  not,
-  track,
-  verdictDot,
-  SignalClaim,
-  Predicates,
-  type Claim,
-  type Process,
-} from "./assert";
-
 export {
   timeline,
   sequential,
@@ -223,34 +201,6 @@ export {
   assemble,
 } from "./motion";
 
-// ── Tex (LaTeX → MathML primitives via Temml) ───────────────────────
-export {
-  tex,
-  TexShape,
-  Part,
-  PartMarker,
-  part,
-  parts,
-  tint,
-  brace,
-  box,
-  underline,
-  cross,
-  highlight,
-  write,
-  writeOut,
-  morph,
-  pluck,
-  unpluck,
-  Plucked,
-  type TexInterp,
-  type TexOpts,
-  type NamesOf,
-  type PartContent,
-  type PartList,
-  type DecorationOpts,
-} from "./tex";
-
 // ── Spatial constants ───────────────────────────────────────────────
 export { Anchor, Dir } from "./anchor";
 
@@ -258,14 +208,3 @@ export { Anchor, Dir } from "./anchor";
 export { Diagram, css } from "./diagram";
 export { attr, observedAttributesOf } from "./attr";
 export { viewport } from "./viewport";
-
-// ── WAAPI / scroll / viewport bridges ───────────────────────────────
-export {
-  untilAnimation,
-  untilInView,
-  untilOutOfView,
-  scrollProgress,
-  viewProgress,
-  inView,
-  type ViewRange,
-} from "./waapi";

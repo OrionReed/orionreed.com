@@ -16,19 +16,21 @@ import {
   Anchor,
   Diagram,
   Mount,
-  highlight,
   label,
+  signal,
+  snapshot,
+  type Content,
+} from "../../minim";
+import {
+  highlight,
   morph,
   part,
   parts,
-  signal,
-  snapshot,
   tex,
   tint,
   write,
   writeOut,
-  type Content,
-} from "../../minim";
+} from "../../minim/tex";
 
 const RED = "#e25c5c";
 const BLUE = "#5b8def";
