@@ -13,12 +13,20 @@ export {
   effect,
   lens,
   Signal,
-  tween,
   type ReadonlySignal,
+} from "./core/signal";
+
+export {
+  tween,
+  lerpable,
   type Tween,
   type Easing,
   type Duration,
-} from "./core/signal";
+  type Lerp,
+} from "./core/tween";
+
+// Built-in struct value types beyond Vec/AABB/Matrix.
+export { Color, rgb, rgba, type C } from "./signals/color";
 
 export { toSig, when, type Arg } from "./core/arg";
 

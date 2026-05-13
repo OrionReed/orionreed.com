@@ -4,7 +4,7 @@
 // reach for `centroid(...shapes).to(...)` instead. For continuous
 // circular motion, see `orbit` in `motion/integrators.ts`.
 
-import type { Animator, Easing, Vec } from "../core";
+import type { Animator, Easing, V } from "../core";
 import { delay } from "../core";
 import { isPoint, type Pointlike, type Writable } from "../scene";
 
@@ -55,10 +55,10 @@ export function* splay(
 }
 
 /** Tween each shape to its paired target (matched by index). Targets
- *  may be `Vec` literals or any `Pointlike`. */
+ *  may be `V` literals or any `Pointlike`. */
 export function* assemble(
   shapes: readonly Writable<"translate">[],
-  targets: readonly (Vec | Pointlike)[],
+  targets: readonly (V | Pointlike)[],
   sec = 0.5,
   ease?: Easing,
 ): Animator {

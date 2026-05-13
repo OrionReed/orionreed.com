@@ -9,12 +9,17 @@ export {
   untracked,
   lens,
   Signal,
-  tween,
   type ReadonlySignal,
+} from "./signal";
+
+// Importing this module installs `Signal.prototype.to` and registers
+// the tween types. Re-exported below.
+export {
+  tween,
   type Tween,
   type Easing,
   type Duration,
-} from "./signal";
+} from "./tween";
 
 export {
   toSig,
@@ -24,7 +29,11 @@ export {
   type ResolveSig,
 } from "./arg";
 
-export { type Vec } from "./vec";
+// Plain `{x, y}` value type. Renamed from `Vec` (which now refers to
+// the registered struct value in `signals/vec`).
+export type { V } from "../signals/vec";
+
+export { lerpable } from "./tween";
 
 export { snapshot, counter } from "./store";
 

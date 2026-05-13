@@ -2,7 +2,7 @@
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
 import { toSig, type Arg } from "../core/arg";
-import { transformAABB } from "../scene/matrix";
+import { transformAABB } from "../signals/matrix";
 import { aabb, expandAABB, type Box } from "../scene/box";
 import { AABB } from "../signals/aabb";
 import type { Shape } from "../scene";

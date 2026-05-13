@@ -1028,127 +1028,28 @@ export {
   Computed,
 };
 
-// ── minim extensions ────────────────────────────────────────────────
+// ── minim extensions: type-level declarations ──────────────────────
 //
-// Added to the vendored signals core: `.derive(fn)` (renamed from
-// preact's `.map` to avoid Array.map collision) and `.to(target, sec)`,
-// a yieldable tween for the Anim runtime.
+// All Signal extensions (`.derive(fn)`, `.to(target, dur, ease?)`)
+// have their RUNTIME install in `core/tween.ts` (auto-loaded via
+// `core/index.ts`). The type-level interface merges live HERE — TS
+// allows merging a class with same-file interface declarations
+// reliably, but cross-file `declare module` augmentations against
+// declare-class are flaky (it sees them as redeclared exports).
+//
+// Tween machinery itself: `Easing`, `Duration`, `Tween`, the engine,
+// the `[LERP]` slot — all in `core/tween.ts`. One engine, dispatched
+// per value type via the prototype slot that the struct framework
+// sets at registration.
 
-import type { Animator, Yieldable } from "./anim";
-import type { Vec } from "./vec";
+import type { Easing, Duration, Tween } from "./tween";
 
-/** `t ∈ [0,1]` → eased value (typically also in `[0,1]`). */
-export type Easing = (t: number) => number;
-const defaultEase: Easing = (t) => 1 - (1 - t) * (1 - t); // easeOut
-
-/** Seconds, fixed or reactive (read each frame). */
-export type Duration = number | ReadonlySignal<number>;
-
-type Lerpable = number | Vec;
-
-function lerp<T extends Lerpable>(a: T, b: T, t: number): T {
-  if (typeof a === "number") {
-    return (a + ((b as number) - a) * t) as T;
-  }
-  if (a !== null && typeof a === "object" && "x" in a && "y" in a) {
-    const av = a as Vec;
-    const bv = b as Vec;
-    return {
-      x: av.x + (bv.x - av.x) * t,
-      y: av.y + (bv.y - av.y) * t,
-    } as T;
-  }
-  throw new Error("tween: unsupported value type");
-}
-
-/** A yieldable tween. Chain with `.to` — `sig.to(a, s).to(b, s)` goes
- *  a then b. */
-export interface Tween<T> extends Generator<Yieldable, void, number> {
-  to(target: T, source: Duration, ease?: Easing): Tween<T>;
-}
-
-function* tweenStep<T extends Lerpable>(
-  sig: Signal<T>,
-  target: T,
-  source: Duration,
-  ease: Easing = defaultEase,
-): Animator {
-  const start = sig.peek();
-  let elapsed = 0;
-  while (true) {
-    const total = typeof source === "number" ? source : source.value;
-    if (elapsed >= total) break;
-    const dt = yield;
-    elapsed += dt;
-    const t = total > 0 ? Math.min(elapsed / total, 1) : 1;
-    sig.value = lerp(start, target, ease(t));
-  }
-  sig.value = target;
-}
-
-function tween<T extends Lerpable>(
-  sig: Signal<T>,
-  target: T,
-  source: Duration,
-  ease?: Easing,
-  prior?: Generator<Yieldable, void, number>,
-): Tween<T> {
-  const gen = (function* (): Animator {
-    if (prior) yield* prior;
-    yield* tweenStep(sig, target, source, ease);
-  })() as Tween<T>;
-  gen.to = (t, s, e) => tween(sig, t, s, e, gen);
-  return gen;
-}
-
-// Declaration-merge `.derive` / `.to` onto the Signal interfaces.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface Signal<T = any> {
   derive<U>(fn: (v: T) => U): ReadonlySignal<U>;
-  to(
-    this: Signal<number>,
-    target: number,
-    source: Duration,
-    ease?: Easing,
-  ): Tween<number>;
-  to(
-    this: Signal<Vec>,
-    target: Vec,
-    source: Duration,
-    ease?: Easing,
-  ): Tween<Vec>;
+  to(target: T, dur: Duration, ease?: Easing): Tween<T>;
 }
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 interface ReadonlySignal<T = any> {
   derive<U>(fn: (v: T) => U): ReadonlySignal<U>;
 }
-
-(
-  Signal.prototype as unknown as {
-    derive: <T, U>(this: Signal<T>, fn: (v: T) => U) => ReadonlySignal<U>;
-  }
-).derive = function <T, U>(
-  this: Signal<T>,
-  fn: (v: T) => U,
-): ReadonlySignal<U> {
-  return computed(() => fn(this.value));
-};
-
-(
-  Signal.prototype as unknown as {
-    to: <T extends Lerpable>(
-      target: T,
-      source: Duration,
-      ease?: Easing,
-    ) => Tween<T>;
-  }
-).to = function <T extends Lerpable>(
-  this: Signal<T>,
-  target: T,
-  source: Duration,
-  ease?: Easing,
-): Tween<T> {
-  return tween(this, target, source, ease);
-};
-
-export { tween };

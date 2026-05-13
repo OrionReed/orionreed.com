@@ -14,7 +14,6 @@ import {
   type Box,
 } from "./box";
 import { AABB as AABBStruct } from "../signals/aabb";
-import type { Vec as Vlike } from "../core/vec";
 import {
   compose,
   invert,
@@ -23,22 +22,18 @@ import {
   transformAABB,
   transformPoint,
   type Matrix2D,
-} from "./matrix";
+} from "../signals/matrix";
 import {
   Vec,
   lensPoint,
   pt,
   toPoint,
+  type V,
   type DerivedPoint,
   type Point,
   type Pointlike,
   type ResolveVec,
 } from "../signals/vec";
-
-// Vec is imported as the new struct (signals/vec).
-// Vlike (the legacy `{x, y}` plain interface) is kept as a type alias
-// for parameter typing where we don't need the reactive surface.
-type Vec = Vlike;
 import { suspend, type Animator } from "../core/anim";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
@@ -64,10 +59,10 @@ export type Segment =
  *  - `aside` excludes this shape from its parent's bounds (and
  *    auto-fit) — for decorative overlays. */
 export interface ShapeOpts {
-  translate?: Arg<Vec>;
+  translate?: Arg<V>;
   rotate?: Arg<number>;
-  scale?: Arg<Vec>;
-  origin?: Arg<Vec>;
+  scale?: Arg<V>;
+  origin?: Arg<V>;
   opacity?: Arg<number>;
   aside?: boolean;
 }
@@ -299,7 +294,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
         const local = { x: b.x + u * b.w, y: b.y + v * b.h };
         const currentWorld = transformPoint(this.transform.peek(), local);
         const tNow = this.translate.peek();
-        (this.translate as Signal<Vec>).value = {
+        (this.translate as Signal<V>).value = {
           x: tNow.x + (target.x - currentWorld.x),
           y: tNow.y + (target.y - currentWorld.y),
         };
@@ -391,7 +386,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Box {
 
   /** Map client-space coords (e.g. `evt.clientX/clientY`) into this
    *  shape's local frame via `getScreenCTM`. */
-  toLocal(evt: { clientX: number; clientY: number }): Vec {
+  toLocal(evt: { clientX: number; clientY: number }): V {
     const target = (this.intrinsic ?? this.el) as SVGGraphicsElement;
     const ctm = target.getScreenCTM();
     if (!ctm) return { x: 0, y: 0 };

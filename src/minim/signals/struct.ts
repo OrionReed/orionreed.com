@@ -25,18 +25,32 @@ import {
   computed,
   lens,
   type ReadonlySignal,
-  type Easing,
-  type Duration,
-  type Tween,
 } from "../core/signal";
-import type { Yieldable, Animator } from "../core/anim";
+import { LERP, type Easing, type Duration, type Tween } from "../core/tween";
 
 // ── Public type surface ─────────────────────────────────────────────
 
-export type Schema = Record<string, number>;
+/** Schema describes a struct's fields. Each field is either:
+ *  - a number literal (default value for a scalar field), OR
+ *  - a registered `StructType` (the field carries a nested struct value).
+ *
+ *  For nested fields, the framework's field accessor returns a
+ *  `Reactive<NestedS>` (full nested-struct surface) rather than a
+ *  plain `Signal<NestedS>`. This lets you write `pose.position.x`,
+ *  `pose.position.add(other)`, etc. — the nested struct's full method
+ *  surface is available on the field. */
+export type Schema = Record<string, number | StructType<any, any, any, any, any>>;
 export type RW = "rw" | "ro";
 
-/** Op signature: positional `self`, then domain args. */
+/** Resolve the actual value type from a schema. Scalar fields stay
+ *  as `number`; nested struct fields become their value type. */
+export type ValueOf<S extends Schema> = {
+  [K in keyof S]: S[K] extends StructType<infer SS, any, any, any, any>
+    ? ValueOf<SS>
+    : number;
+};
+
+/** Op signature: positional `self` (the value), then domain args. */
 export type Op<S, R> = (self: S, ...args: any[]) => R;
 
 /** Lift a struct-returning op into its reactive method form.
@@ -65,13 +79,18 @@ type ReactiveArgs<A extends readonly unknown[]> = {
   [K in keyof A]: A[K] | Signal<A[K]> | ReadonlySignal<A[K]> | (() => A[K]);
 };
 
-/** Field projections. Writable when parent is writable. */
-type Fields<S, W extends RW> = {
-  readonly [K in keyof S]: W extends "rw" ? Signal<S[K]> : ReadonlySignal<S[K]>;
+/** Field projections. Writable when parent is writable.
+ *  Nested struct fields return the nested struct's full Reactive
+ *  surface (so `pose.position.x` works lazily, plus all Vec ops). */
+type Fields<S extends Schema, W extends RW> = {
+  readonly [K in keyof S]:
+    S[K] extends StructType<infer SS, infer SO, infer SX, infer SM, infer SG>
+      ? Reactive<SS, SO, SX, W, SM, SG>
+      : (W extends "rw" ? Signal<number> : ReadonlySignal<number>);
 };
 
-type Ops<S> = Record<string, (self: S, ...args: any[]) => S>;
-type Scalars<S> = Record<string, (self: S, ...args: any[]) => unknown>;
+type Ops<S extends Schema> = Record<string, (self: ValueOf<S>, ...args: any[]) => ValueOf<S>>;
+type Scalars<S extends Schema> = Record<string, (self: ValueOf<S>, ...args: any[]) => unknown>;
 
 type Methods<S extends Schema, O extends Ops<S>, X extends Scalars<S>> =
   & { [K in keyof O]: LiftStruct<O[K], S, O, X> }
@@ -89,9 +108,9 @@ type Methods<S extends Schema, O extends Ops<S>, X extends Scalars<S>> =
  *  "tween toward". For other animation strategies (spring, oscillate,
  *  drift, attract, …), see `signals/integrators.ts` — they're free
  *  functions that take the value type's algebra explicitly. */
-type Tweenable<S, O, W extends RW> = W extends "rw"
-  ? O extends { lerp: (a: any, b: any, t: number) => S }
-    ? { to(target: S, dur: Duration, ease?: Easing): Tween<S> }
+type Tweenable<S extends Schema, O, W extends RW> = W extends "rw"
+  ? O extends { lerp: (a: any, b: any, t: number) => ValueOf<S> }
+    ? { to(target: ValueOf<S>, dur: Duration, ease?: Easing): Tween<ValueOf<S>> }
     : {}
   : {};
 
@@ -106,7 +125,7 @@ export type Reactive<
   M = {},
   G = {},
 > =
-  & (W extends "rw" ? Signal<S> : ReadonlySignal<S>)
+  & (W extends "rw" ? Signal<ValueOf<S>> : ReadonlySignal<ValueOf<S>>)
   & Fields<S, W>
   & Methods<S, O, X>
   & Tweenable<S, O, W>
@@ -138,10 +157,16 @@ export interface StructType<
 > {
   readonly name: string;
   readonly fields: readonly (keyof S)[];
+  /** Default value (the schema's defaults expanded — nested struct
+   *  fields use their nested defaults). */
+  readonly defaults: ValueOf<S>;
 
-  signal(v: S): Reactive<S, O, X, "rw", M, G>;
-  derived(fn: () => S): Reactive<S, O, X, "ro", M, G>;
-  lens(read: () => S, write: (v: S) => void): Reactive<S, O, X, "rw", M, G>;
+  signal(v: ValueOf<S>): Reactive<S, O, X, "rw", M, G>;
+  derived(fn: () => ValueOf<S>): Reactive<S, O, X, "ro", M, G>;
+  lens(
+    read: () => ValueOf<S>,
+    write: (v: ValueOf<S>) => void,
+  ): Reactive<S, O, X, "rw", M, G>;
 
   /** True if `v` is a Reactive produced by this struct. Equivalent
    *  to `v instanceof StructType` — sugar for cleaner narrowing. */
@@ -173,8 +198,8 @@ export const WRITABLE = Symbol("minim.writable");
 interface BuilderState<S extends Schema> {
   name: string;
   defaults: S;
-  equals?: (a: S, b: S) => boolean;
-  construct?: (...args: any[]) => S;
+  equals?: (a: ValueOf<S>, b: ValueOf<S>) => boolean;
+  construct?: (...args: any[]) => ValueOf<S>;
 }
 
 /** Free-form methods a struct can declare via `.methods({...})`.
@@ -213,7 +238,7 @@ class Builder<
     private gettersObj: G & Record<string, (...args: any[]) => any> = {} as G & Record<string, (...args: any[]) => any>,
   ) {}
 
-  equals(fn: (a: S, b: S) => boolean): Builder<S, O, X, M, G> {
+  equals(fn: (a: ValueOf<S>, b: ValueOf<S>) => boolean): Builder<S, O, X, M, G> {
     return new Builder({ ...this.state, equals: fn }, this.opsObj, this.scalarsObj, this.methodsObj, this.gettersObj);
   }
 
@@ -234,7 +259,7 @@ class Builder<
    *  fallback (~30% slower on tight axis-write loops). For minim's
    *  built-in primitives we always provide it; user-defined structs
    *  can opt in if their writes are hot. */
-  construct(fn: (...args: any[]) => S): Builder<S, O, X, M, G> {
+  construct(fn: (...args: any[]) => ValueOf<S>): Builder<S, O, X, M, G> {
     return new Builder({ ...this.state, construct: fn }, this.opsObj, this.scalarsObj, this.methodsObj, this.gettersObj);
   }
 
@@ -302,6 +327,18 @@ export type Of<T> = T extends StructType<infer S, any, any> ? S : never;
 
 // ── Implementation ──────────────────────────────────────────────────
 
+/** Runtime check for a registered StructType. Used when classifying
+ *  schema fields as "nested struct" vs "scalar". */
+function isStructType(v: unknown): v is StructType<any, any, any, any, any> {
+  return (
+    v != null &&
+    typeof v === "object" &&
+    typeof (v as any).is === "function" &&
+    typeof (v as any).signal === "function" &&
+    typeof (v as any).lens === "function"
+  );
+}
+
 function finalize<S extends Schema, O extends Ops<S>, X extends Scalars<S>, M, G>(
   state: BuilderState<S>,
   opsObj: O,
@@ -312,9 +349,39 @@ function finalize<S extends Schema, O extends Ops<S>, X extends Scalars<S>, M, G
   const fields = Object.keys(state.defaults) as (keyof S)[];
   const equalsFn = state.equals;
 
+  // Classify each field: scalar or nested struct. Nested struct fields
+  // get a richer field accessor (returns Reactive<NestedS> via the
+  // nested struct's .lens()) instead of the primitive lens we use for
+  // scalars. Determined once at struct registration.
+  const fieldKinds = new Map<
+    string,
+    { kind: "scalar" } | { kind: "struct"; type: StructType<any, any, any, any, any> }
+  >();
+  for (const name of Object.keys(state.defaults)) {
+    const def = (state.defaults as any)[name];
+    if (isStructType(def)) {
+      fieldKinds.set(name, { kind: "struct", type: def });
+    } else {
+      fieldKinds.set(name, { kind: "scalar" });
+    }
+  }
+
+  // Compute the value-shaped defaults: scalar fields keep their
+  // numeric default; nested struct fields are substituted with the
+  // nested struct's own `.defaults`. Used to seed the lens probe and
+  // exposed publicly on `StructType.defaults`.
+  const valueDefaults = {} as ValueOf<S>;
+  for (const [name, kind] of fieldKinds) {
+    if (kind.kind === "scalar") {
+      (valueDefaults as any)[name] = (state.defaults as any)[name];
+    } else {
+      (valueDefaults as any)[name] = kind.type.defaults;
+    }
+  }
+
   // Forward declaration — referenced by `liftStruct` closures we
   // install during proto installation, defined further down.
-  let makeDerivedRef!: (fn: () => S) => unknown;
+  let makeDerivedRef!: (fn: () => ValueOf<S>) => unknown;
 
   // ── Pre-build descriptors for the lazy field accessors.
   //
@@ -339,9 +406,31 @@ function finalize<S extends Schema, O extends Ops<S>, X extends Scalars<S>, M, G
 
   const writableFieldGetter = (field: keyof S) => {
     const factory = axisWriterFactories[field as string];
-    return function (this: Signal<S>) {
+    const kind = fieldKinds.get(field as string)!;
+    if (kind.kind === "scalar") {
+      // Scalar field: primitive `lens()` returning a Signal<number>.
+      return function (this: Signal<any>) {
+        const setter = factory(this);
+        const projection = lens(() => (this.value as any)[field], setter);
+        Object.defineProperty(this, field as PropertyKey, {
+          value: projection,
+          enumerable: false,
+          configurable: false,
+          writable: false,
+        });
+        return projection;
+      };
+    }
+    // Nested struct field: use the nested struct's `.lens()` so the
+    // result has the nested struct's full Reactive surface (axes,
+    // ops, methods, etc.). Reads/writes round-trip through the parent.
+    const nested = kind.type;
+    return function (this: Signal<any>) {
       const setter = factory(this);
-      const projection = lens(() => (this.value as any)[field], setter);
+      const projection = nested.lens(
+        () => (this.value as any)[field],
+        setter as any,
+      );
       Object.defineProperty(this, field as PropertyKey, {
         value: projection,
         enumerable: false,
@@ -353,8 +442,24 @@ function finalize<S extends Schema, O extends Ops<S>, X extends Scalars<S>, M, G
   };
 
   const readonlyFieldGetter = (field: keyof S) => {
-    return function (this: ReadonlySignal<S>) {
-      const projection = computed(() => (this.value as any)[field]);
+    const kind = fieldKinds.get(field as string)!;
+    if (kind.kind === "scalar") {
+      return function (this: ReadonlySignal<any>) {
+        const projection = computed(() => (this.value as any)[field]);
+        Object.defineProperty(this, field as PropertyKey, {
+          value: projection,
+          enumerable: false,
+          configurable: false,
+          writable: false,
+        });
+        return projection;
+      };
+    }
+    // Nested struct field: use the nested struct's `.derived()` so
+    // the result has the nested struct's full Reactive surface.
+    const nested = kind.type;
+    return function (this: ReadonlySignal<any>) {
+      const projection = nested.derived(() => (this.value as any)[field]);
       Object.defineProperty(this, field as PropertyKey, {
         value: projection,
         enumerable: false,
@@ -372,7 +477,7 @@ function finalize<S extends Schema, O extends Ops<S>, X extends Scalars<S>, M, G
   // value type's algebra and called explicitly with that algebra. No
   // coincidence-based "if you have add+sub+scale you also get spring."
   const lerpFn = (opsObj as any).lerp as
-    | ((a: S, b: S, t: number) => S)
+    | ((a: ValueOf<S>, b: ValueOf<S>, t: number) => ValueOf<S>)
     | undefined;
 
   // Forward declaration — the struct value, used as the [STRUCT]
@@ -401,8 +506,13 @@ function finalize<S extends Schema, O extends Ops<S>, X extends Scalars<S>, M, G
     for (const opName of Object.keys(scalarsObj)) {
       proto[opName] = liftScalar(scalarsObj[opName]);
     }
-    if (lerpFn && mode === "rw") {
-      proto.to = makeTweenMethod(lerpFn);
+    if (lerpFn) {
+      // Stamp the lerp function on the prototype via the shared
+      // `[LERP]` slot. `Signal.prototype.to` (defined in core/tween)
+      // looks up `[LERP]` on the prototype chain and falls back to
+      // numberLerp when not set. Single tween engine, single dispatch
+      // — no per-struct `.to` method install required.
+      proto[LERP] = lerpFn;
     }
     if (mode === "rw") {
       // Free-form methods: only on writable prototypes, since the
@@ -458,7 +568,7 @@ function finalize<S extends Schema, O extends Ops<S>, X extends Scalars<S>, M, G
   // `lensRwProto` carries our field accessors + op methods. The
   // value getter+setter on Lens.prototype provides lens read/write
   // semantics. One setPrototypeOf per lens construction (not per-call).
-  const lensProbe = lens<S>(() => state.defaults, () => {});
+  const lensProbe = lens<ValueOf<S>>(() => valueDefaults, () => {});
   const lensInstanceProto = Object.getPrototypeOf(lensProbe);
   const lensRwProto = Object.create(lensInstanceProto);
   installSurface(lensRwProto, "rw");
@@ -470,20 +580,23 @@ function finalize<S extends Schema, O extends Ops<S>, X extends Scalars<S>, M, G
     ? { equals: equalsFn, name: state.name }
     : { name: state.name };
 
-  function makeSignal(v: S): Reactive<S, O, X, "rw", M, G> {
+  function makeSignal(v: ValueOf<S>): Reactive<S, O, X, "rw", M, G> {
     const inst = Object.create(rwProto);
     Signal.call(inst, v, opts as any);
     return inst as Reactive<S, O, X, "rw", M, G>;
   }
 
-  function makeDerived(fn: () => S): Reactive<S, O, X, "ro", M, G> {
+  function makeDerived(fn: () => ValueOf<S>): Reactive<S, O, X, "ro", M, G> {
     const inst = Object.create(roProto);
     Computed.call(inst, fn as () => unknown, opts as any);
     return inst as Reactive<S, O, X, "ro", M, G>;
   }
   makeDerivedRef = makeDerived;
 
-  function makeLens(read: () => S, write: (v: S) => void): Reactive<S, O, X, "rw", M, G> {
+  function makeLens(
+    read: () => ValueOf<S>,
+    write: (v: ValueOf<S>) => void,
+  ): Reactive<S, O, X, "rw", M, G> {
     const l = lens(read, write) as any;
     Object.setPrototypeOf(l, lensRwProto);
     if (equalsFn) l._equals = equalsFn;
@@ -502,6 +615,7 @@ function finalize<S extends Schema, O extends Ops<S>, X extends Scalars<S>, M, G
   structSelf = {
     name: state.name,
     fields,
+    defaults: valueDefaults,
     signal: makeSignal,
     derived: makeDerived,
     lens: makeLens,
@@ -520,61 +634,12 @@ function finalize<S extends Schema, O extends Ops<S>, X extends Scalars<S>, M, G
   return structSelf;
 }
 
-// ── Generic tween (driven by the struct's lerp op) ─────────────────
+// ── Tween ──────────────────────────────────────────────────────────
 //
-// One engine works for every value type. The struct provides `lerp`;
-// the framework wraps it in a generator that threads dt and writes
-// the lerp'd value each frame. Chainable: `sig.to(a, 1).to(b, 1)`.
-
-const defaultEase: Easing = (t) => 1 - (1 - t) * (1 - t); // easeOut
-
-function makeTweenMethod<S>(lerpFn: (a: S, b: S, t: number) => S) {
-  return function tweenTo(
-    this: Signal<S>,
-    target: S,
-    dur: Duration,
-    ease?: Easing,
-  ): Tween<S> {
-    return makeTween(this, target, dur, ease ?? defaultEase, lerpFn);
-  };
-}
-
-function* tweenStep<S>(
-  sig: Signal<S>,
-  target: S,
-  dur: Duration,
-  ease: Easing,
-  lerp: (a: S, b: S, t: number) => S,
-): Animator {
-  const start = sig.peek();
-  let elapsed = 0;
-  while (true) {
-    const total = typeof dur === "number" ? dur : dur.value;
-    if (elapsed >= total) break;
-    const dt: number = yield;
-    elapsed += dt;
-    const t = total > 0 ? Math.min(elapsed / total, 1) : 1;
-    sig.value = lerp(start, target, ease(t));
-  }
-  sig.value = target;
-}
-
-function makeTween<S>(
-  sig: Signal<S>,
-  target: S,
-  dur: Duration,
-  ease: Easing,
-  lerp: (a: S, b: S, t: number) => S,
-  prior?: Generator<Yieldable, void, number>,
-): Tween<S> {
-  const gen = (function* (): Animator {
-    if (prior) yield* prior;
-    yield* tweenStep(sig, target, dur, ease, lerp);
-  })() as Tween<S>;
-  gen.to = (t: S, d: Duration, e?: Easing) =>
-    makeTween(sig, t, d, e ?? defaultEase, lerp, gen);
-  return gen;
-}
+// One engine, one definition — lives in `core/tween.ts`. The struct
+// framework wires up tweening per-struct by stamping the user's
+// `lerp` op on the prototype's `[LERP]` slot (see installSurface
+// above). `Signal.prototype.to` looks up `[LERP]` and dispatches.
 
 // ── Axis writer factories ──────────────────────────────────────────
 //
@@ -597,13 +662,13 @@ function makeTween<S>(
 // Neither has hardcoded knowledge of field names — the framework
 // stays shape-agnostic.
 
-type AxisWriterFactory<S> = (parent: Signal<S>) => (v: any) => void;
+type AxisWriterFactory<V> = (parent: Signal<V>) => (v: any) => void;
 
 function makeConstructWriters<S extends Schema>(
   fields: readonly (keyof S)[],
-  construct: (...args: any[]) => S,
-): Record<string, AxisWriterFactory<S>> {
-  const writers: Record<string, AxisWriterFactory<S>> = {};
+  construct: (...args: any[]) => ValueOf<S>,
+): Record<string, AxisWriterFactory<ValueOf<S>>> {
+  const writers: Record<string, AxisWriterFactory<ValueOf<S>>> = {};
   const fs = fields as readonly string[];
   const arity = fs.length;
 
@@ -696,8 +761,8 @@ function makeConstructWriters<S extends Schema>(
 
 function makeSpreadWriters<S extends Schema>(
   fields: readonly (keyof S)[],
-): Record<string, AxisWriterFactory<S>> {
-  const writers: Record<string, AxisWriterFactory<S>> = {};
+): Record<string, AxisWriterFactory<ValueOf<S>>> {
+  const writers: Record<string, AxisWriterFactory<ValueOf<S>>> = {};
   for (const field of fields) {
     const f = field;
     writers[String(field)] = (parent) => (v) => {
@@ -715,21 +780,21 @@ function makeSpreadWriters<S extends Schema>(
  *  common: `add`, `sub`, `scale`, `lerp` with a captured t) further
  *  specializes on whether the arg is a Signal at construction time,
  *  so the closure body has no per-eval branch either. */
-function liftStruct<S extends Schema>(
-  fn: (self: S, ...args: any[]) => S,
-  derived: (fn: () => S) => unknown,
+function liftStruct<V>(
+  fn: (self: V, ...args: any[]) => V,
+  derived: (fn: () => V) => unknown,
 ) {
   const arity = Math.max(0, fn.length - 1);
 
   if (arity === 0) {
-    return function lifted0(this: ReadonlySignal<S>) {
+    return function lifted0(this: ReadonlySignal<V>) {
       const self = this;
       return derived(() => fn(self.value));
     };
   }
 
   if (arity === 1) {
-    return function lifted1(this: ReadonlySignal<S>, a: unknown) {
+    return function lifted1(this: ReadonlySignal<V>, a: unknown) {
       const self = this;
       // Branch once at construction: produce a monomorphic closure
       // body so JIT sees the same shape on every evaluation. Three
@@ -747,7 +812,7 @@ function liftStruct<S extends Schema>(
   }
 
   if (arity === 2) {
-    return function lifted2(this: ReadonlySignal<S>, a: unknown, b: unknown) {
+    return function lifted2(this: ReadonlySignal<V>, a: unknown, b: unknown) {
       const self = this;
       const ar = readerFor(a);
       const br = readerFor(b);
@@ -757,7 +822,7 @@ function liftStruct<S extends Schema>(
 
   // Generic fallback for unusual arities (3+). Per-call cost is
   // acceptable here because high-arity ops are rare.
-  return function liftedN(this: ReadonlySignal<S>, ...args: unknown[]) {
+  return function liftedN(this: ReadonlySignal<V>, ...args: unknown[]) {
     const self = this;
     const readers = args.map(readerFor);
     return derived(() => fn(self.value, ...readers.map((r) => r())));

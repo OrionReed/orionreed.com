@@ -12,30 +12,30 @@
 // but model different things — keeping them separate keeps each call
 // site honest about whether it means a point or a vector.
 
-import type { Vec } from "./core/vec";
+import type { V } from "./signals/vec";
 
 /** Anchor points on a unit box. `TopLeft` = `{0, 0}`, `Center` =
  *  `{0.5, 0.5}`, `BottomRight` = `{1, 1}`. Pass to anything that takes
  *  a registration point (`label.align`, `button`, etc.) — or any other
- *  `Vec` in `[0, 1]²` for off-axis anchors. */
+ *  `V` in `[0, 1]²` for off-axis anchors. */
 export const Anchor = {
-  TopLeft:     { x: 0,   y: 0   } as Vec,
-  Top:         { x: 0.5, y: 0   } as Vec,
-  TopRight:    { x: 1,   y: 0   } as Vec,
-  Left:        { x: 0,   y: 0.5 } as Vec,
-  Center:      { x: 0.5, y: 0.5 } as Vec,
-  Right:       { x: 1,   y: 0.5 } as Vec,
-  BottomLeft:  { x: 0,   y: 1   } as Vec,
-  Bottom:      { x: 0.5, y: 1   } as Vec,
-  BottomRight: { x: 1,   y: 1   } as Vec,
+  TopLeft:     { x: 0,   y: 0   } as V,
+  Top:         { x: 0.5, y: 0   } as V,
+  TopRight:    { x: 1,   y: 0   } as V,
+  Left:        { x: 0,   y: 0.5 } as V,
+  Center:      { x: 0.5, y: 0.5 } as V,
+  Right:       { x: 1,   y: 0.5 } as V,
+  BottomLeft:  { x: 0,   y: 1   } as V,
+  Bottom:      { x: 0.5, y: 1   } as V,
+  BottomRight: { x: 1,   y: 1   } as V,
 };
 
 /** Unit direction vectors. `Left` = `{-1, 0}`, `Up` = `{0, -1}`
- *  (y-down). Pass to `slideIn` / `slideOut`, or any other `Vec` for
+ *  (y-down). Pass to `slideIn` / `slideOut`, or any other `V` for
  *  diagonals (`{ x: 0.7, y: 0.7 }` etc.). */
 export const Dir = {
-  Left:  { x: -1, y:  0 } as Vec,
-  Right: { x:  1, y:  0 } as Vec,
-  Up:    { x:  0, y: -1 } as Vec,
-  Down:  { x:  0, y:  1 } as Vec,
+  Left:  { x: -1, y:  0 } as V,
+  Right: { x:  1, y:  0 } as V,
+  Up:    { x:  0, y: -1 } as V,
+  Down:  { x:  0, y:  1 } as V,
 };

@@ -4,12 +4,12 @@
 // array of those calls; the body shows exactly which atoms stack.
 
 import { tween, type Duration, type Easing, type Signal } from "../core";
-import type { Animator, Vec } from "../core";
+import type { Animator, V } from "../core";
 import type { Writable } from "../scene";
 import { Dir } from "../anchor";
 import { easeIn, easeInOut, easeOut } from "./easings";
 
-type Lerpable = number | Vec;
+type Lerpable = number | V;
 
 // ── Primitive ────────────────────────────────────────────────────────
 
@@ -71,7 +71,7 @@ export function* fadeUpOut(
 /** Slide in from `dir` + fade in. */
 export function* slideIn(
   s: Writable<"translate" | "opacity">,
-  dir: Vec = Dir.Left,
+  dir: V = Dir.Left,
   sec = 0.4,
   dist = 30,
 ): Animator {
@@ -90,7 +90,7 @@ export function* slideIn(
 /** Slide out toward a side + fade out. */
 export function* slideOut(
   s: Writable<"translate" | "opacity">,
-  dir: Vec = Dir.Right,
+  dir: V = Dir.Right,
   sec = 0.3,
   dist = 30,
 ): Animator {

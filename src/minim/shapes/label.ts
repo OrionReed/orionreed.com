@@ -1,4 +1,4 @@
-import { toSig, type Arg, type Vec } from "../core";
+import { toSig, type Arg, type V } from "../core";
 import { Shape, aabb, type ShapeOpts, type Pointlike } from "../scene";
 import { tokens } from "./tokens";
 import { renderContent, flattenText, type Content } from "./text";
@@ -7,7 +7,7 @@ export interface LabelOpts extends ShapeOpts {
   size?: Arg<number>;
   /** Bbox point that sits at `at` — `{0, 0}` = top-left, `{0.5, 0.5}`
    *  (default) = center. See `Anchor` for named consts. */
-  align?: Vec;
+  align?: V;
   bold?: boolean;
 }
 

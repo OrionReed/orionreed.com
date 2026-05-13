@@ -34,10 +34,9 @@ import {
 } from "../core/signal";
 import { race } from "../core/suspensions";
 import type { Animator } from "../core/anim";
-import type { Vec } from "../core/vec";
 import { type AABB, type Box } from "../scene/box";
 import { circle } from "../shapes/circle";
-import { pt, type Pointlike } from "../signals/vec";
+import { pt, type V, type Pointlike } from "../signals/vec";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -383,7 +382,7 @@ export class Predicates<T> {
   /** Predicate that the point lies inside `region`. Accepts a `Box`
    *  (Shape, view, split result…) or a `ReadonlySignal<AABB>`. */
   inside(
-    this: Predicates<Vec>,
+    this: Predicates<V>,
     region: Box | ReadonlySignal<AABB>,
   ): Claim {
     const aabbSig: ReadonlySignal<AABB> =
@@ -593,7 +592,7 @@ function fmt(v: unknown): string {
   if (typeof v === "number") return String(+v.toFixed(6));
   if (typeof v === "string") return JSON.stringify(v);
   if (v && typeof v === "object" && "x" in v && "y" in v) {
-    const p = v as Vec;
+    const p = v as V;
     return `(${fmt(p.x)}, ${fmt(p.y)})`;
   }
   return String(v);

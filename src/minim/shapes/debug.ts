@@ -22,7 +22,7 @@ import {
   type Pointlike,
 } from "../scene";
 import { AABB } from "../signals/aabb";
-import { transformAABB, transformPoint } from "../scene/matrix";
+import { transformAABB, transformPoint } from "../signals/matrix";
 import { circle } from "./circle";
 import { line } from "./line";
 import { label } from "./label";

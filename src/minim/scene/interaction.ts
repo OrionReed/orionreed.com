@@ -1,6 +1,6 @@
 // DOM input → signal-world bridges that bind to scene-graph shapes.
 
-import type { Vec } from "../core/vec";
+import type { V } from "../signals/vec";
 import type { AnyShape } from "./shape";
 
 /** Wire `handle` for pointer-drag. Each pointermove while pressed
@@ -8,7 +8,7 @@ import type { AnyShape } from "./shape";
  *  pointer-captured so drags survive leaving the handle. */
 export function draggable(
   handle: AnyShape,
-  onDrag: (local: Vec) => void,
+  onDrag: (local: V) => void,
 ): () => void {
   let dragging = false;
   let pointerId = -1;
