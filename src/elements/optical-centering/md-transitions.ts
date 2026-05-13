@@ -2,28 +2,26 @@
 // loops intro → hold → outro, staggered so the intro reads as a wave.
 
 import {
-  Diagram,
   Anchor,
+  Diagram,
+  Dir,
   Mount,
   Shape,
-  circle,
-  label,
-  stagger,
-  pt,
-  rect,
-  type Animator,
-} from "../../minim";
-import {
-  Dir,
   bounceIn,
+  circle,
   fadeOut,
   fadeUp,
   fadeUpOut,
+  label,
+  pt,
+  rect,
   scaleIn,
   slideIn,
   slideOut,
   spinIn,
+  stagger,
   zoomOut,
+  type Animator,
 } from "../../minim";
 
 const LANES = 5;

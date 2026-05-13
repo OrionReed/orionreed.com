@@ -9,6 +9,7 @@ import {
   bounceIn,
   cell,
   circle,
+  drive,
   group,
   pt,
   stagger,
@@ -29,12 +30,7 @@ export class MdOrbits extends Diagram {
     const angularMotion = (period: number, sig?: Cell<number>) => {
       const a = sig ?? cell(Math.random() * 2 * Math.PI);
       const omega = (2 * Math.PI) / period;
-      this.anim.loop(function* () {
-        while (true) {
-          const dt = yield;
-          a.value = (a.peek() + omega * dt) % (2 * Math.PI);
-        }
-      });
+      this.anim.run(drive((dt) => { a.value = (a.peek() + omega * dt) % (2 * Math.PI); }));
       return a;
     };
 

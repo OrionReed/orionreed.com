@@ -137,7 +137,7 @@ export class MdLerps extends Diagram {
     s(
       rowLabel(0, "number"),
       track(VIS_X, rowY(0) + 4, VIS_W, 10, 0.18),
-      rect(VIS_X, rowY(0) + 4, cell.derived(() => num.value * VIS_W), 10, {
+      rect(VIS_X, rowY(0) + 4, num.derive((n) => n * VIS_W), 10, {
         stroke: "transparent",
         fill: true,
       }),

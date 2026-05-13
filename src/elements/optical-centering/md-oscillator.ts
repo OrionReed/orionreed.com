@@ -20,7 +20,6 @@ import {
   cell,
   circle,
   drive,
-  effect,
   endOn,
   line,
   oscillate,
@@ -145,11 +144,10 @@ export class MdOscillator extends Diagram {
 
     // ── Amplitude bound lines (A) ─────────────────────────────────────────────
     const ampStroke = cell.derived(() => A.color.value ?? tokens.stroke);
-    [CY - A_AMP, CY + A_AMP].forEach(y => {
-      const l = s(line(pt(TL, y), pt(TR, y)));
-      l.attr("stroke", ampStroke);
+    const ampOpacity = A.active.derive((on) => (on ? 0.7 : 0.18));
+    [CY - A_AMP, CY + A_AMP].forEach((y) => {
+      const l = s(line(pt(TL, y), pt(TR, y), { stroke: ampStroke, opacity: ampOpacity }));
       l.attr("stroke-dasharray", "3 5");
-      this.root.track(effect(() => { l.opacity.value = A.active.value ? 0.7 : 0.18; }));
     });
 
     // ── Period tick marks (ω) ─────────────────────────────────────────────────

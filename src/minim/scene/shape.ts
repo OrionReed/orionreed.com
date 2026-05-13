@@ -16,13 +16,13 @@ import {
 } from "../signals/box";
 import {
   compose,
-  invert,
   multiply,
   toString as matrixToString,
   transformBox,
   transformPoint,
   type Matrix2D,
 } from "../signals/matrix";
+import { mean } from "../signals/aggregates";
 import {
   Vec,
   pt,
@@ -479,22 +479,25 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
   }
 }
 
-// ── Cross-frame helpers ─────────────────────────────────────────────
+// ── Aggregates over multiple shapes ─────────────────────────────────
+//
+// Each is a writable view via `mean`: tween the result to move the
+// group rigidly. Generic `mean(...sigs)` is in `signals/aggregates.ts`;
+// these are shape-specific sugar (one-liners over the right field).
 
-/** `shape`'s Box in scene-root frame. Sugar over `box.in(worldFrame)`. */
-export function boxInRoot(shape: AnyShape): ReadonlyCell<Box> {
-  return cell.derived(() =>
-    transformBox(shape.worldFrame.value, shape.box.value),
-  );
+/** Centroid of N shapes' translates, as a writable Point. */
+export function centroid(...shapes: Writable<"translate">[]): Point {
+  return mean(...shapes.map((s) => s.translate)) as Point;
 }
 
-/** `shape`'s Box in `observer`'s local frame: `inv(observer→root) ⋅ shape→root`. */
-export function boxIn(
-  shape: AnyShape,
-  observer: AnyShape,
-): ReadonlyCell<Box> {
-  return cell.derived(() => {
-    const m = multiply(invert(observer.worldFrame.value), shape.worldFrame.value);
-    return transformBox(m, shape.box.value);
-  });
+/** Mean rotation as a writable signal; writes rotate every shape by the same delta. */
+export function meanRotation(
+  ...shapes: Writable<"rotate">[]
+): Cell<number> {
+  return mean(...shapes.map((s) => s.rotate));
+}
+
+/** Mean scale as a writable Point. */
+export function meanScale(...shapes: Writable<"scale">[]): Point {
+  return mean(...shapes.map((s) => s.scale)) as Point;
 }

@@ -17,7 +17,6 @@ import {
   Diagram,
   polar,
   Mount,
-  cell,
   circle,
   label,
   pt,
@@ -40,13 +39,7 @@ export class MdWaapiDemo extends Diagram {
           opacity: 0.6,
         }),
         rect(X, y, BW, 6, { fill: "rgba(127, 127, 127, 0.18)" }),
-        rect(
-          X,
-          y,
-          cell.derived(() => BW * p.value),
-          6,
-          { fill: true },
-        ),
+        rect(X, y, p.derive((v) => BW * v), 6, { fill: true }),
         label(
           view.at(1, 0).left(20).down(y + 4),
           p.derive((v) => v.toFixed(2)),
@@ -80,10 +73,7 @@ export class MdWaapiDemo extends Diagram {
     // motion. With BW=440, LOOPS=4, R=25 we clear that by ~40%.
     const LOOPS = 15;
     const R = 15;
-    const center = pt(
-      cell.derived(() => X + BW * vp.value),
-      150,
-    );
+    const center = pt(vp.derive((p) => X + BW * p), 150);
     const tracker = polar(
       center,
       R,

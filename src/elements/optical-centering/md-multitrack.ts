@@ -133,14 +133,13 @@ export class MdMultitrack extends Diagram {
 
     // ── Stage: one ball driven by all four clip progresses ────────
     const STAGE_Y = 210;
-    const STAGE_X = view.center.x.value;
 
     //   fadeIn.t  → opacity ramps up
     //   scale.t   → radius oscillates (sin: 0 at endpoints)
     //   shift.t   → x oscillates the same way
     //   fadeOut.t → opacity ramps down
     const ballX = cell.derived(
-      () => STAGE_X + Math.sin(tl.shift.t.value * Math.PI) * 110,
+      () => view.center.x.value + Math.sin(tl.shift.t.value * Math.PI) * 110,
     );
     const ballR = cell.derived(
       () => 18 + Math.sin(tl.scale.t.value * Math.PI) * 28,

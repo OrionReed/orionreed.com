@@ -30,6 +30,11 @@ const H = 360;
 const N = 24;
 const R = 110;
 
+const lerpV = (a: V, b: V, t: number): V => ({
+  x: a.x + (b.x - a.x) * t,
+  y: a.y + (b.y - a.y) * t,
+});
+
 type Polygon = { vertices: V[] };
 
 const Polygon = struct<Polygon>("Polygon", { vertices: [] })
@@ -52,12 +57,7 @@ const Polygon = struct<Polygon>("Polygon", { vertices: [] })
       const la = a.vertices.length;
       const lb = b.vertices.length;
       for (let i = 0; i < n; i++) {
-        const va = a.vertices[i % la];
-        const vb = b.vertices[i % lb];
-        out[i] = {
-          x: va.x + (vb.x - va.x) * t,
-          y: va.y + (vb.y - va.y) * t,
-        };
+        out[i] = lerpV(a.vertices[i % la], b.vertices[i % lb], t);
       }
       return { vertices: out };
     },

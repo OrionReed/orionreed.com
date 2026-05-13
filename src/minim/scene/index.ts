@@ -14,11 +14,6 @@ export {
   type ResolveVec,
 } from "../signals/vec";
 
-export {
-  centroid,
-  meanRotation,
-  meanScale,
-} from "./aggregates";
 export { mean } from "../signals/aggregates";
 
 // `Box` re-export carries BOTH the value (the struct) and the type
@@ -36,13 +31,14 @@ export {
 export {
   Shape,
   SVG_NS,
+  centroid,
+  meanRotation,
+  meanScale,
   type ShapeOpts,
   type AnyShape,
   type AnimatableKey,
   type Writable,
   type Segment,
-  boxInRoot,
-  boxIn,
 } from "./shape";
 
 export { draggable, hoverSignal } from "./interaction";

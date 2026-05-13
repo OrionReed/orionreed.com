@@ -60,19 +60,11 @@ export {
   type ResolveVec,
 } from "./signals/vec";
 
-export {
-  centroid,
-  meanRotation,
-  meanScale,
-} from "./scene/aggregates";
 /** Generic mean over any signals with a registered struct algebra
- *  (Vec/Box/Color/Matrix2D/…) or raw `Signal<number>`. `centroid`
- *  etc. are sugar. */
+ *  (Vec/Box/Color/Matrix2D/…) or raw `Signal<number>`. */
 export { mean } from "./signals/aggregates";
 
 // `Box` is both the registered struct and the plain `{x, y, w, h}` type.
-// Mirrors how `Vec` works. The plain `box(x,y,w,h)` constructor is
-// kept internal (would collide with `box(part)` decoration).
 export {
   Box,
   expandBox,
@@ -84,11 +76,12 @@ export {
 
 export {
   Shape,
+  centroid,
+  meanRotation,
+  meanScale,
   type ShapeOpts,
   type AnyShape,
   type Writable,
-  boxInRoot,
-  boxIn,
 } from "./scene/shape";
 
 export { draggable, hoverSignal } from "./scene/interaction";
