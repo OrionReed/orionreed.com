@@ -1,6 +1,6 @@
 // Shared style options + applier for stroked/filled shapes.
 
-import { toSig, type Val } from "@minim/core";
+import { toSig, type Val } from "@minim/signals";
 import { cell } from "@minim/signals";
 import type { AnyShape, ShapeOpts } from "./shape";
 import { tokens } from "./tokens";

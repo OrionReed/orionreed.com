@@ -1,10 +1,14 @@
-// Core: pure generator runtime + low-level utilities. Independent of
-// signals (`@minim/signals/`) and value types (`@minim/values/`).
+// Core: the bare generator runtime + signal-free utilities.
 //
-// The reactive primitives (`cell`, `Cell`, `ReadonlyCell`, struct
-// framework, tween, chain) live in `@minim/signals/`. The `@minim`
-// top-level barrel re-exports everything; consumers usually import
-// from there.
+// Nothing in this folder depends on `@minim/signals`. Anim is the
+// scheduler; `drive` is the frame-loop substrate; `all` / `rand` are
+// the signal-free generator combinators. Easings are pure functions.
+//
+// The signal layer (cells, struct framework, tween, chain, the
+// Chained-returning factories `sequence` / `parallel` / `loop` / …)
+// lives in `@minim/signals`. The bridge type `Val<T>` and the
+// suspension adapters `until*` / `race` also live there because they
+// pull the signal engine.
 
 // ── Anim runtime + generator primitives ───────────────────────────
 export {
@@ -18,44 +22,16 @@ export {
   type SpawnFn,
 } from "./anim";
 
-// ── Suspensions (signal-aware adapters live alongside the
-//    signal-agnostic ones — see `suspensions.ts` for the split. The
-//    signal-aware adapters import `effect` from `@minim/signals`). ──
-export {
-  untilChange,
-  untilTrue,
-  untilFalse,
-  untilEvent,
-  untilPromise,
-  race,
-} from "./suspensions";
-// `endOn(trigger, work)` and `startOn(trigger, work)` are no longer
-// publicly exported — use `chain(work).until(trigger)` (from
-// `@minim/signals`) and `after(trigger, work)` instead.
-
-// ── Generator combinators ─────────────────────────────────────────
-export {
-  all,
-  sequence,
-  parallel,
-  loop,
-  sleep,
-  after,
-  every,
-  rand,
-} from "./compose";
+// ── Generator combinators (signal-free) ───────────────────────────
+//
+// `all(...)` keeps a typed-tuple return — the fluent `parallel(...)`
+// from `@minim/signals` loses per-child typing, so the raw form stays
+// here for callers that need it. `rand(...)` picks one branch
+// uniformly without advancing the rest.
+export { all, rand } from "./compose";
 
 // ── Frame-loop substrate ──────────────────────────────────────────
 export { drive } from "./drive";
 
-// ── Val coercions (signal bridge) ─────────────────────────────────
-//
-// `Val<T>` = literal | reactive cell | thunk; the universal "value
-// source" type for reactive args.
-export { toSig, when, type Val } from "./arg";
-
 // ── Easings ───────────────────────────────────────────────────────
 export { linear, easeIn, easeOut, easeInOut } from "./easings";
-
-// ── Snapshot + counter ────────────────────────────────────────────
-export { snapshot, counter } from "./store";

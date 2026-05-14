@@ -25,7 +25,8 @@
 //
 // Everything reduces to bool signals. There's nothing else to learn.
 
-import { race, type Animator } from "@minim/core";
+import { type Animator } from "@minim/core";
+import { race } from "@minim/signals";
 import {
   cell,
   computed,

@@ -14,7 +14,8 @@
 //   `minim/assert`  trace (spans/tree/tag) + claim (assertions)
 //   `minim/ext`     timeline, events, waapi, marker (opt-in extras)
 
-// ── Reactive signals (signal engine + cells + chain/tween + struct) ─
+// ── Reactive signals (signal engine + cells + Val/toSig + suspensions
+//    + chain/tween + Chained-returning factories + struct) ───────────
 export {
   cell,
   derive,
@@ -25,8 +26,23 @@ export {
   lerpable,
   chain,
   struct,
+  toSig,
+  when,
+  untilChange,
+  untilTrue,
+  untilFalse,
+  untilEvent,
+  untilPromise,
+  race,
+  sequence,
+  parallel,
+  loop,
+  sleep,
+  after,
+  every,
   type Cell,
   type ReadonlyCell,
+  type Val,
   type Tween,
   type Easing,
   type Duration,
@@ -34,35 +50,21 @@ export {
   type Chained,
 } from "./signals";
 
-// ── Generator runtime + combinators ─────────────────────────────────
+// ── Generator runtime + signal-free combinators ─────────────────────
 export {
   Anim,
   asGen,
   isGen,
   suspend,
-  untilChange,
-  untilTrue,
-  untilFalse,
-  untilEvent,
-  untilPromise,
-  race,
   all,
-  sequence,
-  parallel,
-  loop,
-  sleep,
-  after,
-  every,
   rand,
   drive,
-  toSig,
-  when,
-  snapshot,
-  counter,
-  type Val,
   type Animator,
   type SpawnFn,
 } from "./core";
+
+// ── Snapshot (capture-and-restore for cells) ────────────────────────
+export { snapshot } from "./ext";
 
 // ── Reactive value types + struct framework ─────────────────────────
 //

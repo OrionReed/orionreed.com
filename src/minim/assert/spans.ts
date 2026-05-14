@@ -28,8 +28,9 @@ export type Trace = {
   readonly spans: readonly Span[];
   /** Wall-clock duration: `max(completedAt ?? clock) − min(spawnedAt)`. */
   duration(): number;
-  /** Subscribe to spawn/complete/cancel events. Wrap with `counter`
-   *  for a signal adapter. */
+  /** Subscribe to spawn/complete/cancel events. To plug into the
+   *  reactive graph, bump a cell from the callback:
+   *  `const v = cell(0); trace.onChange(() => v.value++);` */
   onChange(cb: () => void): () => void;
   /** Stop collecting; the existing `spans` array is yours to keep. */
   stop(): void;

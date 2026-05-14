@@ -1,17 +1,11 @@
-// Generator composers — sequence / parallel / loop / sleep / when /
-// every — returning `Chained` so they compose fluently with
-// `.until / .while / .for / .then / .at`. The fluent surface lives
-// in `chain.ts`; this file is the factory layer.
+// Signal-free generator combinators that don't need the fluent
+// `Chained` surface. The Chained-returning factories (`sequence`,
+// `parallel`, `loop`, `sleep`, `after`, `every`) live in
+// `signals/compose.ts` because `Chained` itself is signal-coupled
+// (`.until(sig) / .while(sig) / .at(Val<number>)`).
 //
-//   loop(() => spring(w, rest).until(dragging))
-//   sequence(fadeIn(a, 0.3), 0.5, fadeOut(a, 0.3))
-//   parallel(lane0, lane1, lane2).until(hardStop)
-//   sleep(0.5).then(work)
-//   after(ready, work)
-//   every(2, () => pulse(wire))
-//
-// `all(...)` keeps a typed-tuple return — the fluent surface loses
-// per-child typing, so the raw form stays for callers that need it.
+//   const [a, b] = yield* all(workA(), workB());   // typed-tuple return
+//   yield* rand(branch0, branch1, branch2);        // pick one uniformly
 
 import {
   suspend,
@@ -21,12 +15,6 @@ import {
   type Yieldable,
   type SpawnFn,
 } from "./anim";
-import { type ReadonlyCell } from "@minim/signals";
-import { type Val } from "./arg";
-import { untilTrue } from "./suspensions";
-import { chain, sleepGen, yieldableGen, type Chained } from "@minim/signals";
-
-// ── Tuple-typed parallel (raw, not Chained) ─────────────────────────
 
 /** Payload type of a `Yieldable`. Generators carry it in their `R`;
  *  everything else (numbers, arrays, raw suspend-fns, `undefined`)
@@ -39,7 +27,8 @@ type PayloadOf<Y> = Y extends Generator<any, infer R, any> ? R : void;
  *      const [a, b] = yield* all(workA(), workB());
  *
  *  Each tuple slot is the corresponding child's `R`. For the fluent
- *  equivalent (no typed return), use `parallel(...)`. */
+ *  equivalent (no typed return), use `parallel(...)` from
+ *  `@minim/signals`. */
 export function all<Cs extends readonly Yieldable[]>(
   ...children: Cs
 ): Animator<{ [K in keyof Cs]: PayloadOf<Cs[K]> }> {
@@ -74,77 +63,6 @@ export function all<Cs extends readonly Yieldable[]>(
     };
   });
 }
-
-// ── Chained factories ──────────────────────────────────────────────
-
-/** Wait `n` seconds. Chainable: `sleep(0.5).then(work)`. */
-export function sleep(n: Val<number>): Chained {
-  return chain(sleepGen(n));
-}
-
-/** Run children in parallel; complete when all finish. The fluent
- *  form of `yield [a, b, ...]` — composable with `.until`, `.for`,
- *  etc. For typed-tuple return values, use `all(...)` and `yield*`. */
-export function parallel(...children: Yieldable[]): Chained {
-  return chain(
-    (function* (): Animator {
-      yield children;
-    })(),
-  );
-}
-
-/** Run children in sequence. Numbers sleep; arrays run in parallel;
- *  generators run via `yield*`; bare suspend-fns are yielded directly. */
-export function sequence(...children: Yieldable[]): Chained {
-  return chain(
-    (function* (): Animator {
-      for (const c of children) yield* yieldableGen(c);
-    })(),
-  );
-}
-
-/** Repeat `factory()` forever — fresh generator each iteration.
- *  Replaces `Anim.loop()` as a value-returning factory: pass to
- *  `anim.run(loop(...))` at top level, or compose with `.until`,
- *  `.for`, etc. inside generators. */
-export function loop(factory: () => Animator): Chained {
-  return chain(
-    (function* (): Animator {
-      while (true) yield* factory();
-    })(),
-  );
-}
-
-/** Wait for `cond` to fire, then run `work`. Read: "after cond, work".
- *  Signal cond → wait for truthy; Animator cond → wait for completion.
- *  Replaces `startOn(trigger, work)` with English argument order. */
-export function after(
-  cond: ReadonlyCell<unknown> | Animator,
-  work: Yieldable,
-): Chained {
-  return chain(
-    (function* (): Animator {
-      if (isGen(cond)) yield cond;
-      else yield* untilTrue(cond);
-      yield* yieldableGen(work);
-    })(),
-  );
-}
-
-/** Run `fn` every `sec` seconds. Side-effect only — for awaited work
- *  per cycle, use `loop(() => sleep(sec).then(work()))`. */
-export function every(sec: Val<number>, fn: () => void): Chained {
-  return chain(
-    (function* (): Animator {
-      while (true) {
-        yield* sleepGen(sec);
-        fn();
-      }
-    })(),
-  );
-}
-
-// ── Sequential utilities (kept raw — doesn't earn fluent surface) ─
 
 /** Pick one of `children` uniformly at random and run it. Construction
  *  must be side-effect free — unselected generators are never advanced

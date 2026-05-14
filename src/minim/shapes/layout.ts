@@ -1,7 +1,7 @@
 // Spatial composition primitives. Reference points for growth:
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
-import { toSig, type Val } from "@minim/core";
+import { toSig, type Val } from "@minim/signals";
 import {
   transformBox,
   Box,

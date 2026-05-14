@@ -14,7 +14,6 @@ import {
   cell,
   circle,
   clockSignal,
-  counter,
   easeOut,
   fadeIn,
   fadeOut,
@@ -114,7 +113,8 @@ export class MdTraceDemo extends Diagram {
     // ── Reactive derivations ───────────────────────────────────────
     // Bumps on each spawn/complete/cancel. Sparse, event-paced — tree
     // and layout only recompute when structure changes.
-    const version = counter(trace.onChange);
+    const version = cell(0);
+    trace.onChange(() => { version.value++; });
 
     const tree = cell.derived(() => {
       version.value;

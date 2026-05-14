@@ -1,4 +1,4 @@
-import { toSig, type Val } from "@minim/core";
+import { toSig, type Val } from "@minim/signals";
 import { type ReadonlyCell } from "@minim/signals";
 import { Shape, type Segment } from "./shape";
 import {

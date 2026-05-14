@@ -1,4 +1,4 @@
-import { toSig, type Val } from "@minim/core";
+import { toSig, type Val } from "@minim/signals";
 import { Shape, type ShapeOpts } from "./shape";
 import { box, type Pointlike, type V } from "@minim/values";
 import { tokens } from "./tokens";

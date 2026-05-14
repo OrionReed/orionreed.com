@@ -1,7 +1,7 @@
 // Connectors. Uses `shape.boundary` so analytic edges work without
 // per-kind dispatch.
 
-import { toSig, type Val } from "@minim/core";
+import { toSig, type Val } from "@minim/signals";
 import { cell } from "@minim/signals";
 import { Shape, SVG_NS } from "./shape";
 import { type Pointlike } from "@minim/values";

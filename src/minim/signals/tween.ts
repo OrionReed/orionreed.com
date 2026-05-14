@@ -32,11 +32,11 @@ import {
   type Animator,
   type Yieldable,
 } from "../core/anim";
-import { toSig, type Val } from "../core/arg";
-import { race, untilTrue, untilFalse } from "../core/suspensions";
 import { drive } from "../core/drive";
 import { easeOut } from "../core/easings";
 import { signal, type Signal, type ReadonlySignal } from "./signal";
+import { toSig, type Val } from "./arg";
+import { race, untilTrue, untilFalse } from "./suspensions";
 
 // ── Chained<R> — fluent generator surface ─────────────────────────
 

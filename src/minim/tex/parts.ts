@@ -20,7 +20,7 @@
 // The Boxlike surface on `Part` is installed at module load via
 // `delegate(Part.prototype, "box", Box)` — see `values/delegate.ts`.
 
-import { toSig, type Val } from "@minim/core";
+import { toSig, type Val } from "@minim/signals";
 import {
   effect,
   cell,

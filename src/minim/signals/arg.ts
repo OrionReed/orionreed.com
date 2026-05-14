@@ -1,15 +1,11 @@
 // "Value or signal" interop. `Val<T>` unifies literal, reactive cell,
-// and thunk; `toSig` normalizes to a signal cell that can always be
-// read via `.value`. The signal layer lives in `@minim/signals` — this
-// module is the one-way bridge from "any source of T" to "a cell of T".
+// and thunk; `toSig` normalizes to a `ReadonlyCell<T>` that can always
+// be read via `.value`. Lives in `signals/` rather than `core/` because
+// it pulls the signal engine to wrap literals and thunks; the core
+// generator runtime stays signal-free.
 
-import {
-  signal,
-  computed,
-  Signal,
-  type Cell,
-  type ReadonlyCell,
-} from "@minim/signals";
+import { signal, computed, Signal } from "./signal";
+import { type Cell, type ReadonlyCell } from "./cell";
 
 /** Literal, reactive cell, or `() => T` thunk (sugar for `computed`).
  *  Since `Cell<T>` is structurally a `ReadonlyCell<T>`, both writable
@@ -52,6 +48,6 @@ export function when<T>(
   });
 }
 
-// `Cell<T>` is re-exported here so `@minim/core` consumers that only
-// pull this for type info don't have to dual-import from `@minim/signals`.
+// `Cell<T>` is re-exported so `Val<T>` consumers can grab it from the
+// same module.
 export type { Cell };

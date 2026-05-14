@@ -8,11 +8,10 @@
 //
 // Sync-resolve (calling `wake` before returning) is fine.
 //
-// Naming: every `until*` adapter waits for *one* X to happen and then
-// proceeds. Combinators read as temporal prepositions over work:
-// `endOn(trigger, work)` ends work on trigger; `startOn(trigger, work)`
-// starts work on trigger. The pair makes the temporal switch-point
-// explicit.
+// Lives in `signals/` because `untilChange / untilTrue / untilFalse`
+// use `effect()` to react to cell changes. The signal-free adapters
+// (`untilEvent`, `untilPromise`, `race`) ride along — splitting them
+// out earned no clarity and added inter-folder imports.
 
 import {
   asGen,
@@ -21,8 +20,9 @@ import {
   type Animator,
   type SpawnFn,
   type Yieldable,
-} from "./anim";
-import { effect, type ReadonlyCell } from "@minim/signals";
+} from "../core/anim";
+import { effect } from "./signal";
+import { type ReadonlyCell } from "./cell";
 
 // ── Adapters ────────────────────────────────────────────────────────
 

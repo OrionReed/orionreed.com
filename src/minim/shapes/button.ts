@@ -1,7 +1,7 @@
 // Labelled, clickable region — group + tinted-rect + label, with
 // hover/click handlers wired.
 
-import { toSig, type Val } from "@minim/core";
+import { toSig, type Val } from "@minim/signals";
 import { cell, derive, type Cell } from "@minim/signals";
 import { type AnyShape } from "./shape";
 import { Anchor, vec, type Pointlike } from "@minim/values";

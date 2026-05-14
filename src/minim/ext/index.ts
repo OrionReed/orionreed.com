@@ -4,7 +4,7 @@
 //   timeline   declarative clip composition over a clock
 //   events     named-event bus with `until(name)` suspension
 //   waapi      Web Animations / scroll / view-timeline bridges
-//   marker     named reactive identity (cross-prose / cross-diagram)
+//   snapshot   capture-and-restore for cells (loop bodies, cancels)
 
 export {
   timeline,
@@ -15,6 +15,8 @@ export {
 } from "./timeline";
 
 export { EventBus } from "./events";
+
+export { snapshot } from "./snapshot";
 
 export {
   untilAnimation,

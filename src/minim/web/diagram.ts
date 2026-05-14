@@ -2,7 +2,8 @@
 // the graph; signals drive updates. Owns the SVG element, the
 // viewBox (`view`/`fit`), and the host CSS sizing (`--d-w`/`--d-h`).
 
-import { Anim, toSig, type Val } from "@minim/core";
+import { Anim } from "@minim/core";
+import { toSig, type Val } from "@minim/signals";
 import { effect } from "@minim/signals";
 import {
   Shape,

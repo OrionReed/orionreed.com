@@ -5,7 +5,7 @@
 import { struct, type WriteOf, type ReadOf } from "@minim/signals";
 import { Num } from "./num";
 import type { Matrix2D } from "./matrix";
-import { toSig, type Val } from "@minim/core";
+import { toSig, type Val } from "@minim/signals";
 import {
   computed,
   effect,

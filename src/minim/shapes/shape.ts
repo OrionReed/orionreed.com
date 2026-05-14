@@ -1,9 +1,5 @@
-import {
-  suspend,
-  toSig,
-  type Val,
-  type Animator,
-} from "@minim/core";
+import { suspend, type Animator } from "@minim/core";
+import { toSig, type Val } from "@minim/signals";
 import {
   cell,
   effect,

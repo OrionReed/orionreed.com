@@ -19,7 +19,6 @@ import {
   type Pointlike,
   cell,
   circle,
-  counter,
   derive,
   label,
   linear,
@@ -57,16 +56,11 @@ export class MdCircuit extends Diagram {
     /** Counting sink — live count + scale-pulse on each fire. */
     const sink = (x: number, y: number, lbl: string, ev: string) => {
       const c = circle(vec(x, y), 18);
+      const tick = cell(0);
+      bus.on(ev, () => { tick.value++; });
       s(
         c,
-        label(
-          c.center,
-          derive(counter((cb) => bus.on(ev, () => cb())), String),
-          {
-            size: 13,
-            bold: true,
-          },
-        ),
+        label(c.center, derive(tick, String), { size: 13, bold: true }),
         label(c.center.up(30), lbl, { size: 11, opacity: 0.7 }),
       );
       anim.run(loop(function* () {
