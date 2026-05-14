@@ -51,7 +51,7 @@ export type SpawnFn = <R>(
 // directly when a generator yields a function; the `suspend()` factory
 // yields one inside a one-shot generator so `yield* suspend(...)`
 // returns the typed payload.
-type SuspendFn<T = void> = (
+export type SuspendFn<T = void> = (
   wake: [T] extends [void] ? () => void : (value: T) => void,
   spawn: SpawnFn,
 ) => () => void;
@@ -85,6 +85,15 @@ export type Yieldable =
  *  evaluates to; defaults to `void`. */
 export type Animator<R = void> = Generator<Yieldable, R, number>;
 
+/** Project a `Yieldable` to "what does `yield* this` evaluate to".
+ *  Generators carry it in `R`; typed `SuspendFn<R>` (from `suspend<R>()`)
+ *  carries it via the wake signature; everything else (number, array,
+ *  bare suspend-fn, `undefined`) is `void`. */
+export type PayloadOf<Y> =
+  Y extends Animator<infer R> ? R
+  : Y extends SuspendFn<infer R> ? R
+  : void;
+
 /** Lifecycle observer hooks — single optional slot per kind. The
  *  trace/assert layer sets these to record spawns/completes/cancels;
  *  the runtime cares only about whether each hook is undefined.
@@ -102,17 +111,17 @@ export interface AnimObserver {
 
 // Active state — single int field. Cheap to store, cheap to dispatch
 // on, and the lifecycle is self-describing.
-const READY = 0;        // ran a frame yield (`yield;`); advance on next step
-const SLEEPING = 1;     // yielded N>0; wake when own clock ≥ wakeAt
-const SUBSCRIBED = 2;   // yielded a suspend-fn; wake via dispose callback
-const WAITING = 3;      // yielded gen/array; resume when child(ren) complete
-const DEAD = 4;         // cancelled or completed; skipped by step
+const READY = 0; // ran a frame yield (`yield;`); advance on next step
+const SLEEPING = 1; // yielded N>0; wake when own clock ≥ wakeAt
+const SUBSCRIBED = 2; // yielded a suspend-fn; wake via dispose callback
+const WAITING = 3; // yielded gen/array; resume when child(ren) complete
+const DEAD = 4; // cancelled or completed; skipped by step
 
 /** One running generator. Class (not interface) so the shape is
  *  monomorphic — JIT-friendly hot path. */
 class Active {
   state: number = READY;
-  wakeAt: number = 0;                          // in own scaled clock
+  wakeAt: number = 0; // in own scaled clock
   dispose: (() => void) | undefined = undefined;
   // Parent's "child finished" callback. Called with the gen's
   // `return`-value on natural completion; not called on cancel.
@@ -130,7 +139,7 @@ class Active {
   // any child reads it.
   scale: number | (() => number) = 1;
   effectiveScale: number = 1;
-  clock: number = 0;                           // per-Active scaled time
+  clock: number = 0; // per-Active scaled time
 
   constructor(
     readonly gen: Animator<any>,
@@ -351,7 +360,7 @@ export class Anim {
       const d = a.dispose;
       a.state = READY;
       a.dispose = undefined;
-      if (d) d();          // undefined during sync-resolve (dispose not yet stored)
+      if (d) d(); // undefined during sync-resolve (dispose not yet stored)
       this.advance(a, value);
     };
     const spawn: SpawnFn = <R>(
@@ -376,7 +385,7 @@ export class Anim {
     const dispose = impl(wake, spawn);
     setupActive = false;
     if (resumed || a.state === DEAD) {
-      dispose();           // sync-resolve: dispose was never stored on `a`
+      dispose(); // sync-resolve: dispose was never stored on `a`
     } else {
       a.state = SUBSCRIBED;
       a.dispose = dispose;
@@ -404,7 +413,7 @@ export class Anim {
       }
     };
     for (let j = 0; j < children.length; j++) {
-      if (a.state === DEAD) return;     // re-entrant cancel during spawn
+      if (a.state === DEAD) return; // re-entrant cancel during spawn
       this.spawn(asGen(children[j]), a, onChild);
     }
   }

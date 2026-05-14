@@ -1,8 +1,8 @@
-// Signal-free generator combinators that don't need the fluent
-// `Chained` surface. The Chained-returning factories (`sequence`,
-// `parallel`, `loop`, `sleep`, `after`, `every`) live in
-// `signals/compose.ts` because `Chained` itself is signal-coupled
-// (`.until(sig) / .while(sig) / .at(Val<number>)`).
+// Signal-free generator combinators that don't fit the fluent `Play`
+// surface — they keep typed-tuple returns or pick branches at random,
+// neither of which `play(...)` expresses. The fluent factories
+// (`play`, `loop`, `every`) live in `signals/` because `Play` itself
+// is signal-coupled (`.until(sig) / .while(sig) / .at(Val<number>)`).
 //
 //   const [a, b] = yield* all(workA(), workB());   // typed-tuple return
 //   yield* rand(branch0, branch1, branch2);        // pick one uniformly
@@ -14,12 +14,8 @@ import {
   type Animator,
   type Yieldable,
   type SpawnFn,
+  type PayloadOf,
 } from "./anim";
-
-/** Payload type of a `Yieldable`. Generators carry it in their `R`;
- *  everything else (numbers, arrays, raw suspend-fns, `undefined`)
- *  is `void`. */
-type PayloadOf<Y> = Y extends Generator<any, infer R, any> ? R : void;
 
 /** Run children in parallel; complete when all finish; resume with a
  *  typed tuple of their return values:
@@ -27,7 +23,7 @@ type PayloadOf<Y> = Y extends Generator<any, infer R, any> ? R : void;
  *      const [a, b] = yield* all(workA(), workB());
  *
  *  Each tuple slot is the corresponding child's `R`. For the fluent
- *  equivalent (no typed return), use `parallel(...)` from
+ *  equivalent (no typed return), use `play([...])` from
  *  `@minim/signals`. */
 export function all<Cs extends readonly Yieldable[]>(
   ...children: Cs
@@ -49,10 +45,10 @@ export function all<Cs extends readonly Yieldable[]>(
       const c = children[i];
       if (typeof c === "function" && !isGen(c)) {
         disposers.push(
-          (c as (
-            wake: (v: unknown) => void,
-            spawn: SpawnFn,
-          ) => () => void)(handle(i), spawn),
+          (c as (wake: (v: unknown) => void, spawn: SpawnFn) => () => void)(
+            handle(i),
+            spawn,
+          ),
         );
       } else {
         disposers.push(spawn(asGen(c), handle(i)));

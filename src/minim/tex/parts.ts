@@ -5,7 +5,7 @@
 //
 // Identity for morph is by *marker reference*, not name. `PartMarker`
 // composes a `Marker` (from `core/marker`) for the active/bind/register
-// surface. All members of a group chain (`with`, `expand`) share the root's
+// surface. All members of a group play(`with`, `expand`) share the root's
 // inner Marker, so any binding — prose hover, shape hover, animation — sets
 // `active` for all of them simultaneously.
 //

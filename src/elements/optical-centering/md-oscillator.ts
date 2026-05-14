@@ -18,7 +18,7 @@ import {
   Mount,
   Shape,
   cell,
-  chain,
+  play,
   circle,
   derive,
   drive,
@@ -27,8 +27,7 @@ import {
   oscillate,
   vec,
   tokens,
-  untilFalse,
-  untilTrue,
+  not,
 } from "../../minim";
 import { parts, tex, bindParts } from "../../minim/tex";
 
@@ -162,9 +161,9 @@ export class MdOscillator extends Diagram {
     tickPath.opacity.value = 0;
 
     this.anim.run(loop(function* () {
-      yield* untilTrue(omega.active);
+      yield* play(omega.active);
       yield* tickPath.opacity.to(0.65, 0.25);
-      yield* untilFalse(omega.active);
+      yield* play(not(omega.active));
       yield* tickPath.opacity.to(0, 0.3);
     }));
 
@@ -177,9 +176,9 @@ export class MdOscillator extends Diagram {
     envPath.opacity.value = 0;
 
     this.anim.run(loop(function* () {
-      yield* untilTrue(gamma.active);
+      yield* play(gamma.active);
       yield* envPath.opacity.to(0.85, 0.3);                         // fade in
-      yield* chain(oscillate(envPath.opacity, 0.1, 1.6)).while(gamma.active);
+      yield* play(oscillate(envPath.opacity, 0.1, 1.6)).while(gamma.active);
       yield* envPath.opacity.to(0, 0.4);                             // fade out
     }));
 

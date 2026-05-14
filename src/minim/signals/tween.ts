@@ -1,24 +1,29 @@
 // Fluent generator composition + the tween engine.
 //
-// `Chained<R>` is the surface (`.until / .while / .for / .then / .at`)
-// over any `Animator`. Library factories (`sequence` / `parallel` /
-// `loop` / `sleep` / `after` / `every` in `core/compose.ts`) return
-// `Chained` directly; for raw generators, opt in with `chain(g)`.
+// `Play<R>` is the fluent surface (`.until / .while / .then / .at`)
+// over any `Animator`. `play(p)` is the single entry point — it
+// accepts a `Playable<R>`, which is "anything yieldable plus reactive
+// cells (interpreted as wait-until-truthy)":
 //
-//   spring(w, rest).until(dragging)
-//     "spring the width to rest, until dragging"
+//   play(spring(width, rest)).until(dragging)
+//     "play the spring until dragging fires"
 //
-//   parallel(a, b, c).for(2.0)
-//     "run a, b, c in parallel, for 2 seconds"
+//   play([a, b, c]).until(stop)
+//     "play a, b, c in parallel, until stop"
 //
-//   sleep(0.5).then(fadeIn(shape, 0.3))
-//     "sleep half a second, then fade in"
+//   play(0.5).then(fadeIn(shape, 0.3))
+//     "play 0.5 seconds, then fade in"
 //
-// `Tween<T>` is a `Chained<void>` with `.to(target, dur, ease?)`
-// continuation segments. Lives in the same file as `Chained` because
-// the two are tightly bound: `TweenImpl` extends `ChainedImpl`, and
-// `Tween<T>` extends `Chained<void>` while preserving its narrowed
-// type through `.until / .while / .for / .at`.
+//   play(ready).then(work)
+//     "after ready becomes truthy, play work"
+//
+//   play(a, b, c)  // variadic = sequence
+//     "play a, then b, then c"
+//
+// `Tween<T>` extends `Play<void>` with `.to(target, dur, ease?)`
+// continuation. They share this file because `TweenImpl` extends
+// `PlayImpl`, and `Tween<T>` preserves its narrowed type through
+// `.until / .while / .at`.
 //
 // Tweening is signal-typed: the engine writes `sig.value` each frame
 // via a `lerp(start, target, t)` registered on the cell's prototype
@@ -34,41 +39,60 @@ import {
 } from "../core/anim";
 import { drive } from "../core/drive";
 import { easeOut } from "../core/easings";
-import { signal, type Signal, type ReadonlySignal } from "./signal";
+import { signal, Signal } from "./signal";
 import { toSig, type Val } from "./arg";
+import { type ReadonlyCell } from "./cell";
 import { race, untilTrue, untilFalse } from "./suspensions";
 
-// ── Chained<R> — fluent generator surface ─────────────────────────
+// ── Playable<R>: the input vocabulary for play() and methods ──────
+//
+// `Yieldable` lives in `core/anim.ts` and stays signal-free — it's the
+// runtime's yield contract. `Playable` is the signals-layer widening
+// that adds `ReadonlyCell<unknown>` (interpreted as "wait until truthy").
+// `play()` normalizes Cell inputs via `untilTrue(...)` before handing
+// the result to the runtime.
+
+/** Anything `play()` and the Play methods accept: a Yieldable (number
+ *  sleep, array parallel, Animator, bare suspend-fn, `undefined`)
+ *  OR a reactive cell (interpreted as wait-until-truthy). */
+export type Playable<R = void> = Yieldable | Animator<R> | ReadonlyCell<unknown>;
+
+/** Normalize a `Playable` to an `Animator`. Cells become a
+ *  `untilTrue(...)` wait; everything else delegates to `yieldableGen`
+ *  which already handles the runtime's Yieldable variants. */
+function playableGen<R>(p: Playable<R>): Animator<R> {
+  if (p instanceof Signal) {
+    return untilTrue(p as ReadonlyCell<unknown>) as unknown as Animator<R>;
+  }
+  return yieldableGen(p as Yieldable) as Animator<R>;
+}
+
+// ── Play<R> — fluent generator surface ────────────────────────────
 
 /** A fluent Animator. Implements the iterator protocol identically to
  *  a plain generator, so `yield*` and the runtime treat it the same;
- *  the added methods compose by re-wrapping into a fresh Chained
- *  around a `race(...)` or sequencing generator. */
-export interface Chained<R = void> extends Animator<R> {
-  /** End this when `cond` fires. Signal → ends when truthy; Animator
-   *  → ends when completes. Read: "this, until cond". */
-  until(cond: ReadonlySignal<unknown> | Animator): Chained<R>;
+ *  the added methods compose by re-wrapping into a fresh Play around
+ *  a `race(...)` or sequencing generator. */
+export interface Play<R = void> extends Animator<R> {
+  /** End this when `p` fires. Cell → ends when truthy; Animator → ends
+   *  when it completes; number → ends after that many seconds; array
+   *  → ends when all in the array complete. Read: "this, until p". */
+  until(p: Playable): Play<R>;
 
   /** Continue while `sig` is truthy; end when it goes falsy.
    *  Read: "this, while sig". */
-  while(sig: ReadonlySignal<unknown>): Chained<R>;
+  while(sig: ReadonlyCell<unknown>): Play<R>;
 
-  /** Run for at most a duration (`Val<number>`) or until `other`
-   *  completes (Animator). */
-  for(n: Val<number> | Animator): Chained<R>;
-
-  /** Sequence: run this, then `next`. Accepts any Yieldable —
-   *  generator, number (sleep), array (parallel), raw suspend-fn,
-   *  or another Chained. Return-type widens to `unknown`. */
-  then(next: Yieldable): Chained<unknown>;
+  /** Sequence: run this, then `next`. Accepts any Playable. Return-
+   *  type widens to `unknown`. */
+  then(next: Playable): Play<unknown>;
 
   /** Scope time for this generator and all its children. `scale` may
-   *  be a number, signal, or thunk. Reactive scales are read each
-   *  frame. */
-  at(scale: Val<number>): Chained<R>;
+   *  be a number, cell, or thunk. Reactive scales are read each frame. */
+  at(scale: Val<number>): Play<R>;
 }
 
-export class ChainedImpl<R = void> implements Chained<R> {
+class PlayImpl<R = void> implements Play<R> {
   constructor(protected _g: Animator<R>) {}
 
   // ── Iterator protocol — delegate to the wrapped generator so the
@@ -86,44 +110,41 @@ export class ChainedImpl<R = void> implements Chained<R> {
     return this;
   }
 
-  /** Wrap a transformed generator in the same Chained subclass.
-   *  ChainedImpl wraps as plain Chained; subclasses (Tween) override
-   *  to preserve their type and carry per-subclass state forward. */
-  protected _rewrap(g: Animator<R>): Chained<R> {
-    return chain(g);
+  /** Wrap a transformed generator in the same Play subclass. PlayImpl
+   *  wraps as plain Play; subclasses (Tween) override to preserve
+   *  their type and carry per-subclass state forward. */
+  protected _rewrap(g: Animator<R>): Play<R> {
+    return play(g) as Play<R>;
   }
 
-  until(cond: ReadonlySignal<unknown> | Animator): Chained<R> {
-    const trigger = isGen(cond) ? cond : untilTrue(cond);
+  until(p: Playable): Play<R> {
+    const trigger = playableGen(p);
     return this._rewrap(race(this._g, trigger) as Animator<R>);
   }
 
-  while(sig: ReadonlySignal<unknown>): Chained<R> {
+  while(sig: ReadonlyCell<unknown>): Play<R> {
     return this._rewrap(race(this._g, untilFalse(sig)) as Animator<R>);
   }
 
-  for(n: Val<number> | Animator): Chained<R> {
-    const bound = isGen(n) ? n : sleepGen(n);
-    return this._rewrap(race(this._g, bound) as Animator<R>);
-  }
-
-  then(next: Yieldable): Chained<unknown> {
+  then(next: Playable): Play<unknown> {
     const g = this._g;
-    // `.then` always exits to plain Chained<unknown> — subclasses
-    // (Tween) inherit this directly; no override needed.
-    return chain((function* (): Animator<unknown> {
+    // `.then` always exits to plain Play<unknown> — subclasses (Tween)
+    // inherit this directly; no override needed.
+    return play((function* (): Animator<unknown> {
       yield* g;
-      yield* yieldableGen(next);
+      yield* playableGen(next);
       return undefined;
     })());
   }
 
-  at(scale: Val<number>): Chained<R> {
+  at(scale: Val<number>): Play<R> {
     return this._rewrap(scaledChild(this._g, scale));
   }
 }
 
 // ── Internal helpers (also used by compose.ts) ─────────────────────
+// Exported from the file so the sibling `compose.ts` can import them,
+// but NOT re-exported from `signals/index.ts` — not public API.
 
 /** Wrap a gen so its child Active runs at `scale`. */
 export function scaledChild<R>(
@@ -153,8 +174,8 @@ export function* sleepGen(n: Val<number>): Animator {
   if (v > 0) yield v;
 }
 
-/** Yield-dispatch helper used by `.then`, `sequence`, and `after`.
- *  Handles every `Yieldable` shape uniformly. */
+/** Yield-dispatch helper used by `.then`, `play(...)` variadic, and
+ *  `compose.ts:after`. Handles every `Yieldable` shape uniformly. */
 export function* yieldableGen(y: Yieldable): Animator<unknown> {
   if (y === undefined) return undefined;
   if (typeof y === "number") {
@@ -173,22 +194,38 @@ export function* yieldableGen(y: Yieldable): Animator<unknown> {
   return yield* y as Animator<unknown>;
 }
 
-/** Lift any Animator into the fluent vocabulary. Library factories in
- *  `core/compose.ts` (and `Tween` below) already return Chained; for
- *  raw generators (`orbit`, `spring`, `drive`, …), wrap with `chain()`
- *  to opt in. */
-export function chain<R>(g: Animator<R>): Chained<R> {
-  if (g instanceof ChainedImpl) return g as unknown as Chained<R>;
-  return new ChainedImpl(g);
+// ── play() — the one entry point ──────────────────────────────────
+
+/** Lift any `Playable` into the fluent vocabulary.
+ *
+ *      play(spring(w, rest)).until(dragging)
+ *      play(0.5).then(work)              // sleep, then work
+ *      play([a, b, c]).until(stop)       // parallel, until stop
+ *      play(ready).then(work)            // wait truthy, then work
+ *      play(a, b, c)                     // variadic = sequence
+ *
+ *  Single-arg form preserves the typed return `R`. Variadic form
+ *  widens to `Play<unknown>` (the same way `.then` does). */
+export function play<R>(p: Playable<R>): Play<R>;
+export function play(...ps: Playable[]): Play<unknown>;
+export function play(...ps: Playable[]): Play<unknown> {
+  if (ps.length === 1) {
+    const p = ps[0];
+    if (p instanceof PlayImpl) return p as unknown as Play<unknown>;
+    return new PlayImpl(playableGen(p));
+  }
+  return new PlayImpl(
+    (function* (): Animator<unknown> {
+      for (const p of ps) yield* playableGen(p);
+      return undefined;
+    })(),
+  );
 }
 
-// ── Tween<T> — Chained<void> + .to() continuation ──────────────────
+// ── Tween<T> — Play<void> + .to() continuation ─────────────────────
 
 export type Easing = (t: number) => number;
 const defaultEase: Easing = easeOut;
-
-/** Tween duration: number, signal, or thunk (read each frame). */
-export type Duration = Val<number>;
 
 /** Per-value-type lerp; the struct framework registers via the
  *  `[LERP]` prototype slot. */
@@ -198,20 +235,19 @@ export type Lerp<T> = (a: T, b: T, t: number) => T;
  *  @internal — exported for the struct framework only. */
 export const LERP = Symbol("minim.lerp");
 
-/** A tween — `Chained<void>` plus `.to(...)` continuation; preserves
- *  itself through `.until / .while / .for / .at`. `.then(y)` returns
- *  plain `Chained<unknown>` (leaves the tween world). */
-export interface Tween<T> extends Chained<void> {
+/** A tween — `Play<void>` plus `.to(...)` continuation; preserves
+ *  itself through `.until / .while / .at`. `.then(y)` returns plain
+ *  `Play<unknown>` (leaves the tween world). */
+export interface Tween<T> extends Play<void> {
   /** Append another segment that runs after this one. */
-  to(target: T, dur: Duration, ease?: Easing): Tween<T>;
-  // Tween-preserving overrides of the Chained methods.
-  until(cond: ReadonlySignal<unknown> | Animator): Tween<T>;
-  while(sig: ReadonlySignal<unknown>): Tween<T>;
-  for(n: Val<number> | Animator): Tween<T>;
+  to(target: T, dur: Val<number>, ease?: Easing): Tween<T>;
+  // Tween-preserving overrides of the Play methods.
+  until(p: Playable): Tween<T>;
+  while(sig: ReadonlyCell<unknown>): Tween<T>;
   at(scale: Val<number>): Tween<T>;
 }
 
-class TweenImpl<T> extends ChainedImpl<void> implements Tween<T> {
+class TweenImpl<T> extends PlayImpl<void> implements Tween<T> {
   // `_sig` + `_lerp` are carried so `.to(...)` can append fresh
   // segments off the same signal with the same lerp.
   constructor(
@@ -222,14 +258,13 @@ class TweenImpl<T> extends ChainedImpl<void> implements Tween<T> {
     super(g);
   }
 
-  /** Re-wrap into a Tween (instead of plain Chained) so all the
-   *  inherited `until / while / for / at` methods preserve `Tween<T>`
-   *  automatically. */
+  /** Re-wrap into a Tween (instead of plain Play) so all the inherited
+   *  `until / while / at` methods preserve `Tween<T>` automatically. */
   protected override _rewrap(g: Animator<void>): Tween<T> {
     return new TweenImpl(this._sig, this._lerp, g);
   }
 
-  to(target: T, dur: Duration, ease?: Easing): Tween<T> {
+  to(target: T, dur: Val<number>, ease?: Easing): Tween<T> {
     const prior = this._g;
     const sig = this._sig;
     const lerp = this._lerp;
@@ -241,24 +276,21 @@ class TweenImpl<T> extends ChainedImpl<void> implements Tween<T> {
     return new TweenImpl(sig, lerp, next);
   }
 
-  // ── until/while/for/at narrow their return type to `Tween<T>`. The
-  //    runtime is fully inherited from ChainedImpl — these are
-  //    type-level passthroughs. TS can't infer the narrowed return
-  //    purely from the `_rewrap` override; we declare the signature
-  //    here and rely on the runtime guarantee. ──────────────────────
-  override until(cond: ReadonlySignal<unknown> | Animator): Tween<T> {
-    return super.until(cond) as Tween<T>;
+  // ── until/while/at narrow their return type to `Tween<T>`. The
+  //    runtime is fully inherited from PlayImpl — these are type-level
+  //    passthroughs. TS can't infer the narrowed return purely from
+  //    the `_rewrap` override; we declare the signature here and rely
+  //    on the runtime guarantee. ───────────────────────────────────
+  override until(p: Playable): Tween<T> {
+    return super.until(p) as Tween<T>;
   }
-  override while(sig: ReadonlySignal<unknown>): Tween<T> {
+  override while(sig: ReadonlyCell<unknown>): Tween<T> {
     return super.while(sig) as Tween<T>;
-  }
-  override for(n: Val<number> | Animator): Tween<T> {
-    return super.for(n) as Tween<T>;
   }
   override at(scale: Val<number>): Tween<T> {
     return super.at(scale) as Tween<T>;
   }
-  // `.then(...)` exits to plain Chained<unknown> (inherited).
+  // `.then(...)` exits to plain Play<unknown> (inherited).
 }
 
 // ── The engine: one tween-step on top of `drive` ───────────────────
@@ -266,7 +298,7 @@ class TweenImpl<T> extends ChainedImpl<void> implements Tween<T> {
 function tweenStep<T>(
   sig: Signal<T>,
   target: T,
-  dur: Duration,
+  dur: Val<number>,
   ease: Easing,
   lerp: Lerp<T>,
 ): Animator {
@@ -292,7 +324,7 @@ function tweenStep<T>(
 function makeTween<T>(
   sig: Signal<T>,
   target: T,
-  dur: Duration,
+  dur: Val<number>,
   ease: Easing,
   lerp: Lerp<T>,
 ): Tween<T> {
@@ -307,7 +339,7 @@ function makeTween<T>(
 export function tween<T>(
   sig: Signal<T>,
   target: T,
-  dur: Duration,
+  dur: Val<number>,
   ease?: Easing,
   lerp?: Lerp<T>,
 ): Tween<T> {

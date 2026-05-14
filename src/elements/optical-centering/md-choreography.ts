@@ -7,7 +7,7 @@ import {
   Anchor,
   assemble,
   centroid,
-  chain,
+  play,
   circle,
   easeInOut,
   label,
@@ -15,7 +15,6 @@ import {
   num,
   orbit,
   cell,
-  sequence,
   vec,
   snapshot,
   splay,
@@ -122,12 +121,12 @@ export class MdChoreography extends Diagram {
       // spawn/dispose pair. The orbit gets cancelled the moment
       // rampSequence finishes, then the next phase continues.
       phase.value = "orbit (eased)";
-      const rampSequence = sequence(
+      const rampSequence = play(
         orbitRate.to(1, 0.5, easeInOut),
         1.4,
         orbitRate.to(0, 0.5, easeInOut),
       );
-      yield* chain(orbit(orbitCentre, shapes, { period: 2.5, rate: orbitRate }))
+      yield* play(orbit(orbitCentre, shapes, { period: 2.5, rate: orbitRate }))
         .until(rampSequence);
       yield 0.2;
 

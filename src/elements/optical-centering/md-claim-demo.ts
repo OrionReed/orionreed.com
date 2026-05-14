@@ -4,7 +4,7 @@
 //
 //   - value claims (`.stays`, `.becomes`, `.never`)
 //   - a process-duration claim — `claim(intro.duration).ends.below(...)`
-//   - layered composition via Claim's chain (`.and().labelled()`)
+//   - layered composition via Claim's play(`.and().labelled()`)
 //   - a persistent process — same `intro` reused across loop
 //     iterations, with `intro.duration` re-zeroed each `.run()`
 //

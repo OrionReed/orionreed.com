@@ -13,7 +13,7 @@ import {
   attract,
   centroid,
   circle,
-  chain,
+  play,
   derive,
   drift,
   cell,
@@ -597,7 +597,7 @@ const TESTS: TestCase[] = [
       const stop = cell(false);
       let phase = 0;
       a.run(function* () {
-        yield* chain(
+        yield* play(
           (function* (): Animator {
             phase = 1;
             while (true) yield;

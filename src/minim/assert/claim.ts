@@ -35,7 +35,13 @@ import {
   Signal,
   type ReadonlyCell,
 } from "@minim/signals";
-import { vec, type V, type Box, type Boxlike, type Pointlike } from "@minim/values";
+import {
+  vec,
+  type V,
+  type Box,
+  type Boxlike,
+  type Pointlike,
+} from "@minim/values";
 import { circle } from "@minim/shapes";
 
 // ── Types ────────────────────────────────────────────────────────────

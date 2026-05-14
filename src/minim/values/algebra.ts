@@ -4,11 +4,11 @@
 // read it to find the right ops for the value type.
 //
 // There is NO scalar-number fallback — pass a `Num.signal` (which has
-// the algebra installed) or any other struct cell. Plain `Signal<T>`
-// without an `[ALGEBRA]` slot throws.
+// the algebra installed) or any other struct cell. Plain cells without
+// an `[ALGEBRA]` slot throw.
 
 import { ALGEBRA } from "@minim/signals/struct";
-import type { Signal } from "@minim/signals";
+import type { Cell, ReadonlyCell } from "@minim/signals";
 
 /** The minimal vector-space algebra: enough for tween, spring,
  *  oscillate, drift, attract, mean, sum, lerp, etc. */
@@ -18,9 +18,9 @@ export interface VectorSpace<T> {
   scale: (a: T, k: number) => T;
 }
 
-/** Resolve the algebra for a signal via the `[ALGEBRA]` slot.
- *  Throws if the signal isn't a struct cell with algebra registered. */
-export function algebraOf<T>(sig: Signal<T>): VectorSpace<T> {
+/** Resolve the algebra for a cell via the `[ALGEBRA]` slot.
+ *  Throws if the cell isn't a struct cell with algebra registered. */
+export function algebraOf<T>(sig: Cell<T> | ReadonlyCell<T>): VectorSpace<T> {
   const a = (sig as any)[ALGEBRA] as VectorSpace<T> | undefined;
   if (!a) {
     throw new Error(

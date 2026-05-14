@@ -1,7 +1,6 @@
-// Suspension adapters and combinators. Adapters bridge an external
-// source (signal change, DOM event, promise) to the suspend protocol
-// — `yield* untilX(...)` resumes with the typed payload. Combinators
-// orchestrate child Yieldables (race, endOn, startOn).
+// Suspension adapters + race. Adapters bridge an external source
+// (cell change, DOM event, promise) to the suspend protocol —
+// `yield* untilX(...)` resumes with the typed payload.
 //
 //     const evt = yield* untilEvent(el, "click");  // Event
 //     const v   = yield* untilChange(sig);         // T (sig's new value)
@@ -20,6 +19,7 @@ import {
   type Animator,
   type SpawnFn,
   type Yieldable,
+  type PayloadOf,
 } from "../core/anim";
 import { effect } from "./signal";
 import { type ReadonlyCell } from "./cell";
@@ -102,12 +102,6 @@ export function untilPromise<T>(p: Promise<T>): Animator<T> {
 
 // ── Combinators ─────────────────────────────────────────────────────
 
-/** Extract the payload type from a `Yieldable`. Generators carry their
- *  return value in `R`; everything else (numbers, arrays, raw suspend-fn
- *  lambdas, `undefined`) is `void`. For a typed payload from a custom
- *  impl, wrap it in `suspend<T>()` so it returns `Animator<T>`. */
-type PayloadOf<Y> = Y extends Generator<any, infer R, any> ? R : void;
-
 /** First-completion race; resume with the winning child's payload.
  *  Children may be any `Yieldable` (generator, raw suspend-fn, number
  *  sleep, array parallel, `undefined` one frame). First to finish
@@ -159,29 +153,3 @@ export function race<Cs extends readonly Yieldable[]>(
   });
 }
 
-/** Run `work` until `trigger` fires (cancel-on-trigger). The next
- *  `yield*` after `yield endOn(...)` is the graceful-exit sequel.
- *  Read: "this work ends on the trigger".
- *
- *      yield endOn(untilChange(stop), oscillate(y, 20, 1));
- *      yield* fadeOut(s, 0.4);                              // sequel */
-export function endOn<W extends Yieldable, T extends Yieldable>(
-  trigger: T,
-  work: W,
-): Animator<PayloadOf<W> | PayloadOf<T>> {
-  return race(work, trigger) as Animator<PayloadOf<W> | PayloadOf<T>>;
-}
-
-/** Wait for `trigger`, then run `work`. The temporal complement of
- *  `endOn`. Read: "this work starts on the trigger". */
-export function* startOn<W extends Yieldable, T extends Yieldable>(
-  trigger: T,
-  work: W,
-): Animator<PayloadOf<W>> {
-  yield trigger;
-  if (isGen(work)) {
-    return (yield* work) as PayloadOf<W>;
-  }
-  yield work;
-  return undefined as PayloadOf<W>;
-}

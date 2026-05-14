@@ -25,10 +25,9 @@ import {
   loop,
   num,
   path,
-  parallel,
+  play,
   vec,
   rect,
-  sleep,
   toSig,
   tokens,
 } from "../../minim";
@@ -146,7 +145,7 @@ export class MdCircuit extends Diagram {
 
     /** Send one pulse along `w`; the wire's opacity flashes in lockstep.
      *  Composes the dot's distance tween and the wire's opacity flash
-     *  as a `parallel(...)` — one generator, one lifetime. */
+     *  as a `play([...])` — one generator, one lifetime. */
     const pulse = (w: Path, onArrive?: () => void) => {
       const total = w.length.value;
       const sec = total / SPEED;
@@ -154,10 +153,10 @@ export class MdCircuit extends Diagram {
       const dot = circle(w.atDistance(dist), 5, { fill: true });
       s(dot);
       anim.run(
-        parallel(
+        play([
           dist.to(total, sec, linear),
           w.opacity.to(0.75, sec * 0.3).to(0.25, sec * 0.7),
-        ).then(
+        ]).then(
           (function* () {
             dot.dispose();
             onArrive?.();
@@ -171,7 +170,7 @@ export class MdCircuit extends Diagram {
     /** Fire `ev` at random intervals. */
     const ticker = (ev: string, minGap: number, maxGap: number) =>
       anim.run(
-        sleep(R.float(0.3, minGap)).then(
+        play(R.float(0.3, minGap)).then(
           loop(function* () {
             bus.emit(ev);
             yield R.float(minGap, maxGap);

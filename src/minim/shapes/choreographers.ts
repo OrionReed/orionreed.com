@@ -4,7 +4,7 @@
 // `centroid(...shapes).to(...)` instead.
 
 import { drive, type Animator } from "@minim/core";
-import { sleep, toSig, type Val } from "@minim/signals";
+import { play, toSig, type Val } from "@minim/signals";
 import { type Easing } from "@minim/signals";
 import { isPoint, type V, type Pointlike } from "@minim/values";
 import type { Writable } from "./shape";
@@ -29,7 +29,7 @@ export function* stagger<S>(
   items: readonly S[],
   fn: (item: S, i: number) => Animator,
 ): Animator {
-  yield items.map((item, i) => sleep(i * stride).then(fn(item, i)));
+  yield items.map((item, i) => play(i * stride).then(fn(item, i)));
 }
 
 /** Distribute shapes radially around `center` at `radius`, evenly

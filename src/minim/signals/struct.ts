@@ -28,13 +28,8 @@ import {
   type NestedMap,
   type NestedInput,
 } from "./cell";
-import {
-  LERP,
-  tween,
-  type Easing,
-  type Duration,
-  type Tween,
-} from "./tween";
+import { LERP, tween, type Easing, type Tween } from "./tween";
+import { type Val } from "./arg";
 
 // Re-export the type-level surface so files that import from
 // `./struct` (the historical home of `Reactive<...>` and friends)
@@ -570,7 +565,7 @@ function finalize<T>(
     methods.to = function (
       this: Signal<T>,
       target: T,
-      dur: Duration,
+      dur: Val<number>,
       ease?: Easing,
     ): Tween<T> {
       return tween(this, target, dur, ease, lerpFn);
@@ -750,7 +745,7 @@ function defineNestedCell<T, M extends object>(
     Object.defineProperties(proto, lazies(getters));
   };
 
-  // ── RW proto: full SoA. Chained off Signal.prototype so existing
+  // ── RW proto: full SoA. Play off Signal.prototype so existing
   //    `instanceof Signal` checks pass and subscribe/derive/etc work.
   //    The instance has no underlying value — `.value` get/set
   //    composes/decomposes per-field signals.

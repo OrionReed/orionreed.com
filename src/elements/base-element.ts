@@ -33,7 +33,7 @@ export class BaseElement extends HTMLElement {
     const className = constructor.name;
 
     if (!BaseElement.styleSheets.has(className)) {
-      // Walk the prototype chain (base first, subclass last) so subclass
+      // Walk the prototype play(base first, subclass last) so subclass
       // styles override base styles via the cascade.
       const chain: string[] = [];
       let proto: any = constructor;

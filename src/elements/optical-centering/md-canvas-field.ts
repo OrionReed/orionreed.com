@@ -11,7 +11,7 @@
 //     time scaling, same cancellation, just no SVG attached.
 //   - `drive((dt, t) => ...)` is the per-frame substrate. The
 //     integration + render path is one closure, no manual yield loop.
-//   - `every(sec, fn)` is a Chained factory that loops the side
+//   - `every(sec, fn)` is a Play factory that loops the side
 //     effect at a fixed interval on the same clock.
 //   - `num(...)` / `cell(...)` carry reactive knobs (phase index,
 //     hue base, particle size). `Num.signal.to(...)` works here
@@ -303,11 +303,11 @@ export class MdCanvasField extends HTMLElement {
   //
   //   - `drive((dt, t) => ...)` — the per-frame substrate. Integrate
   //     + render, no manual `while (true) { yield }` bookkeeping.
-  //   - `loop(function* () { ... })` — Chained factory, run as a
+  //   - `loop(function* () { ... })` — Play factory, run as a
   //     top-level child via `anim.run(loop(...))`. Phase cycler with
   //     `yield DWELL` / `yield* hueBase.to(...)`, same vocabulary as
   //     the SVG demos.
-  //   - `every(0.5, fn)` — Chained factory, fixed-interval fps emit
+  //   - `every(0.5, fn)` — Play factory, fixed-interval fps emit
   //     on the same clock everything else uses.
   //
   // All three share `anim.clockMs`, and any `.at(scale)` scope

@@ -1,5 +1,5 @@
 // Frames-in-Shapes design question: should `worldFrame` be a reactive
-// chain (each shape's worldFrame derived via parent's worldFrame) or
+// play(each shape's worldFrame derived via parent's worldFrame) or
 // computed on-demand (manual parent-walk only when read)?
 //
 // The reactive chain is API-cleaner — `point.in(worldFrame)` works
@@ -21,7 +21,7 @@ import { bench, group } from "mitata";
 const N = 1000;
 const STEP: Matrix2D = { a: 1, b: 0, c: 0, d: 1, e: 1, f: 0 };
 
-// ── Strategy A: reactive chain (proposed Frames-in-Shapes)
+// ── Strategy A: reactive play(proposed Frames-in-Shapes)
 //   Each level: world[i] = world[i-1].multiply(local[i])
 function buildReactiveChain(n: number) {
   const local = Array.from({ length: n }, () => signal<Matrix2D>({ ...STEP }));
@@ -57,7 +57,7 @@ group("tree fan-out: write root, READ ALL N world frames", () => {
   const B = buildWalkChain(N);
 
   let i = 0;
-  bench(`reactive chain  (n=${N})`, () => {
+  bench(`reactive play(n=${N})`, () => {
     A.local[0].value = { ...STEP, e: ++i };
     let s = 0;
     for (let k = 0; k < N; k++) s += A.world[k].value.e | 0;
@@ -76,7 +76,7 @@ group("tree fan-out: write root, READ ONE LEAF", () => {
   const B = buildWalkChain(N);
 
   let i = 0;
-  bench(`reactive chain  (n=${N})`, () => {
+  bench(`reactive play(n=${N})`, () => {
     A.local[0].value = { ...STEP, e: ++i };
     return A.world[N - 1].value.e | 0;
   }).baseline(true);
@@ -91,7 +91,7 @@ group("tree fan-out: write root, NO READ (drag-only pattern)", () => {
   const B = buildWalkChain(N);
 
   let i = 0;
-  bench(`reactive chain  (n=${N})`, () => {
+  bench(`reactive play(n=${N})`, () => {
     A.local[0].value = { ...STEP, e: ++i };
   }).baseline(true);
   bench(`on-demand walk  (n=${N})`, () => {
@@ -121,7 +121,7 @@ group(`tree fan-out: chain w/ subscribers on EVERY level (n=${N})`, () => {
   // we don't subscribe, we just call worldOf(i) for all i after each write.
 
   let i = 0;
-  bench(`reactive chain  (effects fire on write)`, () => {
+  bench(`reactive play(effects fire on write)`, () => {
     A.local[0].value = { ...STEP, e: ++i };
   }).baseline(true);
   bench(`on-demand walk  (worldOf each child after write)`, () => {
@@ -146,7 +146,7 @@ group(
       world.push(world[k - 1].multiply(local[k]));
     }
     let i = 0;
-    bench(`Matrix2D.multiply chain (n=${N})`, () => {
+    bench(`Matrix2D.multiply play(n=${N})`, () => {
       local[0].value = { ...STEP, e: ++i };
       let s = 0;
       for (let k = 0; k < N; k++) s += world[k].value.e | 0;

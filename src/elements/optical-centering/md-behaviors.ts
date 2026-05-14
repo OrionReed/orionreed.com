@@ -8,9 +8,9 @@
 //
 // All three are driven by the same minim vocabulary:
 //
-//   parallel(drift(x, v), oscillate(y, A, f), bounceFlip(x, v, lo, hi))
+//   play([drift(x, v), oscillate(y, A, f), bounceFlip(x, v, lo, hi)])
 //   loop(function* () { ... pause cycle ... })
-//   chain(spring(s, target, opts)) — fluent over raw behaviors
+//   play(spring(s, target, opts)) — fluent over raw behaviors
 
 import {
   Diagram,
@@ -26,7 +26,7 @@ import {
   loop,
   num,
   oscillate,
-  parallel,
+  play,
   vec,
   spring,
   type Val,
@@ -88,11 +88,11 @@ export class MdBehaviors extends Diagram {
     const ay = num(laneY(0));
     const av = num(180);
     this.anim.run(
-      parallel(
+      play([
         drift(ax, av),
         oscillate(ay, 32, 0.4),
         bounceFlip(ax, av, 40, wall),
-      ),
+      ]),
     );
     s(circle(vec(ax, ay), 9, { fill: "#1a1a1a" }));
     trail(ax, ay, "#5b8def", (sig, target) => {
@@ -107,22 +107,22 @@ export class MdBehaviors extends Diagram {
     const bv = num(-150);
     const byAmp = num(32);
     this.anim.run(
-      parallel(
+      play([
         drift(bx, bv),
         oscillate(by, byAmp, 0.7),
         bounceFlip(bx, bv, 40, wall),
-      ),
+      ]),
     );
     // Pause: both axes stop together, hold, then snap back to motion.
-    // Pure sequence — `parallel(...).then(...)` reads as "do these
+    // Pure sequence — `play([...]).then(...)` reads as "do these
     // together, then continue".
     this.anim.run(
       loop(function* () {
         yield 1.5;
-        yield* parallel(
+        yield* play([
           bv.to(0, 0.4, easeInOut),
           byAmp.to(0, 0.4, easeInOut),
-        );
+        ]);
         yield 0.7;
         byAmp.value = 32;
         bv.value = bx.value < cx ? 155 : -155;
@@ -133,7 +133,7 @@ export class MdBehaviors extends Diagram {
       this.anim.run(spring(sig, target, { stiffness: 200, damping: 15 }));
     });
 
-    // ── Lane 2: fixed-link chain (teal) ─────────────────────────────
+    // ── Lane 2: fixed-link play(teal) ─────────────────────────────
     // Head wanders on a Lissajous path; each frame the chain is solved
     // forward: link[i] is placed exactly LINK_LEN from link[i-1].
     const lc = { x: cx, y: laneY(2) };
@@ -176,7 +176,7 @@ export class MdBehaviors extends Diagram {
     s(
       label(
         view.bottom.up(12),
-        "attract (smooth) · spring (elastic, pauses) · chain (rigid-link)",
+        "attract (smooth) · spring (elastic, pauses) · play(rigid-link)",
         { size: 10, align: Anchor.Center, opacity: 0.55 },
       ),
     );

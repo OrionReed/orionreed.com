@@ -5,7 +5,7 @@
 //          as the sequel in the same generator.
 //
 //   STOP — hard cancel: flip `hardStop`; the loop's outer scope
-//          (`parallel(lifecycles).until(hardStop)`) tears the entire
+//          (`play([lifecycles]).until(hardStop)`) tears the entire
 //          subtree down, mid-fade if necessary.
 //
 // No `disposers[]` array, no `anim.run()` from button callbacks. Both
@@ -18,14 +18,13 @@ import {
   Anchor,
   button,
   cell,
-  chain,
+  play,
   circle,
   fadeOut,
   label,
   loop,
   num,
   oscillate,
-  parallel,
   vec,
   type Animator,
   type Cell,
@@ -49,7 +48,7 @@ function* lifecycle(
   freq: number,
   stop: Cell<boolean>,
 ): Animator {
-  yield* chain(oscillate(y, amp, freq)).until(stop);
+  yield* play(oscillate(y, amp, freq)).until(stop);
   yield* fadeOut(shape, 0.4);
 }
 
@@ -127,11 +126,11 @@ export class MdCancel extends Diagram {
         hardStop.value = false;
         status.value = "running";
 
-        yield* parallel(
+        yield* play([
           ...slots.map((slot, i) =>
             lifecycle(slot.shape, slot.y, 14, 0.45 + i * 0.04, stop),
           ),
-        ).until(hardStop);
+        ]).until(hardStop);
 
         yield hardStop.peek() ? 1.6 : 1.4;
       }),

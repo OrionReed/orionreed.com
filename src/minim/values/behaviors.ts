@@ -2,15 +2,14 @@
 // `drift`, `attract`. Each is a generator that runs `step(dt, t)` once
 // per frame on the `drive` primitive. Generic over any value type whose
 // registered struct has a vector-space algebra (add/sub/scale via the
-// `[ALGEBRA]` slot); raw `Signal<number>` falls back to scalar.
+// `[ALGEBRA]` slot); plain cells without the slot throw at runtime.
 //
 // Reactive args (`target`, `velocity`, `amp`, `freq`, `k`) are read each
 // frame, so a moving target makes the follower chase, a reactive `rate`
 // can ease the simulation, etc.
 
 import { drive, type Animator } from "@minim/core";
-import { toSig, type Val } from "@minim/signals";
-import { type Signal } from "@minim/signals";
+import { toSig, type Cell, type Val } from "@minim/signals";
 import { algebraOf } from "./algebra";
 
 /** Norm for `precision` auto-stop: `|x|` for scalar, hypot for Vec, else 0. */
@@ -35,7 +34,7 @@ export interface SpringOpts {
 
 /** Critically-damped spring chase. `target` may be reactive. */
 export function spring<T = number>(
-  sig: Signal<T>,
+  sig: Cell<T>,
   target: Val<T>,
   opts: SpringOpts = {},
 ): Animator {
@@ -62,7 +61,7 @@ export function spring<T = number>(
 
 /** Sinusoidal oscillation around the signal's initial value. Never returns. */
 export function oscillate<T = number>(
-  sig: Signal<T>,
+  sig: Cell<T>,
   amp: Val<T>,
   freq: Val<number>,
 ): Animator {
@@ -78,7 +77,7 @@ export function oscillate<T = number>(
 /** Exponential pull toward target with rate `k` per second
  *  (k=1 closes ~63% of distance per second). No overshoot. */
 export function attract<T = number>(
-  sig: Signal<T>,
+  sig: Cell<T>,
   target: Val<T>,
   k: Val<number> = 1,
 ): Animator {
@@ -94,7 +93,7 @@ export function attract<T = number>(
 
 /** Constant-velocity advance. `velocity` may be reactive (flip live to reverse). */
 export function drift<T = number>(
-  sig: Signal<T>,
+  sig: Cell<T>,
   velocity: Val<T>,
 ): Animator {
   const { add, scale } = algebraOf(sig);

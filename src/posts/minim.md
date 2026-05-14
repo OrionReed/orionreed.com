@@ -39,16 +39,17 @@ const next = yield * untilChange(signal);
 
 No polling, no per-frame work while suspended.
 
-Generators compose through a fluent vocabulary. `chain(g)` lifts any generator; library factories like `sequence`, `parallel`, `loop`, `sleep` already return one. Methods read subject-first — the running process comes first, the temporal qualifier follows:
+Generators compose through one entry point. `play(p)` lifts any `Playable` — a number (sleep), an array (parallel), a generator, a bare suspend-fn, or a reactive cell (wait truthy) — into the fluent surface. `loop(factory)` is its iterating cousin. Methods read subject-first — the running process comes first, the temporal qualifier follows:
 
 ```ts
 spring(w, rest).until(dragging);             // spring, until dragging
-parallel(lane0, lane1, lane2).until(hardStop); // parallel lanes, until hardStop
-sleep(0.5).then(fadeIn(shape, 0.3));         // sleep, then fade in
+play([lane0, lane1, lane2]).until(hardStop); // parallel lanes, until hardStop
+play(0.5).then(fadeIn(shape, 0.3));          // sleep, then fade in
+play(ready).then(work);                      // wait truthy, then work
 orbit(centre, shapes).at(playback);          // orbit at playback rate
 ```
 
-`.until / .while / .for / .then / .at` are sugar — each composes with existing primitives (`race`, `untilTrue`, `untilFalse`, sleep). The runtime never sees the fluent surface; it sees the same `Yieldable` shapes it always has.
+`.until / .while / .then / .at` are sugar — each composes with existing primitives (`race`, internal until-truthy, sleep). The runtime never sees the fluent surface; it sees the same `Yieldable` shapes it always has.
 
 <md-cancel></md-cancel>
 
@@ -56,11 +57,11 @@ Time scoping is per-generator. `.at(scale)` accepts a number, a signal, or a thu
 
 ```ts
 const playback = num(1);
-yield* parallel(intro, hold, outro).at(playback); // whole scene rate-controlled
+yield* play([intro, hold, outro]).at(playback);   // whole scene rate-controlled
 playback.value = 0;                               // pause everything
 ```
 
-`Anim` itself has no Signal dependency: the runtime exposes time as `anim.clockMs` (a plain number) and `anim.onClock(cb)` (a callback subscription). For reactive access, the signals layer ships `clockSignal(anim)` — a tiny adapter that mirrors the number into a `ReadonlySignal<number>`.
+`Anim` itself has no signal dependency: the runtime exposes time as `anim.clockMs` (a plain number) and `anim.onClock(cb)` (a callback subscription). For reactive access, the signals layer ships `clockSignal(anim)` — a tiny adapter that mirrors the number into a `ReadonlyCell<number>`.
 
 <md-orbits></md-orbits>
 
@@ -85,11 +86,11 @@ yield* x.to(100, 0.5, easeInOut);    // x is `Num.signal` (has `.to`)
 yield* tween(plainSig, 100, 0.5);    // escape hatch for plain Signal
 ```
 
-`.to(...)` returns a `Tween<T> extends Chained<void>` — it composes with the rest of the fluent vocabulary, and chains another segment via `.to`:
+`.to(...)` returns a `Tween<T> extends Play<void>` — it composes with the rest of the fluent vocabulary, and chains another segment via `.to`:
 
 ```ts
 yield* x.to(100, 0.5).to(0, 0.5).until(stop);
-//          ^ tween     ^ tween   ^ Chained method — stops whichever
+//          ^ tween     ^ tween   ^ Play method — stops whichever
 //                                  segment is currently running
 ```
 
@@ -149,7 +150,7 @@ s(debug.center(c));
 
 They update with everything else, because they're just signals deriving from signals.
 
-Generators can suspend on signals too. `untilChange`, `untilTrue`, `untilFalse` are short wrappers around `effect` — animations wait on reactive state without polling:
+Generators can suspend on signals too. `untilChange(sig)` waits for the next change and resumes with the new value; `play(sig)` waits until truthy (`play(work).until(not(sig))` for the falsy case). All wrap `effect` — animations wait on reactive state without polling:
 
 ```ts
 yield * untilChange(stopFlag);
@@ -188,7 +189,7 @@ Rate-controlled playback is just `.at(scale)` on whatever generator owns the wor
 
 ```ts
 const playback = num(1);
-yield* parallel(intro, hold, outro).at(playback);
+yield* play([intro, hold, outro]).at(playback);
 yield* playback.to(0, 0.5, easeOut);         // ease into pause
 slider.oninput = () => (playback.value = +slider.value);
 ```
@@ -227,7 +228,7 @@ The <md-marker sym="minim:m">mass</md-marker>, <md-marker sym="minim:v">velocity
 
 <md-tex-prose></md-tex-prose>
 
-Because `marker.active` is a `ReadonlyCell<boolean>`, the full suspension vocabulary applies to it directly. `yield* untilTrue(marker.active)` pauses a generator until any rendering is activated — from prose, from the diagram, or from an animation holding the marker. The demo below uses this: hover <md-marker sym="osc:gamma">damping</md-marker> to reveal the decay envelope, or hover <md-marker sym="osc:A">amplitude</md-marker> to show the bounds. Hover <md-marker sym="osc:omega">frequency</md-marker> to see the period tick marks scrolling across the trace.
+Because `marker.active` is a `ReadonlyCell<boolean>`, the full suspension vocabulary applies to it directly. `yield* play(marker.active)` pauses a generator until any rendering is activated — from prose, from the diagram, or from an animation holding the marker. The demo below uses this: hover <md-marker sym="osc:gamma">damping</md-marker> to reveal the decay envelope, or hover <md-marker sym="osc:A">amplitude</md-marker> to show the bounds. Hover <md-marker sym="osc:omega">frequency</md-marker> to see the period tick marks scrolling across the trace.
 
 <md-oscillator></md-oscillator>
 

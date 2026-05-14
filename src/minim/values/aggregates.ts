@@ -1,24 +1,23 @@
-// Aggregates over N reactive signals — writable views where reads
-// merge inputs and writes distribute the change.
+// Aggregates over N reactive cells — writable views where reads merge
+// inputs and writes distribute the change.
 //
 // Generic over any value type with a registered struct algebra (Vec,
-// Box, Color, Matrix2D, Transform) AND raw `Signal<number>`. When the
-// sources carry a struct identity (`[STRUCT]` slot), the result wraps
-// in that struct's lens flavor so the rich surface (axes, ops, getters)
-// rides along — `mean(...vecs)` is a Vec, `mean(...nums)` is a number
-// signal.
+// Box, Color, Matrix2D, Transform, Num). When the sources carry a
+// struct identity (`[STRUCT]` slot), the result wraps in that struct's
+// lens flavor so the rich surface (axes, ops, getters) rides along —
+// `mean(...vecs)` is a Vec, `mean(...nums)` is a Num cell.
 
-import { lens, type Signal, type StructType } from "@minim/signals";
+import { lens, type Cell, type StructType } from "@minim/signals";
 import { STRUCT } from "@minim/signals/struct";
 import { algebraOf } from "./algebra";
 
 /** N-to-1 lens combinator. Reads merge inputs; writes distribute. The
  *  engine behind `mean` and friends. */
 function combine<T>(
-  parts: readonly Signal<T>[],
+  parts: readonly Cell<T>[],
   merge: (vs: readonly T[]) => T,
   distribute: (next: T, prev: readonly T[]) => readonly T[],
-): Signal<T> {
+): Cell<T> {
   return lens(
     () => merge(parts.map((p) => p.value)),
     (next) => {
@@ -31,13 +30,13 @@ function combine<T>(
   );
 }
 
-/** Mean of N signals as a writable signal. Reads return the arithmetic
+/** Mean of N cells as a writable cell. Reads return the arithmetic
  *  mean; writes apply the delta to every input (group moves rigidly so
  *  the mean lands at the new value). Auto-wraps in the source's struct
  *  lens flavor when sources carry one. */
-export function mean<T>(...sigs: Signal<T>[]): Signal<T> {
+export function mean<T>(...sigs: Cell<T>[]): Cell<T> {
   if (sigs.length === 0) {
-    throw new Error("mean: requires at least one signal");
+    throw new Error("mean: requires at least one cell");
   }
   const { add, sub, scale } = algebraOf(sigs[0]);
   const inner = combine<T>(

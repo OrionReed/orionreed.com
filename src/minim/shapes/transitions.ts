@@ -12,8 +12,8 @@ import {
 import {
   tween,
   type Cell,
-  type Duration,
   type Easing,
+  type Val,
 } from "@minim/signals";
 import { type V, Dir } from "@minim/values";
 import type { Writable } from "./shape";
@@ -27,7 +27,7 @@ export function* from<T extends Lerpable>(
   sig: Cell<T>,
   start: T,
   end: T,
-  sec: Duration = 0.3,
+  sec: Val<number> = 0.3,
   ease: Easing = easeOut,
 ): Animator {
   sig.value = start;
@@ -39,7 +39,7 @@ export function* from<T extends Lerpable>(
 /** Fade opacity 0 → 1. */
 export function* fadeIn(
   s: Writable<"opacity">,
-  sec: Duration = 0.3,
+  sec: Val<number> = 0.3,
   ease: Easing = easeOut,
 ): Animator {
   yield* from(s.opacity, 0, 1, sec, ease);
@@ -48,7 +48,7 @@ export function* fadeIn(
 /** Fade opacity 1 → 0. */
 export function* fadeOut(
   s: Writable<"opacity">,
-  sec: Duration = 0.3,
+  sec: Val<number> = 0.3,
   ease: Easing = easeIn,
 ): Animator {
   yield* s.opacity.to(0, sec, ease);

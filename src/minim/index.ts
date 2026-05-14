@@ -15,45 +15,39 @@
 //   `minim/ext`     timeline, events, waapi, marker (opt-in extras)
 
 // ── Reactive signals (signal engine + cells + Val/toSig + suspensions
-//    + chain/tween + Chained-returning factories + struct) ───────────
+//    + tween/play + struct) ───────────────────────────────────────
 export {
   cell,
   derive,
+  not,
   effect,
   batch,
   untracked,
   tween,
   lerpable,
-  chain,
+  play,
   struct,
   toSig,
   when,
   untilChange,
-  untilTrue,
-  untilFalse,
   untilEvent,
   untilPromise,
   race,
-  sequence,
-  parallel,
   loop,
-  sleep,
-  after,
   every,
   type Cell,
   type ReadonlyCell,
   type Val,
+  type Play,
+  type Playable,
   type Tween,
   type Easing,
-  type Duration,
   type Lerp,
-  type Chained,
 } from "./signals";
 
 // ── Generator runtime + signal-free combinators ─────────────────────
 export {
   Anim,
-  asGen,
   isGen,
   suspend,
   all,

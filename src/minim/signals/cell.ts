@@ -26,7 +26,8 @@ import {
   type ReadonlySignal,
   type SignalOptions,
 } from "./signal";
-import type { Duration, Easing, Tween, Lerp } from "./tween";
+import type { Easing, Tween, Lerp } from "./tween";
+import type { Val } from "./arg";
 
 // ── Writability flavor flag (internal) ────────────────────────────
 
@@ -111,7 +112,7 @@ type Axes<T, O, W extends RW, N> = keyof O extends never
  *  a registered `lerp` op (via the `[LERP]` prototype slot). */
 type Tweenable<T, O, W extends RW> = W extends "rw"
   ? O extends { lerp: (a: any, b: any, t: number) => T }
-    ? { to(target: T, dur: Duration, ease?: Easing): Tween<T> }
+    ? { to(target: T, dur: Val<number>, ease?: Easing): Tween<T> }
     : {}
   : {};
 
@@ -130,25 +131,30 @@ type Tweenable<T, O, W extends RW> = W extends "rw"
  *
  *  Only `T` appears in user-facing positions; the rest are filled by
  *  the struct framework via inference. */
-export type Cell<T, O = {}, X = {}, G = {}, M = {}, N = {}> =
-  & Signal<T>
-  & Axes<T, O, "rw", N>
-  & Methods<T, O, X, G, N>
-  & GetterProps<G>
-  & Tweenable<T, O, "rw">
-  & M;
+export type Cell<T, O = {}, X = {}, G = {}, M = {}, N = {}> = Signal<T> &
+  Axes<T, O, "rw", N> &
+  Methods<T, O, X, G, N> &
+  GetterProps<G> &
+  Tweenable<T, O, "rw"> &
+  M;
 
 /** A read-only reactive cell carrying a `T`. Same surface as `Cell<T>`
  *  but without the writable setter and without writable axes / free-
  *  form methods (`_M` is accepted for parameter compatibility with
  *  `Cell<...>` / `WriteOf` / `ReadOf` but is not added to the type;
  *  free-form methods are writable-only by design). */
-export type ReadonlyCell<T, O = {}, X = {}, G = {}, _M = {}, N = {}> =
-  & ReadonlySignal<T>
-  & Axes<T, O, "ro", N>
-  & Methods<T, O, X, G, N>
-  & GetterProps<G>
-  & Tweenable<T, O, "ro">;
+export type ReadonlyCell<
+  T,
+  O = {},
+  X = {},
+  G = {},
+  _M = {},
+  N = {},
+> = ReadonlySignal<T> &
+  Axes<T, O, "ro", N> &
+  Methods<T, O, X, G, N> &
+  GetterProps<G> &
+  Tweenable<T, O, "ro">;
 
 // ── Nested-struct types ────────────────────────────────────────────
 
@@ -213,28 +219,16 @@ export interface StructType<T, O = {}, X = {}, G = {}, M = {}, N = {}> {
 /** Project a `StructType` to its writable cell type. Used to spell
  *  short aliases (`Point = WriteOf<typeof Vec>`) without depending on
  *  `signal()`'s ReturnType (which can widen under generic inference). */
-export type WriteOf<S> = S extends StructType<
-  infer T,
-  infer O,
-  infer X,
-  infer G,
-  infer M,
-  infer N
->
-  ? Cell<T, O, X, G, M, N>
-  : never;
+export type WriteOf<S> =
+  S extends StructType<infer T, infer O, infer X, infer G, infer M, infer N>
+    ? Cell<T, O, X, G, M, N>
+    : never;
 
 /** Project a `StructType` to its read-only cell type. */
-export type ReadOf<S> = S extends StructType<
-  infer T,
-  infer O,
-  infer X,
-  infer G,
-  any,
-  infer N
->
-  ? ReadonlyCell<T, O, X, G, {}, N>
-  : never;
+export type ReadOf<S> =
+  S extends StructType<infer T, infer O, infer X, infer G, any, infer N>
+    ? ReadonlyCell<T, O, X, G, {}, N>
+    : never;
 
 // ── Plain cell factory ────────────────────────────────────────────
 
@@ -268,11 +262,22 @@ export const cell: CellFactory = Object.assign(signal, {
  *      derive(hovered, (h) => h ? 0.08 : 0)
  *      // ≡ cell.derived(() => (hovered.value ? 0.08 : 0))
  */
+
 export function derive<T, U>(
   sig: ReadonlyCell<T>,
   fn: (v: T) => U,
 ): ReadonlyCell<U> {
   return computed(() => fn(sig.value));
+}
+
+/** Logical inverse — `true` when `sig` is falsy, `false` otherwise.
+ *  Useful with `play(work).until(not(ready))` and similar patterns
+ *  where you want to wait for a falsy transition.
+ *
+ *      play(idle).until(not(typing))   // run idle until typing starts
+ */
+export function not(sig: ReadonlyCell<unknown>): ReadonlyCell<boolean> {
+  return computed(() => !sig.value);
 }
 
 // ── Re-export Lerp for value-type files that build StructTypes ────
