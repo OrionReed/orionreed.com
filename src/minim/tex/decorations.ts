@@ -8,7 +8,7 @@
 //      const eq = s(tex`${part("a", "...")} ...`);
 //      eq.add(brace(eq.parts.a));
 
-import { computed, type ReadonlySignal } from "@minim/core";
+import { computed, type ReadonlyCell } from "@minim/core";
 import { Shape } from "@minim/shapes";
 // Plain Box constructor — imported renamed to avoid shadowing the
 // `box(part)` decoration exported below.
@@ -35,7 +35,7 @@ const applyStroke = (s: Shape, opts: DecorationOpts) => {
 
 /** A `<rect>` whose x/y/w/h and Box all derive from the same layout
  *  signal — single source of truth, one re-render per change. */
-function rectFromBox(layout: ReadonlySignal<Box>): Shape {
+function rectFromBox(layout: ReadonlyCell<Box>): Shape {
   const s = new Shape("rect", () => layout.value);
   s.attr("x", () => layout.value.x);
   s.attr("y", () => layout.value.y);
@@ -53,7 +53,7 @@ interface LineEnds {
 
 /** A `<line>` whose endpoints (and Box) derive from the same layout
  *  signal. */
-function lineFromEnds(layout: ReadonlySignal<LineEnds>): Shape {
+function lineFromEnds(layout: ReadonlyCell<LineEnds>): Shape {
   const s = new Shape("line", () => {
     const e = layout.value;
     const x = Math.min(e.x1, e.x2);

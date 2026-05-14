@@ -19,22 +19,26 @@ import {
   lens,
   signal,
   batch,
-  LERP,
-  tween,
+  type ReadonlySignal,
+} from "./signal";
+import {
   type Cell,
   type ReadonlyCell,
   type StructType,
   type NestedMap,
   type NestedInput,
-  type ReadonlySignal,
+} from "./cell";
+import {
+  LERP,
+  tween,
   type Easing,
   type Duration,
   type Tween,
-} from "@minim/core";
+} from "./tween";
 
 // Re-export the type-level surface so files that import from
 // `./struct` (the historical home of `Reactive<...>` and friends)
-// continue to work after the move to `@minim/core/cell`.
+// continue to work after the move into `signals/cell`.
 export type {
   Cell,
   ReadonlyCell,
@@ -43,7 +47,7 @@ export type {
   ReadOf,
   NestedMap,
   NestedInput,
-} from "@minim/core";
+} from "./cell";
 
 // ── Marker symbols ─────────────────────────────────────────────────
 //
@@ -680,7 +684,7 @@ function adoptField(
     if (typeof initial === "function") {
       return nested.derived(initial as () => unknown) as unknown as Signal<unknown>;
     }
-    return nested.signal(initial) as unknown as Signal<unknown>;
+    return nested.signal(initial as NestedInput<any, any>) as unknown as Signal<unknown>;
   }
   // Non-nested field
   if (initial != null && (initial as object) instanceof Signal) {

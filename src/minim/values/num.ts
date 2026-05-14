@@ -5,7 +5,7 @@
 // `cell(0)` (raw) returns a plain `Cell<number>` with no rich surface;
 // reach for `num(0)` when you want `.to`, `.derive`, ops, behaviors.
 
-import { struct, type WriteOf, type ReadOf } from "./struct";
+import { struct, type WriteOf, type ReadOf } from "@minim/signals";
 
 export const Num = struct<number>("Num", 0)
   .construct((v: number): number => v)

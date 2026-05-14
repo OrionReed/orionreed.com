@@ -26,13 +26,13 @@
 // Everything reduces to bool signals. There's nothing else to learn.
 
 import {
-  signal,
+  cell,
   computed,
   derive,
   effect,
   race,
   Signal,
-  type ReadonlySignal,
+  type ReadonlyCell,
   type Animator,
 } from "@minim/core";
 import { vec, type V, type Box, type Boxlike, type Pointlike } from "@minim/values";
@@ -51,7 +51,7 @@ import { circle } from "@minim/shapes";
  *  - `dispose()` tears down the underlying `effect` subscription. Not
  *    called by `process`; persistent claims outlive their scopes by
  *    default. */
-export type Claim = ReadonlySignal<boolean> & {
+export type Claim = ReadonlyCell<boolean> & {
   readonly label?: string;
   reset(): void;
   dispose(): void;
@@ -85,16 +85,16 @@ export type Claim = ReadonlySignal<boolean> & {
 export type Process = {
   readonly label?: string;
   /** True while the wrapped work is running. */
-  readonly alive: ReadonlySignal<boolean>;
+  readonly alive: ReadonlyCell<boolean>;
   /** True once the work has started in the current run. Reset at
    *  each `.run()`. */
-  readonly started: ReadonlySignal<boolean>;
+  readonly started: ReadonlyCell<boolean>;
   /** True once the work has both started and ended in the current
    *  run. Reset at each `.run()`. */
-  readonly completed: ReadonlySignal<boolean>;
+  readonly completed: ReadonlyCell<boolean>;
   /** Elapsed alive-time in seconds, integrated from `dt`. Reset to
    *  0 at each `.run()`. */
-  readonly duration: ReadonlySignal<number>;
+  readonly duration: ReadonlyCell<number>;
   /** Build a fresh Animator for one execution. Reset-arms the attached
    *  claims and the lifecycle signals on entry. */
   run(): Animator;
@@ -108,8 +108,8 @@ export type Process = {
  *  Read `p.value` unconditionally — `held.peek() && !p.value` would
  *  short-circuit once held flips, dropping `p` from the effect's deps
  *  and breaking re-arm on the next `.reset()`. */
-function latchFalse(p: ReadonlySignal<boolean>, label?: string): Claim {
-  const held = signal(true);
+function latchFalse(p: ReadonlyCell<boolean>, label?: string): Claim {
+  const held = cell(true);
   const stop = effect(() => {
     const pv = p.value;
     if (held.peek() && !pv) held.value = false;
@@ -125,8 +125,8 @@ function latchFalse(p: ReadonlySignal<boolean>, label?: string): Claim {
  *  latches `true` until `reset`. Used for `becomes.X`.
  *
  *  Same dep-tracking rule as `latchFalse`. */
-function latchTrue(p: ReadonlySignal<boolean>, label?: string): Claim {
-  const held = signal(false);
+function latchTrue(p: ReadonlyCell<boolean>, label?: string): Claim {
+  const held = cell(false);
   const stop = effect(() => {
     const pv = p.value;
     if (!held.peek() && pv) held.value = true;
@@ -138,7 +138,7 @@ function latchTrue(p: ReadonlySignal<boolean>, label?: string): Claim {
 
 /** No latching — the claim is just `p`. Used for `ends.X`: read the
  *  predicate at scope close. Resetting is a no-op. */
-function passthrough(p: ReadonlySignal<boolean>, label?: string): Claim {
+function passthrough(p: ReadonlyCell<boolean>, label?: string): Claim {
   const wrapped = computed(() => p.value);
   return finalize(wrapped as Signal<boolean>, label, () => {}, () => {});
 }
@@ -146,7 +146,7 @@ function passthrough(p: ReadonlySignal<boolean>, label?: string): Claim {
 // ── finalize: tack metadata + chain methods onto a bool signal ───────
 
 function finalize(
-  sig: ReadonlySignal<boolean>,
+  sig: ReadonlyCell<boolean>,
   label: string | undefined,
   reset: () => void,
   dispose: () => void,
@@ -231,7 +231,7 @@ function _during(c: Claim, p: Process): Claim {
  *  before checking `decided`, so reset()-ing the decision still
  *  keeps the effect subscribed to both. */
 function _before(a: Claim, b: Claim): Claim {
-  const held = signal(true);
+  const held = cell(true);
   let aFirst = false;
   let decided = false;
   const stop = effect(() => {
@@ -268,7 +268,7 @@ function labelOf(c: Claim | Process): string {
 
 /** Start a claim sentence about a signal: `claim(sig, "α").stays.in([0, 1])`.
  *  The optional `label` shows up in failure metadata and rendered labels. */
-export function claim<T>(sig: ReadonlySignal<T>, label?: string): SignalClaim<T> {
+export function claim<T>(sig: ReadonlyCell<T>, label?: string): SignalClaim<T> {
   return new SignalClaim(sig, label);
 }
 
@@ -276,7 +276,7 @@ export function claim<T>(sig: ReadonlySignal<T>, label?: string): SignalClaim<T>
  *  predicate builder; pick the verb (`.in`, `.equal`, …) to finish. */
 export class SignalClaim<T> {
   constructor(
-    readonly sig: ReadonlySignal<T>,
+    readonly sig: ReadonlyCell<T>,
     readonly lbl?: string,
   ) {}
 
@@ -309,12 +309,12 @@ type Mood = "stays" | "becomes" | "never" | "ends";
  *  `.in([0, 1])` only compiles on `Predicates<number>`. */
 export class Predicates<T> {
   constructor(
-    readonly sig: ReadonlySignal<T>,
+    readonly sig: ReadonlyCell<T>,
     readonly mood: Mood,
     readonly lbl?: string,
   ) {}
 
-  private build(pred: ReadonlySignal<boolean>, what: string): Claim {
+  private build(pred: ReadonlyCell<boolean>, what: string): Claim {
     const label = `${this.lbl ?? "signal"} ${this.mood} ${what}`;
     switch (this.mood) {
       case "stays":   return latchFalse(pred, label);
@@ -380,12 +380,12 @@ export class Predicates<T> {
   // ── Point / Vec ────────────────────────────────────────────────────
 
   /** Predicate that the point lies inside `region`. Accepts a
-   *  `Boxlike` (Shape, view, split result…) or a `ReadonlySignal<Box>`. */
+   *  `Boxlike` (Shape, view, split result…) or a `ReadonlyCell<Box>`. */
   inside(
     this: Predicates<V>,
-    region: Boxlike | ReadonlySignal<Box>,
+    region: Boxlike | ReadonlyCell<Box>,
   ): Claim {
-    const boxSig: ReadonlySignal<Box> =
+    const boxSig: ReadonlyCell<Box> =
       "box" in region ? region.box : region;
     return this.build(
       computed(() => {
@@ -400,7 +400,7 @@ export class Predicates<T> {
   // ── Signal-vs-signal ───────────────────────────────────────────────
 
   /** Pointwise equality with another signal of the same type. */
-  equalTo(other: ReadonlySignal<T>): Claim {
+  equalTo(other: ReadonlyCell<T>): Claim {
     return this.build(
       computed(() => this.sig.value === other.value),
       `= other`,
@@ -410,7 +410,7 @@ export class Predicates<T> {
   /** Pointwise closeness (numeric). Useful for bisimulation. */
   following(
     this: Predicates<number>,
-    other: ReadonlySignal<number>,
+    other: ReadonlyCell<number>,
     tol = 1e-9,
   ): Claim {
     return this.build(
@@ -464,9 +464,9 @@ function makeProcess(
   factory: () => Animator,
   claims: readonly Claim[],
 ): Process {
-  const alive = signal(false);
-  const started = signal(false);
-  const elapsed = signal(0);
+  const alive = cell(false);
+  const started = cell(false);
+  const elapsed = cell(0);
   const completed = computed(() => started.value && !alive.value);
 
   const run = (): Animator =>
@@ -511,13 +511,13 @@ function makeProcess(
 
 // ── n-ary composition (handy for spread cases) ───────────────────────
 
-/** AND-reduction over claim signals. Returns a `ReadonlySignal<boolean>`
+/** AND-reduction over claim signals. Returns a `ReadonlyCell<boolean>`
  *  that's `true` iff every claim is currently `true`. Force-reads all
  *  values so the computed registers them all as deps (plain
  *  `Array.every` short-circuits, breaking reactivity). */
 export function held(
-  ...claims: readonly ReadonlySignal<boolean>[]
-): ReadonlySignal<boolean> {
+  ...claims: readonly ReadonlyCell<boolean>[]
+): ReadonlyCell<boolean> {
   return computed(() => {
     let all = true;
     for (const c of claims) {
@@ -529,8 +529,8 @@ export function held(
 
 /** OR-reduction. `true` iff at least one is `true`. */
 export function any(
-  ...claims: readonly ReadonlySignal<boolean>[]
-): ReadonlySignal<boolean> {
+  ...claims: readonly ReadonlyCell<boolean>[]
+): ReadonlyCell<boolean> {
   return computed(() => {
     let some = false;
     for (const c of claims) {
@@ -541,7 +541,7 @@ export function any(
 }
 
 /** Negation of a bool signal. */
-export function not(p: ReadonlySignal<boolean>): ReadonlySignal<boolean> {
+export function not(p: ReadonlyCell<boolean>): ReadonlyCell<boolean> {
   return computed(() => !p.value);
 }
 
@@ -550,8 +550,8 @@ export function not(p: ReadonlySignal<boolean>): ReadonlySignal<boolean> {
 /** Pointwise tracking — produces a `stays`-style claim that the two
  *  numeric signals agree within `tol` at every observation. */
 export function track(
-  actual: ReadonlySignal<number>,
-  expected: ReadonlySignal<number>,
+  actual: ReadonlyCell<number>,
+  expected: ReadonlyCell<number>,
   opts: { tol?: number; label?: string } = {},
 ): Claim {
   const tol = opts.tol ?? 1e-9;
@@ -568,7 +568,7 @@ export function track(
  *  green when `true`. Useful for live pass/fail readouts inside a
  *  diagram — the test renders itself. */
 export function verdictDot(
-  source: ReadonlySignal<boolean>,
+  source: ReadonlyCell<boolean>,
   opts: {
     at?: Pointlike;
     r?: number;

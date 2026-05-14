@@ -38,9 +38,10 @@ export type RW = "rw" | "ro";
 // ── Helper types for the rich Cell surface ────────────────────────
 
 /** Args for a lifted struct op: each positional arg accepts a literal,
- *  a signal, or a thunk. */
+ *  a reactive cell (writable or read-only — `Cell<T>` is structurally
+ *  a `ReadonlyCell<T>`), or a thunk. */
 type CellArgs<A extends readonly unknown[]> = {
-  [K in keyof A]: A[K] | Signal<A[K]> | ReadonlySignal<A[K]> | (() => A[K]);
+  [K in keyof A]: A[K] | ReadonlyCell<A[K]> | (() => A[K]);
 };
 
 /** Lift a struct-returning op `(self, ...args) => T` into its method
@@ -175,13 +176,12 @@ export type NestedInput<T, N = {}> = {
       >
       ?
           | NT
-          | Signal<NT>
-          | ReadonlySignal<NT>
+          | ReadonlyCell<NT>
           | (() => NT)
           | Cell<NT, NO, NX, NG, NM, NN>
           | ReadonlyCell<NT, NO, NX, NG, NM, NN>
       : never
-    : T[K] | Signal<T[K]> | ReadonlySignal<T[K]> | (() => T[K]);
+    : T[K] | ReadonlyCell<T[K]> | (() => T[K]);
 };
 
 // ── StructType: the runtime identity of a registered struct ────────
@@ -201,7 +201,11 @@ export interface StructType<T, O = {}, X = {}, G = {}, M = {}, N = {}> {
   signal(v: NestedInput<T, N>): Cell<T, O, X, G, M, N>;
   derived(fn: () => T): ReadonlyCell<T, O, X, G, M, N>;
   lens(read: () => T, write: (v: T) => void): Cell<T, O, X, G, M, N>;
-  is(v: unknown): v is Cell<T, O, X, G, M, N> | ReadonlyCell<T, O, X, G, M, N>;
+  /** Type-guard for "any flavor of this struct's cell" — `Cell<T>` is
+   *  a `ReadonlyCell<T>` structurally, so a single `ReadonlyCell` is
+   *  the safe lower bound. Use `isWritable` if you need the narrower
+   *  type. */
+  is(v: unknown): v is ReadonlyCell<T, O, X, G, M, N>;
   isWritable(v: unknown): v is Cell<T, O, X, G, M, N>;
   [Symbol.hasInstance](v: unknown): boolean;
 }

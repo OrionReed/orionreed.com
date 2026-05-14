@@ -8,7 +8,7 @@
 // without an `[ALGEBRA]` slot throws.
 
 import type { Signal } from "@minim/core";
-import { ALGEBRA } from "./struct";
+import { ALGEBRA } from "@minim/signals/struct";
 
 /** The minimal vector-space algebra: enough for tween, spring,
  *  oscillate, drift, attract, mean, sum, lerp, etc. */

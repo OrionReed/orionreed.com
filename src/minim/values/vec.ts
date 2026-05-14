@@ -2,15 +2,15 @@
 // framework. `Point`/`DerivedPoint`/`Pointlike` are flavor aliases over
 // the underlying `Reactive<V>`.
 
-import { struct, type WriteOf, type ReadOf } from "./struct";
+import { struct, type WriteOf, type ReadOf } from "@minim/signals";
 import { Num } from "./num";
 import type { Matrix2D } from "./matrix";
 import {
   computed,
   effect,
-  Signal,
   toSig,
-  type ReadonlySignal,
+  type Cell,
+  type ReadonlyCell,
   type Val,
 } from "@minim/core";
 
@@ -57,7 +57,7 @@ export const Vec = struct<V>("Vec", { x: 0, y: 0 })
   .getters({
     /** Magnitude of this Vec. Lazy + cached as own-property; reads as
      *  a signal property (`v.length`), not a method call. */
-    length(this: { value: V }): ReadonlySignal<number> {
+    length(this: { value: V }): ReadonlyCell<number> {
       const self = this;
       return computed(() => Math.hypot(self.value.x, self.value.y));
     },
@@ -66,17 +66,17 @@ export const Vec = struct<V>("Vec", { x: 0, y: 0 })
     /** Copy `target.value` into this point — convenience over
      *  `this.value = target.value`. Returns `this` for chaining.
      *
-     *  Typed with the underlying `Signal<V>` shape rather than the
-     *  `Pointlike` alias to break a type-level cycle (`Point` is
-     *  defined in terms of `Vec.signal`'s return). At runtime, any
-     *  reactive Vec works. */
-    set(this: Signal<V>, target: Signal<V> | ReadonlySignal<V>) {
+     *  Typed with the underlying `Cell<V>` shape rather than the
+     *  `Point` alias to break a type-level cycle (`Point` is defined
+     *  in terms of `Vec.signal`'s return). At runtime, any reactive
+     *  Vec works. */
+    set(this: Cell<V>, target: ReadonlyCell<V>) {
       this.value = target.value;
       return this;
     },
     /** Continuously mirror `target` into this point. Returns a
      *  disposer that stops the binding. */
-    bind(this: Signal<V>, target: Signal<V> | ReadonlySignal<V>) {
+    bind(this: Cell<V>, target: ReadonlyCell<V>) {
       const self = this;
       return effect(() => {
         self.value = target.value;
@@ -95,13 +95,24 @@ export type DerivedPoint = ReadOf<typeof Vec>;
 /** Either flavor — writable or derived. */
 export type Pointlike = Point | DerivedPoint;
 
-/** Resolves to the right reactive Vec flavor based on input arg type. */
+/** Resolves to the right reactive Vec flavor based on input arg type.
+ *
+ *  - `any`                            → `Pointlike` (broad — for erased
+ *                                       generics like `Shape<any>`)
+ *  - `Point` (writable Vec cell)      → `Point`
+ *  - `ReadonlyCell<V>` (any plain
+ *    reactive Vec) or `() => V`       → `DerivedPoint`
+ *  - literal `V` or anything else     → `Point` (fresh writable)
+ *
+ *  `Cell<V>` (writable plain) is structurally a `ReadonlyCell<V>`, so
+ *  it matches the read-only branch — the only way to get a writable
+ *  narrowed result is to pass a struct-built `Point` directly. */
 type IsAny<A> = 0 extends 1 & A ? true : false;
 export type ResolveVec<A> = IsAny<A> extends true
   ? Pointlike
   : [A] extends [Point]
     ? Point
-    : [A] extends [DerivedPoint | Signal<V> | ReadonlySignal<V> | (() => V)]
+    : [A] extends [ReadonlyCell<V> | (() => V)]
       ? DerivedPoint
       : Point;
 

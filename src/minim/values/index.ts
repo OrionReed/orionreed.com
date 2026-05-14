@@ -6,21 +6,18 @@
 //   - the plain value type alias (`V`, `Box`, `C`, `Matrix2D`, `Transform`)
 //   - rw/ro flavor aliases where useful (`Point`/`DerivedPoint`)
 //
-// Plus the struct framework itself (`struct`, `Cell`, `StructType`),
-// generic algebra (`mean`, `algebraOf`, `VectorSpace`), continuous
-// behaviors (`spring`, `oscillate`, `drift`, `attract`), `delegate` for
-// host-class boxlike forwarders, and `Anchor`/`Dir` spatial constants.
-
-// ── Struct framework (runtime) ─────────────────────────────────────
+// Generic algebra (`mean`, `algebraOf`, `VectorSpace`), continuous
+// behaviors (`spring`, `oscillate`, `drift`, `attract`), `delegate`
+// for host-class boxlike forwarders, and `Anchor`/`Dir` spatial
+// constants.
 //
-// Type-level surface (`Cell`, `ReadonlyCell`, `StructType`, …) lives
-// in `core/cell.ts` and is exported from `@minim/core`. This module
-// just provides the `struct(...)` builder runtime.
-export { struct } from "./struct";
-
-// Re-export the type-level surface so `@minim/values` consumers can
-// import everything they need from one place.
+// The struct framework (`struct(...)` builder) and its type surface
+// live in `@minim/signals` — they're THE irreducible signals
+// primitive for high-perf chainable cells. Re-exported below for
+// back-compat with pre-restructure consumers; new code should import
+// directly from `@minim/signals`.
 export {
+  struct,
   type Cell,
   type ReadonlyCell,
   type StructType,
@@ -28,7 +25,7 @@ export {
   type ReadOf,
   type NestedMap,
   type NestedInput,
-} from "@minim/core";
+} from "@minim/signals";
 
 // ── Vec ─────────────────────────────────────────────────────────
 export {
@@ -102,6 +99,6 @@ export { Anchor, Dir } from "./anchor";
 // ── Anim adapters ───────────────────────────────────────────────
 //
 // `clockSignal(anim)` projects `anim.clockMs` (a plain number) into
-// a `ReadonlySignal<number>`. Anim itself has no Signal dependency;
+// a `ReadonlyCell<number>`. Anim itself has no signal dependency;
 // users who want reactive clock access bridge through this adapter.
 export { clockSignal } from "./anim-clock";

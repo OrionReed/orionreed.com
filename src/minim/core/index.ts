@@ -1,73 +1,12 @@
-// Core: reactivity (`cell`) + time (Anim + generators) + low-level
-// utilities. The `@minim/core` barrel re-exports the public surface
-// PLUS the framework-internal preact things (`Signal` class,
-// `signal/computed/lens` factories) which downstream `@minim/values`
-// and `@minim/shapes` need for prototype machinery. Public consumers
-// reach for `cell` and the value-type cells (`num`, `vec`, …) instead.
-
-// ── Reactive primitives ────────────────────────────────────────────
+// Core: pure generator runtime + low-level utilities. Independent of
+// signals (`@minim/signals/`) and value types (`@minim/values/`).
 //
-// Public surface:
-//   cell(v)                — writable cell
-//   cell.derived(fn)       — read-only cell
-//   cell.lens(read, w)     — writable lens cell
-//   derive(sig, fn)        — single-source derived cell (sugar)
-//
-// One name pair covers all reactive values:
-//   Cell<T, O?, X?, G?, M?, N?>          — writable
-//   ReadonlyCell<T, O?, X?, G?, M?, N?>  — read-only
-//
-// Defaults (all empty) make `Cell<T>` a plain writable signal; the
-// struct framework (values/struct.ts) instantiates richer surfaces
-// via specific generic args. Value-type files (`num.ts`, `vec.ts`,
-// …) export short aliases (`N`, `Point`, …).
-export {
-  cell,
-  derive,
-  type Cell,
-  type ReadonlyCell,
-  type CellOptions,
-  type StructType,
-  type NestedMap,
-  type NestedInput,
-  type WriteOf,
-  type ReadOf,
-} from "./cell";
+// The reactive primitives (`cell`, `Cell`, `ReadonlyCell`, struct
+// framework, tween, chain) live in `@minim/signals/`. The `@minim`
+// top-level barrel re-exports everything; consumers usually import
+// from there.
 
-// Internal-but-needed: framework-prototype work uses `Signal` /
-// `Computed` classes and the `signal`/`computed`/`lens` factories.
-// Public callers should NOT import these — they're escape hatches
-// for the struct framework and other layers that build on the
-// preact primitives directly.
-export {
-  effect,
-  batch,
-  untracked,
-  signal,
-  computed,
-  lens,
-  Signal,
-  Computed,
-  type ReadonlySignal,
-} from "./signal";
-
-// ── Tween + easings + clocks ───────────────────────────────────────
-//
-// `.to(target, dur, ease?)` is installed per-struct (in `values/struct.ts`)
-// — not on Signal.prototype. Importing `tween` is safe to do early
-// (no global side-effects).
-export {
-  tween,
-  lerpable,
-  type Tween,
-  type Easing,
-  type Duration,
-  type Lerp,
-  LERP,
-} from "./tween";
-export { linear, easeIn, easeOut, easeInOut } from "./easings";
-
-// ── Anim + suspensions + composers + drive ────────────────────────
+// ── Anim runtime + generator primitives ───────────────────────────
 export {
   Anim,
   asGen,
@@ -78,6 +17,10 @@ export {
   type Yieldable,
   type SpawnFn,
 } from "./anim";
+
+// ── Suspensions (signal-aware adapters live alongside the
+//    signal-agnostic ones — see `suspensions.ts` for the split. The
+//    signal-aware adapters import `effect` from `@minim/signals`). ──
 export {
   untilChange,
   untilTrue,
@@ -87,8 +30,10 @@ export {
   race,
 } from "./suspensions";
 // `endOn(trigger, work)` and `startOn(trigger, work)` are no longer
-// publicly exported — use `chain(work).until(trigger)` and
-// `after(trigger, work)` instead (see `chain.ts` and `compose.ts`).
+// publicly exported — use `chain(work).until(trigger)` (from
+// `@minim/signals`) and `after(trigger, work)` instead.
+
+// ── Generator combinators ─────────────────────────────────────────
 export {
   all,
   sequence,
@@ -99,21 +44,58 @@ export {
   every,
   rand,
 } from "./compose";
-export { chain, type Chained } from "./chain";
+
+// ── Frame-loop substrate ──────────────────────────────────────────
 export { drive } from "./drive";
 
-// ── Val coercions ──────────────────────────────────────────────────
+// ── Val coercions (signal bridge) ─────────────────────────────────
 //
-// `Val<T>` = literal | Signal<T> | ReadonlySignal<T> | thunk; the
-// universal "value source" type for reactive args. Named to match
-// the values-layer (`Vec`, `Box`, `Num`, …).
-export {
-  toSig,
-  when,
-  type Val,
-  type NumSig,
-  type ResolveSig,
-} from "./arg";
+// `Val<T>` = literal | reactive cell | thunk; the universal "value
+// source" type for reactive args.
+export { toSig, when, type Val } from "./arg";
 
-// ── Snapshot + counter ─────────────────────────────────────────────
+// ── Easings ───────────────────────────────────────────────────────
+export { linear, easeIn, easeOut, easeInOut } from "./easings";
+
+// ── Snapshot + counter ────────────────────────────────────────────
 export { snapshot, counter } from "./store";
+
+// ── Back-compat: signal-layer re-exports ─────────────────────────
+//
+// These live in `@minim/signals` now. The re-exports here let
+// pre-restructure consumers keep importing from `@minim/core` while
+// the codebase migrates. New code should import directly from
+// `@minim/signals` for clarity.
+export {
+  signal,
+  computed,
+  effect,
+  batch,
+  untracked,
+  lens,
+  Signal,
+  Computed,
+  cell,
+  derive,
+  tween,
+  lerpable,
+  chain,
+  struct,
+  LERP,
+  type ReadonlySignal,
+  type SignalOptions,
+  type EffectOptions,
+  type Cell,
+  type ReadonlyCell,
+  type CellOptions,
+  type StructType,
+  type NestedMap,
+  type NestedInput,
+  type WriteOf,
+  type ReadOf,
+  type Chained,
+  type Tween,
+  type Easing,
+  type Duration,
+  type Lerp,
+} from "@minim/signals";

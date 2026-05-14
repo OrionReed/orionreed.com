@@ -87,12 +87,14 @@ type AnimatableField<K extends AnimatableKey> = K extends
   : N;
 
 /** Resolve a scalar (rotate/opacity) field type from the input opt
- *  flavor. Writable Signal / number / undefined → `N` (so `.to()` is
- *  available); ReadonlySignal / thunk → `DerivedN`. */
+ *  flavor. Writable `Cell<number>` / number literal / undefined → `N`
+ *  (so `.to()` is available); plain `ReadonlyCell<number>` / thunk →
+ *  `DerivedN`. Cell vs ReadonlyCell narrowing relies on the writable
+ *  flavor being a structural subtype of the readonly one. */
 type ResolveNum<A> = [A] extends [() => number]
   ? DerivedN
-  : [A] extends [import("@minim/core").ReadonlySignal<number>]
-    ? [A] extends [import("@minim/core").Signal<number>]
+  : [A] extends [import("@minim/core").ReadonlyCell<number>]
+    ? [A] extends [import("@minim/core").Cell<number>]
       ? N
       : DerivedN
     : N;

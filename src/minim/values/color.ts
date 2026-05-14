@@ -11,8 +11,8 @@
 //
 // Compare to writing this from scratch (~150-200 lines bespoke).
 
-import { struct } from "./struct";
-import { computed, type ReadonlySignal } from "@minim/core";
+import { struct } from "@minim/signals";
+import { computed, type ReadonlyCell } from "@minim/core";
 
 export type C = { r: number; g: number; b: number; a: number };
 
@@ -66,7 +66,7 @@ export const Color = struct<C>("Color", { r: 0, g: 0, b: 0, a: 1 })
   })
   .getters({
     /** Perceptual luminance ≈ 0..1. Lazy + cached as own-property. */
-    luminance(this: { value: C }): ReadonlySignal<number> {
+    luminance(this: { value: C }): ReadonlyCell<number> {
       const self = this;
       return computed(() => {
         const c = self.value;
@@ -74,7 +74,7 @@ export const Color = struct<C>("Color", { r: 0, g: 0, b: 0, a: 1 })
       });
     },
     /** CSS `rgba(...)` string, reactive. Lazy + cached as own-property. */
-    css(this: { value: C }): ReadonlySignal<string> {
+    css(this: { value: C }): ReadonlyCell<string> {
       const self = this;
       return computed(() => {
         const c = self.value;

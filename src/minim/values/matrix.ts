@@ -11,7 +11,7 @@
 // struct (used for reactive matrix signals). The struct's
 // `multiply`/`invert` ops reuse the plain-value implementations.
 
-import { struct } from "./struct";
+import { struct } from "@minim/signals";
 import type { V } from "./vec";
 
 export type Matrix2D = { a: number; b: number; c: number; d: number; e: number; f: number };

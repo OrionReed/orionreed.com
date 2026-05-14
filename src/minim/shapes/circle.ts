@@ -1,4 +1,4 @@
-import { toSig, type Val, type NumSig } from "@minim/core";
+import { toSig, type Val, type ReadonlyCell } from "@minim/core";
 import { Shape, type Segment } from "./shape";
 import {
   Vec,
@@ -12,7 +12,7 @@ import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 export interface CircleOpts extends CommonOpts {}
 
 export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
-  readonly radius: NumSig;
+  readonly radius: ReadonlyCell<number>;
 
   constructor(
     center: Pointlike,

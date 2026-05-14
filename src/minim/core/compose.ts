@@ -21,10 +21,10 @@ import {
   type Yieldable,
   type SpawnFn,
 } from "./anim";
-import { type ReadonlySignal } from "./signal";
+import { type ReadonlyCell } from "@minim/signals";
 import { type Val } from "./arg";
 import { untilTrue } from "./suspensions";
-import { chain, sleepGen, yieldableGen, type Chained } from "./chain";
+import { chain, sleepGen, yieldableGen, type Chained } from "@minim/signals";
 
 // ── Tuple-typed parallel (raw, not Chained) ─────────────────────────
 
@@ -119,7 +119,7 @@ export function loop(factory: () => Animator): Chained {
  *  Signal cond → wait for truthy; Animator cond → wait for completion.
  *  Replaces `startOn(trigger, work)` with English argument order. */
 export function after(
-  cond: ReadonlySignal<unknown> | Animator,
+  cond: ReadonlyCell<unknown> | Animator,
   work: Yieldable,
 ): Chained {
   return chain(

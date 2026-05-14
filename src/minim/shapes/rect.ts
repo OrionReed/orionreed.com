@@ -1,4 +1,4 @@
-import { cell, toSig, type Val, type NumSig } from "@minim/core";
+import { cell, toSig, type Val, type ReadonlyCell } from "@minim/core";
 import { Shape, type Segment } from "./shape";
 import {
   Vec,
@@ -19,11 +19,11 @@ export interface RectOpts extends CommonOpts {
 const HALF_PI = Math.PI / 2;
 
 export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
-  readonly x: NumSig;
-  readonly y: NumSig;
-  readonly w: NumSig;
-  readonly h: NumSig;
-  readonly corner: NumSig;
+  readonly x: ReadonlyCell<number>;
+  readonly y: ReadonlyCell<number>;
+  readonly w: ReadonlyCell<number>;
+  readonly h: ReadonlyCell<number>;
+  readonly corner: ReadonlyCell<number>;
 
   constructor(
     x: Val<number>,

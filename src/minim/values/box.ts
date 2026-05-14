@@ -16,10 +16,10 @@
 // instance. Most consumers only touch one or two anchors per box —
 // the rest never allocate.
 
-import { struct } from "./struct";
+import { struct } from "@minim/signals";
 import { Vec, type V, type Pointlike, type DerivedPoint } from "./vec";
 import { transformBox, type Matrix2D } from "./matrix";
-import { computed, type ReadonlySignal } from "@minim/core";
+import { computed, type ReadonlyCell } from "@minim/core";
 
 /** `{x, y, w, h}`. `Box` is both this type and the registered struct value
  *  (same trick `class` uses by default). */
@@ -123,12 +123,12 @@ export const Box = struct<Box>("Box", { x: 0, y: 0, w: 0, h: 0 })
   })
   .getters({
     /** Area of this box, reactive. Lazy + cached as own-property. */
-    area(this: { value: Box }): ReadonlySignal<number> {
+    area(this: { value: Box }): ReadonlyCell<number> {
       const self = this;
       return computed(() => self.value.w * self.value.h);
     },
     /** Self-reference so `Reactive<Box>` values satisfy the
-     *  `Boxlike` interface (which has `box: ReadonlySignal<Box>` so
+     *  `Boxlike` interface (which has `box: ReadonlyCell<Box>` so
      *  Shape/Part — who hold the Box as a *field* — and bare
      *  Reactive<Box> are interchangeable to consumers). The Reactive
      *  *is* its own Box signal — `b.box === b`. */
@@ -203,12 +203,12 @@ export const boxAt = (
 export interface Boxlike {
   /** Source-of-truth Box signal; everything else derives from it. For
    *  `Reactive<Box>`, `box === box.box` (self-reference). */
-  readonly box: ReadonlySignal<Box>;
+  readonly box: ReadonlyCell<Box>;
 
-  readonly x: ReadonlySignal<number>;
-  readonly y: ReadonlySignal<number>;
-  readonly w: ReadonlySignal<number>;
-  readonly h: ReadonlySignal<number>;
+  readonly x: ReadonlyCell<number>;
+  readonly y: ReadonlyCell<number>;
+  readonly w: ReadonlyCell<number>;
+  readonly h: ReadonlyCell<number>;
 
   readonly center: Pointlike;
   readonly top: Pointlike;

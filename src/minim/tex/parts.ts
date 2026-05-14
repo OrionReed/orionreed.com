@@ -22,11 +22,8 @@
 
 import {
   effect,
-  signal,
   cell,
   toSig,
-  type Signal,
-  type ReadonlySignal,
   type Cell,
   type ReadonlyCell,
   type Val,
@@ -76,31 +73,31 @@ export class Part<N extends string = string> implements Boxlike {
    *  when set by `highlight()` or other animation code. Identity-level
    *  highlighting (from `Marker.active`) is wired externally via
    *  `bindParts()` which writes to this same signal. */
-  readonly highlighted: Signal<boolean> = signal(false);
+  readonly highlighted: Cell<boolean> = cell(false);
   /** Opacity in [0, 1]. Wired to `el.style.opacity`. `Num.signal` so
    *  `.to(target, dur)` is available for per-part tweens. */
   readonly opacity = num(1);
 
   readonly box: BoxCell;
 
-  declare readonly x: ReadonlySignal<number>;
-  declare readonly y: ReadonlySignal<number>;
-  declare readonly w: ReadonlySignal<number>;
-  declare readonly h: ReadonlySignal<number>;
+  declare readonly x: ReadonlyCell<number>;
+  declare readonly y: ReadonlyCell<number>;
+  declare readonly w: ReadonlyCell<number>;
+  declare readonly h: ReadonlyCell<number>;
   declare readonly center: Pointlike;
   declare readonly top: Pointlike;
   declare readonly bottom: Pointlike;
   declare readonly left: Pointlike;
   declare readonly right: Pointlike;
   declare readonly at: (u: number, v: number) => Pointlike;
-  declare readonly area: ReadonlySignal<number>;
+  declare readonly area: ReadonlyCell<number>;
 
   el: HTMLElement | null = null;
   #disposers: Array<() => void> = [];
 
   constructor(
     readonly name: N,
-    readonly content: ReadonlySignal<string>,
+    readonly content: ReadonlyCell<string>,
     box: BoxCell,
     readonly marker: PartMarker,
     readonly host: TexShape,
@@ -162,7 +159,7 @@ delegate(Part.prototype, "box", BoxStruct, { exclude: ["box"] });
 export class PartMarker<N extends string = string> {
   /** Per-instance color. `null` → walk up to parent via `effectiveColor`. */
   readonly color: Cell<string | null> = cell<string | null>(null);
-  readonly content: ReadonlySignal<string>;
+  readonly content: ReadonlyCell<string>;
 
   /** Shared inner Marker. All members of a group chain share the root's
    *  instance, so bind/active/register all target the same identity. */
@@ -173,7 +170,7 @@ export class PartMarker<N extends string = string> {
     source: PartContent,
     readonly group: PartMarker | null = null,
   ) {
-    this.content = toSig(source) as ReadonlySignal<string>;
+    this.content = toSig(source) as ReadonlyCell<string>;
     // Children inherit the root's Marker so all group members share one identity.
     this.#m = group ? group.#m : marker();
   }

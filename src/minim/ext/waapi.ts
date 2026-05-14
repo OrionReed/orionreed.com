@@ -20,7 +20,7 @@
 import {
   signal,
   suspend,
-  type ReadonlySignal,
+  type ReadonlyCell,
   type Animator,
 } from "@minim/core";
 
@@ -148,7 +148,7 @@ function unwatchTick(cb: () => void): void {
 
 /** Lazy scroll-driven signal. `read()` runs on every scroll/resize
  *  (rAF-coalesced) only while the signal has subscribers. */
-function scrollSignal<T>(read: () => T, initial: T): ReadonlySignal<T> {
+function scrollSignal<T>(read: () => T, initial: T): ReadonlyCell<T> {
   let pull: (() => void) | undefined;
   const sig = signal<T>(initial, {
     watched() {
@@ -172,7 +172,7 @@ function scrollSignal<T>(read: () => T, initial: T): ReadonlySignal<T> {
  *  bottom of the scrollable area; `0` when the page doesn't scroll.
  *  Uses the cached `pageTotal` — refreshed on resize, not on every
  *  scroll tick. */
-export function scrollProgress(): ReadonlySignal<number> {
+export function scrollProgress(): ReadonlyCell<number> {
   return scrollSignal(
     () => (pageTotal > 0 ? clamp01(window.scrollY / pageTotal) : 0),
     0,
@@ -228,13 +228,13 @@ function rangeProgress(rect: DOMRect, vp: number, range: ViewRange): number {
  *  are GC'd when `el` is dropped. */
 const viewCache = new WeakMap<
   Element,
-  Partial<Record<ViewRange, ReadonlySignal<number>>>
+  Partial<Record<ViewRange, ReadonlyCell<number>>>
 >();
 
 export function viewProgress(
   el: Element,
   range: ViewRange = "cover",
-): ReadonlySignal<number> {
+): ReadonlyCell<number> {
   let entry = viewCache.get(el);
   if (!entry) viewCache.set(el, (entry = {}));
   return (entry[range] ??= scrollSignal(
@@ -262,7 +262,7 @@ function elInViewport(el: Element): boolean {
 export function inView(
   el: Element,
   opts?: IntersectionObserverInit,
-): ReadonlySignal<boolean> {
+): ReadonlyCell<boolean> {
   let observer: IntersectionObserver | undefined;
   const sig = signal<boolean>(false, {
     watched() {

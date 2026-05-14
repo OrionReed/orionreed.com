@@ -8,9 +8,9 @@
 // rides along — `mean(...vecs)` is a Vec, `mean(...nums)` is a number
 // signal.
 
-import { lens, type Signal } from "@minim/core";
+import { lens, type Signal, type StructType } from "@minim/signals";
+import { STRUCT } from "@minim/signals/struct";
 import { algebraOf } from "./algebra";
-import { STRUCT, type StructType } from "./struct";
 
 /** N-to-1 lens combinator. Reads merge inputs; writes distribute. The
  *  engine behind `mean` and friends. */

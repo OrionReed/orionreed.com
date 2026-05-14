@@ -3,46 +3,56 @@
 // `duration`. `sequential({...})` produces cumulative-start specs.
 
 import {
-  signal,
+  cell,
   computed,
   toSig,
-  type Signal,
-  type ReadonlySignal,
+  type Cell,
+  type ReadonlyCell,
   type Val,
-  type NumSig,
-  type ResolveSig,
   type Animator,
 } from "@minim/core";
 
 // ── Types ────────────────────────────────────────────────────────────
 
 /** A clip on a timeline. `t` extends past the endpoints (0 before,
- *  1 after) so `clip.t.derive(ease)` works without conditional checks. */
+ *  1 after) so `derive(clip.t, ease)` works without conditional checks.
+ *  Generic over input flavor — passing a literal or writable `Cell`
+ *  gives a writable `at`/`dur`; passing a `ReadonlyCell` or thunk
+ *  gives the read-only flavor. */
 export type Clip<A = number, D = number> = {
-  /** Start. Writable iff caller passed a writable signal/literal. */
-  readonly at: ResolveSig<A, number>;
-  /** Duration. Same writability rules as `at`. */
-  readonly dur: ResolveSig<D, number>;
-  readonly end: ReadonlySignal<number>;
+  readonly at: ResolvedField<A>;
+  readonly dur: ResolvedField<D>;
+  readonly end: ReadonlyCell<number>;
   /** Progress: 0 before `at`, 0..1 within, 1 after `end`. */
-  readonly t: ReadonlySignal<number>;
-  readonly active: ReadonlySignal<boolean>;
+  readonly t: ReadonlyCell<number>;
+  readonly active: ReadonlyCell<boolean>;
 };
+
+// Inlined per-field flavor narrowing (replaces the dropped `ResolveSig`
+// helper). A writable `Cell<number>` or a literal number gives back a
+// `Cell<number>`; anything that's only readable (or a thunk) gives back
+// `ReadonlyCell<number>`. The order matters: `Cell` is checked before
+// `ReadonlyCell` because `Cell<T>` is structurally a `ReadonlyCell<T>`.
+type ResolvedField<A> = [A] extends [Cell<number>]
+  ? Cell<number>
+  : [A] extends [ReadonlyCell<number> | (() => number)]
+    ? ReadonlyCell<number>
+    : Cell<number>;
 
 type ClipSpec = { at: Val<number>; dur: Val<number> };
 
 export interface Timeline {
-  readonly clock: Signal<number>;
-  readonly duration: ReadonlySignal<number>;
+  readonly clock: Cell<number>;
+  readonly duration: ReadonlyCell<number>;
   /** `clock / duration`, clamped to `[0, 1]`. */
-  readonly t: ReadonlySignal<number>;
+  readonly t: ReadonlyCell<number>;
   readonly clips: readonly Clip[];
   /** `yield* tl` advances `clock` to `duration`. No auto-reset — for
    *  loops, use `snapshot(tl.clock)`. */
   [Symbol.iterator](): Animator;
 }
 
-/** Type-preserving named-clip access via `ResolveSig`. */
+/** Type-preserving named-clip access. */
 export type TimelineOf<T extends Record<string, ClipSpec>> = Timeline & {
   readonly [K in keyof T]: T[K] extends { at: infer A; dur: infer D }
     ? Clip<A, D>
@@ -52,12 +62,12 @@ export type TimelineOf<T extends Record<string, ClipSpec>> = Timeline & {
 // ── Implementation ───────────────────────────────────────────────────
 
 class TimelineImpl implements Timeline {
-  readonly clock: Signal<number>;
-  readonly duration: ReadonlySignal<number>;
-  readonly t: ReadonlySignal<number>;
+  readonly clock: Cell<number>;
+  readonly duration: ReadonlyCell<number>;
+  readonly t: ReadonlyCell<number>;
   readonly clips: readonly Clip[];
 
-  constructor(clock: Signal<number>, clips: readonly Clip[]) {
+  constructor(clock: Cell<number>, clips: readonly Clip[]) {
     this.clock = clock;
     this.clips = clips;
     this.duration = computed(() => {
@@ -82,9 +92,9 @@ class TimelineImpl implements Timeline {
   }
 }
 
-function makeClip(spec: ClipSpec, clock: Signal<number>): Clip {
-  const at = toSig(spec.at) as NumSig;
-  const dur = toSig(spec.dur) as NumSig;
+function makeClip(spec: ClipSpec, clock: ReadonlyCell<number>): Clip {
+  const at = toSig(spec.at);
+  const dur = toSig(spec.dur);
   const end = computed(() => at.value + dur.value);
   const t = computed(() => {
     const c = clock.value;
@@ -107,7 +117,7 @@ function makeClip(spec: ClipSpec, clock: Signal<number>): Clip {
 export function timeline<T extends Record<string, ClipSpec>>(
   specs: T,
 ): TimelineOf<T> {
-  const clock = signal(0);
+  const clock = cell(0);
   const clips: Clip[] = [];
   const named: Record<string, Clip> = {};
   for (const key of Object.keys(specs)) {
@@ -133,14 +143,15 @@ type Durations = Record<string, Val<number>>;
  */
 export function sequential<T extends Durations>(
   durs: T,
-): {
-  [K in keyof T]: { at: ReadonlySignal<number>; dur: ResolveSig<T[K], number> };
-} {
+): { [K in keyof T]: { at: ReadonlyCell<number>; dur: ResolvedField<T[K]> } } {
   const keys = Object.keys(durs) as Array<keyof T>;
-  const durSigs: NumSig[] = keys.map(
-    (k) => toSig(durs[k] as Val<number>) as NumSig,
+  const durSigs: ReadonlyCell<number>[] = keys.map((k) =>
+    toSig(durs[k] as Val<number>),
   );
-  const out = {} as Record<string, { at: ReadonlySignal<number>; dur: NumSig }>;
+  const out = {} as Record<
+    string,
+    { at: ReadonlyCell<number>; dur: ReadonlyCell<number> }
+  >;
   keys.forEach((key, i) => {
     const idx = i;
     const at = computed(() => {
@@ -151,9 +162,6 @@ export function sequential<T extends Durations>(
     out[key as string] = { at, dur: durSigs[i] };
   });
   return out as {
-    [K in keyof T]: {
-      at: ReadonlySignal<number>;
-      dur: ResolveSig<T[K], number>;
-    };
+    [K in keyof T]: { at: ReadonlyCell<number>; dur: ResolvedField<T[K]> };
   };
 }

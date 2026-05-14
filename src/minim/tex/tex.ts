@@ -6,7 +6,7 @@
 // the type so `eq.parts.a` is typed and `eq.parts.x` is a TS error.
 
 import temml from "temml";
-import { signal, type ReadonlySignal } from "@minim/core";
+import { signal, type ReadonlyCell } from "@minim/core";
 import { Shape, type ShapeOpts } from "@minim/shapes";
 import {
   Box as BoxStruct,
@@ -206,9 +206,9 @@ export class TexShape<Names extends string = string> extends Shape {
   readonly parts: PartList<Names>;
   /** Width in local-frame user units (matches the rendered MathML
    *  bounding rect). */
-  readonly width: ReadonlySignal<number>;
+  readonly width: ReadonlyCell<number>;
   /** Height in local-frame user units. */
-  readonly height: ReadonlySignal<number>;
+  readonly height: ReadonlyCell<number>;
 
   constructor(
     strings: TemplateStringsArray | readonly string[],

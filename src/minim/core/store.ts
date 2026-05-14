@@ -1,4 +1,4 @@
-import { signal, Signal, type ReadonlySignal } from "./signal";
+import { signal, Signal, type ReadonlyCell } from "@minim/signals";
 
 /** Capture current values; return a reset function. Args are signals
  *  or plain objects whose Signal-valued props get flattened. Useful at
@@ -28,7 +28,7 @@ export function snapshot(
  *  things like `Trace.onChange` into the signal graph. */
 export function counter(
   subscribe: (cb: () => void) => () => void,
-): ReadonlySignal<number> {
+): ReadonlyCell<number> {
   const sig = signal(0);
   subscribe(() => {
     sig.value = sig.peek() + 1;

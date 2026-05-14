@@ -7,7 +7,7 @@
 // own per-field signal (full SoA), so per-axis writes are isolated.
 // `.lerp` enables `transform.to(target, dur)` for whole-pose tweens.
 
-import { struct, type WriteOf, type ReadOf } from "./struct";
+import { struct, type WriteOf, type ReadOf } from "@minim/signals";
 import { Vec, type V } from "./vec";
 import { Num } from "./num";
 

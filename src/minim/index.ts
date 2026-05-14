@@ -1,19 +1,20 @@
 // minim — generator-driven SVG diagrams with reactive primitives.
 //
-//   core/    reactivity (`cell`), Anim, suspensions, composers,
-//            drive, easings, clocks, tween, timeline, marker
-//   values/  reactive value-types (Vec, Box, Color, Matrix2D, Num,
-//            Transform) + struct framework + behaviors + algebra
-//   shapes/  Shape base + visuals + interaction + layout + mount +
-//            transitions + choreographers (the full space-and-time
-//            stdlib for shape-shaped things)
+//   core/     pure generator runtime: Anim, suspensions, composers,
+//             drive, easings, snapshot, Val coercions
+//   signals/  irreducible reactivity: signal engine, Cell types,
+//             chain + tween, struct framework
+//   values/   domain value-types (Vec, Box, Color, Matrix2D, Num,
+//             Transform) + behaviors + algebra
+//   shapes/   Shape base + visuals + interaction + layout + mount +
+//             transitions + choreographers
 //
 // Sibling subpath modules:
 //   `minim/tex`     LaTeX → MathML primitives via Temml
 //   `minim/assert`  trace (spans/tree/tag) + claim (assertions)
-//   `minim/waapi`   Web Animations / scroll / view-timeline bridges
+//   `minim/ext`     timeline, events, waapi, marker (opt-in extras)
 
-// ── Reactive primitives + time + utilities ──────────────────────────
+// ── Reactive signals (signal engine + cells + chain/tween + struct) ─
 export {
   cell,
   derive,
@@ -22,10 +23,19 @@ export {
   untracked,
   tween,
   lerpable,
-  toSig,
-  when,
-  snapshot,
-  counter,
+  chain,
+  struct,
+  type Cell,
+  type ReadonlyCell,
+  type Tween,
+  type Easing,
+  type Duration,
+  type Lerp,
+  type Chained,
+} from "./signals";
+
+// ── Generator runtime + combinators ─────────────────────────────────
+export {
   Anim,
   asGen,
   isGen,
@@ -44,18 +54,14 @@ export {
   after,
   every,
   rand,
-  chain,
   drive,
-  type Cell,
-  type ReadonlyCell,
-  type Tween,
-  type Easing,
-  type Duration,
-  type Lerp,
+  toSig,
+  when,
+  snapshot,
+  counter,
   type Val,
   type Animator,
   type SpawnFn,
-  type Chained,
 } from "./core";
 
 // ── Reactive value types + struct framework ─────────────────────────
@@ -69,7 +75,6 @@ export {
 //   - rw/ro flavor aliases where useful (`Point`/`DerivedPoint`,
 //     `N`/`DerivedN`)
 export {
-  struct,
   Vec,
   vec,
   polar,
@@ -94,11 +99,6 @@ export {
   clockSignal,
   Anchor,
   Dir,
-  type StructType,
-  type WriteOf,
-  type ReadOf,
-  type NestedMap,
-  type NestedInput,
   type V,
   type Point,
   type DerivedPoint,
@@ -172,7 +172,7 @@ export type { Line, Circle, Rect, Label, AnnularSector } from "./shapes";
 
 // ── Time stdlib ─────────────────────────────────────────────────────
 //
-// Easings + clocks live in `./core` (see top of file).
+// Easings live in `./core` (see top of file).
 // Behaviors (spring / oscillate / drift / attract) live in `./values`
 // (see the values block above).
 // Transitions + choreographers (`fadeIn` / `slideIn` / `swap` /
@@ -184,6 +184,16 @@ export {
   easeIn,
   easeInOut,
 } from "./core";
+
+// Struct framework type-level surface (lives in `./signals/cell` but
+// is conceptually paired with `./values` consumers).
+export type {
+  StructType,
+  WriteOf,
+  ReadOf,
+  NestedMap,
+  NestedInput,
+} from "./signals";
 export {
   spring,
   oscillate,

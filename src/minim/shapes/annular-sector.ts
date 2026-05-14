@@ -1,4 +1,4 @@
-import { cell, toSig, type Val, type NumSig } from "@minim/core";
+import { cell, toSig, type Val, type ReadonlyCell } from "@minim/core";
 import { Shape, type Segment } from "./shape";
 import { Vec, box, type Pointlike } from "@minim/values";
 import { wireStroke, type CommonOpts } from "./common";
@@ -9,10 +9,10 @@ export interface AnnularSectorOpts extends CommonOpts {}
 export class AnnularSector<
   O extends AnnularSectorOpts = AnnularSectorOpts,
 > extends Shape<O> {
-  readonly rOuter: NumSig;
-  readonly rInner: NumSig;
-  readonly a0: NumSig;
-  readonly a1: NumSig;
+  readonly rOuter: ReadonlyCell<number>;
+  readonly rInner: ReadonlyCell<number>;
+  readonly a0: ReadonlyCell<number>;
+  readonly a1: ReadonlyCell<number>;
 
   constructor(
     center: Pointlike,

@@ -34,7 +34,7 @@
 // auto-include the delegated axes; consumers cast or we add a
 // `Delegated<Host, Map>` mapped type once the runtime stabilizes.
 
-import type { StructType } from "./struct";
+import type { StructType } from "@minim/signals";
 
 export interface DelegateOpts {
   /** Names to skip — useful when the host wants to provide its own

@@ -22,13 +22,13 @@ import {
   type SpawnFn,
   type Yieldable,
 } from "./anim";
-import { effect, type ReadonlySignal } from "./signal";
+import { effect, type ReadonlyCell } from "@minim/signals";
 
 // ── Adapters ────────────────────────────────────────────────────────
 
 /** Wake on the next change of `sig`; resume with the new value. The
  *  baseline read is ignored. */
-export function untilChange<T>(sig: ReadonlySignal<T>): Animator<T> {
+export function untilChange<T>(sig: ReadonlyCell<T>): Animator<T> {
   return suspend<T>((wake) => {
     let first = true;
     return effect(() => {
@@ -44,7 +44,7 @@ export function untilChange<T>(sig: ReadonlySignal<T>): Animator<T> {
 
 /** Wake when `sig` is truthy. Wakes immediately if already truthy. No
  *  payload — `true` is the only thing it would ever carry. */
-export function untilTrue(sig: ReadonlySignal<unknown>): Animator<void> {
+export function untilTrue(sig: ReadonlyCell<unknown>): Animator<void> {
   return suspend<void>((wake) => {
     let resolved = false;
     return effect(() => {
@@ -59,7 +59,7 @@ export function untilTrue(sig: ReadonlySignal<unknown>): Animator<void> {
 
 /** Wake when `sig` is falsy. Wakes immediately if already falsy.
  *  Complement of `untilTrue`. */
-export function untilFalse(sig: ReadonlySignal<unknown>): Animator<void> {
+export function untilFalse(sig: ReadonlyCell<unknown>): Animator<void> {
   return suspend<void>((wake) => {
     let resolved = false;
     return effect(() => {
