@@ -13,22 +13,7 @@
 // marker signals the same way it does with any other signal, because
 // `marker.active` is just a ReadonlyCell<boolean>.
 
-import {
-  Diagram,
-  Mount,
-  Shape,
-  cell,
-  play,
-  circle,
-  derive,
-  drive,
-  line,
-  loop,
-  oscillate,
-  vec,
-  tokens,
-  not,
-} from "../../minim";
+import { Diagram, Mount, Shape, cell, play, circle, derive, drive, line, loop, oscillate, vec, tokens, not } from "../../minim";
 import { parts, tex, bindParts } from "../../minim/tex";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -178,7 +163,7 @@ export class MdOscillator extends Diagram {
     this.anim.run(loop(function* () {
       yield* play(gamma.active);
       yield* envPath.opacity.to(0.85, 0.3);                         // fade in
-      yield* play(oscillate(envPath.opacity, 0.1, 1.6)).while(gamma.active);
+      yield* play(oscillate(envPath.opacity, 0.1, 1.6)).until(not(gamma.active));
       yield* envPath.opacity.to(0, 0.4);                             // fade out
     }));
 

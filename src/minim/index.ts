@@ -26,8 +26,10 @@ export {
   tween,
   lerpable,
   play,
-  struct,
+  defineStruct,
+  registerCapability,
   toSig,
+  asReader,
   when,
   untilChange,
   untilEvent,
@@ -74,7 +76,7 @@ export {
   Vec,
   vec,
   polar,
-  isPoint,
+  isVec,
   vecEquals,
   Box,
   expandBox,
@@ -92,20 +94,11 @@ export {
   transform,
   mean,
   algebraOf,
+  metricOf,
   clockSignal,
   Anchor,
   Dir,
-  type V,
-  type Point,
-  type DerivedPoint,
-  type Pointlike,
-  type ResolveVec,
-  type Boxlike,
-  type C,
-  type N,
-  type DerivedN,
-  type Tr,
-  type DerivedTr,
+  type BoxLike,
   type VectorSpace,
 } from "./values";
 
@@ -183,13 +176,7 @@ export {
 
 // Struct framework type-level surface (lives in `./signals/cell` but
 // is conceptually paired with `./values` consumers).
-export type {
-  StructType,
-  WriteOf,
-  ReadOf,
-  NestedMap,
-  NestedInput,
-} from "./signals";
+export type { StructType, WriteOf, ReadOf } from "./signals";
 export {
   spring,
   oscillate,

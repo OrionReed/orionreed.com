@@ -1,20 +1,4 @@
-import {
-  Diagram,
-  Mount,
-  arrow,
-  attr,
-  label,
-  line,
-  loop,
-  vec,
-  rect,
-  cell,
-  snapshot,
-  split,
-  t,
-  when,
-  type Cell,
-} from "../minim";
+import { Diagram, Mount, arrow, attr, label, line, loop, vec, rect, cell, snapshot, split, t, when, type Cell } from "../minim";
 
 import * as R from "./rand";
 

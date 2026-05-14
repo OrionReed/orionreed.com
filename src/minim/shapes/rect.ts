@@ -1,15 +1,7 @@
 import { toSig, type Val } from "@minim/signals";
 import { cell, type ReadonlyCell } from "@minim/signals";
 import { Shape, type Segment } from "./shape";
-import {
-  Vec,
-  isPoint,
-  box,
-  isBox,
-  type Boxlike,
-  type DerivedPoint,
-  type Pointlike,
-} from "@minim/values";
+import { Vec, isVec, box, isBox, type BoxLike } from "@minim/values";
 import { tokens } from "./tokens";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
@@ -63,7 +55,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     });
   }
 
-  override boundary(toward: Pointlike): DerivedPoint {
+  override boundary(toward: Vec.Like): Vec.Readonly {
     return Vec.derived(() => {
       const c = this.center.value;
       const b = this.box.value;
@@ -128,18 +120,18 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
 /** Rect factory:
  *
  *   rect(x, y, w, h, opts?)             — corner-based (canonical)
- *   rect(box: Boxlike, opts?)           — fill another Box (Shape, view, split…)
+ *   rect(box: BoxLike, opts?)           — fill another Box (Shape, view, split…)
  *   rect(center: Point, w, h, opts?)    — centered on a Point
  *   rect(p1: Point, p2: Point, opts?)   — between two corner Points
  */
-export function rect<const O extends RectOpts>(b: Boxlike, opts?: O): Rect<O>;
+export function rect<const O extends RectOpts>(b: BoxLike, opts?: O): Rect<O>;
 export function rect<const O extends RectOpts>(
-  p1: Pointlike,
-  p2: Pointlike,
+  p1: Vec.Like,
+  p2: Vec.Like,
   opts?: O,
 ): Rect<O>;
 export function rect<const O extends RectOpts>(
-  center: Pointlike,
+  center: Vec.Like,
   w: Val<number>,
   h: Val<number>,
   opts?: O,
@@ -152,8 +144,8 @@ export function rect<const O extends RectOpts>(
   opts?: O,
 ): Rect<O>;
 export function rect(
-  a: Val<number> | Boxlike | Pointlike,
-  b?: Val<number> | Pointlike | RectOpts,
+  a: Val<number> | BoxLike | Vec.Like,
+  b?: Val<number> | Vec.Like | RectOpts,
   c?: Val<number>,
   d?: Val<number> | RectOpts,
   e?: RectOpts,
@@ -161,7 +153,7 @@ export function rect(
   if (isBox(a)) {
     return new Rect(a.x, a.y, a.w, a.h, b as RectOpts | undefined);
   }
-  if (isPoint(a) && isPoint(b)) {
+  if (isVec(a) && isVec(b)) {
     // Bounding rect of two points (any orientation).
     return new Rect(
       cell.derived(() => Math.min(a.x.value, b.x.value)),
@@ -171,7 +163,7 @@ export function rect(
       c as RectOpts | undefined,
     );
   }
-  if (isPoint(a)) {
+  if (isVec(a)) {
     const w = b as Val<number>;
     const h = c as Val<number>;
     const ws = toSig(w);

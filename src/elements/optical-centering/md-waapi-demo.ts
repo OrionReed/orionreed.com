@@ -12,18 +12,7 @@
 // scrolls. The awaitable surface (`untilAnimation`, `untilInView`,
 // `untilOutOfView`) isn't exercised here.
 
-import {
-  Anchor,
-  Diagram,
-  polar,
-  Mount,
-  circle,
-  derive,
-  label,
-  vec,
-  rect,
-  type ReadonlyCell,
-} from "../../minim";
+import { Anchor, Diagram, polar, Mount, circle, derive, label, vec, rect, type ReadonlyCell } from "../../minim";
 import { inView, scrollProgress, viewProgress } from "../../minim/ext";
 
 export class MdWaapiDemo extends Diagram {

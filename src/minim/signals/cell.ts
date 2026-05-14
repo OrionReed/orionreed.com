@@ -95,12 +95,12 @@ type Axes<T, O, W extends RW, N> = keyof O extends never
               infer NO,
               infer NX,
               infer NG,
-              infer _NM,
+              infer NM,
               infer NN
             >
             ? W extends "rw"
-              ? Cell<NT, NO, NX, NG, {}, NN>
-              : ReadonlyCell<NT, NO, NX, NG, {}, NN>
+              ? Cell<NT, NO, NX, NG, NM, NN>
+              : ReadonlyCell<NT, NO, NX, NG, NM, NN>
             : never
           : W extends "rw"
             ? Signal<T[K]>

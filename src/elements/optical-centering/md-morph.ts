@@ -1,5 +1,5 @@
 // Polygon morph — the polygon is a reactive value type whose value
-// carries an array of vertices. `Polygon = { vertices: V[] }` is just
+// carries an array of vertices. `Polygon = { vertices: Vec[] }` is just
 // a struct with a custom `lerp` op; `.to(targetPolygon, dur)` falls out.
 //
 // The demo walks circle → square → triangle → 5-point star →
@@ -7,20 +7,7 @@
 // that Vec / Box / Color use. One reactive value, one tween call,
 // any shape with N matching vertices.
 
-import {
-  Anchor,
-  Diagram,
-  Path,
-  Vec,
-  cell,
-  circle,
-  label,
-  loop,
-  struct,
-  type Content,
-  type Mount,
-  type V,
-} from "../../minim";
+import { Anchor, Diagram, Path, Vec, cell, circle, defineStruct, label, loop, type Content, type Mount } from "../../minim";
 
 const W = 640;
 const H = 360;
@@ -31,15 +18,17 @@ const H = 360;
 const N = 24;
 const R = 110;
 
-const lerpV = (a: V, b: V, t: number): V => ({
+const lerpV = (a: Vec, b: Vec, t: number): Vec => ({
   x: a.x + (b.x - a.x) * t,
   y: a.y + (b.y - a.y) * t,
 });
 
-type Polygon = { vertices: V[] };
+type Polygon = { vertices: Vec[] };
 
-const Polygon = struct<Polygon>("Polygon", { vertices: [] })
-  .equals((a, b) => {
+const Polygon = defineStruct({
+  name: "Polygon",
+  defaults: { vertices: [] } as Polygon,
+  equals: (a, b) => {
     if (a.vertices.length !== b.vertices.length) return false;
     for (let i = 0; i < a.vertices.length; i++) {
       const va = a.vertices[i];
@@ -47,23 +36,21 @@ const Polygon = struct<Polygon>("Polygon", { vertices: [] })
       if (va.x !== vb.x || va.y !== vb.y) return false;
     }
     return true;
-  })
-  .ops({
-    /** Component-wise lerp. Cycles through whichever array is
-     *  shorter, so polygons of different lengths still morph cleanly
-     *  (in this demo every keyframe has exactly N vertices). */
-    lerp: (a, b: Polygon, t: number): Polygon => {
-      const n = Math.max(a.vertices.length, b.vertices.length);
-      const out: V[] = new Array(n);
-      const la = a.vertices.length;
-      const lb = b.vertices.length;
-      for (let i = 0; i < n; i++) {
-        out[i] = lerpV(a.vertices[i % la], b.vertices[i % lb], t);
-      }
-      return { vertices: out };
-    },
-  })
-  .build();
+  },
+  /** Component-wise lerp. Cycles through whichever array is shorter,
+   *  so polygons of different lengths still morph cleanly (in this
+   *  demo every keyframe has exactly N vertices). */
+  lerp: (a, b, t): Polygon => {
+    const n = Math.max(a.vertices.length, b.vertices.length);
+    const out: Vec[] = new Array(n);
+    const la = a.vertices.length;
+    const lb = b.vertices.length;
+    for (let i = 0; i < n; i++) {
+      out[i] = lerpV(a.vertices[i % la], b.vertices[i % lb], t);
+    }
+    return { vertices: out };
+  },
+});
 
 // ── Keyframe builders ──────────────────────────────────────────────
 //
@@ -74,8 +61,8 @@ const Polygon = struct<Polygon>("Polygon", { vertices: [] })
 // "puffs up" into a circle, rather than rotating into place.)
 
 /** Regular n-gon, padded to N vertices by repeating each corner. */
-function ngon(corners: number, radius: number): V[] {
-  const out: V[] = [];
+function ngon(corners: number, radius: number): Vec[] {
+  const out: Vec[] = [];
   for (let i = 0; i < N; i++) {
     const cornerIdx = Math.floor((i * corners) / N);
     const angle = (cornerIdx / corners) * Math.PI * 2 - Math.PI / 2;
@@ -85,8 +72,8 @@ function ngon(corners: number, radius: number): V[] {
 }
 
 /** Regular m-pointed star with alternating outer/inner radii. */
-function star(points: number, outer: number, inner: number): V[] {
-  const out: V[] = [];
+function star(points: number, outer: number, inner: number): Vec[] {
+  const out: Vec[] = [];
   const total = points * 2;
   for (let i = 0; i < N; i++) {
     const idx = Math.floor((i * total) / N);
@@ -98,8 +85,8 @@ function star(points: number, outer: number, inner: number): V[] {
 }
 
 /** Smooth circle (every vertex is "real"). */
-function smoothCircle(radius: number): V[] {
-  const out: V[] = [];
+function smoothCircle(radius: number): Vec[] {
+  const out: Vec[] = [];
   for (let i = 0; i < N; i++) {
     const angle = (i / N) * Math.PI * 2 - Math.PI / 2;
     out.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
@@ -107,7 +94,7 @@ function smoothCircle(radius: number): V[] {
   return out;
 }
 
-const KEYFRAMES: Array<{ name: string; verts: V[] }> = [
+const KEYFRAMES: Array<{ name: string; verts: Vec[] }> = [
   { name: "circle (24-gon)",        verts: smoothCircle(R) },
   { name: "square (4-gon × 6)",     verts: ngon(4, R) },
   { name: "triangle (3-gon × 8)",   verts: ngon(3, R) },

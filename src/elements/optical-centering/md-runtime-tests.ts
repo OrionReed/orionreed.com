@@ -2,40 +2,7 @@
 // drives it via `step(dt)` — synchronous and deterministic, no RAF.
 // Re-runs every few seconds so regressions surface live.
 
-import {
-  Anim,
-  Diagram,
-  EventBus,
-  Vec,
-  Mount,
-  Anchor,
-  assemble,
-  attract,
-  centroid,
-  circle,
-  play,
-  derive,
-  drift,
-  cell,
-  every,
-  forEach,
-  label,
-  loop,
-  mean,
-  meanRotation,
-  meanScale,
-  num,
-  oscillate,
-  vec,
-  race,
-  rect,
-  splay,
-  spring,
-  swap,
-  untilChange,
-  untilPromise,
-  type Animator,
-} from "../../minim";
+import { Anim, Diagram, EventBus, Vec, Mount, Anchor, assemble, attract, centroid, circle, play, derive, drift, cell, every, forEach, label, loop, mean, meanRotation, meanScale, num, oscillate, vec, race, rect, splay, spring, swap, untilChange, untilPromise, type Animator } from "../../minim";
 
 type Status = "pending" | "running" | "pass" | "fail";
 
@@ -907,9 +874,9 @@ const TESTS: TestCase[] = [
   {
     name: "mean (numbers): read avg, write distributes",
     run: (assert) => {
-      const a = cell(0);
-      const b = cell(10);
-      const c = cell(20);
+      const a = num(0);
+      const b = num(10);
+      const c = num(20);
       const m = mean(a, b, c);
       assert(m.value === 10, `initial mean: ${m.value}`);
       m.value = 13; // delta = 3 → each += 3

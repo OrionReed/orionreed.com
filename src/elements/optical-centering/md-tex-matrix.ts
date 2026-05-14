@@ -5,16 +5,7 @@
 // for cells that appear once on the compact side and twice on the
 // evaluated side (vector cells x, y, used by both result rows).
 
-import {
-  Anchor,
-  Diagram,
-  Mount,
-  cell,
-  label,
-  loop,
-  snapshot,
-  type Content,
-} from "../../minim";
+import { Anchor, Diagram, Mount, cell, label, loop, snapshot, type Content } from "../../minim";
 import {
   highlight,
   morph,

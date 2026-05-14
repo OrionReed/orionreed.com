@@ -3,26 +3,7 @@
 // Visualised by a current pick label, a candidates menu, and a rolling
 // history strip.
 
-import {
-  Diagram,
-  Mount,
-  Anchor,
-  bounceIn,
-  cell,
-  circle,
-  easeIn,
-  easeInOut,
-  easeOut,
-  fadeOut,
-  label,
-  loop,
-  vec,
-  rand,
-  snapshot,
-  type Animator,
-  type Content,
-  type Writable,
-} from "../../minim";
+import { Diagram, Mount, Anchor, bounceIn, cell, circle, easeIn, easeInOut, easeOut, fadeOut, label, loop, vec, rand, snapshot, type Animator, type Content, type Writable } from "../../minim";
 
 const STAGE_X = 240;
 const STAGE_Y = 120;

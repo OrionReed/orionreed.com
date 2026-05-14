@@ -9,54 +9,47 @@
 //   6. Smart-adoption overhead in `Transform.signal({...})`
 
 import { cell, type ReadonlyCell } from "@minim/signals";
-import {
-  compose,
-  multiply,
-  Vec,
-  vec,
-  type Matrix2D,
-  type V,
-} from "@minim/values";
-import { struct, type WriteOf } from "@minim/signals";
+import { compose, multiply, Vec, vec, type Matrix2D } from "@minim/values";
+import { defineStruct, type WriteOf } from "@minim/signals";
 import { bench, group } from "mitata";
 
 // ── The Transform struct (matches values/transform.ts) ───────────
 
 type Tr = {
-  translate: V;
+  translate: Vec;
   rotate: number;
-  scale: V;
-  origin: V;
+  scale: Vec;
+  origin: Vec;
   opacity: number;
 };
 
-const Transform = struct<Tr>("Transform", {
-  translate: { x: 0, y: 0 },
-  rotate: 0,
-  scale: { x: 1, y: 1 },
-  origin: { x: 0, y: 0 },
-  opacity: 1,
-})
-  .nested({ translate: Vec, scale: Vec, origin: Vec })
-  .ops({
-    lerp: (a, b: Tr, t: number): Tr => ({
-      translate: {
-        x: a.translate.x + (b.translate.x - a.translate.x) * t,
-        y: a.translate.y + (b.translate.y - a.translate.y) * t,
-      },
-      rotate: a.rotate + (b.rotate - a.rotate) * t,
-      scale: {
-        x: a.scale.x + (b.scale.x - a.scale.x) * t,
-        y: a.scale.y + (b.scale.y - a.scale.y) * t,
-      },
-      origin: {
-        x: a.origin.x + (b.origin.x - a.origin.x) * t,
-        y: a.origin.y + (b.origin.y - a.origin.y) * t,
-      },
-      opacity: a.opacity + (b.opacity - a.opacity) * t,
-    }),
-  })
-  .build();
+const Transform = defineStruct({
+  name: "Transform",
+  defaults: {
+    translate: { x: 0, y: 0 },
+    rotate: 0,
+    scale: { x: 1, y: 1 },
+    origin: { x: 0, y: 0 },
+    opacity: 1,
+  } as Tr,
+  nested: { translate: Vec, scale: Vec, origin: Vec },
+  lerp: (a, b, t): Tr => ({
+    translate: {
+      x: a.translate.x + (b.translate.x - a.translate.x) * t,
+      y: a.translate.y + (b.translate.y - a.translate.y) * t,
+    },
+    rotate: a.rotate + (b.rotate - a.rotate) * t,
+    scale: {
+      x: a.scale.x + (b.scale.x - a.scale.x) * t,
+      y: a.scale.y + (b.scale.y - a.scale.y) * t,
+    },
+    origin: {
+      x: a.origin.x + (b.origin.x - a.origin.x) * t,
+      y: a.origin.y + (b.origin.y - a.origin.y) * t,
+    },
+    opacity: a.opacity + (b.opacity - a.opacity) * t,
+  }),
+});
 
 const TR0: Tr = {
   translate: { x: 0, y: 0 },
@@ -111,7 +104,7 @@ group("shape: construction (reactive bits)", () => {
   bench("ShapeLike()", () => new ShapeLike());
   bench("ShapeLike() with translate=vec(0,0) (adopted)", () => {
     const p = vec(0, 0);
-    return new ShapeLike({ translate: p as unknown as V });
+    return new ShapeLike({ translate: p as unknown as Vec });
   });
 });
 
@@ -245,16 +238,16 @@ group("nested: smart-adoption overhead", () => {
   ).baseline(true);
   bench("Transform.signal({translate: vec(0,0)}) (adopt Vec)", () => {
     const p = vec(0, 0);
-    return Transform.signal({ ...TR0, translate: p as unknown as V });
+    return Transform.signal({ ...TR0, translate: p as unknown as Vec });
   });
   bench("Transform.signal({translate: cell({x,y})}) (wrap raw Signal)", () => {
     const s = cell({ x: 0, y: 0 });
-    return Transform.signal({ ...TR0, translate: s as unknown as V });
+    return Transform.signal({ ...TR0, translate: s as unknown as Vec });
   });
   bench("Transform.signal({translate: () => ({x,y})}) (wrap thunk)", () => {
     return Transform.signal({
       ...TR0,
-      translate: (() => ({ x: 0, y: 0 })) as unknown as V,
+      translate: (() => ({ x: 0, y: 0 })) as unknown as Vec,
     });
   });
 });

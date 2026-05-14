@@ -3,20 +3,7 @@
 // targets so the offsets-are-preserved property is visible.
 
 import * as R from "../rand";
-import {
-  Diagram,
-  Mount,
-  Anchor,
-  centroid,
-  derive,
-  easeInOut,
-  label,
-  loop,
-  meanRotation,
-  meanScale,
-  vec,
-  rect,
-} from "../../minim";
+import { Diagram, Mount, Anchor, centroid, derive, easeInOut, label, loop, meanRotation, meanScale, vec, rect } from "../../minim";
 
 // Heterogeneous sizes, colors, starting rotations — so it reads as
 // "each shape's offset survives the tween."

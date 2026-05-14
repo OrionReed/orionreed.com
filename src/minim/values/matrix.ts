@@ -11,10 +11,18 @@
 // struct (used for reactive matrix signals). The struct's
 // `multiply`/`invert` ops reuse the plain-value implementations.
 
-import { struct } from "@minim/signals";
-import type { V } from "./vec";
+import { defineStruct, type WriteOf, type ReadOf } from "@minim/signals";
+import type { Vec } from "./vec";
 
-export type Matrix2D = { a: number; b: number; c: number; d: number; e: number; f: number };
+/** Plain 2D affine matrix `{a,b,c,d,e,f}` (SVG/Canvas convention). */
+export interface Matrix2D {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  e: number;
+  f: number;
+}
 
 // Plain Box shape (kept local to avoid a circular import with `./box`).
 type Box = { x: number; y: number; w: number; h: number };
@@ -82,7 +90,7 @@ export function invert(m: Matrix2D): Matrix2D {
   };
 }
 
-export const transformPoint = (m: Matrix2D, p: V): V => ({
+export const transformPoint = (m: Matrix2D, p: Vec): Vec => ({
   x: m.a * p.x + m.c * p.y + m.e,
   y: m.b * p.x + m.d * p.y + m.f,
 });
@@ -118,7 +126,7 @@ const SCALE_EPS = 1e-7;
 /** Shape transform: `T(t) T(p) R(r) S(s) T(-p)`. Scales clamped away
  *  from zero (Firefox compositor leak on singular matrices). Fast paths
  *  for no-scale / no-rotate. */
-export function compose(t: V, r: number, s: V, pivot: V): Matrix2D {
+export function compose(t: Vec, r: number, s: Vec, pivot: Vec): Matrix2D {
   // Clamp by magnitude, not equality — tweens crossing zero pass
   // through small floats that equality-clamp would miss.
   const sx =
@@ -175,28 +183,33 @@ export const toString = (m: Matrix2D): string =>
 
 // ── Reactive struct ────────────────────────────────────────────────
 
-export const Matrix2D = struct<Matrix2D>(
-  "Matrix2D",
-  { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
-)
-  .construct(
-    (a: number, b: number, c: number, d: number, e: number, f: number): Matrix2D => ({
-      a, b, c, d, e, f,
-    }),
-  )
-  .equals(
-    (m, n) =>
-      m.a === n.a && m.b === n.b && m.c === n.c &&
-      m.d === n.d && m.e === n.e && m.f === n.f,
-  )
-  .ops({
+export const Matrix2D = defineStruct({
+  name: "Matrix2D",
+  defaults: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 } as Matrix2D,
+  construct: (
+    a: number, b: number, c: number, d: number, e: number, f: number,
+  ): Matrix2D => ({ a, b, c, d, e, f }),
+  equals: (m, n) =>
+    m.a === n.a && m.b === n.b && m.c === n.c &&
+    m.d === n.d && m.e === n.e && m.f === n.f,
+  ops: {
     multiply,
     invert,
-  })
-  .scalars({
+  },
+  scalars: {
     determinant: (m): number => m.a * m.d - m.b * m.c,
-  })
-  .build();
+  },
+});
+
+// eslint-disable-next-line @typescript-eslint/no-namespace
+export namespace Matrix2D {
+  /** Writable reactive Matrix2D. */
+  export type Writable = WriteOf<typeof Matrix2D>;
+  /** Read-only reactive Matrix2D. */
+  export type Readonly = ReadOf<typeof Matrix2D>;
+  /** Either flavor. */
+  export type Like = Writable | Readonly;
+}
 
 /** Sugar for `Matrix2D.signal({a, b, c, d, e, f})`. */
 export const matrix = (

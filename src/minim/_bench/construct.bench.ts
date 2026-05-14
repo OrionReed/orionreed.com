@@ -1,14 +1,5 @@
 import { signal, computed, effect } from "@minim/signals";
-import {
-  Vec,
-  vec,
-  Box,
-  Color,
-  rgb,
-  Matrix2D,
-  Num,
-  num,
-} from "@minim/values";
+import { Vec, vec, Box, Color, rgb, Matrix2D, Num, num } from "@minim/values";
 import { bench, group } from "mitata";
 import { memory } from "./memory";
 

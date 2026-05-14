@@ -1,7 +1,7 @@
 import { toSig, type Val } from "@minim/signals";
 import { cell, type ReadonlyCell } from "@minim/signals";
 import { Shape, type Segment } from "./shape";
-import { Vec, box, type Pointlike } from "@minim/values";
+import { Vec, box } from "@minim/values";
 import { wireStroke, type CommonOpts } from "./common";
 
 export interface AnnularSectorOpts extends CommonOpts {}
@@ -16,7 +16,7 @@ export class AnnularSector<
   readonly a1: ReadonlyCell<number>;
 
   constructor(
-    center: Pointlike,
+    center: Vec.Like,
     rOuter: Val<number>,
     rInner: Val<number>,
     a0: Val<number>,
@@ -97,7 +97,7 @@ export class AnnularSector<
 }
 
 export const annularSector = <const O extends AnnularSectorOpts>(
-  center: Pointlike,
+  center: Vec.Like,
   rOuter: Val<number>,
   rInner: Val<number>,
   a0: Val<number>,

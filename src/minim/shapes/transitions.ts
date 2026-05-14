@@ -3,22 +3,12 @@
 // `sig.to(target, sec, ease)` for outros. Each compound `yield`s an
 // array of those calls; the body shows exactly which atoms stack.
 
-import {
-  easeIn,
-  easeInOut,
-  easeOut,
-  type Animator,
-} from "@minim/core";
-import {
-  tween,
-  type Cell,
-  type Easing,
-  type Val,
-} from "@minim/signals";
-import { type V, Dir } from "@minim/values";
+import { easeIn, easeInOut, easeOut, type Animator } from "@minim/core";
+import { tween, type Cell, type Easing, type Val } from "@minim/signals";
+import { Dir, Vec } from "@minim/values";
 import type { Writable } from "./shape";
 
-type Lerpable = number | V;
+type Lerpable = number | Vec;
 
 // ── Primitive ────────────────────────────────────────────────────────
 
@@ -80,7 +70,7 @@ export function* fadeUpOut(
 /** Slide in from `dir` + fade in. */
 export function* slideIn(
   s: Writable<"translate" | "opacity">,
-  dir: V = Dir.Left,
+  dir: Vec = Dir.Left,
   sec = 0.4,
   dist = 30,
 ): Animator {
@@ -99,7 +89,7 @@ export function* slideIn(
 /** Slide out toward a side + fade out. */
 export function* slideOut(
   s: Writable<"translate" | "opacity">,
-  dir: V = Dir.Right,
+  dir: Vec = Dir.Right,
   sec = 0.3,
   dist = 30,
 ): Animator {

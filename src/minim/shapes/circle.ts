@@ -1,12 +1,7 @@
 import { toSig, type Val } from "@minim/signals";
 import { type ReadonlyCell } from "@minim/signals";
 import { Shape, type Segment } from "./shape";
-import {
-  Vec,
-  box,
-  type DerivedPoint,
-  type Pointlike,
-} from "@minim/values";
+import { Vec, box } from "@minim/values";
 import { TWO_PI } from "./dashed";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
@@ -16,7 +11,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   readonly radius: ReadonlyCell<number>;
 
   constructor(
-    center: Pointlike,
+    center: Vec.Like,
     radius: Val<number>,
     opts: O = {} as O,
   ) {
@@ -29,7 +24,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
       { origin: () => center.value },
     );
     this.radius = r;
-    // Note: the inherited Box `this.center` (a DerivedPoint computed
+    // Note: the inherited Box `this.center` (a Vec.Readonly computed
     // from the Box) resolves to the same point as `center` reactively;
     // internal methods read it via `this.center` rather than capturing
     // the constructor parameter.
@@ -41,7 +36,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   }
 
   /** Point on perimeter at angle θ (radians, y-down). */
-  atAngle(angle: Val<number>): DerivedPoint {
+  atAngle(angle: Val<number>): Vec.Readonly {
     const a = toSig(angle);
     return Vec.derived(() => ({
       x: this.center.x.value + this.radius.value * Math.cos(a.value),
@@ -49,7 +44,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
     }));
   }
   /** Unit tangent at angle θ. */
-  tangentAt(angle: Val<number>): DerivedPoint {
+  tangentAt(angle: Val<number>): Vec.Readonly {
     const a = toSig(angle);
     return Vec.derived(() => ({
       x: -Math.sin(a.value),
@@ -57,7 +52,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
     }));
   }
 
-  override boundary(toward: Pointlike): DerivedPoint {
+  override boundary(toward: Vec.Like): Vec.Readonly {
     return Vec.derived(() => {
       const t = toward.value;
       const c = this.center.value;
@@ -89,7 +84,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
 }
 
 export const circle = <const O extends CircleOpts>(
-  at: Pointlike,
+  at: Vec.Like,
   r: Val<number>,
   opts?: O,
 ): Circle<O> => new Circle<O>(at, r, opts);

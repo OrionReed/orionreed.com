@@ -1,6 +1,6 @@
 // Fluent generator composition + the tween engine.
 //
-// `Play<R>` is the fluent surface (`.until / .while / .then / .at`)
+// `Play<R>` is the fluent surface (`.until / .then / .at`)
 // over any `Animator`. `play(p)` is the single entry point — it
 // accepts a `Playable<R>`, which is "anything yieldable plus reactive
 // cells (interpreted as wait-until-truthy)":
@@ -23,7 +23,7 @@
 // `Tween<T>` extends `Play<void>` with `.to(target, dur, ease?)`
 // continuation. They share this file because `TweenImpl` extends
 // `PlayImpl`, and `Tween<T>` preserves its narrowed type through
-// `.until / .while / .at`.
+// `.until / .at`.
 //
 // Tweening is signal-typed: the engine writes `sig.value` each frame
 // via a `lerp(start, target, t)` registered on the cell's prototype
@@ -40,9 +40,9 @@ import {
 import { drive } from "../core/drive";
 import { easeOut } from "../core/easings";
 import { signal, Signal } from "./signal";
-import { toSig, type Val } from "./arg";
+import { asReader, toSig, type Val } from "./arg";
 import { type ReadonlyCell } from "./cell";
-import { race, untilTrue, untilFalse } from "./suspensions";
+import { race, untilTrue } from "./suspensions";
 
 // ── Playable<R>: the input vocabulary for play() and methods ──────
 //
@@ -76,12 +76,11 @@ function playableGen<R>(p: Playable<R>): Animator<R> {
 export interface Play<R = void> extends Animator<R> {
   /** End this when `p` fires. Cell → ends when truthy; Animator → ends
    *  when it completes; number → ends after that many seconds; array
-   *  → ends when all in the array complete. Read: "this, until p". */
+   *  → ends when all in the array complete. Read: "this, until p".
+   *
+   *  For the falsy case (run while sig stays truthy), use
+   *  `play(work).until(not(sig))`. */
   until(p: Playable): Play<R>;
-
-  /** Continue while `sig` is truthy; end when it goes falsy.
-   *  Read: "this, while sig". */
-  while(sig: ReadonlyCell<unknown>): Play<R>;
 
   /** Sequence: run this, then `next`. Accepts any Playable. Return-
    *  type widens to `unknown`. */
@@ -122,10 +121,6 @@ class PlayImpl<R = void> implements Play<R> {
     return this._rewrap(race(this._g, trigger) as Animator<R>);
   }
 
-  while(sig: ReadonlyCell<unknown>): Play<R> {
-    return this._rewrap(race(this._g, untilFalse(sig)) as Animator<R>);
-  }
-
   then(next: Playable): Play<unknown> {
     const g = this._g;
     // `.then` always exits to plain Play<unknown> — subclasses (Tween)
@@ -152,12 +147,10 @@ export function scaledChild<R>(
   scale: Val<number>,
 ): Animator<R> {
   // Bridge `Val<number>` to the runtime's `number | () => number`.
+  // Static scale stays a primitive so the runtime can skip the thunk
+  // call; everything else flows through `asReader`.
   const arg: number | (() => number) =
-    typeof scale === "number"
-      ? scale
-      : typeof scale === "function"
-        ? (scale as () => number)
-        : (() => toSig(scale).value);
+    typeof scale === "number" ? scale : asReader(scale);
   return suspend<R>((wake, spawn) => {
     // wake's signature varies on `R extends void`. The runtime passes
     // whatever the child returned; cast to a permissive shape for the
@@ -232,18 +225,19 @@ const defaultEase: Easing = easeOut;
 export type Lerp<T> = (a: T, b: T, t: number) => T;
 
 /** Hidden prototype slot that carries the value type's lerp.
- *  @internal — exported for the struct framework only. */
-export const LERP = Symbol("minim.lerp");
+ *  @internal — exported for the struct framework only. Uses
+ *  `Symbol.for` so third-party libraries can recognise "this struct
+ *  has a lerp" without coupling to minim's import path. */
+export const LERP = Symbol.for("minim.lerp");
 
 /** A tween — `Play<void>` plus `.to(...)` continuation; preserves
- *  itself through `.until / .while / .at`. `.then(y)` returns plain
+ *  itself through `.until / .at`. `.then(y)` returns plain
  *  `Play<unknown>` (leaves the tween world). */
 export interface Tween<T> extends Play<void> {
   /** Append another segment that runs after this one. */
   to(target: T, dur: Val<number>, ease?: Easing): Tween<T>;
   // Tween-preserving overrides of the Play methods.
   until(p: Playable): Tween<T>;
-  while(sig: ReadonlyCell<unknown>): Tween<T>;
   at(scale: Val<number>): Tween<T>;
 }
 
@@ -259,7 +253,7 @@ class TweenImpl<T> extends PlayImpl<void> implements Tween<T> {
   }
 
   /** Re-wrap into a Tween (instead of plain Play) so all the inherited
-   *  `until / while / at` methods preserve `Tween<T>` automatically. */
+   *  `until / at` methods preserve `Tween<T>` automatically. */
   protected override _rewrap(g: Animator<void>): Tween<T> {
     return new TweenImpl(this._sig, this._lerp, g);
   }
@@ -276,16 +270,13 @@ class TweenImpl<T> extends PlayImpl<void> implements Tween<T> {
     return new TweenImpl(sig, lerp, next);
   }
 
-  // ── until/while/at narrow their return type to `Tween<T>`. The
+  // ── until/at narrow their return type to `Tween<T>`. The
   //    runtime is fully inherited from PlayImpl — these are type-level
   //    passthroughs. TS can't infer the narrowed return purely from
   //    the `_rewrap` override; we declare the signature here and rely
   //    on the runtime guarantee. ───────────────────────────────────
   override until(p: Playable): Tween<T> {
     return super.until(p) as Tween<T>;
-  }
-  override while(sig: ReadonlyCell<unknown>): Tween<T> {
-    return super.while(sig) as Tween<T>;
   }
   override at(scale: Val<number>): Tween<T> {
     return super.at(scale) as Tween<T>;

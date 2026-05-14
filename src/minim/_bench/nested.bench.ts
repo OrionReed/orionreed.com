@@ -23,48 +23,47 @@
 // that mirrors what `values/matrix.ts` does, so we measure the cost
 // of the *reads* not the matrix math.
 
-import { Signal, signal } from "@minim/signals";
-import { Vec, type V } from "@minim/values";
-import { struct } from "@minim/signals";
+import { defineStruct, Signal, signal } from "@minim/signals";
+import { Vec } from "@minim/values";
 import { bench, group } from "mitata";
 
 // ── The candidate: Transform-as-struct with nested Vec fields ────
 
 type Tr = {
-  translate: V;
+  translate: Vec;
   rotate: number;
-  scale: V;
-  origin: V;
+  scale: Vec;
+  origin: Vec;
   opacity: number;
 };
 
-const Transform = struct<Tr>("Transform", {
-  translate: { x: 0, y: 0 },
-  rotate: 0,
-  scale: { x: 1, y: 1 },
-  origin: { x: 0, y: 0 },
-  opacity: 1,
-})
-  .nested({ translate: Vec, scale: Vec, origin: Vec })
-  .ops({
-    lerp: (a, b: Tr, t: number): Tr => ({
-      translate: {
-        x: a.translate.x + (b.translate.x - a.translate.x) * t,
-        y: a.translate.y + (b.translate.y - a.translate.y) * t,
-      },
-      rotate: a.rotate + (b.rotate - a.rotate) * t,
-      scale: {
-        x: a.scale.x + (b.scale.x - a.scale.x) * t,
-        y: a.scale.y + (b.scale.y - a.scale.y) * t,
-      },
-      origin: {
-        x: a.origin.x + (b.origin.x - a.origin.x) * t,
-        y: a.origin.y + (b.origin.y - a.origin.y) * t,
-      },
-      opacity: a.opacity + (b.opacity - a.opacity) * t,
-    }),
-  })
-  .build();
+const Transform = defineStruct({
+  name: "Transform",
+  defaults: {
+    translate: { x: 0, y: 0 },
+    rotate: 0,
+    scale: { x: 1, y: 1 },
+    origin: { x: 0, y: 0 },
+    opacity: 1,
+  } as Tr,
+  nested: { translate: Vec, scale: Vec, origin: Vec },
+  lerp: (a, b, t): Tr => ({
+    translate: {
+      x: a.translate.x + (b.translate.x - a.translate.x) * t,
+      y: a.translate.y + (b.translate.y - a.translate.y) * t,
+    },
+    rotate: a.rotate + (b.rotate - a.rotate) * t,
+    scale: {
+      x: a.scale.x + (b.scale.x - a.scale.x) * t,
+      y: a.scale.y + (b.scale.y - a.scale.y) * t,
+    },
+    origin: {
+      x: a.origin.x + (b.origin.x - a.origin.x) * t,
+      y: a.origin.y + (b.origin.y - a.origin.y) * t,
+    },
+    opacity: a.opacity + (b.opacity - a.opacity) * t,
+  }),
+});
 
 // Default initial transform (identity) — used in construction benches.
 const TR0: Tr = {
@@ -87,7 +86,7 @@ class FiveFields {
 
 // ── Reference: 5 fields, with lens-Vec wrappers (Shape's actual ctor) ──
 
-const lensVec = (src: Signal<V>) =>
+const lensVec = (src: Signal<Vec>) =>
   Vec.lens(
     () => src.value,
     (v) => {
@@ -108,7 +107,7 @@ class FiveFieldsLensed {
 
 // ── Matrix compose helper (read-cost dominated) ──────────────────
 
-function composeRead(t: V, r: number, s: V, o: V): number {
+function composeRead(t: Vec, r: number, s: Vec, o: Vec): number {
   // Mirrors `values/matrix.ts` `compose` shape, but returns a single
   // number so the JIT can't dead-code-eliminate the reads.
   const c = Math.cos(r);

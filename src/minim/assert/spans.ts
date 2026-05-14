@@ -7,7 +7,7 @@
 // future caller needs fan-out, compose observers in user code and
 // assign the composition to `anim.observer`.
 
-import type { Anim, AnimObserver, Animator } from "@minim/core";
+import { Anim, AnimObserver, Animator } from "@minim/core";
 import { tagOf } from "./tag";
 
 /** One generator's lifecycle as flat data. `completedAt` is set on

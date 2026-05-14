@@ -1,20 +1,15 @@
 import { type Val } from "@minim/signals";
 import { cell, type ReadonlyCell } from "@minim/signals";
 import { Shape, type Segment } from "./shape";
-import {
-  Vec,
-  box,
-  type DerivedPoint,
-  type Pointlike,
-} from "@minim/values";
+import { Vec, box } from "@minim/values";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
 export interface LineOpts extends CommonOpts {}
 
 export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
   constructor(
-    readonly from: Pointlike,
-    readonly to: Pointlike,
+    readonly from: Vec.Like,
+    readonly to: Vec.Like,
     opts: O = {} as O,
   ) {
     super(
@@ -49,14 +44,14 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
 
   // Tangent/normal/angle are constant along a Line; `t` is accepted
   // for API symmetry with Path but ignored. Cached lazily.
-  #tangent?: DerivedPoint;
-  #normal?: DerivedPoint;
+  #tangent?: Vec.Readonly;
+  #normal?: Vec.Readonly;
   #angle?: ReadonlyCell<number>;
   #length?: ReadonlyCell<number>;
 
   /** Position at fraction `t` (0=from, 1=to). Symmetric with
    *  `Path.pointAt`. */
-  pointAt(t: Val<number>): Pointlike {
+  pointAt(t: Val<number>): Vec.Like {
     if (typeof t === "number") {
       if (t === 0) return this.from;
       if (t === 1) return this.to;
@@ -64,11 +59,11 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
     return this.from.lerp(this.to, t);
   }
 
-  tangentAt(_t: Val<number> = 0): DerivedPoint {
+  tangentAt(_t: Val<number> = 0): Vec.Readonly {
     return (this.#tangent ??= this.to.sub(this.from).normalize());
   }
 
-  normalAt(_t: Val<number> = 0): DerivedPoint {
+  normalAt(_t: Val<number> = 0): Vec.Readonly {
     return (this.#normal ??= this.tangentAt().perp());
   }
 
@@ -89,7 +84,7 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
   }
 
   /** Closer endpoint to `toward`. */
-  override boundary(toward: Pointlike): DerivedPoint {
+  override boundary(toward: Vec.Like): Vec.Readonly {
     return Vec.derived(() => {
       const t = toward.value;
       const a = this.from.value;
@@ -106,7 +101,7 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
 }
 
 export const line = <const O extends LineOpts>(
-  from: Pointlike,
-  to: Pointlike,
+  from: Vec.Like,
+  to: Vec.Like,
   opts?: O,
 ): Line<O> => new Line<O>(from, to, opts);

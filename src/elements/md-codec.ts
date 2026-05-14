@@ -1,16 +1,4 @@
-import {
-  Diagram,
-  Mount,
-  Anchor,
-  attr,
-  label,
-  line,
-  path,
-  rect,
-  split,
-  t,
-  type Cell,
-} from "../minim";
+import { Diagram, Mount, Anchor, attr, label, line, path, rect, split, t, type Cell } from "../minim";
 
 interface CodecPart {
   label: string;

@@ -4,7 +4,7 @@
 import { toSig, type Val } from "@minim/signals";
 import { cell, derive, type Cell } from "@minim/signals";
 import { type AnyShape } from "./shape";
-import { Anchor, vec, type Pointlike } from "@minim/values";
+import { Anchor, vec, Vec } from "@minim/values";
 import { tokens } from "./tokens";
 import { group } from "./group";
 import { rect } from "./rect";
@@ -23,7 +23,7 @@ export interface ButtonOpts {
  *  `hovered` signal (auto-created) tracks pointer state — derive from
  *  it to drive ancillary visuals. */
 export function button(
-  pos: Pointlike,
+  pos: Vec.Like,
   content: Val<Content>,
   onClick: () => void,
   opts: ButtonOpts = {},

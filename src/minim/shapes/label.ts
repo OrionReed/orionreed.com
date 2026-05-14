@@ -1,6 +1,6 @@
 import { toSig, type Val } from "@minim/signals";
 import { Shape, type ShapeOpts } from "./shape";
-import { box, type Pointlike, type V } from "@minim/values";
+import { box, Vec } from "@minim/values";
 import { tokens } from "./tokens";
 import { renderContent, flattenText, type Content } from "./text";
 
@@ -8,7 +8,7 @@ export interface LabelOpts extends ShapeOpts {
   size?: Val<number>;
   /** Bbox point that sits at `at` — `{0, 0}` = top-left, `{0.5, 0.5}`
    *  (default) = center. See `Anchor` for named consts. */
-  align?: V;
+  align?: Vec;
   bold?: boolean;
 }
 
@@ -20,10 +20,10 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
   /** The user-supplied anchor point — the position the label is
    *  attached to (subject to `align`). Distinct from the inherited
    *  Box `center` / `at(u, v)` which describe the bounding box. */
-  readonly anchor: Pointlike;
+  readonly anchor: Vec.Like;
 
   constructor(
-    anchor: Pointlike,
+    anchor: Vec.Like,
     content: Val<Content>,
     opts: O = {} as O,
   ) {
@@ -59,7 +59,7 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
 }
 
 export const label = <const O extends LabelOpts>(
-  at: Pointlike,
+  at: Vec.Like,
   content: Val<Content>,
   opts?: O,
 ): Label<O> => new Label<O>(at, content, opts);

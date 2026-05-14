@@ -1,12 +1,15 @@
 // Box — the reactive rectangular-region primitive (axis-aligned).
-// Mirrors the Vec/V split: `Box` is the registered struct value
-// (`Box.signal({...})`, `instanceof Box`, etc.), `B` is the plain
-// `{x, y, w, h}` value type.
+//
+// Pattern:
+//   interface Box        — plain shape ({ x, y, w, h })
+//   const Box            — registered struct
+//   Box.Writable         — writable cell type
+//   Box.Readonly         — readonly cell type
+//   Box.Like             — either flavor
 //
 // Plain-value helpers (`box`, `expandBox`, `unionBox`, `boxEdgeFrom`)
 // live alongside the struct so the struct's `expand` / `union` ops
-// can reuse them — one source of truth, matching the matrix.ts
-// pattern. The plain `box()` constructor is internal-only (not
+// can reuse them. The plain `box()` constructor is internal-only (not
 // re-exported from `minim/index`) to avoid colliding with the
 // `decorations.box(part)` shape factory.
 //
@@ -16,14 +19,23 @@
 // instance. Most consumers only touch one or two anchors per box —
 // the rest never allocate.
 
-import { struct } from "@minim/signals";
-import { Vec, type V, type Pointlike, type DerivedPoint } from "./vec";
+import {
+  computed,
+  defineStruct,
+  type ReadonlyCell,
+  type WriteOf,
+  type ReadOf,
+} from "@minim/signals";
+import { Vec } from "./vec";
 import { transformBox, type Matrix2D } from "./matrix";
-import { computed, type ReadonlyCell } from "@minim/signals";
 
-/** `{x, y, w, h}`. `Box` is both this type and the registered struct value
- *  (same trick `class` uses by default). */
-export type Box = { x: number; y: number; w: number; h: number };
+/** Plain `{x, y, w, h}` rectangular region. */
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 // ── Plain-value helpers ────────────────────────────────────────────
 //
@@ -78,129 +90,127 @@ export function boxEdgeFrom(
 // source of truth for matrix-aware box math, including the identity
 // shortcut).
 
-export const Box = struct<Box>("Box", { x: 0, y: 0, w: 0, h: 0 })
-  .construct(
-    (x: number, y: number, w: number, h: number): Box => ({ x, y, w, h }),
-  )
-  .equals((a, b) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h)
-  .ops({
-    /** Component-wise add. With `sub`+`scale` stamps `[ALGEBRA]` so
-     *  behaviors and aggregates work on `Reactive<Box>`. */
-    add: (a, b: Box): Box => ({
-      x: a.x + b.x,
-      y: a.y + b.y,
-      w: a.w + b.w,
-      h: a.h + b.h,
-    }),
-    sub: (a, b: Box): Box => ({
-      x: a.x - b.x,
-      y: a.y - b.y,
-      w: a.w - b.w,
-      h: a.h - b.h,
-    }),
-    scale: (a, k: number): Box => ({
-      x: a.x * k,
-      y: a.y * k,
-      w: a.w * k,
-      h: a.h * k,
-    }),
+export const Box = defineStruct({
+  name: "Box",
+  defaults: { x: 0, y: 0, w: 0, h: 0 } as Box,
+  construct: (x: number, y: number, w: number, h: number): Box => ({ x, y, w, h }),
+  equals: (a, b) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h,
+  // ── Capabilities ────────────────────────────────────────────────
+  algebra: {
+    add:   (a, b) => ({ x: a.x + b.x, y: a.y + b.y, w: a.w + b.w, h: a.h + b.h }),
+    sub:   (a, b) => ({ x: a.x - b.x, y: a.y - b.y, w: a.w - b.w, h: a.h - b.h }),
+    scale: (a, k) => ({ x: a.x * k, y: a.y * k, w: a.w * k, h: a.h * k }),
+  },
+  /** Component-wise lerp. */
+  lerp: (a, b, t) => ({
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+    w: a.w + (b.w - a.w) * t,
+    h: a.h + (b.h - a.h) * t,
+  }),
+  /** Distance between two boxes — Euclidean over (x, y, w, h). */
+  metric: (a, b) =>
+    Math.hypot(a.x - b.x, a.y - b.y, a.w - b.w, a.h - b.h),
+  ops: {
     expand: expandBox,
     union: (a, b: Box): Box => unionBox(a, b),
-    /** Component-wise lerp; enables `.to(target, dur)` tween. */
-    lerp: (a, b: Box, t: number): Box => ({
-      x: a.x + (b.x - a.x) * t,
-      y: a.y + (b.y - a.y) * t,
-      w: a.w + (b.w - a.w) * t,
-      h: a.h + (b.h - a.h) * t,
-    }),
-    /** This box in the frame `m`. Loose box around the four transformed
-     *  corners. */
+    /** This box in the frame `m`. Loose box around the four transformed corners. */
     in: (b: Box, m: Matrix2D): Box => transformBox(m, b),
-  })
-  .scalars({
-    contains: (a, p: V): boolean =>
+  },
+  scalars: {
+    contains: (a, p: Vec): boolean =>
       p.x >= a.x && p.x <= a.x + a.w && p.y >= a.y && p.y <= a.y + a.h,
-  })
-  .getters({
+  },
+  getters: {
     /** Area of this box, reactive. Lazy + cached as own-property. */
     area(this: { value: Box }): ReadonlyCell<number> {
       const self = this;
       return computed(() => self.value.w * self.value.h);
     },
-    /** Self-reference so `Reactive<Box>` values satisfy the
-     *  `Boxlike` interface (which has `box: ReadonlyCell<Box>` so
-     *  Shape/Part — who hold the Box as a *field* — and bare
-     *  Reactive<Box> are interchangeable to consumers). The Reactive
-     *  *is* its own Box signal — `b.box === b`. */
+    /** Self-reference so reactive `Box` values satisfy the `BoxLike`
+     *  interface (which has `box: ReadonlyCell<Box>`). Shape/Part hold
+     *  the Box as a field; bare reactive Box cells satisfy the same
+     *  surface because of this self-getter (`b.box === b`). */
     box(this: any) {
       return this;
     },
-    /** `at(u, v)` returns a reactive Point at normalized fraction
-     *  `(0, 0)` (top-left) to `(1, 1)` (bottom-right). Implemented as
-     *  a getter that returns a method-shaped closure, so it's
-     *  available on every Reactive flavor (signal, derived, lens) —
-     *  cardinals (`.center`, etc.) are sugar built on top. */
+    /** `at(u, v)` returns a reactive Vec at normalized fraction
+     *  `(0, 0)` (top-left) to `(1, 1)` (bottom-right). Available on
+     *  every cell flavor; cardinals (`.center`, etc.) are sugar over
+     *  this. */
     at(this: { value: Box }) {
       const self = this;
-      return (u: number, v: number): DerivedPoint =>
+      return (u: number, v: number): Vec.Readonly =>
         Vec.derived(() => {
           const b = self.value;
           return { x: b.x + u * b.w, y: b.y + v * b.h };
         });
     },
     /** Centre point — `at(0.5, 0.5)`. Lazy: built on first access. */
-    center(this: { value: Box }): DerivedPoint {
+    center(this: { value: Box }): Vec.Readonly {
       const self = this;
       return Vec.derived(() => {
         const b = self.value;
         return { x: b.x + 0.5 * b.w, y: b.y + 0.5 * b.h };
       });
     },
-    top(this: { value: Box }): DerivedPoint {
+    top(this: { value: Box }): Vec.Readonly {
       const self = this;
       return Vec.derived(() => {
         const b = self.value;
         return { x: b.x + 0.5 * b.w, y: b.y };
       });
     },
-    bottom(this: { value: Box }): DerivedPoint {
+    bottom(this: { value: Box }): Vec.Readonly {
       const self = this;
       return Vec.derived(() => {
         const b = self.value;
         return { x: b.x + 0.5 * b.w, y: b.y + b.h };
       });
     },
-    left(this: { value: Box }): DerivedPoint {
+    left(this: { value: Box }): Vec.Readonly {
       const self = this;
       return Vec.derived(() => {
         const b = self.value;
         return { x: b.x, y: b.y + 0.5 * b.h };
       });
     },
-    right(this: { value: Box }): DerivedPoint {
+    right(this: { value: Box }): Vec.Readonly {
       const self = this;
       return Vec.derived(() => {
         const b = self.value;
         return { x: b.x + b.w, y: b.y + 0.5 * b.h };
       });
     },
-  })
-  .build();
+  },
+});
+
+// eslint-disable-next-line @typescript-eslint/no-namespace
+export namespace Box {
+  /** Writable reactive Box. */
+  export type Writable = WriteOf<typeof Box>;
+  /** Read-only reactive Box. */
+  export type Readonly = ReadOf<typeof Box>;
+  /** Anything with a `Box`-shaped surface — reactive Box cells, plus
+   *  Shape / Part (which carry a `box` field). The full structural
+   *  shape is `BoxLike` below; `Box.Like` is the union of cell flavors. */
+  export type Like = Writable | Readonly;
+}
 
 /** Reactive parametric anchor on a Box — sugar over `box.at(u, v)`. */
 export const boxAt = (
-  b: { at: (u: number, v: number) => Pointlike },
+  b: { at: (u: number, v: number) => Vec.Like },
   u: number,
   v: number,
 ) => b.at(u, v);
 
-// ── Boxlike — structural surface ───────────────────────────────────
+// ── BoxLike — structural surface ───────────────────────────────────
 //
-// Implemented by `Shape`, `Part`, and any `Reactive<Box>` from this
-// module. Consumers take `Boxlike` and don't care which.
+// Implemented by `Shape`, `Part`, and any reactive `Box` from this
+// module. Consumers take `BoxLike` and don't care which.
 
 /** Reactive rectangular region with cardinals + `at(u, v)`. */
-export interface Boxlike {
+export interface BoxLike {
   /** Source-of-truth Box signal; everything else derives from it. For
    *  `Reactive<Box>`, `box === box.box` (self-reference). */
   readonly box: ReadonlyCell<Box>;
@@ -210,19 +220,19 @@ export interface Boxlike {
   readonly w: ReadonlyCell<number>;
   readonly h: ReadonlyCell<number>;
 
-  readonly center: Pointlike;
-  readonly top: Pointlike;
-  readonly bottom: Pointlike;
-  readonly left: Pointlike;
-  readonly right: Pointlike;
+  readonly center: Vec.Like;
+  readonly top: Vec.Like;
+  readonly bottom: Vec.Like;
+  readonly left: Vec.Like;
+  readonly right: Vec.Like;
 
-  /** Reactive Point at `(u, v)`: `(0, 0)` is top-left, `(1, 1)` bottom-right. */
-  at(u: number, v: number): Pointlike;
+  /** Reactive Vec at `(u, v)`: `(0, 0)` is top-left, `(1, 1)` bottom-right. */
+  at(u: number, v: number): Vec.Like;
 }
 
-/** Detect a `Boxlike` value structurally — anything with `box` and `at`.
+/** Detect a `BoxLike` value structurally — anything with `box` and `at`.
  *  Matches `Reactive<Box>`, `Shape`, `Part`, splits/grids, etc. */
-export function isBox(v: unknown): v is Boxlike {
+export function isBox(v: unknown): v is BoxLike {
   return (
     typeof v === "object" &&
     v !== null &&

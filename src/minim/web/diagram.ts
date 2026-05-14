@@ -5,16 +5,10 @@
 import { Anim } from "@minim/core";
 import { toSig, type Val } from "@minim/signals";
 import { effect } from "@minim/signals";
-import {
-  Shape,
-  SVG_NS,
-  mount,
-  ensureArrowMarker,
-  type Mount,
-} from "@minim/shapes";
-import { Box as BoxStruct, box, type Boxlike } from "@minim/values";
+import { Shape, SVG_NS, mount, ensureArrowMarker, type Mount } from "@minim/shapes";
+import { Box as BoxStruct, box, type BoxLike } from "@minim/values";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
-import type { Marker } from "@minim/tex";
+import { Marker } from "@minim/tex";
 // (other web/ files: relative imports stay local to keep the package self-contained)
 
 export const css = String.raw;
@@ -127,7 +121,7 @@ export class Diagram extends HTMLElement {
    *  First call wins; subsequent calls (and the auto-fit fallback) are
    *  no-ops. Returns a Reactive `Box` for layout use (`view.w.value`,
    *  `view.center`, etc.). */
-  view(w: Val<number>, h: Val<number>): Boxlike {
+  view(w: Val<number>, h: Val<number>): BoxLike {
     if (this.#viewSet) return this.#viewBox;
     const ws = toSig(w);
     const hs = toSig(h);
@@ -138,7 +132,7 @@ export class Diagram extends HTMLElement {
 
   /** Auto-fit viewBox to the root's bounds + optional padding. Called
    *  automatically after `scene()` when `view()` wasn't invoked. */
-  fit(padding?: Padding): Boxlike {
+  fit(padding?: Padding): BoxLike {
     if (this.#viewSet) return this.#viewBox;
     const p = resolvePadding(padding);
     const b = this.root.box.value;

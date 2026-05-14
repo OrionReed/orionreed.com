@@ -18,25 +18,7 @@
 // Strings (and other non-record types) use `lerpable(initial, lerp)` —
 // a tiny helper that stamps the same `[LERP]` slot on a plain Signal.
 
-import {
-  Anchor,
-  Box,
-  Color,
-  Diagram,
-  Mount,
-  Vec,
-  circle,
-  derive,
-  label,
-  lerpable,
-  loop,
-  num,
-  tween,
-  vec,
-  rect,
-  rgb,
-  type Lerp,
-} from "../../minim";
+import { Anchor, Box, Color, Diagram, Mount, Vec, circle, derive, label, lerpable, loop, num, tween, vec, rect, rgb, type Lerp } from "../../minim";
 
 const W = 640;
 const H = 320;

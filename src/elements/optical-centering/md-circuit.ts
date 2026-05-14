@@ -9,28 +9,7 @@
 //   C ─── CHOICE ─┬─ Z                   (random one-of branch)
 //                 └─ W
 
-import {
-  Diagram,
-  EventBus,
-  Mount,
-  type AnyShape,
-  type Val,
-  type Path,
-  type Pointlike,
-  cell,
-  circle,
-  derive,
-  label,
-  linear,
-  loop,
-  num,
-  path,
-  play,
-  vec,
-  rect,
-  toSig,
-  tokens,
-} from "../../minim";
+import { Diagram, EventBus, Mount, type AnyShape, type Val, type Path, cell, circle, derive, label, linear, loop, num, path, play, vec, rect, toSig, tokens, Vec } from "../../minim";
 import * as R from "../rand";
 
 export class MdCircuit extends Diagram {
@@ -95,7 +74,7 @@ export class MdCircuit extends Diagram {
     };
 
     /** Indicator dot toggled by a reactive boolean. */
-    const lit = (at: Pointlike, on: Val<boolean>) =>
+    const lit = (at: Vec.Like, on: Val<boolean>) =>
       circle(at, 4, {
         fill: derive(toSig(on), (v) => (v ? tokens.stroke : "transparent")),
       });
@@ -112,7 +91,7 @@ export class MdCircuit extends Diagram {
     const wire = (
       a: AnyShape,
       b: AnyShape,
-      opts: { from?: Pointlike; to?: Pointlike } = {},
+      opts: { from?: Vec.Like; to?: Vec.Like } = {},
     ) => {
       const aRef = opts.from ?? a.center;
       const bRef = opts.to ?? b.center;

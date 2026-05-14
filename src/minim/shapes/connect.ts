@@ -4,7 +4,7 @@
 import { toSig, type Val } from "@minim/signals";
 import { cell } from "@minim/signals";
 import { Shape, SVG_NS } from "./shape";
-import { type Pointlike } from "@minim/values";
+import { Vec } from "@minim/values";
 import { tokens } from "./tokens";
 import { Line, type LineOpts } from "./line";
 
@@ -15,8 +15,8 @@ const ARROW_GAP_DEFAULT = 4;
 /** Line between two shapes/points; shape endpoints meet the analytic
  *  boundary. */
 export function connect(
-  a: Shape | Pointlike,
-  b: Shape | Pointlike,
+  a: Shape | Vec.Like,
+  b: Shape | Vec.Like,
   opts?: LineOpts,
 ): Line {
   const aP = a instanceof Shape ? a.boundary(b instanceof Shape ? b.center : b) : a;
@@ -33,8 +33,8 @@ export interface ArrowOpts extends LineOpts {
  *  up gap-ish past the source and the tip lands gap-ish before the
  *  target (the marker extends past the line end). */
 export function arrow(
-  a: Shape | Pointlike,
-  b: Shape | Pointlike,
+  a: Shape | Vec.Like,
+  b: Shape | Vec.Like,
   opts: ArrowOpts = {},
 ): Line {
   const aBase =

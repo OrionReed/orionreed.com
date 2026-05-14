@@ -7,25 +7,7 @@
 // one contiguous block; concurrent siblings stack into separate
 // blocks; sequential batches under one parent reuse lanes.
 
-import {
-  Diagram,
-  Mount,
-  Anchor,
-  cell,
-  circle,
-  clockSignal,
-  easeOut,
-  fadeIn,
-  fadeOut,
-  fadeUp,
-  fadeUpOut,
-  forEach,
-  label,
-  vec,
-  rect,
-  spinIn,
-  zoomOut,
-} from "../../minim";
+import { Diagram, Mount, Anchor, cell, circle, clockSignal, easeOut, fadeIn, fadeOut, fadeUp, fadeUpOut, forEach, label, vec, rect, spinIn, zoomOut } from "../../minim";
 import {
   spans,
   tag,

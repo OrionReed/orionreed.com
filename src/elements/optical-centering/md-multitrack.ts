@@ -1,22 +1,7 @@
 // Multi-track timeline editor — overlapping clips, drag-to-edit
 // handles, one ball driven by all four clip progresses in parallel.
 
-import {
-  Diagram,
-  Mount,
-  Anchor,
-  cell,
-  circle,
-  derive,
-  draggable,
-  label,
-  line,
-  loop,
-  vec,
-  rect,
-  snapshot,
-  timeline,
-} from "../../minim";
+import { Diagram, Mount, Anchor, cell, circle, derive, draggable, label, line, loop, vec, rect, snapshot, timeline } from "../../minim";
 
 const STRIP_X = 40;
 const STRIP_Y = 24;

@@ -29,7 +29,7 @@ import {
   type NestedInput,
 } from "./cell";
 import { LERP, tween, type Easing, type Tween } from "./tween";
-import { type Val } from "./arg";
+import { asReader, toSig, type Val } from "./arg";
 
 // Re-export the type-level surface so files that import from
 // `./struct` (the historical home of `Reactive<...>` and friends)
@@ -40,8 +40,6 @@ export type {
   StructType,
   WriteOf,
   ReadOf,
-  NestedMap,
-  NestedInput,
 } from "./cell";
 
 // ── Marker symbols ─────────────────────────────────────────────────
@@ -51,38 +49,55 @@ export type {
 
 /** @internal Marks a per-type prototype with the `StructType` that
  *  owns it. `v[STRUCT] === MyStruct` powers fast `instanceof` checks. */
-export const STRUCT = Symbol("minim.struct");
+export const STRUCT = Symbol.for("minim.struct");
 
-/** @internal Carries the value type's vector-space algebra (add, sub,
- *  scale). Integrators (`spring`, `oscillate`, …) read this from the
- *  prototype to find ops for the value type without the user passing
- *  them explicitly. */
-export const ALGEBRA = Symbol("minim.algebra");
+// ── Capability slots ──────────────────────────────────────────────
+//
+// A struct can declare "capabilities" — typed contracts that library
+// functions consume via prototype lookup. Three are built-in:
+//
+//   [ALGEBRA]  { add(a, b), sub(a, b), scale(a, k) }
+//                Vector-space algebra. Consumed by `spring`, `oscillate`,
+//                `drift`, `attract`, `mean`. Also enables auto-method
+//                `.add(b)` / `.sub(b)` / `.scale(k)` on cells.
+//
+//   [LERP]     (a, b, t) => T
+//                Linear interpolation. Consumed by `tween` / `.to()`.
+//                Auto-installs `.to(target, dur)` and `.lerp(b, t)`
+//                methods on writable cells.
+//
+//   [METRIC]   (a, b) => number
+//                Distance function. Consumed by spring/oscillate's
+//                precision-stop check (the principled `normOf` fix).
+//                Auto-installs `.distance(b)` scalar method.
+//
+// User-defined capabilities use the same pattern: define a `Symbol.for(...)`
+// for global uniqueness, then `registerCapability(Struct, sym, impl)` to
+// stamp it on existing structs. Library functions look up the slot at
+// runtime.
+
+/** @internal Carries the value type's vector-space algebra. */
+export const ALGEBRA = Symbol.for("minim.algebra");
+
+/** @internal Carries the value type's distance function. */
+export const METRIC = Symbol.for("minim.metric");
 
 /** @internal Marks a writable per-type prototype (vs read-only).
  *  Used by `StructType.isWritable`. */
-export const WRITABLE = Symbol("minim.writable");
+export const WRITABLE = Symbol.for("minim.writable");
 
-// ── Helpers (each does one thing, all composable) ──────────────────
+// ── Lifters: bag-of-functions → reactive methods ───────────────────
+//
+// Each `op` / `scalar` in the user's bag becomes a method whose first
+// arg is bound to `this.value` and remaining args are bound via
+// `asReader` (the canonical Val<T> → thunk normaliser). The per-call
+// closure stays monomorphic — `asReader` picks the right reader once
+// at construction.
+//
+// Per-arity unrolled (0/1/2; 3+ generic). The arity-1 inline path
+// shaves one stack-frame for the most common case (`vec.add(b)`).
 
-/** Per-call reader for a lifted-op arg: signals → `.value`, functions
- *  → call, literals → return as-is. Branched once at construction so
- *  the resulting closure is monomorphic. */
-function readerFor(a: unknown): () => unknown {
-  if (a instanceof Signal) {
-    const s = a as Signal<unknown>;
-    return () => s.value;
-  }
-  if (typeof a === "function") {
-    const f = a as () => unknown;
-    return () => f();
-  }
-  return () => a;
-}
-
-/** Lift a pure struct-op into a method that returns a derived cell.
- *  Per-arity unrolled (0/1/2; 3+ generic). Arity-1 further specializes
- *  by arg shape so the per-call closure is monomorphic. */
+/** Lift a pure struct-op into a method that returns a derived cell. */
 function lift<T>(
   fn: (self: T, ...args: any[]) => T,
   derived: (fn: () => T) => unknown,
@@ -97,35 +112,27 @@ function lift<T>(
   if (arity === 1) {
     return function (this: ReadonlySignal<T>, a: unknown) {
       const self = this;
-      if (a instanceof Signal) {
-        const sa = a as Signal<unknown>;
-        return derived(() => fn(self.value, sa.value));
-      }
-      if (typeof a === "function") {
-        const fa = a as () => unknown;
-        return derived(() => fn(self.value, fa()));
-      }
-      return derived(() => fn(self.value, a));
+      const ar = asReader(a as Val<unknown>);
+      return derived(() => fn(self.value, ar()));
     };
   }
   if (arity === 2) {
     return function (this: ReadonlySignal<T>, a: unknown, b: unknown) {
       const self = this;
-      const ar = readerFor(a);
-      const br = readerFor(b);
+      const ar = asReader(a as Val<unknown>);
+      const br = asReader(b as Val<unknown>);
       return derived(() => fn(self.value, ar(), br()));
     };
   }
   return function (this: ReadonlySignal<T>, ...args: unknown[]) {
     const self = this;
-    const readers = args.map(readerFor);
+    const readers = args.map((a) => asReader(a as Val<unknown>));
     return derived(() => fn(self.value, ...readers.map((r) => r())));
   };
 }
 
-/** Lift a scalar-returning op into a method that returns a
- *  `ReadonlySignal<R>` (via `computed`). Same per-arity dispatch
- *  as `lift`. */
+/** Lift a scalar-returning op into a method returning a `ReadonlyCell<R>`
+ *  via `computed`. Same per-arity dispatch as `lift`. */
 function liftScalar<T>(fn: (self: T, ...args: any[]) => unknown) {
   const arity = Math.max(0, fn.length - 1);
   if (arity === 0) {
@@ -137,28 +144,21 @@ function liftScalar<T>(fn: (self: T, ...args: any[]) => unknown) {
   if (arity === 1) {
     return function (this: ReadonlySignal<T>, a: unknown) {
       const self = this;
-      if (a instanceof Signal) {
-        const sa = a as Signal<unknown>;
-        return computed(() => fn(self.value, sa.value));
-      }
-      if (typeof a === "function") {
-        const fa = a as () => unknown;
-        return computed(() => fn(self.value, fa()));
-      }
-      return computed(() => fn(self.value, a));
+      const ar = asReader(a as Val<unknown>);
+      return computed(() => fn(self.value, ar()));
     };
   }
   if (arity === 2) {
     return function (this: ReadonlySignal<T>, a: unknown, b: unknown) {
       const self = this;
-      const ar = readerFor(a);
-      const br = readerFor(b);
+      const ar = asReader(a as Val<unknown>);
+      const br = asReader(b as Val<unknown>);
       return computed(() => fn(self.value, ar(), br()));
     };
   }
   return function (this: ReadonlySignal<T>, ...args: unknown[]) {
     const self = this;
-    const readers = args.map(readerFor);
+    const readers = args.map((a) => asReader(a as Val<unknown>));
     return computed(() => fn(self.value, ...readers.map((r) => r())));
   };
 }
@@ -370,7 +370,9 @@ function defineCell<T, M extends object>(
   return self;
 }
 
-// ── The Builder facade ────────────────────────────────────────────
+// ── BuilderState — the internal config record produced by both the
+//    public `defineStruct({...})` entry and the per-value-type wiring
+//    in `values/*`. Keeps `finalize` agnostic of the entry shape. ──
 
 interface BuilderState<T> {
   name: string;
@@ -378,157 +380,12 @@ interface BuilderState<T> {
   equals?: (a: T, b: T) => boolean;
   construct?: (...args: any[]) => T;
   nested?: NestedMap<T>;
+  algebra?: { add: (a: T, b: T) => T; sub: (a: T, b: T) => T; scale: (a: T, k: number) => T };
+  lerp?: (a: T, b: T, t: number) => T;
+  metric?: (a: T, b: T) => number;
 }
 
-type OpsBag<T> = Record<string, (self: T, ...args: any[]) => T>;
-type ScalarsBag<T> = Record<string, (self: T, ...args: any[]) => unknown>;
-type MethodsBag<T, O, X, M, G, N> = Record<
-  string,
-  (this: Cell<T, O, X, G, M, N>, ...args: any[]) => any
->;
-type GettersBag<T, O, X, M, G, N> = Record<
-  string,
-  (this: Cell<T, O, X, G, M, N> | ReadonlyCell<T, O, X, G, M, N>) => any
->;
-
-class Builder<T, O = {}, X = {}, G = {}, M = {}, N = {}> {
-  constructor(
-    private state: BuilderState<T>,
-    private ops_: O,
-    private scalars_: X,
-    private getters_: G,
-    private methods_: M,
-  ) {}
-
-  /** Suppress no-op writes when `eq(a, b)`. */
-  equals(fn: (a: T, b: T) => boolean): Builder<T, O, X, G, M, N> {
-    return new Builder(
-      { ...this.state, equals: fn },
-      this.ops_,
-      this.scalars_,
-      this.getters_,
-      this.methods_,
-    );
-  }
-
-  /** Positional constructor; powers fast (per-arity-unrolled) axis
-   *  writers. Without this, axes use a slower spread fallback. */
-  construct(fn: (...args: any[]) => T): Builder<T, O, X, G, M, N> {
-    return new Builder(
-      { ...this.state, construct: fn },
-      this.ops_,
-      this.scalars_,
-      this.getters_,
-      this.methods_,
-    );
-  }
-
-  /** Declare which fields hold values of *other* registered struct
-   *  types. The framework then:
-   *
-   *    - Exposes those fields with the nested struct's full surface
-   *      (`tr.translate.x`, `tr.translate.length`, …).
-   *    - For `.signal()` flavor, switches storage to SoA: each nested
-   *      field is its own per-field signal (an own-property on the
-   *      cell instance), so per-axis writes (`tr.translate.x.value =
-   *      5`) only re-run subscribers of `translate`'s x lens — not
-   *      everything reading the whole `tr`. The remaining non-nested
-   *      fields share a single AoS Signal underneath.
-   *    - For `.derived()` and `.lens()` flavors, uses AoS storage
-   *      with nested-struct-typed projections (so the surface is the
-   *      same; only the per-axis write story differs).
-   *
-   *  Trade-offs: SoA pays for construction (one Signal per nested
-   *  field instead of one for the whole struct) and for whole-value
-   *  reads (must compose). Wins on per-axis writes (the hot path for
-   *  Shape's transform). Use only for value types whose nested fields
-   *  see lots of independent axis writes. */
-  nested<N2 extends NestedMap<T>>(map: N2): Builder<T, O, X, G, M, N2> {
-    return new Builder<T, O, X, G, M, N2>(
-      { ...this.state, nested: map as NestedMap<T> },
-      this.ops_,
-      this.scalars_,
-      this.getters_,
-      this.methods_,
-    );
-  }
-
-  /** Struct-returning ops `(self, ...args) => T`. Each becomes a
-   *  reactive method. `add`/`sub`/`scale` auto-stamps `[ALGEBRA]`;
-   *  `lerp` auto-stamps `[LERP]`. */
-  ops<O2 extends OpsBag<T>>(bag: O2): Builder<T, O & O2, X, G, M, N> {
-    return new Builder<T, O & O2, X, G, M, N>(
-      this.state,
-      { ...this.ops_, ...bag } as O & O2,
-      this.scalars_,
-      this.getters_,
-      this.methods_,
-    );
-  }
-
-  /** Scalar-returning ops `(self, ...args) => R`. Each becomes a
-   *  reactive method returning `ReadonlySignal<R>`. */
-  scalars<X2 extends ScalarsBag<T>>(bag: X2): Builder<T, O, X & X2, G, M, N> {
-    return new Builder<T, O, X & X2, G, M, N>(
-      this.state,
-      this.ops_,
-      { ...this.scalars_, ...bag } as X & X2,
-      this.getters_,
-      this.methods_,
-    );
-  }
-
-  /** Lazy property getters. First read calls the function and
-   *  caches the result as own-property — subsequent reads are at
-   *  memory speed. Use for "anchors" / projections that should look
-   *  like properties rather than method calls. */
-  getters<G2 extends GettersBag<T, O, X, M, G, N>>(
-    bag: G2,
-  ): Builder<T, O, X, G & G2, M, N> {
-    return new Builder<T, O, X, G & G2, M, N>(
-      this.state,
-      this.ops_,
-      this.scalars_,
-      { ...this.getters_, ...bag } as G & G2,
-      this.methods_,
-    );
-  }
-
-  /** Free-form methods (`this`-typed). Installed verbatim, not
-   *  lifted. Use for things like `.set(target)` (returns this) and
-   *  `.bind(target)` (returns a disposer) that don't fit the ops
-   *  contract. Only on writable Reactives. */
-  methods<M2 extends MethodsBag<T, O, X, M, G, N>>(
-    bag: M2,
-  ): Builder<T, O, X, G, M & M2, N> {
-    return new Builder<T, O, X, G, M & M2, N>(
-      this.state,
-      this.ops_,
-      this.scalars_,
-      this.getters_,
-      { ...this.methods_, ...bag } as M & M2,
-    );
-  }
-
-  build(): StructType<T, O, X, G, M, N> {
-    return finalize(
-      this.state,
-      this.ops_ as Record<string, any>,
-      this.scalars_ as Record<string, any>,
-      this.getters_ as Record<string, any>,
-      this.methods_ as Record<string, any>,
-    ) as unknown as StructType<T, O, X, G, M, N>;
-  }
-}
-
-/** Build a `Cell<T>` / `ReadonlyCell<T>` factory. Fluent: chain `.construct()`,
- *  `.equals()`, `.nested()`, `.ops()`, `.scalars()`, `.getters()`,
- *  `.methods()`, then `.build()`. */
-export function struct<T>(name: string, defaults: T): Builder<T> {
-  return new Builder({ name, defaults }, {}, {}, {}, {});
-}
-
-// ── finalize: bridge from Builder state to defineCell ─────────────
+// ── finalize: build a StructType from a BuilderState + ops bags ───
 
 function finalize<T>(
   state: BuilderState<T>,
@@ -554,14 +411,14 @@ function finalize<T>(
     methods[name] = rawMethods[name];
   }
 
-  // Auto-stamp algebra slots if user provided the canonical ops.
-  // `.to(...)` is installed per-struct here (not on Signal.prototype)
-  // so plain `signal()` has no `.to` — minim does not patch the
-  // signals library. Tweenable<T, O, "rw"> in the type surface
-  // matches.
-  if (ops.lerp) {
-    methods[LERP] = ops.lerp;
-    const lerpFn = ops.lerp;
+  // ── Capability detection — both auto (from named ops) and explicit
+  //    (via `state.algebra` / `.lerp` / `.metric` slots). Explicit
+  //    wins if both are set. ────────────────────────────────────────
+  const lerpFn = state.lerp ?? ops.lerp;
+  if (lerpFn) {
+    methods[LERP] = lerpFn;
+    // `.to(target, dur, ease?)` is installed per-struct here (not on
+    // Signal.prototype) so plain `signal()` has no `.to`.
     methods.to = function (
       this: Signal<T>,
       target: T,
@@ -571,8 +428,18 @@ function finalize<T>(
       return tween(this, target, dur, ease, lerpFn);
     };
   }
-  if (ops.add && ops.sub && ops.scale) {
-    methods[ALGEBRA] = { add: ops.add, sub: ops.sub, scale: ops.scale };
+  const algebra =
+    state.algebra ??
+    (ops.add && ops.sub && ops.scale
+      ? { add: ops.add, sub: ops.sub, scale: ops.scale }
+      : undefined);
+  if (algebra) methods[ALGEBRA] = algebra;
+  if (state.metric) {
+    methods[METRIC] = state.metric;
+    // Auto-install `.distance(b)` scalar method if not already present.
+    if (!methods.distance) {
+      methods.distance = liftScalar(state.metric as (self: T, b: T) => number);
+    }
   }
 
   const fieldKeys =
@@ -681,14 +548,10 @@ function adoptField(
     }
     return nested.signal(initial as NestedInput<any, any>) as unknown as Signal<unknown>;
   }
-  // Non-nested field
-  if (initial != null && (initial as object) instanceof Signal) {
-    return initial as Signal<unknown>;
-  }
-  if (typeof initial === "function") {
-    return computed(initial as () => unknown) as Signal<unknown>;
-  }
-  return signal(initial);
+  // Non-nested field — canonical Val<T> → ReadonlyCell dispatch via
+  // `toSig`. Signals pass through; thunks become computeds; literals
+  // get wrapped in a fresh signal.
+  return toSig(initial as Val<unknown>) as Signal<unknown>;
 }
 
 // ── The nested-aware cell factory ────────────────────────────────
@@ -904,6 +767,220 @@ function installProjectionAxes<T>(
         });
         return view;
       },
+    });
+  }
+}
+
+// ── defineStruct: flat-config alternative to the Builder ──────────
+//
+// One function, one config object. Same runtime as the Builder under
+// the hood — calls into `finalize` directly. Differences:
+//
+//   - Capabilities (`algebra`, `lerp`, `metric`) are first-class config
+//     keys, not auto-detected from ops-bag names. Explicit, clearer.
+//   - Auto-installs methods from capabilities: `.add/.sub/.scale` from
+//     `algebra`; `.to(target, dur)` and `.lerp(b, t)` from `lerp`;
+//     `.distance(b)` from `metric`.
+//   - No method-chain plumbing — single function call, no Builder
+//     instances allocated during definition.
+
+/** Vector-space capability. Enables `spring` / `oscillate` / `drift`
+ *  / `attract` / `mean` over the struct's value type. Also auto-lifts
+ *  `.add(b)` / `.sub(b)` / `.scale(k)` as cell methods. */
+export interface VectorSpace<T> {
+  add(a: T, b: T): T;
+  sub(a: T, b: T): T;
+  scale(a: T, k: number): T;
+}
+
+/** Flat config for `defineStruct`. The function captures the literal
+ *  type via a `const` generic and projects each slot into the
+ *  returned `StructType`. */
+export interface StructConfig<T> {
+  /** Display name and `Symbol.hasInstance` discriminator. */
+  name: string;
+  /** Default value used when `.signal()` is called without a seed. */
+  defaults: T;
+  /** Positional constructor. Powers fast (per-arity-unrolled) axis
+   *  writers; without it the framework falls back to object spread. */
+  construct?: (...args: any[]) => T;
+  /** Suppress no-op writes when `eq(a, b)`. */
+  equals?: (a: T, b: T) => boolean;
+  /** Declare which fields hold values of other registered struct types
+   *  (e.g. `{ x: Num, y: Num }`). Enables full SoA storage. */
+  nested?: NestedMap<T>;
+  // ── Capabilities ────────────────────────────────────────────────
+  /** Vector-space algebra. Auto-lifts `.add(b)` / `.sub(b)` /
+   *  `.scale(k)`. Stamps `[ALGEBRA]`. */
+  algebra?: VectorSpace<T>;
+  /** Linear interpolation. Auto-lifts `.to(target, dur, ease?)` and
+   *  `.lerp(b, t)`. Stamps `[LERP]`. Enables `Tweenable` surface. */
+  lerp?: (a: T, b: T, t: number) => T;
+  /** Distance function. Auto-lifts `.distance(b)`. Stamps `[METRIC]`. */
+  metric?: (a: T, b: T) => number;
+  // ── Bags ────────────────────────────────────────────────────────
+  /** Struct-returning ops. Lifted to derived-cell-returning methods. */
+  ops?: Record<string, (self: T, ...args: any[]) => T>;
+  /** Scalar-returning ops. Lifted to `ReadonlyCell<R>`-returning methods. */
+  scalars?: Record<string, (self: T, ...args: any[]) => unknown>;
+  /** Lazy property getters. First read calls, caches on the instance. */
+  getters?: Record<string, (this: any) => unknown>;
+  /** Free-form methods (`this`-typed). Writable cells only. */
+  methods?: Record<string, (this: any, ...args: any[]) => any>;
+}
+
+/** Effective ops = user's `ops` bag + capabilities (algebra → add/sub/
+ *  scale, lerp → lerp). Mirrors the runtime merge. Pull the inferred
+ *  types out of the config object literal — `C extends { algebra: ...
+ *  }` fires only when the field is actually present at the type level
+ *  (i.e. the user wrote `algebra: {...}` inline). */
+type EffectiveOps<T, C> = (C extends { ops: infer O extends Record<string, any> }
+  ? O
+  : {}) &
+  (C extends { algebra: VectorSpace<T> }
+    ? { add: (a: T, b: T) => T; sub: (a: T, b: T) => T; scale: (a: T, k: number) => T }
+    : {}) &
+  (C extends { lerp: (a: T, b: T, t: number) => T }
+    ? { lerp: (a: T, b: T, t: number) => T }
+    : {});
+
+type EffectiveScalars<T, C> = (C extends {
+  scalars: infer X extends Record<string, any>;
+}
+  ? X
+  : {}) &
+  (C extends { metric: (a: T, b: T) => number }
+    ? { distance: (a: T, b: T) => number }
+    : {});
+
+/** Build a `StructType` from a flat config. Alternative to the fluent
+ *  `struct(name, defaults).ops({...}).build()` Builder — same runtime,
+ *  one function call, capabilities as first-class slots.
+ *
+ *  The returned `StructType`'s `O` parameter merges the capability
+ *  ops (algebra / lerp) into the user's `ops` bag so the cell's type
+ *  surface (`.to()`, `.add()`, etc.) lights up. Same for `metric` →
+ *  `scalars.distance`.
+ *
+ *  @example
+ *      const Num = defineStruct({
+ *        name: "Num",
+ *        defaults: 0,
+ *        construct: (v: number) => v,
+ *        algebra: { add: (a, b) => a + b, sub: (a, b) => a - b, scale: (a, k) => a * k },
+ *        lerp:   (a, b, t) => a + (b - a) * t,
+ *        metric: (a, b) => Math.abs(a - b),
+ *        ops: { clamp: (a, lo: number, hi: number) => a < lo ? lo : a > hi ? hi : a },
+ *        scalars: { abs: (a) => Math.abs(a) },
+ *      });
+ *      // Num.signal(0).to(...), .add(b), .distance(b), .clamp(lo, hi), …
+ */
+export function defineStruct<
+  T,
+  const C extends StructConfig<T>,
+>(
+  config: C & { defaults: T },
+): StructType<
+  T,
+  EffectiveOps<T, C>,
+  EffectiveScalars<T, C>,
+  C extends { getters: infer G extends Record<string, (this: any) => unknown> } ? G : {},
+  C extends { methods: infer M extends Record<string, (this: any, ...args: any[]) => any> } ? M : {},
+  C extends { nested: infer N extends NestedMap<T> } ? N : {}
+> {
+  const state: BuilderState<T> = {
+    name: config.name,
+    defaults: config.defaults,
+    construct: config.construct,
+    equals: config.equals,
+    nested: config.nested,
+    algebra: config.algebra,
+    lerp: config.lerp,
+    metric: config.metric,
+  };
+  // Runtime ops bag = user ops + capabilities. Capabilities go FIRST
+  // so user's own ops with the same name win.
+  const ops: Record<string, (self: T, ...args: any[]) => T> = {};
+  if (config.algebra) {
+    ops.add = config.algebra.add as any;
+    ops.sub = config.algebra.sub as any;
+    ops.scale = config.algebra.scale as any;
+  }
+  if (config.lerp) ops.lerp = config.lerp as any;
+  Object.assign(ops, config.ops ?? {});
+  return finalize<T>(
+    state,
+    ops,
+    config.scalars ?? {},
+    config.getters ?? {},
+    config.methods ?? {},
+  ) as unknown as StructType<
+    T,
+    EffectiveOps<T, C>,
+    EffectiveScalars<T, C>,
+    C extends { getters: infer G extends Record<string, (this: any) => unknown> } ? G : {},
+    C extends { methods: infer M extends Record<string, (this: any, ...args: any[]) => any> } ? M : {},
+    C extends { nested: infer N extends NestedMap<T> } ? N : {}
+  >;
+}
+
+// ── registerCapability: stamp a capability slot on an existing struct
+//
+// For built-in capabilities (`algebra`, `lerp`, `metric`) you usually
+// declare them in `defineStruct({...})`. For user-defined capabilities,
+// or to add a capability to an existing struct from outside its
+// definition file, use this helper.
+//
+//   const ROTATION_SPACE = Symbol.for("myapp.rotation-space");
+//   interface RotationSpace<T> { rotate(v: T, theta: number): T; }
+//   registerCapability(Vec, ROTATION_SPACE, {
+//     rotate: (v, theta) => ({ ... }),
+//   });
+//
+//   // Library function consuming it:
+//   function spin<T>(sig: ReadonlyCell<T>, rate: Val<number>): Animator {
+//     const rot = (sig as any)[ROTATION_SPACE] as RotationSpace<T>;
+//     if (!rot) throw new Error("spin: cell missing ROTATION_SPACE capability");
+//     // ...
+//   }
+
+/** Stamp a capability slot on a struct's prototype chain so all of
+ *  its `.signal()` / `.derived()` / `.lens()` instances expose it via
+ *  `(cell as any)[symbol]`. Works for built-in capabilities and
+ *  user-defined ones alike. */
+export function registerCapability<T>(
+  s: StructType<T, any, any, any, any, any>,
+  capability: symbol,
+  impl: unknown,
+): void {
+  // The cell instances chain to per-type prototypes that share the
+  // same `[STRUCT]` slot. Walk via a fresh `.signal()` instance —
+  // its proto chain is the canonical place to stamp.
+  const probe = s.signal(s.defaults as any);
+  let proto: object | null = Object.getPrototypeOf(probe);
+  while (proto && (proto as any)[STRUCT] !== s) {
+    proto = Object.getPrototypeOf(proto);
+  }
+  if (!proto) {
+    throw new Error(`registerCapability: struct ${s.name} has no [STRUCT] proto`);
+  }
+  Object.defineProperty(proto, capability, {
+    value: impl,
+    writable: true,
+    configurable: true,
+  });
+  // Also stamp on the .derived() and .lens() proto chains so the
+  // capability is available regardless of flavor.
+  const dProbe = s.derived(() => s.defaults as any);
+  let dProto: object | null = Object.getPrototypeOf(dProbe);
+  while (dProto && (dProto as any)[STRUCT] !== s) {
+    dProto = Object.getPrototypeOf(dProto);
+  }
+  if (dProto) {
+    Object.defineProperty(dProto, capability, {
+      value: impl,
+      writable: true,
+      configurable: true,
     });
   }
 }

@@ -1,24 +1,4 @@
-import {
-  Diagram,
-  Mount,
-  cell,
-  circle,
-  clipPath,
-  connect,
-  derive,
-  every,
-  forEach,
-  grid,
-  group,
-  label,
-  line,
-  num,
-  vec,
-  rect,
-  t,
-  viewport,
-  when,
-} from "../minim";
+import { Diagram, Mount, cell, circle, clipPath, connect, derive, every, forEach, grid, group, label, line, num, vec, rect, t, viewport, when } from "../minim";
 import * as R from "./rand";
 
 const QR_GRID = 5;

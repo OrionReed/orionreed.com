@@ -24,17 +24,7 @@
 // so author-side LaTeX uses single backslashes (e.g. `\frac`, `\dot`,
 // `\cdot`) — JS template literals don't get to eat your `\f` / `\t`.
 
-import {
-  Anchor,
-  Diagram,
-  Mount,
-  cell,
-  label,
-  loop,
-  snapshot,
-  stagger,
-  type Content,
-} from "../../minim";
+import { Anchor, Diagram, Mount, cell, label, loop, snapshot, stagger, type Content } from "../../minim";
 import {
   brace,
   box,

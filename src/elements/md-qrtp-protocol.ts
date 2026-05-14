@@ -1,20 +1,4 @@
-import {
-  Diagram,
-  Mount,
-  annularSector,
-  attr,
-  cell,
-  circle,
-  derive,
-  label,
-  line,
-  loop,
-  polar,
-  snapshot,
-  when,
-  type Animator,
-  type Cell,
-} from "../minim";
+import { Diagram, Mount, annularSector, attr, cell, circle, derive, label, line, loop, polar, snapshot, when, type Animator, type Cell } from "../minim";
 import { grey, ink, stroke } from "./color";
 import * as R from "./rand";
 

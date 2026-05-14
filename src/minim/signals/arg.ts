@@ -1,26 +1,32 @@
 // "Value or signal" interop. `Val<T>` unifies literal, reactive cell,
-// and thunk; `toSig` normalizes to a `ReadonlyCell<T>` that can always
-// be read via `.value`. Lives in `signals/` rather than `core/` because
-// it pulls the signal engine to wrap literals and thunks; the core
-// generator runtime stays signal-free.
+// and thunk. Two canonical normalisers — `toSig` (→ ReadonlyCell) and
+// `asReader` (→ thunk) — cover every Val-consuming callsite in the
+// library. No bespoke dispatch elsewhere.
+//
+// Lives in `signals/` rather than `core/` because we need the signal
+// engine to wrap literals/thunks; the core generator runtime stays
+// signal-free.
 
 import { signal, computed, Signal } from "./signal";
 import { type Cell, type ReadonlyCell } from "./cell";
 
 /** Literal, reactive cell, or `() => T` thunk (sugar for `computed`).
  *  Since `Cell<T>` is structurally a `ReadonlyCell<T>`, both writable
- *  and read-only cells satisfy the union — no `Signal<T> |
- *  ReadonlySignal<T>` pair needed. */
+ *  and read-only cells satisfy the union. */
 export type Val<T> = T | ReadonlyCell<T> | (() => T);
 
-/** Normalize a `Val<T>` to a read-only cell. With `fallback`,
- *  `undefined` becomes a fresh writable cell seeded with it.
+/** Normalize a `Val<T>` to a read-only cell that's always safe to
+ *  `.value` / `.peek()`. With `fallback`, `undefined` becomes a fresh
+ *  writable cell seeded with it.
  *
  *  Returns the broader `ReadonlyCell<T>` because callers cannot
- *  generally write back through a `Val<T>` — the source may have been
- *  a thunk or a computed cell. Callers who need writability should
- *  type-narrow to `Cell<T>` at the call site or take a `Cell<T>`
- *  parameter explicitly. */
+ *  generally write back through a `Val<T>` (the source may have been
+ *  a thunk or computed). Callers who need writability take a `Cell<T>`
+ *  parameter explicitly.
+ *
+ *  Allocates when `arg` is a literal (wraps in `signal`) or a thunk
+ *  (wraps in `computed`). For per-frame readers that don't need a
+ *  signal identity, prefer `asReader` — no allocation for literals. */
 export function toSig<T>(arg: Val<T>): ReadonlyCell<T>;
 export function toSig<T>(
   arg: Val<T> | undefined,
@@ -34,6 +40,25 @@ export function toSig<T>(
   if (arg instanceof Signal) return arg as ReadonlyCell<T>;
   if (typeof arg === "function") return computed(arg as () => T);
   return signal(arg as T) as ReadonlyCell<T>;
+}
+
+/** Normalize a `Val<T>` to a `() => T` thunk. Branches once at call
+ *  time; the resulting closure is monomorphic and allocation-free for
+ *  literals (no signal wrapper, no computed wrapper).
+ *
+ *  Used in lifted struct-ops to bind args once at construction, so the
+ *  per-frame read is just one function call. The struct framework, the
+ *  scaled-child bridge in `tween.ts`, and `adoptField`'s field-input
+ *  branch all call through here — one canonical dispatch. */
+export function asReader<T>(v: Val<T>): () => T {
+  if (v instanceof Signal) {
+    const s = v;
+    return () => s.value as T;
+  }
+  if (typeof v === "function") {
+    return v as () => T;
+  }
+  return () => v as T;
 }
 
 /** Coerce reactive truthiness to `0`/`1` — e.g. `opacity: when(hovered)`. */

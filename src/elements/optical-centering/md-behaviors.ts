@@ -12,27 +12,7 @@
 //   loop(function* () { ... pause cycle ... })
 //   play(spring(s, target, opts)) — fluent over raw behaviors
 
-import {
-  Diagram,
-  Mount,
-  Anchor,
-  attract,
-  cell,
-  circle,
-  drift,
-  drive,
-  easeInOut,
-  label,
-  loop,
-  num,
-  oscillate,
-  play,
-  vec,
-  spring,
-  type Val,
-  type N,
-  type Point,
-} from "../../minim";
+import { Diagram, Mount, Anchor, attract, cell, circle, drift, drive, easeInOut, label, loop, num, oscillate, play, vec, spring, type Val, Num, Vec } from "../../minim";
 
 const N_TRAIL = 14;
 const N_CHAIN = 10;
@@ -41,7 +21,7 @@ const LINK_LEN = 11;
 /** A `drift`-with-walls integrator — flips velocity when bounded. One
  *  generator instead of two; the wall-flip is structural, not a
  *  separate concurrent process. */
-function bounceFlip(x: N, v: N, lo: number, hi: number) {
+function bounceFlip(x: Num.Writable, v: Num.Writable, lo: number, hi: number) {
   return drive(() => {
     if (x.value > hi && v.value > 0) v.value = -v.value;
     else if (x.value < lo && v.value < 0) v.value = -v.value;
@@ -56,14 +36,14 @@ export class MdBehaviors extends Diagram {
     const laneY = (i: number) => view.h.value * ((i + 1) / 4);
 
     // ── Shared trail factory ─────────────────────────────────────────
-    // N circles, each chasing the previous link's position via the
+    // Num.Writable circles, each chasing the previous link's position via the
     // caller-supplied `attach` (an `(sig, target) => Animator` that
     // we run as a child of the top-level scene generator).
     const trail = (
-      seedX: N,
-      seedY: N,
+      seedX: Num.Writable,
+      seedY: Num.Writable,
       color: string,
-      attach: (sig: N, target: Val<number>) => void,
+      attach: (sig: Num.Writable, target: Val<number>) => void,
     ) => {
       let prevX: Val<number> = seedX;
       let prevY: Val<number> = seedY;
@@ -145,7 +125,7 @@ export class MdBehaviors extends Diagram {
     );
     s(circle(headPos, 9, { fill: "#1a1a1a" }));
 
-    const links: Point[] = Array.from({ length: N_CHAIN }, (_, i) =>
+    const links: Vec.Writable[] = Array.from({ length: N_CHAIN }, (_, i) =>
       vec(lc.x - i * LINK_LEN, lc.y),
     );
     this.anim.run(

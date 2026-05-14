@@ -6,7 +6,7 @@
 import { drive, type Animator } from "@minim/core";
 import { play, toSig, type Val } from "@minim/signals";
 import { type Easing } from "@minim/signals";
-import { isPoint, type V, type Pointlike } from "@minim/values";
+import { Vec, isVec } from "@minim/values";
 import type { Writable } from "./shape";
 
 /** Swap two shapes' positions over `sec`. */
@@ -35,7 +35,7 @@ export function* stagger<S>(
 /** Distribute shapes radially around `center` at `radius`, evenly
  *  spaced. Each shape tweens to its slot in parallel. */
 export function* splay(
-  center: Pointlike,
+  center: Vec.Like,
   radius: number,
   shapes: readonly Writable<"translate">[],
   sec = 0.5,
@@ -58,13 +58,13 @@ export function* splay(
 /** Tween each shape to its paired target (matched by index). */
 export function* assemble(
   shapes: readonly Writable<"translate">[],
-  targets: readonly (V | Pointlike)[],
+  targets: readonly (Vec | Vec.Like)[],
   sec = 0.5,
   ease?: Easing,
 ): Animator {
   yield shapes.map((s, i) => {
     const t = targets[i];
-    return s.translate.to(isPoint(t) ? t.value : t, sec, ease);
+    return s.translate.to(isVec(t) ? t.value : t, sec, ease);
   });
 }
 
@@ -73,7 +73,7 @@ export function* assemble(
  *  `rate` is a reactive multiplier — tween for ease-in/out; negative
  *  reverses; 0 pauses. */
 export function orbit(
-  center: Pointlike,
+  center: Vec.Like,
   shapes: readonly Writable<"translate">[],
   opts: { period?: number; rate?: Val<number> } = {},
 ): Animator {

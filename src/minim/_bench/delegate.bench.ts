@@ -18,13 +18,7 @@
 // _isolated_check.ts sanity script is still around for spot-checks.
 
 import { signal, type ReadonlySignal, type Signal } from "@minim/signals";
-import {
-  Box,
-  delegate,
-  delegateLazy,
-  type Box as B,
-  type Pointlike,
-} from "@minim/values";
+import { Box, delegate, delegateLazy, type Box as B, Vec } from "@minim/values";
 import { bench, group } from "mitata";
 
 // ── Fixtures ───────────────────────────────────────────────────────
@@ -37,12 +31,12 @@ class DirectPart {
   readonly y: ReadonlySignal<number>;
   readonly w: ReadonlySignal<number>;
   readonly h: ReadonlySignal<number>;
-  readonly center: Pointlike;
-  readonly top: Pointlike;
-  readonly bottom: Pointlike;
-  readonly left: Pointlike;
-  readonly right: Pointlike;
-  readonly at: (u: number, v: number) => Pointlike;
+  readonly center: Vec.Like;
+  readonly top: Vec.Like;
+  readonly bottom: Vec.Like;
+  readonly left: Vec.Like;
+  readonly right: Vec.Like;
+  readonly at: (u: number, v: number) => Vec.Like;
   readonly area: ReadonlySignal<number>;
   constructor(src: ReadonlySignal<B>) {
     const b = Box.derived(() => src.value);

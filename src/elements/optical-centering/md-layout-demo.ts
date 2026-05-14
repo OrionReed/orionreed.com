@@ -2,18 +2,7 @@
 // The highlighted card has a spring on its width: drag it wider and
 // it snaps back when released — handle + spring composing on one signal.
 
-import {
-  Diagram,
-  Mount,
-  Anchor,
-  Vec,
-  arrange,
-  handle,
-  label,
-  num,
-  rect,
-  spring,
-} from "../../minim";
+import { Diagram, Mount, Anchor, Vec, arrange, handle, label, num, rect, spring } from "../../minim";
 
 const WIDTHS = [72, 68, 80, 60, 76];
 const HEIGHTS = [52, 44, 60, 48, 56];

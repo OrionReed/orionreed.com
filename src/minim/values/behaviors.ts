@@ -1,8 +1,9 @@
-// Continuous behaviors over a single signal — `spring`, `oscillate`,
+// Continuous behaviors over a single cell — `spring`, `oscillate`,
 // `drift`, `attract`. Each is a generator that runs `step(dt, t)` once
-// per frame on the `drive` primitive. Generic over any value type whose
-// registered struct has a vector-space algebra (add/sub/scale via the
-// `[ALGEBRA]` slot); plain cells without the slot throw at runtime.
+// per frame on the `drive` primitive. Generic over any value type with
+// a registered vector-space algebra (`[ALGEBRA]` slot). `spring`'s
+// precision-stop additionally needs a metric (`[METRIC]` slot) — runs
+// forever if precision > 0 and no metric is registered.
 //
 // Reactive args (`target`, `velocity`, `amp`, `freq`, `k`) are read each
 // frame, so a moving target makes the follower chase, a reactive `rate`
@@ -10,25 +11,17 @@
 
 import { drive, type Animator } from "@minim/core";
 import { toSig, type Cell, type Val } from "@minim/signals";
-import { algebraOf } from "./algebra";
-
-/** Norm for `precision` auto-stop: `|x|` for scalar, hypot for Vec, else 0. */
-function normOf<T>(v: T): number {
-  if (typeof v === "number") return Math.abs(v);
-  if (v != null && typeof v === "object" && "x" in v && "y" in v) {
-    const o = v as { x: number; y: number };
-    return Math.hypot(o.x, o.y);
-  }
-  return 0;
-}
+import { algebraOf, metricOf } from "./algebra";
 
 export interface SpringOpts {
   /** Hooke stiffness; higher → faster pull. Default 170. */
   stiffness?: number;
   /** Velocity damping; higher → less oscillation. Default 26. */
   damping?: number;
-  /** Settle threshold: snap+complete when both `|displacement|` and
-   *  `|velocity|` drop below this. `0` runs forever. */
+  /** Settle threshold: snap+complete when both
+   *  `distance(cur, target)` and `distance(velocity, zero)` fall
+   *  below this. `0` runs forever. Requires the cell's struct to
+   *  register a `metric` capability (e.g. `Num` / `Vec` do). */
   precision?: number;
 }
 
@@ -42,8 +35,14 @@ export function spring<T = number>(
   const stiffness = opts.stiffness ?? 170;
   const damping = opts.damping ?? 26;
   const eps = opts.precision ?? 0;
+  // Auto-settle uses the cell's registered metric. If `eps > 0` but
+  // the struct has no metric capability, the spring runs forever
+  // (no fallback heuristics — the type tells you what's possible).
+  const distance = eps > 0 ? metricOf(sig) : undefined;
   const tgt = toSig(target);
-  let velocity: T = scale(sub(tgt.peek(), tgt.peek()), 0);
+  // Zero of the vector space — `scale(any, 0)` produces the identity.
+  const zero: T = scale(sub(tgt.peek(), tgt.peek()), 0);
+  let velocity: T = zero;
   return drive((dt) => {
     const t = tgt.value;
     const cur = sig.peek();
@@ -52,7 +51,11 @@ export function spring<T = number>(
     const drag = scale(velocity, -damping);
     velocity = add(velocity, scale(add(force, drag), dt));
     sig.value = add(cur, scale(velocity, dt));
-    if (eps > 0 && normOf(displacement) < eps && normOf(velocity) < eps) {
+    if (
+      distance !== undefined &&
+      distance(cur, t) < eps &&
+      distance(velocity, zero) < eps
+    ) {
       sig.value = t;
       return false;
     }

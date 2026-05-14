@@ -1,5 +1,5 @@
 // handle.* — writable derived shapes: small draggable circles wired to
-// a Point (or Signal-pair). Reads come from the source; writes go back.
+// a Vec.Writable (or Signal-pair). Reads come from the source; writes go back.
 //
 // The atom is `handle(point)`. Every other helper is sugar that picks
 // the writable source — `handle.move(shape)` wires to `shape.center`,
@@ -12,7 +12,7 @@
 import { type Cell } from "@minim/signals";
 import { Shape, type AnyShape, type Writable } from "./shape";
 import { draggable } from "./interaction";
-import { Vec, mean, type Point } from "@minim/values";
+import { Vec, mean } from "@minim/values";
 import { circle } from "./circle";
 import type { Path } from "./path";
 
@@ -27,10 +27,10 @@ export interface HandleOpts {
   cursor?: string;
 }
 
-/** Atom: a small draggable circle wired to a writable Point. Every
+/** Atom: a small draggable circle wired to a writable Vec.Writable. Every
  *  named helper below is sugar — picks the writable source, hands it
  *  to this. */
-function handleFn(target: Point, opts: HandleOpts = {}): Shape {
+function handleFn(target: Vec.Writable, opts: HandleOpts = {}): Shape {
   const h = circle(target, opts.r ?? 6, {
     fill: opts.fill ?? COLOR,
     // Background-colored halo so the handle pops on either theme.
@@ -81,12 +81,12 @@ const anchor = (
  *  deltas — see `centroid` in `shape.ts` for that variant). */
 const centroidHandle = (
   ...shapes: (AnyShape & Writable<"translate">)[]
-): Shape => handleFn(mean(...shapes.map((s) => s.center)) as Point);
+): Shape => handleFn(mean(...shapes.map((s) => s.center)) as Vec.Writable);
 
 /** Drag handle at the midpoint of two writable Points — drags both
  *  along with it. */
-const midpoint = (a: Point, b: Point, opts?: HandleOpts): Shape =>
-  handleFn(mean(a, b) as Point, opts);
+const midpoint = (a: Vec.Writable, b: Vec.Writable, opts?: HandleOpts): Shape =>
+  handleFn(mean(a, b) as Vec.Writable, opts);
 
 /** Rotation knob orbiting the shape's center at `radius`. The knob
  *  position is `center + (r cos θ, r sin θ)` for `θ = shape.rotate`;

@@ -1,7 +1,7 @@
 // DOM input → signal-world bridges that bind to scene-graph shapes.
 
 import { type Cell } from "@minim/signals";
-import type { V } from "@minim/values";
+import { Vec } from "@minim/values";
 import type { AnyShape } from "./shape";
 
 /** Wire `mouseenter`/`mouseleave` on a shape to a writable boolean cell.
@@ -29,7 +29,7 @@ export function hoverSignal(shape: AnyShape, sig: Cell<boolean>): () => void {
  *  pointer-captured so drags survive leaving the handle. */
 export function draggable(
   handle: AnyShape,
-  onDrag: (local: V) => void,
+  onDrag: (local: Vec) => void,
 ): () => void {
   let dragging = false;
   let pointerId = -1;

@@ -17,7 +17,7 @@
 // Markers: it wires hover on each Part.el to the corresponding Marker and
 // makes marker.active drive part.highlighted.
 //
-// The Boxlike surface on `Part` is installed at module load via
+// The BoxLike surface on `Part` is installed at module load via
 // `delegate(Part.prototype, "box", Box)` — see `values/delegate.ts`.
 
 import { toSig, type Val } from "@minim/signals";
@@ -38,8 +38,8 @@ import {
   delegate,
   num,
   type Box,
-  type Boxlike,
-  type Pointlike,
+  type BoxLike,
+  Vec,
 } from "@minim/values";
 import { type WriteOf } from "@minim/signals";
 import type { TexShape } from "./tex";
@@ -64,10 +64,10 @@ const effectiveColor = (m: PartMarker): string | null => {
 
 // ── Part ──────────────────────────────────────────────────────────────────────
 
-/** A named, addressable region of a TexShape. Implements `Boxlike`
+/** A named, addressable region of a TexShape. Implements `BoxLike`
  *  so `part.center`, `part.top`, etc. are Pointlikes in the TexShape's
  *  local frame (read-only — parts are template-bound). */
-export class Part<N extends string = string> implements Boxlike {
+export class Part<N extends string = string> implements BoxLike {
   /** Per-instance highlight for animations. Drives the background tint
    *  when set by `highlight()` or other animation code. Identity-level
    *  highlighting (from `Marker.active`) is wired externally via
@@ -83,12 +83,12 @@ export class Part<N extends string = string> implements Boxlike {
   declare readonly y: ReadonlyCell<number>;
   declare readonly w: ReadonlyCell<number>;
   declare readonly h: ReadonlyCell<number>;
-  declare readonly center: Pointlike;
-  declare readonly top: Pointlike;
-  declare readonly bottom: Pointlike;
-  declare readonly left: Pointlike;
-  declare readonly right: Pointlike;
-  declare readonly at: (u: number, v: number) => Pointlike;
+  declare readonly center: Vec.Like;
+  declare readonly top: Vec.Like;
+  declare readonly bottom: Vec.Like;
+  declare readonly left: Vec.Like;
+  declare readonly right: Vec.Like;
+  declare readonly at: (u: number, v: number) => Vec.Like;
   declare readonly area: ReadonlyCell<number>;
 
   el: HTMLElement | null = null;

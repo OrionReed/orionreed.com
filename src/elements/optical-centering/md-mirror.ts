@@ -19,22 +19,11 @@
 // dependent on every change. Here it's about ten lines of bookkeeping
 // over one tiny `reflect` formula.
 
-import {
-  Anchor,
-  Diagram,
-  Mount,
-  Vec,
-  handle,
-  label,
-  line,
-  vec,
-  type Point,
-  type V,
-} from "../../minim";
+import { Anchor, Diagram, Mount, Vec, handle, label, line, vec } from "../../minim";
 
 /** Reflect point `p` across the line through `a` and `b`. Degenerate
  *  line (a == b) returns `p` unchanged. */
-function reflect(p: V, a: V, b: V): V {
+function reflect(p: Vec, a: Vec, b: Vec): Vec {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const len2 = dx * dx + dy * dy;
@@ -58,7 +47,7 @@ export class MdMirror extends Diagram {
     // current mirror; `write` reflects back — the same formula, since
     // reflection is an involution (`R∘R = id`). One closure → both
     // directions of the handle for free.
-    const mirrorOf = (src: Point): Point =>
+    const mirrorOf = (src: Vec.Writable): Vec.Writable =>
       Vec.lens(
         () => reflect(src.value, mA.value, mB.value),
         (target) => {
@@ -102,7 +91,7 @@ export class MdMirror extends Diagram {
     s(line(mA, mB, { thin: true, dashed: true, opacity: 0.5 }));
 
     // ── Handles ──────────────────────────────────────────────────────
-    // The atom `handle(point)` doesn't care whether the Point is free
+    // The atom `handle(point)` doesn't care whether the Vec.Writable is free
     // or lensed — it just reads + writes. So the reflected F's vertices
     // are draggable too: grabbing one inverts the reflection and pulls
     // the original behind it.

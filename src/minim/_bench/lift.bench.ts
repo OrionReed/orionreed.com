@@ -1,5 +1,5 @@
 import { computed, signal } from "@minim/signals";
-import { Vec, type V } from "@minim/values";
+import { Vec } from "@minim/values";
 import { bench, group } from "mitata";
 
 // ── Lifted struct op (vec.add — arity 1, the per-arity-unrolled hot
@@ -70,7 +70,7 @@ group("lifted scalar (vec.distance)", () => {
 group("lifted op — arg shapes (specialized at construction)", () => {
   const a: any = Vec.signal({ x: 1, y: 2 });
   void a.x;
-  const literal: V = { x: 10, y: 20 };
+  const literal: Vec = { x: 10, y: 20 };
   const sig = Vec.signal({ x: 10, y: 20 });
   const thunk = () => ({ x: 10, y: 20 });
 

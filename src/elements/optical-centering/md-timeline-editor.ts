@@ -3,24 +3,7 @@
 // via `sequential`. Actor opacities are pure signal bindings on
 // `clip.t`.
 
-import {
-  Diagram,
-  EventBus,
-  Mount,
-  Anchor,
-  cell,
-  circle,
-  derive,
-  draggable,
-  label,
-  line,
-  loop,
-  vec,
-  rect,
-  sequential,
-  snapshot,
-  timeline,
-} from "../../minim";
+import { Diagram, EventBus, Mount, Anchor, cell, circle, derive, draggable, label, line, loop, vec, rect, sequential, snapshot, timeline } from "../../minim";
 
 const PHASES = ["intro", "hold", "outro"] as const;
 const COLORS = ["#5b8def", "#f5a623", "#e25c5c"];

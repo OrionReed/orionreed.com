@@ -16,7 +16,7 @@
 //   - `num(...)` / `cell(...)` carry reactive knobs (phase index,
 //     hue base, particle size). `Num.signal.to(...)` works here
 //     exactly as on a shape's `opacity` — same engine.
-//   - `vec(...)` builds the pointer as a reactive Point. It behaves
+//   - `vec(...)` builds the pointer as a reactive Vec.Writable. It behaves
 //     identically to one feeding an SVG shape's `translate`; input →
 //     value-type doesn't care what's rendering.
 //   - Generators (`loop(...)`) drive the phase progression with the
@@ -27,18 +27,7 @@
 // reactives would be silly). Reactivity is in the knobs that *shape*
 // the particles, not in each particle.
 
-import {
-  Anim,
-  cell,
-  drive,
-  effect,
-  every,
-  loop,
-  num,
-  vec,
-  type N,
-  type Point,
-} from "../../minim";
+import { Anim, cell, drive, effect, every, loop, num, vec, Num, Vec } from "../../minim";
 
 const N = 1500;
 const W = 640;
@@ -134,10 +123,10 @@ export class MdCanvasField extends HTMLElement {
 
   // Reactive knobs — the *renderer-agnostic* state.
   private phaseIdx = num(0);
-  private hueBase: N = num(210);
+  private hueBase: Num.Writable = num(210);
   private hueSpread = cell(80);
   private size = cell(2.1);
-  private pointer: Point = vec(W / 2, H / 2);
+  private pointer: Vec.Writable = vec(W / 2, H / 2);
   private statusText = cell("");
   // Rolling-average fps, refreshed every 0.5s via `every(...)`.
   private fpsSmoothed = cell(0);

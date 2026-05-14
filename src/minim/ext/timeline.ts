@@ -4,12 +4,7 @@
 
 import { type Animator } from "@minim/core";
 import { toSig, type Val } from "@minim/signals";
-import {
-  cell,
-  computed,
-  type Cell,
-  type ReadonlyCell,
-} from "@minim/signals";
+import { cell, computed, type Cell, type ReadonlyCell } from "@minim/signals";
 
 // ── Types ────────────────────────────────────────────────────────────
 

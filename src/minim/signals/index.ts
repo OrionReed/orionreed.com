@@ -11,8 +11,8 @@
 //   arg.ts         — `Val<T>` (literal | reactive cell | thunk) and
 //                    `toSig` / `when` bridges.
 //   suspensions.ts — `untilChange / untilEvent / untilPromise / race`
-//                    plus framework-internal `untilTrue` / `untilFalse`
-//                    used by `play(cell)` / `.until(cell)` / `.while`.
+//                    plus framework-internal `untilTrue` used by
+//                    `play(cell)` / `.until(cell)`.
 //   tween.ts       — `Play<R>` fluent vocabulary, `play()` entry
 //                    point, `Playable<R>` input type, AND `Tween<T>`
 //                    (since `Tween<T> extends Play<void>`). One file
@@ -46,6 +46,10 @@ export {
 } from "./signal";
 
 // ── cell types + factory ──────────────────────────────────────────
+//
+// `NestedMap` / `NestedInput` are framework-internal type-system
+// bookkeeping; they're consumed inside `cell.ts` and `struct.ts` but
+// never named in user code.
 export {
   cell,
   derive,
@@ -54,21 +58,26 @@ export {
   type ReadonlyCell,
   type CellOptions,
   type StructType,
-  type NestedMap,
-  type NestedInput,
   type WriteOf,
   type ReadOf,
 } from "./cell";
 
 // ── Val<T> bridge ─────────────────────────────────────────────────
-export { toSig, when, type Val } from "./arg";
+//
+// Two canonical normalisers for `Val<T>`:
+//   toSig(v)     → ReadonlyCell<T>      ("give me a cell")
+//   asReader(v)  → () => T              ("give me a thunk; no signal alloc for literals")
+//
+// Every Val-consuming callsite in the library funnels through one
+// of these. No bespoke dispatch elsewhere.
+export { toSig, asReader, when, type Val } from "./arg";
 
 // ── suspensions ───────────────────────────────────────────────────
 //
-// `untilTrue` / `untilFalse` are framework-internal — they're consumed
-// by `play(cell)` and `.until(cell)` (the "wait truthy" branch of
-// `playableGen`) and by `.while(sig)`. Public code says
-// `play(sig)` / `.until(sig)` / `play(work).until(not(sig))` instead.
+// `untilTrue` is framework-internal — it's consumed by `play(cell)`
+// and `.until(cell)` (the "wait truthy" branch of `playableGen`).
+// Public code says `play(sig)` / `.until(sig)` / `.until(not(sig))`
+// for the falsy case.
 export {
   untilChange,
   untilEvent,
@@ -96,4 +105,14 @@ export {
 export { loop, every } from "./compose";
 
 // ── struct framework ──────────────────────────────────────────────
-export { struct } from "./struct";
+//
+// Two equivalent entry points:
+// `defineStruct({...})` — flat config; capabilities (`algebra`, `lerp`,
+// `metric`) are first-class keys. `registerCapability` stamps custom
+// capability slots onto an already-built struct.
+export {
+  defineStruct,
+  registerCapability,
+  type StructConfig,
+  type VectorSpace,
+} from "./struct";

@@ -15,19 +15,7 @@
 //
 // The test is the demo is the documentation.
 
-import {
-  Anchor,
-  Diagram,
-  Mount,
-  circle,
-  derive,
-  fadeIn,
-  fadeOut,
-  forEach,
-  label,
-  loop,
-  vec,
-} from "../../minim";
+import { Anchor, Diagram, Mount, circle, derive, fadeIn, fadeOut, forEach, label, loop, vec } from "../../minim";
 import { claim, process, verdictDot } from "../../minim/assert";
 
 export class MdClaimDemo extends Diagram {

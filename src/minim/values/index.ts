@@ -1,34 +1,20 @@
 // Reactive value-types — `Vec`, `Box`, `Color`, `Matrix2D`, `Num`,
-// `Transform`. Each ships:
-//   - the struct value (e.g. `Vec`) for advanced use
-//     (`.signal/.derived/.lens/.is/.isWritable`)
-//   - a lowercase factory shorthand (`vec(x, y)`, `num(0)`, …)
-//   - the plain value type alias (`V`, `Box`, `C`, `Matrix2D`, `Transform`)
-//   - rw/ro flavor aliases where useful (`Point`/`DerivedPoint`)
+// `Transform`. Each one follows the same naming pattern:
 //
-// Generic algebra (`mean`, `algebraOf`, `VectorSpace`), continuous
-// behaviors (`spring`, `oscillate`, `drift`, `attract`), `delegate`
-// for host-class boxlike forwarders, and `Anchor`/`Dir` spatial
-// constants.
+//   interface Foo        — plain JS shape (`{x, y}`, `{r, g, b, a}`, …)
+//   const Foo            — registered struct (`.signal/.derived/.lens/.is`)
+//   const foo(...)       — factory shorthand (when useful)
+//   Foo.Writable         — writable cell type
+//   Foo.Readonly         — readonly cell type
+//   Foo.Like             — either flavor (Writable | Readonly)
+//   Foo.Resolve<A>       — per-input narrowing (Vec, Num only)
 //
-// The struct framework (`struct(...)` builder) and its type surface
-// (`Cell`, `ReadonlyCell`, `StructType`, …) live in `@minim/signals`
-// — they're THE irreducible signals primitive for high-perf chainable
-// cells. Import them directly from there.
+// Generic capabilities (`algebra`/`lerp`/`metric`) and free functions
+// (`mean`, `algebraOf`, `metricOf`, `spring`, `oscillate`, `drift`,
+// `attract`) operate uniformly across any registered struct.
 
 // ── Vec ─────────────────────────────────────────────────────────
-export {
-  Vec,
-  vec,
-  polar,
-  isPoint,
-  vecEquals,
-  type V,
-  type Point,
-  type DerivedPoint,
-  type Pointlike,
-  type ResolveVec,
-} from "./vec";
+export { Vec, vec, polar, isVec, vecEquals } from "./vec";
 
 // ── Box ─────────────────────────────────────────────────────────
 export {
@@ -39,11 +25,11 @@ export {
   unionBox,
   boxEdgeFrom,
   isBox,
-  type Boxlike,
+  type BoxLike,
 } from "./box";
 
 // ── Color ───────────────────────────────────────────────────────
-export { Color, rgb, rgba, type C } from "./color";
+export { Color, rgb, rgba } from "./color";
 
 // ── Matrix2D ────────────────────────────────────────────────────
 export {
@@ -63,13 +49,13 @@ export {
 } from "./matrix";
 
 // ── Num ─────────────────────────────────────────────────────────
-export { Num, num, type N, type DerivedN } from "./num";
+export { Num, num } from "./num";
 
 // ── Transform ───────────────────────────────────────────────────
-export { Transform, transform, type Tr, type DerivedTr } from "./transform";
+export { Transform, transform } from "./transform";
 
-// ── Algebra + aggregates + behaviors ────────────────────────────
-export { type VectorSpace, algebraOf } from "./algebra";
+// ── Algebra + capabilities + aggregates + behaviors ─────────────
+export { type VectorSpace, algebraOf, metricOf } from "./algebra";
 export { mean } from "./aggregates";
 export {
   spring,

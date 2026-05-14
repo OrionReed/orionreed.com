@@ -49,7 +49,7 @@ play(ready).then(work);                      // wait truthy, then work
 orbit(centre, shapes).at(playback);          // orbit at playback rate
 ```
 
-`.until / .while / .then / .at` are sugar — each composes with existing primitives (`race`, internal until-truthy, sleep). The runtime never sees the fluent surface; it sees the same `Yieldable` shapes it always has.
+`.until / .then / .at` are sugar — each composes with existing primitives (`race`, internal until-truthy, sleep). For the "while truthy" idiom use `.until(not(sig))`. The runtime never sees the fluent surface; it sees the same `Yieldable` shapes it always has.
 
 <md-cancel></md-cancel>
 

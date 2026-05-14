@@ -2,13 +2,7 @@
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
 import { toSig, type Val } from "@minim/signals";
-import {
-  transformBox,
-  Box,
-  box,
-  expandBox,
-  type Boxlike,
-} from "@minim/values";
+import { transformBox, Box, box, expandBox, type BoxLike } from "@minim/values";
 import type { Shape } from "./shape";
 
 export interface ArrangeOpts {
@@ -60,12 +54,12 @@ export function arrange(
 }
 
 // ── Box operations ──────────────────────────────────────────────────
-// Pure functions over `Boxlike`. Inputs: any reactive rectangle (a
+// Pure functions over `BoxLike`. Inputs: any reactive rectangle (a
 // Shape, a `view`, another result of these helpers). Outputs: derived
 // Reactive<Box>(es) that update reactively as the source changes.
 
 /** Inflate a Box on each side by `by`. */
-export function expand(b: Boxlike, by: Val<number>): Boxlike {
+export function expand(b: BoxLike, by: Val<number>): BoxLike {
   const bys = toSig(by);
   return Box.derived(() => expandBox(b.box.value, bys.value));
 }
@@ -77,11 +71,11 @@ export function expand(b: Boxlike, by: Val<number>): Boxlike {
  *   split(b, "x", 3, { gap: 4 })  — 4px between
  */
 export function split(
-  source: Boxlike,
+  source: BoxLike,
   axis: "x" | "y",
   parts: number | number[],
   opts: { gap?: Val<number> } = {},
-): Boxlike[] {
+): BoxLike[] {
   const ratios = typeof parts === "number" ? new Array(parts).fill(1) : parts;
   const total = ratios.reduce((a, b) => a + b, 0);
   const cumBefore = ratios.map((_, i) =>
@@ -108,11 +102,11 @@ export function split(
 /** Two-axis split into a `rows × cols` grid (sugar over `split`).
  *  Returns `[row][col]`. */
 export function grid(
-  source: Boxlike,
+  source: BoxLike,
   rows: number,
   cols: number,
   opts: { gap?: Val<number> } = {},
-): Boxlike[][] {
+): BoxLike[][] {
   return split(source, "y", rows, opts).map((row) =>
     split(row, "x", cols, opts),
   );

@@ -12,16 +12,7 @@
 // expand chain — `tint(BLUE, ai)` colors a_i, a_1, a_2, a_3
 // together.
 
-import {
-  Anchor,
-  Diagram,
-  Mount,
-  cell,
-  label,
-  loop,
-  snapshot,
-  type Content,
-} from "../../minim";
+import { Anchor, Diagram, Mount, cell, label, loop, snapshot, type Content } from "../../minim";
 import {
   highlight,
   morph,

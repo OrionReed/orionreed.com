@@ -12,45 +12,44 @@
 //      it (same reference); a generic Signal wraps in lens; a derived
 //      wraps as derived; a thunk wraps as derived; a literal allocates.
 
-import { computed, effect, signal } from "@minim/signals";
-import { Vec, vec, type V } from "@minim/values";
-import { struct } from "@minim/signals";
+import { computed, defineStruct, effect, signal } from "@minim/signals";
+import { Vec, vec } from "@minim/values";
 
 type Tr = {
-  translate: V;
+  translate: Vec;
   rotate: number;
-  scale: V;
-  origin: V;
+  scale: Vec;
+  origin: Vec;
   opacity: number;
 };
 
-const Transform = struct<Tr>("Transform", {
-  translate: { x: 0, y: 0 },
-  rotate: 0,
-  scale: { x: 1, y: 1 },
-  origin: { x: 0, y: 0 },
-  opacity: 1,
-})
-  .nested({ translate: Vec, scale: Vec, origin: Vec })
-  .ops({
-    lerp: (a, b: Tr, t: number): Tr => ({
-      translate: {
-        x: a.translate.x + (b.translate.x - a.translate.x) * t,
-        y: a.translate.y + (b.translate.y - a.translate.y) * t,
-      },
-      rotate: a.rotate + (b.rotate - a.rotate) * t,
-      scale: {
-        x: a.scale.x + (b.scale.x - a.scale.x) * t,
-        y: a.scale.y + (b.scale.y - a.scale.y) * t,
-      },
-      origin: {
-        x: a.origin.x + (b.origin.x - a.origin.x) * t,
-        y: a.origin.y + (b.origin.y - a.origin.y) * t,
-      },
-      opacity: a.opacity + (b.opacity - a.opacity) * t,
-    }),
-  })
-  .build();
+const Transform = defineStruct({
+  name: "Transform",
+  defaults: {
+    translate: { x: 0, y: 0 },
+    rotate: 0,
+    scale: { x: 1, y: 1 },
+    origin: { x: 0, y: 0 },
+    opacity: 1,
+  } as Tr,
+  nested: { translate: Vec, scale: Vec, origin: Vec },
+  lerp: (a, b, t): Tr => ({
+    translate: {
+      x: a.translate.x + (b.translate.x - a.translate.x) * t,
+      y: a.translate.y + (b.translate.y - a.translate.y) * t,
+    },
+    rotate: a.rotate + (b.rotate - a.rotate) * t,
+    scale: {
+      x: a.scale.x + (b.scale.x - a.scale.x) * t,
+      y: a.scale.y + (b.scale.y - a.scale.y) * t,
+    },
+    origin: {
+      x: a.origin.x + (b.origin.x - a.origin.x) * t,
+      y: a.origin.y + (b.origin.y - a.origin.y) * t,
+    },
+    opacity: a.opacity + (b.opacity - a.opacity) * t,
+  }),
+});
 
 let pass = 0;
 let fail = 0;
@@ -214,9 +213,9 @@ const tr3 = Transform.signal({
 });
 check("adoption: derived input → derived field", tr3.translate === derivedTranslate);
 
-// 15. Smart adoption — pass a generic Signal<V> (not a Vec); should be
+// 15. Smart adoption — pass a generic Signal<Vec> (not a Vec); should be
 //     wrapped in Vec.lens so axes/methods work, with two-way pass-through.
-const rawSig = signal<V>({ x: 100, y: 200 });
+const rawSig = signal<Vec>({ x: 100, y: 200 });
 const tr4 = Transform.signal({
   translate: rawSig,
   rotate: 0,
@@ -224,7 +223,7 @@ const tr4 = Transform.signal({
   origin: { x: 0, y: 0 },
   opacity: 1,
 });
-check("adoption: generic Signal<V> → Vec lens", Vec.is(tr4.translate));
+check("adoption: generic Signal<Vec> → Vec lens", Vec.is(tr4.translate));
 check("adoption: lens reads through", tr4.translate.x.value === 100);
 tr4.translate.x.value = 7;
 check("adoption: lens write reaches source", rawSig.peek().x === 7);

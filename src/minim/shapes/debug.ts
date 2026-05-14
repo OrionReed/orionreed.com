@@ -14,15 +14,7 @@
 
 import { derive } from "@minim/signals";
 import { Shape, type AnyShape } from "./shape";
-import {
-  Vec,
-  isPoint,
-  Box,
-  transformBox,
-  transformPoint,
-  type Boxlike,
-  type Pointlike,
-} from "@minim/values";
+import { Vec, isVec, Box, transformBox, transformPoint, type BoxLike } from "@minim/values";
 import { circle } from "./circle";
 import { line } from "./line";
 import { label } from "./label";
@@ -41,10 +33,10 @@ const outlineOpts = {
   ...baseOpts,
 };
 
-/** Parent-frame Box for any Boxlike. Shapes get their transform applied
+/** Parent-frame Box for any BoxLike. Shapes get their transform applied
  *  (so the Box reflects the visual footprint); non-Shape Boxes pass
  *  through. */
-function parentBox(b: Boxlike): Boxlike {
+function parentBox(b: BoxLike): BoxLike {
   if (b instanceof Shape) {
     return Box.derived(() => transformBox(b.localFrame.value, b.box.value));
   }
@@ -52,11 +44,11 @@ function parentBox(b: Boxlike): Boxlike {
 }
 
 /** Dashed rect on a Box's parent-frame Box. */
-const boxOutline = (b: Boxlike) => rect(parentBox(b), outlineOpts);
+const boxOutline = (b: BoxLike) => rect(parentBox(b), outlineOpts);
 
 /** Small filled dot at a point or a Box's center. */
-const dot = (p: Pointlike | Boxlike, r = 2.5) =>
-  circle(isPoint(p) ? p : p.center, r, {
+const dot = (p: Vec.Like | BoxLike, r = 2.5) =>
+  circle(isVec(p) ? p : p.center, r, {
     fill: COLOR,
     stroke: "none",
     ...baseOpts,
@@ -85,7 +77,7 @@ const origin = (s: Shape, size = 8) => {
 
 /** Dots at the 9 standard anchor positions: corners, edge midpoints,
  *  center. */
-const anchors = (b: Boxlike, r = 2.5) => {
+const anchors = (b: BoxLike, r = 2.5) => {
   const g = group({ aside: true, opacity: 0.7 });
   for (const u of [0, 0.5, 1]) {
     for (const v of [0, 0.5, 1]) {
@@ -101,9 +93,9 @@ const anchors = (b: Boxlike, r = 2.5) => {
 };
 
 /** Faint dashed line between two shapes' (or points') centers. */
-const connect = (a: AnyShape | Pointlike, b: AnyShape | Pointlike) => {
-  const aP: Pointlike = a instanceof Shape ? a.center : a;
-  const bP: Pointlike = b instanceof Shape ? b.center : b;
+const connect = (a: AnyShape | Vec.Like, b: AnyShape | Vec.Like) => {
+  const aP: Vec.Like = a instanceof Shape ? a.center : a;
+  const bP: Vec.Like = b instanceof Shape ? b.center : b;
   return line(aP, bP, {
     stroke: COLOR,
     thin: true,
@@ -113,9 +105,9 @@ const connect = (a: AnyShape | Pointlike, b: AnyShape | Pointlike) => {
 };
 
 /** `connect(a, b)` + a live distance label at the midpoint. */
-const distance = (a: AnyShape | Pointlike, b: AnyShape | Pointlike) => {
-  const aP: Pointlike = a instanceof Shape ? a.center : a;
-  const bP: Pointlike = b instanceof Shape ? b.center : b;
+const distance = (a: AnyShape | Vec.Like, b: AnyShape | Vec.Like) => {
+  const aP: Vec.Like = a instanceof Shape ? a.center : a;
+  const bP: Vec.Like = b instanceof Shape ? b.center : b;
   const mid = aP.lerp(bP, 0.5);
   const d = aP.distance(bP);
   const g = group({ aside: true });

@@ -12,26 +12,7 @@
 // modes are signal-coordinated — buttons set signals, generators react
 // via the standard fluent vocabulary.
 
-import {
-  Diagram,
-  Mount,
-  Anchor,
-  button,
-  cell,
-  play,
-  circle,
-  fadeOut,
-  label,
-  loop,
-  num,
-  oscillate,
-  vec,
-  type Animator,
-  type Cell,
-  type Content,
-  type N,
-  type Writable,
-} from "../../minim";
+import { Diagram, Mount, Anchor, button, cell, play, circle, fadeOut, label, loop, num, oscillate, vec, type Animator, type Cell, type Content, type Writable, Num } from "../../minim";
 
 const N_SLOTS = 12;
 const SHAPE_Y = 40;
@@ -43,7 +24,7 @@ const BTN_GAP = 12;
 
 function* lifecycle(
   shape: Writable<"opacity">,
-  y: N,
+  y: Num.Writable,
   amp: number,
   freq: number,
   stop: Cell<boolean>,
@@ -69,7 +50,7 @@ export class MdCancel extends Diagram {
       x: number;
       // `y` is a `Num.signal` (rather than plain `cell(...)`) so the
       // oscillate integrator can read its `[ALGEBRA]` slot.
-      y: N;
+      y: Num.Writable;
       shape: Writable<"opacity">;
     };
     const slots: Slot[] = [];
@@ -113,7 +94,7 @@ export class MdCancel extends Diagram {
 
     // One outer loop. Each iteration:
     //   1. Reset slots + signals.
-    //   2. Run all N lifecycles in parallel, with `.until(hardStop)`
+    //   2. Run all Num.Writable lifecycles in parallel, with `.until(hardStop)`
     //      wrapping the whole subtree — hardStop cascades cancellation
     //      to every child instantly.
     //   3. Decide post-cycle delay based on which signal fired.

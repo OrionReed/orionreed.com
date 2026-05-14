@@ -16,18 +16,7 @@
 // content signal changes, the host re-renders, re-measures, and
 // re-binds. No special "live" primitive needed; signals all the way.
 
-import {
-  Anchor,
-  Diagram,
-  Mount,
-  Vec,
-  cell,
-  handle,
-  label,
-  line,
-  vec,
-  type Content,
-} from "../../minim";
+import { Anchor, Diagram, Mount, Vec, cell, handle, label, line, vec, type Content } from "../../minim";
 import { part, tex, tint } from "../../minim/tex";
 
 const W = 640;

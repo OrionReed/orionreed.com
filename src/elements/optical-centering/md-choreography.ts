@@ -1,27 +1,7 @@
 // Six shapes cycle through every group operation. `snapshot` captures
 // the initial pose so each iteration loops perfectly.
 
-import {
-  Diagram,
-  Mount,
-  Anchor,
-  assemble,
-  centroid,
-  play,
-  circle,
-  easeInOut,
-  label,
-  loop,
-  num,
-  orbit,
-  cell,
-  vec,
-  snapshot,
-  splay,
-  stagger,
-  swap,
-  type Content,
-} from "../../minim";
+import { Diagram, Mount, Anchor, assemble, centroid, play, circle, easeInOut, label, loop, num, orbit, cell, vec, snapshot, splay, stagger, swap, type Content } from "../../minim";
 
 const W = 600;
 const H = 360;

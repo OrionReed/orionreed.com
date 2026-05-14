@@ -7,8 +7,8 @@
 //
 // Sync-resolve (calling `wake` before returning) is fine.
 //
-// Lives in `signals/` because `untilChange / untilTrue / untilFalse`
-// use `effect()` to react to cell changes. The signal-free adapters
+// Lives in `signals/` because `untilChange / untilTrue` use
+// `effect()` to react to cell changes. The signal-free adapters
 // (`untilEvent`, `untilPromise`, `race`) ride along — splitting them
 // out earned no clarity and added inter-folder imports.
 
@@ -50,21 +50,6 @@ export function untilTrue(sig: ReadonlyCell<unknown>): Animator<void> {
     return effect(() => {
       if (resolved) return;
       if (sig.value) {
-        resolved = true;
-        wake();
-      }
-    });
-  });
-}
-
-/** Wake when `sig` is falsy. Wakes immediately if already falsy.
- *  Complement of `untilTrue`. */
-export function untilFalse(sig: ReadonlyCell<unknown>): Animator<void> {
-  return suspend<void>((wake) => {
-    let resolved = false;
-    return effect(() => {
-      if (resolved) return;
-      if (!sig.value) {
         resolved = true;
         wake();
       }

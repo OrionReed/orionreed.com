@@ -35,13 +35,7 @@ import {
   Signal,
   type ReadonlyCell,
 } from "@minim/signals";
-import {
-  vec,
-  type V,
-  type Box,
-  type Boxlike,
-  type Pointlike,
-} from "@minim/values";
+import { vec, Vec, type Box, type BoxLike } from "@minim/values";
 import { circle } from "@minim/shapes";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -386,10 +380,10 @@ export class Predicates<T> {
   // ── Point / Vec ────────────────────────────────────────────────────
 
   /** Predicate that the point lies inside `region`. Accepts a
-   *  `Boxlike` (Shape, view, split result…) or a `ReadonlyCell<Box>`. */
+   *  `BoxLike` (Shape, view, split result…) or a `ReadonlyCell<Box>`. */
   inside(
-    this: Predicates<V>,
-    region: Boxlike | ReadonlyCell<Box>,
+    this: Predicates<Vec>,
+    region: BoxLike | ReadonlyCell<Box>,
   ): Claim {
     const boxSig: ReadonlyCell<Box> =
       "box" in region ? region.box : region;
@@ -576,7 +570,7 @@ export function track(
 export function verdictDot(
   source: ReadonlyCell<boolean>,
   opts: {
-    at?: Pointlike;
+    at?: Vec.Like;
     r?: number;
     pass?: string;
     fail?: string;
@@ -598,7 +592,7 @@ function fmt(v: unknown): string {
   if (typeof v === "number") return String(+v.toFixed(6));
   if (typeof v === "string") return JSON.stringify(v);
   if (v && typeof v === "object" && "x" in v && "y" in v) {
-    const p = v as V;
+    const p = v as Vec;
     return `(${fmt(p.x)}, ${fmt(p.y)})`;
   }
   return String(v);

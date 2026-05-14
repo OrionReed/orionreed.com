@@ -1,24 +1,4 @@
-import {
-  Diagram,
-  Mount,
-  Text,
-  Anchor,
-  circle,
-  derive,
-  easeInOut,
-  easeOut,
-  label,
-  line,
-  loop,
-  vec,
-  rect,
-  snapshot,
-  t,
-  timeline,
-  when,
-  type LineOpts,
-  type Pointlike,
-} from "../../minim";
+import { Diagram, Mount, Text, Anchor, circle, derive, easeInOut, easeOut, label, line, loop, vec, rect, snapshot, t, timeline, when, type LineOpts, Vec } from "../../minim";
 
 /** Italic letter with optional italic subscript. */
 function math(base: string, sub?: string): Text {
@@ -27,7 +7,7 @@ function math(base: string, sub?: string): Text {
 }
 
 /** Perpendicular tick across `a→b` at fraction `f`, half-length `h`. */
-function tick(a: Pointlike, b: Pointlike, f: number, h: number, opts: LineOpts = {}) {
+function tick(a: Vec.Like, b: Vec.Like, f: number, h: number, opts: LineOpts = {}) {
   const c = a.lerp(b, f);
   const off = b.sub(a).normalize().perp().scale(h);
   return line(c.sub(off), c.add(off), { thin: true, ...opts });

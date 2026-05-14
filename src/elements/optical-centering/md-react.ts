@@ -3,27 +3,7 @@
 // cascade kills any in-flight click listener via its awaitable
 // disposer.
 
-import {
-  Diagram,
-  Mount,
-  Anchor,
-  bounceIn,
-  button,
-  cell,
-  circle,
-  derive,
-  fadeOut,
-  label,
-  loop,
-  vec,
-  race,
-  rect,
-  suspend,
-  zoomOut,
-  type Animator,
-  type Content,
-  type Writable,
-} from "../../minim";
+import { Diagram, Mount, Anchor, bounceIn, button, cell, circle, derive, fadeOut, label, loop, vec, race, rect, suspend, zoomOut, type Animator, type Content, type Writable } from "../../minim";
 
 const W = 380;
 const TARGET_R = 14;
