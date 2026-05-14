@@ -20,6 +20,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "1.4.1",
 		"@types/node": "^20.11.24",
+		"alien-signals": "^3.2.1",
 		"mitata": "^1.0.34",
 		"ts-node": "^10.9.2",
 		"typescript": "^5.0.2",
