@@ -1,8 +1,13 @@
-// Span recording via `anim.observe`. Pure consumer — the runtime
-// knows nothing about spans, only lifecycle events. Tags are looked
-// up from a WeakMap keyed on the spawned generator (see `./tag`).
+// Span recording via `anim.observer`. Pure consumer — the runtime
+// has a single optional `observer` slot; this module sets it. Tags
+// are looked up from a WeakMap keyed on the spawned generator
+// (see `./tag`).
+//
+// Multiple subscribers: today there's only one (this module). If a
+// future caller needs fan-out, compose observers in user code and
+// assign the composition to `anim.observer`.
 
-import type { Anim, Animator } from "@minim/core";
+import type { Anim, AnimObserver, Animator } from "@minim/core";
 import { tagOf } from "./tag";
 
 /** One generator's lifecycle as flat data. `completedAt` is set on
@@ -41,14 +46,17 @@ export function spans(anim: Anim): Trace {
     for (const cb of listeners) cb();
   };
 
-  const stopObserve = anim.observe({
+  const prior = anim.observer;
+  const observer: AnimObserver = {
     spawn: (id, parentId, clock, gen: Animator) => {
+      prior?.spawn?.(id, parentId, clock, gen);
       const s: Span = { id, parentId, spawnedAt: clock, tag: tagOf(gen) };
       list.push(s);
       byId.set(id, s);
       notify();
     },
     complete: (id, clock) => {
+      prior?.complete?.(id, clock);
       const s = byId.get(id);
       if (s && s.completedAt === undefined) {
         s.completedAt = clock;
@@ -56,13 +64,19 @@ export function spans(anim: Anim): Trace {
       }
     },
     cancel: (id, clock) => {
+      prior?.cancel?.(id, clock);
       const s = byId.get(id);
       if (s && s.completedAt === undefined) {
         s.completedAt = clock;
         notify();
       }
     },
-  });
+  };
+  anim.observer = observer;
+  const stopObserve = (): void => {
+    // Restore the previous observer if our slot is still ours.
+    if (anim.observer === observer) anim.observer = prior;
+  };
 
   return {
     spans: list,

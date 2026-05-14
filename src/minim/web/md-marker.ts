@@ -7,7 +7,8 @@
 //      The <md-marker sym="sim:ball">ball</md-marker> has kinetic energy
 //      <md-tex sym="sim:v">v^2</md-tex>.
 
-import { effect, hover, getMarker } from "@minim/core";
+import { effect } from "@minim/core";
+import { hover, getMarker } from "@minim/ext";
 
 export class MdMarker extends HTMLElement {
   #disposers: Array<() => void> = [];

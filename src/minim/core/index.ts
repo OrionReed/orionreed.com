@@ -8,17 +8,30 @@
 // ── Reactive primitives ────────────────────────────────────────────
 //
 // Public surface:
-//   cell(v)                — writable
-//   cell.derived(fn)       — read-only
-//   cell.lens(read, w)     — writable lens
+//   cell(v)                — writable cell
+//   cell.derived(fn)       — read-only cell
+//   cell.lens(read, w)     — writable lens cell
 //   derive(sig, fn)        — single-source derived cell (sugar)
 //
-// `Cell<T>` / `ReadonlyCell<T>` are the unified type names.
+// One name pair covers all reactive values:
+//   Cell<T, O?, X?, G?, M?, N?>          — writable
+//   ReadonlyCell<T, O?, X?, G?, M?, N?>  — read-only
+//
+// Defaults (all empty) make `Cell<T>` a plain writable signal; the
+// struct framework (values/struct.ts) instantiates richer surfaces
+// via specific generic args. Value-type files (`num.ts`, `vec.ts`,
+// …) export short aliases (`N`, `Point`, …).
 export {
   cell,
   derive,
   type Cell,
   type ReadonlyCell,
+  type CellOptions,
+  type StructType,
+  type NestedMap,
+  type NestedInput,
+  type WriteOf,
+  type ReadOf,
 } from "./cell";
 
 // Internal-but-needed: framework-prototype work uses `Signal` /
@@ -54,7 +67,6 @@ export {
   LERP,
 } from "./tween";
 export { linear, easeIn, easeOut, easeInOut } from "./easings";
-export { pulse } from "./clocks";
 
 // ── Anim + suspensions + composers + drive ────────────────────────
 export {
@@ -63,6 +75,7 @@ export {
   isGen,
   suspend,
   type Animator,
+  type AnimObserver,
   type Yieldable,
   type SpawnFn,
 } from "./anim";
@@ -74,9 +87,10 @@ export {
   untilPromise,
   race,
   firstN,
-  endOn,
-  startOn,
 } from "./suspensions";
+// `endOn(trigger, work)` and `startOn(trigger, work)` are no longer
+// publicly exported — use `chain(work).until(trigger)` and
+// `after(trigger, work)` instead (see `chain.ts` and `compose.ts`).
 export {
   all,
   sequence,
@@ -106,13 +120,3 @@ export {
 
 // ── Snapshot + counter ─────────────────────────────────────────────
 export { snapshot, counter } from "./store";
-
-// ── Identity / cross-prose marker ──────────────────────────────────
-export {
-  marker,
-  palette,
-  hover,
-  getMarker,
-  registerMarker,
-  type Marker,
-} from "./marker";

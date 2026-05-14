@@ -132,18 +132,14 @@ export function after(
   );
 }
 
-/** Run `fn` every `sec` seconds. `fn` may return a generator
- *  (awaited each cycle) or void (cycle is just sleep + fire). */
-export function every(
-  sec: Val<number>,
-  fn: () => void | Animator,
-): Chained {
+/** Run `fn` every `sec` seconds. Side-effect only — for awaited work
+ *  per cycle, use `loop(() => sleep(sec).then(work()))`. */
+export function every(sec: Val<number>, fn: () => void): Chained {
   return chain(
     (function* (): Animator {
       while (true) {
         yield* sleepGen(sec);
-        const r = fn();
-        if (r !== undefined && isGen(r)) yield* r;
+        fn();
       }
     })(),
   );

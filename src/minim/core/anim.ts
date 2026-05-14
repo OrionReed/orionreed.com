@@ -85,16 +85,20 @@ export type Yieldable =
  *  evaluates to; defaults to `void`. */
 export type Animator<R = void> = Generator<Yieldable, R, number>;
 
-type ObserveListeners = {
-  spawn?: (
+/** Lifecycle observer hooks — single optional slot per kind. The
+ *  trace/assert layer sets these to record spawns/completes/cancels;
+ *  the runtime cares only about whether each hook is undefined.
+ *  See `assert/spans.ts` for the consumer. */
+export interface AnimObserver {
+  spawn?(
     id: number,
     parentId: number | undefined,
     clock: number,
     gen: Animator<any>,
-  ) => void;
-  complete?: (id: number, clock: number) => void;
-  cancel?: (id: number, clock: number) => void;
-};
+  ): void;
+  complete?(id: number, clock: number): void;
+  cancel?(id: number, clock: number): void;
+}
 
 // Active state — single int field. Cheap to store, cheap to dispatch
 // on, and the lifecycle is self-describing.
@@ -158,8 +162,12 @@ export class Anim {
   private _clockMs = 0;
   private lastFrame = 0;
   private clockListeners: Set<(t: number) => void> | undefined;
-  private listeners = new Set<ObserveListeners>();
   private nextActiveId = 0;
+
+  /** Lifecycle observer — single optional slot. Set by the trace
+   *  layer (`assert/spans.ts`). Multiple subscribers compose via a
+   *  fan-out wrapper in user code; the runtime sees one. */
+  observer: AnimObserver | undefined = undefined;
 
   // ── Public API ──────────────────────────────────────────────────────
 
@@ -197,15 +205,6 @@ export class Anim {
     this.lastFrame = 0;
     this._clockMs = 0;
     for (const a of this.active.slice()) this.cancel(a);
-  }
-
-  /** Subscribe to lifecycle events. Only listed fields fire; already-
-   *  running generators are not retroactively included. */
-  observe(listeners: ObserveListeners): () => void {
-    this.listeners.add(listeners);
-    return () => {
-      this.listeners.delete(listeners);
-    };
   }
 
   /** Advance by `dt` (seconds). Single advance primitive — RAF,
@@ -273,12 +272,9 @@ export class Anim {
     a.effectiveScale = (parent ? parent.effectiveScale : 1) * own;
 
     this.active.push(a);
-    if (this.listeners.size > 0) {
+    if (this.observer?.spawn) {
       a.observeId = ++this.nextActiveId;
-      const t = this._clockMs;
-      for (const l of this.listeners) {
-        l.spawn?.(a.observeId, parent?.observeId, t, gen);
-      }
+      this.observer.spawn(a.observeId, parent?.observeId, this._clockMs, gen);
     }
     // First .next() arg is discarded by JS generators.
     this.advance(a, undefined);
@@ -291,9 +287,8 @@ export class Anim {
     if (a.state === DEAD) return;
     const wasSubscribed = a.state === SUBSCRIBED;
     a.state = DEAD;
-    if (this.listeners.size > 0 && a.observeId !== undefined) {
-      const t = this._clockMs;
-      for (const l of this.listeners) l.cancel?.(a.observeId, t);
+    if (this.observer?.cancel && a.observeId !== undefined) {
+      this.observer.cancel(a.observeId, this._clockMs);
     }
     if (wasSubscribed) {
       // SUBSCRIBED ⇒ dispose set (atomic with state, no JS interleaving).
@@ -479,9 +474,8 @@ export class Anim {
   private complete(a: Active, value: unknown): void {
     if (a.state === DEAD) return;
     a.state = DEAD;
-    if (this.listeners.size > 0 && a.observeId !== undefined) {
-      const t = this._clockMs;
-      for (const l of this.listeners) l.complete?.(a.observeId, t);
+    if (this.observer?.complete && a.observeId !== undefined) {
+      this.observer.complete(a.observeId, this._clockMs);
     }
     if (a.onComplete) {
       const cb = a.onComplete;

@@ -6,13 +6,14 @@ import {
   clipPath,
   connect,
   derive,
+  every,
   forEach,
   grid,
   group,
   label,
   line,
+  num,
   vec,
-  pulse,
   rect,
   t,
   viewport,
@@ -39,7 +40,8 @@ export class MdLubyTransform extends Diagram {
     const view = this.view(W, 200);
 
     // Re-roll the cell pattern and source-edge gating each tick.
-    const tick = pulse(this.anim, 0.5);
+    const tick = num(0);
+    this.anim.run(every(0.5, () => { tick.value++; }));
     const cells = derive(tick, () => R.bools(QR_GRID * QR_GRID));
     const edges = derive(tick, () => R.bools(N.value, 0.3, 1));
 

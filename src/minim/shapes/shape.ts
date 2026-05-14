@@ -106,14 +106,14 @@ export type Writable<K extends AnimatableKey> = {
  *  + children); subclasses add an intrinsic element and geometry. A
  *  bare `new Shape()` is a group.
  *
- *  Animatable state lives in `this.transform: Reactive<Transform>`.
+ *  Animatable state lives in `this.transform: Cell<Transform, ...>`.
  *  Field aliases (`translate`, `rotate`, …) forward to the transform's
  *  nested signals — same reference, no extra allocation. */
 export class Shape<O extends ShapeOpts = ShapeOpts> implements Boxlike {
   readonly el: SVGGElement;
   readonly intrinsic?: SVGElement;
 
-  /** Animatable surface: a single `Reactive<Transform>`. Tween whole
+  /** Animatable surface: a single `Cell<Transform, ...>`. Tween whole
    *  pose with `shape.transform.to(target, dur)`. Field signals are
    *  smart-adopted from `opts`: pass a `vec(...)` and `transform.translate`
    *  IS that signal (two-way share); pass a `computed` and the field

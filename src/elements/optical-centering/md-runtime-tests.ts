@@ -13,10 +13,11 @@ import {
   attract,
   centroid,
   circle,
+  chain,
   derive,
   drift,
-  endOn,
   cell,
+  every,
   forEach,
   label,
   loop,
@@ -26,7 +27,6 @@ import {
   num,
   oscillate,
   vec,
-  pulse,
   race,
   rect,
   splay,
@@ -591,19 +591,18 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "endOn: cancels work on trigger, sequel runs",
+    name: ".until: cancels work on trigger, sequel runs",
     run: (assert) => {
       const a = new Anim();
       const stop = cell(false);
       let phase = 0;
       a.run(function* () {
-        yield endOn(
-          untilChange(stop),
+        yield* chain(
           (function* (): Animator {
             phase = 1;
             while (true) yield;
           })(),
-        );
+        ).until(stop);
         phase = 2;
         yield 0.1;
         phase = 3;
@@ -717,16 +716,16 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "observe: emits spawn / complete / cancel events",
+    name: "anim.observer: emits spawn / complete / cancel events",
     run: (assert) => {
       const a = new Anim();
       type Ev = { type: "spawn" | "complete" | "cancel"; id: number };
       const events: Ev[] = [];
-      const stop = a.observe({
-        spawn: (id) => events.push({ type: "spawn", id }),
-        complete: (id) => events.push({ type: "complete", id }),
-        cancel: (id) => events.push({ type: "cancel", id }),
-      });
+      a.observer = {
+        spawn: (id: number) => events.push({ type: "spawn", id }),
+        complete: (id: number) => events.push({ type: "complete", id }),
+        cancel: (id: number) => events.push({ type: "cancel", id }),
+      };
       const handle = a.run(function* () {
         yield 0.1;
       });
@@ -736,29 +735,29 @@ const TESTS: TestCase[] = [
       handle();
       const cancelled = events.find((e) => e.type === "cancel");
       assert(cancelled?.id === id, `cancel event should reference same id`);
-      stop();
+      a.observer = undefined;
       a.stop();
     },
   },
   {
-    name: "observe: zero events fire after disposer",
+    name: "anim.observer: zero events fire after slot is cleared",
     run: (assert) => {
       const a = new Anim();
       let count = 0;
-      const stop = a.observe({
+      a.observer = {
         spawn: () => count++,
-      });
+      };
       a.run(function* () {
         yield;
       });
       a.step(0);
       assert(count === 1, `pre-stop spawn should be observed`);
-      stop();
+      a.observer = undefined;
       a.run(function* () {
         yield;
       });
       a.step(0);
-      assert(count === 1, `no events after disposer (got ${count})`);
+      assert(count === 1, `no events after slot cleared (got ${count})`);
       a.stop();
     },
   },
@@ -1100,10 +1099,11 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "pulse signal increments",
+    name: "every: fires at a fixed interval",
     run: (assert) => {
       const a = new Anim();
-      const p = pulse(a, 0.1);
+      const p = num(0);
+      a.run(every(0.1, () => { p.value++; }));
       assert(p.value === 0, `starts at 0`);
       a.step(0);
       a.step(0.15);

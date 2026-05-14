@@ -1,10 +1,16 @@
-// Reactive value-type framework. `struct(name, defaults)` is the fluent
-// Builder for record-shaped value types; internally it lifts ops and scalars,
-// installs lazy axis/getter descriptors, and calls a per-type cell factory.
+// Reactive value-type framework — runtime implementation. The
+// type-level surface (`Cell` / `ReadonlyCell` / `StructType` /
+// `WriteOf` / `ReadOf` / `NestedMap` / `NestedInput`) lives in
+// `core/cell.ts`. This file just implements the builder, the per-type
+// prototype machinery, and the lifted-op closures.
+//
+// `struct(name, defaults)` is the fluent Builder for record-shaped
+// value types; internally it lifts ops and scalars, installs lazy
+// axis/getter descriptors, and calls a per-type cell factory.
 // `.nested(map)` opts into full SoA storage (per-field signals).
 //
-// `lerpable(initial, lerp)` (in core/tween.ts) is the escape hatch for
-// value types you don't want to declare as a full struct.
+// `lerpable(initial, lerp)` (in core/tween.ts) is the escape hatch
+// for value types you don't want to declare as a full struct.
 
 import {
   Signal,
@@ -15,190 +21,29 @@ import {
   batch,
   LERP,
   tween,
+  type Cell,
+  type ReadonlyCell,
+  type StructType,
+  type NestedMap,
+  type NestedInput,
   type ReadonlySignal,
   type Easing,
   type Duration,
   type Tween,
 } from "@minim/core";
 
-// ── Type surface ───────────────────────────────────────────────────
-
-export type RW = "rw" | "ro";
-
-type ReactiveArgs<A extends readonly unknown[]> = {
-  [K in keyof A]: A[K] | Signal<A[K]> | ReadonlySignal<A[K]> | (() => A[K]);
-};
-
-/** Lift a struct-returning op `(self, ...args) => T` into its method
- *  form `(...args) => Reactive<T, ...>`. Threads `G` (lazy getters)
- *  and `N` (nested map) through to the result so cardinals/lazy
- *  projections AND nested-struct axes survive lifted derivations
- *  (e.g. `vec.add(b).x.to(...)` works because the derived's `.x`
- *  is a `Num` reactive, not a plain `Signal<number>`). `M` is
- *  dropped — free-form methods are writable-only by design and
- *  lifted ops always return read-only. */
-type LiftedStruct<F, T, O, X, G, N> = F extends (
-  self: any,
-  ...args: infer A
-) => any
-  ? (...args: ReactiveArgs<A>) => Reactive<T, O, X, G, {}, "ro", N>
-  : never;
-
-/** Lift a scalar-returning op `(self, ...args) => R` into a method
- *  `(...args) => ReadonlySignal<R>`. */
-type LiftedScalar<F> = F extends (self: any, ...args: infer A) => infer R
-  ? (...args: ReactiveArgs<A>) => ReadonlySignal<R>
-  : never;
-
-/** Methods bag — lifted ops + lifted scalars. Verbatim free-form
- *  methods (`M`) are NOT included here; they're added separately by
- *  Reactive only on writable flavors. */
-type Methods<T, O, X, G, N> =
-  & { [K in keyof O]: LiftedStruct<O[K], T, O, X, G, N> }
-  & { [K in keyof X]: LiftedScalar<X[K]> };
-
-/** Lazy getter return types projected as readonly properties.
- *  `{ center: (this) => Reactive<V> }` becomes `{ readonly center:
- *  Reactive<V> }`. */
-type GetterProps<G> = {
-  readonly [K in keyof G]: G[K] extends (this: any) => infer R ? R : never;
-};
-
-/** Per-axis projections of a record-shaped T. Writable when parent
- *  is writable. T that isn't a record yields no axes (e.g. T=string
- *  has no `string.x` axis).
- *
- *  When `N` declares nested struct types for some keys, those axes
- *  expose the nested struct's full surface (`.translate.x`, `.translate.length`,
- *  …) instead of a plain Signal. */
-type Axes<T, W extends RW, N> = T extends Record<string, any>
-  ? {
-      readonly [K in keyof T]: K extends keyof N
-        ? N[K] extends StructType<
-            infer NT,
-            infer NO,
-            infer NX,
-            infer NG,
-            infer NM,
-            infer NN
-          >
-          ? Reactive<NT, NO, NX, NG, NM, W, NN>
-          : never
-        : W extends "rw"
-          ? Signal<T[K]>
-          : ReadonlySignal<T[K]>;
-    }
-  : {};
-
-/** Decompose a `StructType` into the broad `Reactive<...>` of any
- *  flavor. Use to derive type aliases (`Point = WriteOf<typeof Vec>`)
- *  without depending on `signal()`'s ReturnType (which can widen
- *  unhelpfully under generic inference). */
-export type WriteOf<S> = S extends StructType<
-  infer T,
-  infer O,
-  infer X,
-  infer G,
-  infer M,
-  infer N
->
-  ? Reactive<T, O, X, G, M, "rw", N>
-  : never;
-
-export type ReadOf<S> = S extends StructType<
-  infer T,
-  infer O,
-  infer X,
-  infer G,
-  infer M,
-  infer N
->
-  ? Reactive<T, O, X, G, M, "ro", N>
-  : never;
-
-/** When the ops bag includes `lerp`, `.to(target, dur, ease?)` is installed
- *  on writable Reactives via the `[LERP]` slot. Other behaviors
- *  (spring, oscillate, …) are free functions reading `[ALGEBRA]`. */
-type Tweenable<T, O, W extends RW> = W extends "rw"
-  ? O extends { lerp: (a: any, b: any, t: number) => T }
-    ? { to(target: T, dur: Duration, ease?: Easing): Tween<T> }
-    : {}
-  : {};
-
-/** A reactive cell carrying a value of type T.
- *
- *  Generics:
- *    T  — value type (any type, not just records)
- *    O  — struct-returning ops bag
- *    X  — scalar-returning ops bag
- *    G  — lazy-getters bag
- *    M  — free-form methods bag (verbatim, writable-only)
- *    W  — "rw" or "ro"
- *    N  — nested-struct map (for fields whose values are themselves
- *         registered struct types — e.g. `Transform.translate: Vec`)
- *
- *  Only `T` appears in user-facing positions; the rest default and
- *  are filled in by the Builder via inference. */
-export type Reactive<
-  T,
-  O = {},
-  X = {},
-  G = {},
-  M = {},
-  W extends RW = "rw",
-  N = {},
-> =
-  & (W extends "rw" ? Signal<T> : ReadonlySignal<T>)
-  & Axes<T, W, N>
-  & Methods<T, O, X, G, N>
-  & GetterProps<G>
-  & Tweenable<T, O, W>
-  & (W extends "rw" ? M : {});
-
-/** Nested-struct field map. Keys are fields of T whose values should
- *  be exposed as `Reactive<TheirNestedStruct>` rather than plain
- *  signals — and (for `.signal()` flavor) stored SoA-style as
- *  per-field signals so per-axis writes bypass the parent. */
-export type NestedMap<T> = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [K in keyof T]?: StructType<T[K], any, any, any, any, any>;
-};
-
-/** Per-field input for a `.nested()` struct's `signal({...})` call.
- *  Each field accepts a literal, a Signal, a ReadonlySignal, or a
- *  thunk; nested fields additionally accept a Reactive of the nested
- *  type (which is adopted directly — same reference, two-way share). */
-export type NestedInput<T, N = {}> = {
-  [K in keyof T]: K extends keyof N
-    ? N[K] extends StructType<infer NT, any, any, any, any, any>
-      ?
-          | NT
-          | Signal<NT>
-          | ReadonlySignal<NT>
-          | (() => NT)
-          | Reactive<NT, any, any, any, any, any, any>
-      : never
-    : T[K] | Signal<T[K]> | ReadonlySignal<T[K]> | (() => T[K]);
-};
-
-/** A registered struct: factory namespace + identity-as-instanceof.
- *  `v instanceof MyStruct` is O(1) via the [STRUCT] prototype slot. */
-export interface StructType<T, O = {}, X = {}, G = {}, M = {}, N = {}> {
-  readonly name: string;
-  readonly defaults: T;
-  /** Build a writable reactive cell. Each field accepts a literal OR a
-   *  matching reactive value; the output's per-axis writability narrows
-   *  to match the input flavor (literal/Signal → writable, computed/
-   *  thunk → readonly). Pass a `vec(...)` (or any `Vec.signal`) and the
-   *  result's `.translate` IS that signal — same reference, two-way
-   *  share. */
-  signal(v: NestedInput<T, N>): Reactive<T, O, X, G, M, "rw", N>;
-  derived(fn: () => T): Reactive<T, O, X, G, M, "ro", N>;
-  lens(read: () => T, write: (v: T) => void): Reactive<T, O, X, G, M, "rw", N>;
-  is(v: unknown): v is Reactive<T, O, X, G, M, RW, N>;
-  isWritable(v: unknown): v is Reactive<T, O, X, G, M, "rw", N>;
-  [Symbol.hasInstance](v: unknown): boolean;
-}
+// Re-export the type-level surface so files that import from
+// `./struct` (the historical home of `Reactive<...>` and friends)
+// continue to work after the move to `@minim/core/cell`.
+export type {
+  Cell,
+  ReadonlyCell,
+  StructType,
+  WriteOf,
+  ReadOf,
+  NestedMap,
+  NestedInput,
+} from "@minim/core";
 
 // ── Marker symbols ─────────────────────────────────────────────────
 //
@@ -540,11 +385,11 @@ type OpsBag<T> = Record<string, (self: T, ...args: any[]) => T>;
 type ScalarsBag<T> = Record<string, (self: T, ...args: any[]) => unknown>;
 type MethodsBag<T, O, X, M, G, N> = Record<
   string,
-  (this: Reactive<T, O, X, G, M, "rw", N>, ...args: any[]) => any
+  (this: Cell<T, O, X, G, M, N>, ...args: any[]) => any
 >;
 type GettersBag<T, O, X, M, G, N> = Record<
   string,
-  (this: Reactive<T, O, X, G, M, RW, N>) => any
+  (this: Cell<T, O, X, G, M, N> | ReadonlyCell<T, O, X, G, M, N>) => any
 >;
 
 class Builder<T, O = {}, X = {}, G = {}, M = {}, N = {}> {
@@ -677,7 +522,7 @@ class Builder<T, O = {}, X = {}, G = {}, M = {}, N = {}> {
   }
 }
 
-/** Build a `Reactive<T>` factory. Fluent: chain `.construct()`,
+/** Build a `Cell<T>` / `ReadonlyCell<T>` factory. Fluent: chain `.construct()`,
  *  `.equals()`, `.nested()`, `.ops()`, `.scalars()`, `.getters()`,
  *  `.methods()`, then `.build()`. */
 export function struct<T>(name: string, defaults: T): Builder<T> {
@@ -793,7 +638,7 @@ function finalize<T>(
 //
 // Each `.signal({...})` field input is normalized to a backing signal:
 //
-//   - Already a Reactive of the matching nested type     → adopt as-is
+//   - Already a Cell of the matching nested type         → adopt as-is
 //   - Some other Signal<T[K]>                            → wrap in `.lens` (rw)
 //                                                          or `.derived` (ro)
 //   - A function () => T[K]                              → wrap in derived

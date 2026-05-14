@@ -24,17 +24,19 @@ import {
   effect,
   signal,
   cell,
-  marker,
-  hover,
-  registerMarker,
   toSig,
   type Signal,
   type ReadonlySignal,
   type Cell,
   type ReadonlyCell,
-  type Marker,
   type Val,
 } from "@minim/core";
+import {
+  marker,
+  hover,
+  registerMarker,
+  type Marker,
+} from "@minim/ext";
 import {
   Box as BoxStruct,
   delegate,
@@ -49,7 +51,7 @@ import type { TexShape } from "./tex";
 type BoxCell = WriteOf<typeof BoxStruct>;
 
 export type { Marker };
-export { getMarker } from "@minim/core";
+export { getMarker } from "@minim/ext";
 
 /** A part's content can be a literal string, a signal, or a thunk. */
 export type PartContent = Val<string>;

@@ -4,6 +4,7 @@
 //   timeline   declarative clip composition over a clock
 //   events     named-event bus with `until(name)` suspension
 //   waapi      Web Animations / scroll / view-timeline bridges
+//   marker     named reactive identity (cross-prose / cross-diagram)
 
 export {
   timeline,
@@ -24,3 +25,12 @@ export {
   inView,
   type ViewRange,
 } from "./waapi";
+
+export {
+  marker,
+  palette,
+  hover,
+  getMarker,
+  registerMarker,
+  type Marker,
+} from "./marker";

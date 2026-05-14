@@ -1,16 +1,16 @@
 // Two cancellation modes.
 //
 //   EXIT — cooperative: flip the `stop` signal; each lifecycle's
-//          `endOn(untilChange(stop), oscillate(...))` resumes, and
-//          `fadeOut` runs as the sequel in the same generator.
+//          `oscillate(...).until(stop)` resolves, and `fadeOut` runs
+//          as the sequel in the same generator.
 //
 //   STOP — hard cancel: flip `hardStop`; the loop's outer scope
-//          (`endOn(untilTrue(hardStop), parallel(lifecycles))`) tears
-//          the entire subtree down, mid-fade if necessary.
+//          (`parallel(lifecycles).until(hardStop)`) tears the entire
+//          subtree down, mid-fade if necessary.
 //
 // No `disposers[]` array, no `anim.run()` from button callbacks. Both
 // modes are signal-coordinated — buttons set signals, generators react
-// via the standard suspension vocabulary.
+// via the standard fluent vocabulary.
 
 import {
   Diagram,
@@ -18,8 +18,8 @@ import {
   Anchor,
   button,
   cell,
+  chain,
   circle,
-  endOn,
   fadeOut,
   label,
   loop,
@@ -27,8 +27,6 @@ import {
   oscillate,
   parallel,
   vec,
-  untilChange,
-  untilTrue,
   type Animator,
   type Cell,
   type Content,
@@ -51,7 +49,7 @@ function* lifecycle(
   freq: number,
   stop: Cell<boolean>,
 ): Animator {
-  yield endOn(untilChange(stop), oscillate(y, amp, freq));
+  yield* chain(oscillate(y, amp, freq)).until(stop);
   yield* fadeOut(shape, 0.4);
 }
 
@@ -116,7 +114,7 @@ export class MdCancel extends Diagram {
 
     // One outer loop. Each iteration:
     //   1. Reset slots + signals.
-    //   2. Run all N lifecycles in parallel, with `endOn(hardStop, ...)`
+    //   2. Run all N lifecycles in parallel, with `.until(hardStop)`
     //      wrapping the whole subtree — hardStop cascades cancellation
     //      to every child instantly.
     //   3. Decide post-cycle delay based on which signal fired.
@@ -129,14 +127,11 @@ export class MdCancel extends Diagram {
         hardStop.value = false;
         status.value = "running";
 
-        yield endOn(
-          untilTrue(hardStop),
-          parallel(
-            ...slots.map((slot, i) =>
-              lifecycle(slot.shape, slot.y, 14, 0.45 + i * 0.04, stop),
-            ),
+        yield* parallel(
+          ...slots.map((slot, i) =>
+            lifecycle(slot.shape, slot.y, 14, 0.45 + i * 0.04, stop),
           ),
-        );
+        ).until(hardStop);
 
         yield hardStop.peek() ? 1.6 : 1.4;
       }),

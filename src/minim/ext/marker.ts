@@ -9,6 +9,9 @@
 // Self-contained: `marker`, `palette`, `hover`, `getMarker`, `registerMarker`
 // are all here. Import one module, get everything needed to build with identity.
 //
+// Lives in `ext/` rather than `core/`: it's an opinionated content feature
+// (cross-prose / cross-diagram identity), not a runtime primitive. Opt-in.
+//
 // Usage:
 //
 //      // Create
@@ -27,7 +30,7 @@
 //      // Suspend until active
 //      yield* untilTrue(m.active);
 
-import { cell, type Cell, type ReadonlyCell } from "./cell";
+import { cell, type Cell, type ReadonlyCell } from "@minim/core";
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 

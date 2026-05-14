@@ -18,10 +18,10 @@ import {
   Mount,
   Shape,
   cell,
+  chain,
   circle,
   derive,
   drive,
-  endOn,
   line,
   loop,
   oscillate,
@@ -179,7 +179,7 @@ export class MdOscillator extends Diagram {
     this.anim.run(loop(function* () {
       yield* untilTrue(gamma.active);
       yield* envPath.opacity.to(0.85, 0.3);                         // fade in
-      yield endOn(untilFalse(gamma.active), oscillate(envPath.opacity, 0.1, 1.6));
+      yield* chain(oscillate(envPath.opacity, 0.1, 1.6)).while(gamma.active);
       yield* envPath.opacity.to(0, 0.4);                             // fade out
     }));
 

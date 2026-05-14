@@ -6,22 +6,29 @@
 //   - the plain value type alias (`V`, `Box`, `C`, `Matrix2D`, `Transform`)
 //   - rw/ro flavor aliases where useful (`Point`/`DerivedPoint`)
 //
-// Plus the struct framework itself (`struct`, `Reactive`, `StructType`),
+// Plus the struct framework itself (`struct`, `Cell`, `StructType`),
 // generic algebra (`mean`, `algebraOf`, `VectorSpace`), continuous
 // behaviors (`spring`, `oscillate`, `drift`, `attract`), `delegate` for
 // host-class boxlike forwarders, and `Anchor`/`Dir` spatial constants.
 
-// ── Struct framework ─────────────────────────────────────────────
+// ── Struct framework (runtime) ─────────────────────────────────────
+//
+// Type-level surface (`Cell`, `ReadonlyCell`, `StructType`, …) lives
+// in `core/cell.ts` and is exported from `@minim/core`. This module
+// just provides the `struct(...)` builder runtime.
+export { struct } from "./struct";
+
+// Re-export the type-level surface so `@minim/values` consumers can
+// import everything they need from one place.
 export {
-  struct,
-  type Reactive,
+  type Cell,
+  type ReadonlyCell,
   type StructType,
   type WriteOf,
   type ReadOf,
   type NestedMap,
   type NestedInput,
-  type RW,
-} from "./struct";
+} from "@minim/core";
 
 // ── Vec ─────────────────────────────────────────────────────────
 export {
