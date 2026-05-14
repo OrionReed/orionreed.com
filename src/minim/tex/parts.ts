@@ -36,7 +36,7 @@ import {
   hover,
   registerMarker,
   type Marker,
-} from "@minim/ext";
+} from "./marker";
 import {
   Box as BoxStruct,
   delegate,
@@ -51,7 +51,6 @@ import type { TexShape } from "./tex";
 type BoxCell = WriteOf<typeof BoxStruct>;
 
 export type { Marker };
-export { getMarker } from "@minim/ext";
 
 /** A part's content can be a literal string, a signal, or a thunk. */
 export type PartContent = Val<string>;

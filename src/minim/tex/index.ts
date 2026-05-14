@@ -29,8 +29,14 @@ export {
   type Marker,
   type PartContent,
   type PartList,
-  getMarker,
 } from "./parts";
+export {
+  marker,
+  palette,
+  hover,
+  getMarker,
+  registerMarker,
+} from "./marker";
 export {
   brace,
   box,

@@ -1,7 +1,7 @@
 // Suspension adapters and combinators. Adapters bridge an external
 // source (signal change, DOM event, promise) to the suspend protocol
 // — `yield* untilX(...)` resumes with the typed payload. Combinators
-// orchestrate child Yieldables (race, endOn, startOn, firstN).
+// orchestrate child Yieldables (race, endOn, startOn).
 //
 //     const evt = yield* untilEvent(el, "click");  // Event
 //     const v   = yield* untilChange(sig);         // T (sig's new value)
@@ -153,57 +153,6 @@ export function race<Cs extends readonly Yieldable[]>(
     }
     setupDone = true;
     if (pending) (wake as (v?: V) => void)(pendingValue);
-    return () => {
-      for (const d of disposers) d();
-    };
-  });
-}
-
-/** Wait for the first `n` children to complete; resume with an array
- *  of `{ index, value }` in completion order; cancel the remaining
- *  losers. `n=1` ≈ `race` (different return shape); `n=children.length`
- *  ≈ `all` (different return shape). */
-export function firstN<Cs extends readonly Yieldable[]>(
-  n: number,
-  ...children: Cs
-): Animator<Array<{ index: number; value: PayloadOf<Cs[number]> }>> {
-  type V = PayloadOf<Cs[number]>;
-  type R = Array<{ index: number; value: V }>;
-  return suspend<R>((wake, spawn) => {
-    if (n <= 0 || children.length === 0) {
-      wake([]);
-      return () => {};
-    }
-    const want = Math.min(n, children.length);
-    const results: R = [];
-    let resolved = false;
-    const disposers: (() => void)[] = [];
-    const handle = (i: number) => (value: unknown) => {
-      if (resolved) return;
-      results.push({ index: i, value: value as V });
-      if (results.length >= want) {
-        resolved = true;
-        // Cancel any still-running children (their disposers no-op
-        // for the ones that already completed).
-        for (const d of disposers) d();
-        wake(results);
-      }
-    };
-    for (let i = 0; i < children.length; i++) {
-      const c = children[i];
-      if (typeof c === "function" && !isGen(c)) {
-        disposers.push(
-          (
-            c as (
-              wake: (v: unknown) => void,
-              spawn: SpawnFn,
-            ) => () => void
-          )(handle(i) as (v: unknown) => void, spawn),
-        );
-      } else {
-        disposers.push(spawn(asGen(c), handle(i)));
-      }
-    }
     return () => {
       for (const d of disposers) d();
     };

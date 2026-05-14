@@ -4,11 +4,24 @@
 // text content stays in the prose font. Use for full words or phrases;
 // use <md-tex> for symbols that should render in the math font.
 //
-//      The <md-marker sym="sim:ball">ball</md-marker> has kinetic energy
-//      <md-tex sym="sim:v">v^2</md-tex>.
+//      The <md-marker for="d" sym="ball">ball</md-marker> has kinetic energy
+//      <md-tex for="d" sym="v">v^2</md-tex>.
+//
+// `for` names the diagram element's id. Falls back to global registry
+// if absent (transitional — prefer the scoped path).
 
 import { effect } from "@minim/core";
-import { hover, getMarker } from "@minim/ext";
+import { hover, getMarker as getGlobalMarker, type Marker } from "@minim/tex";
+
+type MarkerHost = { getMarker?: (id: string) => Marker | undefined };
+
+function resolveMarker(id: string, forId: string | null): Marker | undefined {
+  if (forId) {
+    const el = document.getElementById(forId) as MarkerHost | null;
+    return el?.getMarker?.(id);
+  }
+  return getGlobalMarker(id);
+}
 
 export class MdMarker extends HTMLElement {
   #disposers: Array<() => void> = [];
@@ -16,7 +29,8 @@ export class MdMarker extends HTMLElement {
   connectedCallback(): void {
     const id = this.getAttribute("sym");
     if (!id) return;
-    const m = getMarker(id);
+    const forId = this.getAttribute("for");
+    const m = resolveMarker(id, forId);
     if (!m) return;
 
     this.style.borderRadius = "2px";

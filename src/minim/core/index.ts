@@ -58,7 +58,6 @@ export {
 // (no global side-effects).
 export {
   tween,
-  makeTween,
   lerpable,
   type Tween,
   type Easing,
@@ -86,7 +85,6 @@ export {
   untilEvent,
   untilPromise,
   race,
-  firstN,
 } from "./suspensions";
 // `endOn(trigger, work)` and `startOn(trigger, work)` are no longer
 // publicly exported — use `chain(work).until(trigger)` and
@@ -99,7 +97,6 @@ export {
   sleep,
   after,
   every,
-  transaction,
   rand,
 } from "./compose";
 export { chain, type Chained } from "./chain";

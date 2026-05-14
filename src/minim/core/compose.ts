@@ -21,9 +21,8 @@ import {
   type Yieldable,
   type SpawnFn,
 } from "./anim";
-import { type Signal, type ReadonlySignal } from "./signal";
+import { type ReadonlySignal } from "./signal";
 import { type Val } from "./arg";
-import { snapshot } from "./store";
 import { untilTrue } from "./suspensions";
 import { chain, sleepGen, yieldableGen, type Chained } from "./chain";
 
@@ -145,24 +144,7 @@ export function every(sec: Val<number>, fn: () => void): Chained {
   );
 }
 
-// ── Sequential utilities (kept raw — neither earns fluent surface) ─
-
-/** Run `work`; on cancel, synchronously restore the snapshot. Natural
- *  completion discards it. For an animated unwind, write the exit as
- *  a sequel after `endOn(trigger, work)` instead. */
-export function* transaction(
-  work: Animator,
-  ...sigs: Array<Signal<unknown> | Record<string, unknown>>
-): Animator {
-  const restore = snapshot(...sigs);
-  let completed = false;
-  try {
-    yield* work;
-    completed = true;
-  } finally {
-    if (!completed) restore();
-  }
-}
+// ── Sequential utilities (kept raw — doesn't earn fluent surface) ─
 
 /** Pick one of `children` uniformly at random and run it. Construction
  *  must be side-effect free — unselected generators are never advanced

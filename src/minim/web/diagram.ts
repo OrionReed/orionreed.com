@@ -12,6 +12,7 @@ import {
 } from "@minim/shapes";
 import { Box as BoxStruct, box, type Boxlike } from "@minim/values";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
+import type { Marker } from "@minim/tex";
 // (other web/ files: relative imports stay local to keep the package self-contained)
 
 export const css = String.raw;
@@ -54,6 +55,21 @@ export class Diagram extends HTMLElement {
   /** Callable mount handle passed into `scene(s)`. `s(shape)` adds to root. */
   protected s!: Mount;
 
+  // Per-instance marker registry. Cleared and repopulated on each
+  // connectedCallback so `<md-tex for="id">` always sees fresh markers.
+  #markers = new Map<string, Marker>();
+
+  /** Register a marker under `id` for this diagram instance. Call in
+   *  `scene()` so prose elements with `for="this-id"` can resolve it. */
+  registerMarker(id: string, m: Marker): void {
+    this.#markers.set(id, m);
+  }
+
+  /** Look up a marker registered on this instance. */
+  getMarker(id: string): Marker | undefined {
+    return this.#markers.get(id);
+  }
+
   // Viewport state. `#viewSet` flips on the first explicit `view()`/`fit()`
   // call; `connectedCallback` auto-fits if it's still false.
   #viewSet = false;
@@ -91,6 +107,7 @@ export class Diagram extends HTMLElement {
     this.anim.stop();
     this.root?.dispose();
     this.#viewSet = false;
+    this.#markers.clear();
     this.root = new Shape();
     this.svg.replaceChildren(this.root.el);
     ensureArrowMarker(this.svg);

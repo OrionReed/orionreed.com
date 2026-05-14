@@ -25,12 +25,3 @@ export {
   inView,
   type ViewRange,
 } from "./waapi";
-
-export {
-  marker,
-  palette,
-  hover,
-  getMarker,
-  registerMarker,
-  type Marker,
-} from "./marker";

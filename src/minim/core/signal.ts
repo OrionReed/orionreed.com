@@ -1,4 +1,16 @@
-// An named symbol/brand for detecting Signal instances even when they weren't
+// Reactive signals — vendored from @preact/signals-core (MIT). Local
+// modifications:
+//
+//   1. Lens<T> — writable-derived signal (see the `//#region Lens`
+//      block near the bottom). Used by `cell.lens()` and the struct
+//      framework for sub-field views and aggregates.
+//
+// Everything else in this file is preact's code, kept verbatim so we
+// can pull upstream fixes by re-vendoring. Copy-pasters who want a
+// different reactivity engine swap this whole file (and keep `Lens`
+// or its equivalent).
+
+// A named symbol/brand for detecting Signal instances even when they weren't
 // created using the same signals library version.
 const BRAND_SYMBOL = Symbol.for("preact-signals");
 

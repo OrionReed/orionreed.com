@@ -36,7 +36,6 @@ export {
   untilEvent,
   untilPromise,
   race,
-  firstN,
   all,
   sequence,
   parallel,
@@ -44,7 +43,6 @@ export {
   sleep,
   after,
   every,
-  transaction,
   rand,
   chain,
   drive,
@@ -221,16 +219,20 @@ export {
   timeline,
   sequential,
   EventBus,
+  type Clip,
+  type Timeline,
+  type TimelineOf,
+} from "./ext";
+
+// Marker: lives in tex/ alongside PartMarker which composes it.
+export {
   marker,
   palette,
   hover,
   getMarker,
   registerMarker,
   type Marker,
-  type Clip,
-  type Timeline,
-  type TimelineOf,
-} from "./ext";
+} from "./tex";
 
 // ── Consumer scaffold (`@minim/web`) ────────────────────────────────
 //

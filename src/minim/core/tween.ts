@@ -136,7 +136,7 @@ class TweenImpl<T> extends ChainedImpl<void> implements Tween<T> {
 /** Build a fresh `Tween<T>` for a signal. The struct framework calls
  *  this when installing `.to` on registered writable Reactive
  *  prototypes; users normally just call `cell.to(...)`. */
-export function makeTween<T>(
+function makeTween<T>(
   sig: Signal<T>,
   target: T,
   dur: Duration,
