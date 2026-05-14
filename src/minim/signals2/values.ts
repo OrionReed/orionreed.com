@@ -1,18 +1,18 @@
-// Value types in v2 style — plain configs through `defineType`.
+// Value types — plain configs through `struct({...})`.
 //
 // Compare to current `values/transform.ts` (130 LOC, ~70 of which is
-// cut-and-paste algebra/lerp/metric): Transform here is ~15 LOC. The
-// capabilities are derived from `nested` mechanically.
+// hand-written algebra/lerp/metric/equals): Transform here is ~15 LOC.
+// The capabilities compose mechanically from `nested:`.
 
-import { defineType, computed, type Cell } from "./cell";
+import { struct, computed, type Cell } from "./cell";
 
 // ── Num ─────────────────────────────────────────────────────────────
 
-export const Num = defineType({
+export const Num = struct({
   name: "Num",
   defaults: 0 as number,
   lerp: (a, b, t) => a + (b - a) * t,
-  algebra: { add: (a, b) => a + b, sub: (a, b) => a - b, scale: (a, k) => a * k },
+  linear: { add: (a, b) => a + b, sub: (a, b) => a - b, scale: (a, k) => a * k },
   metric: (a, b) => Math.abs(a - b),
   methods: {
     clamp: (a, lo: number, hi: number) => (a < lo ? lo : a > hi ? hi : a),
@@ -24,18 +24,18 @@ export const Num = defineType({
 
 export interface V { x: number; y: number; }
 
-export const Vec = defineType({
+export const Vec = struct({
   name: "Vec",
   defaults: { x: 0, y: 0 } as V,
   equals: (a, b) => a.x === b.x && a.y === b.y,
   lerp: (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }),
-  algebra: {
-    add: (a, b) => ({ x: a.x + b.x, y: a.y + b.y }),
-    sub: (a, b) => ({ x: a.x - b.x, y: a.y - b.y }),
+  linear: {
+    add:   (a, b) => ({ x: a.x + b.x, y: a.y + b.y }),
+    sub:   (a, b) => ({ x: a.x - b.x, y: a.y - b.y }),
     scale: (a, k) => ({ x: a.x * k, y: a.y * k }),
   },
   metric: (a, b) => Math.hypot(a.x - b.x, a.y - b.y),
-  // AoS storage — lazy lens axes (no `soa: true`)
+  // AoS storage (default) — lazy lens-style field projections.
   methods: {
     perp: (a): V => ({ x: -a.y, y: a.x }),
     normalize: (a): V => {
@@ -44,8 +44,8 @@ export const Vec = defineType({
     },
   },
   getters: {
-    // NOTE: avoid `length` here — Function.prototype.length is read-only.
-    // The framework's RESERVED_NAMES check would throw at construction.
+    // `length` is reserved (Function.prototype.length). RESERVED_NAMES
+    // throws at struct() time if you try to use it.
     magnitude(this: Cell<V>) {
       const self = this;
       return computed(() => {
@@ -62,16 +62,21 @@ export interface Tr {
   translate: V; rotate: number; scale: V; origin: V; opacity: number;
 }
 
-// NOTE: NO algebra/lerp/metric/equals here. Derived from `nested`.
-export const Transform = defineType({
+// NO linear/lerp/metric/equals here — composed from nested:Vec/Num.
+// SoA storage so per-field writes don't fire whole-Transform readers.
+export const Transform = struct({
   name: "Transform",
   defaults: {
     translate: { x: 0, y: 0 }, rotate: 0,
     scale: { x: 1, y: 1 }, origin: { x: 0, y: 0 }, opacity: 1,
   } as Tr,
+  // No `as any` casts — preserving the literal Type values is what
+  // makes EffectivelyHas walk through to discover Vec/Num capabilities
+  // at the type level. Without preservation, Transform.lerp/add/distance
+  // wouldn't surface on the cell type.
   nested: {
-    translate: Vec as any, scale: Vec as any, origin: Vec as any,
-    rotate: Num as any, opacity: Num as any,
+    translate: Vec, scale: Vec, origin: Vec,
+    rotate: Num, opacity: Num,
   },
-  soa: true as const,
+  storage: "soa",
 });

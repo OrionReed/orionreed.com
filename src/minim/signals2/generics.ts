@@ -1,27 +1,35 @@
 // Generic capability-driven functions — `mean<T>`, `spring<T>`,
-// `lerp<T>`, etc. Demonstrate that dispatching via `cell.type.X`
-// is just as expressive as the current `[ALGEBRA]`/`[LERP]`/`[METRIC]`
-// symbol slots, while being one less indirection and visible in JS
-// dev tools without symbol unwrapping.
+// `lerp<T>`, etc. Dispatch via `cell.type.X` direct property access.
+// No symbol slots, no registration step.
 //
-// The pattern in EVERY generic function:
+// Pattern in every generic function:
 //
 //   1. Pull the type off the cell:  const t = cell.type;
-//   2. Pull the capability off the type:  t.algebra, t.lerp, t.metric
+//   2. Pull the capability:          t.linear, t.lerp, t.metric
 //   3. Throw with a useful error if missing.
-//   4. Use it as plain math (cells unwrapped to .peek() / () values).
+//   4. Use as plain math (cells unwrapped to .peek() / () values).
 //
-// User-defined capabilities work the same way — just stamp them as
-// extra properties on the Type. `Object.assign(Vec, { rotationSpace: impl })`.
+// User-defined capabilities work the same way — stamp them on the
+// Type. `Object.assign(Vec, { rotationSpace: impl })`.
+//
+// NOTE: with the surface-inference fix in cell.ts, many of these
+// generics are now redundant for users with concrete cell types —
+// `cell.add(b)`, `cell.lerp(b, t)`, `cell.distance(b)` are typed
+// directly. These generics exist for code that's polymorphic in T
+// (`function center<T>(cells: Cell<T>[])`).
 
-import { computed, effect, type SignalFn } from "./engine";
+import { computed, effect } from "./engine";
 import { startBatch, endBatch } from "./engine";
-import type { Cell, RO, Type, Algebra } from "./cell";
+import type { Cell, RO, Type, Linear } from "./cell";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function typeOf<T>(cell: Cell<T> | RO<T>): Type<T> {
-  const t = (cell as any).type as Type<T> | undefined;
+// `Cell<T, any>` — generic ops accept any cell flavor of T. The
+// per-call-site C the cell carries is invisible to the generic.
+type AnyCell<T> = Cell<T, any> | RO<T, any>;
+
+function typeOf<T>(cell: AnyCell<T>): Type<T, any> {
+  const t = (cell as any).type as Type<T, any> | undefined;
   if (!t) throw new Error(
     "generic op called on a typeless cell. " +
     "use a typed cell (e.g. `Vec({x,y})`, `Num(0)`) instead of bare `cell(0)`.",
@@ -29,24 +37,24 @@ function typeOf<T>(cell: Cell<T> | RO<T>): Type<T> {
   return t;
 }
 
-function algebraOf<T>(cell: Cell<T> | RO<T>): Algebra<T> {
+function linearOf<T>(cell: AnyCell<T>): Linear<T> {
   const t = typeOf(cell);
-  if (!t.algebra) {
+  if (!t.linear) {
     throw new Error(
-      `type \`${(t as any).name ?? "<unnamed>"}\` has no algebra. ` +
+      `type \`${(t as any).name ?? "<unnamed>"}\` has no linear capability. ` +
       "ops like mean/spring/drift require add/sub/scale.",
     );
   }
-  return t.algebra;
+  return t.linear;
 }
 
-function lerpOf<T>(cell: Cell<T> | RO<T>): (a: T, b: T, t: number) => T {
+function lerpOf<T>(cell: AnyCell<T>): (a: T, b: T, t: number) => T {
   const t = typeOf(cell);
   if (!t.lerp) throw new Error(`type \`${(t as any).name ?? "<unnamed>"}\` has no lerp`);
   return t.lerp;
 }
 
-function metricOf<T>(cell: Cell<T> | RO<T>): (a: T, b: T) => number {
+function metricOf<T>(cell: AnyCell<T>): (a: T, b: T) => number {
   const t = typeOf(cell);
   if (!t.metric) throw new Error(`type \`${(t as any).name ?? "<unnamed>"}\` has no metric`);
   return t.metric;
@@ -59,31 +67,27 @@ function metricOf<T>(cell: Cell<T> | RO<T>): (a: T, b: T) => number {
  *
  *  Works on ANY type with an `algebra` capability — Num, Vec, Color,
  *  Transform, your custom struct, ... */
-export function mean<T>(...cells: Cell<T>[]): Cell<T> {
+export function mean<T>(...cells: Cell<T, any>[]): Cell<T> {
   if (cells.length === 0) throw new Error("mean: need at least one cell");
-  const alg = algebraOf(cells[0]);
+  const lin = linearOf(cells[0]);
   const n = cells.length;
   const invN = 1 / n;
 
-  // Read: average of all values (subscribes to each via call).
   const avg = computed(() => {
     let acc = cells[0]();
-    for (let i = 1; i < n; i++) acc = alg.add(acc, cells[i]());
-    return alg.scale(acc, invN);
+    for (let i = 1; i < n; i++) acc = lin.add(acc, cells[i]());
+    return lin.scale(acc, invN);
   });
 
-  // Wrap as a callable that delegates read to `avg` and write to
-  // distribution.
   const fn: any = function (...args: any[]) {
     if (args.length === 0) return avg();
     const target = args[0];
-    // Current mean (untracked).
     let curAvg = cells[0].peek();
-    for (let i = 1; i < n; i++) curAvg = alg.add(curAvg, cells[i].peek());
-    curAvg = alg.scale(curAvg, invN);
-    const delta = alg.sub(target, curAvg);
+    for (let i = 1; i < n; i++) curAvg = lin.add(curAvg, cells[i].peek());
+    curAvg = lin.scale(curAvg, invN);
+    const delta = lin.sub(target, curAvg);
     startBatch();
-    try { for (let i = 0; i < n; i++) cells[i](alg.add(cells[i].peek(), delta)); }
+    try { for (let i = 0; i < n; i++) cells[i](lin.add(cells[i].peek(), delta)); }
     finally { endBatch(); }
   };
   return fn as Cell<T>;
@@ -91,7 +95,7 @@ export function mean<T>(...cells: Cell<T>[]): Cell<T> {
 
 // ── lerp — plain reactive lerp between two cells ────────────────────
 
-export function lerp<T>(a: Cell<T> | RO<T>, b: Cell<T> | RO<T>, t: number | (() => number)): RO<T> {
+export function lerp<T>(a: AnyCell<T>, b: AnyCell<T>, t: number | (() => number)): RO<T> {
   const fn = lerpOf(a);
   const tg = typeof t === "function" ? t : () => t;
   return computed(() => fn(a(), b(), tg())) as unknown as RO<T>;
@@ -99,7 +103,7 @@ export function lerp<T>(a: Cell<T> | RO<T>, b: Cell<T> | RO<T>, t: number | (() 
 
 // ── distance — plain reactive metric between two cells ──────────────
 
-export function distance<T>(a: Cell<T> | RO<T>, b: Cell<T> | RO<T>): RO<number> {
+export function distance<T>(a: AnyCell<T>, b: AnyCell<T>): RO<number> {
   const fn = metricOf(a);
   return computed(() => fn(a(), b())) as unknown as RO<number>;
 }
@@ -119,7 +123,7 @@ export interface SpringOpts {
 }
 
 export function springStep<T>(
-  sig: Cell<T>,
+  sig: Cell<T, any>,
   target: () => T,
   velRef: { current: T },
   dt: number,
@@ -128,19 +132,18 @@ export function springStep<T>(
   const k = opts.stiffness ?? 100;
   const c = opts.damping ?? 10;
   const t = typeOf(sig);
-  const alg = algebraOf(sig);
+  const lin = linearOf(sig);
   const m = t.metric;
   // F = -k(x - target) - c*v
   const cur = sig.peek();
   const tg = target();
-  const displacement = alg.sub(cur, tg);
-  const restoring = alg.scale(displacement, -k);
-  const damping = alg.scale(velRef.current, -c);
-  const force = alg.add(restoring, damping);
-  velRef.current = alg.add(velRef.current, alg.scale(force, dt));
-  const nextPos = alg.add(cur, alg.scale(velRef.current, dt));
+  const displacement = lin.sub(cur, tg);
+  const restoring = lin.scale(displacement, -k);
+  const damping = lin.scale(velRef.current, -c);
+  const force = lin.add(restoring, damping);
+  velRef.current = lin.add(velRef.current, lin.scale(force, dt));
+  const nextPos = lin.add(cur, lin.scale(velRef.current, dt));
   sig(nextPos);
-  // Stop when within precision of target (requires metric).
   if (opts.precision !== undefined && m !== undefined) {
     return m(nextPos, tg) <= opts.precision;
   }
@@ -157,11 +160,11 @@ export interface Serialise<T> {
   (v: T): string;
 }
 
-export function serialise<T>(cell: Cell<T> | RO<T>): RO<string> {
+export function serialise<T>(cell: AnyCell<T>): RO<string> {
   const t = typeOf(cell);
   const s = (t as any).serialise as Serialise<T> | undefined;
   if (!s) throw new Error(`type \`${(t as any).name ?? "?"}\` has no serialise capability`);
   return computed(() => s(cell())) as unknown as RO<string>;
 }
 
-void effect;  // re-export marker
+void effect;

@@ -1,27 +1,26 @@
-// ── minim v2 — the cell IS the callable, no .value ───────────────────
+// ── minim signals2 — Cell + Type ─────────────────────────────────────
 //
-// Design intent:
+// Design rules:
 //
 //   • One reactive primitive: Cell<T>. It's a callable function.
 //     `v()` reads, `v(x)` writes. No `.value` getter — call IS read.
 //
-//   • One config shape: Type<T>. Plain JS object. No defineStruct, no
-//     Builder, no `[ALGEBRA]` symbols. Capabilities are direct
-//     properties (`Vec.lerp`, `Vec.algebra`, `Vec.metric`).
+//   • One config shape: Type<T>. Plain JS object. Capabilities are
+//     direct properties (`Vec.lerp`, `Vec.linear`, `Vec.metric`); no
+//     `[ALGEBRA]` symbols, no `defineStruct` ceremony.
 //
-//   • Two bags: `methods` (cell methods, auto-lifted) and `getters`
-//     (lazy properties, cached). No ops/scalars/getters/methods/
-//     construct distinction.
-//
-//   • Capabilities compose through `nested`. Transform declares no
-//     algebra/lerp/metric; they're synthesised from per-field
-//     reductions through Vec/Num. Same for `equals`.
+//   • Capabilities propagate through `nested`. Transform declares NO
+//     linear/lerp/metric of its own; the runtime walks `nested:` and
+//     synthesises composite operations. The type-level `EffectivelyHas`
+//     predicate recursively checks the same path, so Transform's
+//     `.lerp()`, `.add()`, `.distance()` are typed without casts.
 //
 //   • `Val<T> = T | (() => T)`. Cells ARE callables, so a cell is
-//     already a `() => T` and slots into Val<T> with no special case.
+//     already `() => T` and slots into Val<T> with no special case.
 //
-//   • Types know writability per-axis. `Cell<T>` is writable;
-//     `Cell.RO<T>` is read-only; lenses bridge from RO to writable.
+//   • Storage (SoA vs AoS) is a runtime hint, not a type-level field.
+//     `struct({...})` declares a default; callers override per-use:
+//     `Transform(initial, { storage: "soa" })`.
 
 import {
   signal,
@@ -38,102 +37,152 @@ import {
 
 /** Core writable-cell shape — call to read, call with arg to write,
  *  peek for untracked, type for capability dispatch. */
-export interface CellBase<T, C extends TypeConfig<T>> extends SignalFn<T> {
+export interface CellBase<T, C = unknown> extends SignalFn<T> {
   /** Untracked read — doesn't subscribe the current effect. */
   peek(): T;
   /** The Type this cell is attached to (or undefined for bare cells). */
   readonly type?: Type<T, C>;
 }
 
-/** A writable reactive value. Generic over the type-config so methods,
- *  getters, axes, and capability-derived surface are all inferred from
- *  the original `defineType({...})` literal. */
-export type Cell<T, C extends TypeConfig<T> = TypeConfig<T>> =
+/** A writable reactive value. Generic over the source config `C` so
+ *  methods, getters, fields, and capability surface are all inferred
+ *  from the original `struct({...})` literal. */
+export type Cell<T, C = unknown> =
   CellBase<T, C> &
   MethodSurface<T, C> &
   GetterSurface<C> &
-  AlgebraSurface<T, C> &
-  LerpSurface<T, C> &
-  MetricSurface<T, C> &
-  AxisSurface<T>;
+  CapabilitySurface<T, C> &
+  FieldSurface<T>;
 
-/** A read-only reactive value. Same surface as Cell minus the write
- *  call signature. Methods returning derived cells stay; writers are
- *  the only thing missing. (TypeScript can't express "drop the write
- *  overload" cleanly, so RO uses a parallel base shape.) */
-export interface ROBase<T, C extends TypeConfig<T>> {
+/** Read-only writable-shape — same call/peek/type but no writer. */
+export interface ROBase<T, C = unknown> {
   (): T;
   peek(): T;
   readonly type?: Type<T, C>;
   readonly __t?: T;
 }
 
-export type RO<T, C extends TypeConfig<T> = TypeConfig<T>> =
+export type RO<T, C = unknown> =
   ROBase<T, C> &
   MethodSurface<T, C> &
   GetterSurface<C> &
-  AlgebraSurface<T, C> &
-  LerpSurface<T, C> &
-  MetricSurface<T, C> &
-  AxisSurface<T>;
+  CapabilitySurface<T, C> &
+  FieldSurface<T>;
 
-/** Anywhere a value-or-source is accepted: literal, thunk, or cell.
- *  Because Cell<T> is `() => T`, cells already satisfy `(() => T)`. */
+/** Anywhere a value-or-source is accepted: literal or thunk. Because
+ *  Cell<T> is `() => T`, cells satisfy `(() => T)` with no special case. */
 export type Val<T> = T | (() => T);
 
-/** Vector-space algebra. */
-export interface Algebra<T> {
+/** Linear (vector-space-over-real-numbers) algebra: an additive group
+ *  with a scalar action. Required by `mean`, `spring`, `oscillate`,
+ *  and the cell's `.add()`, `.sub()`, `.scale()` methods.
+ *
+ *  Named `Linear` rather than the older `Algebra` because the precise
+ *  structure is "vector space over ℝ" — not arbitrary algebra. */
+export interface Linear<T> {
   add(a: T, b: T): T;
   sub(a: T, b: T): T;
   scale(a: T, k: number): T;
 }
 
-/** Names reserved by the host: function-prototype members + framework
- *  intrinsics. Putting a `methods` or `getters` entry under any of these
- *  would silently shadow built-in behaviour (e.g. `cell.length` would
- *  return Function.prototype.length, not the user's getter). Checked
- *  at runtime in `defineType` — throws with the offending name. */
+/** Storage strategy:
+ *
+ *   - "aos" (default): one signal per cell, fields are lazy lens-style
+ *     projections. Cheap construction, low memory, coarse invalidation.
+ *
+ *   - "soa": one signal per declared field, parent is a fan-in/fan-out
+ *     callable. Pays for construction (~5x); wins on per-field write
+ *     subscriber isolation. Use when individual fields are written
+ *     independently and have different subscriber sets. */
+export type Storage = "aos" | "soa";
+
+// ── Reserved names — runtime guard ──────────────────────────────────
+
+/** Function-prototype intrinsics + framework keys that user `methods`
+ *  / `getters` MUST NOT clash with. Checked at `struct({...})` time. */
 export const RESERVED_NAMES = new Set<string>([
-  // Function.prototype intrinsics
   "length", "name", "caller", "arguments", "prototype",
   "bind", "call", "apply", "toString",
-  // minim framework keys
   "type", "peek",
 ]);
 
-/** Plain config object for a value type. Pass to `defineType()` to get
- *  a Type<T> with synthesized capabilities + factory call signature.
- *  Method / getter names that clash with Function.prototype are
- *  rejected at construction with a clear error. */
-export interface TypeConfig<T> {
+// ── Type<T, C>: the single Type interface ──────────────────────────
+//
+// User passes the config-shaped subset (via `struct({...})`); the
+// framework adds the factory methods + capability copies + `is` guard.
+// One interface, no separate TypeConfig vs Type duplication.
+
+export interface Type<T, C = unknown> {
+  // ── User-supplied config ─────────────────────────────────────
   readonly name?: string;
   readonly defaults: T;
   readonly equals?: (a: T, b: T) => boolean;
   readonly lerp?: (a: T, b: T, t: number) => T;
-  readonly algebra?: Algebra<T>;
+  readonly linear?: Linear<T>;
   readonly metric?: (a: T, b: T) => number;
-  /** Field-type map. Declaring a field here gives that axis the
-   *  nested type's surface AND participates in capability lifting. */
-  readonly nested?: { [K in keyof T]?: TypeConfig<T[K]> };
-  /** SoA storage (per-field signals). Default false (AoS lens axes). */
-  readonly soa?: boolean;
-  /** Methods on cells. `(self, ...args) => R`. Framework auto-wraps R
-   *  in a derived cell if non-function. */
+  readonly nested?: { [K in keyof T]?: Type<T[K], any> };
+  readonly storage?: Storage;
   readonly methods?: Record<string, (self: T, ...args: any[]) => any>;
-  /** Lazy getters — read-once, cache as own-property. `this` is the
-   *  cell; user typically `const self = this` and reads via `self()`. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly getters?: Record<string, (this: any) => any>;
+
+  // ── Framework-added (after `struct(cfg)`) ─────────────────────
+  /** Callable as factory: `Vec({x:1, y:2})` === `Vec.cell({x:1, y:2})`. */
+  (this: void, initial: T, opts?: { storage?: Storage }): Cell<T, C>;
+
+  /** Build a writable cell. */
+  cell(initial: T, opts?: { storage?: Storage }): Cell<T, C>;
+  /** Build a read-only cell from a getter. */
+  derived(fn: () => T): RO<T, C>;
+  /** Build a writable lens — reads via `r`, writes via `w`. */
+  lens(read: () => T, write: (v: T) => void): Cell<T, C>;
+  /** Type guard: any flavor of this type's cell. */
+  is(v: unknown): v is Cell<T, C> | RO<T, C>;
+
+  // Plain math, copied from `linear` if present.
+  add: Linear<T>["add"] | undefined;
+  sub: Linear<T>["sub"] | undefined;
+  scale: Linear<T>["scale"] | undefined;
 }
 
-// ── Type-level inference: derive cell surface from a config literal ─
+/** What the user passes to `struct()` — the config-shaped subset of
+ *  Type<T>. Derived via Omit so there's one source of truth. */
+export type StructInput<T> = Omit<
+  Type<T>,
+  | "cell" | "derived" | "lens" | "is"
+  | "add" | "sub" | "scale"
+  // The function call signature is on Type as a callable too. Omit
+  // gets call signatures along for free; we restore the field set.
+>;
+
+// ── Composite capability detection (type level) ─────────────────────
 //
-// `defineType<T, const C extends TypeConfig<T>>(cfg: C): Type<T, C>`
-// — the `const` modifier preserves literal types of cfg, so we can
-// look up `C['methods']`, `C['algebra']`, etc. at the type level and
-// build up the resulting Cell<T, C> surface.
+// A type effectively has capability K iff:
+//   (a) It directly declares K on its config, OR
+//   (b) It declares `nested:` and ALL nested fields effectively have K.
 //
-// Each helper takes the config C and returns the "added surface":
+// The "directly declares K" check uses `K extends keyof C` so optional
+// fields count (`linear?: Linear<T>` on a struct config matches even
+// if the user supplied it). Validated for depth 3+ in
+// `_inference_check.ts`. Depth growth is in a boolean, so it stays
+// well under TS's instantiation limit.
+
+type EffectivelyHas<K extends string, C> =
+  K extends keyof C
+    ? Exclude<C[K extends keyof C ? K : never], undefined> extends never
+      ? false
+      : true
+    : C extends { nested: infer N }
+      ? AllChildrenHave<K, N>
+      : false;
+
+type AllChildrenHave<K extends string, N> =
+  keyof N extends never
+    ? false
+    : { [F in keyof N]: EffectivelyHas<K, N[F]> }[keyof N] extends true
+      ? true
+      : false;
+
+// ── Surface mixins ──────────────────────────────────────────────────
 
 /** From `methods: { foo: (self, ...args) => R }`, derive
  *  `{ foo: (...args) => RO<R> }`. */
@@ -150,83 +199,36 @@ type GetterSurface<C> = C extends { getters: infer G }
   ? { readonly [K in keyof G]: G[K] extends (this: any) => infer R ? R : never }
   : {};
 
-/** From `algebra: { add, sub, scale }`, derive add/sub/scale methods.
- *  Args accept `Val<T>` so cells/thunks/literals all work. */
-type AlgebraSurface<T, C> = C extends { algebra: any }
-  ? {
-      add(b: Val<T>): RO<T>;
-      sub(b: Val<T>): RO<T>;
-      scale(k: Val<number>): RO<T>;
-    }
-  : {};
+/** All capability-derived methods in one place. Each branch uses
+ *  `EffectivelyHas` so composite types (Transform) get the surface
+ *  even though they don't declare the capability directly. */
+type CapabilitySurface<T, C> =
+  (EffectivelyHas<"linear", C> extends true
+    ? { add(b: Val<T>): RO<T>; sub(b: Val<T>): RO<T>; scale(k: Val<number>): RO<T> }
+    : {})
+  & (EffectivelyHas<"lerp", C> extends true
+    ? { lerp(target: Val<T>, t: Val<number>): RO<T> }
+    : {})
+  & (EffectivelyHas<"metric", C> extends true
+    ? { distance(b: Val<T>): RO<number> }
+    : {});
 
-/** From `lerp: (a, b, t) => T`, derive `.lerp(b, t)`. */
-type LerpSurface<T, C> = C extends { lerp: any }
-  ? { lerp(target: Val<T>, t: Val<number>): RO<T> }
-  : {};
-
-/** From `metric: (a, b) => number`, derive `.distance(b)`. */
-type MetricSurface<T, C> = C extends { metric: any }
-  ? { distance(b: Val<T>): RO<number> }
-  : {};
-
-/** Per-axis projection. Axes are bare `CellBase<T[K]>` — nested-type
- *  surfaces are NOT recursively expanded because the recursion grows
- *  multiplicatively (each cell has 6 mixins × N axes) and trips TS's
- *  depth limit. If you need the nested surface on an axis, cast:
- *  `(tr.translate as Cell<Vec, typeof Vec>)`. */
-type AxisSurface<T> = T extends object
+/** Per-field projection. Each declared field of `T` gets a CellBase.
+ *  Bare CellBase (no `C` inference) keeps the surface from blowing up
+ *  through nested types; for the nested-type-typed surface, cast: e.g.
+ *  `tr.translate as Cell<Vec, typeof Vec>`. */
+type FieldSurface<T> = T extends object
   ? T extends Function
     ? {}
-    : { readonly [K in keyof T]: CellBase<T[K], TypeConfig<T[K]>> }
+    : { readonly [K in keyof T]: CellBase<T[K], StructInput<T[K]>> }
   : {};
 
-/** A registered type: callable as factory + carries plain math + cell
- *  factory variants + type guard. Generic over the source config `C`
- *  so the Cell surface can be inferred from the literal. */
-export interface Type<T, C extends TypeConfig<T> = TypeConfig<T>> {
-  // Callable as factory: `Vec({x:1, y:2})` → Cell<Vec, VecCfg>.
-  (this: void, initial: T): Cell<T, C>;
+// ── Composite capability synthesis (runtime) ────────────────────────
+//
+// Mirror of the type-level predicate. Walk `nested`, ask each field's
+// type for the capability, build the per-field reduction.
 
-  /** Build a writable cell from initial value. */
-  cell(initial: T): Cell<T, C>;
-  /** Build a read-only cell from a getter. */
-  derived(fn: () => T): RO<T, C>;
-  /** Build a writable lens from a read fn + write fn. */
-  lens(read: () => T, write: (v: T) => void): Cell<T, C>;
-
-  /** Type guard: any flavor of this type's cell. */
-  is(v: unknown): v is Cell<T, C> | RO<T, C>;
-
-  /** Display name (writable through Object.defineProperty). */
-  readonly name: string;
-
-  // Direct config access (untouched).
-  readonly defaults: T;
-  readonly equals: (a: T, b: T) => boolean;
-  readonly lerp?: C extends { lerp: infer L } ? L : ((a: T, b: T, t: number) => T) | undefined;
-  readonly algebra?: C extends { algebra: infer A } ? A : Algebra<T> | undefined;
-  readonly metric?: C extends { metric: infer M } ? M : ((a: T, b: T) => number) | undefined;
-  readonly nested?: C extends { nested: infer N } ? N : { [K in keyof T]?: TypeConfig<T[K]> };
-  readonly methods?: TypeConfig<T>["methods"];
-  readonly getters?: TypeConfig<T>["getters"];
-  readonly soa?: boolean;
-
-  // Plain math, copied from algebra if present.
-  add: C extends { algebra: infer A }
-    ? A extends Algebra<T> ? (a: T, b: T) => T : undefined
-    : undefined;
-  sub: C extends { algebra: infer A }
-    ? A extends Algebra<T> ? (a: T, b: T) => T : undefined
-    : undefined;
-  scale: C extends { algebra: infer A }
-    ? A extends Algebra<T> ? (a: T, k: number) => T : undefined
-    : undefined;
-}
-
-// ── Capability composition (lifting through `nested`) ───────────────
-
-function compositeEquals<T>(t: TypeConfig<T>): (a: T, b: T) => boolean {
+function compositeEquals<T>(t: StructInput<T>): (a: T, b: T) => boolean {
   if (t.equals) return t.equals;
   if (typeof t.defaults !== "object" || t.defaults === null) {
     return (a, b) => a === b;
@@ -244,7 +246,7 @@ function compositeEquals<T>(t: TypeConfig<T>): (a: T, b: T) => boolean {
   };
 }
 
-function compositeLerp<T>(t: TypeConfig<T>): ((a: T, b: T, t: number) => T) | undefined {
+function compositeLerp<T>(t: StructInput<T>): ((a: T, b: T, t: number) => T) | undefined {
   if (t.lerp) return t.lerp;
   if (typeof t.defaults !== "object" || !t.nested) return undefined;
   const keys = Object.keys(t.defaults as object);
@@ -261,26 +263,26 @@ function compositeLerp<T>(t: TypeConfig<T>): ((a: T, b: T, t: number) => T) | un
   };
 }
 
-function compositeAlgebra<T>(t: TypeConfig<T>): Algebra<T> | undefined {
-  if (t.algebra) return t.algebra;
+function compositeLinear<T>(t: StructInput<T>): Linear<T> | undefined {
+  if (t.linear) return t.linear;
   if (typeof t.defaults !== "object" || !t.nested) return undefined;
   const keys = Object.keys(t.defaults as object);
   const adds: Record<string, any> = {};
   const subs: Record<string, any> = {};
   const scales: Record<string, any> = {};
   for (const k of keys) {
-    const a = compositeAlgebra((t.nested as any)[k]);
+    const a = compositeLinear((t.nested as any)[k]);
     if (!a) return undefined;
     adds[k] = a.add; subs[k] = a.sub; scales[k] = a.scale;
   }
   return {
-    add: (a, b) => { const out: any = {}; for (const k of keys) out[k] = adds[k]((a as any)[k], (b as any)[k]); return out; },
-    sub: (a, b) => { const out: any = {}; for (const k of keys) out[k] = subs[k]((a as any)[k], (b as any)[k]); return out; },
-    scale: (a, k) => { const out: any = {}; for (const kk of keys) out[kk] = scales[kk]((a as any)[kk], k); return out; },
+    add:   (a, b) => { const o: any = {}; for (const k of keys) o[k] = adds[k]((a as any)[k], (b as any)[k]); return o; },
+    sub:   (a, b) => { const o: any = {}; for (const k of keys) o[k] = subs[k]((a as any)[k], (b as any)[k]); return o; },
+    scale: (a, k) => { const o: any = {}; for (const kk of keys) o[kk] = scales[kk]((a as any)[kk], k); return o; },
   };
 }
 
-function compositeMetric<T>(t: TypeConfig<T>): ((a: T, b: T) => number) | undefined {
+function compositeMetric<T>(t: StructInput<T>): ((a: T, b: T) => number) | undefined {
   if (t.metric) return t.metric;
   if (typeof t.defaults !== "object" || !t.nested) return undefined;
   const keys = Object.keys(t.defaults as object);
@@ -290,6 +292,7 @@ function compositeMetric<T>(t: TypeConfig<T>): ((a: T, b: T) => number) | undefi
     if (!m) return undefined;
     subs[k] = m;
   }
+  // Euclidean composition — sqrt(Σ d_i²).
   return (a, b) => {
     let s = 0;
     for (const k of keys) {
@@ -300,37 +303,42 @@ function compositeMetric<T>(t: TypeConfig<T>): ((a: T, b: T) => number) | undefi
   };
 }
 
-// ── Prototype installation ──────────────────────────────────────────
+// ── Prototype installation — split into focused helpers ────────────
 
 const TYPE = Symbol("type");
 
-const protoCache = new WeakMap<TypeConfig<any>, { rw: any; ro: any; soa: any }>();
+const protoCache = new WeakMap<StructInput<any>, { rw: any; ro: any; soa: any }>();
 
+/** Build a per-type prototype (rw or ro flavor). Orchestrator over
+ *  the install* helpers; each helper does one thing. */
 function makeProto<T>(type: Type<T>, writable: boolean): any {
-  // Chain off Function.prototype so the cell remains callable.
   const proto = Object.create(Function.prototype);
+  installBase(proto, type);
+  installCapabilityMethods(proto, type);
+  installUserMethods(proto, type);
+  installUserGetters(proto, type);
+  installFieldGetters(proto, type, writable);
+  return proto;
+}
 
-  // ── peek: untracked read. We don't expose .value, but peek() is
-  //    explicit "I don't want to subscribe right now."
+/** `peek()`, `.type`, and the framework-internal type tag. */
+function installBase<T>(proto: any, type: Type<T>): void {
   Object.defineProperty(proto, "peek", {
-    configurable: true,
-    writable: true,
+    configurable: true, writable: true,
     value(this: SignalFn<T>) {
       const prev = setActiveSub(undefined);
       try { return (this as () => T)(); }
       finally { setActiveSub(prev); }
     },
   });
-
-  // .type — the canonical access for generic capability dispatch.
-  // `cell.type === Vec`. `cell.type.algebra` works in `mean<T>`,
-  // `cell.type.metric` in `spring<T>`, etc. Replaces the symbol-keyed
-  // [ALGEBRA] / [LERP] / [METRIC] slots from the current minim. Reads
-  // are one prototype-chain hop (same as old).
   Object.defineProperty(proto, "type", { value: type, configurable: true });
-  proto[TYPE] = type;  // keep symbol slot for `Vec.is(v)` fast path
+  proto[TYPE] = type;
+}
 
-  // ── Capability methods ────────────────────────────────────────
+/** Capability-derived methods: `.add`, `.sub`, `.scale` from `linear`;
+ *  `.lerp` from `lerp`; `.distance` from `metric`. Reads `Type<T>`'s
+ *  effective (possibly composite-synthesised) capabilities. */
+function installCapabilityMethods<T>(proto: any, type: Type<T>): void {
   if (type.lerp) {
     const fn = type.lerp;
     proto.lerp = function (this: () => T, target: Val<T>, t: Val<number>) {
@@ -338,8 +346,8 @@ function makeProto<T>(type: Type<T>, writable: boolean): any {
       return wrap(computed(() => fn(self(), valOf(target), valOf(t) as number)), type, false);
     };
   }
-  if (type.algebra) {
-    const a = type.algebra;
+  if (type.linear) {
+    const a = type.linear;
     proto.add = function (this: () => T, b: Val<T>) {
       const self = this;
       return wrap(computed(() => a.add(self(), valOf(b))), type, false);
@@ -360,86 +368,85 @@ function makeProto<T>(type: Type<T>, writable: boolean): any {
       return computed(() => d(self(), valOf(b)));
     };
   }
+}
 
-  // ── User methods (auto-lifted). Each becomes a method that wraps
-  //    its result in a derived cell of `type` (if the result is T) or
-  //    a bare computed (if scalar).
-  if (type.methods) {
-    for (const name of Object.keys(type.methods)) {
-      const m = type.methods[name];
-      proto[name] = function (this: () => T, ...args: any[]) {
+/** User-defined methods (the `methods: {...}` bag). Each is lifted:
+ *  args are flattened via `valOf` (so cells/thunks/literals all work),
+ *  result is wrapped in a derived cell. */
+function installUserMethods<T>(proto: any, type: Type<T>): void {
+  if (!type.methods) return;
+  for (const name of Object.keys(type.methods)) {
+    const m = type.methods[name];
+    proto[name] = function (this: () => T, ...args: any[]) {
+      const self = this;
+      return computed(() => m(self(), ...args.map(valOf)));
+    };
+  }
+}
+
+/** User-defined lazy getters (the `getters: {...}` bag). First read
+ *  calls the function and caches the result as an own-property. */
+function installUserGetters<T>(proto: any, type: Type<T>): void {
+  if (!type.getters) return;
+  for (const name of Object.keys(type.getters)) {
+    const g = type.getters[name];
+    Object.defineProperty(proto, name, {
+      configurable: true,
+      get(this: any) {
+        const v = g.call(this);
+        Object.defineProperty(this, name, { value: v });
+        return v;
+      },
+    });
+  }
+}
+
+/** Per-field projections (`v.x`, `tr.translate`, etc). Built lazily
+ *  on first access, cached as own-property. For AoS storage these are
+ *  lens-callables; for SoA they're own-prop signals installed at
+ *  cell construction. */
+function installFieldGetters<T>(proto: any, type: Type<T>, writable: boolean): void {
+  if (typeof type.defaults !== "object" || type.defaults === null) return;
+  const nested = type.nested ?? {};
+  for (const k of Object.keys(type.defaults as object)) {
+    const childType = (nested as any)[k];
+    Object.defineProperty(proto, k, {
+      configurable: true,
+      get(this: any) {
         const self = this;
-        // Args may be Val<X>. Pre-flatten on call.
-        const resolved = args;
-        return computed(() => m(self(), ...resolved.map(valOf)));
-      };
-    }
+        let field: any;
+        if (writable) {
+          const reader = computed(() => (self() as any)[k]);
+          field = function (...args: any[]) {
+            if (args.length === 0) return reader();
+            const cur = peekValue(self) as any;
+            self({ ...cur, [k]: args[0] });
+          };
+        } else {
+          field = computed(() => (self() as any)[k]);
+        }
+        if (childType) Object.setPrototypeOf(field, protosFor(childType).rw);
+        Object.defineProperty(self, k, { value: field, configurable: false });
+        return field;
+      },
+    });
   }
-
-  // ── Getters: lazy, cached as own-prop on first read.
-  if (type.getters) {
-    for (const name of Object.keys(type.getters)) {
-      const g = type.getters[name];
-      Object.defineProperty(proto, name, {
-        configurable: true,
-        get(this: any) {
-          const v = g.call(this);
-          Object.defineProperty(this, name, { value: v });
-          return v;
-        },
-      });
-    }
-  }
-
-  // ── Lazy axes (AoS lens-style for non-SoA types).
-  if (typeof type.defaults === "object" && type.defaults !== null) {
-    const nested = type.nested ?? {};
-    for (const k of Object.keys(type.defaults as object)) {
-      const childType = (nested as any)[k];
-      Object.defineProperty(proto, k, {
-        configurable: true,
-        get(this: any) {
-          const self = this;
-          let axis: any;
-          if (writable) {
-            const reader = computed(() => (self() as any)[k]);
-            axis = function (...args: any[]) {
-              if (args.length === 0) return reader();
-              const cur = peekValue(self) as any;
-              self({ ...cur, [k]: args[0] });
-            };
-          } else {
-            axis = computed(() => (self() as any)[k]);
-          }
-          if (childType) {
-            Object.setPrototypeOf(axis, protosFor(childType).rw);
-          }
-          Object.defineProperty(self, k, { value: axis, configurable: false });
-          return axis;
-        },
-      });
-    }
-  }
-
-  return proto;
 }
 
+/** SoA flavor: per-field signals are eagerly installed as own-props at
+ *  construction (in `makeSoaCell`). The proto just chains off the rw
+ *  proto so methods are visible, and overrides axes-default behaviour
+ *  (it doesn't install lazy fields). */
 function makeSoaProto<T>(type: Type<T>): any {
-  // SoA proto: composed call dispatch (read fans-in, write fans-out).
-  // Chains off the rw proto so methods are available.
   const rwProto = protosFor(type as any).rw;
-  const proto = Object.create(rwProto);
-  // No need to install axes — they're own-props on SoA instances.
-  return proto;
+  return Object.create(rwProto);
 }
 
-function protosFor<T>(type: TypeConfig<T>): { rw: any; ro: any; soa: any } {
+function protosFor<T>(type: StructInput<T>): { rw: any; ro: any; soa: any } {
   const cached = protoCache.get(type);
   if (cached) return cached;
   const fullType = type as Type<T>;
-  // Insert the slot BEFORE computing its prototypes — `makeSoaProto`
-  // calls back into `protosFor(type)` to fetch the rw proto, so we
-  // must avoid an infinite recursion.
+  // Insert before computing — makeSoaProto calls back via protosFor.
   const slot: any = { rw: null, ro: null, soa: null };
   protoCache.set(type, slot);
   slot.rw = makeProto(fullType, true);
@@ -448,7 +455,7 @@ function protosFor<T>(type: TypeConfig<T>): { rw: any; ro: any; soa: any } {
   return slot;
 }
 
-function wrap<T>(fn: SignalFn<T>, type: TypeConfig<T>, writable: boolean): SignalFn<T> {
+function wrap<T>(fn: SignalFn<T>, type: StructInput<T>, writable: boolean): SignalFn<T> {
   const slot = protosFor(type);
   Object.setPrototypeOf(fn, writable ? slot.rw : slot.ro);
   return fn;
@@ -461,44 +468,37 @@ function peekValue<T>(fn: () => T): T {
 }
 
 /** Unwrap a `Val<T>` to a `T`. Callables (cells/thunks) are invoked;
- *  literals returned as-is. The framework's universal "give me the
- *  current value" function. */
+ *  literals returned as-is. The universal "give me the current value"
+ *  helper used inside lifted methods. */
 export function valOf<T>(v: Val<T>): T {
   return typeof v === "function" ? (v as () => T)() : v;
 }
 
-// ── Public factory ──────────────────────────────────────────────────
+// ── struct() — the public factory ───────────────────────────────────
 
-/** Turn a TypeConfig into a callable Type. The returned object is BOTH
- *  the factory (call as `Vec({x:1, y:2})` → Cell<Vec>) AND the
- *  namespace (`Vec.lerp`, `Vec.cell(...)`, `Vec.derived(...)`,
- *  `Vec.is(...)`, etc).
- *
- *  All capabilities (lerp/algebra/metric/equals) are pre-composed
- *  from `nested` if not user-supplied. */
-/** Pull T out of a config literal — direct field access is more
- *  inference-friendly than `C extends TypeConfig<infer T>`. */
+/** Extract T from a struct-config literal. Direct field access is more
+ *  inference-friendly than going via a TypeConfig matcher. */
 type ExtractT<C> = C extends { defaults: infer T } ? T : never;
 
-// Single signature — both T (via ExtractT<C>) and C inferred from cfg.
-// To force T, cast the `defaults` field:
-//
-//   defineType({ defaults: { x: 0, y: 0 } as V, ... })
-//
-// The `const` modifier preserves the literal-shape of cfg so
-// Cell<T, C>'s surface inference (methods, getters, axes, capability
-// mixins) sees the exact keys you wrote at the call-site.
-export function defineType<const C extends TypeConfig<any>>(
+/** Build a Type<T, C> from a plain config object.
+ *
+ *  The `const` modifier preserves the literal shape of cfg so
+ *  Cell<T, C>'s surface inference (methods, getters, fields, capability
+ *  mixins) sees the exact keys the user wrote.
+ *
+ *  Replaces the old `defineStruct({...}).build()` Builder pattern from
+ *  the legacy `signals/` folder. */
+export function struct<const C extends StructInput<any>>(
   cfg: C,
 ): Type<ExtractT<C>, C> {
   type T = ExtractT<C>;
-  // Validate at construction — reject names that would shadow built-in
-  // function-prototype properties.
+
+  // ── Reserved-name guard at construction time ────────────────
   if (cfg.methods) {
     for (const k of Object.keys(cfg.methods)) {
       if (RESERVED_NAMES.has(k)) {
         throw new Error(
-          `defineType(${cfg.name ?? "<unnamed>"}): method name "${k}" is reserved ` +
+          `struct(${cfg.name ?? "<unnamed>"}): method name "${k}" is reserved ` +
           `(would shadow Function.prototype.${k} or a minim intrinsic).`,
         );
       }
@@ -508,22 +508,20 @@ export function defineType<const C extends TypeConfig<any>>(
     for (const k of Object.keys(cfg.getters)) {
       if (RESERVED_NAMES.has(k)) {
         throw new Error(
-          `defineType(${cfg.name ?? "<unnamed>"}): getter name "${k}" is reserved.`,
+          `struct(${cfg.name ?? "<unnamed>"}): getter name "${k}" is reserved.`,
         );
       }
     }
   }
 
-  // Build a callable. Vec({x:1, y:2}) === Vec.cell({x:1, y:2}).
-  const t: any = function (initial: any) {
-    return t.cell(initial);
+  // The callable factory. `Vec({x:1, y:2})` === `Vec.cell({x:1, y:2})`.
+  const t: any = function (initial: any, opts?: { storage?: Storage }) {
+    return t.cell(initial, opts);
   };
 
-  // Copy config fields. The function's intrinsic `name` is read-only
-  // by assignment but configurable via defineProperty — use that so
-  // `Vec.name === "Vec"` (debugger / instanceof / serialisation all
-  // benefit). Other fields copied directly.
-  for (const k of Object.keys(cfg) as (keyof TypeConfig<T>)[]) {
+  // Copy config fields verbatim. The function's intrinsic `name` is
+  // read-only by assignment but configurable via defineProperty.
+  for (const k of Object.keys(cfg) as (keyof StructInput<T>)[]) {
     if (k === "name") continue;
     (t as any)[k] = cfg[k];
   }
@@ -531,56 +529,58 @@ export function defineType<const C extends TypeConfig<any>>(
     Object.defineProperty(t, "name", { value: cfg.name, configurable: true });
   }
 
-  // Synthesize composite capabilities (don't overwrite user-provided).
+  // Synthesise composite capabilities from `nested` (don't overwrite
+  // user-supplied directs).
   const lerpFn = compositeLerp(cfg);
-  const alg = compositeAlgebra(cfg);
-  const metricFn = compositeMetric(cfg);
-  const equalsFn = compositeEquals(cfg);
-  if (lerpFn && !cfg.lerp) t.lerp = lerpFn;
-  if (alg && !cfg.algebra) t.algebra = alg;
-  if (metricFn && !cfg.metric) t.metric = metricFn;
-  t.equals = equalsFn;
+  const linFn  = compositeLinear(cfg);
+  const metFn  = compositeMetric(cfg);
+  const eqFn   = compositeEquals(cfg);
+  if (lerpFn && !cfg.lerp)   t.lerp   = lerpFn;
+  if (linFn  && !cfg.linear) t.linear = linFn;
+  if (metFn  && !cfg.metric) t.metric = metFn;
+  t.equals = eqFn;
 
-  // Expose algebra functions directly on the type for plain math.
-  if (t.algebra) {
-    t.add = t.algebra.add;
-    t.sub = t.algebra.sub;
-    t.scale = t.algebra.scale;
+  // Expose linear ops directly for plain math: `Vec.add(a, b)`.
+  if (t.linear) {
+    t.add   = t.linear.add;
+    t.sub   = t.linear.sub;
+    t.scale = t.linear.scale;
   }
 
-  // Cell factories. The `peek` method lives on the per-type prototype
-  // (see makeProto), so wrapping is enough — no per-instance install.
-  t.cell = function (initial: T): Cell<T> {
-    if (cfg.soa && cfg.nested && typeof cfg.defaults === "object") {
+  // ── Cell factories ─────────────────────────────────────────
+  t.cell = function (initial: T, opts?: { storage?: Storage }): Cell<T, C> {
+    const storage = opts?.storage ?? cfg.storage ?? "aos";
+    if (storage === "soa" && cfg.nested && typeof cfg.defaults === "object") {
       return makeSoaCell(t, initial);
     }
-    return wrap(signal(initial), t, true) as Cell<T>;
+    return wrap(signal(initial), t, true) as Cell<T, C>;
   };
-  t.derived = function (fn: () => T): RO<T> {
-    return wrap(computed(fn), t, false) as unknown as RO<T>;
+  t.derived = function (fn: () => T): RO<T, C> {
+    return wrap(computed(fn), t, false) as unknown as RO<T, C>;
   };
-  t.lens = function (read: () => T, write: (v: T) => void): Cell<T> {
+  t.lens = function (read: () => T, write: (v: T) => void): Cell<T, C> {
     const reader = computed(read);
     const fn: any = function (...args: any[]) {
       if (args.length === 0) return reader();
       write(args[0]);
     };
     Object.setPrototypeOf(fn, protosFor(t).rw);
-    return fn as Cell<T>;
+    return fn as Cell<T, C>;
   };
-  t.is = function (v: unknown): v is Cell<T> | RO<T> {
+  t.is = function (v: unknown): v is Cell<T, C> | RO<T, C> {
     return typeof v === "function" && (v as any)[TYPE] === t;
   };
 
-  return t as Type<T>;
+  return t as Type<T, C>;
 }
 
-function makeSoaCell<T>(type: Type<T>, initial: T): Cell<T> {
-  const cfg = type as TypeConfig<T>;
+/** Build a SoA-flavor cell: per-field signals installed as own-props,
+ *  parent callable fans-in for read, fans-out for write. */
+function makeSoaCell<T, C extends StructInput<T>>(type: Type<T, C>, initial: T): Cell<T, C> {
+  const cfg = type as StructInput<T>;
   const keys = Object.keys(cfg.defaults as object);
   const nested = cfg.nested as any;
 
-  // The cell is a callable that fans-in for read, fans-out for write.
   const inst: any = function (...args: any[]) {
     if (args.length === 0) {
       const out: any = {};
@@ -593,36 +593,31 @@ function makeSoaCell<T>(type: Type<T>, initial: T): Cell<T> {
       for (let i = 0; i < keys.length; i++) inst[keys[i]](v[keys[i]]);
     } finally { endBatch(); }
   };
-  // Per-field cells installed as own-props. If the child is already a
-  // Type (has .cell), use it directly — calling `defineType(Vec)`
-  // every Transform construction would create 5 new types and cost
-  // ~24 µs per Transform. Use the existing Type if it's callable.
+
   const obj = initial as any;
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i];
     const childCfg = nested[k];
     const childInit = obj?.[k] ?? (cfg.defaults as any)[k];
     if (childCfg && typeof (childCfg as any).cell === "function") {
-      // Already a registered Type — reuse it.
+      // Already a registered Type — reuse it (don't re-`struct`).
       inst[k] = (childCfg as Type<any>).cell(childInit);
     } else if (childCfg) {
-      // Raw TypeConfig — promote to Type once. Subsequent constructions
-      // hit the WeakMap cache in `defineType` (TODO: add such caching).
-      inst[k] = defineType(childCfg as TypeConfig<any>).cell(childInit);
+      inst[k] = struct(childCfg as StructInput<any>).cell(childInit);
     } else {
       inst[k] = signal(childInit);
     }
   }
-  Object.setPrototypeOf(inst, protosFor(type).soa);
-  return inst as Cell<T>;
+  Object.setPrototypeOf(inst, protosFor(type as Type<T>).soa);
+  return inst as Cell<T, C>;
 }
 
 // ── Bare cell (no type) ─────────────────────────────────────────────
 
-/** Bare reactive cell — no type attached, just `v()` / `v(x)` / `v.peek()`. */
+/** Bare reactive cell — no type attached. `v()` reads, `v(x)` writes,
+ *  `v.peek()` reads untracked. No methods, no fields. */
 export function cell<T>(initial: T): Cell<T> {
   const fn = signal(initial) as unknown as Cell<T>;
-  // Bare cells still need `.peek()` for ergonomic untracked reads.
   (fn as any).peek = function (this: () => T) {
     const prev = setActiveSub(undefined);
     try { return this(); }
@@ -651,3 +646,14 @@ cell.lens = <T>(read: () => T, write: (v: T) => void): Cell<T> => {
 // ── Re-exports ──────────────────────────────────────────────────────
 
 export { signal, computed, effect, isSignal, startBatch, endBatch };
+
+// ── Backward-compat aliases (will be removed before signals2 ships) ─
+
+/** @deprecated use `struct` instead. Kept for migration period. */
+export const defineType = struct;
+
+/** @deprecated use `Linear<T>` instead. */
+export type Algebra<T> = Linear<T>;
+
+/** @deprecated use `StructInput<T>` instead. */
+export type TypeConfig<T> = StructInput<T>;

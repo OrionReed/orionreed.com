@@ -11,6 +11,7 @@ import * as v9 from "./engine-v9";
 import * as v10 from "./engine-v10";
 import * as v11 from "./engine-v11";
 import * as v12 from "./engine-v12";
+import * as v13 from "./engine-v13";
 import {
   type EngineModule,
   makeRawYieldLoop,
@@ -32,6 +33,7 @@ const engines: Array<[string, EngineModule]> = [
   ["current", { Engine: current.Anim, suspend: current.suspend }],
   ["v6     ", { Engine: v6.Anim, suspend: v6.suspend, drive: v6.drive }],
   ["v12    ", { Engine: v12.Anim, suspend: v12.suspend, drive: v12.drive }],
+  ["v13    ", { Engine: v13.Anim, suspend: v13.suspend, drive: v13.drive }],
 ];
 
 function across(name: string, make: (mod: EngineModule) => () => unknown) {

@@ -17,6 +17,7 @@ import * as v9 from "./engine-v9";
 import * as v10 from "./engine-v10";
 import * as v11 from "./engine-v11";
 import * as v12 from "./engine-v12";
+import * as v13 from "./engine-v13";
 
 const engines: Record<string, EngineModule> = {
   current: { Engine: current.Anim, suspend: current.suspend },
@@ -32,6 +33,7 @@ const engines: Record<string, EngineModule> = {
   v10: { Engine: v10.Anim, suspend: v10.suspend },
   v11: { Engine: v11.Anim, suspend: v11.suspend },
   v12: { Engine: v12.Anim, suspend: v12.suspend },
+  v13: { Engine: v13.Anim, suspend: v13.suspend },
 };
 
 type Test = ((mod: EngineModule) => unknown) & { skipOn?: string[] };
@@ -469,9 +471,14 @@ const tests: Record<string, Test> = {
   clockListenerFires(mod) {
     const e = new mod.Engine();
     const seen: number[] = [];
-    const dispose = (e as any).onClock?.((t: number) => seen.push(t));
-    if (!dispose) {
-      // Engine doesn't expose onClock; skip rather than fail.
+    let dispose: (() => void) | undefined;
+    const anyE = e as any;
+    if (anyE.onClock) {
+      dispose = anyE.onClock((t: number) => seen.push(t));
+    } else if (anyE.onTick) {
+      let t = 0;
+      dispose = anyE.onTick((dt: number) => { t += dt; seen.push(t); });
+    } else {
       e.stop();
       return "skipped";
     }
@@ -480,7 +487,7 @@ const tests: Record<string, Test> = {
     if (seen.length !== 2) throw new Error(`expected 2 ticks got ${seen.length}`);
     if (Math.abs(seen[0] - 0.1) > 1e-9) throw new Error("first tick wrong");
     if (Math.abs(seen[1] - 0.3) > 1e-9) throw new Error("second tick wrong");
-    dispose();
+    dispose!();
     e.step(0.1);
     if (seen.length !== 2) throw new Error("dispose should stop ticks");
     e.stop();

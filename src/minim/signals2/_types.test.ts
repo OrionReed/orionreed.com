@@ -3,10 +3,10 @@
 //
 // Run via tsc; runtime behavior already tested elsewhere.
 
-import { defineType, type Cell, type RO } from "./cell";
-import { Vec, Num, Transform } from "./values";
+import { struct, type Cell, type RO } from "./cell";
+import { Vec, Num, Transform, type Tr } from "./values";
 
-// ── Cell surfaces inferred from defineType<T>({...}) literal ────────
+// ── Cell surfaces inferred from struct({...}) literal ──────────────
 
 const v = Vec({ x: 1, y: 2 });
 
@@ -58,34 +58,32 @@ const _nClamp: RO<number> = n.clamp(0, 10);
 const _nAbs: RO<number> = n.abs();
 const _nAdd: RO<number> = n.add(10);
 
-// ── Transform — capabilities composed, surface inferred ─────────────
+// ── Transform — capabilities composed THROUGH NESTED, surface inferred
 
 const tr = Transform({
   translate: { x: 0, y: 0 }, rotate: 0,
   scale: { x: 1, y: 1 }, origin: { x: 0, y: 0 }, opacity: 1,
 });
 const _trRead = tr();
-// Transform's algebra/lerp/metric are SYNTHESIZED from `nested` at
-// runtime — they exist on the cell, but TypeScript's surface inference
-// can't recursively walk `nested` to discover this without hitting
-// depth limits. Use the generic `lerp<T>` / `mean<T>` / `distance<T>`
-// from `generics.ts` for typed access, or cast at call sites.
-//   const _trLerp = tr.lerp(_trRead, 0.5);     // runtime ok, type fail
-//   const _trAdd = tr.add(_trRead);             // runtime ok, type fail
-// At call sites that need the typed methods, the generic op functions
-// are the safe path:
-import { lerp, distance } from "./generics";
-const _trLerp = lerp(tr as any, tr as any, 0.5);    // RO<Tr>
-const _trDist = distance(tr as any, tr as any);     // RO<number>
-void _trLerp; void _trDist;
+// Composite-capability inference: Transform declares NO linear/lerp/
+// metric, but `EffectivelyHas<"linear", typeof Transform.config>`
+// recurses through `nested: { translate: Vec, ... }` and resolves true
+// because all children have it. The surface mixins fire — `tr.lerp`,
+// `tr.add`, `tr.distance` are all directly typed.
+const _trLerp: RO<Tr> = tr.lerp(_trRead, 0.5);
+const _trAdd: RO<Tr>  = tr.add(_trRead);
+const _trSub: RO<Tr>  = tr.sub(_trRead);
+const _trScale: RO<Tr> = tr.scale(2);
+const _trDist: RO<number> = tr.distance(_trRead);
+void _trLerp; void _trAdd; void _trSub; void _trScale; void _trDist;
 
 // ── Inline new type — full inference, no manual annotations ────────
 
-const Angle = defineType({
+const Angle = struct({
   name: "Angle",
   defaults: { rad: 0 } as { rad: number },
   lerp: (a, b, t) => ({ rad: a.rad + (b.rad - a.rad) * t }),
-  algebra: {
+  linear: {
     add: (a, b) => ({ rad: a.rad + b.rad }),
     sub: (a, b) => ({ rad: a.rad - b.rad }),
     scale: (a, k) => ({ rad: a.rad * k }),

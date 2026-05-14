@@ -47,7 +47,7 @@ export {
 
 // ── Cell + Type ─────────────────────────────────────────────────────
 export {
-  defineType,
+  struct,
   cell,
   valOf,
   RESERVED_NAMES,
@@ -55,6 +55,11 @@ export {
   type RO,
   type Val,
   type Type,
+  type StructInput,
+  type Linear,
+  type Storage,
+  // Deprecated aliases — kept for migration:
+  defineType,
   type TypeConfig,
   type Algebra,
 } from "./cell";
