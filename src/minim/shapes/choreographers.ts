@@ -9,8 +9,8 @@ import {
   toSig,
   type Animator,
   type Val,
-  type Easing,
 } from "@minim/core";
+import { type Easing } from "@minim/signals";
 import { isPoint, type V, type Pointlike } from "@minim/values";
 import type { Writable } from "./shape";
 

@@ -6,14 +6,10 @@
 // the type so `eq.parts.a` is typed and `eq.parts.x` is a TS error.
 
 import temml from "temml";
-import { signal, type ReadonlyCell } from "@minim/core";
+import { signal, type ReadonlyCell } from "@minim/signals";
 import { Shape, type ShapeOpts } from "@minim/shapes";
-import {
-  Box as BoxStruct,
-  box,
-  type Box,
-  type WriteOf,
-} from "@minim/values";
+import { Box as BoxStruct, box, type Box } from "@minim/values";
+import { type WriteOf } from "@minim/signals";
 import { tokens } from "@minim/shapes";
 import { Part, PartMarker, type PartList } from "./parts";
 

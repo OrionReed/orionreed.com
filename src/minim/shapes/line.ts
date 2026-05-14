@@ -1,4 +1,5 @@
-import { cell, type Val, type ReadonlyCell } from "@minim/core";
+import { type Val } from "@minim/core";
+import { cell, type ReadonlyCell } from "@minim/signals";
 import { Shape, type Segment } from "./shape";
 import {
   Vec,

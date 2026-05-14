@@ -7,8 +7,8 @@
 // the algebra installed) or any other struct cell. Plain `Signal<T>`
 // without an `[ALGEBRA]` slot throws.
 
-import type { Signal } from "@minim/core";
 import { ALGEBRA } from "@minim/signals/struct";
+import type { Signal } from "@minim/signals";
 
 /** The minimal vector-space algebra: enough for tween, spring,
  *  oscillate, drift, attract, mean, sum, lerp, etc. */

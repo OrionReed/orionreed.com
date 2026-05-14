@@ -12,7 +12,7 @@
 // Compare to writing this from scratch (~150-200 lines bespoke).
 
 import { struct } from "@minim/signals";
-import { computed, type ReadonlyCell } from "@minim/core";
+import { computed, type ReadonlyCell } from "@minim/signals";
 
 export type C = { r: number; g: number; b: number; a: number };
 

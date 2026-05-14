@@ -7,14 +7,8 @@
 //      for (const p of eq.parts) p.opacity.value = 0;
 //      yield* stagger(0.05, eq.parts, p => p.opacity.to(1, 0.3));
 
-import {
-  effect,
-  signal,
-  easeInOut,
-  easeOut,
-  type Animator,
-  type Easing,
-} from "@minim/core";
+import { easeInOut, easeOut, type Animator } from "@minim/core";
+import { effect, signal, type Easing } from "@minim/signals";
 import { Shape } from "@minim/shapes";
 import { box, num } from "@minim/values";
 import { Part, type PartMarker } from "./parts";

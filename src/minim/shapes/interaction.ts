@@ -1,6 +1,6 @@
 // DOM input → signal-world bridges that bind to scene-graph shapes.
 
-import { type Cell } from "@minim/core";
+import { type Cell } from "@minim/signals";
 import type { V } from "@minim/values";
 import type { AnyShape } from "./shape";
 

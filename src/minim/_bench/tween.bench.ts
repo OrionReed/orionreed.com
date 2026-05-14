@@ -1,4 +1,4 @@
-import { signal, lerpable } from "@minim/core";
+import { signal, lerpable } from "@minim/signals";
 import { Vec, Color } from "@minim/values";
 import { bench, group } from "mitata";
 

@@ -17,12 +17,8 @@
 // their `inView` signal. Range names follow the CSS `view-timeline`
 // spec (cover / entry / contain / exit) so semantics port over.
 
-import {
-  signal,
-  suspend,
-  type ReadonlyCell,
-  type Animator,
-} from "@minim/core";
+import { suspend, type Animator } from "@minim/core";
+import { signal, type ReadonlyCell } from "@minim/signals";
 
 // ── Awaitables ──────────────────────────────────────────────────────
 

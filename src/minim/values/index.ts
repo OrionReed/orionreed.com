@@ -12,20 +12,9 @@
 // constants.
 //
 // The struct framework (`struct(...)` builder) and its type surface
-// live in `@minim/signals` — they're THE irreducible signals
-// primitive for high-perf chainable cells. Re-exported below for
-// back-compat with pre-restructure consumers; new code should import
-// directly from `@minim/signals`.
-export {
-  struct,
-  type Cell,
-  type ReadonlyCell,
-  type StructType,
-  type WriteOf,
-  type ReadOf,
-  type NestedMap,
-  type NestedInput,
-} from "@minim/signals";
+// (`Cell`, `ReadonlyCell`, `StructType`, …) live in `@minim/signals`
+// — they're THE irreducible signals primitive for high-perf chainable
+// cells. Import them directly from there.
 
 // ── Vec ─────────────────────────────────────────────────────────
 export {

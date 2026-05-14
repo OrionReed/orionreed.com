@@ -1,4 +1,5 @@
-import { cell, toSig, type Val, type ReadonlyCell } from "@minim/core";
+import { toSig, type Val } from "@minim/core";
+import { cell, type ReadonlyCell } from "@minim/signals";
 import { Shape, type Segment } from "./shape";
 import { Vec, box, type Pointlike } from "@minim/values";
 import { wireStroke, type CommonOpts } from "./common";

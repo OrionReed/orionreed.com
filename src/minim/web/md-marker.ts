@@ -10,7 +10,7 @@
 // `for` names the diagram element's id. Falls back to global registry
 // if absent (transitional — prefer the scoped path).
 
-import { effect } from "@minim/core";
+import { effect } from "@minim/signals";
 import { hover, getMarker as getGlobalMarker, type Marker } from "@minim/tex";
 
 type MarkerHost = { getMarker?: (id: string) => Marker | undefined };

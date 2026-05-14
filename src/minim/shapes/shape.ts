@@ -1,14 +1,16 @@
 import {
-  cell,
-  effect,
   suspend,
   toSig,
-  Signal,
-  type Cell,
-  type ReadonlyCell,
   type Val,
   type Animator,
 } from "@minim/core";
+import {
+  cell,
+  effect,
+  Signal,
+  type Cell,
+  type ReadonlyCell,
+} from "@minim/signals";
 import {
   Box as BoxStruct,
   box,
@@ -31,10 +33,10 @@ import {
   type Point,
   type Pointlike,
   type ResolveVec,
-  type WriteOf,
   type N,
   type DerivedN,
 } from "@minim/values";
+import { type WriteOf } from "@minim/signals";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -93,8 +95,8 @@ type AnimatableField<K extends AnimatableKey> = K extends
  *  flavor being a structural subtype of the readonly one. */
 type ResolveNum<A> = [A] extends [() => number]
   ? DerivedN
-  : [A] extends [import("@minim/core").ReadonlyCell<number>]
-    ? [A] extends [import("@minim/core").Cell<number>]
+  : [A] extends [import("@minim/signals").ReadonlyCell<number>]
+    ? [A] extends [import("@minim/signals").Cell<number>]
       ? N
       : DerivedN
     : N;

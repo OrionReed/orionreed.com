@@ -20,14 +20,13 @@
 // The Boxlike surface on `Part` is installed at module load via
 // `delegate(Part.prototype, "box", Box)` — see `values/delegate.ts`.
 
+import { toSig, type Val } from "@minim/core";
 import {
   effect,
   cell,
-  toSig,
   type Cell,
   type ReadonlyCell,
-  type Val,
-} from "@minim/core";
+} from "@minim/signals";
 import {
   marker,
   hover,
@@ -40,9 +39,9 @@ import {
   num,
   type Box,
   type Boxlike,
-  type WriteOf,
   type Pointlike,
 } from "@minim/values";
+import { type WriteOf } from "@minim/signals";
 import type { TexShape } from "./tex";
 
 type BoxCell = WriteOf<typeof BoxStruct>;

@@ -23,8 +23,9 @@
 // that mirrors what `values/matrix.ts` does, so we measure the cost
 // of the *reads* not the matrix math.
 
-import { Signal, signal } from "@minim/core";
-import { struct, Vec, type V } from "@minim/values";
+import { Signal, signal } from "@minim/signals";
+import { Vec, type V } from "@minim/values";
+import { struct } from "@minim/signals";
 import { bench, group } from "mitata";
 
 // ── The candidate: Transform-as-struct with nested Vec fields ────

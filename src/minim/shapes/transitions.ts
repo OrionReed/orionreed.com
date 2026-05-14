@@ -4,15 +4,17 @@
 // array of those calls; the body shows exactly which atoms stack.
 
 import {
-  tween,
   easeIn,
   easeInOut,
   easeOut,
+  type Animator,
+} from "@minim/core";
+import {
+  tween,
   type Cell,
   type Duration,
   type Easing,
-  type Animator,
-} from "@minim/core";
+} from "@minim/signals";
 import { type V, Dir } from "@minim/values";
 import type { Writable } from "./shape";
 

@@ -22,7 +22,7 @@
 // `getMarker` / `registerMarker` free functions and `marker.register(id)`
 // remain for backward compatibility. Prefer the scoped path for new code.
 
-import { cell, type Cell, type ReadonlyCell } from "@minim/core";
+import { cell, type Cell, type ReadonlyCell } from "@minim/signals";
 
 // ── Global registry (transitional) ────────────────────────────────────────────
 

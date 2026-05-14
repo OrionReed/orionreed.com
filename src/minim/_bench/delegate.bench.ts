@@ -17,7 +17,7 @@
 // pollution we hit with the in-repo harness. The cross-process
 // _isolated_check.ts sanity script is still around for spot-checks.
 
-import { signal, type ReadonlySignal, type Signal } from "@minim/core";
+import { signal, type ReadonlySignal, type Signal } from "@minim/signals";
 import {
   Box,
   delegate,

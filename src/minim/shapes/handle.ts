@@ -9,7 +9,7 @@
 // All handles are `aside: true` (no autofit contribution) and themable
 // via the `--minim-handle` CSS var.
 
-import { type Cell } from "@minim/core";
+import { type Cell } from "@minim/signals";
 import { Shape, type AnyShape, type Writable } from "./shape";
 import { draggable } from "./interaction";
 import { Vec, mean, type Point } from "@minim/values";

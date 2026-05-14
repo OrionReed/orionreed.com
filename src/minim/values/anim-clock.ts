@@ -7,7 +7,8 @@
 // Signal class lives. The signal is allocated once per `clockSignal`
 // call and writes through `anim.onClock`.
 
-import { cell, type ReadonlyCell, type Anim } from "@minim/core";
+import { type Anim } from "@minim/core";
+import { cell, type ReadonlyCell } from "@minim/signals";
 
 /** A `ReadonlyCell<number>` that mirrors `anim.clockMs`. Updates
  *  after every step. Multiple callers can share — call once per anim

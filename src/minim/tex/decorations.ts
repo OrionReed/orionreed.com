@@ -8,7 +8,7 @@
 //      const eq = s(tex`${part("a", "...")} ...`);
 //      eq.add(brace(eq.parts.a));
 
-import { computed, type ReadonlyCell } from "@minim/core";
+import { computed, type ReadonlyCell } from "@minim/signals";
 import { Shape } from "@minim/shapes";
 // Plain Box constructor — imported renamed to avoid shadowing the
 // `box(part)` decoration exported below.

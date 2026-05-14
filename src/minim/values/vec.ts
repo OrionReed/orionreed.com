@@ -5,14 +5,13 @@
 import { struct, type WriteOf, type ReadOf } from "@minim/signals";
 import { Num } from "./num";
 import type { Matrix2D } from "./matrix";
+import { toSig, type Val } from "@minim/core";
 import {
   computed,
   effect,
-  toSig,
   type Cell,
   type ReadonlyCell,
-  type Val,
-} from "@minim/core";
+} from "@minim/signals";
 
 /** The struct's value type — declared up-front so ops can reference
  *  it in their signatures without circular type inference. */

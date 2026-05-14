@@ -1,7 +1,8 @@
 // Reactive list rendering. Diffs `parent`'s children as `source`
 // changes; stable keys preserve per-shape state across updates.
 
-import { effect, toSig, untracked, type Val } from "@minim/core";
+import { toSig, type Val } from "@minim/core";
+import { effect, untracked } from "@minim/signals";
 import type { AnyShape } from "./shape";
 
 export interface ForEachOptions<T> {

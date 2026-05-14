@@ -1,4 +1,4 @@
-import { computed, signal } from "@minim/core";
+import { computed, signal } from "@minim/signals";
 import { Vec, type V } from "@minim/values";
 import { bench, group } from "mitata";
 

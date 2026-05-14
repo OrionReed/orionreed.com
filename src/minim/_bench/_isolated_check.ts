@@ -2,7 +2,7 @@
 // reads, time it. No cross-class IC training, no harness, no other
 // suites running. Run each variant separately by editing VARIANT.
 
-import { signal } from "@minim/core";
+import { signal } from "@minim/signals";
 import { Box, delegate, delegateLazy, type Box as B } from "@minim/values";
 
 const ITERS = 30_000_000;

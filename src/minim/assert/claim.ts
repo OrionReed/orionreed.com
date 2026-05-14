@@ -25,16 +25,15 @@
 //
 // Everything reduces to bool signals. There's nothing else to learn.
 
+import { race, type Animator } from "@minim/core";
 import {
   cell,
   computed,
   derive,
   effect,
-  race,
   Signal,
   type ReadonlyCell,
-  type Animator,
-} from "@minim/core";
+} from "@minim/signals";
 import { vec, type V, type Box, type Boxlike, type Pointlike } from "@minim/values";
 import { circle } from "@minim/shapes";
 
