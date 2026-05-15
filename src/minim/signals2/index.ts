@@ -58,10 +58,7 @@ export {
   type StructInput,
   type Linear,
   type Storage,
-  // Deprecated aliases — kept for migration:
-  defineType,
-  type TypeConfig,
-  type Algebra,
+  type FieldSpec,
 } from "./cell";
 
 // ── Generic capability-driven ops ───────────────────────────────────
@@ -71,9 +68,27 @@ export {
   distance,
   springStep,
   serialise,
-  type SpringOpts,
   type Serialise,
 } from "./generics";
 
+// ── Continuous behaviors (generator-driven) ────────────────────────
+export {
+  spring,
+  oscillate,
+  attract,
+  drift,
+  type SpringOpts,
+} from "./behaviors";
+
 // ── Value types ─────────────────────────────────────────────────────
-export { Num, Vec, Transform, type V, type Tr } from "./values";
+export {
+  Num,
+  Vec, vec, type V,
+  Color, rgb, rgba,
+  Box, box, expandBox, unionBox, boxEdgeFrom, boxAt, isBox, type BoxLike,
+  Matrix2D, mat,
+  identity, fromTranslate, fromScale, fromRotate, isIdentity,
+  multiplyMatrix, invertMatrix, transformPoint, transformBox,
+  composeMatrix, matrixToString,
+  Transform, type Tr,
+} from "./values";

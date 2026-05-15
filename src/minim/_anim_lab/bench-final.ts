@@ -12,6 +12,14 @@ import * as v10 from "./engine-v10";
 import * as v11 from "./engine-v11";
 import * as v12 from "./engine-v12";
 import * as v13 from "./engine-v13";
+import * as v14 from "./engine-v14";
+import * as v15 from "./engine-v15";
+import * as v16 from "./engine-v16";
+import * as v17 from "./engine-v17";
+import * as v18 from "./engine-v18";
+import * as v19 from "./engine-v19";
+import * as v20 from "./engine-v20";
+import * as v21 from "./engine-v21";
 import {
   type EngineModule,
   makeRawYieldLoop,
@@ -34,6 +42,14 @@ const engines: Array<[string, EngineModule]> = [
   ["v6     ", { Engine: v6.Anim, suspend: v6.suspend, drive: v6.drive }],
   ["v12    ", { Engine: v12.Anim, suspend: v12.suspend, drive: v12.drive }],
   ["v13    ", { Engine: v13.Anim, suspend: v13.suspend, drive: v13.drive }],
+  ["v14    ", { Engine: v14.Anim, suspend: v14.suspend, drive: v14.drive }],
+  ["v15    ", { Engine: v15.Anim, suspend: v15.suspend, drive: v15.drive }],
+  ["v16    ", { Engine: v16.Anim, suspend: v16.suspend }],
+  ["v17    ", { Engine: v17.Anim, suspend: v17.suspend }],
+  ["v18    ", { Engine: v18.Anim, suspend: v18.suspend }],
+  ["v19    ", { Engine: v19.Anim, suspend: v19.suspend }],
+  ["v20    ", { Engine: v20.Anim, suspend: v20.suspend }],
+  ["v21    ", { Engine: v21.Anim, suspend: v21.suspend, drive: v21.drive }],
 ];
 
 function across(name: string, make: (mod: EngineModule) => () => unknown) {

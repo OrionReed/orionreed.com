@@ -12,15 +12,19 @@
 // User-defined capabilities work the same way — stamp them on the
 // Type. `Object.assign(Vec, { rotationSpace: impl })`.
 //
-// NOTE: with the surface-inference fix in cell.ts, many of these
-// generics are now redundant for users with concrete cell types —
-// `cell.add(b)`, `cell.lerp(b, t)`, `cell.distance(b)` are typed
-// directly. These generics exist for code that's polymorphic in T
-// (`function center<T>(cells: Cell<T>[])`).
+// Many of these generics are redundant for users with concrete cell
+// types — `cell.add(b)`, `cell.lerp(b, t)`, `cell.distance(b)` are
+// directly typed via composite-capability inference. The generics
+// exist for code polymorphic in T:
+//   `function center<T>(cells: Cell<T>[]) { return mean(...cells); }`
+//
+// Generator-based behaviors (`spring`, `oscillate`, `attract`, `drift`)
+// live in `./behaviors`. They wrap `springStep` (below) with `drive`.
 
 import { computed, effect } from "./engine";
 import { startBatch, endBatch } from "./engine";
 import type { Cell, RO, Type, Linear } from "./cell";
+import type { SpringOpts } from "./behaviors";
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -108,19 +112,12 @@ export function distance<T>(a: AnyCell<T>, b: AnyCell<T>): RO<number> {
   return computed(() => fn(a(), b())) as unknown as RO<number>;
 }
 
-// ── spring — physics integrator. Returns disposer. ──────────────────
+// ── springStep — per-frame spring integrator ──────────────────────
 //
-// Sketch only — drives `sig` toward `target` using the type's algebra
-// and the type's metric for precision-stop. The real impl would tie
-// into Anim's drive loop; here it shows that the capability dispatch
-// works generically.
-
-export interface SpringOpts {
-  stiffness?: number;
-  damping?: number;
-  /** Stop when |sig - target| < precision. Requires the type's metric. */
-  precision?: number;
-}
+// Lower-level than `spring()` (in behaviors.ts) — caller owns the
+// frame loop and the velocity state. Use when integrating manually
+// (custom game loop or non-generator runtime). `spring()` wraps this
+// with `drive(...)` for the standard generator-based API.
 
 export function springStep<T>(
   sig: Cell<T, any>,

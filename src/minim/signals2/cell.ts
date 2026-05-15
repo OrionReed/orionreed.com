@@ -96,6 +96,25 @@ export interface Linear<T> {
  *     independently and have different subscriber sets. */
 export type Storage = "aos" | "soa";
 
+/** A typed-field spec carrying a Type + an explicit initial value.
+ *  Produced by `SomeType.with(init)` for use inside `defaults: {...}`:
+ *
+ *      defaults: {
+ *        translate: Vec,                     // typed, init = Vec.defaults
+ *        scale: Vec.with({ x: 1, y: 1 }),    // typed, init overridden
+ *        opacity: Num.with(1),               // typed, init = 1 (not Num.defaults=0)
+ *      }
+ *
+ *  Branded so the runtime can distinguish a `Type.with(...)` result
+ *  from a literal record that happens to have `type` and `init` keys.
+ *  Generic in `C` so the original type's config is preserved for
+ *  composite-capability inference. */
+export interface FieldSpec<T, C = unknown> {
+  readonly __field: true;
+  readonly type: Type<T, C>;
+  readonly init: T;
+}
+
 // ── Reserved names — runtime guard ──────────────────────────────────
 
 /** Function-prototype intrinsics + framework keys that user `methods`
@@ -115,7 +134,12 @@ export const RESERVED_NAMES = new Set<string>([
 export interface Type<T, C = unknown> {
   // ── User-supplied config ─────────────────────────────────────
   readonly name?: string;
-  readonly defaults: T;
+  // `defaults` is loosely typed because it accepts BOTH the plain T
+  // value (legacy) AND a record where each entry may be a Type or
+  // FieldSpec (new style). The runtime `walkDefaults` resolves either
+  // shape to a concrete T. Type-level ExtractT<C> handles the union
+  // for inference purposes; the constraint here just stays open.
+  readonly defaults: any;
   readonly equals?: (a: T, b: T) => boolean;
   readonly lerp?: (a: T, b: T, t: number) => T;
   readonly linear?: Linear<T>;
@@ -138,33 +162,50 @@ export interface Type<T, C = unknown> {
   /** Type guard: any flavor of this type's cell. */
   is(v: unknown): v is Cell<T, C> | RO<T, C>;
 
+  /** Build a `FieldSpec<T, C>` for use inside another struct's
+   *  `defaults`:
+   *      defaults: { scale: Vec.with({ x: 1, y: 1 }) }
+   *  Equivalent to `{ __field: true, type: this, init }`. Preserves
+   *  `C` so composite-capability inference can still walk the typed
+   *  field's config. */
+  with(init: T): FieldSpec<T, C>;
+
   // Plain math, copied from `linear` if present.
   add: Linear<T>["add"] | undefined;
   sub: Linear<T>["sub"] | undefined;
   scale: Linear<T>["scale"] | undefined;
 }
 
-/** What the user passes to `struct()` — the config-shaped subset of
- *  Type<T>. Derived via Omit so there's one source of truth. */
-export type StructInput<T> = Omit<
-  Type<T>,
-  | "cell" | "derived" | "lens" | "is"
-  | "add" | "sub" | "scale"
-  // The function call signature is on Type as a callable too. Omit
-  // gets call signatures along for free; we restore the field set.
->;
+/** What the user passes to `struct()`.
+ *
+ *  Defined as a standalone interface (NOT `Omit<Type<T>, ...>`) because
+ *  Omit preserves call signatures and would make StructInput itself
+ *  callable. Plain config objects aren't callable, so the constraint
+ *  would never match. */
+export interface StructInput<T> {
+  readonly name?: string;
+  readonly defaults: any;
+  readonly equals?: (a: T, b: T) => boolean;
+  readonly lerp?: (a: T, b: T, t: number) => T;
+  readonly linear?: Linear<T>;
+  readonly metric?: (a: T, b: T) => number;
+  readonly nested?: { [K in keyof T]?: Type<T[K], any> };
+  readonly storage?: Storage;
+  readonly methods?: Record<string, (self: T, ...args: any[]) => any>;
+  readonly getters?: Record<string, (this: any) => any>;
+}
 
 // ── Composite capability detection (type level) ─────────────────────
 //
 // A type effectively has capability K iff:
 //   (a) It directly declares K on its config, OR
-//   (b) It declares `nested:` and ALL nested fields effectively have K.
+//   (b) Its `defaults` entries are all Types/FieldSpecs that recursively
+//       have K (new style), OR
+//   (c) It has a `nested:` map and all children have K (legacy style).
 //
-// The "directly declares K" check uses `K extends keyof C` so optional
-// fields count (`linear?: Linear<T>` on a struct config matches even
-// if the user supplied it). Validated for depth 3+ in
-// `_inference_check.ts`. Depth growth is in a boolean, so it stays
-// well under TS's instantiation limit.
+// "Directly declares K" uses `K extends keyof C` so optional fields
+// count. Depth growth is in a boolean, stays well under TS's
+// instantiation limit. Validated in `_inference_check.ts`.
 
 type EffectivelyHas<K extends string, C> =
   K extends keyof C
@@ -173,7 +214,9 @@ type EffectivelyHas<K extends string, C> =
       : true
     : C extends { nested: infer N }
       ? AllChildrenHave<K, N>
-      : false;
+      : C extends { defaults: infer D }
+        ? AllDefaultEntriesHave<K, D>
+        : false;
 
 type AllChildrenHave<K extends string, N> =
   keyof N extends never
@@ -181,6 +224,27 @@ type AllChildrenHave<K extends string, N> =
     : { [F in keyof N]: EffectivelyHas<K, N[F]> }[keyof N] extends true
       ? true
       : false;
+
+/** Walk a defaults map: for each entry that is a Type or FieldSpec,
+ *  check the underlying config for K. Non-Type entries (primitives)
+ *  count as `false` — i.e. a defaults map containing any plain field
+ *  cannot compose K. (A pure primitive default is fine — handled by
+ *  `K extends keyof C` returning false, then `defaults: infer D`
+ *  matches a non-object D, falling through.) */
+type AllDefaultEntriesHave<K extends string, D> =
+  D extends object
+    ? D extends Function ? false
+    : D extends readonly unknown[] ? false
+    : keyof D extends never ? false
+    : { [F in keyof D]: DefaultEntryHas<K, D[F]> }[keyof D] extends true
+      ? true
+      : false
+    : false;
+
+type DefaultEntryHas<K extends string, F> =
+  F extends Type<any, infer SubC> ? EffectivelyHas<K, SubC>
+  : F extends FieldSpec<any, infer SubC> ? EffectivelyHas<K, SubC>
+  : false;
 
 // ── Surface mixins ──────────────────────────────────────────────────
 
@@ -246,10 +310,17 @@ function compositeEquals<T>(t: StructInput<T>): (a: T, b: T) => boolean {
   };
 }
 
+/** Is `t.nested` populated enough to attempt composition? Empty `{}`
+ *  (e.g. when defaults entries are all primitives) means "no typed
+ *  children, can't compose." */
+function hasNestedTypes<T>(t: StructInput<T>): boolean {
+  return !!t.nested && Object.keys(t.nested).length > 0;
+}
+
 function compositeLerp<T>(t: StructInput<T>): ((a: T, b: T, t: number) => T) | undefined {
   if (t.lerp) return t.lerp;
-  if (typeof t.defaults !== "object" || !t.nested) return undefined;
-  const keys = Object.keys(t.defaults as object);
+  if (typeof t.defaults !== "object" || !hasNestedTypes(t)) return undefined;
+  const keys = Object.keys(t.nested as object);
   const subs: Record<string, (a: any, b: any, t: number) => any> = {};
   for (const k of keys) {
     const f = compositeLerp((t.nested as any)[k]);
@@ -257,7 +328,7 @@ function compositeLerp<T>(t: StructInput<T>): ((a: T, b: T, t: number) => T) | u
     subs[k] = f;
   }
   return (a, b, alpha) => {
-    const out: any = {};
+    const out: any = { ...(a as any) };  // preserve untyped fields
     for (const k of keys) out[k] = subs[k]((a as any)[k], (b as any)[k], alpha);
     return out as T;
   };
@@ -265,8 +336,8 @@ function compositeLerp<T>(t: StructInput<T>): ((a: T, b: T, t: number) => T) | u
 
 function compositeLinear<T>(t: StructInput<T>): Linear<T> | undefined {
   if (t.linear) return t.linear;
-  if (typeof t.defaults !== "object" || !t.nested) return undefined;
-  const keys = Object.keys(t.defaults as object);
+  if (typeof t.defaults !== "object" || !hasNestedTypes(t)) return undefined;
+  const keys = Object.keys(t.nested as object);
   const adds: Record<string, any> = {};
   const subs: Record<string, any> = {};
   const scales: Record<string, any> = {};
@@ -276,23 +347,22 @@ function compositeLinear<T>(t: StructInput<T>): Linear<T> | undefined {
     adds[k] = a.add; subs[k] = a.sub; scales[k] = a.scale;
   }
   return {
-    add:   (a, b) => { const o: any = {}; for (const k of keys) o[k] = adds[k]((a as any)[k], (b as any)[k]); return o; },
-    sub:   (a, b) => { const o: any = {}; for (const k of keys) o[k] = subs[k]((a as any)[k], (b as any)[k]); return o; },
-    scale: (a, k) => { const o: any = {}; for (const kk of keys) o[kk] = scales[kk]((a as any)[kk], k); return o; },
+    add:   (a, b) => { const o: any = { ...(a as any) }; for (const k of keys) o[k] = adds[k]((a as any)[k], (b as any)[k]); return o; },
+    sub:   (a, b) => { const o: any = { ...(a as any) }; for (const k of keys) o[k] = subs[k]((a as any)[k], (b as any)[k]); return o; },
+    scale: (a, k) => { const o: any = { ...(a as any) }; for (const kk of keys) o[kk] = scales[kk]((a as any)[kk], k); return o; },
   };
 }
 
 function compositeMetric<T>(t: StructInput<T>): ((a: T, b: T) => number) | undefined {
   if (t.metric) return t.metric;
-  if (typeof t.defaults !== "object" || !t.nested) return undefined;
-  const keys = Object.keys(t.defaults as object);
+  if (typeof t.defaults !== "object" || !hasNestedTypes(t)) return undefined;
+  const keys = Object.keys(t.nested as object);
   const subs: Record<string, (a: any, b: any) => number> = {};
   for (const k of keys) {
     const m = compositeMetric((t.nested as any)[k]);
     if (!m) return undefined;
     subs[k] = m;
   }
-  // Euclidean composition — sqrt(Σ d_i²).
   return (a, b) => {
     let s = 0;
     for (const k of keys) {
@@ -474,11 +544,92 @@ export function valOf<T>(v: Val<T>): T {
   return typeof v === "function" ? (v as () => T)() : v;
 }
 
+/** Is `v` a Type (callable + has .defaults + .cell factory)? Avoids
+ *  the more expensive `isSignal` lookup. */
+function isType(v: unknown): v is Type<any, any> {
+  return typeof v === "function"
+    && (v as any).cell !== undefined
+    && (v as any).defaults !== undefined;
+}
+
+/** Is `v` a FieldSpec produced by `SomeType.with(init)`? Brand check. */
+function isFieldSpec(v: unknown): v is FieldSpec<any> {
+  return typeof v === "object" && v !== null
+    && (v as any).__field === true;
+}
+
+/** Walk a `defaults` value. For object-shaped defaults, replace each
+ *  entry that is a Type or FieldSpec with its plain default value, and
+ *  build the corresponding nested-type map. Primitive entries are
+ *  passed through.
+ *
+ *  Returns the resolved value-shape + the synthesised nested map. */
+function walkDefaults(defaults: unknown): {
+  values: any;
+  nested: Record<string, Type<any, any>>;
+} {
+  // Primitive default — just return it; no fields, no nested.
+  if (typeof defaults !== "object" || defaults === null) {
+    return { values: defaults, nested: {} };
+  }
+  // Object default — walk each entry.
+  const values: Record<string, unknown> = {};
+  const nested: Record<string, Type<any, any>> = {};
+  for (const k of Object.keys(defaults as object)) {
+    const v = (defaults as Record<string, unknown>)[k];
+    if (isType(v)) {
+      // `defaults: { translate: Vec }` — use Vec.defaults as the value.
+      values[k] = v.defaults;
+      nested[k] = v;
+    } else if (isFieldSpec(v)) {
+      // `defaults: { scale: Vec.with({x:1, y:1}) }`
+      values[k] = v.init;
+      nested[k] = v.type;
+    } else {
+      // Primitive literal — plain field, no type.
+      values[k] = v;
+    }
+  }
+  return { values, nested };
+}
+
 // ── struct() — the public factory ───────────────────────────────────
 
-/** Extract T from a struct-config literal. Direct field access is more
- *  inference-friendly than going via a TypeConfig matcher. */
-type ExtractT<C> = C extends { defaults: infer T } ? T : never;
+/** Type-level: widen a literal primitive (`0` → `number`, `"a"` →
+ *  `string`, `true` → `boolean`). For object literals, keep as-is. */
+type Widen<T> =
+  T extends number ? number
+  : T extends string ? string
+  : T extends boolean ? boolean
+  : T extends bigint ? bigint
+  : T;
+
+/** Type-level: resolve one entry in a defaults map to its value type.
+ *
+ *  - `Vec` (a Type)              → V (Vec's plain value type)
+ *  - `Vec.with({x:1, y:1})`      → V
+ *  - `0`, `"hello"`, `true`      → number, string, boolean (widened)
+ *  - `{ x: 0, y: 0 }`            → { x: number, y: number } (recursive) */
+type FieldValue<F> =
+  F extends Type<infer X, any> ? X
+  : F extends FieldSpec<infer X> ? X
+  : Widen<F>;
+
+/** Extract T from a struct-config literal. Handles:
+ *  - Primitive defaults: `defaults: 0` → T = number
+ *  - Plain-object defaults: `defaults: { x: 0, y: 0 }` → T = {x, y}
+ *  - Typed-entry defaults: `defaults: { translate: Vec, rotate: 0 }` →
+ *    T = { translate: V, rotate: number } */
+type ExtractT<C> =
+  C extends { defaults: infer D }
+    ? D extends Type<infer X, any> ? X
+    : D extends FieldSpec<infer X> ? X
+    : D extends object
+      ? D extends Function ? D
+      : D extends readonly any[] ? D
+      : { [K in keyof D]: FieldValue<D[K]> }
+    : Widen<D>
+  : never;
 
 /** Build a Type<T, C> from a plain config object.
  *
@@ -519,22 +670,46 @@ export function struct<const C extends StructInput<any>>(
     return t.cell(initial, opts);
   };
 
+  // ── Walk `defaults` entries: extract typed fields + value shape ──
+  //
+  // The new style allows `defaults` entries to be Types or FieldSpecs:
+  //
+  //     defaults: {
+  //       translate: Vec,                    // typed shorthand
+  //       scale: Vec.with({ x: 1, y: 1 }),   // typed with init override
+  //       rotate: 0,                          // primitive default
+  //     }
+  //
+  // Synthesise: (a) the actual value-shape with literal defaults, and
+  // (b) the `nested` map of declared field types. Either may be empty;
+  // legacy `nested:` config still works as an override.
+  const walked = walkDefaults(cfg.defaults);
+  const synthDefaults = walked.values;
+  const synthNested = walked.nested;
+
   // Copy config fields verbatim. The function's intrinsic `name` is
   // read-only by assignment but configurable via defineProperty.
   for (const k of Object.keys(cfg) as (keyof StructInput<T>)[]) {
-    if (k === "name") continue;
+    if (k === "name" || k === "defaults" || k === "nested") continue;
     (t as any)[k] = cfg[k];
   }
+  // Defaults: prefer the synthesised value-shape so Types/FieldSpecs
+  // in the literal are resolved to their plain values at runtime.
+  t.defaults = synthDefaults;
+  // Nested: user-supplied `nested:` wins (explicit override); else
+  // use the map synthesised from defaults entries.
+  t.nested = cfg.nested ?? synthNested;
   if (cfg.name) {
     Object.defineProperty(t, "name", { value: cfg.name, configurable: true });
   }
 
   // Synthesise composite capabilities from `nested` (don't overwrite
-  // user-supplied directs).
-  const lerpFn = compositeLerp(cfg);
-  const linFn  = compositeLinear(cfg);
-  const metFn  = compositeMetric(cfg);
-  const eqFn   = compositeEquals(cfg);
+  // user-supplied directs). Use the resolved nested map.
+  const effectiveCfg = { ...cfg, defaults: synthDefaults, nested: t.nested };
+  const lerpFn = compositeLerp(effectiveCfg);
+  const linFn  = compositeLinear(effectiveCfg);
+  const metFn  = compositeMetric(effectiveCfg);
+  const eqFn   = compositeEquals(effectiveCfg);
   if (lerpFn && !cfg.lerp)   t.lerp   = lerpFn;
   if (linFn  && !cfg.linear) t.linear = linFn;
   if (metFn  && !cfg.metric) t.metric = metFn;
@@ -548,9 +723,13 @@ export function struct<const C extends StructInput<any>>(
   }
 
   // ── Cell factories ─────────────────────────────────────────
+  // Storage decision: check the *resolved* nested map (`t.nested`, set
+  // above by either user-supplied `cfg.nested` or synthesised from
+  // `defaults` entries), and the *resolved* defaults (`t.defaults`).
   t.cell = function (initial: T, opts?: { storage?: Storage }): Cell<T, C> {
     const storage = opts?.storage ?? cfg.storage ?? "aos";
-    if (storage === "soa" && cfg.nested && typeof cfg.defaults === "object") {
+    const hasNested = t.nested && Object.keys(t.nested).length > 0;
+    if (storage === "soa" && hasNested && typeof t.defaults === "object") {
       return makeSoaCell(t, initial);
     }
     return wrap(signal(initial), t, true) as Cell<T, C>;
@@ -571,15 +750,22 @@ export function struct<const C extends StructInput<any>>(
     return typeof v === "function" && (v as any)[TYPE] === t;
   };
 
+  // `.with(init)` — produce a FieldSpec for use in parent's defaults.
+  //   Vec.with({x:1, y:1})  →  { __field: true, type: Vec, init: {x:1, y:1} }
+  t.with = function (init: T): FieldSpec<T> {
+    return { __field: true, type: t, init };
+  };
+
   return t as Type<T, C>;
 }
 
 /** Build a SoA-flavor cell: per-field signals installed as own-props,
- *  parent callable fans-in for read, fans-out for write. */
-function makeSoaCell<T, C extends StructInput<T>>(type: Type<T, C>, initial: T): Cell<T, C> {
-  const cfg = type as StructInput<T>;
-  const keys = Object.keys(cfg.defaults as object);
-  const nested = cfg.nested as any;
+ *  parent callable fans-in for read, fans-out for write. Reads from the
+ *  Type's resolved `.defaults` (post-walkDefaults) and `.nested` map
+ *  (synthesised from defaults entries or supplied directly). */
+function makeSoaCell<T, C>(type: Type<T, C>, initial: T): Cell<T, C> {
+  const keys = Object.keys(type.defaults as object);
+  const nested = type.nested as any;
 
   const inst: any = function (...args: any[]) {
     if (args.length === 0) {
@@ -598,7 +784,7 @@ function makeSoaCell<T, C extends StructInput<T>>(type: Type<T, C>, initial: T):
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i];
     const childCfg = nested[k];
-    const childInit = obj?.[k] ?? (cfg.defaults as any)[k];
+    const childInit = obj?.[k] ?? (type.defaults as any)[k];
     if (childCfg && typeof (childCfg as any).cell === "function") {
       // Already a registered Type — reuse it (don't re-`struct`).
       inst[k] = (childCfg as Type<any>).cell(childInit);
@@ -613,25 +799,33 @@ function makeSoaCell<T, C extends StructInput<T>>(type: Type<T, C>, initial: T):
 }
 
 // ── Bare cell (no type) ─────────────────────────────────────────────
+//
+// Bare cells use a single shared prototype carrying `.peek`. Previously
+// `.peek` was installed as an own-property per instance (~100 b/cell
+// extra); the shared-proto version costs nothing per instance — every
+// bare cell is just `Object.setPrototypeOf(alienSignal, bareProto)`,
+// matching typed cells' zero-per-instance overhead story.
+
+const bareProto: any = Object.create(Function.prototype);
+Object.defineProperty(bareProto, "peek", {
+  configurable: true, writable: true,
+  value(this: () => unknown) {
+    const prev = setActiveSub(undefined);
+    try { return this(); }
+    finally { setActiveSub(prev); }
+  },
+});
 
 /** Bare reactive cell — no type attached. `v()` reads, `v(x)` writes,
  *  `v.peek()` reads untracked. No methods, no fields. */
 export function cell<T>(initial: T): Cell<T> {
   const fn = signal(initial) as unknown as Cell<T>;
-  (fn as any).peek = function (this: () => T) {
-    const prev = setActiveSub(undefined);
-    try { return this(); }
-    finally { setActiveSub(prev); }
-  };
+  Object.setPrototypeOf(fn, bareProto);
   return fn;
 }
 cell.derived = <T>(fn: () => T): RO<T> => {
   const c = computed(fn) as unknown as RO<T>;
-  (c as any).peek = function (this: () => T) {
-    const prev = setActiveSub(undefined);
-    try { return this(); }
-    finally { setActiveSub(prev); }
-  };
+  Object.setPrototypeOf(c, bareProto);
   return c;
 };
 cell.lens = <T>(read: () => T, write: (v: T) => void): Cell<T> => {
@@ -640,20 +834,10 @@ cell.lens = <T>(read: () => T, write: (v: T) => void): Cell<T> => {
     if (args.length === 0) return reader();
     write(args[0]);
   };
+  Object.setPrototypeOf(fn, bareProto);
   return fn as Cell<T>;
 };
 
 // ── Re-exports ──────────────────────────────────────────────────────
 
 export { signal, computed, effect, isSignal, startBatch, endBatch };
-
-// ── Backward-compat aliases (will be removed before signals2 ships) ─
-
-/** @deprecated use `struct` instead. Kept for migration period. */
-export const defineType = struct;
-
-/** @deprecated use `Linear<T>` instead. */
-export type Algebra<T> = Linear<T>;
-
-/** @deprecated use `StructInput<T>` instead. */
-export type TypeConfig<T> = StructInput<T>;

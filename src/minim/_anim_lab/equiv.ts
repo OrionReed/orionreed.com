@@ -18,6 +18,14 @@ import * as v10 from "./engine-v10";
 import * as v11 from "./engine-v11";
 import * as v12 from "./engine-v12";
 import * as v13 from "./engine-v13";
+import * as v14 from "./engine-v14";
+import * as v15 from "./engine-v15";
+import * as v16 from "./engine-v16";
+import * as v17 from "./engine-v17";
+import * as v18 from "./engine-v18";
+import * as v19 from "./engine-v19";
+import * as v20 from "./engine-v20";
+import * as v21 from "./engine-v21";
 
 const engines: Record<string, EngineModule> = {
   current: { Engine: current.Anim, suspend: current.suspend },
@@ -34,6 +42,14 @@ const engines: Record<string, EngineModule> = {
   v11: { Engine: v11.Anim, suspend: v11.suspend },
   v12: { Engine: v12.Anim, suspend: v12.suspend },
   v13: { Engine: v13.Anim, suspend: v13.suspend },
+  v14: { Engine: v14.Anim, suspend: v14.suspend },
+  v15: { Engine: v15.Anim, suspend: v15.suspend },
+  v16: { Engine: v16.Anim, suspend: v16.suspend },
+  v17: { Engine: v17.Anim, suspend: v17.suspend },
+  v18: { Engine: v18.Anim, suspend: v18.suspend },
+  v19: { Engine: v19.Anim, suspend: v19.suspend },
+  v20: { Engine: v20.Anim, suspend: v20.suspend },
+  v21: { Engine: v21.Anim, suspend: v21.suspend },
 };
 
 type Test = ((mod: EngineModule) => unknown) & { skipOn?: string[] };
@@ -478,6 +494,9 @@ const tests: Record<string, Test> = {
     } else if (anyE.onTick) {
       let t = 0;
       dispose = anyE.onTick((dt: number) => { t += dt; seen.push(t); });
+    } else if (anyE.onFrame) {
+      let t = 0;
+      dispose = anyE.onFrame((dt: number) => { t += dt; seen.push(t); });
     } else {
       e.stop();
       return "skipped";
@@ -548,6 +567,154 @@ const tests: Record<string, Test> = {
     e.stop();
     return dtSeen;
   }, { skipOn: ["v9", "v10", "v11", "v12"] }),
+
+  // ── Edge cases / robustness ────────────────────────────────────────
+
+  zeroDtIsNoop(mod) {
+    const e = new mod.Engine();
+    let n = 0;
+    function* g() { while (true) { yield; n++; } }
+    e.run(g);
+    e.step(0); e.step(0); e.step(0);
+    if (n !== 3) throw new Error(`expected 3 advances on dt=0 got ${n}`);
+    e.stop();
+    return n;
+  },
+
+  fpAccumulatedSleep(mod) {
+    // Sleep 1.0s reached via 1000 × 0.001s ticks. Floating point should
+    // wake within one tick of the target.
+    const e = new mod.Engine();
+    let woke = false;
+    function* g() { yield 1.0; woke = true; }
+    e.run(g);
+    for (let i = 0; i < 999; i++) e.step(0.001);
+    if (woke) throw new Error("woke too early");
+    // 1001st tick should definitely wake (1.001s > 1.0s).
+    e.step(0.001);
+    e.step(0.001);
+    if (!woke) throw new Error("did not wake by 1.001s");
+    e.stop();
+    return woke;
+  },
+
+  cancelDuringChildOnComplete(mod) {
+    // A parallel child completes synchronously and triggers onChild,
+    // which causes the parent to advance, which yields again with
+    // another child... the engine must not blow up.
+    const e = new mod.Engine();
+    let outer = 0;
+    function* leaf() { return; }
+    function* parent() {
+      for (let i = 0; i < 5; i++) {
+        yield [leaf(), leaf(), leaf()];
+        outer++;
+      }
+    }
+    e.run(parent);
+    if (outer !== 5) throw new Error(`expected 5 outer iters got ${outer}`);
+    e.stop();
+    return outer;
+  },
+
+  spawnAfterStop(mod) {
+    // stop() should leave the engine reusable.
+    const e = new mod.Engine();
+    let n = 0;
+    function* g() { yield; n++; }
+    e.run(g);
+    e.step(0.016);
+    e.stop();
+    if (n !== 1) throw new Error("first run didn't tick");
+    e.run(g);
+    e.step(0.016);
+    if (n !== 2) throw new Error(`expected 2 ticks after restart got ${n}`);
+    e.stop();
+    return n;
+  },
+
+  cancelInsideOwnAdvance(mod) {
+    // A generator returns the run-disposer from within its first yield.
+    // Cancelling itself mid-advance shouldn't crash.
+    const e = new mod.Engine();
+    let after = 0;
+    let dispose: (() => void) | undefined;
+    function* g() {
+      // The first yielded suspend captures dispose and calls it.
+      yield* mod.suspend<void>((_w) => {
+        dispose!();
+        return () => {};
+      });
+      after++;
+    }
+    dispose = e.run(g);
+    if (after !== 0) throw new Error("must not advance past self-cancel");
+    e.stop();
+    return after;
+  },
+
+  manyParallelLevelsDeep(mod) {
+    // Nested parallel: 4 levels of [child, child] each.
+    const e = new mod.Engine();
+    let leaves = 0;
+    function* leaf() { yield; leaves++; }
+    function makeLevel(depth: number): () => any {
+      if (depth === 0) return leaf;
+      return function* () {
+        yield [makeLevel(depth - 1)(), makeLevel(depth - 1)()];
+      };
+    }
+    e.run(makeLevel(4)());
+    e.step(0.016);
+    e.step(0.016);
+    e.step(0.016);
+    if (leaves !== 16) throw new Error(`expected 16 leaves got ${leaves}`);
+    e.stop();
+    return leaves;
+  },
+
+  wakeAfterStopIsSafe(mod) {
+    const e = new mod.Engine();
+    let storedWake: (() => void) | undefined;
+    let advanced = false;
+    function* g() {
+      yield* mod.suspend<void>((wake) => {
+        storedWake = wake;
+        return () => {};
+      });
+      advanced = true;
+    }
+    e.run(g);
+    e.stop();
+    storedWake!(); // post-stop wake should be a no-op
+    if (advanced) throw new Error("wake after stop must not advance");
+    return advanced;
+  },
+
+  yieldStarSequence(mod) {
+    // yield* delegation should NOT spawn a child Active — it's pure
+    // delegation (cheaper). Engine should see the inner gen's yields.
+    const e = new mod.Engine();
+    let log = "";
+    function* inner() {
+      log += "a"; yield;
+      log += "b"; yield;
+      log += "c";
+    }
+    function* outer() {
+      log += "[";
+      yield* inner();
+      log += "]";
+    }
+    e.run(outer);
+    if (log !== "[a") throw new Error(`init expected '[a' got ${log}`);
+    e.step(0.016);
+    if (log !== "[ab") throw new Error(`step1 expected '[ab' got ${log}`);
+    e.step(0.016);
+    if (log !== "[abc]") throw new Error(`step2 expected '[abc]' got ${log}`);
+    e.stop();
+    return log;
+  },
 
   // ── Memory leak guard ──────────────────────────────────────────────
 
