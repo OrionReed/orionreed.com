@@ -1,51 +1,31 @@
-// Generator-driven cooperative animation runtime.
+// v1: constants for wakeAt's encoded states + inline state predicates.
+// Behaviour identical to v0_baseline. Goal: readability without paying
+// a perf tax. Bench against v0 to confirm.
 //
-// Yield contract:
-//   undefined   park 1 frame; resume with dt
-//   number > 0  sleep N seconds
-//   number ≤ 0  tail-call (resume immediately)
-//   Animator    spawn child; resume with R when it completes
-//   Yieldable[] spawn all in parallel; resume when all complete
-//   SuspendFn   callback wake; resume with T
-//
-// SuspendFn signature: `(wake, spawn, anim) => dispose`. The `anim`
-// arg is the host engine, which means SuspendFns are first-class
-// engine primitives — they can:
-//   - read `anim.clock` for engine-time guards (e.g. withTimeout)
-//   - call `anim.onFrame(cb)` to bypass per-frame `gen.next()` cost
-//     (this is how `drive` is built)
-//   - install a scoped `anim.observer` and restore it on dispose
-// The `spawn` arg is `anim`-bound but exposed separately because
-// children spawned through it cascade-cancel with the parent active.
-//
-// Time-scale, per-step tracing, and similar concerns are NOT runtime
-// features. They're userland generator wrappers (`mapDt`, `tap`,
-// `record`, …) — see `core/composability.ts`.
+// wakeAt encoding:
+//   DEAD     (-1)        cancelled or completed
+//   READY    ( 0)         ready to advance this step
+//   PARKED   (Infinity)   waiting on suspend/children
+//   finite>0              sleeping until that engine-clock value
 
 export type Yieldable =
-  | number
-  | undefined
-  | Animator<any>
-  | Yieldable[]
-  | SuspendFn<any>;
+  | number | undefined | Animator<any> | Yieldable[] | SuspendFn<any>;
 export type Animator<R = void> = Generator<Yieldable, R, number>;
 export type PayloadOf<Y> =
   Y extends Animator<infer R> ? R
   : Y extends SuspendFn<infer R> ? R
   : void;
-
-export type SpawnFn = <R>(
-  g: Animator<R>,
-  onDone?: (v: R) => void,
-) => () => void;
-
+export type SpawnFn = <R>(g: Animator<R>, onDone?: (v: R) => void) => () => void;
 export type SuspendFn<T = void> = (
   wake: [T] extends [void] ? () => void : (v: T) => void,
   spawn: SpawnFn,
   anim: Anim,
 ) => () => void;
 
-/** `yield* suspend(impl)` parks until `wake(value)`; resumes with `value`. */
+const DEAD = -1;
+const READY = 0;
+const PARKED = Infinity;
+
 export function* suspend<T = void>(impl: SuspendFn<T>): Animator<T> {
   return (yield impl) as T;
 }
@@ -53,12 +33,8 @@ export function* suspend<T = void>(impl: SuspendFn<T>): Animator<T> {
 export const isGen = (v: any): v is Animator<any> =>
   typeof v?.next === "function";
 
-/** Wraps a non-generator Yieldable in a one-shot generator. */
 function* asGen(y: Yieldable): Animator<any> { yield y; }
 
-/** Optional per-engine span observer; opt-in for the assert/spans
- *  layer. Set `anim.observer` to subscribe; subscribers compose in
- *  user code (the runtime sees one slot). */
 export interface AnimObserver {
   spawn?(id: number, parentId: number | undefined, clock: number, gen: Animator<any>): void;
   complete?(id: number, clock: number): void;
@@ -66,31 +42,21 @@ export interface AnimObserver {
 }
 
 class Active {
-  // wakeAt: −1 done · 0 ready · >0 sleeping vs engine clock · Infinity parked.
-  wakeAt = 0;
-  // Disposer for the resource this active is parked on. For SuspendFn
-  // parks: the impl's returned dispose. For parallel-waiting parents:
-  // a closure that cancels the kids. The two never coexist.
+  wakeAt = READY;
   cleanup: (() => void) | null = null;
-  /** Set on actives spawned as tracked children; called on completion. */
   onDone: ((v: any) => void) | null = null;
-  // Re-entrancy guard: cancel-during-advance defers `gen.return()`.
   busy = false;
   pendingReturn = false;
-  // Set when an observer is registered at spawn time; 0 means unobserved.
   observeId = 0;
   constructor(readonly gen: Animator<any>) {}
 }
 
 class Ticker {
   alive = true;
-  /** Engine clock at registration; per-tick `t` is `clock - t0`. */
   t0 = 0;
   constructor(readonly cb: (dt: number, t: number) => void) {}
 }
 
-/** Hoisted so the ticker loop body stays catch-free; TurboFan
- *  optimises catch-free loops more aggressively. */
 function safeTick(t: Ticker, dt: number, time: number): void {
   try { t.cb(dt, time); }
   catch (e) { console.error("minim:", e); t.alive = false; }
@@ -99,21 +65,16 @@ function safeTick(t: Ticker, dt: number, time: number): void {
 export class Anim {
   private actives: Active[] = [];
   private tickers: Ticker[] = [];
-  /** Bumped on each death; step compacts only when this changes. */
   private deadSeen = 0;
   private nextObserveId = 0;
-  /** Optional lifecycle observer (assert/spans). Single slot. */
   observer: AnimObserver | undefined = undefined;
-  /** Engine time in seconds since last `stop()`. */
   clock = 0;
 
-  /** Run `g` (or its result if a factory). Returns a disposer. */
   run(g: Animator<any> | (() => Animator<any>)): () => void {
     const a = this.spawn(typeof g === "function" ? g() : g, null);
     return () => this.cancel(a);
   }
 
-  /** Cancel everything; reset clock. */
   stop(): void {
     for (const a of this.actives) this.cancel(a);
     this.actives.length = 0;
@@ -121,7 +82,6 @@ export class Anim {
     this.clock = 0;
   }
 
-  /** Advance by `dt` seconds. */
   step(dt: number): void {
     if (dt > 0) this.clock += dt;
     const clock = this.clock;
@@ -141,21 +101,20 @@ export class Anim {
     const dead0 = this.deadSeen;
     for (let i = 0; i < len; i++) {
       const a = arr[i];
-      if (a.wakeAt >= 0 && a.wakeAt <= clock) {
-        a.wakeAt = 0;
+      if (a.wakeAt !== DEAD && a.wakeAt <= clock) {
+        a.wakeAt = READY;
         this.advance(a, dt);
       }
     }
     if (this.deadSeen !== dead0) {
       let w = 0;
       for (let i = 0; i < arr.length; i++) {
-        if (arr[i].wakeAt >= 0) arr[w++] = arr[i];
+        if (arr[i].wakeAt !== DEAD) arr[w++] = arr[i];
       }
       arr.length = w;
     }
   }
 
-  /** Register a per-frame callback. The cb receives `(dt, t-since-reg)`. */
   onFrame(cb: (dt: number, t: number) => void): () => void {
     const t = new Ticker(cb);
     t.t0 = this.clock;
@@ -180,8 +139,8 @@ export class Anim {
   }
 
   private cancel(a: Active): void {
-    if (a.wakeAt < 0) return;
-    a.wakeAt = -1; this.deadSeen++;
+    if (a.wakeAt === DEAD) return;
+    a.wakeAt = DEAD; this.deadSeen++;
     this.observer?.cancel?.(a.observeId, this.clock);
     const c = a.cleanup; a.cleanup = null;
     if (c) c();
@@ -194,7 +153,7 @@ export class Anim {
     try {
       let r = a.gen.next(resume);
       while (!r.done) {
-        if (a.wakeAt < 0) return;
+        if (a.wakeAt === DEAD) return;
         const v = r.value;
         if (v === undefined) return;
         if (typeof v === "number") {
@@ -205,15 +164,14 @@ export class Anim {
         if (Array.isArray(v)) return this.spawnKids(a, v);
         return this.spawnOne(a, v as Animator<any>);
       }
-      // Natural completion.
-      if (a.wakeAt < 0) return;
-      a.wakeAt = -1; this.deadSeen++;
+      if (a.wakeAt === DEAD) return;
+      a.wakeAt = DEAD; this.deadSeen++;
       this.observer?.complete?.(a.observeId, this.clock);
       const cb = a.onDone; a.onDone = null;
       if (cb) cb(r.value);
     } catch (e) {
       console.error("minim:", e);
-      if (a.wakeAt >= 0) { a.wakeAt = -1; this.deadSeen++; }
+      if (a.wakeAt !== DEAD) { a.wakeAt = DEAD; this.deadSeen++; }
     } finally {
       a.busy = false;
       if (a.pendingReturn) {
@@ -228,17 +186,14 @@ export class Anim {
     let subKids: Active[] | null = null;
 
     const wake = (val?: any): void => {
-      if (resumed || a.wakeAt < 0) return;
+      if (resumed || a.wakeAt === DEAD) return;
       resumed = true;
       const c = a.cleanup; a.cleanup = null;
-      a.wakeAt = 0;
+      a.wakeAt = READY;
       if (c) c();
       this.advance(a, val);
     };
 
-    // Per-disposer indexOf+splice would tidy subKids on individual
-    // child cancel; the host's wrapping cleanup already filters dead
-    // entries via `wakeAt >= 0`, so we skip it.
     const spawn: SpawnFn = <R>(g: Animator<R>, oc?: (v: R) => void) => {
       const c = this.spawn(g, a, oc as any);
       (subKids ??= []).push(c);
@@ -247,38 +202,32 @@ export class Anim {
 
     const userDispose = impl(wake, spawn, this);
 
-    // Lazy wrap: most SuspendFns (drive, untilEvent, untilPromise)
-    // never call `spawn`, so the wrapper is unnecessary — saves a
-    // closure allocation per subscribe.
     const dispose: () => void = subKids === null
       ? userDispose
       : (): void => {
           try { userDispose(); } catch (e) { console.error("minim:", e); }
           if (subKids) {
             const ks = subKids; subKids = null;
-            for (const c of ks) if (c.wakeAt >= 0) this.cancel(c);
+            for (const c of ks) if (c.wakeAt !== DEAD) this.cancel(c);
           }
         };
 
-    if (resumed || a.wakeAt < 0) {
+    if (resumed || a.wakeAt === DEAD) {
       try { dispose(); } catch {}
     } else {
-      a.wakeAt = Infinity;
+      a.wakeAt = PARKED;
       a.cleanup = dispose;
     }
   }
 
-  /** Fast path for `yield childGen` — single Animator. Avoids the
-   *  kids array, the `children` capture, and the count-down closure
-   *  that `spawnKids` allocates. */
   private spawnOne(a: Active, child: Animator<any>): void {
-    a.wakeAt = Infinity;
+    a.wakeAt = PARKED;
     let c: Active | null = null;
-    a.cleanup = () => { if (c && c.wakeAt >= 0) this.cancel(c); };
+    a.cleanup = () => { if (c && c.wakeAt !== DEAD) this.cancel(c); };
     c = this.spawn(child, a, () => {
-      if (a.wakeAt === Infinity && a.cleanup !== null) {
+      if (a.wakeAt === PARKED && a.cleanup !== null) {
         a.cleanup = null;
-        a.wakeAt = 0;
+        a.wakeAt = READY;
         this.advance(a, undefined);
       }
     });
@@ -288,19 +237,19 @@ export class Anim {
     if (kids.length === 0) return this.advance(a, undefined);
     const children: Active[] = [];
     let left = kids.length;
-    a.wakeAt = Infinity;
+    a.wakeAt = PARKED;
     a.cleanup = () => {
-      for (const c of children) if (c.wakeAt >= 0) this.cancel(c);
+      for (const c of children) if (c.wakeAt !== DEAD) this.cancel(c);
     };
     const onChild = (): void => {
-      if (--left === 0 && a.cleanup !== null && a.wakeAt >= 0) {
+      if (--left === 0 && a.cleanup !== null && a.wakeAt !== DEAD) {
         a.cleanup = null;
-        a.wakeAt = 0;
+        a.wakeAt = READY;
         this.advance(a, undefined);
       }
     };
     for (let j = 0; j < kids.length; j++) {
-      if (a.wakeAt < 0) return;
+      if (a.wakeAt === DEAD) return;
       const k = kids[j];
       const child = this.spawn(isGen(k) ? k : asGen(k), a, onChild);
       children.push(child);
@@ -308,29 +257,8 @@ export class Anim {
   }
 }
 
-/** Tick `step(dt, t)` each frame. Return `false` to complete. Routes
- *  through `onFrame` so the per-frame cost is one direct callback,
- *  not a `gen.next()`. */
 export function drive(step: (dt: number, t: number) => boolean | void): Animator {
   return suspend<void>((wake, _spawn, anim) =>
     anim.onFrame((dt, t) => { if (step(dt, t) === false) wake(); }),
   );
-}
-
-/** Browser RAF adapter. Caps single-frame dt at 32 ms so tab-
- *  backgrounding (where browsers throttle then resume with the
- *  accumulated delta) doesn't deliver one giant frame. Returns a
- *  disposer that cancels the RAF loop. */
-export function attachRaf(anim: Anim): () => void {
-  if (typeof requestAnimationFrame !== "function") return () => {};
-  const FRAME_CAP_MS = 32;
-  let rafId = 0, last = 0;
-  const tick = (now: number): void => {
-    rafId = requestAnimationFrame(tick);
-    const dt = last ? Math.min(now - last, FRAME_CAP_MS) / 1000 : 0;
-    last = now;
-    anim.step(dt);
-  };
-  rafId = requestAnimationFrame(tick);
-  return () => { if (rafId) cancelAnimationFrame(rafId); rafId = 0; last = 0; };
 }

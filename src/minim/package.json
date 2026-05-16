@@ -7,6 +7,18 @@
   "module": "./index.ts",
   "types": "./index.ts",
   "sideEffects": false,
+  "scripts": {
+    "test": "vitest --config ../../vitest.config.ts run",
+    "test:watch": "vitest --config ../../vitest.config.ts",
+    "bench": "node --expose-gc ../../node_modules/.bin/vite-node",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "alien-signals": "^3.2.1",
+    "mitata": "^1.0.34",
+    "reactive-framework-test-suite": "^0.0.2",
+    "vitest": "^4.1.6"
+  },
   "author": "Orion Reed",
   "license": "ISC",
   "repository": {

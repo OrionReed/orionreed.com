@@ -18,15 +18,10 @@ import {
   type PayloadOf,
 } from "./anim";
 
-// Local one-shot wrap. Engine has its own internal version for
-// spawnKids; the duplication is one line each, which is less
-// coupling than re-exporting an internal.
-function* once(y: Yieldable): Animator<any> { yield y; }
-
 /** Subscribe a Yieldable from inside a SuspendFn body — bare SuspendFns
  *  subscribe directly (sharing the parent's `spawn` so nested combinators
- *  don't re-wrap), other shapes go through `spawn(once(y))`. Returns the
- *  disposer. Used by `all`, `race`, and similar combinators. */
+ *  don't re-wrap), other shapes get a one-shot generator wrap. Returns
+ *  the disposer. Used by `all`, `race`, and similar combinators. */
 export function spawnYieldable(
   y: Yieldable,
   spawn: SpawnFn,
@@ -38,7 +33,7 @@ export function spawnYieldable(
       w: (v: any) => void, s: SpawnFn, a: Anim,
     ) => () => void)(onDone, spawn, anim);
   }
-  return spawn(once(y), onDone);
+  return spawn((function* () { yield y; })(), onDone);
 }
 
 /** Run children in parallel; complete when all finish; resume with a

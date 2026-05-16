@@ -1,498 +1,329 @@
-// Value types — plain configs through `struct({...})`.
+// values.ts — hand-written value types.
 //
-// New-style declaration: `defaults` entries can be Types directly. The
-// framework reads `translate: Vec` as "field is a Vec, default is
-// Vec.defaults"; `scale: Vec.with({x:1, y:1})` lets you override the
-// default per-field. No separate `nested:` map.
+// Each value-type is a class extending Signal. Methods return the same
+// type for fluent chaining (vec.add(b).scale(2)). Static traits enable
+// generic dispatch via classOf/traitsOf/requireTraits.
 //
-// Other simplifications relative to legacy `signals/values/`:
-//   • `equals` is auto-synthesised from field structure — drop the
-//     hand-written `(a, b) => a.x === b.x && ...` where it's just
-//     structural shallow equality.
-//   • `construct: (...) => T` is gone — plain factory functions
-//     (`rgb`, `box`, `mat`) take positional args and call `Type({...})`.
-//   • `ops` + `scalars` are collapsed into a single `methods` bag.
+// Two ways to use methods reactively:
 //
-// Compare to legacy `signals/values/transform.ts` (130 LOC, ~70 of
-// which is hand-written algebra/lerp/metric/equals): Transform here
-// is ~12 LOC. Capabilities compose from the nested types mechanically.
-
-import { struct, cell, type Cell, type RO } from "./cell";
-
-// Local helper: build a derived RO-cell from a getter that reads from
-// `self`. Skips the `as unknown as RO<T>` casts that bare `computed()`
-// requires — `cell.derived(fn)` returns the right shape already.
-function derived<T>(fn: () => T): RO<T> { return cell.derived(fn); }
-
-// ── Num ─────────────────────────────────────────────────────────────
-
-export const Num = struct({
-  name: "Num",
-  defaults: 0 as number,
-  lerp: (a, b, t) => a + (b - a) * t,
-  linear: { add: (a, b) => a + b, sub: (a, b) => a - b, scale: (a, k) => a * k },
-  metric: (a, b) => Math.abs(a - b),
-  methods: {
-    clamp: (a, lo: number, hi: number) => (a < lo ? lo : a > hi ? hi : a),
-    abs: (a) => Math.abs(a),
-  },
-});
-
-// ── Vec ─────────────────────────────────────────────────────────────
-
-export interface V { x: number; y: number; }
-
-export const Vec = struct({
-  name: "Vec",
-  defaults: { x: 0, y: 0 } as V,
-  lerp: (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }),
-  linear: {
-    add:   (a, b) => ({ x: a.x + b.x, y: a.y + b.y }),
-    sub:   (a, b) => ({ x: a.x - b.x, y: a.y - b.y }),
-    scale: (a, k) => ({ x: a.x * k, y: a.y * k }),
-  },
-  metric: (a, b) => Math.hypot(a.x - b.x, a.y - b.y),
-  methods: {
-    perp: (a): V => ({ x: -a.y, y: a.x }),
-    normalize: (a): V => {
-      const len = Math.hypot(a.x, a.y) || 1;
-      return { x: a.x / len, y: a.y / len };
-    },
-  },
-  getters: {
-    // `length` is reserved (Function.prototype.length); RESERVED_NAMES
-    // throws at struct() time if you try to use it.
-    magnitude(this: Cell<V>) {
-      const self = this;
-      return derived(() => Math.hypot(self().x, self().y));
-    },
-  },
-});
-
-/** Construct a Vec cell from two numbers. */
-export const vec = (x: number, y: number) => Vec({ x, y });
-
-// ── Color ───────────────────────────────────────────────────────────
-
-export interface Color {
-  r: number;
-  g: number;
-  b: number;
-  a: number;
-}
-
-export const Color = struct({
-  name: "Color",
-  defaults: { r: 0, g: 0, b: 0, a: 1 } as Color,
-  // equals auto-synthesised: r === r && g === g && b === b && a === a
-  linear: {
-    add:   (a, b) => ({ r: a.r + b.r, g: a.g + b.g, b: a.b + b.b, a: a.a + b.a }),
-    sub:   (a, b) => ({ r: a.r - b.r, g: a.g - b.g, b: a.b - b.b, a: a.a - b.a }),
-    scale: (a, k) => ({ r: a.r * k, g: a.g * k, b: a.b * k, a: a.a * k }),
-  },
-  /** Component-wise lerp in linear RGBA. */
-  lerp: (a, b, t) => ({
-    r: a.r + (b.r - a.r) * t,
-    g: a.g + (b.g - a.g) * t,
-    b: a.b + (b.b - a.b) * t,
-    a: a.a + (b.a - a.a) * t,
-  }),
-  methods: {
-    /** Convex combination — like lerp but explicit alpha-combine. */
-    blend: (a, b: Color, t: number): Color => ({
-      r: a.r * (1 - t) + b.r * t,
-      g: a.g * (1 - t) + b.g * t,
-      b: a.b * (1 - t) + b.b * t,
-      a: Math.max(a.a, b.a),
-    }),
-    withAlpha: (c, alpha: number): Color => ({ r: c.r, g: c.g, b: c.b, a: alpha }),
-    lighten: (c, amount: number): Color => ({
-      r: Math.min(1, c.r + amount),
-      g: Math.min(1, c.g + amount),
-      b: Math.min(1, c.b + amount),
-      a: c.a,
-    }),
-  },
-  getters: {
-    /** Perceptual luminance ≈ 0..1. Lazy + cached. */
-    luminance(this: Cell<Color>) {
-      const self = this;
-      return derived(() => {
-        const c = self();
-        return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-      });
-    },
-    /** CSS `rgba(...)` string, reactive. */
-    css(this: Cell<Color>) {
-      const self = this;
-      return derived(() => {
-        const c = self();
-        return `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${c.a})`;
-      });
-    },
-  },
-});
-
-/** Construct an opaque Color cell from r, g, b in [0, 1]. */
-export const rgb = (r: number, g: number, b: number) => Color({ r, g, b, a: 1 });
-
-/** Construct a Color cell from r, g, b, a in [0, 1]. */
-export const rgba = (r: number, g: number, b: number, a: number) =>
-  Color({ r, g, b, a });
-
-// ── Matrix2D ────────────────────────────────────────────────────────
+//   1. Method chain:      vec.add(b).scale(2)               N Computeds
+//   2. derive(c => …):    vec.derive(c => c.add(b).scale(2)) 1 Computed
 //
-// 2D affine matrices, SVG/Canvas convention:
+// Both are observationally equivalent. Pick (2) for deep chains.
 //
-//   | a c e |
-//   | b d f |
-//   | 0 0 1 |
-//
-// `multiply(A, B) = A·B` — B applies first, matching SVG `transform`.
-//
-// Plain-value helpers (`identity`, `fromTranslate`, ...) are exported
-// alongside the reactive struct — single source of truth for matrix
-// math. The reactive struct's `multiply`/`invert` methods reuse these.
+// Per-class `derive` is declared on each value-type class, so the
+// chain parameter `c` is properly typed (e.g. VecChain) inside the
+// lambda. There is no Signal.prototype.derive — derive is a value-
+// type concern.
 
-/** Plain 2D affine matrix `{a,b,c,d,e,f}` (SVG/Canvas convention). */
-export interface Matrix2D {
-  a: number;
-  b: number;
-  c: number;
-  d: number;
-  e: number;
-  f: number;
-}
+import {
+  Signal, Computed, Lens, value,
+  type Val, type CommonTraits, type Linear, type Lerp, type Metric, type Equals,
+} from "./engine";
+import { Chain, derived, typedField, typedLensClass } from "./derive";
 
-export const identity = (): Matrix2D => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+// ════════════════════════════════════════════════════════════════════
+// Num — primitive number
+// ════════════════════════════════════════════════════════════════════
 
-export const fromTranslate = (x: number, y: number): Matrix2D =>
-  ({ a: 1, b: 0, c: 0, d: 1, e: x, f: y });
-
-export const fromScale = (x: number, y: number): Matrix2D =>
-  ({ a: x, b: 0, c: 0, d: y, e: 0, f: 0 });
-
-export const fromRotate = (angle: number): Matrix2D => {
-  const s = Math.sin(angle);
-  const c = Math.cos(angle);
-  return { a: c, b: s, c: -s, d: c, e: 0, f: 0 };
+const numLinear: Linear<number> = {
+  add: (a, b) => a + b,
+  sub: (a, b) => a - b,
+  scale: (a, k) => a * k,
 };
+const numLerp: Lerp<number> = (a, b, t) => a + (b - a) * t;
+const numMetric: Metric<number> = (a, b) => Math.abs(a - b);
+const numEquals: Equals<number> = (a, b) => a === b;
 
-export const isIdentity = (m: Matrix2D): boolean =>
-  m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.e === 0 && m.f === 0;
-
-export function multiplyMatrix(a: Matrix2D, b: Matrix2D): Matrix2D {
-  return {
-    a: a.a * b.a + a.c * b.b,
-    b: a.b * b.a + a.d * b.b,
-    c: a.a * b.c + a.c * b.d,
-    d: a.b * b.c + a.d * b.d,
-    e: a.a * b.e + a.c * b.f + a.e,
-    f: a.b * b.e + a.d * b.f + a.f,
-  };
-}
-
-export function invertMatrix(m: Matrix2D): Matrix2D {
-  const det = m.a * m.d - m.b * m.c;
-  if (det === 0) throw new Error("Matrix2D not invertible");
-  const inv = 1 / det;
-  return {
-    a:  m.d * inv,
-    b: -m.b * inv,
-    c: -m.c * inv,
-    d:  m.a * inv,
-    e: (m.c * m.f - m.d * m.e) * inv,
-    f: (m.b * m.e - m.a * m.f) * inv,
-  };
-}
-
-export const transformPoint = (m: Matrix2D, p: V): V => ({
-  x: m.a * p.x + m.c * p.y + m.e,
-  y: m.b * p.x + m.d * p.y + m.f,
-});
-
-// Forward-declare for transformBox / Box's in-method.
-type BoxShape = { x: number; y: number; w: number; h: number };
-
-/** Loose Box enclosing the four transformed corners; identity short-circuits. */
-export function transformBox(m: Matrix2D, b: BoxShape): BoxShape {
-  if (isIdentity(m)) return b;
-  const x0 = b.x;
-  const y0 = b.y;
-  const x1 = b.x + b.w;
-  const y1 = b.y + b.h;
-  const ax = m.a * x0 + m.c * y0 + m.e;
-  const ay = m.b * x0 + m.d * y0 + m.f;
-  const bx = m.a * x1 + m.c * y0 + m.e;
-  const by = m.b * x1 + m.d * y0 + m.f;
-  const cx = m.a * x1 + m.c * y1 + m.e;
-  const cy = m.b * x1 + m.d * y1 + m.f;
-  const dx = m.a * x0 + m.c * y1 + m.e;
-  const dy = m.b * x0 + m.d * y1 + m.f;
-  const minX = Math.min(ax, bx, cx, dx);
-  const maxX = Math.max(ax, bx, cx, dx);
-  const minY = Math.min(ay, by, cy, dy);
-  const maxY = Math.max(ay, by, cy, dy);
-  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
-}
-
-// Clamp scale magnitude away from zero. Firefox's SVG compositor leaks
-// GPU layer textures when an animated transform is exactly singular
-// (det = 0); any non-zero magnitude dodges it. `1e-7` is sub-pixel.
-const SCALE_EPS = 1e-7;
-
-/** Shape transform: `T(t) T(p) R(r) S(s) T(-p)`. Scales clamped away
- *  from zero (Firefox compositor leak on singular matrices). Fast paths
- *  for no-scale / no-rotate cases. */
-export function composeMatrix(t: V, r: number, s: V, pivot: V): Matrix2D {
-  const sx = Math.abs(s.x) < SCALE_EPS ? (s.x < 0 ? -SCALE_EPS : SCALE_EPS) : s.x;
-  const sy = Math.abs(s.y) < SCALE_EPS ? (s.y < 0 ? -SCALE_EPS : SCALE_EPS) : s.y;
-
-  const hasTrans = t.x !== 0 || t.y !== 0;
-  const hasRot = r !== 0;
-  const hasScale = sx !== 1 || sy !== 1;
-  if (!hasTrans && !hasRot && !hasScale) return identity();
-
-  if (!hasRot && !hasScale) return { a: 1, b: 0, c: 0, d: 1, e: t.x, f: t.y };
-
-  if (hasRot && !hasScale) {
-    const cos = Math.cos(r);
-    const sin = Math.sin(r);
-    return {
-      a: cos, b: sin, c: -sin, d: cos,
-      e: t.x + pivot.x - cos * pivot.x + sin * pivot.y,
-      f: t.y + pivot.y - sin * pivot.x - cos * pivot.y,
-    };
+class NumChain extends Chain<number> {
+  add(b: Val<number>): this { this.value += value(b); return this; }
+  sub(b: Val<number>): this { this.value -= value(b); return this; }
+  scale(k: Val<number>): this { this.value *= value(k); return this; }
+  clamp(lo: Val<number>, hi: Val<number>): this {
+    const v = this.value, l = value(lo), h = value(hi);
+    this.value = v < l ? l : v > h ? h : v;
+    return this;
   }
-  if (hasScale && !hasRot) {
-    return {
-      a: sx, b: 0, c: 0, d: sy,
-      e: t.x + pivot.x * (1 - sx),
-      f: t.y + pivot.y * (1 - sy),
-    };
+}
+
+export class Num extends Signal<number> {
+  static traits: CommonTraits<number> = {
+    linear: numLinear, lerp: numLerp, metric: numMetric, equals: numEquals,
+  };
+  static add = numLinear.add;
+  static sub = numLinear.sub;
+  static scale = numLinear.scale;
+  static lerp = numLerp;
+
+  constructor(v: Val<number> = 0) { super(v); }
+
+  // Reactive methods — chainable.
+  add(b: Val<number>): Num { return derived(Num, () => this.value + value(b)); }
+  sub(b: Val<number>): Num { return derived(Num, () => this.value - value(b)); }
+  scale(k: Val<number>): Num { return derived(Num, () => this.value * value(k)); }
+  clamp(lo: Val<number>, hi: Val<number>): Num {
+    return derived(Num, () => {
+      const v = this.value, l = value(lo), h = value(hi);
+      return v < l ? l : v > h ? h : v;
+    });
   }
 
-  let m = hasTrans ? fromTranslate(t.x, t.y) : identity();
-  m = multiplyMatrix(m, fromTranslate(pivot.x, pivot.y));
-  if (hasRot)   m = multiplyMatrix(m, fromRotate(r));
-  if (hasScale) m = multiplyMatrix(m, fromScale(sx, sy));
-  m = multiplyMatrix(m, fromTranslate(-pivot.x, -pivot.y));
-  return m;
+  // Fluent reactive chain. Single Computed, regardless of depth.
+  derive(fn: (c: NumChain) => NumChain): Num {
+    return derived(Num, () => fn(new NumChain(this.value)).value);
+  }
 }
 
-/** Comma-separated — valid as both SVG and CSS `transform`. */
-export const matrixToString = (m: Matrix2D): string =>
-  `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
+export const num = (v: Val<number> = 0): Num => new Num(v);
 
-export const Matrix2D = struct({
-  name: "Matrix2D",
-  defaults: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 } as Matrix2D,
-  // No linear/lerp/metric: matrix algebra isn't a vector-space-over-ℝ.
-  // (You CAN add matrices component-wise but it's rarely useful; the
-  // composable algebra IS matrix multiplication, which isn't `linear`.)
-  // equals auto-synthesised.
-  methods: {
-    multiply: multiplyMatrix,
-    invert: invertMatrix,
-    determinant: (m): number => m.a * m.d - m.b * m.c,
-  },
+// ════════════════════════════════════════════════════════════════════
+// Vec — 2D point
+// ════════════════════════════════════════════════════════════════════
+
+export interface V { x: number; y: number }
+
+const vAdd = (a: V, b: V): V => ({ x: a.x + b.x, y: a.y + b.y });
+const vSub = (a: V, b: V): V => ({ x: a.x - b.x, y: a.y - b.y });
+const vScale = (a: V, k: number): V => ({ x: a.x * k, y: a.y * k });
+const vLerp = (a: V, b: V, t: number): V => ({
+  x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t,
 });
+const vMetric = (a: V, b: V): number => Math.hypot(a.x - b.x, a.y - b.y);
+const vEquals: Equals<V> = (a, b) => a === b || (a.x === b.x && a.y === b.y);
 
-/** Construct a Matrix2D cell from six numbers. */
-export const mat = (
-  a: number, b: number, c: number, d: number, e: number, f: number,
-) => Matrix2D({ a, b, c, d, e, f });
-
-// ── Box ─────────────────────────────────────────────────────────────
-
-/** Plain `{x, y, w, h}` rectangular region. */
-export interface Box {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
+class VecChain extends Chain<V> {
+  add(b: Val<V>): this { this.value = vAdd(this.value, value(b)); return this; }
+  sub(b: Val<V>): this { this.value = vSub(this.value, value(b)); return this; }
+  scale(k: Val<number>): this { this.value = vScale(this.value, value(k)); return this; }
+  lerp(b: Val<V>, t: Val<number>): this { this.value = vLerp(this.value, value(b), value(t)); return this; }
 }
 
-/** Plain Box value constructor. */
+export class Vec extends Signal<V> {
+  static traits: CommonTraits<V> = {
+    linear: { add: vAdd, sub: vSub, scale: vScale },
+    lerp: vLerp, metric: vMetric, equals: vEquals,
+  };
+  static add = vAdd;
+  static sub = vSub;
+  static scale = vScale;
+  static lerp = vLerp;
+  static metric = vMetric;
+
+  constructor(v: Val<V> = { x: 0, y: 0 }) { super(v); }
+
+  add(b: Val<V>): Vec { return derived(Vec, () => vAdd(this.value, value(b))); }
+  sub(b: Val<V>): Vec { return derived(Vec, () => vSub(this.value, value(b))); }
+  scale(k: Val<number>): Vec { return derived(Vec, () => vScale(this.value, value(k))); }
+  lerp(b: Val<V>, t: Val<number>): Vec { return derived(Vec, () => vLerp(this.value, value(b), value(t))); }
+
+  // Per-axis projections — typed Num lenses, no casts at call site.
+  get x(): Num { return typedField(this, "x", NumLens); }
+  get y(): Num { return typedField(this, "y", NumLens); }
+
+  get magnitude(): Num {
+    return this._mag ??= derived(Num, () => Math.hypot(this.value.x, this.value.y));
+  }
+  private _mag?: Num;
+
+  derive(fn: (c: VecChain) => VecChain): Vec {
+    return derived(Vec, () => fn(new VecChain(this.value)).value);
+  }
+}
+
+const NumLens = typedLensClass<number, Num>(Num);
+
+export const vec = (x: Val<number> = 0, y: Val<number> = 0): Vec =>
+  new Vec({ x: value(x), y: value(y) });
+
+// ════════════════════════════════════════════════════════════════════
+// Color — RGBA
+// ════════════════════════════════════════════════════════════════════
+
+export interface C { r: number; g: number; b: number; a: number }
+
+const cAdd = (a: C, b: C): C => ({ r: a.r + b.r, g: a.g + b.g, b: a.b + b.b, a: a.a + b.a });
+const cSub = (a: C, b: C): C => ({ r: a.r - b.r, g: a.g - b.g, b: a.b - b.b, a: a.a - b.a });
+const cScale = (a: C, k: number): C => ({ r: a.r * k, g: a.g * k, b: a.b * k, a: a.a * k });
+const cLerp = (a: C, b: C, t: number): C => ({
+  r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t,
+  b: a.b + (b.b - a.b) * t, a: a.a + (b.a - a.a) * t,
+});
+const cEquals: Equals<C> = (a, b) =>
+  a === b || (a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a);
+
+class ColorChain extends Chain<C> {
+  add(b: Val<C>): this { this.value = cAdd(this.value, value(b)); return this; }
+  scale(k: Val<number>): this { this.value = cScale(this.value, value(k)); return this; }
+  lerp(b: Val<C>, t: Val<number>): this { this.value = cLerp(this.value, value(b), value(t)); return this; }
+}
+
+export class Color extends Signal<C> {
+  static traits: CommonTraits<C> = {
+    linear: { add: cAdd, sub: cSub, scale: cScale },
+    lerp: cLerp, equals: cEquals,
+  };
+  static add = cAdd;
+  static lerp = cLerp;
+
+  constructor(v: Val<C> = { r: 0, g: 0, b: 0, a: 1 }) { super(v); }
+
+  add(b: Val<C>): Color { return derived(Color, () => cAdd(this.value, value(b))); }
+  scale(k: Val<number>): Color { return derived(Color, () => cScale(this.value, value(k))); }
+  lerp(b: Val<C>, t: Val<number>): Color { return derived(Color, () => cLerp(this.value, value(b), value(t))); }
+
+  get luminance(): Num {
+    return this._lum ??= derived(Num, () => {
+      const c = this.value;
+      return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+    });
+  }
+  private _lum?: Num;
+
+  derive(fn: (c: ColorChain) => ColorChain): Color {
+    return derived(Color, () => fn(new ColorChain(this.value)).value);
+  }
+}
+
+export const rgb = (r: number, g: number, b: number): Color => new Color({ r, g, b, a: 1 });
+export const rgba = (r: number, g: number, b: number, a: number): Color => new Color({ r, g, b, a });
+
+// ════════════════════════════════════════════════════════════════════
+// Box — rectangle
+// ════════════════════════════════════════════════════════════════════
+
+export interface B { x: number; y: number; w: number; h: number }
+
+const bAdd = (a: B, b: B): B => ({ x: a.x + b.x, y: a.y + b.y, w: a.w + b.w, h: a.h + b.h });
+const bSub = (a: B, b: B): B => ({ x: a.x - b.x, y: a.y - b.y, w: a.w - b.w, h: a.h - b.h });
+const bScale = (a: B, k: number): B => ({ x: a.x * k, y: a.y * k, w: a.w * k, h: a.h * k });
+const bLerp = (a: B, b: B, t: number): B => ({
+  x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t,
+  w: a.w + (b.w - a.w) * t, h: a.h + (b.h - a.h) * t,
+});
+const bEquals: Equals<B> = (a, b) =>
+  a === b || (a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h);
+
+class BoxChain extends Chain<B> {
+  add(b: Val<B>): this { this.value = bAdd(this.value, value(b)); return this; }
+  scale(k: Val<number>): this { this.value = bScale(this.value, value(k)); return this; }
+  lerp(b: Val<B>, t: Val<number>): this { this.value = bLerp(this.value, value(b), value(t)); return this; }
+  expand(n: Val<number>): this {
+    const b = this.value, nv = value(n);
+    this.value = { x: b.x - nv, y: b.y - nv, w: b.w + 2 * nv, h: b.h + 2 * nv };
+    return this;
+  }
+}
+
+export class Box extends Signal<B> {
+  static traits: CommonTraits<B> = {
+    linear: { add: bAdd, sub: bSub, scale: bScale }, lerp: bLerp, equals: bEquals,
+  };
+  static add = bAdd;
+  static scale = bScale;
+  static lerp = bLerp;
+
+  constructor(v: Val<B> = { x: 0, y: 0, w: 0, h: 0 }) { super(v); }
+
+  expand(n: Val<number>): Box {
+    return derived(Box, () => {
+      const b = this.value, nv = value(n);
+      return { x: b.x - nv, y: b.y - nv, w: b.w + 2 * nv, h: b.h + 2 * nv };
+    });
+  }
+
+  get area(): Num {
+    return this._area ??= derived(Num, () => this.value.w * this.value.h);
+  }
+  private _area?: Num;
+
+  derive(fn: (c: BoxChain) => BoxChain): Box {
+    return derived(Box, () => fn(new BoxChain(this.value)).value);
+  }
+}
+
 export const box = (x: number, y: number, w: number, h: number): Box =>
-  ({ x, y, w, h });
+  new Box({ x, y, w, h });
 
-/** Expand a box by `n` pixels in every direction. */
-export const expandBox = (b: Box, n: number): Box =>
-  box(b.x - n, b.y - n, b.w + 2 * n, b.h + 2 * n);
-
-/** Smallest box enclosing all inputs. */
-export function unionBox(...bs: Box[]): Box {
-  if (bs.length === 0) return box(0, 0, 0, 0);
-  let xMin = bs[0].x;
-  let yMin = bs[0].y;
-  let xMax = xMin + bs[0].w;
-  let yMax = yMin + bs[0].h;
-  for (let i = 1; i < bs.length; i++) {
-    const o = bs[i];
-    if (o.x < xMin) xMin = o.x;
-    if (o.y < yMin) yMin = o.y;
-    if (o.x + o.w > xMax) xMax = o.x + o.w;
-    if (o.y + o.h > yMax) yMax = o.y + o.h;
-  }
-  return box(xMin, yMin, xMax - xMin, yMax - yMin);
-}
-
-/** Perimeter point on a Box facing `toward`. Used by default
- *  Shape boundary. */
-export function boxEdgeFrom(
-  b: Box,
-  toward: { x: number; y: number },
-): { x: number; y: number } {
-  const cx = b.x + b.w / 2;
-  const cy = b.y + b.h / 2;
-  const dx = toward.x - cx;
-  const dy = toward.y - cy;
-  if (dx === 0 && dy === 0) return { x: cx, y: cy };
-  const k = Math.min(
-    dx === 0 ? Infinity : (b.w / 2) / Math.abs(dx),
-    dy === 0 ? Infinity : (b.h / 2) / Math.abs(dy),
-  );
-  return { x: cx + dx * k, y: cy + dy * k };
-}
-
-export const Box = struct({
-  name: "Box",
-  defaults: { x: 0, y: 0, w: 0, h: 0 } as Box,
-  // equals auto-synthesised.
-  linear: {
-    add:   (a, b) => ({ x: a.x + b.x, y: a.y + b.y, w: a.w + b.w, h: a.h + b.h }),
-    sub:   (a, b) => ({ x: a.x - b.x, y: a.y - b.y, w: a.w - b.w, h: a.h - b.h }),
-    scale: (a, k) => ({ x: a.x * k, y: a.y * k, w: a.w * k, h: a.h * k }),
-  },
-  lerp: (a, b, t) => ({
-    x: a.x + (b.x - a.x) * t,
-    y: a.y + (b.y - a.y) * t,
-    w: a.w + (b.w - a.w) * t,
-    h: a.h + (b.h - a.h) * t,
-  }),
-  metric: (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.w - b.w, a.h - b.h),
-  methods: {
-    expand: expandBox,
-    union: (a, b: Box): Box => unionBox(a, b),
-    in: (b, m: Matrix2D): Box => transformBox(m, b) as Box,
-    /** Parametric anchor: `(0,0)` top-left, `(1,1)` bottom-right. */
-    at: (b, u: number, v: number): V => ({ x: b.x + u * b.w, y: b.y + v * b.h }),
-    /** Point-in-box test. */
-    contains: (b, p: V): boolean =>
-      p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h,
-  },
-  getters: {
-    /** Area of this box, reactive + cached. */
-    area(this: Cell<Box>) {
-      const self = this;
-      return derived(() => {
-        const b = self();
-        return b.w * b.h;
-      });
-    },
-    /** Self-reference — lets reactive Box cells satisfy the `BoxLike`
-     *  interface (which has `.box: RO<Box>`). Shape/Part hold the Box
-     *  as a field; bare reactive Box cells satisfy the same surface
-     *  via this self-getter (`b.box === b`). */
-    box(this: any) {
-      return this;
-    },
-    /** Centre — `at(0.5, 0.5)`, cached. */
-    center(this: Cell<Box>) {
-      const self = this;
-      return derived(() => {
-        const b = self();
-        return { x: b.x + 0.5 * b.w, y: b.y + 0.5 * b.h };
-      });
-    },
-    top(this: Cell<Box>) {
-      const self = this;
-      return derived(() => {
-        const b = self();
-        return { x: b.x + 0.5 * b.w, y: b.y };
-      });
-    },
-    bottom(this: Cell<Box>) {
-      const self = this;
-      return derived(() => {
-        const b = self();
-        return { x: b.x + 0.5 * b.w, y: b.y + b.h };
-      });
-    },
-    left(this: Cell<Box>) {
-      const self = this;
-      return derived(() => {
-        const b = self();
-        return { x: b.x, y: b.y + 0.5 * b.h };
-      });
-    },
-    right(this: Cell<Box>) {
-      const self = this;
-      return derived(() => {
-        const b = self();
-        return { x: b.x + b.w, y: b.y + 0.5 * b.h };
-      });
-    },
-  },
-});
-
-/** Reactive parametric anchor on a Box — sugar over `box.at(u, v)`. */
-export const boxAt = (b: { at: (u: number, v: number) => any }, u: number, v: number) =>
-  b.at(u, v);
-
-// ── BoxLike — structural surface ────────────────────────────────────
-//
-// Implemented by reactive `Box` cells AND by shapes/parts that carry
-// a `.box` field. Consumers take `BoxLike` and don't care which.
-
-export interface BoxLike {
-  readonly box: RO<Box>;
-  readonly x: RO<number>;
-  readonly y: RO<number>;
-  readonly w: RO<number>;
-  readonly h: RO<number>;
-  readonly center: RO<V>;
-  readonly top: RO<V>;
-  readonly bottom: RO<V>;
-  readonly left: RO<V>;
-  readonly right: RO<V>;
-  at(u: number, v: number): RO<V>;
-}
-
-/** Detect a `BoxLike` value structurally — anything with `box` and
- *  `at`. Accepts both object-shape (Shape/Part instances) and
- *  function-shape (signals2 reactive Box cells, which are callable). */
-export function isBox(v: unknown): v is BoxLike {
-  return (
-    (typeof v === "object" || typeof v === "function") &&
-    v !== null &&
-    "box" in (v as object) &&
-    typeof (v as { at?: unknown }).at === "function"
-  );
-}
-
-// ── Transform ───────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════
+// Transform — composite
+// ════════════════════════════════════════════════════════════════════
 
 export interface Tr {
-  translate: V; rotate: number; scale: V; origin: V; opacity: number;
+  translate: V; scale: V; origin: V; rotate: number; opacity: number;
 }
 
-// NEW STYLE: typed-entry defaults. No separate `nested:` map needed.
-// The framework reads each entry:
-//   - `Vec` (a Type)              → typed field, init = Vec.defaults
-//   - `Num.with(1)` (a FieldSpec) → typed field, init overrides default
-//   - Plain values                → primitive field, no type
-//
-// Composite linear/lerp/metric/equals are synthesised from this map.
-export const Transform = struct({
-  name: "Transform",
-  defaults: {
-    translate: Vec,                              // typed, init = {x:0, y:0}
-    scale: Vec.with({ x: 1, y: 1 }),             // typed, override init
-    origin: Vec,                                 // typed
-    rotate: Num,                                 // typed, init = 0
-    opacity: Num.with(1),                        // typed, override init
-  },
-  storage: "soa",
+const trAdd = (a: Tr, b: Tr): Tr => ({
+  translate: vAdd(a.translate, b.translate),
+  scale: vAdd(a.scale, b.scale),
+  origin: vAdd(a.origin, b.origin),
+  rotate: a.rotate + b.rotate,
+  opacity: a.opacity + b.opacity,
 });
+const trLerp = (a: Tr, b: Tr, t: number): Tr => ({
+  translate: vLerp(a.translate, b.translate, t),
+  scale: vLerp(a.scale, b.scale, t),
+  origin: vLerp(a.origin, b.origin, t),
+  rotate: a.rotate + (b.rotate - a.rotate) * t,
+  opacity: a.opacity + (b.opacity - a.opacity) * t,
+});
+const trEquals: Equals<Tr> = (a, b) =>
+  a === b || (
+    vEquals(a.translate, b.translate) &&
+    vEquals(a.scale, b.scale) &&
+    vEquals(a.origin, b.origin) &&
+    a.rotate === b.rotate &&
+    a.opacity === b.opacity
+  );
+
+const TR_DEFAULT: Tr = { translate: { x: 0, y: 0 }, scale: { x: 1, y: 1 }, origin: { x: 0, y: 0 }, rotate: 0, opacity: 1 };
+
+class TrChain extends Chain<Tr> {
+  add(b: Val<Tr>): this { this.value = trAdd(this.value, value(b)); return this; }
+  lerp(b: Val<Tr>, t: Val<number>): this { this.value = trLerp(this.value, value(b), value(t)); return this; }
+}
+
+export class Transform extends Signal<Tr> {
+  static traits: CommonTraits<Tr> = { lerp: trLerp, equals: trEquals };
+  static add = trAdd;
+  static lerp = trLerp;
+
+  constructor(v: Val<Tr> = TR_DEFAULT) { super(v); }
+
+  add(b: Val<Tr>): Transform { return derived(Transform, () => trAdd(this.value, value(b))); }
+  lerp(b: Val<Tr>, t: Val<number>): Transform { return derived(Transform, () => trLerp(this.value, value(b), value(t))); }
+
+  // Typed nested fields — Vec/Num backed by typed lenses, no casts.
+  get translate(): Vec { return typedField(this, "translate", VecLens); }
+  get scale(): Vec { return typedField(this, "scale", VecLens); }
+  get origin(): Vec { return typedField(this, "origin", VecLens); }
+  get rotate(): Num { return typedField(this, "rotate", NumLens); }
+  get opacity(): Num { return typedField(this, "opacity", NumLens); }
+
+  derive(fn: (c: TrChain) => TrChain): Transform {
+    return derived(Transform, () => fn(new TrChain(this.value)).value);
+  }
+}
+
+const VecLens = typedLensClass<V, Vec>(Vec);
+
+export const transform = (init?: Partial<Tr>): Transform =>
+  new Transform(init ? { ...TR_DEFAULT, ...init } : TR_DEFAULT);
+
+// ════════════════════════════════════════════════════════════════════
+// mean<T> — generic op via traits
+// ════════════════════════════════════════════════════════════════════
+
+import { computed, requireTraits } from "./engine";
+
+/** Reactive arithmetic mean of N cells of the same type T. */
+export function mean<T>(...cells: Signal<T>[]): Computed<T> {
+  if (cells.length === 0) throw new Error("mean: need ≥1 cell");
+  const { linear } = requireTraits(cells[0], "linear");
+  const n = cells.length;
+  const invN = 1 / n;
+  return computed(() => {
+    let acc = cells[0].value;
+    for (let i = 1; i < n; i++) acc = linear.add(acc, cells[i].value);
+    return linear.scale(acc, invN);
+  });
+}
