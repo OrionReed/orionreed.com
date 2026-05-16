@@ -1,6 +1,6 @@
 // _struct3.test.ts — verify class-based struct.
 
-import { signal, computed, effect, batch, struct, type Cell, Lens } from "./struct3";
+import { signal, computed, effect, batch, struct, type Cell, Lens } from "./signals";
 
 let passed = 0, failed = 0;
 function check(name: string, cond: boolean): void {

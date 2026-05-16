@@ -1,6 +1,6 @@
 // _core3.test.ts — verify class-based engine correctness.
 
-import { signal, computed, lens, effect, batch, follow, mirror, Signal, Computed } from "./core3";
+import { signal, computed, lens, effect, batch, follow, mirror, Signal, Computed } from "./signals";
 
 let passed = 0, failed = 0;
 function check(name: string, cond: boolean): void {

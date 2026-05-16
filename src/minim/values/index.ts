@@ -73,7 +73,7 @@ export { Anchor, Dir } from "./anchor";
 
 // ── Anim adapters ───────────────────────────────────────────────
 //
-// `clockSignal(anim)` projects `anim.clockMs` (a plain number) into
+// `clockSignal(anim)` projects `anim.clock` (a plain number) into
 // a `ReadonlyCell<number>`. Anim itself has no signal dependency;
 // users who want reactive clock access bridge through this adapter.
 export { clockSignal } from "./anim-clock";

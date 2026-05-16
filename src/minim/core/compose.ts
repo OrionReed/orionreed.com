@@ -8,14 +8,38 @@
 //   yield* rand(branch0, branch1, branch2);        // pick one uniformly
 
 import {
-  suspend,
-  asGen,
+  Anim,
   isGen,
+  suspend,
   type Animator,
-  type Yieldable,
   type SpawnFn,
+  type SuspendFn,
+  type Yieldable,
   type PayloadOf,
 } from "./anim";
+
+// Local one-shot wrap. Engine has its own internal version for
+// spawnKids; the duplication is one line each, which is less
+// coupling than re-exporting an internal.
+function* once(y: Yieldable): Animator<any> { yield y; }
+
+/** Subscribe a Yieldable from inside a SuspendFn body — bare SuspendFns
+ *  subscribe directly (sharing the parent's `spawn` so nested combinators
+ *  don't re-wrap), other shapes go through `spawn(once(y))`. Returns the
+ *  disposer. Used by `all`, `race`, and similar combinators. */
+export function spawnYieldable(
+  y: Yieldable,
+  spawn: SpawnFn,
+  anim: Anim,
+  onDone: (v: any) => void,
+): () => void {
+  if (typeof y === "function" && !isGen(y)) {
+    return (y as SuspendFn<any> as (
+      w: (v: any) => void, s: SpawnFn, a: Anim,
+    ) => () => void)(onDone, spawn, anim);
+  }
+  return spawn(once(y), onDone);
+}
 
 /** Run children in parallel; complete when all finish; resume with a
  *  typed tuple of their return values:
@@ -29,7 +53,7 @@ export function all<Cs extends readonly Yieldable[]>(
   ...children: Cs
 ): Animator<{ [K in keyof Cs]: PayloadOf<Cs[K]> }> {
   type R = { [K in keyof Cs]: PayloadOf<Cs[K]> };
-  return suspend<R>((wake, spawn) => {
+  return suspend<R>((wake, spawn, anim) => {
     if (children.length === 0) {
       wake([] as unknown as R);
       return () => {};
@@ -37,26 +61,14 @@ export function all<Cs extends readonly Yieldable[]>(
     const results = new Array(children.length);
     let remaining = children.length;
     const disposers: (() => void)[] = [];
-    const handle = (i: number) => (value: unknown) => {
-      results[i] = value;
-      if (--remaining === 0) wake(results as unknown as R);
-    };
     for (let i = 0; i < children.length; i++) {
-      const c = children[i];
-      if (typeof c === "function" && !isGen(c)) {
-        disposers.push(
-          (c as (wake: (v: unknown) => void, spawn: SpawnFn) => () => void)(
-            handle(i),
-            spawn,
-          ),
-        );
-      } else {
-        disposers.push(spawn(asGen(c), handle(i)));
-      }
+      const idx = i;
+      disposers.push(spawnYieldable(children[i], spawn, anim, (v) => {
+        results[idx] = v;
+        if (--remaining === 0) wake(results as unknown as R);
+      }));
     }
-    return () => {
-      for (const d of disposers) d();
-    };
+    return () => { for (const d of disposers) d(); };
   });
 }
 

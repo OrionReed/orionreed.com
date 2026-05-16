@@ -34,10 +34,11 @@
 import {
   suspend,
   isGen,
+  drive,
   type Animator,
   type Yieldable,
 } from "../core/anim";
-import { drive } from "../core/drive";
+import { mapDt } from "../core/composability";
 import { easeOut } from "../core/easings";
 import { signal, Signal } from "./signal";
 import { asReader, toSig, type Val } from "./arg";
@@ -57,14 +58,17 @@ import { race, untilTrue } from "./suspensions";
  *  OR a reactive cell (interpreted as wait-until-truthy). */
 export type Playable<R = void> = Yieldable | Animator<R> | ReadonlyCell<unknown>;
 
-/** Normalize a `Playable` to an `Animator`. Cells become a
- *  `untilTrue(...)` wait; everything else delegates to `yieldableGen`
- *  which already handles the runtime's Yieldable variants. */
-function playableGen<R>(p: Playable<R>): Animator<R> {
+/** Normalize a `Playable` to an `Animator`. Cell → `untilTrue` wait;
+ *  Animator → `yield*` it (preserves return); other Yieldables (number,
+ *  array, undefined, SuspendFn) → just yield them once for the runtime
+ *  to interpret. */
+function* playableGen<R>(p: Playable<R>): Animator<R> {
   if (p instanceof Signal) {
-    return untilTrue(p as ReadonlyCell<unknown>) as unknown as Animator<R>;
+    return (yield* untilTrue(p as ReadonlyCell<unknown>) as any) as R;
   }
-  return yieldableGen(p as Yieldable) as Animator<R>;
+  if (isGen(p)) return yield* p as Animator<R>;
+  if (p !== undefined) yield p as Yieldable;
+  return undefined as R;
 }
 
 // ── Play<R> — fluent generator surface ────────────────────────────
@@ -141,23 +145,19 @@ class PlayImpl<R = void> implements Play<R> {
 // Exported from the file so the sibling `compose.ts` can import them,
 // but NOT re-exported from `signals/index.ts` — not public API.
 
-/** Wrap a gen so its child Active runs at `scale`. */
+/** Wrap a gen so its child runs at `scale`. Built from the userland
+ *  `mapDt` wrapper — every numeric resume value is multiplied by the
+ *  current `scale.value`. Static scales skip the thunk. */
 export function scaledChild<R>(
   g: Animator<R>,
   scale: Val<number>,
 ): Animator<R> {
-  // Bridge `Val<number>` to the runtime's `number | () => number`.
-  // Static scale stays a primitive so the runtime can skip the thunk
-  // call; everything else flows through `asReader`.
-  const arg: number | (() => number) =
-    typeof scale === "number" ? scale : asReader(scale);
-  return suspend<R>((wake, spawn) => {
-    // wake's signature varies on `R extends void`. The runtime passes
-    // whatever the child returned; cast to a permissive shape for the
-    // call.
-    const finish = (v: unknown) => (wake as (v?: unknown) => void)(v);
-    return spawn(g, finish, arg);
-  });
+  if (typeof scale === "number") {
+    const k = scale;
+    return mapDt((dt) => (typeof dt === "number" ? dt * k : dt), g);
+  }
+  const get = asReader(scale);
+  return mapDt((dt) => (typeof dt === "number" ? dt * get() : dt), g);
 }
 
 /** `Val<number>` → a sleep-N generator. Resolves the value once at
@@ -165,26 +165,6 @@ export function scaledChild<R>(
 export function* sleepGen(n: Val<number>): Animator {
   const v = typeof n === "number" ? n : toSig(n).value;
   if (v > 0) yield v;
-}
-
-/** Yield-dispatch helper used by `.then`, `play(...)` variadic, and
- *  `compose.ts:after`. Handles every `Yieldable` shape uniformly. */
-export function* yieldableGen(y: Yieldable): Animator<unknown> {
-  if (y === undefined) return undefined;
-  if (typeof y === "number") {
-    if (y > 0) yield y;
-    return undefined;
-  }
-  if (Array.isArray(y)) {
-    yield y;
-    return undefined;
-  }
-  if (typeof y === "function" && !isGen(y)) {
-    // Bare SuspendFn — yield it for the runtime to subscribe.
-    yield y;
-    return undefined;
-  }
-  return yield* y as Animator<unknown>;
 }
 
 // ── play() — the one entry point ──────────────────────────────────

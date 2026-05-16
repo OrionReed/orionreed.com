@@ -1,6 +1,6 @@
 // _real_world.test.ts — real-world correctness scenarios we haven't tested.
 
-import { signal, computed, effect, batch, struct, type Cell, follow, mirror, lens } from "./struct3";
+import { signal, computed, effect, batch, struct, type Cell, follow, mirror, lens } from "./signals";
 
 let passed = 0, failed = 0;
 function check(name: string, cond: boolean): void {

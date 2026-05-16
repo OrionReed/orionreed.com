@@ -87,9 +87,8 @@ export {
 
 // ── play + tween (the fluent surface) ─────────────────────────────
 //
-// `LERP` symbol, `scaledChild`, `sleepGen`, `yieldableGen` are
-// framework-internal — used by `struct.ts` and `compose.ts` only.
-// Not re-exported.
+// `LERP` symbol, `scaledChild`, `sleepGen` are framework-internal —
+// used by `struct.ts` and `compose.ts` only. Not re-exported.
 export {
   play,
   tween,

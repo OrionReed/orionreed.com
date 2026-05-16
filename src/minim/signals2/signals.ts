@@ -2,11 +2,10 @@
 //
 // Two sections:
 //
-//   1. ENGINE — class-based reactivity (Signal/Computed/Lens) using the
-//      alien-signals algorithm. Construction ~7ns, reads ~4ns, writes
-//      ~9ns. Memory ~90B/cell. Aligned with preact-signals, TC39
-//      Signal.State, MobX, Vue ref, alien-signals-starter — the entire
-//      ecosystem's class-based convention.
+//   1. ENGINE — class-based reactivity (Signal/Computed/Lens/Effect) using
+//      the alien-signals algorithm. Polymorphic dispatch via `_update` /
+//      `_notify` / `_unwatched` on each class. Algorithm at module level
+//      (no closure factory). Construction ~7ns, reads ~4ns, writes ~9ns.
 //
 //   2. STRUCT — typed cells via `struct({...})`:
 //        cell.value          read/write
@@ -23,7 +22,7 @@
 // Algorithm is unchanged from alien-signals. Glitch-freeness preserved.
 
 // ════════════════════════════════════════════════════════════════════
-// ENGINE — alien-signals algorithm, class-based shell
+// ENGINE — alien-signals algorithm, polymorphic class shell
 // ════════════════════════════════════════════════════════════════════
 
 interface ReactiveNode {
@@ -32,6 +31,9 @@ interface ReactiveNode {
   subs?: Link;
   subsTail?: Link;
   flags: number;
+  _update(): boolean;
+  _notify(): void;
+  _unwatched(): void;
 }
 
 interface Link {
@@ -58,174 +60,7 @@ const ReactiveFlags = {
 
 const HasChildEffect = 64;
 
-// Use the same makeSystem closure pattern as core.ts. It allows the
-// algorithm to be configured for different node-type dispatches via the
-// 3 callbacks (update / notify / unwatched). Kept here for parity.
-function makeSystem(
-  update: (sub: ReactiveNode) => boolean,
-  notify: (sub: ReactiveNode) => void,
-  unwatched: (sub: ReactiveNode) => void,
-) {
-  function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
-    const prevDep = sub.depsTail;
-    if (prevDep !== undefined && prevDep.dep === dep) return;
-    const nextDep = prevDep !== undefined ? prevDep.nextDep : sub.deps;
-    if (nextDep !== undefined && nextDep.dep === dep) {
-      nextDep.version = version;
-      sub.depsTail = nextDep;
-      return;
-    }
-    const prevSub = dep.subsTail;
-    if (prevSub !== undefined && prevSub.version === version && prevSub.sub === sub) return;
-    const newLink: Link = (sub.depsTail = dep.subsTail = {
-      version, dep, sub, prevDep, nextDep, prevSub, nextSub: undefined,
-    });
-    if (nextDep !== undefined) nextDep.prevDep = newLink;
-    if (prevDep !== undefined) prevDep.nextDep = newLink;
-    else sub.deps = newLink;
-    if (prevSub !== undefined) prevSub.nextSub = newLink;
-    else dep.subs = newLink;
-  }
-
-  function unlink(l: Link, sub: ReactiveNode = l.sub): Link | undefined {
-    const { dep, prevDep, nextDep, nextSub, prevSub } = l;
-    if (nextDep !== undefined) nextDep.prevDep = prevDep;
-    else sub.depsTail = prevDep;
-    if (prevDep !== undefined) prevDep.nextDep = nextDep;
-    else sub.deps = nextDep;
-    if (nextSub !== undefined) nextSub.prevSub = prevSub;
-    else dep.subsTail = prevSub;
-    if (prevSub !== undefined) prevSub.nextSub = nextSub;
-    else if ((dep.subs = nextSub) === undefined) unwatched(dep);
-    return nextDep;
-  }
-
-  function propagate(start: Link, innerWrite: boolean): void {
-    let l: Link | undefined = start;
-    let next: Link | undefined = start.nextSub;
-    let stack: Stack<Link | undefined> | undefined;
-    top: do {
-      const sub: ReactiveNode = l!.sub;
-      let flags = sub.flags;
-      if (!(flags & (ReactiveFlags.RecursedCheck | ReactiveFlags.Recursed | ReactiveFlags.Dirty | ReactiveFlags.Pending))) {
-        sub.flags = flags | ReactiveFlags.Pending;
-        if (innerWrite) sub.flags |= ReactiveFlags.Recursed;
-      } else if (!(flags & (ReactiveFlags.RecursedCheck | ReactiveFlags.Recursed))) {
-        flags = ReactiveFlags.None;
-      } else if (!(flags & ReactiveFlags.RecursedCheck)) {
-        sub.flags = (flags & ~ReactiveFlags.Recursed) | ReactiveFlags.Pending;
-      } else if (!(flags & (ReactiveFlags.Dirty | ReactiveFlags.Pending)) && isValidLink(l!, sub)) {
-        sub.flags = flags | (ReactiveFlags.Recursed | ReactiveFlags.Pending);
-        flags &= ReactiveFlags.Mutable;
-      } else {
-        flags = ReactiveFlags.None;
-      }
-      if (flags & ReactiveFlags.Watching) notify(sub);
-      if (flags & ReactiveFlags.Mutable) {
-        const subSubs: Link | undefined = sub.subs;
-        if (subSubs !== undefined) {
-          const nextSub = (l = subSubs).nextSub;
-          if (nextSub !== undefined) {
-            stack = { value: next, prev: stack };
-            next = nextSub;
-          }
-          continue;
-        }
-      }
-      if ((l = next!) !== undefined) {
-        next = l.nextSub;
-        continue;
-      }
-      while (stack !== undefined) {
-        l = stack.value;
-        stack = stack.prev;
-        if (l !== undefined) {
-          next = l.nextSub;
-          continue top;
-        }
-      }
-      break;
-    } while (true);
-  }
-
-  function checkDirty(startLink: Link, startSub: ReactiveNode): boolean {
-    let l = startLink;
-    let sub = startSub;
-    let stack: Stack<Link> | undefined;
-    let checkDepth = 0;
-    let dirty = false;
-    top: do {
-      const dep = l.dep;
-      const flags = dep.flags;
-      if (sub.flags & ReactiveFlags.Dirty) dirty = true;
-      else if ((flags & (ReactiveFlags.Mutable | ReactiveFlags.Dirty)) === (ReactiveFlags.Mutable | ReactiveFlags.Dirty)) {
-        const subs = dep.subs!;
-        if (update(dep)) {
-          if (subs.nextSub !== undefined) shallowPropagate(subs);
-          dirty = true;
-        }
-      } else if ((flags & (ReactiveFlags.Mutable | ReactiveFlags.Pending)) === (ReactiveFlags.Mutable | ReactiveFlags.Pending)) {
-        stack = { value: l, prev: stack };
-        l = dep.deps!;
-        sub = dep;
-        ++checkDepth;
-        continue;
-      }
-      if (!dirty) {
-        const nextDep = l.nextDep;
-        if (nextDep !== undefined) { l = nextDep; continue; }
-      }
-      while (checkDepth--) {
-        l = stack!.value;
-        stack = stack!.prev;
-        if (dirty) {
-          const subs = sub.subs!;
-          if (update(sub)) {
-            if (subs.nextSub !== undefined) shallowPropagate(subs);
-            sub = l.sub;
-            continue;
-          }
-          dirty = false;
-        } else {
-          sub.flags &= ~ReactiveFlags.Pending;
-        }
-        sub = l.sub;
-        const nextDep = l.nextDep;
-        if (nextDep !== undefined) { l = nextDep; continue top; }
-      }
-      return dirty && !!sub.flags;
-    } while (true);
-  }
-
-  function shallowPropagate(l: Link): void {
-    do {
-      const sub = l.sub;
-      const flags = sub.flags;
-      if ((flags & (ReactiveFlags.Pending | ReactiveFlags.Dirty)) === ReactiveFlags.Pending) {
-        sub.flags = flags | ReactiveFlags.Dirty;
-        if ((flags & (ReactiveFlags.Watching | ReactiveFlags.RecursedCheck)) === ReactiveFlags.Watching) notify(sub);
-      }
-    } while ((l = l.nextSub!) !== undefined);
-  }
-
-  function isValidLink(checkLink: Link, sub: ReactiveNode): boolean {
-    let l = sub.depsTail;
-    while (l !== undefined) {
-      if (l === checkLink) return true;
-      l = l.prevDep;
-    }
-    return false;
-  }
-
-  return { link, unlink, propagate, checkDirty, shallowPropagate };
-}
-
-// ── Engine state ───────────────────────────────────────────────────
-
-interface EffectNode extends ReactiveNode {
-  fn(): (() => void) | void;
-  cleanup: (() => void) | void;
-}
+// ── Engine state ────────────────────────────────────────────────────
 
 let cycle = 0;
 let runDepth = 0;
@@ -233,62 +68,167 @@ let batchDepth = 0;
 let notifyIndex = 0;
 let queuedLength = 0;
 let activeSub: ReactiveNode | undefined;
-const queued: (EffectNode | undefined)[] = [];
+const queued: (Effect | undefined)[] = [];
 
-const { link, unlink, propagate, checkDirty, shallowPropagate } = makeSystem(
-  (node) => {
-    if (node instanceof Signal) return node._update();
-    if (node instanceof Computed) return node._update();
-    if (node instanceof Lens) return node._update();
-    node.flags = ReactiveFlags.Mutable;
-    return true;
-  },
-  (effect) => {
-    let e = effect as EffectNode;
-    let insertIndex = queuedLength;
-    const firstInsertedIndex = insertIndex;
-    do {
-      queued[insertIndex++] = e;
-      e.flags &= ~ReactiveFlags.Watching;
-      const next = e.subs?.sub as EffectNode | undefined;
-      if (next === undefined || !(next.flags & ReactiveFlags.Watching)) break;
-      e = next;
-    } while (true);
-    queuedLength = insertIndex;
-    let idx = insertIndex;
-    let firstIdx = firstInsertedIndex;
-    while (firstIdx < --idx) {
-      const left = queued[firstIdx];
-      queued[firstIdx++] = queued[idx];
-      queued[idx] = left;
+// ── Algorithm (was alien's createReactiveSystem, inlined) ──────────
+
+function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
+  const prevDep = sub.depsTail;
+  if (prevDep !== undefined && prevDep.dep === dep) return;
+  const nextDep = prevDep !== undefined ? prevDep.nextDep : sub.deps;
+  if (nextDep !== undefined && nextDep.dep === dep) {
+    nextDep.version = version;
+    sub.depsTail = nextDep;
+    return;
+  }
+  const prevSub = dep.subsTail;
+  if (prevSub !== undefined && prevSub.version === version && prevSub.sub === sub) return;
+  const newLink: Link = (sub.depsTail = dep.subsTail = {
+    version, dep, sub, prevDep, nextDep, prevSub, nextSub: undefined,
+  });
+  if (nextDep !== undefined) nextDep.prevDep = newLink;
+  if (prevDep !== undefined) prevDep.nextDep = newLink;
+  else sub.deps = newLink;
+  if (prevSub !== undefined) prevSub.nextSub = newLink;
+  else dep.subs = newLink;
+}
+
+function unlink(l: Link, sub: ReactiveNode = l.sub): Link | undefined {
+  const { dep, prevDep, nextDep, nextSub, prevSub } = l;
+  if (nextDep !== undefined) nextDep.prevDep = prevDep;
+  else sub.depsTail = prevDep;
+  if (prevDep !== undefined) prevDep.nextDep = nextDep;
+  else sub.deps = nextDep;
+  if (nextSub !== undefined) nextSub.prevSub = prevSub;
+  else dep.subsTail = prevSub;
+  if (prevSub !== undefined) prevSub.nextSub = nextSub;
+  else if ((dep.subs = nextSub) === undefined) dep._unwatched();
+  return nextDep;
+}
+
+function propagate(start: Link, innerWrite: boolean): void {
+  let l: Link | undefined = start;
+  let next: Link | undefined = start.nextSub;
+  let stack: Stack<Link | undefined> | undefined;
+  top: do {
+    const sub: ReactiveNode = l!.sub;
+    let flags = sub.flags;
+    if (!(flags & (ReactiveFlags.RecursedCheck | ReactiveFlags.Recursed | ReactiveFlags.Dirty | ReactiveFlags.Pending))) {
+      sub.flags = flags | ReactiveFlags.Pending;
+      if (innerWrite) sub.flags |= ReactiveFlags.Recursed;
+    } else if (!(flags & (ReactiveFlags.RecursedCheck | ReactiveFlags.Recursed))) {
+      flags = ReactiveFlags.None;
+    } else if (!(flags & ReactiveFlags.RecursedCheck)) {
+      sub.flags = (flags & ~ReactiveFlags.Recursed) | ReactiveFlags.Pending;
+    } else if (!(flags & (ReactiveFlags.Dirty | ReactiveFlags.Pending)) && isValidLink(l!, sub)) {
+      sub.flags = flags | (ReactiveFlags.Recursed | ReactiveFlags.Pending);
+      flags &= ReactiveFlags.Mutable;
+    } else {
+      flags = ReactiveFlags.None;
     }
-  },
-  (node) => {
-    if (node instanceof Computed || node instanceof Lens) {
-      if (node.depsTail !== undefined) {
-        node.flags = ReactiveFlags.Mutable | ReactiveFlags.Dirty;
-        disposeAllDepsInReverse(node);
+    if (flags & ReactiveFlags.Watching) sub._notify();
+    if (flags & ReactiveFlags.Mutable) {
+      const subSubs: Link | undefined = sub.subs;
+      if (subSubs !== undefined) {
+        const nextSub = (l = subSubs).nextSub;
+        if (nextSub !== undefined) {
+          stack = { value: next, prev: stack };
+          next = nextSub;
+        }
+        continue;
       }
-    } else if (node instanceof Signal) {
-      // no cleanup
-    } else if ("fn" in node) {
-      // effect cleanup
-      const e = node as EffectNode;
-      e.flags = ReactiveFlags.None;
-      disposeAllDepsInReverse(e);
-      const sub = e.subs;
-      if (sub !== undefined) unlink(sub);
-      if (e.cleanup) runCleanup(e);
     }
-  },
-);
+    if ((l = next!) !== undefined) {
+      next = l.nextSub;
+      continue;
+    }
+    while (stack !== undefined) {
+      l = stack.value;
+      stack = stack.prev;
+      if (l !== undefined) {
+        next = l.nextSub;
+        continue top;
+      }
+    }
+    break;
+  } while (true);
+}
+
+function checkDirty(startLink: Link, startSub: ReactiveNode): boolean {
+  let l = startLink;
+  let sub = startSub;
+  let stack: Stack<Link> | undefined;
+  let checkDepth = 0;
+  let dirty = false;
+  top: do {
+    const dep = l.dep;
+    const flags = dep.flags;
+    if (sub.flags & ReactiveFlags.Dirty) dirty = true;
+    else if ((flags & (ReactiveFlags.Mutable | ReactiveFlags.Dirty)) === (ReactiveFlags.Mutable | ReactiveFlags.Dirty)) {
+      const subs = dep.subs!;
+      if (dep._update()) {
+        if (subs.nextSub !== undefined) shallowPropagate(subs);
+        dirty = true;
+      }
+    } else if ((flags & (ReactiveFlags.Mutable | ReactiveFlags.Pending)) === (ReactiveFlags.Mutable | ReactiveFlags.Pending)) {
+      stack = { value: l, prev: stack };
+      l = dep.deps!;
+      sub = dep;
+      ++checkDepth;
+      continue;
+    }
+    if (!dirty) {
+      const nextDep = l.nextDep;
+      if (nextDep !== undefined) { l = nextDep; continue; }
+    }
+    while (checkDepth--) {
+      l = stack!.value;
+      stack = stack!.prev;
+      if (dirty) {
+        const subs = sub.subs!;
+        if (sub._update()) {
+          if (subs.nextSub !== undefined) shallowPropagate(subs);
+          sub = l.sub;
+          continue;
+        }
+        dirty = false;
+      } else {
+        sub.flags &= ~ReactiveFlags.Pending;
+      }
+      sub = l.sub;
+      const nextDep = l.nextDep;
+      if (nextDep !== undefined) { l = nextDep; continue top; }
+    }
+    return dirty && !!sub.flags;
+  } while (true);
+}
+
+function shallowPropagate(l: Link): void {
+  do {
+    const sub = l.sub;
+    const flags = sub.flags;
+    if ((flags & (ReactiveFlags.Pending | ReactiveFlags.Dirty)) === ReactiveFlags.Pending) {
+      sub.flags = flags | ReactiveFlags.Dirty;
+      if ((flags & (ReactiveFlags.Watching | ReactiveFlags.RecursedCheck)) === ReactiveFlags.Watching) sub._notify();
+    }
+  } while ((l = l.nextSub!) !== undefined);
+}
+
+function isValidLink(checkLink: Link, sub: ReactiveNode): boolean {
+  let l = sub.depsTail;
+  while (l !== undefined) {
+    if (l === checkLink) return true;
+    l = l.prevDep;
+  }
+  return false;
+}
 
 function flush(): void {
   try {
     while (notifyIndex < queuedLength) {
       const e = queued[notifyIndex]!;
       queued[notifyIndex++] = undefined;
-      runEffect(e);
+      e._run();
     }
   } finally {
     while (notifyIndex < queuedLength) {
@@ -301,48 +241,10 @@ function flush(): void {
   }
 }
 
-function runEffect(e: EffectNode): void {
-  const flags = e.flags;
-  if (flags & ReactiveFlags.Dirty || (flags & ReactiveFlags.Pending && checkDirty(e.deps!, e))) {
-    if (flags & HasChildEffect) {
-      let l = e.depsTail;
-      while (l !== undefined) {
-        const prev = l.prevDep;
-        const dep = l.dep;
-        if (!(dep instanceof Computed) && !(dep instanceof Lens) && !(dep instanceof Signal)) unlink(l, e);
-        l = prev;
-      }
-    }
-    if (e.cleanup) {
-      runCleanup(e);
-      if (!e.flags) return;
-    }
-    e.depsTail = undefined;
-    e.flags = ReactiveFlags.Watching | ReactiveFlags.RecursedCheck;
-    const prev = activeSub;
-    activeSub = e;
-    try {
-      ++cycle;
-      ++runDepth;
-      const ret = e.fn();
-      e.cleanup = typeof ret === "function" ? (ret as () => void) : undefined;
-    } finally {
-      --runDepth;
-      activeSub = prev;
-      e.flags &= ~ReactiveFlags.RecursedCheck;
-      purgeDeps(e);
-    }
-  } else if (e.deps !== undefined) {
-    e.flags = ReactiveFlags.Watching | (flags & HasChildEffect);
-  }
-}
-
-function runCleanup(e: EffectNode): void {
-  const cleanup = e.cleanup!;
-  e.cleanup = undefined;
-  const prev = activeSub;
-  activeSub = undefined;
-  try { cleanup(); } finally { activeSub = prev; }
+function purgeDeps(sub: ReactiveNode): void {
+  const depsTail = sub.depsTail;
+  let dep = depsTail !== undefined ? depsTail.nextDep : sub.deps;
+  while (dep !== undefined) dep = unlink(dep, sub);
 }
 
 function disposeAllDepsInReverse(sub: ReactiveNode): void {
@@ -354,26 +256,25 @@ function disposeAllDepsInReverse(sub: ReactiveNode): void {
   }
 }
 
-function purgeDeps(sub: ReactiveNode): void {
-  const depsTail = sub.depsTail;
-  let dep = depsTail !== undefined ? depsTail.nextDep : sub.deps;
-  while (dep !== undefined) dep = unlink(dep, sub);
+// Strip child-effect deps from a computed/effect's dep chain before re-eval.
+function unlinkChildEffects(node: ReactiveNode): void {
+  let l = node.depsTail;
+  while (l !== undefined) {
+    const prev = l.prevDep;
+    if (l.dep instanceof Effect) unlink(l, node);
+    l = prev;
+  }
 }
 
 // ── Public API: classes ─────────────────────────────────────────────
 
-/** Untracked read — read a signal without subscribing the current effect. */
-export function peek<T>(s: { peek(): T }): T { return s.peek(); }
-
 /** Writable signal. Construct with `new Signal(v)` or `signal(v)`. */
 export class Signal<T = any> implements ReactiveNode {
-  // Reactive node fields
   subs: Link | undefined = undefined;
   subsTail: Link | undefined = undefined;
   deps: Link | undefined = undefined;
   depsTail: Link | undefined = undefined;
   flags: number = ReactiveFlags.Mutable;
-  // Value storage
   currentValue: T;
   pendingValue: T;
 
@@ -410,11 +311,12 @@ export class Signal<T = any> implements ReactiveNode {
   /** Untracked read. */
   peek(): T { return this.currentValue; }
 
-  /** Internal: equality-check update. */
   _update(): boolean {
     this.flags = ReactiveFlags.Mutable;
     return this.currentValue !== (this.currentValue = this.pendingValue);
   }
+  _notify(): void {}  // signals don't get notified (no Watching flag)
+  _unwatched(): void {}  // no deps to dispose
 }
 
 /** Read-only computed signal. */
@@ -427,9 +329,7 @@ export class Computed<T = any> implements ReactiveNode {
   cachedValue: T | undefined = undefined;
   getter: () => T;
 
-  constructor(getter: () => T) {
-    this.getter = getter;
-  }
+  constructor(getter: () => T) { this.getter = getter; }
 
   get value(): T {
     const flags = this.flags;
@@ -461,15 +361,7 @@ export class Computed<T = any> implements ReactiveNode {
   }
 
   _update(): boolean {
-    if (this.flags & HasChildEffect) {
-      let l = this.depsTail;
-      while (l !== undefined) {
-        const prev = l.prevDep;
-        const dep = l.dep;
-        if (!(dep instanceof Computed) && !(dep instanceof Lens) && !(dep instanceof Signal)) unlink(l, this);
-        l = prev;
-      }
-    }
+    if (this.flags & HasChildEffect) unlinkChildEffects(this);
     this.depsTail = undefined;
     this.flags = ReactiveFlags.Mutable | ReactiveFlags.RecursedCheck;
     const prev = activeSub;
@@ -482,26 +374,26 @@ export class Computed<T = any> implements ReactiveNode {
       activeSub = prev;
       this.flags &= ~ReactiveFlags.RecursedCheck;
       purgeDeps(this);
+    }
+  }
+  _notify(): void {}
+  _unwatched(): void {
+    if (this.depsTail !== undefined) {
+      this.flags = ReactiveFlags.Mutable | ReactiveFlags.Dirty;
+      disposeAllDepsInReverse(this);
     }
   }
 }
 
-/** Writable computed: get via getter (tracks deps), set via setter. */
-export class Lens<T = any> implements ReactiveNode {
-  subs: Link | undefined = undefined;
-  subsTail: Link | undefined = undefined;
-  deps: Link | undefined = undefined;
-  depsTail: Link | undefined = undefined;
-  flags: number = 0;
-  cachedValue: T | undefined = undefined;
-  getter: () => T;
+/** Writable computed: get via getter (tracks deps), set via setter.
+ *  Extends Computed for `_update`/`_unwatched`/`peek`. The `value`
+ *  accessor pair is inlined (not `super.value`) — ~5% faster reads. */
+export class Lens<T = any> extends Computed<T> {
   setter: (v: T) => void;
-
   constructor(getter: () => T, setter: (v: T) => void) {
-    this.getter = getter;
+    super(getter);
     this.setter = setter;
   }
-
   get value(): T {
     const flags = this.flags;
     if (
@@ -523,40 +415,111 @@ export class Lens<T = any> implements ReactiveNode {
     if (activeSub !== undefined) link(this, activeSub, cycle);
     return this.cachedValue!;
   }
-
   set value(next: T) { this.setter(next); }
+}
 
-  peek(): T {
+/** Side-effect — runs `fn` whenever its deps change. */
+export class Effect implements ReactiveNode {
+  subs: Link | undefined = undefined;
+  subsTail: Link | undefined = undefined;
+  deps: Link | undefined = undefined;
+  depsTail: Link | undefined = undefined;
+  flags: number = ReactiveFlags.Watching | ReactiveFlags.RecursedCheck;
+  fn: () => (() => void) | void;
+  cleanup: (() => void) | undefined = undefined;
+
+  constructor(fn: () => (() => void) | void) {
+    this.fn = fn;
     const prev = activeSub;
-    activeSub = undefined;
-    try { return this.value; }
-    finally { activeSub = prev; }
+    activeSub = this;
+    if (prev !== undefined) {
+      link(this, prev, 0);
+      prev.flags |= HasChildEffect;
+    }
+    try {
+      ++runDepth;
+      const ret = fn();
+      this.cleanup = typeof ret === "function" ? ret : undefined;
+    } finally {
+      --runDepth;
+      activeSub = prev;
+      this.flags &= ~ReactiveFlags.RecursedCheck;
+    }
   }
 
   _update(): boolean {
-    if (this.flags & HasChildEffect) {
-      let l = this.depsTail;
-      while (l !== undefined) {
-        const prev = l.prevDep;
-        const dep = l.dep;
-        if (!(dep instanceof Computed) && !(dep instanceof Lens) && !(dep instanceof Signal)) unlink(l, this);
-        l = prev;
-      }
-    }
-    this.depsTail = undefined;
-    this.flags = ReactiveFlags.Mutable | ReactiveFlags.RecursedCheck;
-    const prev = activeSub;
-    activeSub = this;
-    try {
-      ++cycle;
-      const old = this.cachedValue;
-      return old !== (this.cachedValue = this.getter());
-    } finally {
-      activeSub = prev;
-      this.flags &= ~ReactiveFlags.RecursedCheck;
-      purgeDeps(this);
+    this.flags = ReactiveFlags.Mutable;
+    return true;
+  }
+
+  _notify(): void {
+    let e: Effect = this;
+    let insertIndex = queuedLength;
+    const firstInsertedIndex = insertIndex;
+    do {
+      queued[insertIndex++] = e;
+      e.flags &= ~ReactiveFlags.Watching;
+      const next = e.subs?.sub as Effect | undefined;
+      if (next === undefined || !(next.flags & ReactiveFlags.Watching)) break;
+      e = next;
+    } while (true);
+    queuedLength = insertIndex;
+    // Reverse the just-inserted run so parents run after children.
+    let idx = insertIndex;
+    let firstIdx = firstInsertedIndex;
+    while (firstIdx < --idx) {
+      const left = queued[firstIdx];
+      queued[firstIdx++] = queued[idx];
+      queued[idx] = left;
     }
   }
+
+  _unwatched(): void {
+    this.flags = ReactiveFlags.None;
+    disposeAllDepsInReverse(this);
+    const sub = this.subs;
+    if (sub !== undefined) unlink(sub);
+    if (this.cleanup) this._runCleanup();
+  }
+
+  _run(): void {
+    const flags = this.flags;
+    if (flags & ReactiveFlags.Dirty || (flags & ReactiveFlags.Pending && checkDirty(this.deps!, this))) {
+      if (flags & HasChildEffect) unlinkChildEffects(this);
+      if (this.cleanup) {
+        this._runCleanup();
+        if (!this.flags) return;
+      }
+      this.depsTail = undefined;
+      this.flags = ReactiveFlags.Watching | ReactiveFlags.RecursedCheck;
+      const prev = activeSub;
+      activeSub = this;
+      try {
+        ++cycle;
+        ++runDepth;
+        const ret = this.fn();
+        this.cleanup = typeof ret === "function" ? ret : undefined;
+      } finally {
+        --runDepth;
+        activeSub = prev;
+        this.flags &= ~ReactiveFlags.RecursedCheck;
+        purgeDeps(this);
+      }
+    } else if (this.deps !== undefined) {
+      this.flags = ReactiveFlags.Watching | (flags & HasChildEffect);
+    }
+  }
+
+  _runCleanup(): void {
+    const c = this.cleanup!;
+    this.cleanup = undefined;
+    const prev = activeSub;
+    activeSub = undefined;
+    try { c(); } finally { activeSub = prev; }
+  }
+
+  /** Dispose this effect. */
+  stop(): void { this._unwatched(); }
 }
 
 // ── Factory helpers (parallel API surface) ────────────────────────
@@ -566,41 +529,10 @@ export function computed<T>(getter: () => T): Computed<T> { return new Computed(
 export function lens<T>(getter: () => T, setter: (v: T) => void): Lens<T> {
   return new Lens(getter, setter);
 }
-
 export function effect(fn: () => void | (() => void)): () => void {
-  const e: EffectNode = {
-    fn: fn as () => (() => void) | void,
-    cleanup: undefined,
-    subs: undefined,
-    subsTail: undefined,
-    deps: undefined,
-    depsTail: undefined,
-    flags: ReactiveFlags.Watching | ReactiveFlags.RecursedCheck,
-  };
-  const prev = activeSub;
-  activeSub = e;
-  if (prev !== undefined) {
-    link(e, prev, 0);
-    prev.flags |= HasChildEffect;
-  }
-  try {
-    ++runDepth;
-    const ret = e.fn();
-    e.cleanup = typeof ret === "function" ? (ret as () => void) : undefined;
-  } finally {
-    --runDepth;
-    activeSub = prev;
-    e.flags &= ~ReactiveFlags.RecursedCheck;
-  }
-  return function dispose() {
-    e.flags = ReactiveFlags.None;
-    disposeAllDepsInReverse(e);
-    const sub = e.subs;
-    if (sub !== undefined) unlink(sub);
-    if (e.cleanup) runCleanup(e);
-  };
+  const e = new Effect(fn);
+  return () => e._unwatched();
 }
-
 export function batch<R>(fn: () => R): R {
   ++batchDepth;
   try { return fn(); }
@@ -629,6 +561,11 @@ export function mirror<T>(a: Signal<T> | Lens<T>, b: Signal<T> | Lens<T>): () =>
   });
   return () => { dA(); dB(); };
 }
+
+// ════════════════════════════════════════════════════════════════════
+// STRUCT — typed cells, methods, getters, fields, traits, chain
+// ════════════════════════════════════════════════════════════════════
+
 // ── Trait interfaces (open registry, declaration-merge extensible) ──
 
 export interface Linear<T> {
@@ -792,11 +729,19 @@ export function struct<const Cfg extends StructDef>(
   Object.defineProperty(CellCls, "name", { value: cfg.tag });
   const proto = CellCls.prototype as any;
 
-  // Reactive methods: lifted to `cell.method(...args) → Computed<R>`.
+  // Chain ctor (built early so the method loop can install both shapes).
+  const Chain: any = function (this: any, v: any) { this.value = v; };
+
+  // Methods get three lifts: reactive (cell), mutating (chain), static (Type).
+  // One pass over `methods` installs all three.
   for (const [k, fn] of Object.entries(methods)) {
     proto[k] = function (this: CellCls, ...args: any[]) {
       const self = this;
       return computed(() => fn(self.value, ...args.map(unwrap)));
+    };
+    Chain.prototype[k] = function (this: any, ...a: any[]) {
+      this.value = (fn as any)(this.value, ...a);
+      return this;
     };
   }
 
@@ -818,10 +763,10 @@ export function struct<const Cfg extends StructDef>(
   // ("ViewLens") that extends Lens and carries the typed methods.
   // Each field-access just `new TypedLens(getter, setter)` — fast.
   //
-  // (Originally I copied descriptors on each access: ~1400ns. Then
-  // tried setPrototypeOf to typed proto: ~7ns but broke `instanceof
-  // Lens` in engine dispatch. View-class approach: cheap construct,
-  // correct instanceof.)
+  // Why not setPrototypeOf? Lens.prototype's `value` getter/setter
+  // gets shadowed when the proto is swapped to the typed proto
+  // (which inherits from Signal.prototype with a different value).
+  // ViewLens keeps Lens's `value` on the chain via class inheritance.
   const viewCache = new Map<object, any>();
   function makeViewClass(typedProto: any): any {
     let cached = viewCache.get(typedProto);
@@ -847,31 +792,24 @@ export function struct<const Cfg extends StructDef>(
           () => (self.value as any)[k],
           (v: any) => { self.value = { ...(self.value as any), [k]: v }; },
         );
-        Object.defineProperty(this, k, { value: fl, configurable: false, writable: false });
+        // own-prop, non-configurable, non-writable, non-enumerable (all defaults)
+        Object.defineProperty(this, k, { value: fl });
         return fl;
       },
     });
   }
 
-  // Chain ctor — mutating, for fluent plain math.
-  const Chain: any = function (this: any, v: any) {
-    this.value = v;
-  };
-  for (const [k, fn] of Object.entries(methods)) {
-    Chain.prototype[k] = function (this: any, ...a: any[]) {
-      this.value = (fn as any)(this.value, ...a);
-      return this;
-    };
-  }
   proto.raw = function (this: CellCls) {
     return new Chain(this.peek());
   };
 
   // Type function — `Vec({x,y})` constructs a CellCls; also carries
-  // static methods, traits, helpers.
+  // static methods, traits, helpers. Static methods come from the same
+  // bag and are installed alongside reactive/chain methods (unified loop above).
   const Vec: any = function (init?: any) {
     return new CellCls(init);
   };
+  Object.assign(Vec, methods);
   Vec.tag = cfg.tag;
   Vec.value = cfg.value;
   Vec.traits = cfg.traits ?? {};
@@ -881,7 +819,6 @@ export function struct<const Cfg extends StructDef>(
   Vec.with = (init: any): FieldSpec =>
     ({ [BRAND]: "field", type: Vec, init }) as FieldSpec;
   Vec.chain = (v: any) => new Chain(v);
-  for (const [k, fn] of Object.entries(methods)) Vec[k] = fn;
 
   // Make `instance.constructor === Vec` (the Type) so `typeOf(cell)`
   // returns the type with `.traits`/`.tag`/`.is`/`.with`/`.chain`.
@@ -889,5 +826,3 @@ export function struct<const Cfg extends StructDef>(
 
   return Vec as Type<ShapeOf<Cfg["value"]>, Cfg>;
 }
-
-// ════════════════════════════════════════════════════════════════════

@@ -2,7 +2,7 @@
 // the graph; signals drive updates. Owns the SVG element, the
 // viewBox (`view`/`fit`), and the host CSS sizing (`--d-w`/`--d-h`).
 
-import { Anim } from "@minim/core";
+import { Anim, attachRaf } from "@minim/core";
 import { toSig, type Val } from "@minim/signals";
 import { effect } from "@minim/signals";
 import { Shape, SVG_NS, mount, ensureArrowMarker, type Mount } from "@minim/shapes";
@@ -45,6 +45,7 @@ export class Diagram extends HTMLElement {
 
   protected shadow: ShadowRoot;
   protected anim = new Anim();
+  #detachRaf: (() => void) | null = null;
   protected svg!: SVGSVGElement;
   /** Scene-graph root. All user-mounted shapes are children of this. */
   protected root!: Shape;
@@ -100,6 +101,7 @@ export class Diagram extends HTMLElement {
 
   connectedCallback(): void {
     if (!this.svg) this.mountSvg();
+    this.#detachRaf?.();
     this.anim.stop();
     this.root?.dispose();
     this.#viewSet = false;
@@ -110,9 +112,12 @@ export class Diagram extends HTMLElement {
     this.s = mount(this.root);
     this.scene(this.s);
     if (!this.#viewSet) this.fit();
+    this.#detachRaf = attachRaf(this.anim);
   }
 
   disconnectedCallback(): void {
+    this.#detachRaf?.();
+    this.#detachRaf = null;
     this.anim.stop();
     this.root?.dispose();
   }

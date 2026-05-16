@@ -4,9 +4,9 @@
 // because Yieldables are single-shot (a generator passed to `play(g)`
 // is exhausted after one run).
 //
-// `every(sec, fn)` is sugar for `loop(() => play(sec).then(asGen(fn)))`
-// — kept because every-N-seconds is a very common pattern and the
-// inline form is noisier than the named call earns back.
+// `every(sec, fn)` is `play(suspend(...))` over `anim.onFrame` with a
+// drift-correcting accumulator — fires `fn` whenever `acc >= sec`.
+// One closure per frame, no per-iteration generator overhead.
 //
 // Everything else from the old vocabulary — `sleep` / `parallel` /
 // `sequence` / `after` — collapsed into `play(...)`:
@@ -16,9 +16,9 @@
 //   sequence(a, b, c)     → play(a, b, c)
 //   after(cond, work)     → play(cond).then(work)
 
-import { type Animator } from "../core/anim";
-import { type Val } from "./arg";
-import { play, sleepGen, type Play } from "./tween";
+import { suspend, type Animator } from "../core/anim";
+import { asReader, type Val } from "./arg";
+import { play, type Play } from "./tween";
 
 /** Repeat `factory()` forever — fresh generator each iteration. Pass
  *  to `anim.run(loop(...))` at top level, or compose with `.until`,
@@ -32,14 +32,19 @@ export function loop(factory: () => Animator): Play {
 }
 
 /** Run `fn` every `sec` seconds. Side-effect only — for awaited work
- *  per cycle, use `loop(() => play(sec).then(work()))`. */
+ *  per cycle, use `loop(() => play(sec).then(work()))`. Drift-corrects
+ *  via accumulator: missed firings are caught up the next frame. */
 export function every(sec: Val<number>, fn: () => void): Play {
+  const getSec = typeof sec === "number" ? () => sec : asReader(sec);
   return play(
-    (function* (): Animator {
-      while (true) {
-        yield* sleepGen(sec);
-        fn();
-      }
-    })(),
+    suspend<void>((_wake, _spawn, anim) => {
+      let acc = 0;
+      return anim.onFrame((dt) => {
+        acc += dt;
+        const period = getSec();
+        if (period <= 0) return;
+        while (acc >= period) { fn(); acc -= period; }
+      });
+    }),
   );
 }

@@ -61,7 +61,7 @@ const HasChildEffect = 64;
 
 // Public algorithm — same signatures as upstream `createReactiveSystem`,
 // inlined here to avoid the extra module hop.
-function makeSystem(
+export function createReactiveSystem(
   update: (sub: ReactiveNode) => boolean,
   notify: (sub: ReactiveNode) => void,
   unwatched: (sub: ReactiveNode) => void,
@@ -247,7 +247,7 @@ let queuedLength = 0;
 let activeSub: ReactiveNode | undefined;
 const queued: (EffectNode | undefined)[] = [];
 
-const { link, unlink, propagate, checkDirty, shallowPropagate } = makeSystem(
+const { link, unlink, propagate, checkDirty, shallowPropagate } = createReactiveSystem(
   // update
   (node) => {
     if ("getter" in node) return updateComputed(node as ComputedNode);

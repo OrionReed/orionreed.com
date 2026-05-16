@@ -9,8 +9,8 @@ export default defineConfig({
   },
   test: {
     include: ["src/minim/**/*.test.ts"],
-    exclude: ["**/node_modules/**", "**/_anim_lab/**", "**/setup.ts"],
+    exclude: ["**/node_modules/**", "**/_bench/**"],
     environment: "node",
-    setupFiles: ["src/minim/_anim_alt/_test/setup.ts"],
+    setupFiles: ["src/minim/_test/setup.ts"],
   },
 });

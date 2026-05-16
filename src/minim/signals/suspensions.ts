@@ -13,14 +13,12 @@
 // out earned no clarity and added inter-folder imports.
 
 import {
-  asGen,
-  isGen,
   suspend,
   type Animator,
-  type SpawnFn,
   type Yieldable,
   type PayloadOf,
 } from "../core/anim";
+import { spawnYieldable } from "../core/compose";
 import { effect } from "./signal";
 import { type ReadonlyCell } from "./cell";
 
@@ -94,7 +92,7 @@ export function untilPromise<T>(p: Promise<T>): Animator<T> {
 export function race<Cs extends readonly Yieldable[]>(
   ...children: Cs
 ): Animator<PayloadOf<Cs[number]>> {
-  return suspend<PayloadOf<Cs[number]>>((wake, spawn) => {
+  return suspend<PayloadOf<Cs[number]>>((wake, spawn, anim) => {
     type V = PayloadOf<Cs[number]>;
     let won = false;
     let setupDone = false;
@@ -106,35 +104,15 @@ export function race<Cs extends readonly Yieldable[]>(
       if (won) return;
       won = true;
       if (setupDone) (wake as (v?: V) => void)(value);
-      else {
-        pending = true;
-        pendingValue = value;
-      }
+      else { pending = true; pendingValue = value; }
     };
     const disposers: (() => void)[] = [];
     for (const c of children) {
-      if (typeof c === "function" && !isGen(c)) {
-        // Bare suspend-fn — subscribe directly, sharing our spawn so
-        // nested combinators (race-of-races) work without rewrapping.
-        disposers.push(
-          (
-            c as (
-              wake: (v: unknown) => void,
-              spawn: SpawnFn,
-            ) => () => void
-          )(safeWake as (v: unknown) => void, spawn),
-        );
-      } else {
-        // Generator child — spawn forwards its return-value through
-        // onComplete, so the winner's typed payload flows up.
-        disposers.push(spawn(asGen(c), safeWake as (v: unknown) => void));
-      }
+      disposers.push(spawnYieldable(c, spawn, anim, safeWake as (v: any) => void));
     }
     setupDone = true;
     if (pending) (wake as (v?: V) => void)(pendingValue);
-    return () => {
-      for (const d of disposers) d();
-    };
+    return () => { for (const d of disposers) d(); };
   });
 }
 
