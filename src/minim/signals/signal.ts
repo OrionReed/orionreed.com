@@ -1,1051 +1,582 @@
-// Reactive signals — vendored from @preact/signals-core (MIT). Local
-// modifications:
+// signal.ts — minim's reactive engine.
 //
-//   1. Lens<T> — writable-derived signal (see the `//#region Lens`
-//      block near the bottom). Used by `cell.lens()` and the struct
-//      framework for sub-field views and aggregates.
-//
-// Everything else in this file is preact's code, kept verbatim so we
-// can pull upstream fixes by re-vendoring. Copy-pasters who want a
-// different reactivity engine swap this whole file (and keep `Lens`
-// or its equivalent).
+// Hierarchy: Signal → Computed (Lens = Computed with setter).
+// Algorithm is alien-signals; trait dispatch via `./traits`.
 
-// A named symbol/brand for detecting Signal instances even when they weren't
-// created using the same signals library version.
-const BRAND_SYMBOL = Symbol.for("preact-signals");
+import { EQUALS, type Equals } from "./traits";
 
-// Flags for Computed and Effect.
-const RUNNING = 1 << 0;
-const NOTIFIED = 1 << 1;
-const OUTDATED = 1 << 2;
-const DISPOSED = 1 << 3;
-const HAS_ERROR = 1 << 4;
-const TRACKING = 1 << 5;
+// ════════════════════════════════════════════════════════════════════
+// alien-signals types
+// ════════════════════════════════════════════════════════════════════
 
-// A linked list node used to track dependencies (sources) and dependents (targets).
-// Also used to remember the source's last version number that the target saw.
-type Node = {
-  // A source whose value the target depends on.
-  _source: Signal;
-  _prevSource?: Node;
-  _nextSource?: Node;
-
-  // A target that depends on the source and should be notified when the source changes.
-  _target: Computed | Effect;
-  _prevTarget?: Node;
-  _nextTarget?: Node;
-
-  // The version number of the source that target has last seen. We use version numbers
-  // instead of storing the source value, because source values can take arbitrary amount
-  // of memory, and computeds could hang on to them forever because they're lazily evaluated.
-  // Use the special value -1 to mark potentially unused but recyclable nodes.
-  _version: number;
-
-  // Used to remember & roll back the source's previous `._node` value when entering &
-  // exiting a new evaluation context.
-  _rollbackNode?: Node;
-};
-
-function startBatch() {
-  batchDepth++;
+interface ReactiveNode {
+  deps?: Link;
+  depsTail?: Link;
+  subs?: Link;
+  subsTail?: Link;
+  flags: number;
+  _update(): boolean;
+  _notify(): void;
+  _unwatched(): void;
 }
 
-function endBatch() {
-  if (batchDepth > 1) {
-    batchDepth--;
-    return;
-  }
-
-  let error: unknown;
-  let hasError = false;
-  reconcileBatchSnapshots();
-
-  while (batchedEffect !== undefined) {
-    let effect: Effect | undefined = batchedEffect;
-    batchedEffect = undefined;
-
-    batchIteration++;
-
-    while (effect !== undefined) {
-      const next: Effect | undefined = effect._nextBatchedEffect;
-      effect._nextBatchedEffect = undefined;
-      effect._flags &= ~NOTIFIED;
-
-      if (!(effect._flags & DISPOSED) && needsToRecompute(effect)) {
-        try {
-          effect._callback();
-        } catch (err) {
-          if (!hasError) {
-            error = err;
-            hasError = true;
-          }
-        }
-      }
-      effect = next;
-    }
-  }
-  batchIteration = 0;
-  batchDepth--;
-
-  if (hasError) {
-    throw error;
-  }
+interface Link {
+  version: number;
+  dep: ReactiveNode;
+  sub: ReactiveNode;
+  prevSub: Link | undefined;
+  nextSub: Link | undefined;
+  prevDep: Link | undefined;
+  nextDep: Link | undefined;
 }
 
-/**
- * Combine multiple value updates into one "commit" at the end of the provided callback.
- *
- * Batches can be nested and changes are only flushed once the outermost batch callback
- * completes.
- *
- * Accessing a signal that has been modified within a batch will reflect its updated
- * value.
- *
- * @param fn The callback function.
- * @returns The value returned by the callback.
- */
-function batch<T>(fn: () => T): T {
-  if (batchDepth > 0) {
-    return fn();
-  }
-  currentBatchSnapshotVersion = ++batchSnapshotVersion;
-  /*@__INLINE__**/ startBatch();
-  try {
-    return fn();
-  } finally {
-    endBatch();
-  }
-}
+interface Stack<T> { value: T; prev: Stack<T> | undefined }
 
-// Currently evaluated computed or effect.
-let evalContext: Computed | Effect | undefined = undefined;
+const F = {
+  None: 0,
+  Mutable: 1,
+  Watching: 2,
+  RecursedCheck: 4,
+  Recursed: 8,
+  Dirty: 16,
+  Pending: 32,
+  HasChildEffect: 64,
+} as const;
 
-/**
- * Run a callback function that can access signal values without
- * subscribing to the signal updates.
- *
- * @param fn The callback function.
- * @returns The value returned by the callback.
- */
-function untracked<T>(fn: () => T): T {
-  const prevContext = evalContext;
-  evalContext = undefined;
-  try {
-    return fn();
-  } finally {
-    evalContext = prevContext;
-  }
-}
+const noop = () => {};
 
-// Effects collected into a batch.
-let batchedEffect: Effect | undefined = undefined;
+// ── Engine state ────────────────────────────────────────────────────
+
+let cycle = 0;
+let runDepth = 0;
 let batchDepth = 0;
-let batchIteration = 0;
+let notifyIndex = 0;
+let queuedLength = 0;
+let activeSub: ReactiveNode | undefined;
+const queued: (Effect | undefined)[] = [];
 
-type BatchSnapshot = {
-  _source: Signal;
-  _value: unknown;
-  _version: number;
-  _next?: BatchSnapshot;
-};
+// ── Algorithm ──────────────────────────────────────────────────────
 
-let batchSnapshotVersion = 0;
-let currentBatchSnapshotVersion = 0;
-let batchSnapshots: BatchSnapshot | undefined = undefined;
-
-// A global version number for signals, used for fast-pathing repeated
-// computed.peek()/computed.value calls when nothing has changed globally.
-let globalVersion = 0;
-
-function recordBatchSnapshot(source: Signal) {
-  // Only capture writes during the user-visible batch callback, not during effect flush.
-  if (batchDepth === 0 || batchIteration !== 0) {
+function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
+  const prevDep = sub.depsTail;
+  if (prevDep !== undefined && prevDep.dep === dep) return;
+  const nextDep = prevDep !== undefined ? prevDep.nextDep : sub.deps;
+  if (nextDep !== undefined && nextDep.dep === dep) {
+    nextDep.version = version;
+    sub.depsTail = nextDep;
     return;
   }
-
-  if (source._batchSnapshotVersion !== currentBatchSnapshotVersion) {
-    source._batchSnapshotVersion = currentBatchSnapshotVersion;
-    batchSnapshots = {
-      _source: source,
-      _value: source._value,
-      _version: source._version,
-      _next: batchSnapshots,
-    };
+  const prevSub = dep.subsTail;
+  if (prevSub !== undefined && prevSub.version === version && prevSub.sub === sub) return;
+  const isFirstSub = dep.subs === undefined;
+  const newLink: Link = (sub.depsTail = dep.subsTail = {
+    version, dep, sub, prevDep, nextDep, prevSub, nextSub: undefined,
+  });
+  if (nextDep !== undefined) nextDep.prevDep = newLink;
+  if (prevDep !== undefined) prevDep.nextDep = newLink;
+  else sub.deps = newLink;
+  if (prevSub !== undefined) prevSub.nextSub = newLink;
+  else dep.subs = newLink;
+  // First subscriber: fire `watched` hook if declared.
+  if (isFirstSub && dep instanceof Signal) {
+    const hook = dep._watched;
+    if (hook !== undefined) hook.call(dep);
   }
 }
 
-function reconcileBatchSnapshots() {
-  let snapshots = batchSnapshots;
-  batchSnapshots = undefined;
-
-  while (snapshots !== undefined) {
-    if (snapshots._source._value === snapshots._value) {
-      snapshots._source._version = snapshots._version;
-    }
-    snapshots = snapshots._next;
-  }
+function unlink(l: Link, sub: ReactiveNode = l.sub): Link | undefined {
+  const { dep, prevDep, nextDep, nextSub, prevSub } = l;
+  if (nextDep !== undefined) nextDep.prevDep = prevDep;
+  else sub.depsTail = prevDep;
+  if (prevDep !== undefined) prevDep.nextDep = nextDep;
+  else sub.deps = nextDep;
+  if (nextSub !== undefined) nextSub.prevSub = prevSub;
+  else dep.subsTail = prevSub;
+  if (prevSub !== undefined) prevSub.nextSub = nextSub;
+  else if ((dep.subs = nextSub) === undefined) dep._unwatched();
+  return nextDep;
 }
 
-function addDependency(signal: Signal): Node | undefined {
-  if (evalContext === undefined) {
-    return undefined;
-  }
-
-  let node = signal._node;
-  if (node === undefined || node._target !== evalContext) {
-    /**
-     * `signal` is a new dependency. Create a new dependency node, and set it
-     * as the tail of the current context's dependency list. e.g:
-     *
-     * { A <-> B       }
-     *         ↑     ↑
-     *        tail  node (new)
-     *               ↓
-     * { A <-> B <-> C }
-     *               ↑
-     *              tail (evalContext._sources)
-     */
-    node = {
-      _version: 0,
-      _source: signal,
-      _prevSource: evalContext._sources,
-      _nextSource: undefined,
-      _target: evalContext,
-      _prevTarget: undefined,
-      _nextTarget: undefined,
-      _rollbackNode: node,
-    };
-
-    if (evalContext._sources !== undefined) {
-      evalContext._sources._nextSource = node;
-    }
-    evalContext._sources = node;
-    signal._node = node;
-
-    // Subscribe to change notifications from this dependency if we're in an effect
-    // OR evaluating a computed signal that in turn has subscribers.
-    if (evalContext._flags & TRACKING) {
-      signal._subscribe(node);
-    }
-    return node;
-  } else if (node._version === -1) {
-    // `signal` is an existing dependency from a previous evaluation. Reuse it.
-    node._version = 0;
-
-    /**
-     * If `node` is not already the current tail of the dependency list (i.e.
-     * there is a next node in the list), then make the `node` the new tail. e.g:
-     *
-     * { A <-> B <-> C <-> D }
-     *         ↑           ↑
-     *        node   ┌─── tail (evalContext._sources)
-     *         └─────│─────┐
-     *               ↓     ↓
-     * { A <-> C <-> D <-> B }
-     *                     ↑
-     *                    tail (evalContext._sources)
-     */
-    if (node._nextSource !== undefined) {
-      node._nextSource._prevSource = node._prevSource;
-
-      if (node._prevSource !== undefined) {
-        node._prevSource._nextSource = node._nextSource;
-      }
-
-      node._prevSource = evalContext._sources;
-      node._nextSource = undefined;
-
-      evalContext._sources!._nextSource = node;
-      evalContext._sources = node;
-    }
-
-    // We can assume that the currently evaluated effect / computed signal is already
-    // subscribed to change notifications from `signal` if needed.
-    return node;
-  }
-  return undefined;
-}
-
-//#region Signal
-
-/**
- * The base class for plain and computed signals.
- */
-//
-// A function with the same name is defined later, so we need to ignore TypeScript's
-// warning about a redeclared variable.
-//
-// The class is declared here, but later implemented with ES5-style prototypes.
-// This enables better control of the transpiled output size.
-// @ts-ignore: "Cannot redeclare exported variable 'Signal'."
-declare class Signal<T = any> {
-  /** @internal */
-  _value: unknown;
-
-  /**
-   * @internal
-   * Version numbers should always be >= 0, because the special value -1 is used
-   * by Nodes to signify potentially unused but recyclable nodes.
-   */
-  _version: number;
-
-  /** @internal */
-  _node?: Node;
-
-  /** @internal */
-  _targets?: Node;
-
-  /** @internal */
-  _batchSnapshotVersion: number;
-
-  /** @internal — typed `any` so `T` stays variance-free; callers
-   *  supply the correctly-typed predicate via `SignalOptions.equals`. */
-  _equals?: (a: any, b: any) => boolean;
-
-  constructor(value?: T, options?: SignalOptions<T>);
-
-  /** @internal */
-  _refresh(): boolean;
-
-  /** @internal */
-  _subscribe(node: Node): void;
-
-  /** @internal */
-  _unsubscribe(node: Node): void;
-
-  /** @internal */
-  _watched?(this: Signal<T>): void;
-
-  /** @internal */
-  _unwatched?(this: Signal<T>): void;
-
-  subscribe(fn: (value: T) => void): () => void;
-
-  name?: string;
-
-  valueOf(): T;
-
-  toString(): string;
-
-  toJSON(): T;
-
-  peek(): T;
-
-  brand: typeof BRAND_SYMBOL;
-
-  get value(): T;
-  set value(value: T);
-}
-
-export interface SignalOptions<T = any> {
-  watched?: (this: Signal<T>) => void;
-  unwatched?: (this: Signal<T>) => void;
-  name?: string;
-  /** Custom equality check; writes/recomputations whose new value is
-   *  equal under this predicate don't fire subscribers. Default is
-   *  reference inequality (`!==`). Useful for struct values like Vec
-   *  where a freshly-allocated object may carry the same data. */
-  equals?: (a: T, b: T) => boolean;
-}
-
-/** @internal */
-// A class with the same name has already been declared, so we need to ignore
-// TypeScript's warning about a redeclared variable.
-//
-// The previously declared class is implemented here with ES5-style prototypes.
-// This enables better control of the transpiled output size.
-// @ts-ignore: "Cannot redeclare exported variable 'Signal'."
-function Signal(this: Signal, value?: unknown, options?: SignalOptions) {
-  this._value = value;
-  this._version = 0;
-  this._node = undefined;
-  this._targets = undefined;
-  this._batchSnapshotVersion = 0;
-  this._watched = options?.watched;
-  this._unwatched = options?.unwatched;
-  this._equals = options?.equals;
-  this.name = options?.name;
-}
-
-Signal.prototype.brand = BRAND_SYMBOL;
-
-Signal.prototype._refresh = function () {
-  return true;
-};
-
-Signal.prototype._subscribe = function (node) {
-  const targets = this._targets;
-  if (targets !== node && node._prevTarget === undefined) {
-    node._nextTarget = targets;
-    this._targets = node;
-
-    if (targets !== undefined) {
-      targets._prevTarget = node;
+function propagate(start: Link, innerWrite: boolean): void {
+  let l: Link | undefined = start;
+  let next: Link | undefined = start.nextSub;
+  let stack: Stack<Link | undefined> | undefined;
+  top: do {
+    const sub: ReactiveNode = l!.sub;
+    let flags = sub.flags;
+    if (!(flags & (F.RecursedCheck | F.Recursed | F.Dirty | F.Pending))) {
+      sub.flags = flags | F.Pending;
+      if (innerWrite) sub.flags |= F.Recursed;
+    } else if (!(flags & (F.RecursedCheck | F.Recursed))) {
+      flags = F.None;
+    } else if (!(flags & F.RecursedCheck)) {
+      sub.flags = (flags & ~F.Recursed) | F.Pending;
+    } else if (!(flags & (F.Dirty | F.Pending)) && isValidLink(l!, sub)) {
+      sub.flags = flags | (F.Recursed | F.Pending);
+      flags &= F.Mutable;
     } else {
-      untracked(() => {
-        this._watched?.call(this);
-      });
+      flags = F.None;
     }
-  }
-};
-
-Signal.prototype._unsubscribe = function (node) {
-  // Only run the unsubscribe step if the signal has any subscribers to begin with.
-  if (this._targets !== undefined) {
-    const prev = node._prevTarget;
-    const next = node._nextTarget;
-    if (prev !== undefined) {
-      prev._nextTarget = next;
-      node._prevTarget = undefined;
-    }
-
-    if (next !== undefined) {
-      next._prevTarget = prev;
-      node._nextTarget = undefined;
-    }
-
-    if (node === this._targets) {
-      this._targets = next;
-      if (next === undefined) {
-        untracked(() => {
-          this._unwatched?.call(this);
-        });
+    if (flags & F.Watching) sub._notify();
+    if (flags & F.Mutable) {
+      const subSubs: Link | undefined = sub.subs;
+      if (subSubs !== undefined) {
+        const nextSub = (l = subSubs).nextSub;
+        if (nextSub !== undefined) { stack = { value: next, prev: stack }; next = nextSub; }
+        continue;
       }
     }
-  }
-};
-
-Signal.prototype.subscribe = function (fn) {
-  return effect(
-    () => {
-      const value = this.value;
-      const prevContext = evalContext;
-      evalContext = undefined;
-      try {
-        fn(value);
-      } finally {
-        evalContext = prevContext;
-      }
-    },
-    { name: "sub" },
-  );
-};
-
-Signal.prototype.valueOf = function () {
-  return this.value;
-};
-
-Signal.prototype.toString = function () {
-  return this.value + "";
-};
-
-Signal.prototype.toJSON = function () {
-  return this.value;
-};
-
-Signal.prototype.peek = function () {
-  return untracked(() => this.value);
-};
-
-Object.defineProperty(Signal.prototype, "value", {
-  get(this: Signal) {
-    const node = addDependency(this);
-    if (node !== undefined) {
-      node._version = this._version;
+    if ((l = next!) !== undefined) { next = l.nextSub; continue; }
+    while (stack !== undefined) {
+      l = stack.value; stack = stack.prev;
+      if (l !== undefined) { next = l.nextSub; continue top; }
     }
-    return this._value;
-  },
-  set(this: Signal, value) {
-    const changed = this._equals
-      ? !this._equals(value, this._value)
-      : value !== this._value;
-    if (changed) {
-      if (batchIteration > 100) {
-        throw new Error("Cycle detected");
-      }
-
-      recordBatchSnapshot(this);
-      this._value = value;
-      this._version++;
-      globalVersion++;
-
-      /**@__INLINE__*/ startBatch();
-      try {
-        for (
-          let node = this._targets;
-          node !== undefined;
-          node = node._nextTarget
-        ) {
-          node._target._notify();
-        }
-      } finally {
-        endBatch();
-      }
-    }
-  },
-});
-
-/**
- * Create a new plain signal.
- *
- * @param value The initial value for the signal.
- * @returns A new signal.
- */
-export function signal<T>(value: T, options?: SignalOptions<T>): Signal<T>;
-export function signal<T = undefined>(): Signal<T | undefined>;
-export function signal<T>(value?: T, options?: SignalOptions<T>): Signal<T> {
-  return new Signal(value, options);
+    break;
+  } while (true);
 }
 
-//#endregion Signal
-
-//#region Computed
-
-function needsToRecompute(target: Computed | Effect): boolean {
-  // Check the dependencies for changed values. The dependency list is already
-  // in order of use. Therefore if multiple dependencies have changed values, only
-  // the first used dependency is re-evaluated at this point.
-  for (
-    let node = target._sources;
-    node !== undefined;
-    node = node._nextSource
-  ) {
-    if (
-      // If the dependency has definitely been updated since its version number
-      // was observed, then we need to recompute. This first check is not strictly
-      // necessary for correctness, but allows us to skip the refresh call if the
-      // dependency has already been updated.
-      node._source._version !== node._version ||
-      // Refresh the dependency. If there's something blocking the refresh (e.g. a
-      // dependency cycle), then we need to recompute.
-      !node._source._refresh() ||
-      // If the dependency got a new version after the refresh, then we need to recompute.
-      node._source._version !== node._version
-    ) {
-      return true;
+function checkDirty(startLink: Link, startSub: ReactiveNode): boolean {
+  let l = startLink, sub = startSub;
+  let stack: Stack<Link> | undefined;
+  let checkDepth = 0, dirty = false;
+  top: do {
+    const dep = l.dep;
+    const flags = dep.flags;
+    if (sub.flags & F.Dirty) dirty = true;
+    else if ((flags & (F.Mutable | F.Dirty)) === (F.Mutable | F.Dirty)) {
+      const subs = dep.subs!;
+      if (dep._update()) {
+        if (subs.nextSub !== undefined) shallowPropagate(subs);
+        dirty = true;
+      }
+    } else if ((flags & (F.Mutable | F.Pending)) === (F.Mutable | F.Pending)) {
+      stack = { value: l, prev: stack }; l = dep.deps!; sub = dep; ++checkDepth; continue;
     }
-  }
-  // If none of the dependencies have changed values since last recompute then
-  // there's no need to recompute.
+    if (!dirty) {
+      const nextDep = l.nextDep;
+      if (nextDep !== undefined) { l = nextDep; continue; }
+    }
+    while (checkDepth--) {
+      l = stack!.value; stack = stack!.prev;
+      if (dirty) {
+        const subs = sub.subs!;
+        if (sub._update()) {
+          if (subs.nextSub !== undefined) shallowPropagate(subs);
+          sub = l.sub; continue;
+        }
+        dirty = false;
+      } else {
+        sub.flags &= ~F.Pending;
+      }
+      sub = l.sub;
+      const nextDep = l.nextDep;
+      if (nextDep !== undefined) { l = nextDep; continue top; }
+    }
+    return dirty && !!sub.flags;
+  } while (true);
+}
+
+function shallowPropagate(l: Link): void {
+  do {
+    const sub = l.sub;
+    const flags = sub.flags;
+    if ((flags & (F.Pending | F.Dirty)) === F.Pending) {
+      sub.flags = flags | F.Dirty;
+      if ((flags & (F.Watching | F.RecursedCheck)) === F.Watching) sub._notify();
+    }
+  } while ((l = l.nextSub!) !== undefined);
+}
+
+function isValidLink(checkLink: Link, sub: ReactiveNode): boolean {
+  let l = sub.depsTail;
+  while (l !== undefined) { if (l === checkLink) return true; l = l.prevDep; }
   return false;
 }
 
-function prepareSources(target: Computed | Effect) {
-  /**
-   * 1. Mark all current sources as re-usable nodes (version: -1)
-   * 2. Set a rollback node if the current node is being used in a different context
-   * 3. Point 'target._sources' to the tail of the doubly-linked list, e.g:
-   *
-   *    { undefined <- A <-> B <-> C -> undefined }
-   *                   ↑           ↑
-   *                   │           └──────┐
-   * target._sources = A; (node is head)  │
-   *                   ↓                  │
-   * target._sources = C; (node is tail) ─┘
-   */
-  for (
-    let node = target._sources;
-    node !== undefined;
-    node = node._nextSource
-  ) {
-    const rollbackNode = node._source._node;
-    if (rollbackNode !== undefined) {
-      node._rollbackNode = rollbackNode;
-    }
-    node._source._node = node;
-    node._version = -1;
-
-    if (node._nextSource === undefined) {
-      target._sources = node;
-      break;
-    }
-  }
-}
-
-function cleanupSources(target: Computed | Effect) {
-  let node = target._sources;
-  let head: Node | undefined = undefined;
-
-  /**
-   * At this point 'target._sources' points to the tail of the doubly-linked list.
-   * It contains all existing sources + new sources in order of use.
-   * Iterate backwards until we find the head node while dropping old dependencies.
-   */
-  while (node !== undefined) {
-    const prev = node._prevSource;
-
-    /**
-     * The node was not re-used, unsubscribe from its change notifications and remove itself
-     * from the doubly-linked list. e.g:
-     *
-     * { A <-> B <-> C }
-     *         ↓
-     *    { A <-> C }
-     */
-    if (node._version === -1) {
-      node._source._unsubscribe(node);
-
-      if (prev !== undefined) {
-        prev._nextSource = node._nextSource;
-      }
-      if (node._nextSource !== undefined) {
-        node._nextSource._prevSource = prev;
-      }
-    } else {
-      /**
-       * The new head is the last node seen which wasn't removed/unsubscribed
-       * from the doubly-linked list. e.g:
-       *
-       * { A <-> B <-> C }
-       *   ↑     ↑     ↑
-       *   │     │     └ head = node
-       *   │     └ head = node
-       *   └ head = node
-       */
-      head = node;
-    }
-
-    node._source._node = node._rollbackNode;
-    if (node._rollbackNode !== undefined) {
-      node._rollbackNode = undefined;
-    }
-
-    node = prev;
-  }
-
-  target._sources = head;
-}
-
-/**
- * The base class for computed signals.
- */
-declare class Computed<T = any> extends Signal<T> {
-  _fn: () => T;
-  _sources?: Node;
-  _globalVersion: number;
-  _flags: number;
-
-  constructor(fn: () => T, options?: SignalOptions<T>);
-
-  _notify(): void;
-  get value(): T;
-}
-
-/** @internal */
-function Computed(this: Computed, fn: () => unknown, options?: SignalOptions) {
-  Signal.call(this, undefined);
-
-  this._fn = fn;
-  this._sources = undefined;
-  this._globalVersion = globalVersion - 1;
-  this._flags = OUTDATED;
-  this._watched = options?.watched;
-  this._unwatched = options?.unwatched;
-  this._equals = options?.equals;
-  this.name = options?.name;
-}
-
-Computed.prototype = new Signal() as Computed;
-
-Computed.prototype._refresh = function () {
-  this._flags &= ~NOTIFIED;
-
-  if (this._flags & RUNNING) {
-    return false;
-  }
-
-  // If this computed signal has subscribed to updates from its dependencies
-  // (TRACKING flag set) and none of them have notified about changes (OUTDATED
-  // flag not set), then the computed value can't have changed.
-  if ((this._flags & (OUTDATED | TRACKING)) === TRACKING) {
-    return true;
-  }
-  this._flags &= ~OUTDATED;
-
-  if (this._globalVersion === globalVersion) {
-    return true;
-  }
-  this._globalVersion = globalVersion;
-
-  // Mark this computed signal running before checking the dependencies for value
-  // changes, so that the RUNNING flag can be used to notice cyclical dependencies.
-  this._flags |= RUNNING;
-  if (this._version > 0 && !needsToRecompute(this)) {
-    this._flags &= ~RUNNING;
-    return true;
-  }
-
-  const prevContext = evalContext;
+function flush(): void {
   try {
-    prepareSources(this);
-    evalContext = this;
-    const value = this._fn();
-    // First evaluation: `_value` is uninitialised (undefined). Skip the
-    // user equals predicate — it'd be called with `undefined` as `b`.
-    const isFirst = this._version === 0;
-    const changed =
-      isFirst ||
-      (this._equals
-        ? !this._equals(value, this._value)
-        : this._value !== value);
-    if (this._flags & HAS_ERROR || changed) {
-      this._value = value;
-      this._flags &= ~HAS_ERROR;
-      this._version++;
-    }
-  } catch (err) {
-    this._value = err;
-    this._flags |= HAS_ERROR;
-    this._version++;
-  }
-  evalContext = prevContext;
-  cleanupSources(this);
-  this._flags &= ~RUNNING;
-  return true;
-};
-
-Computed.prototype._subscribe = function (node) {
-  if (this._targets === undefined) {
-    this._flags |= OUTDATED | TRACKING;
-
-    // A computed signal subscribes lazily to its dependencies when it
-    // gets its first subscriber.
-    for (
-      let node = this._sources;
-      node !== undefined;
-      node = node._nextSource
-    ) {
-      node._source._subscribe(node);
-    }
-  }
-  Signal.prototype._subscribe.call(this, node);
-};
-
-Computed.prototype._unsubscribe = function (node) {
-  // Only run the unsubscribe step if the computed signal has any subscribers.
-  if (this._targets !== undefined) {
-    Signal.prototype._unsubscribe.call(this, node);
-
-    // Computed signal unsubscribes from its dependencies when it loses its last subscriber.
-    // This makes it possible for unreferences subgraphs of computed signals to get garbage collected.
-    if (this._targets === undefined) {
-      this._flags &= ~TRACKING;
-
-      for (
-        let node = this._sources;
-        node !== undefined;
-        node = node._nextSource
-      ) {
-        node._source._unsubscribe(node);
-      }
-    }
-  }
-};
-
-Computed.prototype._notify = function () {
-  if (!(this._flags & NOTIFIED)) {
-    this._flags |= OUTDATED | NOTIFIED;
-
-    for (
-      let node = this._targets;
-      node !== undefined;
-      node = node._nextTarget
-    ) {
-      node._target._notify();
-    }
-  }
-};
-
-Object.defineProperty(Computed.prototype, "value", {
-  get(this: Computed) {
-    if (this._flags & RUNNING) {
-      throw new Error("Cycle detected");
-    }
-    const node = addDependency(this);
-    this._refresh();
-    if (node !== undefined) {
-      node._version = this._version;
-    }
-    if (this._flags & HAS_ERROR) {
-      throw this._value;
-    }
-    return this._value;
-  },
-});
-
-//#region Lens
-
-/** A writable signal with user-defined read and write sides. Reads
- *  memoize like a `computed`; writes call `write(n)` — the lens has
- *  no parent. Used for sub-field views of struct signals and for
- *  aggregates over multiple signals (`centroid`, `meanRotation`, …).
- *  `instanceof Signal` is true. */
-declare class Lens<T = any> extends Computed<T> {
-  /** @internal */
-  _write: (n: T) => void;
-  constructor(read: () => T, write: (n: T) => void);
-  get value(): T;
-  set value(v: T);
-}
-
-/** @internal */
-// @ts-ignore: "Cannot redeclare exported variable 'Lens'."
-function Lens(this: Lens, read: () => unknown, write: (n: unknown) => void) {
-  Computed.call(this, read);
-  this._write = write;
-}
-
-Lens.prototype = Object.create(Computed.prototype);
-
-const computedValueGet = Object.getOwnPropertyDescriptor(
-  Computed.prototype,
-  "value",
-)!.get!;
-
-Object.defineProperty(Lens.prototype, "value", {
-  get: computedValueGet,
-  set(this: Lens, n: unknown) {
-    this._write(n);
-  },
-});
-
-export function lens<T>(read: () => T, write: (n: T) => void): Signal<T> {
-  return new Lens(read, write) as unknown as Signal<T>;
-}
-
-//#endregion Lens
-
-/**
- * An interface for read-only signals.
- */
-interface ReadonlySignal<T = any> {
-  readonly value: T;
-  peek(): T;
-
-  subscribe(fn: (value: T) => void): () => void;
-  valueOf(): T;
-  toString(): string;
-  toJSON(): T;
-  brand: typeof BRAND_SYMBOL;
-}
-
-/**
- * Create a new signal that is computed based on the values of other signals.
- *
- * The returned computed signal is read-only, and its value is automatically
- * updated when any signals accessed from within the callback function change.
- *
- * @param fn The effect callback.
- * @returns A new read-only signal.
- */
-function computed<T>(
-  fn: () => T,
-  options?: SignalOptions<T>,
-): ReadonlySignal<T> {
-  return new Computed(fn, options);
-}
-
-//#endregion Computed
-
-//#region Effect
-
-function cleanupEffect(effect: Effect) {
-  const cleanup = effect._cleanup;
-  effect._cleanup = undefined;
-
-  if (typeof cleanup === "function") {
-    /*@__INLINE__**/ startBatch();
-
-    // Run cleanup functions always outside of any context.
-    const prevContext = evalContext;
-    evalContext = undefined;
-    try {
-      cleanup();
-    } catch (err) {
-      effect._flags &= ~RUNNING;
-      effect._flags |= DISPOSED;
-      disposeEffect(effect);
-      throw err;
-    } finally {
-      evalContext = prevContext;
-      endBatch();
-    }
-  }
-}
-
-function disposeEffect(effect: Effect) {
-  for (
-    let node = effect._sources;
-    node !== undefined;
-    node = node._nextSource
-  ) {
-    node._source._unsubscribe(node);
-  }
-  effect._fn = undefined;
-  effect._sources = undefined;
-
-  cleanupEffect(effect);
-}
-
-function endEffect(this: Effect, prevContext?: Computed | Effect) {
-  if (evalContext !== this) {
-    throw new Error("Out-of-order effect");
-  }
-  cleanupSources(this);
-  evalContext = prevContext;
-
-  this._flags &= ~RUNNING;
-  if (this._flags & DISPOSED) {
-    disposeEffect(this);
-  }
-  endBatch();
-}
-
-type EffectFn =
-  | ((this: { dispose: () => void }) => void | (() => void))
-  | (() => void | (() => void));
-
-// Avoid hard-requiring the ESNext.Disposable lib in consuming tsconfigs.
-// When `Symbol.dispose` is available, this becomes a symbol-keyed disposer type.
-type DisposeSymbol = typeof Symbol extends { readonly dispose: infer TDispose }
-  ? TDispose
-  : never;
-type DisposableLike = {
-  [K in DisposeSymbol & PropertyKey]: () => void;
-};
-type DisposeFn = (() => void) & DisposableLike;
-
-/**
- * The base class for reactive effects.
- */
-declare class Effect {
-  _fn?: EffectFn;
-  _cleanup?: () => void;
-  _sources?: Node;
-  _nextBatchedEffect?: Effect;
-  _flags: number;
-  _debugCallback?: () => void;
-  name?: string;
-
-  constructor(fn: EffectFn, options?: EffectOptions);
-
-  _callback(): void;
-  _start(): () => void;
-  _notify(): void;
-  _dispose(): void;
-  dispose(): void;
-}
-
-export interface EffectOptions {
-  name?: string;
-}
-
-/** @internal */
-function Effect(this: Effect, fn: EffectFn, options?: EffectOptions) {
-  this._fn = fn;
-  this._cleanup = undefined;
-  this._sources = undefined;
-  this._nextBatchedEffect = undefined;
-  this._flags = TRACKING;
-  this.name = options?.name;
-}
-
-Effect.prototype._callback = function () {
-  const finish = this._start();
-  try {
-    if (this._flags & DISPOSED) return;
-    if (this._fn === undefined) return;
-
-    const cleanup = this._fn();
-    if (typeof cleanup === "function") {
-      this._cleanup = cleanup;
+    while (notifyIndex < queuedLength) {
+      const e = queued[notifyIndex]!;
+      queued[notifyIndex++] = undefined;
+      e._run();
     }
   } finally {
-    finish();
+    while (notifyIndex < queuedLength) {
+      const e = queued[notifyIndex]!;
+      queued[notifyIndex++] = undefined;
+      e.flags |= F.Watching | F.Recursed;
+    }
+    notifyIndex = 0;
+    queuedLength = 0;
   }
-};
-
-Effect.prototype._start = function () {
-  if (this._flags & RUNNING) {
-    throw new Error("Cycle detected");
-  }
-  this._flags |= RUNNING;
-  this._flags &= ~DISPOSED;
-  cleanupEffect(this);
-  prepareSources(this);
-
-  /*@__INLINE__**/ startBatch();
-  const prevContext = evalContext;
-  evalContext = this;
-  return endEffect.bind(this, prevContext);
-};
-
-Effect.prototype._notify = function () {
-  if (!(this._flags & NOTIFIED)) {
-    this._flags |= NOTIFIED;
-    this._nextBatchedEffect = batchedEffect;
-    batchedEffect = this;
-  }
-};
-
-Effect.prototype._dispose = function () {
-  this._flags |= DISPOSED;
-
-  if (!(this._flags & RUNNING)) {
-    disposeEffect(this);
-  }
-};
-
-Effect.prototype.dispose = function () {
-  this._dispose();
-};
-/**
- * Create an effect to run arbitrary code in response to signal changes.
- *
- * An effect tracks which signals are accessed within the given callback
- * function `fn`, and re-runs the callback when those signals change.
- *
- * The callback may return a cleanup function. The cleanup function gets
- * run once, either when the callback is next called or when the effect
- * gets disposed, whichever happens first.
- *
- * @param fn The effect callback.
- * @returns A function for disposing the effect.
- */
-function effect(fn: EffectFn, options?: EffectOptions): DisposeFn {
-  const effect = new Effect(fn, options);
-  try {
-    effect._callback();
-  } catch (err) {
-    effect._dispose();
-    throw err;
-  }
-  // Return a bound function instead of a wrapper like `() => effect._dispose()`,
-  // because bound functions seem to be just as fast and take up a lot less memory.
-  const dispose = effect._dispose.bind(effect);
-  (dispose as any)[Symbol.dispose] = dispose;
-  return dispose as DisposeFn;
 }
 
-//#endregion Effect
+function purgeDeps(sub: ReactiveNode): void {
+  const depsTail = sub.depsTail;
+  let dep = depsTail !== undefined ? depsTail.nextDep : sub.deps;
+  while (dep !== undefined) dep = unlink(dep, sub);
+}
 
-export {
-  computed,
-  effect,
-  batch,
-  untracked,
-  Signal,
-  type ReadonlySignal,
-  Effect,
-  Computed,
-};
+function disposeAllDepsInReverse(sub: ReactiveNode): void {
+  let l = sub.depsTail;
+  while (l !== undefined) { const prev = l.prevDep; unlink(l, sub); l = prev; }
+}
 
-// ── minim extensions ────────────────────────────────────────────────
-//
-// minim no longer patches `Signal.prototype`. `.to(target, dur, ease?)`
-// is installed by the struct framework on each registered writable
-// Reactive's prototype (see `values/struct.ts`), so `num(0).to(...)`
-// works but `cell(0).to(...)` does not.
-//
-// For derived signals, use `cell.derived(() => ...)` or the standalone
-// `derive(sig, fn)` helper from `core/cell.ts`.
+function unlinkChildEffects(node: ReactiveNode): void {
+  let l = node.depsTail;
+  while (l !== undefined) {
+    const prev = l.prevDep;
+    if (l.dep instanceof Effect) unlink(l, node);
+    l = prev;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Val<T> — "anything that yields a T"
+// ════════════════════════════════════════════════════════════════════
+
+/** Plain T, thunk `() => T`, or reactive Signal. Branded nominally via
+ *  `instanceof Signal` so plain objects with `.value` aren't mistaken
+ *  for cells. */
+export type Val<T> = T | (() => T) | Signal<T>;
+
+/** Unwrap to T. Reactive forms auto-track inside an effect/computed body. */
+export function value<T>(v: Val<T>): T {
+  if (v instanceof Signal) return v.value;
+  if (typeof v === "function") return (v as () => T)();
+  return v as T;
+}
+
+export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signal;
+
+// ════════════════════════════════════════════════════════════════════
+// SignalOptions
+// ════════════════════════════════════════════════════════════════════
+
+export interface SignalOptions<T = unknown> {
+  /** First subscriber attached. */
+  watched?: () => void;
+  /** Last subscriber detached. */
+  unwatched?: () => void;
+  /** Per-instance equality. Stamps `[EQUALS]` shadowing the class slot.
+   *  Falls back to `===` if no slot is declared. */
+  equals?: Equals<T>;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Signal — writable reactive value, base class
+// ════════════════════════════════════════════════════════════════════
+
+/** Writable signal. Bind reactively via `.bind(source: Val<T>)`. */
+export class Signal<T = unknown> implements ReactiveNode {
+  subs: Link | undefined = undefined;
+  subsTail: Link | undefined = undefined;
+  deps: Link | undefined = undefined;
+  depsTail: Link | undefined = undefined;
+  flags: number = F.Mutable;
+  currentValue: T;
+  pendingValue: T;
+  _watched?: () => void;
+  _unwatchedHook?: () => void;
+  /** Disposer for the most recent `.bind(reactive)`. */
+  protected _stopBinding?: () => void;
+
+  constructor(initial: T, opts?: SignalOptions<T>) {
+    if (opts) {
+      if (opts.watched) this._watched = opts.watched;
+      if (opts.unwatched) this._unwatchedHook = opts.unwatched;
+      // Stamp own-property [EQUALS], shadowing any class-level slot.
+      if (opts.equals) (this as unknown as { [EQUALS]?: Equals<T> })[EQUALS] = opts.equals;
+    }
+    this.currentValue = initial;
+    this.pendingValue = initial;
+  }
+
+  /** Read with tracking. */
+  get value(): T {
+    if (this.flags & F.Dirty) {
+      this.flags = F.Mutable;
+      if (this.currentValue !== (this.currentValue = this.pendingValue)) {
+        const subs = this.subs;
+        if (subs !== undefined) shallowPropagate(subs);
+      }
+    }
+    if (activeSub !== undefined) link(this, activeSub, cycle);
+    return this.currentValue;
+  }
+
+  /** Plain write. */
+  set value(next: T) {
+    const prev = this.pendingValue;
+    this.pendingValue = next;
+    const equals = this[EQUALS];
+    const same = equals ? equals(prev, next) : prev === next;
+    if (!same) {
+      this.flags = F.Mutable | F.Dirty;
+      const subs = this.subs;
+      if (subs !== undefined) {
+        propagate(subs, !!runDepth);
+        if (!batchDepth) flush();
+      }
+    }
+  }
+
+  /** Untracked read; honors Dirty flag. */
+  peek(): T {
+    if (this.flags & F.Dirty) {
+      this.flags = F.Mutable;
+      this.currentValue = this.pendingValue;
+    }
+    return this.currentValue;
+  }
+
+  /** Bind to a `Val<T>`; each call REPLACES any prior binding.
+   *
+   *    sig.bind(5)              one-shot write of 5
+   *    sig.bind(otherSig)       follows otherSig.value
+   *    sig.bind(() => x.value)  follows tracked deps of the thunk
+   *
+   *  Returns a dispose fn (no-op for plain T). To unbind without setting
+   *  a value: keep the dispose fn from a prior bind, or `sig.bind(sig.peek())`. */
+  bind(source: Val<T>): () => void {
+    if (this._stopBinding) { this._stopBinding(); this._stopBinding = undefined; }
+    if (source instanceof Signal || typeof source === "function") {
+      const stop = effect(() => { this.value = value(source); });
+      this._stopBinding = stop;
+      return stop;
+    }
+    this.value = source;
+    return noop;
+  }
+
+  _update(): boolean {
+    this.flags = F.Mutable;
+    return this.currentValue !== (this.currentValue = this.pendingValue);
+  }
+  _notify(): void {}
+  _unwatched(): void {
+    if (this._unwatchedHook !== undefined) this._unwatchedHook();
+  }
+
+  /** Footgun guard: `${sig}` / `sig + 1` / `Boolean(sig)` throw instead
+   *  of silently coercing. `sig === otherSig` (identity) still works. */
+  [Symbol.toPrimitive](hint: string): never {
+    throw new TypeError(`Signal cannot be coerced to ${hint} — use \`.value\``);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Computed — derived signal (read-only, or writable view if setter set)
+// ════════════════════════════════════════════════════════════════════
+
+export class Computed<T = unknown> extends Signal<T> {
+  cachedValue: T | undefined = undefined;
+  getter: () => T;
+  /** Lens-mode iff set; otherwise writes throw. */
+  setter?: (v: T) => void;
+
+  constructor(getter: () => T, setter?: (v: T) => void) {
+    super(undefined as T);
+    this.getter = getter;
+    if (setter !== undefined) this.setter = setter;
+    this.flags = 0;
+  }
+
+  override get value(): T {
+    const flags = this.flags;
+    // RecursedCheck is set only during this computed's own sync eval.
+    // Hitting it on a read means the getter is reading its own value.
+    if (flags & F.RecursedCheck) {
+      throw new RangeError(`Cyclic computed: ${(this.constructor as { name?: string }).name ?? "?"} read its own value`);
+    }
+    if (
+      flags & F.Dirty ||
+      (flags & F.Pending &&
+        (checkDirty(this.deps!, this) || ((this.flags = flags & ~F.Pending), false)))
+    ) {
+      if (this._update()) {
+        const subs = this.subs;
+        if (subs !== undefined) shallowPropagate(subs);
+      }
+    } else if (!flags) {
+      this.flags = F.Mutable | F.RecursedCheck;
+      const prev = activeSub;
+      activeSub = this;
+      let threw = true;
+      try {
+        this.cachedValue = this.getter();
+        threw = false;
+      } finally {
+        activeSub = prev;
+        // On throw: leave dirty so next read retries.
+        this.flags = threw ? F.Mutable | F.Dirty : (this.flags & ~F.RecursedCheck);
+      }
+    }
+    if (activeSub !== undefined) link(this, activeSub, cycle);
+    return this.cachedValue!;
+  }
+
+  override set value(next: T) {
+    if (this.setter !== undefined) this.setter(next);
+    else throw new TypeError("Cannot write to a Computed");
+  }
+
+  override peek(): T {
+    const prev = activeSub;
+    activeSub = undefined;
+    try { return this.value; }
+    finally { activeSub = prev; }
+  }
+
+  override _update(): boolean {
+    if (this.flags & F.HasChildEffect) unlinkChildEffects(this);
+    this.depsTail = undefined;
+    this.flags = F.Mutable | F.RecursedCheck;
+    const prev = activeSub;
+    activeSub = this;
+    let threw = true;
+    try {
+      ++cycle;
+      const old = this.cachedValue;
+      const next = this.cachedValue = this.getter();
+      threw = false;
+      const eq = this[EQUALS];
+      return eq ? !eq(old as T, next) : old !== next;
+    } finally {
+      activeSub = prev;
+      this.flags = threw ? F.Mutable | F.Dirty : (this.flags & ~F.RecursedCheck);
+      purgeDeps(this);
+    }
+  }
+
+  override _unwatched(): void {
+    if (this.depsTail !== undefined) {
+      this.flags = F.Mutable | F.Dirty;
+      disposeAllDepsInReverse(this);
+    }
+  }
+}
+
+/** Type alias — Lens is a Computed with a setter; no separate runtime class. */
+export type Lens<T = unknown> = Computed<T>;
+
+// ════════════════════════════════════════════════════════════════════
+// Effect — internal; users call effect()
+// ════════════════════════════════════════════════════════════════════
+
+class Effect implements ReactiveNode {
+  subs: Link | undefined = undefined;
+  subsTail: Link | undefined = undefined;
+  deps: Link | undefined = undefined;
+  depsTail: Link | undefined = undefined;
+  flags: number = F.Watching | F.RecursedCheck;
+  fn: () => (() => void) | void;
+  cleanup: (() => void) | undefined = undefined;
+
+  constructor(fn: () => (() => void) | void) {
+    this.fn = fn;
+    const prev = activeSub;
+    activeSub = this;
+    if (prev !== undefined) {
+      link(this, prev, 0);
+      prev.flags |= F.HasChildEffect;
+    }
+    try {
+      ++runDepth;
+      const ret = fn();
+      this.cleanup = typeof ret === "function" ? ret : undefined;
+    } finally {
+      --runDepth;
+      activeSub = prev;
+      this.flags &= ~F.RecursedCheck;
+    }
+  }
+
+  _update(): boolean { this.flags = F.Mutable; return true; }
+
+  _notify(): void {
+    let e: Effect = this;
+    let insertIndex = queuedLength;
+    const firstInsertedIndex = insertIndex;
+    do {
+      queued[insertIndex++] = e;
+      e.flags &= ~F.Watching;
+      const next = e.subs?.sub as Effect | undefined;
+      if (next === undefined || !(next.flags & F.Watching)) break;
+      e = next;
+    } while (true);
+    queuedLength = insertIndex;
+    let idx = insertIndex, firstIdx = firstInsertedIndex;
+    while (firstIdx < --idx) {
+      const left = queued[firstIdx];
+      queued[firstIdx++] = queued[idx];
+      queued[idx] = left;
+    }
+  }
+
+  _unwatched(): void {
+    this.flags = F.None;
+    disposeAllDepsInReverse(this);
+    const sub = this.subs;
+    if (sub !== undefined) unlink(sub);
+    if (this.cleanup) this._runCleanup();
+  }
+
+  _run(): void {
+    const flags = this.flags;
+    if (flags & F.Dirty || (flags & F.Pending && checkDirty(this.deps!, this))) {
+      if (flags & F.HasChildEffect) unlinkChildEffects(this);
+      if (this.cleanup) { this._runCleanup(); if (!this.flags) return; }
+      this.depsTail = undefined;
+      this.flags = F.Watching | F.RecursedCheck;
+      const prev = activeSub;
+      activeSub = this;
+      try {
+        ++cycle; ++runDepth;
+        const ret = this.fn();
+        this.cleanup = typeof ret === "function" ? ret : undefined;
+      } finally {
+        --runDepth;
+        activeSub = prev;
+        this.flags &= ~F.RecursedCheck;
+        purgeDeps(this);
+      }
+    } else if (this.deps !== undefined) {
+      this.flags = F.Watching | (flags & F.HasChildEffect);
+    }
+  }
+
+  _runCleanup(): void {
+    const c = this.cleanup!;
+    this.cleanup = undefined;
+    const prev = activeSub;
+    activeSub = undefined;
+    try { c(); } finally { activeSub = prev; }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Factory helpers
+// ════════════════════════════════════════════════════════════════════
+
+export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> {
+  return new Signal(initial, opts);
+}
+export function computed<T>(getter: () => T): Computed<T> { return new Computed(getter); }
+export function lens<T>(getter: () => T, setter: (v: T) => void): Lens<T> { return new Computed(getter, setter); }
+export function effect(fn: () => void | (() => void)): () => void {
+  const e = new Effect(fn);
+  return () => e._unwatched();
+}
+export function batch<R>(fn: () => R): R {
+  ++batchDepth;
+  try { return fn(); }
+  finally { if (!--batchDepth) flush(); }
+}
+export function untracked<R>(fn: () => R): R {
+  const prev = activeSub;
+  activeSub = undefined;
+  try { return fn(); }
+  finally { activeSub = prev; }
+}
+

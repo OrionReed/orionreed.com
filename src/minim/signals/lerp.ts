@@ -18,9 +18,8 @@ import {
 } from "./traits";
 import {
   drive, suspend, race, type Animator, type Yieldable,
-} from "./anim";
-import { type Easing, easeOut } from "./easings";
-export { type Easing, linear, easeIn, easeOut, easeInOut } from "./easings";
+  type Easing, easeOut,
+} from "../core";
 
 const defaultEase = easeOut;
 

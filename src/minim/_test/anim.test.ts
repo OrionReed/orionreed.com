@@ -542,25 +542,8 @@ describe("composability", () => {
     anim.stop();
   });
 
-  it("record + replay: source runs once, replays don't re-enter", async () => {
-    const { record, replay } = await import("@minim/core");
-    let runCount = 0;
-    function* src(): any { runCount++; yield 0.05; yield 0.05; }
-    const anim = new Anim();
-    const trace: any[] = [];
-    anim.start(record(trace, src()));
-    for (let f = 0; f < 10; f++) anim.step(0.02);
-    anim.stop();
-    expect(runCount).toBe(1);
-    runCount = 0;
-    for (let r = 0; r < 10; r++) {
-      const a2 = new Anim();
-      a2.start(replay(trace) as Animator);
-      for (let f = 0; f < 10; f++) a2.step(0.02);
-      a2.stop();
-    }
-    expect(runCount).toBe(0);
-  });
+  // record/replay/reverse/forks dropped from core (experiment cruft).
+  // If we want them back, write minimal versions; the tests can return.
 });
 
 describe("detach", () => {

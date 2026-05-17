@@ -8,8 +8,8 @@
   "types": "./index.ts",
   "sideEffects": false,
   "scripts": {
-    "test": "vitest --config ../../vitest.config.ts run",
-    "test:watch": "vitest --config ../../vitest.config.ts",
+    "test": "cd ../.. && vitest --config vitest.config.ts run",
+    "test:watch": "cd ../.. && vitest --config vitest.config.ts",
     "bench": "node --expose-gc ../../node_modules/.bin/vite-node",
     "typecheck": "tsc --noEmit"
   },

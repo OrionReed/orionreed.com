@@ -280,8 +280,9 @@ const TESTS: TestCase[] = [
     name: "child throw propagates to parent (model-a)",
     run: (assert) => {
       // A thrown child raises at the parent's yield site (model-a).
-      // Without `try/catch` the parent terminates errored; sibling is
-      // cancelled. With `try/catch` the parent catches and resumes.
+      // `bad` parks before throwing so both children are fully spawned
+      // before the error path fires; on step the throw propagates,
+      // siblings are cancelled (finally runs), parent catches.
       const a = new Anim();
       let parentDone = false;
       let caught: unknown;
@@ -291,16 +292,16 @@ const TESTS: TestCase[] = [
         a.start(function* () {
           try {
             yield [
-              (function* (): Animator { throw new Error("boom"); })(),
+              (function* (): Animator { yield; throw new Error("boom"); })(),
               (function* (): Animator { try { yield 5; } finally { sibFin++; } })(),
             ];
           } catch (e) { caught = e; }
           parentDone = true;
         });
-        a.step(0);
-        assert(parentDone, `parent should reach catch and resume`);
+        a.step(0.016);
         assert((caught as Error)?.message === "boom", `parent caught the throw`);
         assert(sibFin === 1, `sibling cancelled (finally ran)`);
+        assert(parentDone, `parent reached post-catch`);
       } finally {
         a.stop();
       }

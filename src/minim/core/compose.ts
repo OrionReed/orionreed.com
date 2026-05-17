@@ -1,12 +1,13 @@
-// Signal-free generator combinators + the two userland Yieldable
-// constructors (`drive`, `suspend`). The fluent factories (`play`,
-// `loop`, `every`) live in `signals/` because `Play` itself is
-// signal-coupled (`.until(sig) / .while(sig) / .at(Val<number>)`).
+// Signal-free generator combinators on top of `Anim`.
 //
-//   yield* drive((dt) => …)                        // per-frame work
-//   const v = yield* suspend((wake) => () => …)    // typed callback
-//   const [a, b] = yield* all(workA(), workB());   // typed-tuple return
-//   yield* rand(branch0, branch1, branch2);        // pick one uniformly
+// Three categories:
+//
+//   Yieldable constructors:  drive, suspend
+//   Concurrency:             all, race, rand
+//   Wrappers:                mapDt, withTimeout
+//
+// Plus the RAF adapter — `attachRaf(anim)` wires `anim.step(dt)` to
+// `requestAnimationFrame`. None of these touch signals.
 
 import {
   Anim,
@@ -19,9 +20,13 @@ import {
   type PayloadOf,
 } from "./anim";
 
+// ════════════════════════════════════════════════════════════════════
+// Yieldable constructors
+// ════════════════════════════════════════════════════════════════════
+
 /** `yield* drive(cb)` parks each frame until `cb` returns `false`.
- *  Plain generator — composes with `mapDt`, `tap`, `record`,
- *  `withTimeout`, etc. through the standard yield seam. */
+ *  Plain generator — composes with `mapDt`, `withTimeout`, etc.
+ *  through the standard yield seam. */
 export function* drive(
   cb: (dt: number, t: number) => boolean | void,
 ): Animator<void> {
@@ -39,16 +44,22 @@ export function* suspend<T = void>(impl: SuspendFn<T>): Animator<T> {
   return (yield impl) as T;
 }
 
-/** Subscribe a Yieldable from inside a SuspendFn body — bare SuspendFns
- *  subscribe directly (sharing the parent's `spawn` so nested combinators
- *  don't re-wrap), other shapes get wrapped via `asGen`. */
-export function spawnYieldable(
+// ════════════════════════════════════════════════════════════════════
+// Concurrency combinators
+// ════════════════════════════════════════════════════════════════════
+
+/** Internal: subscribe a Yieldable from inside a SuspendFn body. Bare
+ *  SuspendFns subscribe directly (sharing the parent's `spawn` so
+ *  nested combinators don't re-wrap); generators pass through to
+ *  preserve their return value; other shapes wrap via `asGen`. */
+function spawnYieldable(
   y: Yieldable,
   spawn: SpawnFn,
   anim: Anim,
   onDone: (v: any) => void,
 ): () => void {
-  if (typeof y === "function" && !isGen(y)) {
+  if (isGen(y)) return spawn(y, onDone);
+  if (typeof y === "function") {
     return (y as SuspendFn<any> as (
       w: (v: any) => void, s: SpawnFn, a: Anim,
     ) => () => void)(onDone, spawn, anim);
@@ -56,14 +67,8 @@ export function spawnYieldable(
   return spawn(asGen(y), onDone);
 }
 
-/** Run children in parallel; complete when all finish; resume with a
- *  typed tuple of their return values:
- *
- *      const [a, b] = yield* all(workA(), workB());
- *
- *  Each tuple slot is the corresponding child's `R`. For the fluent
- *  equivalent (no typed return), use `play([...])` from
- *  `@minim/signals`. */
+/** Run children in parallel; resume with a typed tuple of return values
+ *  when all complete. Errors propagate from the first kid that throws. */
 export function all<Cs extends readonly Yieldable[]>(
   ...children: Cs
 ): Animator<{ [K in keyof Cs]: PayloadOf<Cs[K]> }> {
@@ -87,12 +92,99 @@ export function all<Cs extends readonly Yieldable[]>(
   });
 }
 
+/** First-completion race; resume with the winner's payload. Losers are
+ *  cancelled. */
+export function race<Cs extends readonly Yieldable[]>(
+  ...children: Cs
+): Animator<PayloadOf<Cs[number]>> {
+  type R = PayloadOf<Cs[number]>;
+  return suspend<R>((wake, spawn, anim) => {
+    let won = false;
+    const disposers: (() => void)[] = [];
+    const safeWake = (v: any): void => {
+      if (won) return;
+      won = true;
+      for (const d of disposers) try { d(); } catch {}
+      wake(v as R);
+    };
+    for (const c of children) {
+      disposers.push(spawnYieldable(c, spawn, anim, safeWake));
+    }
+    return () => {
+      if (won) return;
+      won = true;
+      for (const d of disposers) try { d(); } catch {}
+    };
+  });
+}
+
 /** Pick one of `children` uniformly at random and run it. Construction
- *  must be side-effect free — unselected generators are never advanced
- *  (the convention for every factory in this stdlib). Combine with
- *  `loop(...)` for a fresh roll each iteration. */
+ *  must be side-effect free — unselected generators are never advanced. */
 export function* rand(...children: Animator[]): Animator {
   if (children.length === 0) return;
   const i = Math.floor(Math.random() * children.length);
   yield* children[i];
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Wrappers — drive other gens via the standard yield seam
+//
+// Wrappers MUST `try/finally { gen.return() }`. JS doesn't propagate
+// `.return()` across independently-driven gens — only across `yield*`
+// delegation. Our wrappers iterate manually, so we own the cleanup.
+// ════════════════════════════════════════════════════════════════════
+
+/** Transform `dt` before the inner gen sees it: slow-mo, fast-forward,
+ *  reactive time-scale. `fn` is called with whatever the runtime hands
+ *  us; what `fn` returns is what the inner gen receives. */
+export function* mapDt<R>(fn: (resume: any) => any, gen: Animator<R>): Animator<R> {
+  let arg: any = undefined;
+  try {
+    while (true) {
+      const r = gen.next(arg);
+      if (r.done) return r.value;
+      arg = fn(yield r.value);
+    }
+  } finally { gen.return(undefined as any); }
+}
+
+/** Hard-cap by engine time. `gen` and a sibling `seconds` sleep race;
+ *  on timeout the inner is cancelled and the parent resumes with
+ *  `undefined`. */
+export function withTimeout<R>(
+  seconds: number,
+  gen: Animator<R>,
+): Animator<R | undefined> {
+  return suspend<R | undefined>((wake, spawn) => {
+    let done = false;
+    const finish = (v: R | undefined): void => { if (done) return; done = true; wake(v); };
+    const stopChild = spawn(gen, (v) => finish(v as R | undefined));
+    const stopTimer = spawn(
+      (function* (): Animator { yield seconds; })(),
+      () => finish(undefined),
+    );
+    return () => { stopTimer(); stopChild(); };
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// RAF adapter
+// ════════════════════════════════════════════════════════════════════
+
+/** Browser RAF adapter; caps single-frame dt at 32 ms so tab-
+ *  backgrounding (where browsers throttle then resume with the
+ *  accumulated delta) doesn't deliver one giant frame. Returns a
+ *  disposer that cancels the RAF loop. */
+export function attachRaf(anim: Anim): () => void {
+  if (typeof requestAnimationFrame !== "function") return () => {};
+  const FRAME_CAP_MS = 32;
+  let rafId = 0, last = 0;
+  const tick = (now: number): void => {
+    rafId = requestAnimationFrame(tick);
+    const dt = last ? Math.min(now - last, FRAME_CAP_MS) / 1000 : 0;
+    last = now;
+    anim.step(dt);
+  };
+  rafId = requestAnimationFrame(tick);
+  return () => { if (rafId) cancelAnimationFrame(rafId); rafId = 0; last = 0; };
 }

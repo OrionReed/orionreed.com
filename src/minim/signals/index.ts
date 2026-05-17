@@ -1,117 +1,60 @@
-// Reactive signals — the irreducible reactivity primitives.
+// signals — reactive cells + signals→generators bridge.
 //
-// Layout:
-//   signal.ts      — Signal/Computed/Lens engine (vendored
-//                    preact-signals + our `Lens<T>` subclass).
-//   cell.ts        — `Cell<T>` / `ReadonlyCell<T>` — the unified
-//                    user-facing type pair, plus `cell()` factory,
-//                    `derive`, `not`, and the type-level surface for
-//                    the struct framework (`StructType`, `WriteOf`,
-//                    `ReadOf`, `NestedMap`, `NestedInput`).
-//   arg.ts         — `Val<T>` (literal | reactive cell | thunk) and
-//                    `toSig` / `when` bridges.
-//   suspensions.ts — `untilChange / untilEvent / untilPromise / race`
-//                    plus framework-internal `untilTrue` used by
-//                    `play(cell)` / `.until(cell)`.
-//   tween.ts       — `Play<R>` fluent vocabulary, `play()` entry
-//                    point, `Playable<R>` input type, AND `Tween<T>`
-//                    (since `Tween<T> extends Play<void>`). One file
-//                    because they share the `_rewrap`-based subclass-
-//                    preserving design.
-//   compose.ts     — `loop(factory)` + `every(sec, fn)` — distinct
-//                    shapes that don't fit the `play(...)` signature.
-//   struct.ts      — runtime for the struct framework. Produces high-
-//                    performance chainable cells (axes, lifted ops,
-//                    lazy getters, per-struct `.to`, `[ALGEBRA]`).
+// Layered surface:
+//   ./signal     Signal / Computed / Lens + effect / batch / untracked
+//   ./traits    LINEAR / LERP / METRIC / EQUALS slots + accessors
+//   ./derive    BaseChain / derived / field / bindFields / ReactiveInit
+//   ./lerp      Tween, tween/spring/toward/from/holding/driven, play, defineTrait
+//   ./values/*  Num / Vec / Color / Box / Transform built-in cells
+//
+// The signal-free runtime (Anim, drive, suspend, race, etc.) lives in
+// `../core` — it has no signal dependency and is re-exported separately.
 
-// ── signal engine ─────────────────────────────────────────────────
-//
-// `Signal` / `Computed` classes and the `signal` / `computed` / `lens`
-// factories are exposed because the struct framework runtime needs them
-// for prototype work and `instanceof` checks. Public consumers should
-// reach for `cell` / `cell.derived` / `cell.lens` instead.
-//
-// `SignalOptions` / `EffectOptions` are not re-exported — they're
-// preact's internal config types and have no external callers.
+// ── Engine ─────────────────────────────────────────────────────────
 export {
-  signal,
-  computed,
-  effect,
-  batch,
-  untracked,
-  lens,
   Signal,
   Computed,
-  type ReadonlySignal,
+  signal, computed, lens, effect, batch, untracked,
+  value, isSignal,
+  type Lens,
+  type Val,
+  type SignalOptions,
 } from "./signal";
 
-// ── cell types + factory ──────────────────────────────────────────
-//
-// `NestedMap` / `NestedInput` are framework-internal type-system
-// bookkeeping; they're consumed inside `cell.ts` and `struct.ts` but
-// never named in user code.
+// ── Traits ─────────────────────────────────────────────────────────
 export {
-  cell,
-  derive,
-  not,
-  type Cell,
-  type ReadonlyCell,
-  type CellOptions,
-  type StructType,
-  type WriteOf,
-  type ReadOf,
-} from "./cell";
+  LINEAR, LERP, METRIC, EQUALS,
+  classOf,
+  linearOf, lerpOf, metricOf, equalsOf,
+  requireLinear, requireLerp, requireMetric, requireEquals,
+  type Linear, type Lerp, type Metric, type Equals,
+  type ValueClass,
+} from "./traits";
 
-// ── Val<T> bridge ─────────────────────────────────────────────────
-//
-// Two canonical normalisers for `Val<T>`:
-//   toSig(v)     → ReadonlyCell<T>      ("give me a cell")
-//   asReader(v)  → () => T              ("give me a thunk; no signal alloc for literals")
-//
-// Every Val-consuming callsite in the library funnels through one
-// of these. No bespoke dispatch elsewhere.
-export { toSig, asReader, when, type Val } from "./arg";
-
-// ── suspensions ───────────────────────────────────────────────────
-//
-// `untilTrue` is framework-internal — it's consumed by `play(cell)`
-// and `.until(cell)` (the "wait truthy" branch of `playableGen`).
-// Public code says `play(sig)` / `.until(sig)` / `.until(not(sig))`
-// for the falsy case.
+// ── Composition primitives ─────────────────────────────────────────
 export {
-  untilChange,
-  untilEvent,
-  untilPromise,
-  race,
-} from "./suspensions";
+  BaseChain,
+  derived,
+  field,
+  bindFields,
+  type ReactiveInit,
+} from "./derive";
 
-// ── play + tween (the fluent surface) ─────────────────────────────
-//
-// `LERP` symbol, `scaledChild`, `sleepGen` are framework-internal —
-// used by `struct.ts` and `compose.ts` only. Not re-exported.
+// ── Lerp / temporal cell methods ───────────────────────────────────
 export {
-  play,
-  tween,
-  lerpable,
-  type Play,
-  type Playable,
-  type Tween,
-  type Easing,
-  type Lerp,
-} from "./tween";
+  Tween,
+  tween, spring, toward, from, holding, driven,
+  play, untilTrue,
+  defineTrait, lerpImpl,
+  type LerpMethods,
+} from "./lerp";
 
-// ── compose (distinct-shape factories) ────────────────────────────
-export { loop, every } from "./compose";
-
-// ── struct framework ──────────────────────────────────────────────
-//
-// Two equivalent entry points:
-// `defineStruct({...})` — flat config; capabilities (`algebra`, `lerp`,
-// `metric`) are first-class keys. `registerCapability` stamps custom
-// capability slots onto an already-built struct.
+// ── Built-in value types ───────────────────────────────────────────
 export {
-  defineStruct,
-  registerCapability,
-  type StructConfig,
-  type VectorSpace,
-} from "./struct";
+  Num, num, type NumValue,
+  Vec, vec, type VecValue,
+  Color, rgb, rgba, type ColorValue,
+  Box, box, type BoxValue,
+  Transform, transform, type TransformValue, type TransformInit,
+  mean,
+} from "./values";
