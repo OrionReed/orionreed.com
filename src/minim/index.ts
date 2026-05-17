@@ -55,6 +55,7 @@ export {
   all,
   rand,
   drive,
+  detach,
   type Animator,
   type SpawnFn,
 } from "./core";

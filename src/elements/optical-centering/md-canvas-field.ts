@@ -28,6 +28,7 @@
 // the particles, not in each particle.
 
 import { Anim, cell, drive, effect, every, loop, num, vec, Num, Vec } from "../../minim";
+import { attachRaf } from "@minim/web";
 
 const N = 1500;
 const W = 640;
@@ -120,6 +121,7 @@ export class MdCanvasField extends HTMLElement {
 
   private anim = new Anim();
   private disposers: Array<() => void> = [];
+  #detachRaf: (() => void) | null = null;
 
   // Reactive knobs — the *renderer-agnostic* state.
   private phaseIdx = num(0);
@@ -227,9 +229,12 @@ export class MdCanvasField extends HTMLElement {
     this.initParticles();
     this.bindPointer();
     this.startLoops();
+    this.#detachRaf = attachRaf(this.anim);
   }
 
   disconnectedCallback(): void {
+    this.#detachRaf?.();
+    this.#detachRaf = null;
     this.anim.stop();
     for (const d of this.disposers) d();
     this.disposers = [];

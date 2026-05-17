@@ -2,7 +2,7 @@
 // drives it via `step(dt)` — synchronous and deterministic, no RAF.
 // Re-runs every few seconds so regressions surface live.
 
-import { Anim, Diagram, EventBus, Vec, Mount, Anchor, assemble, attract, centroid, circle, play, derive, drift, cell, every, forEach, label, loop, mean, meanRotation, meanScale, num, oscillate, vec, race, rect, splay, spring, swap, untilChange, untilPromise, type Animator } from "../../minim";
+import { Anim, Diagram, EventBus, Vec, Mount, Anchor, assemble, attract, centroid, circle, play, derive, detach, drift, cell, every, forEach, label, loop, mean, meanRotation, meanScale, num, oscillate, vec, race, rect, splay, spring, swap, untilChange, untilPromise, type Animator } from "../../minim";
 
 type Status = "pending" | "running" | "pass" | "fail";
 
@@ -277,35 +277,31 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "child throw doesn't hang parent",
+    name: "child throw propagates to parent (model-a)",
     run: (assert) => {
-      // Throwing children must report via `complete` so the parent's
-      // counter decrements.
+      // A thrown child raises at the parent's yield site (model-a).
+      // Without `try/catch` the parent terminates errored; sibling is
+      // cancelled. With `try/catch` the parent catches and resumes.
       const a = new Anim();
       let parentDone = false;
-      const origError = console.error;
-      console.error = () => {
-        /* expected */
-      };
+      let caught: unknown;
+      let sibFin = 0;
+      a.onError = () => { /* expected */ };
       try {
         a.start(function* () {
-          yield [
-            (function* (): Animator {
-              throw new Error("boom");
-            })(),
-            (function* (): Animator {
-              yield 0.1;
-            })(),
-          ];
+          try {
+            yield [
+              (function* (): Animator { throw new Error("boom"); })(),
+              (function* (): Animator { try { yield 5; } finally { sibFin++; } })(),
+            ];
+          } catch (e) { caught = e; }
           parentDone = true;
         });
-        a.step(0.15);
-        assert(
-          parentDone,
-          `parent should resume after throwing child completes`,
-        );
+        a.step(0);
+        assert(parentDone, `parent should reach catch and resume`);
+        assert((caught as Error)?.message === "boom", `parent caught the throw`);
+        assert(sibFin === 1, `sibling cancelled (finally ran)`);
       } finally {
-        console.error = origError;
         a.stop();
       }
     },
@@ -584,7 +580,7 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "ctx.spawn parents children to the suspended host",
+    name: "spawn parents children to the suspended host",
     run: (assert) => {
       const a = new Anim();
       let childFinally = 0;
@@ -621,33 +617,36 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "ctx.spawn after setup throws",
+    name: "spawn after setup is permitted (scoped to active suspension)",
     run: (assert) => {
+      // Calling `spawn` after the SuspendFn body returns is fine while
+      // the suspension is still parked — the spawned child cascades
+      // with the parent on cancel. Previous engine threw; the new
+      // contract is more permissive and uses `detach(g)` for genuinely-
+      // decoupled work.
       const a = new Anim();
       let captured: ((g: Animator) => () => void) | undefined;
-      a.start(function* () {
+      let childRan = 0;
+      const handle = a.start(function* () {
         yield (_wake, spawn) => {
           captured = spawn!;
           return () => {};
         };
       });
       a.step(0);
-      let threw = false;
-      try {
-        captured!(
-          (function* (): Animator {
-            yield;
-          })(),
-        );
-      } catch {
-        threw = true;
-      }
-      assert(threw, `spawn outside setup window should throw`);
+      const stop = captured!(
+        (function* (): Animator {
+          try { yield 5; } finally { childRan++; }
+        })(),
+      );
+      assert(typeof stop === "function", `spawn should return a disposer`);
+      handle();
+      assert(childRan === 1, `child finally should run on parent cancel`);
       a.stop();
     },
   },
   {
-    name: "ctx.spawn onComplete fires on natural completion",
+    name: "spawn onComplete fires on natural completion",
     run: (assert) => {
       // `onComplete` MUST NOT fire on cancel.
       const a = new Anim();
@@ -725,6 +724,45 @@ const TESTS: TestCase[] = [
       });
       a.step(0);
       assert(count === 1, `no events after slot cleared (got ${count})`);
+      a.stop();
+    },
+  },
+  {
+    name: "detach: spawns at root, parent resumes immediately",
+    run: (assert) => {
+      const a = new Anim();
+      let log = "";
+      let subTicks = 0;
+      function* sub(): Animator { while (true) { yield; subTicks++; } }
+      const stop = a.start(function* () {
+        log += "before ";
+        yield detach(sub());
+        log += "after";
+        yield 999;
+      });
+      assert(log === "before after", `parent should resume immediately past detach (got "${log}")`);
+      a.step(0.016);
+      assert(subTicks === 1, `detached gen ticks (got ${subTicks})`);
+      stop();
+      a.step(0.016);
+      assert(subTicks === 2, `detached survives parent cancel (got ${subTicks})`);
+      a.stop();
+      a.step(0.016);
+      assert(subTicks === 2, `engine.stop cancels detached (got ${subTicks})`);
+    },
+  },
+  {
+    name: "anim.onStep: subscribes to step events, unsubs via disposer",
+    run: (assert) => {
+      const a = new Anim();
+      const dts: number[] = [];
+      const off = a.onStep((dt) => dts.push(dt));
+      a.step(0.016);
+      a.step(0.02);
+      off();
+      a.step(0.03);
+      assert(dts.length === 2, `expected 2 fires, got ${dts.length}`);
+      assert(Math.abs(dts[0] - 0.016) < 1e-9 && Math.abs(dts[1] - 0.02) < 1e-9, `dts=${dts}`);
       a.stop();
     },
   },

@@ -14,8 +14,9 @@ import { Marker } from "@minim/tex";
 export const css = String.raw;
 
 /** Browser RAF adapter. Caps single-frame `dt` at 32 ms so tab-switch
- *  catch-up doesn't deliver one giant step. Returns a detach function. */
-function attachRaf(anim: Anim): () => void {
+ *  catch-up doesn't deliver one giant step. Returns a detach function.
+ *  Used by `Diagram` and any custom element that owns its own `Anim`. */
+export function attachRaf(anim: Anim): () => void {
   if (typeof requestAnimationFrame !== "function") return () => {};
   const FRAME_CAP_MS = 32;
   let rafId = 0;

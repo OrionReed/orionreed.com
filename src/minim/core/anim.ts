@@ -313,18 +313,18 @@ export class Anim {
       } else this.onError(e);
       return;
     }
-    // Lazy-wrap: only allocate the cascading dispose when subKids
-    // actually exist. Most SuspendFns don't spawn, so this is the
-    // common path.
-    const dispose: () => void =
-      subKids === null
-        ? (userDispose ?? (() => {}))
-        : () => {
-            this.safe(userDispose);
-            const ks = subKids!;
-            subKids = null;
-            for (const c of ks) if (c.wakeAt !== DEAD) this.cancel(c);
-          };
+    // Dispose checks `subKids` at call time (not setup time) — the
+    // SuspendFn is allowed to capture `spawn` and call it later, while
+    // the parent is still parked. Children attached then must still
+    // cascade-cancel.
+    const dispose: () => void = () => {
+      this.safe(userDispose);
+      if (subKids) {
+        const ks = subKids;
+        subKids = null;
+        for (const c of ks) if (c.wakeAt !== DEAD) this.cancel(c);
+      }
+    };
     if (resumed || a.wakeAt === DEAD) this.safe(dispose);
     else {
       a.wakeAt = PARKED;

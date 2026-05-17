@@ -9,7 +9,7 @@
 //              optional prose-linking via the marker registry
 //   md-marker  <md-marker> custom element — non-math prose linker
 
-export { Diagram, css, type Padding } from "./diagram";
+export { Diagram, attachRaf, css, type Padding } from "./diagram";
 export { attr, observedAttributesOf, syncAttrSignal } from "./attr";
 export { viewport } from "./viewport";
 export { MdTex } from "./md-tex";
