@@ -1,25 +1,12 @@
-// engine.ts — minim's reactive engine.
+// signal.ts — minim's reactive engine.
 //
-// One file. Signal/Computed/Lens — a single class hierarchy where
-// Computed extends Signal and Lens extends Computed. Effect is the
-// fourth primitive (internal-ish). Polymorphic dispatch via _update /
-// _notify / _unwatched. Algorithm is alien-signals, unchanged.
-//
-// Surface design
-//   • Val<T> = T | (() => T) | Signal<T>           universal "yields T"
-//   • value(v: Val<T>): T                          unwrap (auto-tracks)
-//   • new Signal(v: Val<T>)                        construct, optionally bind
-//   • signal.value get/set                         plain read/write
-//   • signal.bind(source: Val<T>): () => void      explicit re-bind
-//   • signal.peek(): T                             untracked read
-//   • computed(fn) / lens(get, set) / effect(fn)
-//   • batch(fn) / untracked(fn) / follow(target, source)
-//   • SignalOptions { watched, unwatched }         lifecycle hooks
-//   • Linear/Lerp/Metric/Equals + CommonTraits<T>  trait shapes
-//   • classOf(s) / traitsOf(s) / requireTraits(s, ...keys)
+// Hierarchy: Signal → Computed (Lens = Computed with setter).
+// Algorithm is alien-signals; trait dispatch via `./traits`.
+
+import { EQUALS, type Equals } from "./traits";
 
 // ════════════════════════════════════════════════════════════════════
-// Internal types — alien-signals shape, kept verbatim
+// alien-signals types
 // ════════════════════════════════════════════════════════════════════
 
 interface ReactiveNode {
@@ -55,6 +42,8 @@ const F = {
   Pending: 32,
   HasChildEffect: 64,
 } as const;
+
+const noop = () => {};
 
 // ── Engine state ────────────────────────────────────────────────────
 
@@ -243,44 +232,42 @@ function unlinkChildEffects(node: ReactiveNode): void {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Val<T> — universal rule
+// Val<T> — "anything that yields a T"
 // ════════════════════════════════════════════════════════════════════
 
-/** "Anything that yields a T":
- *  - plain T
- *  - thunk () => T
- *  - reactive Signal (any Signal subclass — Computed/Lens/Vec/Num/etc.)
- *
- *  Branded NOMINALLY via `instanceof Signal` — plain `{ value: 5 }`
- *  objects are NOT mistakenly treated as cells. */
+/** Plain T, thunk `() => T`, or reactive Signal. Branded nominally via
+ *  `instanceof Signal` so plain objects with `.value` aren't mistaken
+ *  for cells. */
 export type Val<T> = T | (() => T) | Signal<T>;
 
-/** Unwrap a Val<T> to T. Inside a tracking context (effect/computed
- *  body) reactive forms auto-subscribe. */
+/** Unwrap to T. Reactive forms auto-track inside an effect/computed body. */
 export function value<T>(v: Val<T>): T {
   if (v instanceof Signal) return v.value;
   if (typeof v === "function") return (v as () => T)();
   return v as T;
 }
 
-/** Predicate: is `v` a reactive signal of any flavor? */
 export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signal;
 
 // ════════════════════════════════════════════════════════════════════
-// Lifecycle hooks
+// SignalOptions
 // ════════════════════════════════════════════════════════════════════
 
-export interface SignalOptions {
+export interface SignalOptions<T = unknown> {
   /** First subscriber attached. */
   watched?: () => void;
   /** Last subscriber detached. */
   unwatched?: () => void;
+  /** Per-instance equality. Stamps `[EQUALS]` shadowing the class slot.
+   *  Falls back to `===` if no slot is declared. */
+  equals?: Equals<T>;
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Signal — writable reactive value, the base class
+// Signal — writable reactive value, base class
 // ════════════════════════════════════════════════════════════════════
 
+/** Writable signal. Bind reactively via `.bind(source: Val<T>)`. */
 export class Signal<T = unknown> implements ReactiveNode {
   subs: Link | undefined = undefined;
   subsTail: Link | undefined = undefined;
@@ -289,29 +276,20 @@ export class Signal<T = unknown> implements ReactiveNode {
   flags: number = F.Mutable;
   currentValue: T;
   pendingValue: T;
-  /** Set when the signal is bound to a reactive Val<T>. */
-  protected _binding: (() => void) | undefined = undefined;
-  /** Optional lifecycle hooks. */
   _watched?: () => void;
   _unwatchedHook?: () => void;
+  /** Disposer for the most recent `.bind(reactive)`. */
+  protected _stopBinding?: () => void;
 
-  constructor(initial: Val<T>, opts?: SignalOptions) {
+  constructor(initial: T, opts?: SignalOptions<T>) {
     if (opts) {
-      this._watched = opts.watched;
-      this._unwatchedHook = opts.unwatched;
+      if (opts.watched) this._watched = opts.watched;
+      if (opts.unwatched) this._unwatchedHook = opts.unwatched;
+      // Stamp own-property [EQUALS], shadowing any class-level slot.
+      if (opts.equals) (this as unknown as { [EQUALS]?: Equals<T> })[EQUALS] = opts.equals;
     }
-    if (initial instanceof Signal || typeof initial === "function") {
-      const v = value(initial);
-      this.currentValue = v;
-      this.pendingValue = v;
-      this._binding = effect(() => {
-        const next = value(initial);
-        if (this.peek() !== next) this._setPlain(next);
-      });
-    } else {
-      this.currentValue = initial as T;
-      this.pendingValue = initial as T;
-    }
+    this.currentValue = initial;
+    this.pendingValue = initial;
   }
 
   /** Read with tracking. */
@@ -327,13 +305,11 @@ export class Signal<T = unknown> implements ReactiveNode {
     return this.currentValue;
   }
 
-  /** Plain write. Does NOT rebind — use `.bind(source)` for that. */
-  set value(next: T) { this._setPlain(next); }
-
-  protected _setPlain(next: T): void {
+  /** Plain write. */
+  set value(next: T) {
     const prev = this.pendingValue;
     this.pendingValue = next;
-    const equals = (this.constructor as ValueClass<T>).traits?.equals;
+    const equals = this[EQUALS];
     const same = equals ? equals(prev, next) : prev === next;
     if (!same) {
       this.flags = F.Mutable | F.Dirty;
@@ -354,30 +330,25 @@ export class Signal<T = unknown> implements ReactiveNode {
     return this.currentValue;
   }
 
-  /** Bind this signal to a reactive source. Severs any previous binding.
-   *  Plain T sources do a one-shot write. Returns a dispose fn. */
+  /** Bind to a `Val<T>`; each call REPLACES any prior binding.
+   *
+   *    sig.bind(5)              one-shot write of 5
+   *    sig.bind(otherSig)       follows otherSig.value
+   *    sig.bind(() => x.value)  follows tracked deps of the thunk
+   *
+   *  Returns a dispose fn (no-op for plain T). To unbind without setting
+   *  a value: keep the dispose fn from a prior bind, or `sig.bind(sig.peek())`. */
   bind(source: Val<T>): () => void {
-    if (this._binding) { this._binding(); this._binding = undefined; }
+    if (this._stopBinding) { this._stopBinding(); this._stopBinding = undefined; }
     if (source instanceof Signal || typeof source === "function") {
-      this._binding = effect(() => {
-        const next = value(source);
-        if (this.peek() !== next) this._setPlain(next);
-      });
-      return this._binding;
+      const stop = effect(() => { this.value = value(source); });
+      this._stopBinding = stop;
+      return stop;
     }
-    this._setPlain(source as T);
-    return () => {};
+    this.value = source;
+    return noop;
   }
 
-  /** Sever any active binding. */
-  unbind(): void {
-    if (this._binding) { this._binding(); this._binding = undefined; }
-  }
-
-  /** Whether this signal is bound to an external reactive source. */
-  get isBound(): boolean { return this._binding !== undefined; }
-
-  // Polymorphic engine dispatch:
   _update(): boolean {
     this.flags = F.Mutable;
     return this.currentValue !== (this.currentValue = this.pendingValue);
@@ -386,27 +357,38 @@ export class Signal<T = unknown> implements ReactiveNode {
   _unwatched(): void {
     if (this._unwatchedHook !== undefined) this._unwatchedHook();
   }
+
+  /** Footgun guard: `${sig}` / `sig + 1` / `Boolean(sig)` throw instead
+   *  of silently coercing. `sig === otherSig` (identity) still works. */
+  [Symbol.toPrimitive](hint: string): never {
+    throw new TypeError(`Signal cannot be coerced to ${hint} — use \`.value\``);
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Computed — read-only derived signal
+// Computed — derived signal (read-only, or writable view if setter set)
 // ════════════════════════════════════════════════════════════════════
 
-/** Read-only derived signal. Re-evaluates when deps change.
- *  Extends Signal so `instanceof Signal` covers all reactive types. */
 export class Computed<T = unknown> extends Signal<T> {
   cachedValue: T | undefined = undefined;
   getter: () => T;
+  /** Lens-mode iff set; otherwise writes throw. */
+  setter?: (v: T) => void;
 
-  constructor(getter: () => T) {
-    super(undefined as T);  // Signal's slots inherited; value semantics overridden below
+  constructor(getter: () => T, setter?: (v: T) => void) {
+    super(undefined as T);
     this.getter = getter;
+    if (setter !== undefined) this.setter = setter;
     this.flags = 0;
   }
 
-  // Override value getter for lazy-eval caching.
   override get value(): T {
     const flags = this.flags;
+    // RecursedCheck is set only during this computed's own sync eval.
+    // Hitting it on a read means the getter is reading its own value.
+    if (flags & F.RecursedCheck) {
+      throw new RangeError(`Cyclic computed: ${(this.constructor as { name?: string }).name ?? "?"} read its own value`);
+    }
     if (
       flags & F.Dirty ||
       (flags & F.Pending &&
@@ -420,16 +402,23 @@ export class Computed<T = unknown> extends Signal<T> {
       this.flags = F.Mutable | F.RecursedCheck;
       const prev = activeSub;
       activeSub = this;
-      try { this.cachedValue = this.getter(); }
-      finally { activeSub = prev; this.flags &= ~F.RecursedCheck; }
+      let threw = true;
+      try {
+        this.cachedValue = this.getter();
+        threw = false;
+      } finally {
+        activeSub = prev;
+        // On throw: leave dirty so next read retries.
+        this.flags = threw ? F.Mutable | F.Dirty : (this.flags & ~F.RecursedCheck);
+      }
     }
     if (activeSub !== undefined) link(this, activeSub, cycle);
     return this.cachedValue!;
   }
 
-  // Computed is read-only by default. Subclasses (Lens) override.
-  override set value(_next: T) {
-    throw new TypeError("Cannot write to a Computed");
+  override set value(next: T) {
+    if (this.setter !== undefined) this.setter(next);
+    else throw new TypeError("Cannot write to a Computed");
   }
 
   override peek(): T {
@@ -445,13 +434,17 @@ export class Computed<T = unknown> extends Signal<T> {
     this.flags = F.Mutable | F.RecursedCheck;
     const prev = activeSub;
     activeSub = this;
+    let threw = true;
     try {
       ++cycle;
       const old = this.cachedValue;
-      return old !== (this.cachedValue = this.getter());
+      const next = this.cachedValue = this.getter();
+      threw = false;
+      const eq = this[EQUALS];
+      return eq ? !eq(old as T, next) : old !== next;
     } finally {
       activeSub = prev;
-      this.flags &= ~F.RecursedCheck;
+      this.flags = threw ? F.Mutable | F.Dirty : (this.flags & ~F.RecursedCheck);
       purgeDeps(this);
     }
   }
@@ -464,25 +457,11 @@ export class Computed<T = unknown> extends Signal<T> {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Lens — writable view (custom get/set)
-// ════════════════════════════════════════════════════════════════════
-
-export class Lens<T = unknown> extends Computed<T> {
-  setter: (v: T) => void;
-  constructor(getter: () => T, setter: (v: T) => void) {
-    super(getter);
-    this.setter = setter;
-  }
-  // Inherits Computed's value getter; override only the setter.
-  override set value(next: T) { this.setter(next); }
-  // TS class-getter+setter requires both on the class; re-declare get
-  // as super.value (no perf change measured for simple value-types).
-  override get value(): T { return super.value; }
-}
+/** Type alias — Lens is a Computed with a setter; no separate runtime class. */
+export type Lens<T = unknown> = Computed<T>;
 
 // ════════════════════════════════════════════════════════════════════
-// Effect — internal-ish; users call effect()
+// Effect — internal; users call effect()
 // ════════════════════════════════════════════════════════════════════
 
 class Effect implements ReactiveNode {
@@ -580,9 +559,11 @@ class Effect implements ReactiveNode {
 // Factory helpers
 // ════════════════════════════════════════════════════════════════════
 
-export function signal<T>(initial: Val<T>): Signal<T> { return new Signal(initial); }
+export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> {
+  return new Signal(initial, opts);
+}
 export function computed<T>(getter: () => T): Computed<T> { return new Computed(getter); }
-export function lens<T>(getter: () => T, setter: (v: T) => void): Lens<T> { return new Lens(getter, setter); }
+export function lens<T>(getter: () => T, setter: (v: T) => void): Lens<T> { return new Computed(getter, setter); }
 export function effect(fn: () => void | (() => void)): () => void {
   const e = new Effect(fn);
   return () => e._unwatched();
@@ -599,67 +580,3 @@ export function untracked<R>(fn: () => R): R {
   finally { activeSub = prev; }
 }
 
-/** One-way binding: target follows source (Val<T>). Returns dispose. */
-export function follow<T>(target: Signal<T>, source: Val<T>): () => void {
-  return effect(() => { target.value = value(source); });
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Traits — generic dispatch via static slot
-// ════════════════════════════════════════════════════════════════════
-
-export interface Linear<T> {
-  add(a: T, b: T): T;
-  sub(a: T, b: T): T;
-  scale(a: T, k: number): T;
-}
-export type Lerp<T> = (a: T, b: T, t: number) => T;
-export type Metric<T> = (a: T, b: T) => number;
-export type Equals<T> = (a: T, b: T) => boolean;
-
-/** Open registry of common traits — extend via declaration merging. */
-export interface CommonTraits<T> {
-  linear?: Linear<T>;
-  lerp?: Lerp<T>;
-  metric?: Metric<T>;
-  equals?: Equals<T>;
-}
-
-/** Internal: a value-type class that may declare static `traits`. */
-interface ValueClass<T = unknown> {
-  new (v: Val<T>): Signal<T>;
-  readonly traits?: CommonTraits<T>;
-}
-
-/** Get the value-type class of a signal. */
-export function classOf<T>(s: Signal<T>): ValueClass<T> & { readonly name: string } {
-  return s.constructor as ValueClass<T> & { readonly name: string };
-}
-
-/** Read all traits from a signal's class. Returns the traits object
- *  (with optional members) — the user handles missing keys explicitly.
- *  For a throwing version that requires specific keys, see `requireTraits`. */
-export function traitsOf<T>(s: Signal<T>): CommonTraits<T> {
-  return ((s.constructor as ValueClass<T>).traits ?? {}) as CommonTraits<T>;
-}
-
-/** Pluck N traits from a signal's class. Throws if any are missing.
- *
- *      const { linear, lerp } = requireTraits(v, "linear", "lerp");
- *      lerp(a, b, 0.5);
- */
-export function requireTraits<T, K extends keyof CommonTraits<T>>(
-  s: Signal<T>,
-  ...keys: readonly K[]
-): { [Key in K]: NonNullable<CommonTraits<T>[Key]> } {
-  const tag = (s.constructor as { name?: string }).name ?? "?";
-  const traits = (s.constructor as ValueClass<T>).traits;
-  if (!traits) throw new Error(`requireTraits(${tag}): no traits declared`);
-  const out = {} as { [Key in K]: NonNullable<CommonTraits<T>[Key]> };
-  for (const k of keys) {
-    const v = traits[k];
-    if (v == null) throw new Error(`requireTraits(${tag}): missing trait \`${String(k)}\``);
-    out[k] = v as NonNullable<CommonTraits<T>[K]>;
-  }
-  return out;
-}

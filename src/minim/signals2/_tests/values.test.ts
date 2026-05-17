@@ -9,7 +9,11 @@
 //   - classOf + traits + requireTraits dispatch
 //   - Composite Transform with typed nested fields
 
-import { signal, effect, computed, value, classOf, requireTraits } from "../engine";
+import { signal, effect, computed, value } from "../signal";
+import {
+  classOf, linearOf, requireLinear, requireLerp,
+  LINEAR,
+} from "../traits";
 import { vec, Vec, num, Num, rgb, Color, box, Box, transform, Transform } from "../values";
 
 let pass = 0, fail = 0;
@@ -139,30 +143,57 @@ section("Equivalence: method chain vs derive (same observable behavior)");
 }
 
 // ════════════════════════════════════════════════════════════════════
-section("classOf + traits");
+section("classOf + per-trait accessors");
 // ════════════════════════════════════════════════════════════════════
 {
   const v = vec(3, 4);
   const klass = classOf(v);
   check("classOf returns Vec", klass === Vec);
-  check("Vec.traits.linear typed", !!klass.traits?.linear);
-  const sum = klass.traits!.linear!.add({ x: 1, y: 1 }, { x: 2, y: 3 });
-  check("trait linear.add works", sum.x === 3);
+  // Trait slot directly readable on prototype:
+  check("Vec.prototype[LINEAR] exists", !!Vec.prototype[LINEAR]);
+  // linearOf accessor works on instance:
+  const linear = linearOf(v)!;
+  const sum = linear.add({ x: 1, y: 1 }, { x: 2, y: 3 });
+  check("linearOf(v).add works", sum.x === 3);
 }
 
 // ════════════════════════════════════════════════════════════════════
-section("requireTraits(cell, ...keys) — ergonomic dispatch");
+section("requireLinear / requireLerp — ergonomic dispatch");
 // ════════════════════════════════════════════════════════════════════
 {
   const v = vec(0, 0);
-  const { linear, lerp } = requireTraits(v, "linear", "lerp");
-  check("linear destructured + typed", linear.add({ x: 1, y: 2 }, { x: 3, y: 4 }).x === 4);
-  check("lerp destructured + typed", lerp({ x: 0, y: 0 }, { x: 10, y: 10 }, 0.5).x === 5);
+  const linear = requireLinear(v);
+  const lerp = requireLerp(v);
+  check("requireLinear typed + works", linear.add({ x: 1, y: 2 }, { x: 3, y: 4 }).x === 4);
+  check("requireLerp typed + works", lerp({ x: 0, y: 0 }, { x: 10, y: 10 }, 0.5).x === 5);
 
-  // Missing trait throws:
+  // Plain Signal<T> (no class trait) → throws.
+  const plain = signal(42);
   let threw = false;
-  try { (requireTraits as any)(v, "linear", "nonexistent"); } catch { threw = true; }
-  check("throws on missing trait", threw);
+  try { requireLinear(plain); } catch { threw = true; }
+  check("requireLinear throws on plain signal", threw);
+
+  // Optional accessor returns undefined (doesn't throw):
+  check("linearOf returns undefined on plain signal", linearOf(plain) === undefined);
+}
+
+// ════════════════════════════════════════════════════════════════════
+section("traits + classOf work on derived/lensed cells");
+// ════════════════════════════════════════════════════════════════════
+{
+  // derived (vec.add()): classOf chains to Vec, traits dispatch via
+  // the prototype-copy in viewClassFor.
+  const v = vec(1, 2);
+  const d = v.add({ x: 3, y: 4 });
+  check("classOf(derived).name === 'Vec'", classOf(d).name === "Vec");
+  const linear = requireLinear(d);
+  check("linear dispatch on derived works", linear.add({ x: 1, y: 1 }, { x: 2, y: 3 }).y === 4);
+
+  // typed field lens: classOf chains to Num, traits dispatch.
+  const tr = transform();
+  check("classOf(tr.translate).name === 'Vec'", classOf(tr.translate).name === "Vec");
+  const numLinear = requireLinear(tr.opacity);
+  check("linear dispatch on field lens works", numLinear.add(0.2, 0.3) === 0.5);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -188,7 +219,7 @@ section("Num operations");
   check("Num.add(3)", n.add(3).value === 8);
   check("Num.clamp(0, 4)", n.clamp(0, 4).value === 4);
   check("Num.scale(2)", n.scale(2).value === 10);
-  check("Num.add static", Num.add(2, 3) === 5);
+  check("Num.prototype[LINEAR].add", Num.prototype[LINEAR]!.add(2, 3) === 5);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -213,19 +244,15 @@ section("Box");
 }
 
 // ════════════════════════════════════════════════════════════════════
-section("Footgun: function-typed T (rare; documented)");
+section("Function-typed T: stored as plain value (no ambiguity)");
 // ════════════════════════════════════════════════════════════════════
 {
-  // signal(fn) where fn is intended as a value — but Val<T> rule says
-  // function = thunk. The signal becomes bound to the thunk's return.
-  // This is an inherent ambiguity of the Val<T> rule. For real value
-  // types in minim (Vec/Num/Color/Box/Transform), T is never a function,
-  // so this is purely hypothetical.
+  // Signal constructor takes plain T. Functions are stored AS values,
+  // not interpreted as thunks. (To bind a thunk, use follow.)
   const fn = () => 99;
-  const s = signal(fn);
-  check("signal(fn): treated as thunk-bound", s.isBound);
-  check("its value is fn's return", s.value === 99);
-  s.unbind();
+  const s = signal<() => number>(fn);
+  check("signal(fn): fn stored as the value", s.value === fn);
+  check("invoking the value calls the original fn", s.value() === 99);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

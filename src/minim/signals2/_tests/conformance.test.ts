@@ -3,7 +3,7 @@
 // surface to RFTS's `.read()/.write(v)` interface.
 
 import { testSuite, type ReactiveFramework, setExpect } from "reactive-framework-test-suite";
-import { signal as povSig, computed as povComp, effect as povEff, batch as povBatch, untracked as povUntracked } from "../engine";
+import { signal as povSig, computed as povComp, effect as povEff, batch as povBatch, untracked as povUntracked } from "../signal";
 
 // ── Adapter ────────────────────────────────────────────────────────
 

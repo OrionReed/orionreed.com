@@ -1,111 +1,88 @@
-// derive.ts — fluent reactive composition primitives.
+// derive.ts — composition primitives.
 //
-//   Chain<T>            mutating wrapper, used inside `vec.derive(c => …)`
-//   field(p, k)         plain Lens<P[K]> onto a parent field
-//   typedField(p, k, C) Lens<P[K]> with a value-type's methods
-//   typedLensClass(C)   build a Lens subclass carrying C's instance methods
-//   derived(C, fn)      build a Computed-backed instance of C (chainable)
-//
-// Each value-type class overrides `derive` with its own typed signature,
-// so `c => c.add(b).scale(2)` types correctly. There is NO derive() on
-// Signal.prototype — it's a per-class concern.
+//   Chain<T>           mutating wrapper used inside `vec.derive(c => …)`
+//   field(p, k, Type)  typed Lens<P[K]> wearing Type's instance interface
+//   derived(C, fn)     Computed-backed instance of C (chainable result)
 
-import { Signal, Computed, Lens, computed } from "./engine";
+import { Signal, Computed } from "./signal";
 
-// ── Chain<T> — base mutating wrapper ───────────────────────────────
-//
-// Each value-type extends this with its own methods (NumChain,
-// VecChain, etc.). Methods mutate `chain.value` and return `this`.
+// ════════════════════════════════════════════════════════════════════
+// Chain<T>
+// ════════════════════════════════════════════════════════════════════
 
 export class Chain<T> {
   value: T;
   constructor(v: T) { this.value = v; }
 }
 
-// ── derived(Cls, fn) — Computed-backed instance with Cls's surface ──
+// ════════════════════════════════════════════════════════════════════
+// View-class synthesis: build a subclass of `Base` that inherits Cls's
+// instance methods + symbol-keyed prototype slots (traits) + name.
 //
-// The trick: build a per-Cls "ComputedCls" once that extends Computed
-// and copies Cls.prototype's methods + Cls's static side. Returned
-// instances have Computed semantics (lazy eval, caching) AND Cls's
-// method surface (so vec.add(b).scale(2) keeps chaining).
+// `setPrototypeOf(View, Cls)` would re-target `super()`, breaking
+// Computed's `(getter, setter?)` constructor signature — so we copy.
+// ════════════════════════════════════════════════════════════════════
 
-const COMPUTED_CLS_CACHE = new WeakMap<object, new (fn: () => unknown) => Computed<unknown>>();
+const VIEW_CLASS_CACHE = new WeakMap<object, WeakMap<object, unknown>>();
 
-function computedClassFor(Cls: { prototype: object }): new (fn: () => unknown) => Computed<unknown> {
-  let cached = COMPUTED_CLS_CACHE.get(Cls);
-  if (cached) return cached;
-  class ComputedCls extends Computed<unknown> {}
-  // Copy instance methods (skip `value` — keep Computed's getter — and `constructor`).
-  for (const k of Object.getOwnPropertyNames(Cls.prototype)) {
+function viewClassFor<B>(Base: B, Cls: { prototype: object; name?: string }): B {
+  let perBase = VIEW_CLASS_CACHE.get(Base as object);
+  if (perBase === undefined) VIEW_CLASS_CACHE.set(Base as object, perBase = new WeakMap());
+  const cached = perBase.get(Cls);
+  if (cached !== undefined) return cached as B;
+  class View extends (Base as new (...args: never[]) => object) {}
+  const keys: (string | symbol)[] = [
+    ...Object.getOwnPropertyNames(Cls.prototype),
+    ...Object.getOwnPropertySymbols(Cls.prototype),
+  ];
+  for (const k of keys) {
     if (k === "constructor" || k === "value") continue;
     const desc = Object.getOwnPropertyDescriptor(Cls.prototype, k);
-    if (desc) Object.defineProperty(ComputedCls.prototype, k, desc);
+    if (desc) Object.defineProperty(View.prototype, k, desc);
   }
-  // Copy statics (for classOf(derived).traits to work).
-  for (const k of Object.getOwnPropertyNames(Cls)) {
-    if (k === "length" || k === "name" || k === "prototype") continue;
-    const desc = Object.getOwnPropertyDescriptor(Cls, k);
-    if (desc) Object.defineProperty(ComputedCls, k, desc);
-  }
-  cached = ComputedCls;
-  COMPUTED_CLS_CACHE.set(Cls, cached);
-  return cached;
+  if (Cls.name) Object.defineProperty(View, "name", { value: Cls.name, configurable: true });
+  perBase.set(Cls, View);
+  return View as unknown as B;
 }
+
+// ════════════════════════════════════════════════════════════════════
+// derived(Cls, fn) — Computed-backed instance presenting Cls's surface
+// ════════════════════════════════════════════════════════════════════
 
 export function derived<T, C extends Signal<T>>(
   Cls: new (...args: never[]) => C,
   fn: () => T,
 ): C {
-  const ComputedCls = computedClassFor(Cls as unknown as { prototype: object });
+  const ComputedCls = viewClassFor(Computed, Cls) as unknown as new (fn: () => T) => Computed<T>;
   return new ComputedCls(fn) as unknown as C;
 }
 
-// ── field — typed sub-cell accessor ────────────────────────────────
+// ════════════════════════════════════════════════════════════════════
+// field(parent, key, Type) — typed sub-cell accessor
+// ════════════════════════════════════════════════════════════════════
 
 const FIELD_CACHE = Symbol("minim.field-cache");
 
-/** Plain typed lens onto `parent.value[key]`. Cached on parent. */
-export function field<P, K extends keyof P>(parent: Signal<P>, key: K): Lens<P[K]> {
-  const cache = ((parent as any)[FIELD_CACHE] ??= {}) as Record<string, Lens<unknown>>;
-  const cached = cache[key as string];
-  if (cached) return cached as Lens<P[K]>;
-  const fl = new Lens<P[K]>(
-    () => (parent.value as P)[key],
-    (v) => { parent.value = { ...(parent.peek() as object), [key]: v } as P; },
-  );
-  cache[key as string] = fl as unknown as Lens<unknown>;
-  return fl;
-}
-
-/** Build a Lens subclass that carries `Type.prototype`'s methods.
- *  Returned class is typed as `new (g, s) => InstanceType<Type>` so
- *  field accessors don't need `as unknown as` casts at the call site. */
-export function typedLensClass<T, C>(
-  Type: { prototype: object; new (...args: never[]): C },
-): new (g: () => T, s: (v: T) => void) => C {
-  class TypedLens extends Lens<T> {}
-  for (const k of Object.getOwnPropertyNames(Type.prototype)) {
-    if (k === "constructor" || k === "value") continue;
-    const desc = Object.getOwnPropertyDescriptor(Type.prototype, k);
-    if (desc) Object.defineProperty(TypedLens.prototype, k, desc);
-  }
-  return TypedLens as unknown as new (g: () => T, s: (v: T) => void) => C;
-}
-
-/** Typed sub-field: a Lens<P[K]> wearing a value-type's method surface.
- *  `LensCls` should come from `typedLensClass(SomeValueType)`. */
-export function typedField<P, K extends keyof P, C>(
+/** Typed lens onto `parent.value[key]` wearing `Type`'s instance methods.
+ *  Cached per (parent, key) for stable identity.
+ *
+ *      class Vec extends Signal<Vec.Value> {
+ *        get x() { return field(this, "x", Num); }
+ *      }
+ */
+export function field<P, K extends keyof P, Type extends new (...args: never[]) => Signal<P[K]>>(
   parent: Signal<P>,
   key: K,
-  LensCls: new (g: () => P[K], s: (v: P[K]) => void) => C,
-): C {
-  const cache = ((parent as any)[FIELD_CACHE] ??= {}) as Record<string, unknown>;
+  Type: Type,
+): InstanceType<Type> {
+  const cache = ((parent as unknown as Record<symbol, Record<string, unknown>>)[FIELD_CACHE] ??= {});
   const cached = cache[key as string];
-  if (cached) return cached as C;
+  if (cached) return cached as InstanceType<Type>;
+  const LensCls = viewClassFor(Computed, Type) as unknown as new (g: () => P[K], s: (v: P[K]) => void) => Computed<P[K]>;
   const fl = new LensCls(
     () => (parent.value as P)[key],
     (v) => { parent.value = { ...(parent.peek() as object), [key]: v } as P; },
   );
   cache[key as string] = fl;
-  return fl;
+  return fl as unknown as InstanceType<Type>;
 }

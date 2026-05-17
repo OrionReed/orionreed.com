@@ -1,6 +1,6 @@
 // _hooks.test.ts — verify watched/unwatched lifecycle hooks fire correctly.
 
-import { Signal, signal, effect, computed } from "../engine";
+import { Signal, signal, effect, computed } from "../signal";
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean): void {

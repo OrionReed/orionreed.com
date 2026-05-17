@@ -11,7 +11,7 @@
 //   - follow() one-way binding
 //   - method args treated as Val<T> reactively
 
-import { signal, computed, effect, lens, follow, value, isSignal, Signal } from "../engine";
+import { signal, computed, effect, lens, value, isSignal, Signal } from "../signal";
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean, info?: string): void {
@@ -36,65 +36,45 @@ section("peek() honors Dirty flag");
 }
 
 // ════════════════════════════════════════════════════════════════════
-section("Val<T> at construction: static");
+section("Constructor: plain T only");
 // ════════════════════════════════════════════════════════════════════
+// new Signal() takes a plain T. Reactive binding is via follow().
 {
   const s = new Signal(7);
   check("plain init", s.value === 7);
-  check("not bound", !s.isBound);
 }
 
 // ════════════════════════════════════════════════════════════════════
-section("Val<T> at construction: thunk → auto-binds");
+section("target.bind(source) — the binding API");
 // ════════════════════════════════════════════════════════════════════
 {
   const a = signal(2);
-  const s = new Signal(() => a.value * 10);
-  check("thunk init reads source", s.value === 20);
-  check("isBound = true", s.isBound);
+  const s = signal(0);
+  const stop = s.bind(() => a.value * 10);
+  check("initial computed via thunk", s.value === 20);
   a.value = 5;
-  check("auto-updates on src change", s.value === 50);
-  s.unbind();
+  check("auto-updates on a change", s.value === 50);
+  stop();
+  a.value = 99;
+  check("after dispose, no update", s.value === 50);
 }
 
 // ════════════════════════════════════════════════════════════════════
-section("Val<T> at construction: cell → auto-binds");
+section("follow with cell source");
 // ════════════════════════════════════════════════════════════════════
 {
   const src = signal(100);
-  const s = new Signal(src);
-  check("cell init copies value", s.value === 100);
-  check("isBound", s.isBound);
+  const t = signal(0);
+  const stop = t.bind(src);
+  check("initial sync", t.value === 100);
   src.value = 200;
-  check("auto-updates", s.value === 200);
-  s.unbind();
-  src.value = 999;
-  check("after unbind, no update", s.value === 200);
-  check("isBound false after unbind", !s.isBound);
-}
-
-// ════════════════════════════════════════════════════════════════════
-section("Val<T> via bind() — explicit re-bind");
-// ════════════════════════════════════════════════════════════════════
-// .value = X is now ALWAYS plain write. Re-binding requires .bind().
-{
-  const s = signal(0);
-  const src = signal(50);
-  s.bind(src);
-  check("after bind: tracks src value", s.value === 50);
-  check("isBound", s.isBound);
-  src.value = 75;
-  check("tracks new src", s.value === 75);
-
-  // Plain write to s while bound: the binding will overwrite on next src change
-  s.value = 999;
-  check("plain write takes effect", s.value === 999);
-  src.value = 100;
-  check("next src change overrides plain write", s.value === 100);
-
-  s.unbind();
-  src.value = 200;
-  check("after unbind: no track", s.value === 100);
+  check("auto-updates", t.value === 200);
+  // Manual write to target — overwritten on next src change
+  t.value = 999;
+  check("manual write takes effect", t.value === 999);
+  src.value = 50;
+  check("next src change overwrites manual", t.value === 50);
+  stop();
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -124,24 +104,6 @@ section("value() unwraps via brand, not structural shape");
   check("plain T with .value is preserved", value(plainT as any) === plainT);
 }
 
-// ════════════════════════════════════════════════════════════════════
-section("follow(target, source: Val<T>) — universal binding");
-// ════════════════════════════════════════════════════════════════════
-{
-  const t = signal(0);
-  const s = signal(5);
-  const stop = follow(t, s);
-  check("initial sync", t.value === 5);
-  s.value = 10;
-  check("updates on src change", t.value === 10);
-  t.value = 999;  // manual write
-  check("manual write to target works", t.value === 999);
-  s.value = 50;
-  check("next src change overwrites manual", t.value === 50);
-  stop();
-  s.value = 100;
-  check("after dispose, no update", t.value === 50);
-}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

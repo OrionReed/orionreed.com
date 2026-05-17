@@ -22,12 +22,17 @@
 //   composition: field, typedField, Chain, derived, mean
 
 import {
-  Signal, Computed, Lens,
-  signal, computed, lens, effect, batch, untracked, follow,
+  Signal,
+  type Computed, type Lens,
+  signal, computed, lens, effect, batch, untracked,
   value, isSignal, type Val,
-  classOf, traitsOf, requireTraits,
-  type Linear, type Lerp, type CommonTraits, type SignalOptions,
-} from "../engine";
+  type SignalOptions,
+} from "../signal";
+import {
+  classOf, linearOf, lerpOf, requireLinear, requireLerp, requireMetric,
+  LINEAR, LERP, EQUALS,
+  type Linear, type Lerp,
+} from "../traits";
 import { field } from "../derive";
 import { Vec, vec, Num, num, Color, rgb, Box, box, Transform, transform, mean } from "../values";
 
@@ -65,19 +70,19 @@ takesAnything(10);                   // ok
 takesAnything(() => 20);             // ok
 takesAnything(a);                    // ok — auto-subscribes inside reactive scope
 
-// Construction with Val<T>:
-const live = new Signal(() => a.value * 10);          // bound to thunk, auto-updates
-
-// Re-bind via .bind() (NOT via .value =, that's plain write only):
+// Reactive binding via .bind(source). Each bind REPLACES any previous.
+// Source is Val<T>: plain (one-shot write), thunk, or cell.
 const t = signal(0);
-const dispose = t.bind(a);            // tracks a
-t.value = 999;                        // plain write (overwritten on next a change)
-t.unbind();                           // sever
+const stopA = t.bind(42);             // one-shot write of 42
+const stopB = t.bind(() => Date.now());  // tracks the thunk's deps
+const stopC = t.bind(a);              // tracks a — t.value follows a.value
+stopC();                              // sever the binding
 
-// follow() is a free-function alternative to .bind:
-follow(t, 42);                        // static
-follow(t, () => Date.now());          // thunk
-follow(t, a);                         // cell
+// To "unbind" without changing the value: t.bind(t.peek()) or use stop fn.
+
+// Construction itself takes a plain T; bind separately:
+const live = signal(0);
+live.bind(() => a.value * 10);
 
 // ════════════════════════════════════════════════════════════════════
 // 3. Value types — typed signals with chainable methods
@@ -117,23 +122,34 @@ const r2 = p.derive(c => c.add(b).scale(2));           // 1 Computed, chained
 // Both produce the same observable behavior. Pick (b) for deep chains.
 
 // ════════════════════════════════════════════════════════════════════
-// 5. Trait dispatch
+// 5. Trait dispatch — Symbol.for slots, prototype-stamped
 // ════════════════════════════════════════════════════════════════════
 
-// classOf returns the runtime class with its static traits typed:
+// classOf returns the runtime class:
 const klass = classOf(p);                              // typeof Vec
-const _lin: Linear<{ x: number; y: number }> | undefined = klass.traits?.linear;
+const _name: string = klass.name;                      // "Vec"
 
-// traitsOf returns the traits object with optional members:
-const traits = traitsOf(p);
-if (traits.linear) traits.linear.add(p.peek(), b.peek());
+// Direct prototype access (typed via module-augmented Signal<T>):
+const _lin: Linear<{ x: number; y: number }> | undefined = Vec.prototype[LINEAR];
+const _lerp: Lerp<{ x: number; y: number }> | undefined = Vec.prototype[LERP];
 
-// requireTraits plucks specified traits + throws if missing:
-const { linear, lerp, metric } = requireTraits(p, "linear", "lerp", "metric");
+// Optional accessors — return slot or undefined:
+const linOpt = linearOf(p);
+if (linOpt) linOpt.add(p.peek(), b.peek());
+const lerpOpt = lerpOf(p);
+
+// Throwing variants — useful for "this op needs trait X" assertions:
+const linear = requireLinear(p);
+const lerp = requireLerp(p);
+const metric = requireMetric(p);
 const mid = lerp({ x: 0, y: 0 }, { x: 10, y: 10 }, 0.5);
 const sum = linear.add(p.peek(), b.peek());
 
-// Generic ops over any T with a `linear` trait:
+// Per-instance override: shadows class-level slot.
+const customP = vec(0, 0);
+customP[EQUALS] = (a, b) => Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01;
+
+// Generic ops over any T with a `[LINEAR]` slot:
 const avg = mean(vec(0, 0), vec(10, 10), vec(20, 20));  // Computed<V>
 const numAvg = mean(num(0), num(10));                   // Computed<number>
 
@@ -167,16 +183,16 @@ const qMul = (a: Quat, b: Quat): Quat => ({
 });
 
 class MyQuat extends Signal<Quat> {
-  static traits: CommonTraits<Quat> = {
-    equals: (a, b) => a.x === b.x && a.y === b.y && a.z === b.z && a.w === b.w,
-  };
-  static multiply = qMul;
-
-  constructor(v: Val<Quat> = { x: 0, y: 0, z: 0, w: 1 }) { super(v); }
+  constructor(v: Quat = { x: 0, y: 0, z: 0, w: 1 }) { super(v); }
   multiply(b: Val<Quat>): MyQuat {
-    return new (this.constructor as typeof MyQuat)(() => qMul(this.value, value(b)));
+    const q = new MyQuat();
+    q.bind(() => qMul(this.value, value(b)));
+    return q;
   }
 }
+// Stamp traits — open extensibility, same pattern as built-ins.
+MyQuat.prototype[EQUALS] = (a, b) =>
+  a.x === b.x && a.y === b.y && a.z === b.z && a.w === b.w;
 
 // ════════════════════════════════════════════════════════════════════
 // 20-second user mental model
@@ -187,8 +203,8 @@ class MyQuat extends Signal<Quat> {
 //    Use value(v) to unwrap; auto-tracks reactive forms in scope.
 // 3. Value types (Vec/Num/Color) extend Signal. Methods return themselves —
 //    vec.add(b).scale(2) chains. Fields are typed lenses.
-// 4. Generic dispatch: classOf(s).traits or traitsOf(s) or requireTraits(s, ...).
-// 5. Re-bind via .bind(source). .value = is plain write.
+// 4. Generic dispatch: linearOf(s) / requireLinear(s) etc. — proto-stamped Symbol slots.
+// 5. Bind via sig.bind(source) → dispose fn. .value = is plain write.
 // 6. derive(c => c.foo()) for single-Computed chains; methods return same type
 //    for fluent multi-Computed chains. Both are observationally equivalent.
 

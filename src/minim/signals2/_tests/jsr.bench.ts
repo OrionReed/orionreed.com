@@ -1,7 +1,7 @@
 // _jsr_benchmark.bench.ts — JS Reactivity Benchmark scenarios for PoC.
 // Compare PoC engine vs preact-signals vs bare alien-signals.
 
-import { signal as povSig, computed as povComp, effect as povEff, batch as povBatch } from "../engine";
+import { signal as povSig, computed as povComp, effect as povEff, batch as povBatch } from "../signal";
 import { signal as pSig, computed as pComp, effect as pEff, batch as pBatch } from "../../signals/signal";
 import { signal as aSig, computed as aComp, effect as aEff, startBatch as bsA, endBatch as beA } from "alien-signals";
 const aBatch = <R>(fn: () => R): R => { bsA(); try { return fn(); } finally { beA(); } };

@@ -3,14 +3,14 @@
 import { bench, printRow, measureMemory } from "./bench_utils";
 
 // PoC
-import { signal as povSig, computed as povComp, effect as povEff, batch as povBatch, Signal as PovSignal } from "../engine";
+import { signal as povSig, computed as povComp, effect as povEff, batch as povBatch, Signal as PovSignal } from "../signal";
 import { vec as povVec, Vec as PovVec, num as povNum } from "../values";
 
 // Current signals.ts
 import { signal as curSig, computed as curComp, effect as curEff, batch as curBatch } from "../signals";
 
 // alien
-import { signal as aSig, computed as aComp, effect as aEff } from "../engine";
+import { signal as aSig, computed as aComp, effect as aEff } from "../signal";
 
 // preact
 import { signal as pSig, computed as pComp, effect as pEff, batch as pBatch } from "../../signals/signal";

@@ -4,14 +4,18 @@
 // at the user surface. If TypeScript catches an error, the test fails.
 
 import {
-  signal, computed, effect, batch, untracked, follow, value,
-  classOf, requireTraits, isSignal,
-  Signal, Computed, Lens,
-  type Val, type Linear, type Lerp, type Metric, type Equals, type CommonTraits,
+  signal, computed, effect, batch, untracked, value, isSignal,
+  Signal,
+  type Computed, type Lens,
+  type Val,
   type SignalOptions,
-} from "../engine";
+} from "../signal";
+import {
+  classOf, linearOf, lerpOf, requireLinear, requireLerp, requireMetric,
+  LINEAR, LERP,
+  type Linear, type Lerp, type Metric, type Equals,
+} from "../traits";
 import { Vec, vec, Num, num, Color, rgb, Box, box, Transform, transform } from "../values";
-import { meanOf } from "../derive";
 
 
 // ── 1. Val<T> brand: only these match the reactive form ──────────
@@ -48,23 +52,29 @@ const _s1: Vec = v1.scale(numK);                     // Num
 const _s2: Vec = v1.scale(() => 3);                  // thunk
 const _s3: Vec = v1.scale(2);                        // plain
 
-// ── 4. classOf + traits typed access ─────────────────────────────
+// ── 4. classOf + per-trait accessors typed access ────────────────
 
 const klass = classOf(v1);                            // typeof Vec
-const _lin: Linear<{ x: number; y: number }> | undefined = klass.traits?.linear;
-const _lerp: Lerp<{ x: number; y: number }> | undefined = klass.traits?.lerp;
+const _vname: string = klass.name;
+const _linOpt: Linear<{ x: number; y: number }> | undefined = linearOf(v1);
+const _lerpOpt: Lerp<{ x: number; y: number }> | undefined = lerpOf(v1);
+// Direct prototype access (typed via module augmentation):
+const _linProto: Linear<{ x: number; y: number }> | undefined = Vec.prototype[LINEAR];
+const _lerpProto: Lerp<{ x: number; y: number }> | undefined = Vec.prototype[LERP];
 
-// ── 5. requireTraits — ergonomic trait pluck ──────────────────────────
+// ── 5. requireLinear / requireLerp / requireMetric — ergonomic dispatch
 
-const { linear, lerp, metric } = requireTraits(v1, "linear", "lerp", "metric");
+const linear = requireLinear(v1);
+const lerp = requireLerp(v1);
+const metric = requireMetric(v1);
 const _sum = linear.add({ x: 1, y: 1 }, { x: 2, y: 2 });
 const _mid = lerp({ x: 0, y: 0 }, { x: 10, y: 10 }, 0.5);
 const _dist = metric({ x: 0, y: 0 }, { x: 3, y: 4 });
 
-// ── 6. Generic ops via requireTraits ──────────────────────────────────
+// ── 6. Generic ops via requireLinear ──────────────────────────────────
 
 function mean<T>(...cells: Signal<T>[]): Computed<T> {
-  const { linear } = requireTraits(cells[0], "linear");
+  const linear = requireLinear(cells[0]);
   const invN = 1 / cells.length;
   return computed(() => {
     let acc = cells[0].value;
@@ -86,9 +96,9 @@ const _trMove: Vec = tr.translate.add({ x: 10, y: 0 });
 // ── 8. follow accepts Val<T> ─────────────────────────────────────
 
 const target = signal(0);
-const _stop1: () => void = follow(target, 5);
-const _stop2: () => void = follow(target, () => Date.now());
-const _stop3: () => void = follow(target, numK);
+const _stop1: () => void = target.bind(5);
+const _stop2: () => void = target.bind(() => Date.now());
+const _stop3: () => void = target.bind(numK);
 
 // ── 9. value() handles every Val form ───────────────────────────
 
@@ -116,10 +126,10 @@ const _opts: SignalOptions = {
 };
 const _sig = new Signal(0, _opts);
 
-// ── 12. bind() — explicit re-bind ───────────────────────────────
+// ── 12. follow() — explicit binding ─────────────────────────────
 
 const target2 = signal(0);
-const _stop4: () => void = target2.bind(numK);  // Signal.bind() returns dispose
-target2.unbind();
+const _stop4: () => void = target2.bind(numK);
+const _stop5: () => void = target2.bind(() => 42);
 
 console.log("Type audit compiled clean.");
