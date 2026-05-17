@@ -8,8 +8,8 @@
 // in the page resolve the lookup before DOM elements connect, regardless
 // of DOM order.
 
-import { Diagram, Mount } from "../../minim";
-import { parts, tex, bindParts } from "../../minim/tex";
+import {Diagram, Mount} from "../../minim";
+import {parts, tex, bindParts} from "../../minim/tex";
 
 // Module-level: create PartMarkers (needed for with/expand in tex templates)
 // and assign equidistant OKLCH colors. Three equally-spaced hues at a

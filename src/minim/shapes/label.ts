@@ -1,14 +1,13 @@
-import { toSig, type Val } from "@minim/signals";
-import { Shape, type ShapeOpts } from "./shape";
-import { box, Vec } from "@minim/values";
-import { tokens } from "./tokens";
-import { renderContent, flattenText, type Content } from "./text";
+import {toSignal, Vec, type VecValue, type Val} from "@minim/signals";
+import {Shape, type ShapeOpts} from "./shape";
+import {tokens} from "./tokens";
+import {renderContent, flattenText, type Content} from "./text";
 
 export interface LabelOpts extends ShapeOpts {
   size?: Val<number>;
   /** Bbox point that sits at `at` — `{0, 0}` = top-left, `{0.5, 0.5}`
    *  (default) = center. See `Anchor` for named consts. */
-  align?: Vec;
+  align?: VecValue;
   bold?: boolean;
 }
 
@@ -20,15 +19,15 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
   /** The user-supplied anchor point — the position the label is
    *  attached to (subject to `align`). Distinct from the inherited
    *  Box `center` / `at(u, v)` which describe the bounding box. */
-  readonly anchor: Vec.Like;
+  readonly anchor: Vec;
 
   constructor(
-    anchor: Vec.Like,
+    anchor: Vec,
     content: Val<Content>,
     opts: O = {} as O,
   ) {
-    const contentSig = toSig(content);
-    const sizeSig = toSig(opts.size ?? tokens.fontSize);
+    const contentSig = toSignal(content);
+    const sizeSig = toSignal(opts.size ?? tokens.fontSize);
     const a = opts.align ?? { x: 0.5, y: 0.5 };
     super(
       "text",
@@ -36,7 +35,7 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
         const text = flattenText(contentSig.value);
         const fs = sizeSig.value;
         const w = fs * Math.max(1, text.length) * tokens.charWidth;
-        return box(anchor.x.value - a.x * w, anchor.y.value - a.y * fs, w, fs);
+        return { x: anchor.x.value - a.x * w, y: anchor.y.value - a.y * fs, w, h: fs };
       },
       opts,
       // Pivot rotations on the anchor, not the bbox center.
@@ -59,7 +58,7 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
 }
 
 export const label = <const O extends LabelOpts>(
-  at: Vec.Like,
+  at: Vec,
   content: Val<Content>,
   opts?: O,
 ): Label<O> => new Label<O>(at, content, opts);

@@ -77,10 +77,7 @@ function* tweenStep<T>(
     throw new Error(`tween: ${sig.constructor.name} has no [LERP] slot`);
   }
   const start = sig.peek();
-  // Resolve duration once at start; reactive Val<number> reads via .value/thunk.
-  const D = typeof dur === "number"
-    ? () => dur
-    : (dur instanceof Signal ? () => dur.value : dur);
+  const D = valFn(dur);
   // Epsilon guards against FP imprecision in dt accumulation: e.g. with
   // synthetic dt = 1/60, six frames give clock=0.0999...8, missing the
   // `>= 0.1` exact-equality and pushing tween completion to the 7th frame.
@@ -104,44 +101,60 @@ export function tween<T>(
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Spring & Toward — physics-flavoured drives (need [LINEAR] + [METRIC])
+// Spring / Toward / Oscillate / Drift / Attract
+// All need [LINEAR]; spring/toward additionally need [METRIC] for the
+// distance-based settle / step.
 // ════════════════════════════════════════════════════════════════════
 
-/** Critically-damped-ish spring. Settles when distance < 1e-4. */
+export interface SpringOpts {
+  /** Hooke stiffness; higher → faster pull. Default 170. */
+  stiffness?: number;
+  /** Velocity damping; higher → less oscillation. Default 26. */
+  damping?: number;
+  /** Settle threshold; snap+complete when distance < precision and
+   *  velocity magnitude < precision*100. Default 1e-4. `0` runs forever. */
+  precision?: number;
+}
+
+/** Pull `sig` toward `target` with critically-damped-ish dynamics.
+ *  `target` may be reactive (read each frame). Settles when both
+ *  distance and velocity drop below `opts.precision`. */
 export function* spring<T>(
   sig: Signal<T>,
-  target: T,
-  stiffness = 100,
-  damping = 10,
+  target: Val<T>,
+  opts: SpringOpts = {},
 ): Animator<void> {
   const lin = sig[LINEAR];
   const met = sig[METRIC];
   if (!lin || !met) {
     throw new Error(`spring: ${sig.constructor.name} needs [LINEAR] + [METRIC]`);
   }
-  // velocity in T-space; maintained by accumulating scaled additions
+  const stiffness = opts.stiffness ?? 170;
+  const damping = opts.damping ?? 26;
+  const eps = opts.precision ?? 1e-4;
+  const T = valFn(target);
   let vel: T | undefined;
-  const SETTLE = 1e-4;
   yield* drive((dt) => {
+    const t = T();
     const cur = sig.peek();
-    const disp = lin.sub(target, cur);            // target - cur
+    const disp = lin.sub(t, cur);                 // target - cur
     const vAccel = lin.scale(disp, stiffness);    // k * disp
     const damp = vel ? lin.scale(vel, damping) : lin.scale(disp, 0);
     const accel = lin.sub(vAccel, damp);          // k*disp - c*v
     vel = vel ? lin.add(vel, lin.scale(accel, dt)) : lin.scale(accel, dt);
     sig.value = lin.add(cur, lin.scale(vel, dt));
-    // Settle check: both distance AND velocity small.
-    if (met(cur, target) < SETTLE && met(vel, target) < SETTLE * 100) {
-      sig.value = target;
+    if (eps > 0 && met(cur, t) < eps && met(vel, t) < eps * 100) {
+      sig.value = t;
       return false;
     }
   });
 }
 
-/** Constant-speed approach. `speed` is units-of-T per second (via metric). */
+/** Constant-speed approach. `speed` is units-of-T per second (via metric).
+ *  `target` and `speed` may be reactive. */
 export function* toward<T>(
   sig: Signal<T>,
-  target: T,
+  target: Val<T>,
   speed: Val<number>,
 ): Animator<void> {
   const lin = sig[LINEAR];
@@ -149,18 +162,76 @@ export function* toward<T>(
   if (!lin || !met) {
     throw new Error(`toward: ${sig.constructor.name} needs [LINEAR] + [METRIC]`);
   }
-  const speedFn = typeof speed === "number"
-    ? () => speed
-    : (speed instanceof Signal ? () => speed.value : speed);
+  const T = valFn(target);
+  const S = valFn(speed);
   yield* drive((dt) => {
+    const t = T();
     const cur = sig.peek();
-    const dist = met(cur, target);
-    const step = speedFn() * dt;
-    if (dist <= step) { sig.value = target; return false; }
-    // Move `step` units toward target along the line:
-    const dir = lin.scale(lin.sub(target, cur), 1 / dist);
+    const dist = met(cur, t);
+    const step = S() * dt;
+    if (dist <= step) { sig.value = t; return false; }
+    const dir = lin.scale(lin.sub(t, cur), 1 / dist);
     sig.value = lin.add(cur, lin.scale(dir, step));
   });
+}
+
+/** Sinusoidal oscillation around the signal's value at start. `amp` and
+ *  `freq` (Hz) may be reactive. Runs forever — wrap with `race`/`until`
+ *  to terminate. */
+export function* oscillate<T>(
+  sig: Signal<T>,
+  amp: Val<T>,
+  freq: Val<number>,
+): Animator<void> {
+  const lin = sig[LINEAR];
+  if (!lin) throw new Error(`oscillate: ${sig.constructor.name} needs [LINEAR]`);
+  const A = valFn(amp);
+  const F = valFn(freq);
+  const base = sig.peek();
+  yield* drive((_dt, t) => {
+    sig.value = lin.add(base, lin.scale(A(), Math.sin(2 * Math.PI * F() * t)));
+  });
+}
+
+/** Exponential pull toward `target` with rate `k` per second
+ *  (k=1 closes ~63% of distance per second). No overshoot. */
+export function* attract<T>(
+  sig: Signal<T>,
+  target: Val<T>,
+  k: Val<number> = 1,
+): Animator<void> {
+  const lin = sig[LINEAR];
+  if (!lin) throw new Error(`attract: ${sig.constructor.name} needs [LINEAR]`);
+  const T = valFn(target);
+  const K = valFn(k);
+  yield* drive((dt) => {
+    const cur = sig.peek();
+    const delta = lin.scale(lin.sub(T(), cur), K() * dt);
+    sig.value = lin.add(cur, delta);
+  });
+}
+
+/** Constant-velocity advance. `velocity` may be reactive — flip live to
+ *  reverse, scale to slow. */
+export function* drift<T>(
+  sig: Signal<T>,
+  velocity: Val<T>,
+): Animator<void> {
+  const lin = sig[LINEAR];
+  if (!lin) throw new Error(`drift: ${sig.constructor.name} needs [LINEAR]`);
+  const V = valFn(velocity);
+  yield* drive((dt) => {
+    sig.value = lin.add(sig.peek(), lin.scale(V(), dt));
+  });
+}
+
+/** Coerce a `Val<T>` into a `() => T` getter (no signal tracking — used
+ *  inside `drive` lambdas which are untracked). */
+function valFn<T>(v: Val<T>): () => T {
+  if (v instanceof Signal) return () => (v as Signal<T>).value;
+  if (typeof v === "function") return v as () => T;
+  const k = v as T;
+  return () => k;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -175,16 +246,18 @@ export function* holding<T>(
 ): Animator<void> {
   const prev = sig.peek();
   sig.value = v;
-  try { yield typeof dur === "number" ? dur : (dur instanceof Signal ? dur.value : dur()); }
+  try { yield valFn(dur)(); }
   finally { sig.value = prev; }
 }
 
-/** Generator-scoped reactive bind: follows `source` until parent ends.
- *  Equivalent to `try { stop = sig.bind(source); yield* untilForever; } finally { stop(); }`.
+/** Generator-scoped reactive bind: `sig` follows `source` until the
+ *  enclosing generator ends or is cancelled. Sugar over `sig.bind(source)`
+ *  with automatic cleanup tied to the parent's lifetime.
+ *
+ *      yield* race(follow(b, a), untilTrue(stop));   // b follows a until stop
  */
-export function from<T>(sig: Signal<T>, source: Val<T>): Animator<void> {
+export function follow<T>(sig: Signal<T>, source: Val<T>): Animator<void> {
   return suspend<void>((_wake) => {
-    // Eagerly install the bind; never wake (runs until cancel).
     const stop = sig.bind(source);
     return stop;
   });
@@ -221,6 +294,24 @@ export const lerpImpl = {
   },
 };
 
+/** Make a fresh `Signal<T>` carrying an ad-hoc `[LERP]` impl plus the
+ *  `.to(target, dur)` method. Useful for value types you don't want to
+ *  promote to a full class (custom strings, opaque domain values, etc.):
+ *
+ *      const status = lerpable("idle", (a, b, t) => t < 0.5 ? a : b);
+ *      yield* status.to("done", 0.3);
+ */
+export function lerpable<T>(
+  initial: T,
+  lerpFn: Lerp<T>,
+  opts?: import("./signal").SignalOptions<T>,
+): Signal<T> & LerpMethods<T> {
+  const s = new Signal<T>(initial, opts) as Signal<T> & LerpMethods<T>;
+  (s as unknown as Record<symbol, unknown>)[LERP] = lerpFn;
+  Object.assign(s, lerpImpl);
+  return s;
+}
+
 // ════════════════════════════════════════════════════════════════════
 // defineTrait(Cls, slot, impl)
 //
@@ -256,9 +347,11 @@ export function defineTrait(Cls: ProtoTarget, slot: symbol, impl: unknown): void
 
 export interface Play<R = void> extends Animator<R> {
   /** End when `p` fires (truthy cell, animator completion, n-second sleep, etc.) */
-  until(p: Yieldable | Signal<unknown>): Play<R>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  until(p: Yieldable | Signal<any>): Play<R>;
   /** Sequence: this, then `next`. */
-  then(next: Yieldable | Signal<unknown>): Play<unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  then(next: Yieldable | Signal<any>): Play<unknown>;
   /** Time-scale this and its children. */
   at(scale: Val<number>): Play<R>;
 }
@@ -271,7 +364,7 @@ class PlayImpl<R> implements Play<R> {
   [Symbol.iterator]() { return this; }
 
   until(p: Yieldable | Signal<unknown>): Play<R> {
-    const trigger = playableGen(p);
+    const trigger = playableGen(p as Yieldable | Signal<unknown>);
     const g = this.g;
     return new PlayImpl<R>(
       // race(this, trigger) — first to settle wins, other cancels.
@@ -286,7 +379,7 @@ class PlayImpl<R> implements Play<R> {
   then(next: Yieldable | Signal<unknown>): Play<unknown> {
     const g = this.g;
     return new PlayImpl(
-      (function* () { yield* g; yield* playableGen(next); })(),
+      (function* () { yield* g; yield* playableGen(next as Yieldable | Signal<unknown>); })(),
     );
   }
 
@@ -297,13 +390,16 @@ class PlayImpl<R> implements Play<R> {
 
 /** Lift any yieldable into a Play. Cells become wait-until-truthy. */
 export function play<R>(g: Animator<R>): Play<R>;
-export function play(p: Yieldable | Signal<unknown>): Play<unknown>;
-export function play(p: Yieldable | Signal<unknown>): Play<unknown> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function play(p: Yieldable | Signal<any>): Play<unknown>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function play(p: Yieldable | Signal<any>): Play<unknown> {
   if (p instanceof PlayImpl) return p;
   return new PlayImpl(playableGen(p));
 }
 
-function* playableGen(p: Yieldable | Signal<unknown>): Animator<unknown> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function* playableGen(p: Yieldable | Signal<any>): Animator<unknown> {
   if (p instanceof Signal) {
     yield* untilTrue(p);
     return undefined;
@@ -317,7 +413,8 @@ function* playableGen(p: Yieldable | Signal<unknown>): Animator<unknown> {
 }
 
 /** Wait until `sig.value` is truthy. */
-export function untilTrue(sig: Signal<unknown>): Animator<void> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function untilTrue(sig: Signal<any>): Animator<void> {
   return suspend<void>((wake) => {
     let resolved = false;
     return effect(() => {
@@ -327,30 +424,84 @@ export function untilTrue(sig: Signal<unknown>): Animator<void> {
   });
 }
 
-/** Wrap a gen so child resume-dts are scaled. Static scale skips the read. */
-function scaledGen<R>(g: Animator<R>, scale: Val<number>): Animator<R> {
-  if (typeof scale === "number") {
-    const k = scale;
-    return mapDt(g, (dt) => dt * k);
-  }
-  const get = scale instanceof Signal ? () => (scale as Signal<number>).value : (scale as () => number);
-  return mapDt(g, (dt) => dt * get());
+/** Alias of `untilTrue` reading as "when sig becomes truthy". */
+export const when = untilTrue;
+
+/** Wait for a DOM event on `target`; resume with the event. */
+export function untilEvent<E extends Event = Event>(
+  target: EventTarget,
+  name: string,
+  opts?: AddEventListenerOptions,
+): Animator<E> {
+  return suspend<E>((wake) => {
+    const handler = (e: Event): void => wake(e as E);
+    target.addEventListener(name, handler, opts);
+    return () => target.removeEventListener(name, handler, opts);
+  });
 }
 
-/** Scale every dt the gen sees:
- *  • sleep durations (`yield N`) yielded out are passed through f
- *  • dts the runtime resumes us with are passed back to gen as f(dt)
- *
- *  Both directions cover sleep-based pacing AND drive-based per-frame
- *  loops (since drive is now yield-based — the runtime feeds dt via
- *  gen.next(dt)). */
-function* mapDt<R>(g: Animator<R>, f: (dt: number) => number): Animator<R> {
+/** Wait for a promise; resume with its resolved value (rejection propagates). */
+export function* untilPromise<T>(p: PromiseLike<T>): Animator<T> {
+  return (yield p) as T;
+}
+
+/** Wait until `sig` changes value (via `===`/`equals` trait). Resumes
+ *  with the new value. Useful when you want the *next* update and
+ *  don't care about a specific predicate. */
+export function untilChange<T>(sig: Signal<T>): Animator<T> {
+  return suspend<T>((wake) => {
+    const initial = sig.peek();
+    let resolved = false;
+    return effect(() => {
+      const v = sig.value;
+      if (resolved) return;
+      if (v !== initial) { resolved = true; wake(v); }
+    });
+  });
+}
+
+/** Repeat `factory()` forever — fresh generator each iteration.
+ *  Returns a `Play` so you can `.until(sig)` to bound the loop. */
+export function loop(factory: () => Animator): Play {
+  return play(
+    (function* (): Animator {
+      while (true) yield* factory();
+    })(),
+  );
+}
+
+/** Run `fn` every `sec` seconds. Drift-corrects (missed firings catch
+ *  up on the next frame). `sec` may be reactive. Side-effect only —
+ *  for awaited per-cycle work, use `loop(() => play(sec).then(work))`. */
+export function every(sec: Val<number>, fn: () => void): Play {
+  const getSec = valFn(sec);
+  return play((function* (): Animator {
+    let acc = 0;
+    while (true) {
+      const dt = yield;
+      acc += dt;
+      const period = getSec();
+      if (period <= 0) continue;
+      while (acc >= period) { fn(); acc -= period; }
+    }
+  })());
+}
+
+/** Wrap a gen so child resume-dts are scaled. Static scale skips the
+ *  read. Unlike `core.mapDt` (resume side only), this also scales the
+ *  outbound yields so `yield N` sleeps stay correct under .at(). */
+function scaledGen<R>(g: Animator<R>, scale: Val<number>): Animator<R> {
+  const get = valFn(scale);
+  return scaleBoth(g, get);
+}
+
+function* scaleBoth<R>(g: Animator<R>, f: () => number): Animator<R> {
   let r = g.next();
   while (!r.done) {
     const v = r.value;
-    const out: Yieldable = typeof v === "number" ? f(v) : v;
+    const out: Yieldable = typeof v === "number" ? v * f() : v;
     const resume = (yield out);
-    r = g.next(typeof resume === "number" ? f(resume) : resume);
+    r = g.next(typeof resume === "number" ? resume * f() : resume);
   }
   return r.value;
 }

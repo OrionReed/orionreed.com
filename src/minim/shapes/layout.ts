@@ -1,9 +1,8 @@
 // Spatial composition primitives. Reference points for growth:
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
-import { toSig, type Val } from "@minim/signals";
-import { transformBox, Box, box, expandBox, type BoxLike } from "@minim/values";
-import type { Shape } from "./shape";
+import {derived, toSignal, transformBox, Box, BoxMath, type BoxLike, type Val} from "@minim/signals";
+import type {Shape} from "./shape";
 
 export interface ArrangeOpts {
   /** Spacing between adjacent bounding boxes. Default 0. */
@@ -60,8 +59,8 @@ export function arrange(
 
 /** Inflate a Box on each side by `by`. */
 export function expand(b: BoxLike, by: Val<number>): BoxLike {
-  const bys = toSig(by);
-  return Box.derived(() => expandBox(b.box.value, bys.value));
+  const bys = toSignal(by);
+  return derived(Box, () => BoxMath.expand(b.box.value, bys.value));
 }
 
 /** Split a Box along an axis into N reactive sub-Boxes.
@@ -81,20 +80,20 @@ export function split(
   const cumBefore = ratios.map((_, i) =>
     ratios.slice(0, i).reduce((a, b) => a + b, 0),
   );
-  const gapSig = toSig(opts.gap ?? 0);
+  const gapSig = toSignal(opts.gap ?? 0);
   return ratios.map((r, i) =>
-    Box.derived(() => {
+    derived(Box, () => {
       const b = source.box.value;
       const gap = gapSig.value;
       const gapTotal = gap * (ratios.length - 1);
       if (axis === "x") {
         const free = b.w - gapTotal;
         const offset = (cumBefore[i] / total) * free + gap * i;
-        return box(b.x + offset, b.y, (r / total) * free, b.h);
+        return { x: b.x + offset, y: b.y, w: (r / total) * free, h: b.h };
       }
       const free = b.h - gapTotal;
       const offset = (cumBefore[i] / total) * free + gap * i;
-      return box(b.x, b.y + offset, b.w, (r / total) * free);
+      return { x: b.x, y: b.y + offset, w: b.w, h: (r / total) * free };
     }),
   );
 }

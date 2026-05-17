@@ -15,7 +15,7 @@ export {
   Signal,
   Computed,
   signal, computed, lens, effect, batch, untracked,
-  value, isSignal,
+  value, toSignal, isSignal,
   type Lens,
   type Val,
   type SignalOptions,
@@ -43,18 +43,52 @@ export {
 // ── Lerp / temporal cell methods ───────────────────────────────────
 export {
   Tween,
-  tween, spring, toward, from, holding, driven,
-  play, untilTrue,
-  defineTrait, lerpImpl,
+  tween, spring, toward, follow, holding, driven,
+  oscillate, attract, drift,
+  play, untilTrue, when, untilEvent, untilPromise, untilChange,
+  loop, every,
+  defineTrait, lerpImpl, lerpable,
   type LerpMethods,
+  type SpringOpts,
 } from "./lerp";
+
+// Easings + signal-free runtime — re-exported for the common case of
+// "I'm in signals-land, give me everything to author."
+export {
+  // Runtime engine
+  Anim, asGen, detach, isGen,
+  type Animator, type AnimObserver, type Detach,
+  type PayloadOf, type SpawnFn, type SuspendFn,
+  type Wake, type Yieldable,
+  // Combinators (signal-free)
+  drive, suspend, all, race, rand, mapDt, withTimeout, attachRaf,
+  // Easings
+  type Easing, linear, easeIn, easeOut, easeInOut,
+} from "../core";
+
+// ── Anim → reactive clock ──────────────────────────────────────────
+export { clockSignal } from "./clock";
 
 // ── Built-in value types ───────────────────────────────────────────
 export {
   Num, num, type NumValue,
-  Vec, vec, type VecValue,
+  Vec, vec, polar, type VecValue,
   Color, rgb, rgba, type ColorValue,
-  Box, box, type BoxValue,
+  Box, box, boxAt, isBoxLike, delegateBoxLike, type BoxValue, type BoxLike,
   Transform, transform, type TransformValue, type TransformInit,
-  mean,
+  Matrix2D, matrix, type Matrix2DValue,
+  identity, fromTranslate, fromScale, fromRotate,
+  isIdentity, multiply, invert, determinant,
+  transformPoint, transformBox, compose,
+  matrixToString,
+  Anchor, Dir,
+  mean, combine,
 } from "./values";
+
+// ── Pure value-math (for deep imports / interop) ───────────────────
+export * as VecMath from "./values/vec";
+export * as BoxMath from "./values/box";
+export * as ColorMath from "./values/color";
+export * as MatrixMath from "./values/matrix";
+export * as NumMath from "./values/num";
+export * as TransformMath from "./values/transform";

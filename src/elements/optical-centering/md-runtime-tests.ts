@@ -2,7 +2,7 @@
 // drives it via `step(dt)` — synchronous and deterministic, no RAF.
 // Re-runs every few seconds so regressions surface live.
 
-import { Anim, Diagram, EventBus, Vec, Mount, Anchor, assemble, attract, centroid, circle, play, derive, detach, drift, cell, every, forEach, label, loop, mean, meanRotation, meanScale, num, oscillate, vec, race, rect, splay, spring, swap, untilChange, untilPromise, type Animator } from "../../minim";
+import {Anim, Diagram, EventBus, Vec, Mount, Anchor, assemble, attract, centroid, circle, play, computed, detach, drift, signal, lens, every, forEach, label, loop, mean, meanRotation, meanScale, num, oscillate, vec, race, rect, splay, spring, swap, untilChange, untilPromise, type Animator} from "../../minim";
 
 type Status = "pending" | "running" | "pass" | "fail";
 
@@ -558,7 +558,7 @@ const TESTS: TestCase[] = [
     name: ".until: cancels work on trigger, sequel runs",
     run: (assert) => {
       const a = new Anim();
-      const stop = cell(false);
+      const stop = signal(false);
       let phase = 0;
       a.start(function* () {
         yield* play(
@@ -768,9 +768,9 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "cell equals option suppresses no-op writes",
+    name: "signal equals option suppresses no-op writes",
     run: (assert) => {
-      const s = cell(
+      const s = signal(
         { x: 1, y: 2 },
         { equals: (a, b) => a.x === b.x && a.y === b.y },
       );
@@ -784,10 +784,10 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "cell.lens reads through and writes back",
+    name: "signal.lens reads through and writes back",
     run: (assert) => {
-      const parent = cell({ a: 1, b: 2 });
-      const lensA = cell.lens(
+      const parent = signal({ a: 1, b: 2 });
+      const lensA = lens(
         () => parent.value.a,
         (n) => {
           parent.value = { ...parent.peek(), a: n };
@@ -801,11 +801,11 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "cell.lens aggregates multiple parents (centroid-style)",
+    name: "signal.lens aggregates multiple parents (centroid-style)",
     run: (assert) => {
-      const a = cell(0);
-      const b = cell(10);
-      const avg = cell.lens(
+      const a = signal(0);
+      const b = signal(10);
+      const avg = lens(
         () => (a.value + b.value) / 2,
         (n) => {
           const delta = n - (a.peek() + b.peek()) / 2;
@@ -870,7 +870,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const lit = vec(1, 2);
       assert(Vec.isWritable(lit), `vec(num,num) should be writable Vec`);
-      const s = cell(5);
+      const s = signal(5);
       const der = vec(s, 10);
       assert(Vec.is(der) && !Vec.isWritable(der), `vec(sig,num) should be derived Vec`);
       assert(der.x.value === 5 && der.y.value === 10, `derived read off`);
@@ -928,8 +928,8 @@ const TESTS: TestCase[] = [
   {
     name: "mean (Vecs): drop-in centroid for raw Vec signals",
     run: (assert) => {
-      const a = Vec.signal({ x: 0, y: 0 });
-      const b = Vec.signal({ x: 100, y: 50 });
+      const a = vec(0, 0 );
+      const b = vec(100, 50 );
       const m = mean(a, b);
       assert(Vec.isWritable(m), `mean of Vecs should return a writable Vec`);
       assert(m.value.x === 50 && m.value.y === 25, `initial mean off`);
@@ -1180,7 +1180,7 @@ const TESTS: TestCase[] = [
     name: "untilChange: wakes on next signal change",
     run: (assert) => {
       const a = new Anim();
-      const sig = cell(0);
+      const sig = signal(0);
       let woke = false;
       a.start(function* () {
         yield untilChange(sig);
@@ -1197,7 +1197,7 @@ const TESTS: TestCase[] = [
     name: "untilChange: ignores baseline read",
     run: (assert) => {
       const a = new Anim();
-      const sig = cell(42);
+      const sig = signal(42);
       let woke = false;
       a.start(function* () {
         yield untilChange(sig);
@@ -1279,9 +1279,9 @@ export class MdRuntimeTests extends Diagram {
     const H = HEADER_H + TESTS.length * ROW_H + 36;
     this.view(W, H);
 
-    const statuses = TESTS.map(() => cell<Status>("pending"));
-    const messages = TESTS.map(() => cell<string>(""));
-    const summary = cell<string>("");
+    const statuses = TESTS.map(() => signal<Status>("pending"));
+    const messages = TESTS.map(() => signal<string>(""));
+    const summary = signal<string>("");
 
     s(
       label(vec(PAD_X, 18), "minim runtime tests", {
@@ -1301,12 +1301,12 @@ export class MdRuntimeTests extends Diagram {
     forEach(s.root, TESTS, (t, i) => {
       const y = HEADER_H + i * ROW_H + ROW_H / 2;
       const dot = circle(vec(PAD_X + 6, y), 5, {
-        fill: derive(statuses[i], (st) => COLOR[st]),
+        fill: () => COLOR[statuses[i].value],
       });
       const name = label(vec(PAD_X + 22, y), t.name, {
         size: 12,
         align: Anchor.Left,
-        opacity: derive(statuses[i], (st) => (st === "pending" ? 0.5 : 1)),
+        opacity: () => (statuses[i].value === "pending" ? 0.5 : 1),
       });
       const msg = label(vec(W - PAD_X, y), messages[i], {
         size: 11,

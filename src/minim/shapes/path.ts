@@ -1,8 +1,6 @@
-import { toSig, type Val } from "@minim/signals";
-import { cell, type Cell, type ReadonlyCell } from "@minim/signals";
-import { Shape, type Segment } from "./shape";
-import { Vec, isVec, box } from "@minim/values";
-import { wireStroke, type CommonOpts } from "./common";
+import {derived, computed, signal, toSignal, Vec, type Signal, type Val} from "@minim/signals";
+import {Shape, type Segment} from "./shape";
+import {wireStroke, type CommonOpts} from "./common";
 
 export interface PathOpts extends CommonOpts {
   closed?: boolean;
@@ -12,8 +10,8 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /** Geometry sampler over a reactive list of Points. `pts` is tracked
  *  by every computed, so mutating the list re-runs sampling. */
-function sampler(pts: Cell<readonly Vec.Like[]>) {
-  const cumLen = cell.derived(() => {
+function sampler(pts: Signal<readonly Vec[]>) {
+  const cumLen = computed(() => {
     const points = pts.value;
     const lens = [0];
     for (let i = 1; i < points.length; i++) {
@@ -24,13 +22,13 @@ function sampler(pts: Cell<readonly Vec.Like[]>) {
     return lens;
   });
 
-  const length: ReadonlyCell<number> = cell.derived(() => {
+  const length: Signal<number> = computed(() => {
     const lens = cumLen.value;
     return lens[lens.length - 1] ?? 0;
   });
 
   /** Locate by arc-length `d` (px), clamped to `[0, total]`. */
-  const locateAt = (d: number, points: readonly Vec.Like[]) => {
+  const locateAt = (d: number, points: readonly Vec[]) => {
     const lens = cumLen.value;
     const total = lens[lens.length - 1] ?? 0;
     if (points.length < 2 || total === 0) return { i: 0, segT: 0 };
@@ -42,8 +40,8 @@ function sampler(pts: Cell<readonly Vec.Like[]>) {
     return { i: i - 1, segT };
   };
 
-  const sampleAt = (ds: ReadonlyCell<number>): Vec.Readonly =>
-    Vec.derived(() => {
+  const sampleAt = (ds: Signal<number>): Vec =>
+    derived(Vec, () => {
       const points = pts.value;
       if (points.length === 0) return { x: 0, y: 0 };
       if (points.length === 1) return points[0].value;
@@ -53,17 +51,17 @@ function sampler(pts: Cell<readonly Vec.Like[]>) {
       return { x: a.x + (b.x - a.x) * segT, y: a.y + (b.y - a.y) * segT };
     });
 
-  const at = (t: Val<number>): Vec.Readonly => {
-    const ts = toSig(t);
-    return sampleAt(cell.derived(() => clamp01(ts.value) * length.value));
+  const at = (t: Val<number>): Vec => {
+    const ts = toSignal(t);
+    return sampleAt(computed(() => clamp01(ts.value) * length.value));
   };
 
   /** Sample at absolute arc-length (px from start). */
-  const atDistance = (d: Val<number>): Vec.Readonly => sampleAt(toSig(d));
+  const atDistance = (d: Val<number>): Vec => sampleAt(toSignal(d));
 
-  const tangentAt = (t: Val<number>): Vec.Readonly => {
-    const ts = toSig(t);
-    return Vec.derived(() => {
+  const tangentAt = (t: Val<number>): Vec => {
+    const ts = toSignal(t);
+    return derived(Vec, () => {
       const points = pts.value;
       if (points.length < 2) return { x: 1, y: 0 };
       const total = length.value;
@@ -77,11 +75,11 @@ function sampler(pts: Cell<readonly Vec.Like[]>) {
     });
   };
 
-  const normalAt = (t: Val<number>): Vec.Readonly => tangentAt(t).perp();
+  const normalAt = (t: Val<number>): Vec => tangentAt(t).perp();
 
-  const angleAt = (t: Val<number>): ReadonlyCell<number> => {
+  const angleAt = (t: Val<number>): Signal<number> => {
     const tan = tangentAt(t);
-    return cell.derived(() => Math.atan2(tan.y.value, tan.x.value));
+    return computed(() => Math.atan2(tan.y.value, tan.x.value));
   };
 
   return { length, at, atDistance, tangentAt, normalAt, angleAt };
@@ -96,28 +94,28 @@ function sampler(pts: Cell<readonly Vec.Like[]>) {
  *  place and return `this`. The `d` attribute and all sampling methods
  *  react to point changes automatically. */
 export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
-  private readonly _points: Cell<readonly Vec.Like[]>;
+  private readonly _points: Signal<readonly Vec[]>;
   readonly closed: boolean;
 
-  readonly length: ReadonlyCell<number>;
+  readonly length: Signal<number>;
   /** Sample at `t ∈ [0, 1]`. Named to avoid shadowing the Box `at(u, v)`
    *  anchor — same symmetry as `tangentAt` / `normalAt` / `angleAt`. */
-  readonly pointAt: (t: Val<number>) => Vec.Readonly;
-  readonly atDistance: (d: Val<number>) => Vec.Readonly;
-  readonly tangentAt: (t: Val<number>) => Vec.Readonly;
-  readonly normalAt: (t: Val<number>) => Vec.Readonly;
-  readonly angleAt: (t: Val<number>) => ReadonlyCell<number>;
+  readonly pointAt: (t: Val<number>) => Vec;
+  readonly atDistance: (d: Val<number>) => Vec;
+  readonly tangentAt: (t: Val<number>) => Vec;
+  readonly normalAt: (t: Val<number>) => Vec;
+  readonly angleAt: (t: Val<number>) => Signal<number>;
 
-  constructor(start: Vec.Like | readonly Vec.Like[] = [], opts: O = {} as O) {
-    const init: readonly Vec.Like[] = isVec(start) ? [start] : start;
-    const points = cell<readonly Vec.Like[]>(init);
+  constructor(start: Vec | readonly Vec[] = [], opts: O = {} as O) {
+    const init: readonly Vec[] = start instanceof Vec ? [start] : start;
+    const points = signal<readonly Vec[]>(init);
     const closed = opts.closed ?? false;
 
     super(
       "path",
       () => {
         const ps = points.value;
-        if (ps.length === 0) return box(0, 0, 0, 0);
+        if (ps.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
         let xMin = Infinity,
           yMin = Infinity,
           xMax = -Infinity,
@@ -129,7 +127,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
           if (v.x > xMax) xMax = v.x;
           if (v.y > yMax) yMax = v.y;
         }
-        return box(xMin, yMin, xMax - xMin, yMax - yMin);
+        return { x: xMin, y: yMin, w: xMax - xMin, h: yMax - yMin };
       },
       opts,
       {
@@ -156,7 +154,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
     wireStroke(this, opts, closed, () => {
       this.attr(
         "d",
-        cell.derived(() => {
+        computed(() => {
           const ps = points.value;
           if (ps.length === 0) return "";
           const parts: string[] = [`M ${ps[0].x.value} ${ps[0].y.value}`];
@@ -171,21 +169,21 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   }
 
   /** Untracked snapshot of the points list. */
-  get points(): readonly Vec.Like[] {
+  get points(): readonly Vec[] {
     return this._points.peek();
   }
 
-  private get last(): Vec.Like {
+  private get last(): Vec {
     const ps = this._points.peek();
     return ps[ps.length - 1];
   }
 
-  private extend(p: Vec.Like): this {
+  private extend(p: Vec): this {
     this._points.value = [...this._points.peek(), p];
     return this;
   }
 
-  to(p: Vec.Like): this {
+  to(p: Vec): this {
     return this.extend(p);
   }
   /** Step `n` up from the last vertex. */
@@ -209,12 +207,12 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   }
   /** Walk `dist` at `angle` (radians, y-down). */
   along(angle: Val<number>, dist: Val<number>) {
-    const a = toSig(angle);
-    const d = toSig(dist);
+    const a = toSignal(angle);
+    const d = toSignal(dist);
     return this.extend(
       this.last.offset(
-        cell.derived(() => Math.cos(a.value) * d.value),
-        cell.derived(() => Math.sin(a.value) * d.value),
+        computed(() => Math.cos(a.value) * d.value),
+        computed(() => Math.sin(a.value) * d.value),
       ),
     );
   }
@@ -223,10 +221,10 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
     const ps = this._points.peek();
     const segs: Segment[] = [];
     for (let i = 0; i < ps.length - 1; i++) {
-      segs.push({ type: "line", from: ps[i], to: ps[i + 1] });
+      segs.push({ type: "line", from: ps[i].value, to: ps[i + 1].value });
     }
     if (this.closed && ps.length > 1) {
-      segs.push({ type: "line", from: ps[ps.length - 1], to: ps[0] });
+      segs.push({ type: "line", from: ps[ps.length - 1].value, to: ps[0].value });
     }
     return segs;
   }
@@ -236,6 +234,6 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
  *  / `.l(n)` / `.r(n)` / `.offset(dx, dy)` / `.along(angle, dist)` and
  *  pass to `s(...)` to render. */
 export const path = <const O extends PathOpts>(
-  start: Vec.Like,
+  start: Vec,
   opts?: O,
 ): Path<O> => new Path<O>(start, opts);

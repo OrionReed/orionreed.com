@@ -1,4 +1,4 @@
-import { Diagram, Mount, Anchor, attr, label, line, path, rect, split, t, type Cell } from "../minim";
+import {Diagram, Mount, Anchor, attr, label, line, path, rect, split, t, type Signal} from "../minim";
 
 interface CodecPart {
   label: string;
@@ -37,7 +37,7 @@ function parseContent(text: string): CodecPart[] {
 }
 
 export class MdCodec extends Diagram {
-  @attr.str() declare width: Cell<string | undefined>;
+  @attr.str() declare width: Signal<string | undefined>;
 
   protected scene(s: Mount): void {
     const w = this.width.value;

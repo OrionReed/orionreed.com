@@ -12,7 +12,7 @@
 // modes are signal-coordinated — buttons set signals, generators react
 // via the standard fluent vocabulary.
 
-import { Diagram, Mount, Anchor, button, cell, play, circle, fadeOut, label, loop, num, oscillate, vec, type Animator, type Cell, type Content, type Writable, Num } from "../../minim";
+import {Diagram, Mount, Anchor, button, signal, play, circle, fadeOut, label, loop, num, oscillate, vec, type Animator, type Signal, type Content, type Writable, Num} from "../../minim";
 
 const N_SLOTS = 12;
 const SHAPE_Y = 40;
@@ -24,10 +24,10 @@ const BTN_GAP = 12;
 
 function* lifecycle(
   shape: Writable<"opacity">,
-  y: Num.Writable,
+  y: Num,
   amp: number,
   freq: number,
-  stop: Cell<boolean>,
+  stop: Signal<boolean>,
 ): Animator {
   yield* play(oscillate(y, amp, freq)).until(stop);
   yield* fadeOut(shape, 0.4);
@@ -37,7 +37,7 @@ export class MdCancel extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(380, 160);
 
-    const status = cell<Content>("running");
+    const status = signal<Content>("running");
     s(
       label(view.top.down(STATUS_Y), status, {
         size: 11,
@@ -48,9 +48,9 @@ export class MdCancel extends Diagram {
 
     type Slot = {
       x: number;
-      // `y` is a `Num.signal` (rather than plain `cell(...)`) so the
+      // `y` is a `Num.signal` (rather than plain `signal(...)`) so the
       // oscillate integrator can read its `[ALGEBRA]` slot.
-      y: Num.Writable;
+      y: Num;
       shape: Writable<"opacity">;
     };
     const slots: Slot[] = [];
@@ -64,8 +64,8 @@ export class MdCancel extends Diagram {
 
     // Two signals coordinate the outer loop. Buttons set them; the
     // generator observes via `untilChange` / `untilTrue`.
-    const stop = cell(false);
-    const hardStop = cell(false);
+    const stop = signal(false);
+    const hardStop = signal(false);
 
     s(
       button(
@@ -94,7 +94,7 @@ export class MdCancel extends Diagram {
 
     // One outer loop. Each iteration:
     //   1. Reset slots + signals.
-    //   2. Run all Num.Writable lifecycles in parallel, with `.until(hardStop)`
+    //   2. Run all Num lifecycles in parallel, with `.until(hardStop)`
     //      wrapping the whole subtree — hardStop cascades cancellation
     //      to every child instantly.
     //   3. Decide post-cycle delay based on which signal fired.

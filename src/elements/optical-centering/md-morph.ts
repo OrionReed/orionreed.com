@@ -7,7 +7,12 @@
 // that Vec / Box / Color use. One reactive value, one tween call,
 // any shape with N matching vertices.
 
-import { Anchor, Diagram, Path, Vec, cell, circle, defineStruct, label, loop, type Content, type Mount } from "../../minim";
+import {
+  Anchor, Diagram, Path, Vec, type VecValue,
+  Signal, signal, derived, defineTrait, LERP, EQUALS,
+  circle, label, loop,
+  type Content, type Mount, type LerpMethods,
+} from "../../minim";
 
 const W = 640;
 const H = 360;
@@ -18,39 +23,45 @@ const H = 360;
 const N = 24;
 const R = 110;
 
-const lerpV = (a: Vec, b: Vec, t: number): Vec => ({
+const lerpV = (a: VecValue, b: VecValue, t: number): VecValue => ({
   x: a.x + (b.x - a.x) * t,
   y: a.y + (b.y - a.y) * t,
 });
 
-type Polygon = { vertices: Vec[] };
+interface PolygonValue { vertices: VecValue[] }
 
-const Polygon = defineStruct({
-  name: "Polygon",
-  defaults: { vertices: [] } as Polygon,
-  equals: (a, b) => {
-    if (a.vertices.length !== b.vertices.length) return false;
-    for (let i = 0; i < a.vertices.length; i++) {
-      const va = a.vertices[i];
-      const vb = b.vertices[i];
-      if (va.x !== vb.x || va.y !== vb.y) return false;
-    }
-    return true;
-  },
-  /** Component-wise lerp. Cycles through whichever array is shorter,
-   *  so polygons of different lengths still morph cleanly (in this
-   *  demo every keyframe has exactly N vertices). */
-  lerp: (a, b, t): Polygon => {
-    const n = Math.max(a.vertices.length, b.vertices.length);
-    const out: Vec[] = new Array(n);
-    const la = a.vertices.length;
-    const lb = b.vertices.length;
-    for (let i = 0; i < n; i++) {
-      out[i] = lerpV(a.vertices[i % la], b.vertices[i % lb], t);
-    }
-    return { vertices: out };
-  },
-});
+const polygonEquals = (a: PolygonValue, b: PolygonValue): boolean => {
+  if (a.vertices.length !== b.vertices.length) return false;
+  for (let i = 0; i < a.vertices.length; i++) {
+    const va = a.vertices[i];
+    const vb = b.vertices[i];
+    if (va.x !== vb.x || va.y !== vb.y) return false;
+  }
+  return true;
+};
+
+/** Component-wise lerp. Cycles through whichever array is shorter,
+ *  so polygons of different lengths still morph cleanly (in this
+ *  demo every keyframe has exactly N vertices). */
+const polygonLerp = (a: PolygonValue, b: PolygonValue, t: number): PolygonValue => {
+  const n = Math.max(a.vertices.length, b.vertices.length);
+  const out: VecValue[] = new Array(n);
+  const la = a.vertices.length;
+  const lb = b.vertices.length;
+  for (let i = 0; i < n; i++) {
+    out[i] = lerpV(a.vertices[i % la], b.vertices[i % lb], t);
+  }
+  return { vertices: out };
+};
+
+/** Custom reactive value type — `polygon.to(target, dur)` falls out
+ *  of the `[LERP]` trait stamp. */
+class Polygon extends Signal<PolygonValue> {
+  constructor(v: PolygonValue = { vertices: [] }) { super(v); }
+}
+interface Polygon extends LerpMethods<PolygonValue> {}
+defineTrait(Polygon, LERP, polygonLerp);
+defineTrait(Polygon, EQUALS, polygonEquals);
 
 // ── Keyframe builders ──────────────────────────────────────────────
 //
@@ -61,8 +72,8 @@ const Polygon = defineStruct({
 // "puffs up" into a circle, rather than rotating into place.)
 
 /** Regular n-gon, padded to N vertices by repeating each corner. */
-function ngon(corners: number, radius: number): Vec[] {
-  const out: Vec[] = [];
+function ngon(corners: number, radius: number): VecValue[] {
+  const out: VecValue[] = [];
   for (let i = 0; i < N; i++) {
     const cornerIdx = Math.floor((i * corners) / N);
     const angle = (cornerIdx / corners) * Math.PI * 2 - Math.PI / 2;
@@ -72,8 +83,8 @@ function ngon(corners: number, radius: number): Vec[] {
 }
 
 /** Regular m-pointed star with alternating outer/inner radii. */
-function star(points: number, outer: number, inner: number): Vec[] {
-  const out: Vec[] = [];
+function star(points: number, outer: number, inner: number): VecValue[] {
+  const out: VecValue[] = [];
   const total = points * 2;
   for (let i = 0; i < N; i++) {
     const idx = Math.floor((i * total) / N);
@@ -85,8 +96,8 @@ function star(points: number, outer: number, inner: number): Vec[] {
 }
 
 /** Smooth circle (every vertex is "real"). */
-function smoothCircle(radius: number): Vec[] {
-  const out: Vec[] = [];
+function smoothCircle(radius: number): VecValue[] {
+  const out: VecValue[] = [];
   for (let i = 0; i < N; i++) {
     const angle = (i / N) * Math.PI * 2 - Math.PI / 2;
     out.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
@@ -94,7 +105,7 @@ function smoothCircle(radius: number): Vec[] {
   return out;
 }
 
-const KEYFRAMES: Array<{ name: string; verts: Vec[] }> = [
+const KEYFRAMES: Array<{ name: string; verts: VecValue[] }> = [
   { name: "circle (24-gon)",        verts: smoothCircle(R) },
   { name: "square (4-gon × 6)",     verts: ngon(4, R) },
   { name: "triangle (3-gon × 8)",   verts: ngon(3, R) },
@@ -126,12 +137,12 @@ export class MdMorph extends Diagram {
     );
 
     // The polygon is one reactive value carrying N vertices.
-    const poly = Polygon.signal({ vertices: KEYFRAMES[0].verts });
+    const poly = new Polygon({ vertices: KEYFRAMES[0].verts });
 
     // Derive N reactive Points from the array, centered at (cx, cy).
     // Each `path` vertex tracks one slot of poly.value.vertices.
     const points = Array.from({ length: N }, (_, i) =>
-      Vec.derived(() => {
+      derived(Vec, () => {
         const v = poly.value.vertices[i] ?? { x: 0, y: 0 };
         return { x: cx + v.x, y: cy + v.y };
       }),
@@ -162,7 +173,7 @@ export class MdMorph extends Diagram {
     }
 
     // Status label updates as we cycle through keyframes.
-    const status = cell<Content>(KEYFRAMES[0].name);
+    const status = signal<Content>(KEYFRAMES[0].name);
     s(
       label(view.top.down(46), status, {
         size: 11,

@@ -1,6 +1,6 @@
 // color.ts — reactive RGBA colour.
 
-import { Signal, value, type Val } from "../signal";
+import { Signal, computed, type Computed, value, type Val } from "../signal";
 import { LINEAR, LERP, EQUALS } from "../traits";
 import { BaseChain, derived } from "../derive";
 import { defineTrait, type LerpMethods } from "../lerp";
@@ -37,6 +37,18 @@ export class Color extends Signal<Value> {
     });
   }
   private _lum?: Num;
+
+  /** Reactive CSS string — `rgba(r*255, g*255, b*255, a)`. Lazy + cached. */
+  get css(): Computed<string> {
+    return this._css ??= computed(() => {
+      const c = this.value;
+      const r = Math.round(c.r * 255);
+      const g = Math.round(c.g * 255);
+      const b = Math.round(c.b * 255);
+      return `rgba(${r}, ${g}, ${b}, ${c.a})`;
+    });
+  }
+  private _css?: Computed<string>;
 
   derive(fn: (c: Chain) => Chain) {
     return derived(Color, () => fn(new Chain(this.value)).value);

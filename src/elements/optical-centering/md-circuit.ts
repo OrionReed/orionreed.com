@@ -9,7 +9,7 @@
 //   C ─── CHOICE ─┬─ Z                   (random one-of branch)
 //                 └─ W
 
-import { Diagram, EventBus, Mount, type AnyShape, type Val, type Path, cell, circle, derive, label, linear, loop, num, path, play, vec, rect, toSig, tokens, Vec } from "../../minim";
+import {Diagram, EventBus, Mount, type AnyShape, type Val, type Path, signal, circle, computed, label, linear, loop, num, path, play, vec, rect, toSignal, tokens, Vec} from "../../minim";
 import * as R from "../rand";
 
 export class MdCircuit extends Diagram {
@@ -34,11 +34,11 @@ export class MdCircuit extends Diagram {
     /** Counting sink — live count + scale-pulse on each fire. */
     const sink = (x: number, y: number, lbl: string, ev: string) => {
       const c = circle(vec(x, y), 18);
-      const tick = cell(0);
+      const tick = signal(0);
       bus.on(ev, () => { tick.value++; });
       s(
         c,
-        label(c.center, derive(tick, String), { size: 13, bold: true }),
+        label(c.center, computed(() => (String)(tick.value)), { size: 13, bold: true }),
         label(c.center.up(30), lbl, { size: 11, opacity: 0.7 }),
       );
       anim.start(loop(function* () {
@@ -74,9 +74,9 @@ export class MdCircuit extends Diagram {
     };
 
     /** Indicator dot toggled by a reactive boolean. */
-    const lit = (at: Vec.Like, on: Val<boolean>) =>
+    const lit = (at: Vec, on: Val<boolean>) =>
       circle(at, 4, {
-        fill: derive(toSig(on), (v) => (v ? tokens.stroke : "transparent")),
+        fill: () => (toSignal(on).value ? tokens.stroke : "transparent"),
       });
 
     // Reactive auto-route — endpoints track visual boundaries as
@@ -91,7 +91,7 @@ export class MdCircuit extends Diagram {
     const wire = (
       a: AnyShape,
       b: AnyShape,
-      opts: { from?: Vec.Like; to?: Vec.Like } = {},
+      opts: { from?: Vec; to?: Vec } = {},
     ) => {
       const aRef = opts.from ?? a.center;
       const bRef = opts.to ?? b.center;
@@ -107,7 +107,7 @@ export class MdCircuit extends Diagram {
         // diagonal leg covers exactly |dy|/2 horizontally.
         const m = aRef.lerp(bRef, 0.5);
         const dirX = bRefV.x > aRefV.x ? 1 : -1;
-        const halfDy = cell.derived(() => Math.abs(m.y.value - aRef.y.value));
+        const halfDy = computed(() => Math.abs(m.y.value - aRef.y.value));
         const pA = vec(() => aRef.x.value + dirX * halfDy.value, m.y);
         const pB = vec(() => bRef.x.value - dirX * halfDy.value, m.y);
         const start = opts.from ?? a.boundary(pA);
@@ -162,11 +162,11 @@ export class MdCircuit extends Diagram {
       bus.on(from, () => pulse(w, () => bus.emit(to)));
 
     /** AND-sync: tokens accumulate from `evA`/`evB`; when each has ≥1,
-     *  fire `out` and consume one of each. Slot-dot visuals derive
+     *  fire `out` and consume one of each. Slot-dot visuals computed
      *  from the counts (no manual mirroring). */
     const andSync = (evA: string, evB: string, out: string, gate: AnyShape) => {
-      const a = cell(0);
-      const b = cell(0);
+      const a = signal(0);
+      const b = signal(0);
       gate.add(
         lit(gate.center.offset(-14, 14), () => a.value > 0),
         lit(gate.center.offset(+14, 14), () => b.value > 0),
@@ -196,7 +196,7 @@ export class MdCircuit extends Diagram {
       out: string,
       gate: AnyShape,
     ) => {
-      const holding = cell(false);
+      const holding = signal(false);
       gate.add(lit(gate.center.down(6), holding));
       anim.start(loop(function* () {
         yield bus.until(from);

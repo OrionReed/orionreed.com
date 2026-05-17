@@ -1,19 +1,20 @@
-// `snapshot(...sigs)` — capture current cell values; return a reset
-// function. Args are cells or plain records whose cell-valued
+// `snapshot(...sigs)` — capture current signal values; return a reset
+// function. Args are cells or plain records whose signal-valued
 // properties get flattened. Useful at the top of `loop(...)` bodies so
 // each iteration starts from a known baseline.
 
-import { Signal } from "@minim/signals";
+import {Signal} from "@minim/signals";
 
 /** Capture current values; return a reset function. Args are cells or
- *  plain records whose cell-valued properties get flattened.
+ *  plain records whose signal-valued properties get flattened.
  *
  *      const reset = snapshot(score, position);
  *      // … later, on cancel/reset …
  *      reset();
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function snapshot(
-  ...args: ReadonlyArray<Signal<unknown> | Record<string, unknown>>
+  ...args: ReadonlyArray<Signal<any> | Record<string, unknown>>
 ): () => void {
   const sigs: Signal<unknown>[] = [];
   for (const arg of args) {

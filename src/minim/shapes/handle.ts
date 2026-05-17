@@ -1,5 +1,5 @@
 // handle.* — writable derived shapes: small draggable circles wired to
-// a Vec.Writable (or Signal-pair). Reads come from the source; writes go back.
+// a Vec (or Signal-pair). Reads come from the source; writes go back.
 //
 // The atom is `handle(point)`. Every other helper is sugar that picks
 // the writable source — `handle.move(shape)` wires to `shape.center`,
@@ -9,12 +9,11 @@
 // All handles are `aside: true` (no autofit contribution) and themable
 // via the `--minim-handle` CSS var.
 
-import { type Cell } from "@minim/signals";
-import { Shape, type AnyShape, type Writable } from "./shape";
-import { draggable } from "./interaction";
-import { Vec, mean } from "@minim/values";
-import { circle } from "./circle";
-import type { Path } from "./path";
+import {derived, Vec, mean, type Signal} from "@minim/signals";
+import {Shape, type AnyShape, type Writable} from "./shape";
+import {draggable} from "./interaction";
+import {circle} from "./circle";
+import type {Path} from "./path";
 
 const COLOR = "var(--minim-handle, #2563eb)";
 
@@ -27,10 +26,10 @@ export interface HandleOpts {
   cursor?: string;
 }
 
-/** Atom: a small draggable circle wired to a writable Vec.Writable. Every
+/** Atom: a small draggable circle wired to a writable Vec. Every
  *  named helper below is sugar — picks the writable source, hands it
  *  to this. */
-function handleFn(target: Vec.Writable, opts: HandleOpts = {}): Shape {
+function handleFn(target: Vec, opts: HandleOpts = {}): Shape {
   const h = circle(target, opts.r ?? 6, {
     fill: opts.fill ?? COLOR,
     // Background-colored halo so the handle pops on either theme.
@@ -81,12 +80,12 @@ const anchor = (
  *  deltas — see `centroid` in `shape.ts` for that variant). */
 const centroidHandle = (
   ...shapes: (AnyShape & Writable<"translate">)[]
-): Shape => handleFn(mean(...shapes.map((s) => s.center)) as Vec.Writable);
+): Shape => handleFn(mean(...shapes.map((s) => s.center)));
 
 /** Drag handle at the midpoint of two writable Points — drags both
  *  along with it. */
-const midpoint = (a: Vec.Writable, b: Vec.Writable, opts?: HandleOpts): Shape =>
-  handleFn(mean(a, b) as Vec.Writable, opts);
+const midpoint = (a: Vec, b: Vec, opts?: HandleOpts): Shape =>
+  handleFn(mean(a, b), opts);
 
 /** Rotation knob orbiting the shape's center at `radius`. The knob
  *  position is `center + (r cos θ, r sin θ)` for `θ = shape.rotate`;
@@ -96,7 +95,7 @@ const rotate = (
   radius = 40,
   opts?: HandleOpts,
 ): Shape => {
-  const pos = Vec.lens(
+  const pos = derived(Vec,
     () => {
       const c = shape.center.value;
       const a = shape.rotate.value;
@@ -117,7 +116,7 @@ const scaleHandle = (
   radius = 40,
   opts?: HandleOpts,
 ): Shape => {
-  const pos = Vec.lens(
+  const pos = derived(Vec,
     () => {
       const c = shape.center.value;
       const s = shape.scale.value;
@@ -137,7 +136,7 @@ const scaleHandle = (
  *  parameter. Re-projects every drag step, so works on animated paths. */
 const tOnPath = (
   p: Path,
-  t: Cell<number>,
+  t: Signal<number>,
   opts?: HandleOpts & { samples?: number },
 ): Shape => {
   const N = opts?.samples ?? 64;
@@ -155,11 +154,9 @@ const tOnPath = (
     }
     return bestT;
   };
-  const pos = Vec.lens(
+  const pos = derived(Vec,
     () => p.pointAt(t.value).value,
-    (target) => {
-      t.value = project(target);
-    },
+    (target) => { t.value = project(target); },
   );
   return handleFn(pos, opts);
 };

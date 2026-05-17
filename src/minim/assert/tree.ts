@@ -2,7 +2,7 @@
 // module groups it as a tree where parent-child, sibling batches, and
 // depth are first-class. Used by gantt layouts and assertions alike.
 
-import type { Span } from "./spans";
+import type {Span} from "./spans";
 
 /** A yield-array's worth of siblings — same parent, same `spawnedAt`.
  *  Sequential batches under one parent are separate entries. */

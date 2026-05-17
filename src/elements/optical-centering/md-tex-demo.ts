@@ -24,26 +24,14 @@
 // so author-side LaTeX uses single backslashes (e.g. `\frac`, `\dot`,
 // `\cdot`) — JS template literals don't get to eat your `\f` / `\t`.
 
-import { Anchor, Diagram, Mount, cell, label, loop, snapshot, stagger, type Content } from "../../minim";
-import {
-  brace,
-  box,
-  highlight,
-  morph,
-  parts,
-  pluck,
-  tex,
-  underline,
-  unpluck,
-  write,
-  writeOut,
-} from "../../minim/tex";
+import {Anchor, Diagram, Mount, signal, label, loop, snapshot, stagger, type Content} from "../../minim";
+import {brace, frame, highlight, morph, parts, pluck, tex, underline, unpluck, write, writeOut} from "../../minim/tex";
 
 export class MdTexDemo extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(640, 280);
 
-    const status = cell<Content>("");
+    const status = signal<Content>("");
 
     s(
       label(view.top.down(22), "tex — derivations, representations, identity", {
@@ -97,7 +85,7 @@ export class MdTexDemo extends Diagram {
 
     // Decorations on p1 — three parts, one decoration each.
     // Reads as "look at each side of the equation".
-    const aBox = box(p1.parts.a, { gap: 3 });
+    const aBox = frame(p1.parts.a, { gap: 3 });
     const bUnderline = underline(p1.parts.b);
     const cBrace = brace(p1.parts.c, { placement: "below" });
     aBox.opacity.value = 0;

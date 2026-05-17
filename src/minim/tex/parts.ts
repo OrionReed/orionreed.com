@@ -20,31 +20,9 @@
 // The BoxLike surface on `Part` is installed at module load via
 // `delegate(Part.prototype, "box", Box)` — see `values/delegate.ts`.
 
-import { toSig, type Val } from "@minim/signals";
-import {
-  effect,
-  cell,
-  type Cell,
-  type ReadonlyCell,
-} from "@minim/signals";
-import {
-  marker,
-  hover,
-  registerMarker,
-  type Marker,
-} from "./marker";
-import {
-  Box as BoxStruct,
-  delegate,
-  num,
-  type Box,
-  type BoxLike,
-  Vec,
-} from "@minim/values";
-import { type WriteOf } from "@minim/signals";
-import type { TexShape } from "./tex";
-
-type BoxCell = WriteOf<typeof BoxStruct>;
+import {signal, effect, toSignal, Signal, num, Box, Vec, delegateBoxLike, type BoxLike, type Val} from "@minim/signals";
+import {marker, hover, registerMarker, type Marker} from "./marker";
+import type {TexShape} from "./tex";
 
 export type { Marker };
 
@@ -72,32 +50,32 @@ export class Part<N extends string = string> implements BoxLike {
    *  when set by `highlight()` or other animation code. Identity-level
    *  highlighting (from `Marker.active`) is wired externally via
    *  `bindParts()` which writes to this same signal. */
-  readonly highlighted: Cell<boolean> = cell(false);
+  readonly highlighted: Signal<boolean> = signal(false);
   /** Opacity in [0, 1]. Wired to `el.style.opacity`. `Num.signal` so
    *  `.to(target, dur)` is available for per-part tweens. */
   readonly opacity = num(1);
 
-  readonly box: BoxCell;
+  readonly box: Box;
 
-  declare readonly x: ReadonlyCell<number>;
-  declare readonly y: ReadonlyCell<number>;
-  declare readonly w: ReadonlyCell<number>;
-  declare readonly h: ReadonlyCell<number>;
-  declare readonly center: Vec.Like;
-  declare readonly top: Vec.Like;
-  declare readonly bottom: Vec.Like;
-  declare readonly left: Vec.Like;
-  declare readonly right: Vec.Like;
-  declare readonly at: (u: number, v: number) => Vec.Like;
-  declare readonly area: ReadonlyCell<number>;
+  declare readonly x: import("@minim/signals").Num;
+  declare readonly y: import("@minim/signals").Num;
+  declare readonly w: import("@minim/signals").Num;
+  declare readonly h: import("@minim/signals").Num;
+  declare readonly center: Vec;
+  declare readonly top: Vec;
+  declare readonly bottom: Vec;
+  declare readonly left: Vec;
+  declare readonly right: Vec;
+  declare readonly at: (u: number, v: number) => Vec;
+  declare readonly area: Signal<number>;
 
   el: HTMLElement | null = null;
   #disposers: Array<() => void> = [];
 
   constructor(
     readonly name: N,
-    readonly content: ReadonlyCell<string>,
-    box: BoxCell,
+    readonly content: Signal<string>,
+    box: Box,
     readonly marker: PartMarker,
     readonly host: TexShape,
   ) {
@@ -141,7 +119,7 @@ export class Part<N extends string = string> implements BoxLike {
   }
 }
 
-delegate(Part.prototype, "box", BoxStruct, { exclude: ["box"] });
+delegateBoxLike(Part.prototype, "box");
 
 // ── PartMarker ────────────────────────────────────────────────────────────────
 
@@ -157,8 +135,8 @@ delegate(Part.prototype, "box", BoxStruct, { exclude: ["box"] });
  *  is per-instance and cascades separately via the group chain. */
 export class PartMarker<N extends string = string> {
   /** Per-instance color. `null` → walk up to parent via `effectiveColor`. */
-  readonly color: Cell<string | null> = cell<string | null>(null);
-  readonly content: ReadonlyCell<string>;
+  readonly color: Signal<string | null> = signal<string | null>(null);
+  readonly content: Signal<string>;
 
   /** Shared inner Marker. All members of a group chain share the root's
    *  instance, so bind/active/register all target the same identity. */
@@ -169,20 +147,20 @@ export class PartMarker<N extends string = string> {
     source: PartContent,
     readonly group: PartMarker | null = null,
   ) {
-    this.content = toSig(source) as ReadonlyCell<string>;
+    this.content = toSignal(source) as Signal<string>;
     // Children inherit the root's Marker so all group members share one identity.
     this.#m = group ? group.#m : marker();
   }
 
   /** Identity active signal — true when any rendering of this marker
    *  (prose, shape, animation) is currently active. */
-  get active(): ReadonlyCell<boolean> {
+  get active(): Signal<boolean> {
     return this.#m.active;
   }
 
   /** Bind a local boolean signal to this marker's identity. Returns a disposer.
    *  See `Marker.bind` for full docs. */
-  bind(local: Cell<boolean>): () => void {
+  bind(local: Signal<boolean>): () => void {
     return this.#m.bind(local);
   }
 
@@ -249,7 +227,7 @@ type NameOf<S> = S extends string
 /** Set the same color on N markers at once. */
 export function tint(
   color: string | null,
-  ...markers: readonly { color: Cell<string | null> }[]
+  ...markers: readonly { color: Signal<string | null> }[]
 ): void {
   for (const m of markers) m.color.value = color;
 }
@@ -287,5 +265,3 @@ export type PartList<Names extends string = string> = readonly Part[] & {
   readonly [K in Names]: Part<K>;
 };
 
-// Silence unused-import warning.
-void (null as unknown as Box);

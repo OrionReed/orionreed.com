@@ -3,7 +3,7 @@
 // Visualised by a current pick label, a candidates menu, and a rolling
 // history strip.
 
-import { Diagram, Mount, Anchor, bounceIn, cell, circle, easeIn, easeInOut, easeOut, fadeOut, label, loop, vec, rand, snapshot, type Animator, type Content, type Writable } from "../../minim";
+import {Diagram, Mount, Anchor, bounceIn, signal, computed, circle, easeIn, easeInOut, easeOut, fadeOut, label, loop, vec, rand, snapshot, type Animator, type Content, type Writable} from "../../minim";
 
 const STAGE_X = 240;
 const STAGE_Y = 120;
@@ -79,9 +79,9 @@ export class MdRand extends Diagram {
     const view = this.view(600, 280);
 
     // ── State ────────────────────────────────────────────────────────
-    const current = cell<Pick | null>(null);
-    const currentName = cell.derived<Content>(() => current.value?.name ?? "—");
-    const currentColor = cell.derived(() => current.value?.color ?? "#1a1a1a");
+    const current = signal<Pick | null>(null);
+    const currentName = signal.derived<Content>(() => current.value?.name ?? "—");
+    const currentColor = computed(() => current.value?.color ?? "#1a1a1a");
 
     // ── Header ───────────────────────────────────────────────────────
     s(
@@ -130,8 +130,8 @@ export class MdRand extends Diagram {
       }),
     );
     MOVES.forEach((m, i) => {
-      const isActive = cell.derived(() => current.value?.name === m.name);
-      const opacity = cell.derived(() => (isActive.value ? 1 : 0.4));
+      const isActive = computed(() => current.value?.name === m.name);
+      const opacity = computed(() => (isActive.value ? 1 : 0.4));
       s(
         circle(vec(MENU_X, MENU_Y + i * ROW_H), 5, {
           fill: m.color,

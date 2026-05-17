@@ -4,7 +4,7 @@
 // browser-rendered MathML). Sub-formulas are addressable via
 // `${part(name, content)}` interpolations: lightweight handles with
 // reactive `box`, `opacity`, `color`, `highlighted` signals.
-// Decorations re-derive from `part.box`; motion combinators
+// Decorations re-computed from `part.box`; motion combinators
 // (`write`, `morph`, `pluck`/`unpluck`) compose over the existing
 // tween + behavior stdlib. Per-part stagger uses the standard
 // `stagger` from `@minim/shapes`:
@@ -39,7 +39,7 @@ export {
 } from "./marker";
 export {
   brace,
-  box,
+  frame,
   underline,
   cross,
   type DecorationOpts,

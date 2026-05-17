@@ -1,7 +1,7 @@
-import { Prism } from "prism-esm";
-import { loader as JsLoader } from "prism-esm/components/prism-javascript.js";
-import { loader as TsLoader } from "prism-esm/components/prism-typescript.js";
-import { loader as CssLoader } from "prism-esm/components/prism-css.js";
+import {Prism} from "prism-esm";
+import {loader as JsLoader} from "prism-esm/components/prism-javascript.js";
+import {loader as TsLoader} from "prism-esm/components/prism-typescript.js";
+import {loader as CssLoader} from "prism-esm/components/prism-css.js";
 
 // Forked from https://github.com/andreruffert/syntax-highlight-element
 

@@ -1,8 +1,6 @@
-import { toSig, type Val } from "@minim/signals";
-import { cell, type ReadonlyCell } from "@minim/signals";
-import { Shape, type Segment } from "./shape";
-import { Vec, box } from "@minim/values";
-import { wireStroke, type CommonOpts } from "./common";
+import {computed, toSignal, Vec, type Signal, type Val} from "@minim/signals";
+import {Shape, type Segment} from "./shape";
+import {wireStroke, type CommonOpts} from "./common";
 
 export interface AnnularSectorOpts extends CommonOpts {}
 
@@ -10,32 +8,31 @@ export interface AnnularSectorOpts extends CommonOpts {}
 export class AnnularSector<
   O extends AnnularSectorOpts = AnnularSectorOpts,
 > extends Shape<O> {
-  readonly rOuter: ReadonlyCell<number>;
-  readonly rInner: ReadonlyCell<number>;
-  readonly a0: ReadonlyCell<number>;
-  readonly a1: ReadonlyCell<number>;
+  readonly rOuter: Signal<number>;
+  readonly rInner: Signal<number>;
+  readonly a0: Signal<number>;
+  readonly a1: Signal<number>;
 
   constructor(
-    center: Vec.Like,
+    center: Vec,
     rOuter: Val<number>,
     rInner: Val<number>,
     a0: Val<number>,
     a1: Val<number>,
     opts: O = {} as O,
   ) {
-    const ro = toSig(rOuter);
-    const ri = toSig(rInner);
-    const a0s = toSig(a0);
-    const a1s = toSig(a1);
+    const ro = toSignal(rOuter);
+    const ri = toSignal(rInner);
+    const a0s = toSignal(a0);
+    const a1s = toSignal(a1);
     super(
       "path",
-      () =>
-        box(
-          center.x.value - ro.value,
-          center.y.value - ro.value,
-          2 * ro.value,
-          2 * ro.value,
-        ),
+      () => ({
+        x: center.x.value - ro.value,
+        y: center.y.value - ro.value,
+        w: 2 * ro.value,
+        h: 2 * ro.value,
+      }),
       opts,
       { origin: () => center.value },
     );
@@ -47,7 +44,7 @@ export class AnnularSector<
     wireStroke(this, opts, true, () => {
       this.attr(
         "d",
-        cell.derived(() => {
+        computed(() => {
           const cx = center.x.value;
           const cy = center.y.value;
           const _ro = ro.value;
@@ -82,11 +79,10 @@ export class AnnularSector<
     const ri = () => this.rInner.value;
     const a0 = () => this.a0.value;
     const a1 = () => this.a1.value;
-    const polar = (rfn: () => number, afn: () => number) =>
-      Vec.derived(() => ({
-        x: cx() + rfn() * Math.cos(afn()),
-        y: cy() + rfn() * Math.sin(afn()),
-      }));
+    const polar = (rfn: () => number, afn: () => number) => ({
+      x: cx() + rfn() * Math.cos(afn()),
+      y: cy() + rfn() * Math.sin(afn()),
+    });
     return [
       { type: "arc", cx, cy, r: ro, a0, a1 },
       { type: "line", from: polar(ro, a1), to: polar(ri, a1) },
@@ -97,7 +93,7 @@ export class AnnularSector<
 }
 
 export const annularSector = <const O extends AnnularSectorOpts>(
-  center: Vec.Like,
+  center: Vec,
   rOuter: Val<number>,
   rInner: Val<number>,
   a0: Val<number>,

@@ -1,17 +1,17 @@
-// Shared viewport cell — one lazy resize listener, re-emits on resize.
+// Shared viewport signal — one lazy resize listener, re-emits on resize.
 
-import { cell, type Cell, type ReadonlyCell } from "@minim/signals";
+import {signal, type Signal} from "@minim/signals";
 
 interface Viewport {
   w: number;
   h: number;
 }
 
-let cached: Cell<Viewport> | undefined;
+let cached: Signal<Viewport> | undefined;
 
-export function viewport(): ReadonlyCell<Viewport> {
+export function viewport(): Signal<Viewport> {
   if (cached) return cached;
-  const sig = cell({ w: window.innerWidth, h: window.innerHeight });
+  const sig = signal({ w: window.innerWidth, h: window.innerHeight });
   window.addEventListener("resize", () => {
     sig.value = { w: window.innerWidth, h: window.innerHeight };
   });

@@ -7,17 +7,17 @@
 //
 // Authoring shape:
 //
-//      const n = cell(5);
-//      const nStr = cell.derived(() => String(n.value));
-//      const sumStr = cell.derived(() => String(n.value * (n.value + 1) / 2));
+//      const n = signal(5);
+//      const nStr = computed(() => String(n.value));
+//      const sumStr = computed(() => String(n.value * (n.value + 1) / 2));
 //      const eq = tex`\sum_{i=1}^{${part("n", nStr)}} i = ${part("s", sumStr)}`;
 //
 // The reactive content path lives in `tex.ts` — when any part's
 // content signal changes, the host re-renders, re-measures, and
 // re-binds. No special "live" primitive needed; signals all the way.
 
-import { Anchor, Diagram, Mount, Vec, cell, handle, label, line, vec, type Content } from "../../minim";
-import { part, tex, tint } from "../../minim/tex";
+import {Anchor, Diagram, Mount, Vec, signal, computed, derived, handle, label, line, vec, type Content} from "../../minim";
+import {part, tex, tint} from "../../minim/tex";
 
 const W = 640;
 const H = 220;
@@ -58,12 +58,12 @@ export class MdTexLive extends Diagram {
     // `t` ∈ [0, 1] is the raw slider position. `n` quantizes it to
     // an integer in [N_MIN, N_MAX]. `nStr` and `sumStr` are the
     // string forms spliced into the equation as part contents.
-    const t = cell(0.4);
-    const n = cell.derived(() =>
+    const t = signal(0.4);
+    const n = computed(() =>
       Math.round(N_MIN + t.value * (N_MAX - N_MIN)),
     );
-    const nStr = cell.derived(() => String(n.value));
-    const sumStr = cell.derived(() =>
+    const nStr = computed(() => String(n.value));
+    const sumStr = computed(() =>
       String((n.value * (n.value + 1)) / 2),
     );
 
@@ -77,7 +77,7 @@ export class MdTexLive extends Diagram {
     );
     // Lens-backed Point: reads project `t` onto the track; writes
     // clamp the dragged x back into [0, 1] and store as `t`.
-    const knobPos = Vec.lens(
+    const knobPos = derived(Vec,
       () => ({ x: TRACK_X0 + t.value * trackW, y: TRACK_Y }),
       (target) => {
         const clamped = Math.max(

@@ -22,7 +22,7 @@
 // `getMarker` / `registerMarker` free functions and `marker.register(id)`
 // remain for backward compatibility. Prefer the scoped path for new code.
 
-import { cell, type Cell, type ReadonlyCell } from "@minim/signals";
+import {computed, signal, type Signal} from "@minim/signals";
 
 // ── Global registry (transitional) ────────────────────────────────────────────
 
@@ -44,11 +44,11 @@ export function registerMarker(id: string, m: Marker): void {
  *  `active` is OR over all bound locals — simultaneous activations
  *  from multiple sources are counted correctly. */
 export type Marker = {
-  color: Cell<string | null>;
+  color: Signal<string | null>;
   /** True when any bound rendering is active. Read-only; use `bind()`. */
-  active: ReadonlyCell<boolean>;
-  /** Bind a local boolean cell. Returns a disposer. */
-  bind(local: Cell<boolean>): () => void;
+  active: Signal<boolean>;
+  /** Bind a local boolean signal. Returns a disposer. */
+  bind(local: Signal<boolean>): () => void;
   /** Register in the global lookup under `id` and return `this`. */
   register(id: string): Marker;
 };
@@ -57,10 +57,10 @@ export type Marker = {
 
 /** Create a Marker, optionally pre-seeded with a color. */
 export function marker(color?: string): Marker {
-  const colorCell = cell<string | null>(color ?? null);
-  const locals = new Set<Cell<boolean>>();
-  const v = cell(0);
-  const active = cell.derived(() => {
+  const colorCell = signal<string | null>(color ?? null);
+  const locals = new Set<Signal<boolean>>();
+  const v = signal(0);
+  const active = computed(() => {
     v.value;
     for (const s of locals) if (s.value) return true;
     return false;
@@ -103,7 +103,7 @@ export function palette(n: number): Marker[] {
  *      this.#disposers.push(hover(this, m));   // in a custom element
  */
 export function hover(el: Element, m: Marker): () => void {
-  const local = cell(false);
+  const local = signal(false);
   const unbind = m.bind(local);
   const on  = (): void => { local.value = true; };
   const off = (): void => { local.value = false; };

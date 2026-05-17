@@ -4,7 +4,7 @@
 //              attribute reactivity, the `scene(s: Mount)` authoring hook
 //   attr       `@attr.{str,num,bool}` decorators — observed HTML attrs
 //              mapped to reactive cells on the host element
-//   viewport   shared `viewport()` cell — one lazy resize listener
+//   viewport   shared `viewport()` signal — one lazy resize listener
 //   md-tex     <md-tex> custom element — inline math via Temml, with
 //              optional prose-linking via the marker registry
 //   md-marker  <md-marker> custom element — non-math prose linker

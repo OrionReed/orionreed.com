@@ -7,7 +7,9 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "vite-node scripts/build.ts && vite build && vite-node scripts/build.ts",
-		"preview": "vite preview"
+		"preview": "vite preview",
+		"fmt": "biome format --write .",
+		"typecheck": "tsc --noEmit --pretty"
 	},
 	"author": "Orion Reed",
 	"license": "ISC",

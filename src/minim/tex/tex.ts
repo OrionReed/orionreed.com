@@ -6,14 +6,9 @@
 // the type so `eq.parts.a` is typed and `eq.parts.x` is a TS error.
 
 import temml from "temml";
-import { signal, type ReadonlyCell } from "@minim/signals";
-import { Shape, type ShapeOpts } from "@minim/shapes";
-import { Box as BoxStruct, box, type Box } from "@minim/values";
-import { type WriteOf } from "@minim/signals";
-import { tokens } from "@minim/shapes";
+import { signal, Box, type Signal, type BoxValue } from "@minim/signals";
+import { Shape, type ShapeOpts, tokens } from "@minim/shapes";
 import { Part, PartMarker, type PartList } from "./parts";
-
-type BoxReactive = WriteOf<typeof BoxStruct>;
 
 /** Anything legal in a `tex\`…\`` interpolation slot. Strings splice
  *  through to the LaTeX source verbatim; PartMarkers wrap content in
@@ -147,7 +142,7 @@ const stabilizePart = (el: HTMLElement): void => {
 interface Measurement {
   width: number;
   height: number;
-  rects: Map<string, Box>;
+  rects: Map<string, BoxValue>;
 }
 
 const measureMathML = (
@@ -173,22 +168,19 @@ const measureMathML = (
     // not to `<math>` — `<mfrac>` can overflow its line-box upward,
     // so math-relative bounds would be off by that overflow.
     const wrapperRect = div.getBoundingClientRect();
-    const rects = new Map<string, Box>();
+    const rects = new Map<string, BoxValue>();
     div.querySelectorAll<HTMLElement>("[class*='minim-part-']").forEach((el) => {
       const cls = Array.from(el.classList).find((c) =>
         c.startsWith("minim-part-"),
       );
       if (!cls) return;
       const r = el.getBoundingClientRect();
-      rects.set(
-        cls,
-        box(
-          r.left - wrapperRect.left,
-          r.top - wrapperRect.top,
-          r.width,
-          r.height,
-        ),
-      );
+      rects.set(cls, {
+        x: r.left - wrapperRect.left,
+        y: r.top - wrapperRect.top,
+        w: r.width,
+        h: r.height,
+      });
     });
     return { width: rootRect.width, height: rootRect.height, rects };
   } finally {
@@ -202,9 +194,9 @@ export class TexShape<Names extends string = string> extends Shape {
   readonly parts: PartList<Names>;
   /** Width in local-frame user units (matches the rendered MathML
    *  bounding rect). */
-  readonly width: ReadonlyCell<number>;
+  readonly width: Signal<number>;
   /** Height in local-frame user units. */
-  readonly height: ReadonlyCell<number>;
+  readonly height: Signal<number>;
 
   constructor(
     strings: TemplateStringsArray | readonly string[],
@@ -224,7 +216,7 @@ export class TexShape<Names extends string = string> extends Shape {
 
     super(
       "foreignObject",
-      () => box(0, 0, w.value, h.value),
+      () => ({ x: 0, y: 0, w: w.value, h: h.value }),
       opts,
       { origin: () => ({ x: w.value / 2, y: h.value / 2 }) },
     );
@@ -248,12 +240,10 @@ export class TexShape<Names extends string = string> extends Shape {
     // and binds each Part to its live el. `boxWriters` holds the
     // writable handles to each part's bounds for re-measure.
     const list: Part[] = [];
-    const boxWriters = new Map<string, BoxReactive>();
+    const boxWriters = new Map<string, Box>();
     for (const m of markers) {
       const cls = partClass(m.name);
-      const boxSig = BoxStruct.signal(
-        measured.rects.get(cls) ?? box(0, 0, 0, 0),
-      );
+      const boxSig = new Box(measured.rects.get(cls) ?? { x: 0, y: 0, w: 0, h: 0 });
       boxWriters.set(cls, boxSig);
       list.push(new Part(m.name, m.content, boxSig, m, this as TexShape));
     }

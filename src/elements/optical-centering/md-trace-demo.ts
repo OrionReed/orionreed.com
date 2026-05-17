@@ -7,7 +7,26 @@
 // one contiguous block; concurrent siblings stack into separate
 // blocks; sequential batches under one parent reuse lanes.
 
-import { Diagram, Mount, Anchor, cell, circle, clockSignal, easeOut, fadeIn, fadeOut, fadeUp, fadeUpOut, forEach, label, vec, rect, spinIn, zoomOut } from "../../minim";
+import {
+  Diagram,
+  Mount,
+  Anchor,
+  signal,
+  circle,
+  clockSignal,
+  easeOut,
+  fadeIn,
+  fadeOut,
+  fadeUp,
+  fadeUpOut,
+  forEach,
+  label,
+  vec,
+  rect,
+  spinIn,
+  zoomOut,
+  computed,
+} from "../../minim";
 import {
   spans,
   tag,
@@ -84,29 +103,27 @@ export class MdTraceDemo extends Diagram {
           c.translate.to({ x: -30, y: 30 }, 0.3, easeOut),
         ];
         yield 0.3;
-        yield [
-          t.fadeUpOut(a, 0.3),
-          t.fadeOut(b, 0.5),
-          t.zoomOut(c, 0.6),
-        ];
+        yield [t.fadeUpOut(a, 0.3), t.fadeOut(b, 0.5), t.zoomOut(c, 0.6)];
       }),
     );
 
     // ── Reactive derivations ───────────────────────────────────────
     // Bumps on each spawn/complete/cancel. Sparse, event-paced — tree
     // and layout only recompute when structure changes.
-    const version = cell(0);
-    trace.onChange(() => { version.value++; });
+    const version = signal(0);
+    trace.onChange(() => {
+      version.value++;
+    });
 
-    const tree = cell.derived(() => {
+    const tree = computed(() => {
       version.value;
       return traceTree(trace.spans);
     });
-    const layout = cell.derived(() => assignLanes(tree.value));
+    const layout = computed(() => assignLanes(tree.value));
 
     const GANTT_W = W - 2 * PAD;
     // SCALE depends on `now` so the gantt re-fits as in-flight time grows.
-    const SCALE = cell.derived(() => {
+    const SCALE = computed(() => {
       now.value;
       version.value;
       return GANTT_W / Math.max(trace.duration(), SCALE_MIN);
@@ -121,7 +138,7 @@ export class MdTraceDemo extends Diagram {
       }),
       label(
         vec(W - PAD, HEADER_Y),
-        cell.derived(() => {
+        computed(() => {
           version.value;
           now.value;
           const n = tree.value.size;
@@ -135,7 +152,7 @@ export class MdTraceDemo extends Diagram {
     // ── Rows ───────────────────────────────────────────────────────
     // A fresh slice per version-bump forces forEach to diff when new
     // spans appear; per-frame growth flows through per-row computeds.
-    const spansSig = cell.derived(() => {
+    const spansSig = computed(() => {
       version.value;
       return trace.spans.slice();
     });
@@ -144,24 +161,24 @@ export class MdTraceDemo extends Diagram {
       s.root,
       spansSig,
       (span) => {
-        const x = cell.derived(() => PAD + span.spawnedAt * SCALE.value);
-        const width = cell.derived(() => {
+        const x = computed(() => PAD + span.spawnedAt * SCALE.value);
+        const width = computed(() => {
           const end = span.completedAt ?? now.value;
           return Math.max(2, (end - span.spawnedAt) * SCALE.value);
         });
-        const y = cell.derived(() => {
+        const y = computed(() => {
           const lane = layout.value.lanes.get(span.id) ?? 0;
           return ROWS_Y + lane * (ROW_H + ROW_GAP);
         });
-        const isRunning = cell.derived(() => {
+        const isRunning = computed(() => {
           version.value;
           return span.completedAt === undefined;
         });
-        const fill = cell.derived(() => {
+        const fill = computed(() => {
           const d = tree.value.byId.get(span.id)?.depth ?? 0;
           return ROW_FILL[Math.min(d, ROW_FILL.length - 1)];
         });
-        const opacity = cell.derived(() => (isRunning.value ? 0.55 : 0.85));
+        const opacity = computed(() => (isRunning.value ? 0.55 : 0.85));
 
         const bar = rect(x, y, width, ROW_H, {
           fill,
@@ -175,7 +192,9 @@ export class MdTraceDemo extends Diagram {
             ? `#${span.id} root`
             : `#${span.id} ← #${span.parentId}`;
         const tagShape = label(bar.left.right(5), labelText, {
-          size: 9, align: Anchor.Left, opacity: 0.9,
+          size: 9,
+          align: Anchor.Left,
+          opacity: 0.9,
         });
         return [bar, tagShape];
       },

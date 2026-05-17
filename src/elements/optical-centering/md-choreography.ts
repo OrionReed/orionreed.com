@@ -1,7 +1,7 @@
 // Six shapes cycle through every group operation. `snapshot` captures
 // the initial pose so each iteration loops perfectly.
 
-import { Diagram, Mount, Anchor, assemble, centroid, play, circle, easeInOut, label, loop, num, orbit, cell, vec, snapshot, splay, stagger, swap, type Content } from "../../minim";
+import {Diagram, Mount, Anchor, assemble, centroid, play, circle, easeInOut, label, loop, num, orbit, signal, vec, snapshot, splay, stagger, swap, type Content} from "../../minim";
 
 const W = 600;
 const H = 360;
@@ -51,7 +51,7 @@ export class MdChoreography extends Diagram {
       s(circle(vec(0, 0), 18, { translate: p, fill: COLORS[i] })),
     );
 
-    const phase = cell<Content>("assemble (row)");
+    const phase = signal<Content>("assemble (row)");
     const c = centroid(...shapes);
     s(
       label(view.top.down(24), phase, {
@@ -101,11 +101,9 @@ export class MdChoreography extends Diagram {
       // spawn/dispose pair. The orbit gets cancelled the moment
       // rampSequence finishes, then the next phase continues.
       phase.value = "orbit (eased)";
-      const rampSequence = play(
-        orbitRate.to(1, 0.5, easeInOut),
-        1.4,
-        orbitRate.to(0, 0.5, easeInOut),
-      );
+      const rampSequence = play(orbitRate.to(1, 0.5, easeInOut))
+        .then(1.4)
+        .then(orbitRate.to(0, 0.5, easeInOut));
       yield* play(orbit(orbitCentre, shapes, { period: 2.5, rate: orbitRate }))
         .until(rampSequence);
       yield 0.2;

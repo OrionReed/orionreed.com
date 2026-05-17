@@ -7,12 +7,9 @@
 // `stagger` would let bodies sit at their default pose until their
 // slot's tween begins.
 
-import { easeIn, easeInOut, easeOut, type Animator, type Yieldable } from "@minim/core";
-import { tween, type Cell, type Easing, type Val } from "@minim/signals";
-import { Dir, Vec } from "@minim/values";
-import type { Writable } from "./shape";
-
-type Lerpable = number | Vec;
+import {easeIn, easeInOut, easeOut, type Animator, type Yieldable} from "@minim/core";
+import {tween, Dir, type Signal, type Easing, type Val, type VecValue} from "@minim/signals";
+import type {Writable} from "./shape";
 
 /** Eagerly advance `factory()` to its first yield (flushing pose side-
  *  effects), then return an Animator that re-yields and forwards the
@@ -41,8 +38,8 @@ const eager = <R>(factory: () => Animator<R>): Animator<R> => {
 
 /** Pose-then-tween. Sets `sig.value = start` synchronously, then tweens
  *  to `end`. */
-export const from = <T extends Lerpable>(
-  sig: Cell<T>,
+export const from = <T>(
+  sig: Signal<T>,
   start: T,
   end: T,
   sec: Val<number> = 0.3,
@@ -98,7 +95,7 @@ export function* fadeUpOut(
 /** Slide in from `dir` + fade in. */
 export const slideIn = (
   s: Writable<"translate" | "opacity">,
-  dir: Vec = Dir.Left,
+  dir: VecValue = Dir.Left,
   sec = 0.4,
   dist = 30,
 ): Animator =>
@@ -118,7 +115,7 @@ export const slideIn = (
 /** Slide out toward a side + fade out. */
 export function* slideOut(
   s: Writable<"translate" | "opacity">,
-  dir: Vec = Dir.Right,
+  dir: VecValue = Dir.Right,
   sec = 0.3,
   dist = 30,
 ): Animator {

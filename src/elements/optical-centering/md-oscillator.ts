@@ -11,10 +11,10 @@
 //
 // All generator code (`untilTrue`, `endOn`, `oscillate`) composes with
 // marker signals the same way it does with any other signal, because
-// `marker.active` is just a ReadonlyCell<boolean>.
+// `marker.active` is just a Signal<boolean>.
 
-import { Diagram, Mount, Shape, cell, play, circle, derive, drive, line, loop, oscillate, vec, tokens, not } from "../../minim";
-import { parts, tex, bindParts } from "../../minim/tex";
+import {Diagram, Mount, Shape, signal, play, circle, computed, drive, line, loop, oscillate, vec, tokens, not} from "../../minim";
+import {parts, tex, bindParts} from "../../minim/tex";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -85,7 +85,7 @@ const computeTicks = (T: number): string => {
 
 // ── Path shape factory ────────────────────────────────────────────────────────
 
-function makePath(d: ReturnType<typeof cell.derived<string>>): Shape {
+function makePath(d: ReturnType<typeof signal.derived<string>>): Shape {
   const s = new Shape("path", () => ({ x: TL, y: CY - A_AMP - 12, w: TW, h: (A_AMP + 12) * 2 }));
   s.attr("fill", "none");
   s.attr("stroke-linecap", "round");
@@ -101,10 +101,10 @@ export class MdOscillator extends Diagram {
     const view = this.view(600, 208);
 
     // ── Physics ───────────────────────────────────────────────────────────────
-    const t = cell(0);
+    const t = signal(0);
     this.anim.start(drive((dt) => { t.value = (t.value + dt) % T_LOOP; }));
 
-    const disp = cell.derived(() =>
+    const disp = computed(() =>
       A_AMP * Math.exp(-GAMMA * t.value) * Math.cos(OMEGA * t.value),
     );
 
@@ -120,17 +120,17 @@ export class MdOscillator extends Diagram {
     cl.opacity.value = 0.12;
 
     // ── Oscillation trace ─────────────────────────────────────────────────────
-    const trace = s(makePath(cell.derived(() => computeTrace(t.value))));
+    const trace = s(makePath(computed(() => computeTrace(t.value))));
     trace.attr("stroke", tokens.stroke);
     trace.attr("stroke-width", "1.5");
 
     // ── Ball ─────────────────────────────────────────────────────────────────
-    const ball = s(circle(vec(TR, cell.derived(() => CY - disp.value)), 5.5, { fill: true }));
-    ball.attr("fill", cell.derived(() => A.color.value ?? tokens.stroke));
+    const ball = s(circle(vec(TR, computed(() => CY - disp.value)), 5.5, { fill: true }));
+    ball.attr("fill", computed(() => A.color.value ?? tokens.stroke));
 
     // ── Amplitude bound lines (A) ─────────────────────────────────────────────
-    const ampStroke = cell.derived(() => A.color.value ?? tokens.stroke);
-    const ampOpacity = derive(A.active, (on) => (on ? 0.7 : 0.18));
+    const ampStroke = computed(() => A.color.value ?? tokens.stroke);
+    const ampOpacity = computed(() => ((on) => (on ? 0.7 : 0.18))(A.active.value));
     [CY - A_AMP, CY + A_AMP].forEach((y) => {
       const l = s(line(vec(TL, y), vec(TR, y), { stroke: ampStroke, opacity: ampOpacity }));
       l.attr("stroke-dasharray", "3 5");
@@ -139,8 +139,8 @@ export class MdOscillator extends Diagram {
     // ── Period tick marks (ω) ─────────────────────────────────────────────────
     // Vertical dashed lines at each cycle boundary, sliding left as time
     // progresses. Their spacing IS the period — seeing them scroll shows ω.
-    const tickPath = s(makePath(cell.derived(() => computeTicks(t.value))));
-    tickPath.attr("stroke", cell.derived(() => omega.color.value ?? tokens.stroke));
+    const tickPath = s(makePath(computed(() => computeTicks(t.value))));
+    tickPath.attr("stroke", computed(() => omega.color.value ?? tokens.stroke));
     tickPath.attr("stroke-dasharray", "2 3");
     tickPath.attr("stroke-width", "1");
     tickPath.opacity.value = 0;
@@ -154,8 +154,8 @@ export class MdOscillator extends Diagram {
 
     // ── Decay envelope (γ) ────────────────────────────────────────────────────
     // Fades in on hover, pulses while held, fades back out on release.
-    const envPath = s(makePath(cell.derived(() => computeEnvelope(t.value))));
-    envPath.attr("stroke", cell.derived(() => gamma.color.value ?? tokens.stroke));
+    const envPath = s(makePath(computed(() => computeEnvelope(t.value))));
+    envPath.attr("stroke", computed(() => gamma.color.value ?? tokens.stroke));
     envPath.attr("stroke-dasharray", "4 6");
     envPath.attr("stroke-width", "1");
     envPath.opacity.value = 0;

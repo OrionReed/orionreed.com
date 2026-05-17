@@ -2,34 +2,18 @@
 // the graph; signals drive updates. Owns the SVG element, the
 // viewBox (`view`/`fit`), and the host CSS sizing (`--d-w`/`--d-h`).
 
-import { Anim } from "@minim/core";
-import { toSig, type Val } from "@minim/signals";
-import { effect } from "@minim/signals";
+import { Anim, attachRaf } from "@minim/core";
+export { attachRaf };
+import {
+  derived, computed, effect, toSignal,
+  Box, type BoxLike, type BoxValue,
+  type Val,
+} from "@minim/signals";
 import { Shape, SVG_NS, mount, ensureArrowMarker, type Mount } from "@minim/shapes";
-import { Box as BoxStruct, box, type BoxLike } from "@minim/values";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
 import { Marker } from "@minim/tex";
-// (other web/ files: relative imports stay local to keep the package self-contained)
 
 export const css = String.raw;
-
-/** Browser RAF adapter. Caps single-frame `dt` at 32 ms so tab-switch
- *  catch-up doesn't deliver one giant step. Returns a detach function.
- *  Used by `Diagram` and any custom element that owns its own `Anim`. */
-export function attachRaf(anim: Anim): () => void {
-  if (typeof requestAnimationFrame !== "function") return () => {};
-  const FRAME_CAP_MS = 32;
-  let rafId = 0;
-  let last = 0;
-  const tick = (now: number): void => {
-    rafId = requestAnimationFrame(tick);
-    const dt = last ? Math.min(now - last, FRAME_CAP_MS) / 1000 : 0;
-    last = now;
-    anim.step(dt);
-  };
-  rafId = requestAnimationFrame(tick);
-  return () => cancelAnimationFrame(rafId);
-}
 
 export type Padding =
   | number
@@ -89,7 +73,7 @@ export class Diagram extends HTMLElement {
   // call; `connectedCallback` auto-fits if it's still false.
   #viewSet = false;
   #viewSig = signal0Box();
-  #viewBox = BoxStruct.derived(() => this.#viewSig.value);
+  #viewBox = derived(Box, () => this.#viewSig.value);
 
   private static styleSheets = new Map<string, CSSStyleSheet>();
   static styles = css`
@@ -146,8 +130,8 @@ export class Diagram extends HTMLElement {
    *  `view.center`, etc.). */
   view(w: Val<number>, h: Val<number>): BoxLike {
     if (this.#viewSet) return this.#viewBox;
-    const ws = toSig(w);
-    const hs = toSig(h);
+    const ws = toSignal(w);
+    const hs = toSignal(h);
     effect(() => this.setViewBox(0, 0, ws.value, hs.value));
     this.#viewSet = true;
     return this.#viewBox;
@@ -181,7 +165,7 @@ export class Diagram extends HTMLElement {
   }
 
   private setViewBox(x: number, y: number, w: number, h: number): void {
-    this.#viewSig.value = box(x, y, w, h);
+    this.#viewSig.value = { x, y, w, h };
     this.svg.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
     this.svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     this.svg.setAttribute("width", String(w));
@@ -214,5 +198,5 @@ export class Diagram extends HTMLElement {
 
 // Helper: a fresh writable Box-valued signal seeded with the zero box.
 function signal0Box() {
-  return BoxStruct.signal(box(0, 0, 0, 0));
+  return new Box({ x: 0, y: 0, w: 0, h: 0 });
 }

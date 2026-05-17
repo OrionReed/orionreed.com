@@ -1,7 +1,7 @@
 // Multi-track timeline editor — overlapping clips, drag-to-edit
 // handles, one ball driven by all four clip progresses in parallel.
 
-import { Diagram, Mount, Anchor, cell, circle, derive, draggable, label, line, loop, vec, rect, snapshot, timeline } from "../../minim";
+import {Diagram, Mount, Anchor, signal, circle, computed, draggable, label, line, loop, vec, rect, snapshot, timeline} from "../../minim";
 
 const STRIP_X = 40;
 const STRIP_Y = 24;
@@ -34,7 +34,7 @@ export class MdMultitrack extends Diagram {
 
     // ── Strip ─────────────────────────────────────────────────────
     const STRIP_W = view.w.value - 2 * STRIP_X;
-    const SCALE = cell.derived(() =>
+    const SCALE = computed(() =>
       tl.duration.value > 0 ? STRIP_W / tl.duration.value : 0,
     );
 
@@ -58,9 +58,9 @@ export class MdMultitrack extends Diagram {
 
       // Body — drag to move the clip.
       const body = s(rect(
-        derive(clip.at, a => STRIP_X + a * SCALE.value),
+        computed(() => (a => STRIP_X + a * SCALE.value)(clip.at.value)),
         bodyY,
-        derive(clip.dur, d => Math.max(d * SCALE.value, 8)),
+        computed(() => (d => Math.max(d * SCALE.value, 8))(clip.dur.value)),
         bodyH,
         { fill: color, opacity: 0.78, corner: 3, stroke: "none" },
       ));
@@ -111,7 +111,7 @@ export class MdMultitrack extends Diagram {
       }));
     });
 
-    const playX = derive(tl.t, (t) => STRIP_X + t * STRIP_W);
+    const playX = computed(() => ((t) => STRIP_X + t * STRIP_W)(tl.t.value));
     s(line(
       vec(playX, STRIP_Y - 4),
       vec(playX, STRIP_Y + STRIP_H_TOTAL + 4),
@@ -125,13 +125,13 @@ export class MdMultitrack extends Diagram {
     //   scale.t   → radius oscillates (sin: 0 at endpoints)
     //   shift.t   → x oscillates the same way
     //   fadeOut.t → opacity ramps down
-    const ballX = cell.derived(
+    const ballX = computed(
       () => view.center.x.value + Math.sin(tl.shift.t.value * Math.PI) * 110,
     );
-    const ballR = cell.derived(
+    const ballR = computed(
       () => 18 + Math.sin(tl.scale.t.value * Math.PI) * 28,
     );
-    const ballOpacity = cell.derived(
+    const ballOpacity = computed(
       () => tl.fadeIn.t.value * (1 - tl.fadeOut.t.value),
     );
 
@@ -144,7 +144,7 @@ export class MdMultitrack extends Diagram {
     s(
       label(
         view.bottom.up(32),
-        cell.derived(() =>
+        computed(() =>
           `time: ${tl.clock.value.toFixed(2)}s / ${tl.duration.value.toFixed(2)}s`,
         ),
         { size: 11, opacity: 0.65, align: Anchor.Center },

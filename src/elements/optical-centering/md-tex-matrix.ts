@@ -1,21 +1,12 @@
 // minim/tex demo: matrix × vector, written compact then evaluated.
 //
 // Exercises display mode (for `\begin{pmatrix}` rendering),
-// per-cell identity across structural rewrites, and 1↔2 fan-out
+// per-signal identity across structural rewrites, and 1↔2 fan-out
 // for cells that appear once on the compact side and twice on the
 // evaluated side (vector cells x, y, used by both result rows).
 
-import { Anchor, Diagram, Mount, cell, label, loop, snapshot, type Content } from "../../minim";
-import {
-  highlight,
-  morph,
-  part,
-  parts,
-  tex,
-  tint,
-  write,
-  writeOut,
-} from "../../minim/tex";
+import {Anchor, Diagram, Mount, signal, label, loop, snapshot, type Content} from "../../minim";
+import {highlight, morph, part, parts, tex, tint, write, writeOut} from "../../minim/tex";
 
 const RED = "#e25c5c";
 const BLUE = "#5b8def";
@@ -31,7 +22,7 @@ export class MdTexMatrix extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(640, 280);
 
-    const status = cell<Content>("");
+    const status = signal<Content>("");
 
     s(
       label(view.top.down(22), "tex — matrix × vector, compact ↔ evaluated", {

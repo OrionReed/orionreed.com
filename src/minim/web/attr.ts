@@ -1,19 +1,19 @@
 // HTML attributes mapped to reactive cells on a custom element. The
-// decorated field IS the cell.
+// decorated field IS the signal.
 //
-//   @attr.str()      declare width: Cell<string | undefined>;
-//   @attr.str("a")   declare mode:  Cell<string>;          // default "a"
-//   @attr.num(4)     declare cells: Cell<number>;          // default 4
-//   @attr.bool()     declare flag:  Cell<boolean>;         // default false
+//   @attr.str()      declare width: Signal<string | undefined>;
+//   @attr.str("a")   declare mode:  Signal<string>;          // default "a"
+//   @attr.num(4)     declare cells: Signal<number>;          // default 4
+//   @attr.bool()     declare flag:  Signal<boolean>;         // default false
 
-import { cell, type Cell } from "@minim/signals";
+import {signal, type Signal} from "@minim/signals";
 
 type AttrType = "string" | "number" | "boolean";
 
 const SIGNALS = Symbol("attrSignals");
 
 interface AttrCarrier {
-  [SIGNALS]?: Map<string, Cell<unknown>>;
+  [SIGNALS]?: Map<string, Signal<unknown>>;
 }
 
 interface AttrCtor {
@@ -37,7 +37,7 @@ function coerce(
   return raw === null ? default_ : raw;
 }
 
-function bagOf(instance: object): Map<string, Cell<unknown>> {
+function bagOf(instance: object): Map<string, Signal<unknown>> {
   const carrier = instance as AttrCarrier;
   let bag = carrier[SIGNALS];
   if (!bag) {
@@ -68,7 +68,7 @@ function register(
       const bag = bagOf(this);
       let sig = bag.get(propertyKey);
       if (!sig) {
-        sig = cell(coerce(this.getAttribute(propertyKey), type, default_));
+        sig = signal(coerce(this.getAttribute(propertyKey), type, default_));
         bag.set(propertyKey, sig);
       }
       return sig;
@@ -134,6 +134,6 @@ export function syncAttrSignal(
   if (sig) {
     sig.value = next;
   } else {
-    bag.set(name, cell(next));
+    bag.set(name, signal(next));
   }
 }

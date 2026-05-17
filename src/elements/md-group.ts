@@ -1,4 +1,4 @@
-import { BaseElement, css } from "./base-element";
+import {BaseElement, css} from "./base-element";
 
 export class MdGroup extends BaseElement {
   static styles = css`

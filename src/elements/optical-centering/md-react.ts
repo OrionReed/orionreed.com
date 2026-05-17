@@ -3,7 +3,7 @@
 // cascade kills any in-flight click listener via its awaitable
 // disposer.
 
-import { Diagram, Mount, Anchor, bounceIn, button, cell, circle, derive, fadeOut, label, loop, vec, race, rect, suspend, zoomOut, type Animator, type Content, type Writable } from "../../minim";
+import {Diagram, Mount, Anchor, bounceIn, button, signal, circle, computed, fadeOut, label, loop, vec, race, rect, suspend, zoomOut, type Animator, type Content, type Writable} from "../../minim";
 
 const W = 380;
 const TARGET_R = 14;
@@ -40,23 +40,23 @@ export class MdReact extends Diagram {
       }),
     );
 
-    const hits = cell(0);
-    const misses = cell(0);
-    const status = cell<Content>("running");
+    const hits = signal(0);
+    const misses = signal(0);
+    const status = signal<Content>("running");
 
     s(
-      label(vec(PAD, STATS_Y), derive(hits, (n) => `hits: ${n}`), {
+      label(vec(PAD, STATS_Y), computed(() => ((n) => `hits: ${n}`)(hits.value)), {
         size: 12,
         align: Anchor.Left,
       }),
       label(
         vec(W - PAD, STATS_Y),
-        derive(misses, (n) => `misses: ${n}`),
+        computed(() => ((n) => `misses: ${n}`)(misses.value)),
         { size: 12, align: Anchor.Right },
       ),
       label(
         vec(W / 2, STATS_Y),
-        cell.derived(() => {
+        computed(() => {
           const h = hits.value;
           const m = misses.value;
           const total = h + m;

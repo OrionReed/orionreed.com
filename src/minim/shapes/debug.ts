@@ -7,20 +7,20 @@
 // All debug shapes report in PARENT frame: for a `Shape`, the Box is
 // transformed through the shape's transform first (so you see the visual
 // footprint, not the pre-transform local one); for non-Shape Boxes (a
-// view, a split, a grid cell), the Box is already parent-frame.
+// view, a split, a grid signal), the Box is already parent-frame.
 //
 // The `--minim-debug` CSS var lets authors theme; the fallback is
 // magenta so debug shapes always read as "scaffolding".
 
-import { derive } from "@minim/signals";
-import { Shape, type AnyShape } from "./shape";
-import { Vec, isVec, Box, transformBox, transformPoint, type BoxLike } from "@minim/values";
-import { circle } from "./circle";
-import { line } from "./line";
-import { label } from "./label";
-import { rect } from "./rect";
-import { group } from "./group";
-import type { Path } from "./path";
+import {derived, computed} from "@minim/signals";
+import {Shape, type AnyShape} from "./shape";
+import {Vec, Box, transformBox, transformPoint, type BoxLike} from "@minim/signals";
+import {circle} from "./circle";
+import {line} from "./line";
+import {label} from "./label";
+import {rect} from "./rect";
+import {group} from "./group";
+import type {Path} from "./path";
 
 const COLOR = "var(--minim-debug, #c026d3)";
 
@@ -38,7 +38,7 @@ const outlineOpts = {
  *  through. */
 function parentBox(b: BoxLike): BoxLike {
   if (b instanceof Shape) {
-    return Box.derived(() => transformBox(b.localFrame.value, b.box.value));
+    return derived(Box, () => transformBox(b.localFrame.value, b.box.value));
   }
   return b;
 }
@@ -47,8 +47,8 @@ function parentBox(b: BoxLike): BoxLike {
 const boxOutline = (b: BoxLike) => rect(parentBox(b), outlineOpts);
 
 /** Small filled dot at a point or a Box's center. */
-const dot = (p: Vec.Like | BoxLike, r = 2.5) =>
-  circle(isVec(p) ? p : p.center, r, {
+const dot = (p: Vec | BoxLike, r = 2.5) =>
+  circle(p instanceof Vec ? p : p.center, r, {
     fill: COLOR,
     stroke: "none",
     ...baseOpts,
@@ -56,7 +56,7 @@ const dot = (p: Vec.Like | BoxLike, r = 2.5) =>
 
 /** Crosshair at a Shape's rotate/scale pivot, in parent frame. */
 const origin = (s: Shape, size = 8) => {
-  const pivot = Vec.derived(() =>
+  const pivot = derived(Vec, () =>
     transformPoint(s.localFrame.value, s.origin.value),
   );
   const half = size / 2;
@@ -93,9 +93,9 @@ const anchors = (b: BoxLike, r = 2.5) => {
 };
 
 /** Faint dashed line between two shapes' (or points') centers. */
-const connect = (a: AnyShape | Vec.Like, b: AnyShape | Vec.Like) => {
-  const aP: Vec.Like = a instanceof Shape ? a.center : a;
-  const bP: Vec.Like = b instanceof Shape ? b.center : b;
+const connect = (a: AnyShape | Vec, b: AnyShape | Vec) => {
+  const aP: Vec = a instanceof Shape ? a.center : a;
+  const bP: Vec = b instanceof Shape ? b.center : b;
   return line(aP, bP, {
     stroke: COLOR,
     thin: true,
@@ -105,15 +105,15 @@ const connect = (a: AnyShape | Vec.Like, b: AnyShape | Vec.Like) => {
 };
 
 /** `connect(a, b)` + a live distance label at the midpoint. */
-const distance = (a: AnyShape | Vec.Like, b: AnyShape | Vec.Like) => {
-  const aP: Vec.Like = a instanceof Shape ? a.center : a;
-  const bP: Vec.Like = b instanceof Shape ? b.center : b;
+const distance = (a: AnyShape | Vec, b: AnyShape | Vec) => {
+  const aP: Vec = a instanceof Shape ? a.center : a;
+  const bP: Vec = b instanceof Shape ? b.center : b;
   const mid = aP.lerp(bP, 0.5);
   const d = aP.distance(bP);
   const g = group({ aside: true });
   g.add(
     connect(aP, bP),
-    label(mid.up(6), derive(d, (v) => v.toFixed(0)), {
+    label(mid.up(6), () => d.value.toFixed(0), {
       size: 10,
       opacity: 0.85,
     }),
@@ -128,7 +128,7 @@ const path = (p: Path, ticks = 5) => {
     const t = ticks === 1 ? 0 : i / (ticks - 1);
     const head = p.pointAt(t);
     const tan = p.tangentAt(t);
-    const tip = Vec.derived(() => ({
+    const tip = derived(Vec, () => ({
       x: head.value.x + tan.value.x * 6,
       y: head.value.y + tan.value.y * 6,
     }));

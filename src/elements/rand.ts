@@ -1,9 +1,7 @@
 // Randomness helpers — namespace import: `import * as R from "./rand"`.
 
 /** Random float in [min, max). */
-export function float(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
-}
+export function float(min: number, max: number): number {return Math.random() * (max - min) + min;}
 
 /** Random integer in [min, max] inclusive. */
 export function int(min: number, max: number): number {

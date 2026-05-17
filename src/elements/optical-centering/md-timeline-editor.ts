@@ -3,7 +3,7 @@
 // via `sequential`. Actor opacities are pure signal bindings on
 // `clip.t`.
 
-import { Diagram, EventBus, Mount, Anchor, cell, circle, derive, draggable, label, line, loop, vec, rect, sequential, snapshot, timeline } from "../../minim";
+import {Diagram, EventBus, Mount, Anchor, signal, circle, computed, draggable, label, line, loop, vec, rect, sequential, snapshot, timeline} from "../../minim";
 
 const PHASES = ["intro", "hold", "outro"] as const;
 const COLORS = ["#5b8def", "#f5a623", "#e25c5c"];
@@ -17,12 +17,12 @@ export class MdTimelineEditor extends Diagram {
     const tl = timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));
     const reset = snapshot(tl.clock);
 
-    const phaseName = cell.derived(() => {
+    const phaseName = computed(() => {
       for (const name of PHASES) if (tl[name].active.value) return name;
       return tl.clock.value >= tl.duration.value ? "rest" : PHASES[0];
     });
     const bus = new EventBus();
-    const taps = cell(0);
+    const taps = signal(0);
     bus.on("ping", () => {
       taps.value = taps.peek() + 1;
     });
@@ -31,7 +31,7 @@ export class MdTimelineEditor extends Diagram {
     s(
       label(
         view.top.down(24),
-        cell.derived(() => `phase: ${phaseName.value}   ·   taps: ${taps.value}`),
+        computed(() => `phase: ${phaseName.value}   ·   taps: ${taps.value}`),
         { size: 14, opacity: 0.75 },
       ),
     );
@@ -41,15 +41,15 @@ export class MdTimelineEditor extends Diagram {
     const STRIP_W = view.w.value - 120;
     const STRIP_Y = 60;
     const STRIP_H = 36;
-    const scale = cell.derived(() => STRIP_W / tl.duration.value);
+    const scale = computed(() => STRIP_W / tl.duration.value);
 
     PHASES.forEach((name, i) => {
       const c = tl[name];
       const body = s(
         rect(
-          derive(c.at, (a) => STRIP_X + a * scale.value),
+          computed(() => ((a) => STRIP_X + a * scale.value)(c.at.value)),
           STRIP_Y,
-          derive(c.dur, (d) => d * scale.value),
+          computed(() => ((d) => d * scale.value)(c.dur.value)),
           STRIP_H,
           { fill: COLORS[i] },
         ),
@@ -57,13 +57,13 @@ export class MdTimelineEditor extends Diagram {
       s(
         label(
           body.center,
-          cell.derived(() => `${name} ${c.dur.value.toFixed(2)}s`),
+          computed(() => `${name} ${c.dur.value.toFixed(2)}s`),
           { size: 11, opacity: 0.95 },
         ),
       );
     });
 
-    const playX = cell.derived(() => STRIP_X + tl.t.value * STRIP_W);
+    const playX = computed(() => STRIP_X + tl.t.value * STRIP_W);
     s(
       line(vec(playX, STRIP_Y - 6), vec(playX, STRIP_Y + STRIP_H + 6), {
         strokeWidth: 2,
@@ -106,7 +106,7 @@ export class MdTimelineEditor extends Diagram {
     const actors = PHASES.map((name, i) => {
       const c = circle(vec(120 + i * 180, STAGE_Y), 24, {
         fill: COLORS[i],
-        opacity: derive(tl[name].t, (t) => 0.1 + t * 0.9),
+        opacity: computed(() => ((t) => 0.1 + t * 0.9)(tl[name].t.value)),
       });
       c.on("click", () => bus.emit("ping"));
       return c;

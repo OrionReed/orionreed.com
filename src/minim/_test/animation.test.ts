@@ -10,7 +10,7 @@ import {
   signal,
   num, vec, transform,
   play, untilTrue, Tween,
-  spring, toward, holding, driven, from,
+  spring, toward, holding, driven, follow,
 } from "@minim/signals";
 import { Anim, detach, race, linear } from "@minim/core";
 
@@ -198,7 +198,7 @@ describe("animation", () => {
       const anim = new Anim();
       const x = num(0);
       let settled = false;
-      anim.start(function* () { yield* spring(x, 100, 100, 20); settled = true; });
+      anim.start(function* () { yield* spring(x, 100, { stiffness: 100, damping: 20 }); settled = true; });
       tick(anim, 600);
       check("spring final very close to 100", approx(x.value, 100, 0.5));
       check("spring eventually settles (or near it)", settled || approx(x.value, 100, 1));
@@ -212,7 +212,7 @@ describe("animation", () => {
         translate: { x: 100, y: 50 }, scale: { x: 2, y: 2 }, origin: { x: 0, y: 0 },
         rotate: Math.PI, opacity: 0.5,
       };
-      anim.start(function* () { yield* spring(tr, target, 80, 18); });
+      anim.start(function* () { yield* spring(tr, target, { stiffness: 80, damping: 18 }); });
       tick(anim, 600);
       check("spring on Transform: translate.x → ~100", approx(tr.value.translate.x, 100, 1));
       check("spring on Transform: scale.x → ~2", approx(tr.value.scale.x, 2, 0.05));
@@ -231,14 +231,14 @@ describe("animation", () => {
       check("toward final === target", x.value === 50);
     }
 
-    section("from(source) — generator-scoped reactive bind");
+    section("follow(source) — generator-scoped reactive bind");
     {
       const anim = new Anim();
       const a = num(10);
       const b = num(0);
       const stop = signal(false);
       anim.start(function* () {
-        yield* race(from(b, a), untilTrue(stop));
+        yield* race(follow(b, a), untilTrue(stop));
       });
       tick(anim, 1);
       check("b initially follows a", b.value === 10);

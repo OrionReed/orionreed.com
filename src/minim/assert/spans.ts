@@ -7,8 +7,8 @@
 // future caller needs fan-out, compose observers in user code and
 // assign the composition to `anim.observer`.
 
-import { Anim, AnimObserver, Animator } from "@minim/core";
-import { tagOf } from "./tag";
+import {Anim, AnimObserver, Animator} from "@minim/core";
+import {tagOf} from "./tag";
 
 /** One generator's lifecycle as flat data. `completedAt` is set on
  *  natural completion *and* on cancel; still-open spans read
@@ -29,8 +29,8 @@ export type Trace = {
   /** Wall-clock duration: `max(completedAt ?? clock) − min(spawnedAt)`. */
   duration(): number;
   /** Subscribe to spawn/complete/cancel events. To plug into the
-   *  reactive graph, bump a cell from the callback:
-   *  `const v = cell(0); trace.onChange(() => v.value++);` */
+   *  reactive graph, bump a signal from the callback:
+   *  `const v = signal(0); trace.onChange(() => v.value++);` */
   onChange(cb: () => void): () => void;
   /** Stop collecting; the existing `spans` array is yours to keep. */
   stop(): void;

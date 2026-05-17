@@ -1,4 +1,4 @@
-import { Diagram, Mount, cell, circle, clipPath, connect, derive, every, forEach, grid, group, label, line, num, vec, rect, t, viewport, when } from "../minim";
+import {Diagram, Mount, signal, circle, clipPath, connect, computed, every, forEach, grid, group, label, line, num, vec, rect, t, viewport, when} from "../minim";
 import * as R from "./rand";
 
 const QR_GRID = 5;
@@ -6,24 +6,24 @@ const SIZE = 32;
 
 export class MdLubyTransform extends Diagram {
   protected scene(s: Mount): void {
-    // Reactive layout: viewport breakpoint drives both cell count and
+    // Reactive layout: viewport breakpoint drives both signal count and
     // viewBox width. Surviving cells keep their animation state across
     // breakpoint flips — no rebuild.
-    const isMobile = cell.derived(() => viewport().value.w < 768);
-    const W = derive(isMobile, (m: boolean) => (m ? 300 : 400));
-    const N = derive(isMobile, (m: boolean) => (m ? 7 : 10));
-    const stride = cell.derived(() => (W.value - SIZE) / (N.value - 1));
-    const indices = derive(N, (n: number) =>
-      Array.from({ length: n }, (_, i) => i),
-    );
+    const isMobile = computed(() => viewport().value.w < 768);
+    const W = computed(() => ((m: boolean) => (m ? 300 : 400))(isMobile.value));
+    const N = computed(() => ((m: boolean) => (m ? 7 : 10))(isMobile.value));
+    const stride = computed(() => (W.value - SIZE) / (N.value - 1));
+    const indices = computed(() => ((n: number) =>
+      Array.from({ length: n }, (_, i) => i)
+    )(N.value));
 
     const view = this.view(W, 200);
 
-    // Re-roll the cell pattern and source-edge gating each tick.
+    // Re-roll the signal pattern and source-edge gating each tick.
     const tick = num(0);
     this.anim.start(every(0.5, () => { tick.value++; }));
-    const cells = derive(tick, () => R.bools(QR_GRID * QR_GRID));
-    const edges = derive(tick, () => R.bools(N.value, 0.3, 1));
+    const cells = computed(() => { void tick.value; return R.bools(QR_GRID * QR_GRID); });
+    const edges = computed(() => { void tick.value; return R.bools(N.value, 0.3, 1); });
 
     // ── Sources (top row) — reactive list. `sources.at(i)` exposes
     //    the i-th rect for the connection layer to anchor against.
@@ -66,7 +66,7 @@ export class MdLubyTransform extends Diagram {
         fill: true,
         corner: 0,
         strokeWidth: 0.1,
-        opacity: when(() => cells.value[i]),
+        opacity: () => (cells.value[i]) ? 1 : 0,
       })),
     );
 
@@ -78,7 +78,7 @@ export class MdLubyTransform extends Diagram {
       if (!src) return [];
       return connect(src.bottom, xor, {
         thin: true,
-        opacity: when(() => edges.value[i]),
+        opacity: () => (edges.value[i]) ? 1 : 0,
       });
     });
   }

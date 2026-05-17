@@ -1,4 +1,4 @@
-import { BaseElement, css } from "./base-element.ts";
+import {BaseElement, css} from "./base-element.ts";
 
 export class DarkModeToggle extends BaseElement {
   static styles = css`

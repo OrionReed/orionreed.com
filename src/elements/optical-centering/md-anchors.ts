@@ -3,7 +3,7 @@
 // (parent-frame), so every dependent — bound dots, line endpoints,
 // labels — tracks the visual position without an `anim.run` of its own.
 
-import { Anchor, Diagram, Mount, circle, easeInOut, label, line, loop, rect, snapshot } from "../../minim";
+import {Anchor, Diagram, Mount, circle, easeInOut, label, line, loop, rect, snapshot} from "../../minim";
 
 export class MdAnchors extends Diagram {
   protected scene(s: Mount): void {

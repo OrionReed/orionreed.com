@@ -1,7 +1,7 @@
 // Solar system — each body is a child group; transforms compound
 // automatically so each body just orbits its parent's local origin.
 
-import { Diagram, polar, Mount, type AnyShape, bounceIn, cell, circle, drive, group, loop, vec, stagger, rect, type Cell, zoomOut } from "../../minim";
+import {Diagram, polar, Mount, type AnyShape, bounceIn, signal, circle, drive, group, loop, vec, stagger, rect, type Signal, zoomOut} from "../../minim";
 
 export class MdOrbits extends Diagram {
   protected scene(s: Mount): void {
@@ -12,8 +12,8 @@ export class MdOrbits extends Diagram {
 
     // Integrate ω = 2π/period per frame. Returns the angle Signal
     // (radians, wraps mod 2π).
-    const angularMotion = (period: number, sig?: Cell<number>) => {
-      const a = sig ?? cell(Math.random() * 2 * Math.PI);
+    const angularMotion = (period: number, sig?: Signal<number>) => {
+      const a = sig ?? signal(Math.random() * 2 * Math.PI);
       const omega = (2 * Math.PI) / period;
       this.anim.start(drive((dt) => { a.value = (a.peek() + omega * dt) % (2 * Math.PI); }));
       return a;

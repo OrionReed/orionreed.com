@@ -12,17 +12,8 @@
 // expand chain — `tint(BLUE, ai)` colors a_i, a_1, a_2, a_3
 // together.
 
-import { Anchor, Diagram, Mount, cell, label, loop, snapshot, type Content } from "../../minim";
-import {
-  highlight,
-  morph,
-  part,
-  parts,
-  tex,
-  tint,
-  write,
-  writeOut,
-} from "../../minim/tex";
+import {Anchor, Diagram, Mount, signal, label, loop, snapshot, type Content} from "../../minim";
+import {highlight, morph, part, parts, tex, tint, write, writeOut} from "../../minim/tex";
 
 const RED = "#e25c5c";
 const BLUE = "#5b8def";
@@ -37,7 +28,7 @@ export class MdTexCorrespond extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(640, 260);
 
-    const status = cell<Content>("");
+    const status = signal<Content>("");
 
     s(
       label(view.top.down(22), "tex — identity across representations", {

@@ -19,8 +19,8 @@
 // is absent (transitional — prefer the scoped path).
 
 import temml from "temml";
-import { effect } from "@minim/signals";
-import { hover, getMarker as getGlobalMarker, type Marker } from "@minim/tex";
+import {effect} from "@minim/signals";
+import {hover, getMarker as getGlobalMarker, type Marker} from "@minim/tex";
 
 const SYM_RE = /\\sym\{([^}]+)\}\{([^}]*)\}/g;
 const symClass = (id: string): string =>

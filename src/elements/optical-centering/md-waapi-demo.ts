@@ -12,8 +12,8 @@
 // scrolls. The awaitable surface (`untilAnimation`, `untilInView`,
 // `untilOutOfView`) isn't exercised here.
 
-import { Anchor, Diagram, polar, Mount, circle, derive, label, vec, rect, type ReadonlyCell } from "../../minim";
-import { inView, scrollProgress, viewProgress } from "../../minim/ext";
+import {Anchor, Diagram, polar, Mount, circle, computed, label, vec, rect, type Signal} from "../../minim";
+import {inView, scrollProgress, viewProgress} from "../../minim/ext";
 
 export class MdWaapiDemo extends Diagram {
   protected scene(s: Mount): void {
@@ -21,7 +21,7 @@ export class MdWaapiDemo extends Diagram {
     const X = 56;
     const BW = 440;
 
-    const bar = (y: number, name: string, p: ReadonlyCell<number>): void => {
+    const bar = (y: number, name: string, p: Signal<number>): void => {
       s(
         label(view.at(0, 0).right(20).down(y + 4), name, {
           size: 11,
@@ -29,10 +29,10 @@ export class MdWaapiDemo extends Diagram {
           opacity: 0.6,
         }),
         rect(X, y, BW, 6, { fill: "rgba(127, 127, 127, 0.18)" }),
-        rect(X, y, derive(p, (v) => BW * v), 6, { fill: true }),
+        rect(X, y, computed(() => ((v) => BW * v)(p.value)), 6, { fill: true }),
         label(
           view.at(1, 0).left(20).down(y + 4),
-          derive(p, (v) => v.toFixed(2)),
+          computed(() => ((v) => v.toFixed(2))(p.value)),
           {
             size: 11,
             align: Anchor.Right,
@@ -63,11 +63,11 @@ export class MdWaapiDemo extends Diagram {
     // motion. With BW=440, LOOPS=4, R=25 we clear that by ~40%.
     const LOOPS = 15;
     const R = 15;
-    const center = vec(derive(vp, (p) => X + BW * p), 150);
+    const center = vec(computed(() => ((p) => X + BW * p)(vp.value)), 150);
     const tracker = polar(
       center,
       R,
-      derive(vp, (p) => p * 2 * Math.PI * LOOPS),
+      computed(() => ((p) => p * 2 * Math.PI * LOOPS)(vp.value)),
     );
 
     s(
@@ -83,7 +83,7 @@ export class MdWaapiDemo extends Diagram {
       ),
       label(
         view.top.down(217),
-        derive(inView(this), (v) => (v ? "in view" : "offscreen")),
+        () => (inView(this).value ? "in view" : "offscreen"),
         { size: 11, align: Anchor.Center, opacity: 0.6 },
       ),
     );

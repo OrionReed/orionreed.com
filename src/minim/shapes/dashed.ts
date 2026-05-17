@@ -2,7 +2,7 @@
 // corner artifacts by emitting explicit `<path>` commands at the
 // computed dash positions.
 
-import type { Segment } from "./shape";
+import type {Segment} from "./shape";
 
 const TWO_PI = Math.PI * 2;
 
@@ -29,8 +29,8 @@ function evalSegments(segments: Segment[]): EvalSeg[] {
   const out: EvalSeg[] = [];
   for (const s of segments) {
     if (s.type === "line") {
-      const a = s.from.value;
-      const b = s.to.value;
+      const a = s.from;
+      const b = s.to;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const len = Math.hypot(dx, dy);

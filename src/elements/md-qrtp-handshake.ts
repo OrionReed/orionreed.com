@@ -1,4 +1,4 @@
-import { Diagram, Mount, arrow, attr, label, line, loop, vec, rect, cell, snapshot, split, t, when, type Cell } from "../minim";
+import {Diagram, Mount, arrow, attr, label, line, loop, vec, rect, signal, snapshot, split, t, when, type Signal} from "../minim";
 
 import * as R from "./rand";
 
@@ -25,7 +25,7 @@ function initialChunks(prefix: string, n: number): ChunkState[] {
 }
 
 export class MdQrtpHandshake extends Diagram {
-  @attr.num(4) declare chunks: Cell<number>;
+  @attr.num(4) declare chunks: Signal<number>;
 
   protected scene(s: Mount): void {
     const N = this.chunks.value;
@@ -33,12 +33,12 @@ export class MdQrtpHandshake extends Diagram {
     const H = CHUNK_H * 2 + DEVICE_GAP;
     this.view(W + 50, H + 2 * PAD_Y);
 
-    // Single source of truth — both rows + arrow visibility derive from
+    // Single source of truth — both rows + arrow visibility computed from
     // the chunk arrays. Arrows fire iff the corresponding chunk's `ack`
     // is set.
     const state = {
-      A: cell(initialChunks("A", N)),
-      B: cell(initialChunks("B", N)),
+      A: signal(initialChunks("A", N)),
+      B: signal(initialChunks("B", N)),
     };
 
     // Build one row of N chunks reading from `state[device]`. Returns
@@ -54,7 +54,7 @@ export class MdQrtpHandshake extends Diagram {
           r.outline(4, {
             dashed: true,
             cap: "round",
-            opacity: when(() => state[device].value[i].status === "current"),
+            opacity: () => (state[device].value[i].status === "current") ? 1 : 0,
             aside: true,
           }),
           // Data slot: value (only when not future) + muted "data" tag.
@@ -90,10 +90,10 @@ export class MdQrtpHandshake extends Diagram {
     for (let i = 0; i < N; i++) {
       s(
         arrow(slotsA[i].ack.bottom, slotsB[i].data.top, {
-          opacity: when(() => state.A.value[i].ack !== ""),
+          opacity: () => (state.A.value[i].ack !== "") ? 1 : 0,
         }),
         arrow(slotsB[i].ack.top, slotsA[i].data.bottom, {
-          opacity: when(() => state.B.value[i].ack !== ""),
+          opacity: () => (state.B.value[i].ack !== "") ? 1 : 0,
         }),
       );
     }

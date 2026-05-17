@@ -7,12 +7,12 @@
 //      for (const p of eq.parts) p.opacity.value = 0;
 //      yield* stagger(0.05, eq.parts, p => p.opacity.to(1, 0.3));
 
-import { easeInOut, easeOut, type Animator } from "@minim/core";
-import { effect, signal, type Easing } from "@minim/signals";
-import { Shape } from "@minim/shapes";
-import { box, num } from "@minim/values";
-import { Part, type PartMarker } from "./parts";
-import type { TexShape } from "./tex";
+import {easeInOut, easeOut, type Animator} from "@minim/core";
+import {effect, signal, type Easing} from "@minim/signals";
+import {Shape} from "@minim/shapes";
+import {box, num} from "@minim/signals";
+import {Part, type PartMarker} from "./parts";
+import type {TexShape} from "./tex";
 
 /** Wildcard TexShape — accepts any `Names` union, so cross-cycle
  *  morphs (`TexShape<"a"|"b">` ↔ `TexShape<"f"|"x">`) typecheck. */
@@ -108,7 +108,7 @@ export class Plucked extends Shape {
 
   constructor(source: Part) {
     const a = source.box.peek();
-    const local = box(0, 0, a.w, a.h);
+    const local = { x: 0, y: 0, w: a.w, h: a.h };
     super("foreignObject", () => local);
     this.source = source;
     this.#sourcePrevOpacity = source.opacity.peek();

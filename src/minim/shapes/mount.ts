@@ -9,7 +9,7 @@
 //     const s = mount(root);
 //     s(circle(...));
 
-import type { AnyShape } from "./shape";
+import type {AnyShape} from "./shape";
 
 export interface Mount {
   <T extends AnyShape>(shape: T): T;

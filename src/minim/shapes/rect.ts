@@ -1,9 +1,7 @@
-import { toSig, type Val } from "@minim/signals";
-import { cell, type ReadonlyCell } from "@minim/signals";
-import { Shape, type Segment } from "./shape";
-import { Vec, isVec, box, isBox, type BoxLike } from "@minim/values";
-import { tokens } from "./tokens";
-import { intrinsicType, wireStroke, type CommonOpts } from "./common";
+import {signal, computed, toSignal, derived, Vec, vec, Num, num, Box, box, isBoxLike, type BoxLike, type Val} from "@minim/signals";
+import {Shape, type Segment} from "./shape";
+import {tokens} from "./tokens";
+import {intrinsicType, wireStroke, type CommonOpts} from "./common";
 
 export interface RectOpts extends CommonOpts {
   corner?: Val<number>;
@@ -12,11 +10,11 @@ export interface RectOpts extends CommonOpts {
 const HALF_PI = Math.PI / 2;
 
 export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
-  readonly x: ReadonlyCell<number>;
-  readonly y: ReadonlyCell<number>;
-  readonly w: ReadonlyCell<number>;
-  readonly h: ReadonlyCell<number>;
-  readonly corner: ReadonlyCell<number>;
+  override readonly x: Num;
+  override readonly y: Num;
+  override readonly w: Num;
+  override readonly h: Num;
+  readonly corner: Num;
 
   constructor(
     x: Val<number>,
@@ -25,13 +23,13 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     h: Val<number>,
     opts: O = {} as O,
   ) {
-    const xs = toSig(x);
-    const ys = toSig(y);
-    const ws = toSig(w);
-    const hs = toSig(h);
+    const xs = num(x);
+    const ys = num(y);
+    const ws = num(w);
+    const hs = num(h);
     super(
       intrinsicType(opts, "rect"),
-      () => box(xs.value, ys.value, ws.value, hs.value),
+      () => ({ x: xs.value, y: ys.value, w: ws.value, h: hs.value }),
       opts,
       {
         origin: () => ({
@@ -44,7 +42,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     this.y = ys;
     this.w = ws;
     this.h = hs;
-    this.corner = toSig(opts.corner ?? tokens.corner);
+    this.corner = num(opts.corner ?? tokens.corner);
     wireStroke(this, opts, true, () => {
       this.attr("x", xs);
       this.attr("y", ys);
@@ -55,8 +53,8 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     });
   }
 
-  override boundary(toward: Vec.Like): Vec.Readonly {
-    return Vec.derived(() => {
+  override boundary(toward: Vec): Vec {
+    return derived(Vec, () => {
       const c = this.center.value;
       const b = this.box.value;
       const sc = this.scale.value;
@@ -77,13 +75,13 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   /** Concentric outline — a new unmounted Rect inflated by `by` per
    *  side; corner radius bumps to keep curves parallel. */
   outline(by: Val<number>, opts?: RectOpts): Rect {
-    const bys = toSig(by);
+    const bys = toSignal(by);
     return new Rect(
-      cell.derived(() => this.x.value - bys.value),
-      cell.derived(() => this.y.value - bys.value),
-      cell.derived(() => this.w.value + 2 * bys.value),
-      cell.derived(() => this.h.value + 2 * bys.value),
-      { corner: cell.derived(() => this.corner.value + bys.value), ...opts } as RectOpts,
+      () => this.x.value - bys.value,
+      () => this.y.value - bys.value,
+      () => this.w.value + 2 * bys.value,
+      () => this.h.value + 2 * bys.value,
+      { corner: () => this.corner.value + bys.value, ...opts } as RectOpts,
     );
   }
 
@@ -95,7 +93,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     const y = b.y;
     const w = b.w;
     const h = b.h;
-    const p = (px: number, py: number) => Vec.signal({ x: px, y: py });
+    const p = (px: number, py: number) => ({ x: px, y: py });
     if (r <= 0) {
       return [
         { type: "line", from: p(x, y), to: p(x + w, y) },
@@ -126,12 +124,12 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
  */
 export function rect<const O extends RectOpts>(b: BoxLike, opts?: O): Rect<O>;
 export function rect<const O extends RectOpts>(
-  p1: Vec.Like,
-  p2: Vec.Like,
+  p1: Vec,
+  p2: Vec,
   opts?: O,
 ): Rect<O>;
 export function rect<const O extends RectOpts>(
-  center: Vec.Like,
+  center: Vec,
   w: Val<number>,
   h: Val<number>,
   opts?: O,
@@ -144,33 +142,33 @@ export function rect<const O extends RectOpts>(
   opts?: O,
 ): Rect<O>;
 export function rect(
-  a: Val<number> | BoxLike | Vec.Like,
-  b?: Val<number> | Vec.Like | RectOpts,
+  a: Val<number> | BoxLike | Vec,
+  b?: Val<number> | Vec | RectOpts,
   c?: Val<number>,
   d?: Val<number> | RectOpts,
   e?: RectOpts,
 ): Rect {
-  if (isBox(a)) {
+  if (isBoxLike(a)) {
     return new Rect(a.x, a.y, a.w, a.h, b as RectOpts | undefined);
   }
-  if (isVec(a) && isVec(b)) {
+  if (a instanceof Vec && b instanceof Vec) {
     // Bounding rect of two points (any orientation).
     return new Rect(
-      cell.derived(() => Math.min(a.x.value, b.x.value)),
-      cell.derived(() => Math.min(a.y.value, b.y.value)),
-      cell.derived(() => Math.abs(b.x.value - a.x.value)),
-      cell.derived(() => Math.abs(b.y.value - a.y.value)),
+      computed(() => Math.min(a.x.value, b.x.value)),
+      computed(() => Math.min(a.y.value, b.y.value)),
+      computed(() => Math.abs(b.x.value - a.x.value)),
+      computed(() => Math.abs(b.y.value - a.y.value)),
       c as RectOpts | undefined,
     );
   }
-  if (isVec(a)) {
+  if (a instanceof Vec) {
     const w = b as Val<number>;
     const h = c as Val<number>;
-    const ws = toSig(w);
-    const hs = toSig(h);
+    const ws = toSignal(w);
+    const hs = toSignal(h);
     return new Rect(
-      cell.derived(() => a.x.value - ws.value / 2),
-      cell.derived(() => a.y.value - hs.value / 2),
+      computed(() => a.x.value - ws.value / 2),
+      computed(() => a.y.value - hs.value / 2),
       ws,
       hs,
       d as RectOpts | undefined,

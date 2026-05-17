@@ -7,7 +7,7 @@ import { describe, it } from "vitest";
 import {
   signal, computed, effect, batch, untracked, value, isSignal,
   Signal,
-  type Computed, type Lens,
+  Computed, type Lens,
   type Val,
   type SignalOptions,
   classOf, linearOf, lerpOf, requireLinear, requireLerp, requireMetric,
@@ -116,6 +116,7 @@ describe("types", () => {
     void _avg; void _trans; void _sc; void _rot; void _op; void _trMove;
     void _stop1; void _stop2; void _stop3; void _u1; void _u2; void _u3; void _u4;
     void _opts; void _sig; void _test;
-    void [effect, batch, untracked, Computed, Lens, Color, rgb, Box, box];
+    void [effect, batch, untracked, Computed, Color, rgb, Box, box];
+    const _lens: Lens<number> | undefined = undefined; void _lens;
   });
 });

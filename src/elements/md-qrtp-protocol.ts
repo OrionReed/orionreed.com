@@ -1,5 +1,5 @@
-import { Diagram, Mount, annularSector, attr, cell, circle, derive, label, line, loop, polar, snapshot, when, type Animator, type Cell } from "../minim";
-import { grey, ink, stroke } from "./color";
+import {Diagram, Mount, annularSector, attr, signal, circle, computed, label, line, loop, polar, snapshot, when, type Animator, type Signal} from "../minim";
+import {grey, ink, stroke} from "./color";
 import * as R from "./rand";
 
 type CellState = "received" | "retransmit" | "acknowledged";
@@ -20,8 +20,8 @@ const T = {
 };
 
 export class MdQrtpProtocol extends Diagram {
-  @attr.num(60) declare cells: Cell<number>;
-  @attr.bool() declare backchannel: Cell<boolean>;
+  @attr.num(60) declare cells: Signal<number>;
+  @attr.bool() declare backchannel: Signal<boolean>;
 
   protected scene(s: Mount): void {
     const N = this.cells.value;
@@ -40,16 +40,16 @@ export class MdQrtpProtocol extends Diagram {
     // and write. `snapshot(state)` flattens all signal-valued
     // properties for one-call reset.
     const state = {
-      cells: cell(new Map<number, CellState>()),
-      overrides: cell(new Map<number, string>()),
-      broadcast: cell(0),
-      lastBroadcast: cell(-1),
+      cells: signal(new Map<number, CellState>()),
+      overrides: signal(new Map<number, string>()),
+      broadcast: signal(0),
+      lastBroadcast: signal(-1),
     };
 
-    // Per-cell color: override > broadcast highlight > state-based.
-    // Returns null when the cell should be invisible.
+    // Per-signal color: override > broadcast highlight > state-based.
+    // Returns null when the signal should be invisible.
     const cellColor = (i: number) =>
-      cell.derived((): string | null => {
+      computed((): string | null => {
         const ov = state.overrides.value.get(i);
         if (ov !== undefined) return ov;
         if (i === state.lastBroadcast.value) return stroke.toString();
@@ -71,8 +71,8 @@ export class MdQrtpProtocol extends Diagram {
       s(
         annularSector(center, rOut, rIn, a0, a1, {
           stroke: "none",
-          fill: derive(colors[i], (c) => c ?? "transparent"),
-          opacity: when(colors[i]),
+          fill: computed(() => ((c) => c ?? "transparent")(colors[i].value)),
+          opacity: () => colors[i].value ? 1 : 0,
         }),
       );
     }
@@ -149,10 +149,10 @@ export class MdQrtpProtocol extends Diagram {
       const flood = ink("blue").mod(0.7).toString();
 
       for (const component of components) {
-        for (const cell of component) {
-          if (cell !== state.lastBroadcast.peek()) {
+        for (const signal of component) {
+          if (signal !== state.lastBroadcast.peek()) {
             const next = new Map(state.overrides.peek());
-            next.set(cell, flood);
+            next.set(signal, flood);
             state.overrides.value = next;
           }
           yield T.floodCellStep;

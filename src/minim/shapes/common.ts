@@ -1,10 +1,10 @@
 // Shared style options + applier for stroked/filled shapes.
 
-import { toSig, type Val } from "@minim/signals";
-import { cell } from "@minim/signals";
-import type { AnyShape, ShapeOpts } from "./shape";
-import { tokens } from "./tokens";
-import { dashedPath } from "./dashed";
+import {computed, toSignal, type Val} from "@minim/signals";
+import {signal} from "@minim/signals";
+import type {AnyShape, ShapeOpts} from "./shape";
+import {tokens} from "./tokens";
+import {dashedPath} from "./dashed";
 
 const NSS = "non-scaling-stroke";
 
@@ -72,11 +72,11 @@ export function setupDashed<S extends AnyShape>(
   const stroke =
     opts.strokeWidth === undefined
       ? (opts.thin ? tokens.thinWeight : tokens.weight)
-      : toSig(opts.strokeWidth).value;
+      : toSignal(opts.strokeWidth).value;
   const capExt = cap === "round" ? stroke : 0;
 
   s.attr(
     "d",
-    cell.derived(() => dashedPath(s.segments(), { closed, capExtension: capExt })),
+    computed(() => dashedPath(s.segments(), { closed, capExtension: capExt })),
   );
 }

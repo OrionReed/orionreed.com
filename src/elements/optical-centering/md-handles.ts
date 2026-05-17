@@ -11,7 +11,7 @@
 // drag writes back through. No interaction layer, no special-casing —
 // the same algebra animates and interacts.
 
-import { Anchor, Diagram, Mount, circle, debug, handle, label, line, rect } from "../../minim";
+import {Anchor, Diagram, Mount, circle, debug, handle, label, line, rect} from "../../minim";
 
 export class MdHandles extends Diagram {
   protected scene(s: Mount): void {

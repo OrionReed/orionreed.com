@@ -18,7 +18,7 @@
 // Strings (and other non-record types) use `lerpable(initial, lerp)` —
 // a tiny helper that stamps the same `[LERP]` slot on a plain Signal.
 
-import { Anchor, Box, Color, Diagram, Mount, Vec, circle, derive, label, lerpable, loop, num, tween, vec, rect, rgb, type Lerp } from "../../minim";
+import {Anchor, Box, Color, Diagram, Mount, Vec, circle, computed, label, lerpable, loop, num, tween, vec, rect, rgb, type Lerp} from "../../minim";
 
 const W = 640;
 const H = 320;
@@ -83,8 +83,8 @@ export class MdLerps extends Diagram {
     // ALL expose `.to(target, dur)` because they all carry a [LERP] slot.
     const baseY = (i: number) => rowY(i) + 9;
     const n = num(0.15);
-    const pos = Vec.signal({ x: VIS_X + 12, y: baseY(1) });
-    const box = Box.signal({ x: VIS_X + 4, y: rowY(2) - 6, w: 30, h: 20 });
+    const pos = vec(VIS_X + 12, baseY(1) );
+    const box = new Box({ x: VIS_X + 4, y: rowY(2) - 6, w: 30, h: 20 });
     const col = rgb(0.4, 0.6, 0.9);
     // `lerpable(...)` stamps `[LERP]` on a plain Signal — no `.to()`
     // method, but the standalone `tween(sig, target, dur)` still works
@@ -125,11 +125,11 @@ export class MdLerps extends Diagram {
     s(
       rowLabel(0, "number"),
       track(VIS_X, rowY(0) + 4, VIS_W, 10, 0.18),
-      rect(VIS_X, rowY(0) + 4, derive(n, (v: number) => v * VIS_W), 10, {
+      rect(VIS_X, rowY(0) + 4, computed(() => ((v: number) => v * VIS_W)(n.value)), 10, {
         stroke: "transparent",
         fill: true,
       }),
-      readout(0, derive(n, fmtNum)),
+      readout(0, computed(() => (fmtNum)(n.value))),
     );
 
     // Row 1 — Vec: a dot whose center IS the Vec signal.
@@ -137,7 +137,7 @@ export class MdLerps extends Diagram {
       rowLabel(1, "Vec"),
       track(VIS_X, rowY(1) + 5, VIS_W, 8, 0.1),
       circle(pos, 5, { fill: true, stroke: "transparent" }),
-      readout(1, derive(pos, fmtVec)),
+      readout(1, computed(() => (fmtVec)(pos.value))),
     );
 
     // Row 2 — Box: every axis (x, y, w, h) is a Signal<number> lens
@@ -150,7 +150,7 @@ export class MdLerps extends Diagram {
         fill: true,
         corner: 3,
       }),
-      readout(2, derive(box, fmtBox)),
+      readout(2, computed(() => (fmtBox)(box.value))),
     );
 
     // Row 3 — Color: `col.css` is a lazy getter (cached as own-prop on
@@ -162,7 +162,7 @@ export class MdLerps extends Diagram {
         fill: col.css,
         corner: 3,
       }),
-      readout(3, derive(col, fmtColor)),
+      readout(3, computed(() => (fmtColor)(col.value))),
     );
 
     // Row 4 — string: lerpable() stamps the [LERP] slot on a plain
@@ -175,7 +175,7 @@ export class MdLerps extends Diagram {
         size: 13,
         align: Anchor.Left,
       }),
-      readout(4, derive(txt, (str) => `len=${str.length}`)),
+      readout(4, computed(() => ((str) => `len=${str.length}`)(txt.value))),
     );
 
     // ── Drive ──────────────────────────────────────────────────────

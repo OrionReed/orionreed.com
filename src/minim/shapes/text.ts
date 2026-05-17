@@ -1,7 +1,7 @@
 // Chainable rich text — nested styled spans, pure values (no DOM).
 // Rendered to `<tspan>` markup by `label()`.
 
-import { tokens } from "./tokens";
+import {tokens} from "./tokens";
 
 interface TextStyle {
   bold?: boolean;

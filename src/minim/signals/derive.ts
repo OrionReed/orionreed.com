@@ -55,12 +55,16 @@ function viewClassFor<B>(Base: B, Cls: { prototype: object; name?: string }): B 
 // derived(Cls, fn) — Computed-backed instance presenting Cls's surface
 // ════════════════════════════════════════════════════════════════════
 
+/** Computed-backed instance of `Cls` (Vec, Num, Box, …) presenting
+ *  `Cls`'s full instance surface. Pass a `setter` to get a writable
+ *  lens with the same typed surface. */
 export function derived<T, C extends Signal<T>>(
   Cls: new (...args: never[]) => C,
   fn: () => T,
+  setter?: (v: T) => void,
 ): C {
-  const ComputedCls = viewClassFor(Computed, Cls) as unknown as new (fn: () => T) => Computed<T>;
-  return new ComputedCls(fn) as unknown as C;
+  const ComputedCls = viewClassFor(Computed, Cls) as unknown as new (g: () => T, s?: (v: T) => void) => Computed<T>;
+  return new ComputedCls(fn, setter) as unknown as C;
 }
 
 // ════════════════════════════════════════════════════════════════════

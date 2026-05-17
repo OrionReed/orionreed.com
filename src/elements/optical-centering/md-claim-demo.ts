@@ -15,8 +15,8 @@
 //
 // The test is the demo is the documentation.
 
-import { Anchor, Diagram, Mount, circle, derive, fadeIn, fadeOut, forEach, label, loop, vec } from "../../minim";
-import { claim, process, verdictDot } from "../../minim/assert";
+import {Anchor, Diagram, Mount, circle, computed, fadeIn, fadeOut, forEach, label, loop, vec} from "../../minim";
+import {claim, process, verdictDot} from "../../minim/assert";
 
 export class MdClaimDemo extends Diagram {
   protected scene(s: Mount): void {
@@ -75,7 +75,7 @@ export class MdClaimDemo extends Diagram {
       label(vec(20, 22), "claims", {
         size: 12, bold: true, align: Anchor.Left,
       }),
-      label(vec(W - 34, 22), derive(fullSpec, (v) => (v ? "ALL HOLD" : "VIOLATED")), {
+      label(vec(W - 34, 22), computed(() => ((v) => (v ? "ALL HOLD" : "VIOLATED"))(fullSpec.value)), {
         size: 11, align: Anchor.Right, opacity: 0.85,
       }),
       verdictDot(fullSpec, { at: vec(W - 18, 22), r: 6 }),

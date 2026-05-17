@@ -2,7 +2,7 @@
 // The highlighted card has a spring on its width: drag it wider and
 // it snaps back when released — handle + spring composing on one signal.
 
-import { Diagram, Mount, Anchor, Vec, arrange, handle, label, num, rect, spring } from "../../minim";
+import {Diagram, Mount, Anchor, Vec, derived, arrange, handle, label, num, rect, spring} from "../../minim";
 
 const WIDTHS = [72, 68, 80, 60, 76];
 const HEIGHTS = [52, 44, 60, 48, 56];
@@ -16,7 +16,7 @@ export class MdLayoutDemo extends Diagram {
     const view = this.view(560, 200);
     const cy = view.h.value / 2;
 
-    // `num(w)` (vs `cell(w)`) so `spring(...)` can read the `[ALGEBRA]`
+    // `num(w)` (vs `signal(w)`) so `spring(...)` can read the `[ALGEBRA]`
     // slot — plain Signal<number> has no algebra installed.
     const widths = WIDTHS.map((w) => num(w));
     widths[SPRING_IDX].value = SPRING_REST;
@@ -44,7 +44,7 @@ export class MdLayoutDemo extends Diagram {
       const card = cards[i];
       const w = widths[i];
       const h = HEIGHTS[i];
-      const pos = Vec.lens(
+      const pos = derived(Vec,
         () => ({
           x: card.translate.value.x + w.value,
           y: card.translate.value.y + h / 2,

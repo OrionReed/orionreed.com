@@ -3,7 +3,7 @@
 // targets so the offsets-are-preserved property is visible.
 
 import * as R from "../rand";
-import { Diagram, Mount, Anchor, centroid, derive, easeInOut, label, loop, meanRotation, meanScale, vec, rect } from "../../minim";
+import {Diagram, Mount, Anchor, centroid, computed, easeInOut, label, loop, meanRotation, meanScale, vec, rect} from "../../minim";
 
 // Heterogeneous sizes, colors, starting rotations — so it reads as
 // "each shape's offset survives the tween."
@@ -36,11 +36,8 @@ export class MdAggregates extends Diagram {
     s(
       label(
         view.top.down(30),
-        derive(
-          r,
-          (rad) =>
-            `mean rotation: ${((rad * 180) / Math.PI).toFixed(0)}°    mean scale: ${k.peek().x.toFixed(2)}`,
-        ),
+        () =>
+          `mean rotation: ${((r.value * 180) / Math.PI).toFixed(0)}°    mean scale: ${k.peek().x.toFixed(2)}`,
         { size: 11, align: Anchor.Center, opacity: 0.7 },
       ),
       label(

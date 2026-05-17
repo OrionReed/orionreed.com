@@ -8,12 +8,8 @@
 //      const eq = s(tex`${part("a", "...")} ...`);
 //      eq.add(brace(eq.parts.a));
 
-import { computed, type ReadonlyCell } from "@minim/signals";
-import { Shape } from "@minim/shapes";
-// Plain Box constructor — imported renamed to avoid shadowing the
-// `box(part)` decoration exported below.
-import { box as mkBox, type Box } from "@minim/values";
-import { tokens } from "@minim/shapes";
+import { computed, type Signal, type BoxValue } from "@minim/signals";
+import { Shape, tokens } from "@minim/shapes";
 import type { Part } from "./parts";
 
 export interface DecorationOpts {
@@ -33,9 +29,9 @@ const applyStroke = (s: Shape, opts: DecorationOpts) => {
   s.attr("fill", "none");
 };
 
-/** A `<rect>` whose x/y/w/h and Box all derive from the same layout
+/** A `<rect>` whose x/y/w/h and Box all computed from the same layout
  *  signal — single source of truth, one re-render per change. */
-function rectFromBox(layout: ReadonlyCell<Box>): Shape {
+function rectFromBox(layout: Signal<BoxValue>): Shape {
   const s = new Shape("rect", () => layout.value);
   s.attr("x", () => layout.value.x);
   s.attr("y", () => layout.value.y);
@@ -51,14 +47,14 @@ interface LineEnds {
   y2: number;
 }
 
-/** A `<line>` whose endpoints (and Box) derive from the same layout
+/** A `<line>` whose endpoints (and Box) computed from the same layout
  *  signal. */
-function lineFromEnds(layout: ReadonlyCell<LineEnds>): Shape {
+function lineFromEnds(layout: Signal<LineEnds>): Shape {
   const s = new Shape("line", () => {
     const e = layout.value;
     const x = Math.min(e.x1, e.x2);
     const y = Math.min(e.y1, e.y2);
-    return mkBox(x, y, Math.abs(e.x2 - e.x1), Math.abs(e.y2 - e.y1));
+    return { x, y, w: Math.abs(e.x2 - e.x1), h: Math.abs(e.y2 - e.y1) };
   });
   s.attr("x1", () => layout.value.x1);
   s.attr("y1", () => layout.value.y1);
@@ -106,7 +102,7 @@ export function brace(
     const b = part.box.value;
     const baseY = placement === "below" ? b.y + b.h + gap : b.y - gap;
     const tip = baseY + (placement === "below" ? height : -height);
-    return mkBox(b.x, Math.min(baseY, tip), b.w, Math.abs(tip - baseY));
+    return { x: b.x, y: Math.min(baseY, tip), w: b.w, h: Math.abs(tip - baseY) };
   });
   s.attr("d", d);
   s.attr("stroke-linecap", "round");
@@ -115,8 +111,9 @@ export function brace(
   return s;
 }
 
-/** Surrounding rectangle around a part, inset by `gap`. */
-export function box(
+/** Surrounding rectangle around a part, inset by `gap`. (Named `frame`
+ *  to avoid collision with the `box(x, y, w, h)` cell factory.) */
+export function frame(
   part: Part,
   opts: DecorationOpts & { corner?: number } = {},
 ): Shape {
@@ -124,7 +121,7 @@ export function box(
   const corner = opts.corner ?? tokens.corner;
   const layout = computed(() => {
     const b = part.box.value;
-    return mkBox(b.x - gap, b.y - gap, b.w + 2 * gap, b.h + 2 * gap);
+    return { x: b.x - gap, y: b.y - gap, w: b.w + 2 * gap, h: b.h + 2 * gap };
   });
   const s = rectFromBox(layout);
   s.attr("rx", corner);
