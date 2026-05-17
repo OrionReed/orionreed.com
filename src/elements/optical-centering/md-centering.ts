@@ -95,7 +95,7 @@ export class MdCentering extends Diagram {
     );
 
     const reset = snapshot(tl.clock);
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       reset();
       yield* tl;
       yield 4.5;

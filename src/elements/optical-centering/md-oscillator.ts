@@ -102,7 +102,7 @@ export class MdOscillator extends Diagram {
 
     // ── Physics ───────────────────────────────────────────────────────────────
     const t = cell(0);
-    this.anim.run(drive((dt) => { t.value = (t.value + dt) % T_LOOP; }));
+    this.anim.start(drive((dt) => { t.value = (t.value + dt) % T_LOOP; }));
 
     const disp = cell.derived(() =>
       A_AMP * Math.exp(-GAMMA * t.value) * Math.cos(OMEGA * t.value),
@@ -145,7 +145,7 @@ export class MdOscillator extends Diagram {
     tickPath.attr("stroke-width", "1");
     tickPath.opacity.value = 0;
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       yield* play(omega.active);
       yield* tickPath.opacity.to(0.65, 0.25);
       yield* play(not(omega.active));
@@ -160,7 +160,7 @@ export class MdOscillator extends Diagram {
     envPath.attr("stroke-width", "1");
     envPath.opacity.value = 0;
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       yield* play(gamma.active);
       yield* envPath.opacity.to(0.85, 0.3);                         // fade in
       yield* play(oscillate(envPath.opacity, 0.1, 1.6)).until(not(gamma.active));

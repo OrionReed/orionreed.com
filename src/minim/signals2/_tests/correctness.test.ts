@@ -8,7 +8,7 @@
 // Plus the Symbol.toPrimitive footgun guard.
 
 import { signal, computed, effect, batch } from "../signal";
-import { vec, Vec, num } from "../values";
+import { vec, num, type VecValue } from "../values";
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean, info?: string): void {
@@ -111,7 +111,7 @@ section("4.2  vec(reactiveX, reactiveY) glitch-free under batch");
   const ry = signal(20);
   const v = vec(rx, ry);
 
-  const seen: Vec.Value[] = [];
+  const seen: VecValue[] = [];
   effect(() => { seen.push({ ...v.value }); });
   check("initial value", v.value.x === 10 && v.value.y === 20);
 

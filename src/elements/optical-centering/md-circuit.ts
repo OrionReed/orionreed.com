@@ -24,7 +24,7 @@ export class MdCircuit extends Diagram {
     const source = (x: number, y: number, lbl: string, ev: string) => {
       const c = circle(vec(x, y), 18);
       s(c, label(c.center, lbl, { size: 13, bold: true }));
-      anim.run(loop(function* () {
+      anim.start(loop(function* () {
         yield bus.until(ev);
         yield* c.scale.to({ x: 1.4, y: 1.4 }, 0.08).to({ x: 1, y: 1 }, 0.3);
       }));
@@ -41,7 +41,7 @@ export class MdCircuit extends Diagram {
         label(c.center, derive(tick, String), { size: 13, bold: true }),
         label(c.center.up(30), lbl, { size: 11, opacity: 0.7 }),
       );
-      anim.run(loop(function* () {
+      anim.start(loop(function* () {
         yield bus.until(ev);
         yield* c.scale.to({ x: 1.3, y: 1.3 }, 0.06).to({ x: 1, y: 1 }, 0.3);
       }));
@@ -131,7 +131,7 @@ export class MdCircuit extends Diagram {
       const dist = num(0);
       const dot = circle(w.atDistance(dist), 5, { fill: true });
       s(dot);
-      anim.run(
+      anim.start(
         play([
           dist.to(total, sec, linear),
           w.opacity.to(0.75, sec * 0.3).to(0.25, sec * 0.7),
@@ -148,7 +148,7 @@ export class MdCircuit extends Diagram {
 
     /** Fire `ev` at random intervals. */
     const ticker = (ev: string, minGap: number, maxGap: number) =>
-      anim.run(
+      anim.start(
         play(R.float(0.3, minGap)).then(
           loop(function* () {
             bus.emit(ev);
@@ -198,7 +198,7 @@ export class MdCircuit extends Diagram {
     ) => {
       const holding = cell(false);
       gate.add(lit(gate.center.down(6), holding));
-      anim.run(loop(function* () {
+      anim.start(loop(function* () {
         yield bus.until(from);
         holding.value = true;
         yield R.float(holdRange[0], holdRange[1]);

@@ -5,9 +5,12 @@
 // spring, toward, from, holding, driven.
 
 import { signal } from "../signal";
-import { num, vec } from "../values";
+import { num, vec, transform } from "../values";
 import { Anim, fork, race } from "../anim";
-import { play, untilTrue, linear, Tween } from "../animations";
+import {
+  play, untilTrue, linear, Tween,
+  spring, toward, holding, driven, from,
+} from "../lerp";
 
 let pass = 0, fail = 0;
 function check(name: string, cond: boolean, info?: string): void {
@@ -69,6 +72,20 @@ section("Tween chain returns Tween<T> — type + runtime");
   check("x.to(...) returns Tween<number>", t1 instanceof Tween);
   const t2 = t1.to(20, 0.1);
   check("Tween.to(...) returns Tween<number>", t2 instanceof Tween);
+}
+
+// ════════════════════════════════════════════════════════════════════
+section("Tween .from(start) — pose-then-tween prefix");
+// ════════════════════════════════════════════════════════════════════
+{
+  const anim = new Anim();
+  const x = num(50);  // start at 50
+  // Pose to 0 then tween to 100. After 6 frames: should be at 100.
+  anim.run(function* () { yield* x.to(100, 0.1, linear).from(0); });
+  tick(anim, 1);
+  check("from(0) sets initial value", approx(x.value, 0, 0.01) || x.value < 30);
+  tick(anim, 6);
+  check(".from(0).to(100): final 100", x.value === 100);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -204,19 +221,27 @@ section("play().then(next) — sequence");
 }
 
 // ════════════════════════════════════════════════════════════════════
-section("play().at(scale) — time-scale child");
+section("play().at(scale) — time-scale child (now works for tweens too!)");
 // ════════════════════════════════════════════════════════════════════
 {
-  // FINDING: my naive `mapDt` only scales `yield N` sleeps, not
-  // drive-based per-frame writes. Production's `mapDt` works because
-  // it operates on the dt the runtime PASSES to gen.next(). Drive
-  // doesn't currently consult that — drive's onFrame gets raw clock dt.
-  // This is a real implementation gap — `.at(scale)` is a NOOP for tweens.
+  // With drive switched to yield-based, mapDt scales the dt that
+  // reaches the tween's per-frame step. .at(2) → tween runs 2x speed.
   const anim = new Anim();
   const x = num(0);
   anim.run(function* () { yield* play(x.to(100, 0.5, linear)).at(2); });
-  tick(anim, 35);  // 0.583s — tween should be done at full speed
-  check(".at(2) doesn't crash; tween completes at 1x speed (BUG)", x.value === 100);
+  // 0.5s tween at 2x → finishes at clock=0.25 → 15 frames at dt=1/60
+  tick(anim, 15);
+  check(".at(2) accelerates tween: x === 100 at 0.25s", x.value === 100);
+}
+{
+  const anim = new Anim();
+  const x = num(0);
+  anim.run(function* () { yield* play(x.to(100, 0.5, linear)).at(0.5); });
+  // 0.5s tween at 0.5x → finishes at clock=1.0 → 60 frames
+  tick(anim, 30);
+  check(".at(0.5) at half-tween: x ≈ 50", approx(x.value, 50, 1));
+  tick(anim, 30);
+  check(".at(0.5) decelerates tween: x === 100 at 1.0s", x.value === 100);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -226,7 +251,7 @@ section("spring() — settle to target");
   const anim = new Anim();
   const x = num(0);
   let settled = false;
-  anim.run(function* () { yield* x.spring(100, 100, 20); settled = true; });
+  anim.run(function* () { yield* spring(x, 100, 100, 20); settled = true; });
   // Even with damping, a coarse spring takes a while; give it 10 seconds.
   tick(anim, 600);
   check("spring final very close to 100", approx(x.value, 100, 0.5));
@@ -238,13 +263,31 @@ section("spring() — settle to target");
 }
 
 // ════════════════════════════════════════════════════════════════════
+section("spring() generic over Transform — works because [LINEAR]+[METRIC] stamped");
+// ════════════════════════════════════════════════════════════════════
+{
+  const anim = new Anim();
+  const tr = transform();
+  const target = {
+    translate: { x: 100, y: 50 }, scale: { x: 2, y: 2 }, origin: { x: 0, y: 0 },
+    rotate: Math.PI, opacity: 0.5,
+  };
+  anim.run(function* () { yield* spring(tr, target, 80, 18); });
+  tick(anim, 600);
+  check("spring on Transform: translate.x → ~100", approx(tr.value.translate.x, 100, 1));
+  check("spring on Transform: scale.x → ~2", approx(tr.value.scale.x, 2, 0.05));
+  check("spring on Transform: rotate → ~π", approx(tr.value.rotate, Math.PI, 0.05));
+  check("spring on Transform: opacity → ~0.5", approx(tr.value.opacity, 0.5, 0.05));
+}
+
+// ════════════════════════════════════════════════════════════════════
 section("toward() — constant-speed approach");
 // ════════════════════════════════════════════════════════════════════
 {
   const anim = new Anim();
   const x = num(0);
   let done = false;
-  anim.run(function* () { yield* x.toward(50, 100); done = true; });
+  anim.run(function* () { yield* toward(x, 50, 100); done = true; });
   // 50 units / 100 units-per-sec = 0.5s
   tick(anim, 31);
   check("toward done at ~0.5s", done);
@@ -262,7 +305,7 @@ section("from(source) — generator-scoped reactive bind");
   anim.run(function* () {
     // b follows a until stop fires. `from` returns infinite Animator;
     // race vs untilTrue terminates it.
-    yield* race(b.from(a), untilTrue(stop));
+    yield* race(from(b, a), untilTrue(stop));
     // After race ends, the binding is auto-cancelled.
   });
   tick(anim, 1);
@@ -284,7 +327,7 @@ section("holding(v, dur) — set, wait, restore");
   const anim = new Anim();
   const x = num(50);
   let done = false;
-  anim.run(function* () { yield* x.holding(99, 0.2); done = true; });
+  anim.run(function* () { yield* holding(x, 99, 0.2); done = true; });
   tick(anim, 1);
   check("during hold: x === 99", x.value === 99);
   tick(anim, 12);  // 0.2s elapsed
@@ -301,7 +344,7 @@ section("driven(stepFn) — escape hatch");
   const x = num(0);
   let done = false;
   anim.run(function* () {
-    yield* x.driven((dt, t, v) => t > 0.5 ? false : v + dt * 100);
+    yield* driven(x, (dt, t, v) => t > 0.5 ? false : v + dt * 100);
     done = true;
   });
   tick(anim, 31);  // a hair over 0.5s

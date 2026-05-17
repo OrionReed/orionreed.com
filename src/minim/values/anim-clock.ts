@@ -11,6 +11,6 @@ import { cell, type ReadonlyCell } from "@minim/signals";
  *  every `step()`. Multiple callers can share — call once per anim. */
 export function clockSignal(anim: Anim): ReadonlyCell<number> {
   const s = cell(anim.clock);
-  anim.onFrame(() => { s.value = anim.clock; });
+  anim.onStep(() => { s.value = anim.clock; });
   return s;
 }

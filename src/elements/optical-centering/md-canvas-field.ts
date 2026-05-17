@@ -293,7 +293,7 @@ export class MdCanvasField extends HTMLElement {
   //   - `drive((dt, t) => ...)` — the per-frame substrate. Integrate
   //     + render, no manual `while (true) { yield }` bookkeeping.
   //   - `loop(function* () { ... })` — Play factory, run as a
-  //     top-level child via `anim.run(loop(...))`. Phase cycler with
+  //     top-level child via `anim.start(loop(...))`. Phase cycler with
   //     `yield DWELL` / `yield* hueBase.to(...)`, same vocabulary as
   //     the SVG demos.
   //   - `every(0.5, fn)` — Play factory, fixed-interval fps emit
@@ -307,7 +307,7 @@ export class MdCanvasField extends HTMLElement {
 
     // Hot loop — drive yields `dt` each frame; `t` is elapsed since
     // start (used as the wave-phase clock). Never returns.
-    this.anim.run(
+    this.anim.start(
       drive((dt, t) => {
         self.integrate(dt, t);
         self.render();
@@ -317,7 +317,7 @@ export class MdCanvasField extends HTMLElement {
     );
 
     // Phase cycler.
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       self.statusText.value = `phase: ${PHASES[self.phaseIdx.peek()].name}`;
       yield DWELL;
       self.phaseIdx.value = (self.phaseIdx.peek() + 1) % PHASES.length;
@@ -328,7 +328,7 @@ export class MdCanvasField extends HTMLElement {
     }));
 
     // Fps emit — averages over the last 0.5s window of frames.
-    this.anim.run(every(0.5, () => {
+    this.anim.start(every(0.5, () => {
       if (self.fpsFrames > 0) {
         self.fpsSmoothed.value = self.fpsFrames / self.fpsAccum;
       }

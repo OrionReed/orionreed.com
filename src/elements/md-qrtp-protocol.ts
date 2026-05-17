@@ -173,7 +173,7 @@ export class MdQrtpProtocol extends Diagram {
     }
 
     const startFloodFillLoop = () => {
-      floodDispose = this.anim.run(loop(function* () {
+      floodDispose = this.anim.start(loop(function* () {
         while (cellsWithState("retransmit").length === 0) yield;
         yield T.beforeFlood;
         yield* doFloodFill();
@@ -183,7 +183,7 @@ export class MdQrtpProtocol extends Diagram {
 
     if (backchannel) startFloodFillLoop();
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       // Skip already-acknowledged cells.
       if (
         backchannel &&

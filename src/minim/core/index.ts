@@ -14,18 +14,19 @@
 export {
   Anim,
   isGen,
-  suspend,
-  drive,
-  attachRaf,
+  asGen,
+  detach,
   type Animator,
   type AnimObserver,
   type Yieldable,
+  type Detach,
   type SpawnFn,
   type SuspendFn,
+  type Wake,
   type PayloadOf,
 } from "./anim";
 
-export { all, rand, spawnYieldable } from "./compose";
+export { all, drive, rand, spawnYieldable, suspend } from "./compose";
 
 export { linear, easeIn, easeOut, easeInOut } from "./easings";
 

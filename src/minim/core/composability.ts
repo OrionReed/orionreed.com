@@ -16,7 +16,8 @@
 // JS does not propagate `.return()` across independently-driven gens —
 // only across `yield*` delegation. The wrappers below all do this.
 
-import { suspend, type Animator } from "./anim";
+import { type Animator } from "./anim";
+import { suspend } from "./compose";
 
 export const trace = <R>(label: string, gen: Animator<R>): Animator<R> =>
   tap((v) => console.log(`[${label}]`, v), gen);
@@ -47,20 +48,21 @@ export function* mapDt<R>(fn: (resume: any) => any, gen: Animator<R>): Animator<
   } finally { gen.return(undefined as any); }
 }
 
-/** Hard-cap by engine time. The inner gen runs unscaled as a tracked
- *  child; a ticker watches `anim.clock`. On timeout the child is
- *  cancelled and parent resumes with `undefined`. For gen-time caps
- *  (respecting `mapDt` etc.), wrap with `mapDt` outside `withTimeout`. */
+/** Hard-cap by engine time. Spawns the inner gen and a sibling that
+ *  sleeps for `seconds`; whichever settles first wins. On timeout the
+ *  inner is cancelled and the parent resumes with `undefined`. For
+ *  gen-time caps (respecting `mapDt` etc.), wrap with `mapDt` outside
+ *  `withTimeout`. */
 export function withTimeout<R>(seconds: number, gen: Animator<R>): Animator<R | undefined> {
-  return suspend<R | undefined>((wake, spawn, anim) => {
-    const deadline = anim.clock + seconds;
+  return suspend<R | undefined>((wake, spawn) => {
     let done = false;
     const finish = (v: R | undefined): void => { if (done) return; done = true; wake(v); };
-    const stopTicker = anim.onFrame(() => {
-      if (anim.clock >= deadline) finish(undefined);
-    });
     const stopChild = spawn(gen, (v) => finish(v as R | undefined));
-    return () => { stopTicker(); stopChild(); };
+    const stopTimer = spawn(
+      (function* (): Animator { yield seconds; })(),
+      () => finish(undefined),
+    );
+    return () => { stopTimer(); stopChild(); };
   });
 }
 

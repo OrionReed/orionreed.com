@@ -113,7 +113,7 @@ export class MdTexDemo extends Diagram {
       status,
     );
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       reset();
       for (const eq of eqs) eq.el.style.clipPath = "";
       yield 0.3;

@@ -8,7 +8,7 @@
 //          (`play([lifecycles]).until(hardStop)`) tears the entire
 //          subtree down, mid-fade if necessary.
 //
-// No `disposers[]` array, no `anim.run()` from button callbacks. Both
+// No `disposers[]` array, no `anim.start()` from button callbacks. Both
 // modes are signal-coordinated — buttons set signals, generators react
 // via the standard fluent vocabulary.
 
@@ -99,7 +99,7 @@ export class MdCancel extends Diagram {
     //      to every child instantly.
     //   3. Decide post-cycle delay based on which signal fired.
     //   4. Loop restarts; everything fresh.
-    this.anim.run(
+    this.anim.start(
       loop(function* () {
         for (const slot of slots) slot.shape.opacity.value = 1;
         for (const slot of slots) slot.y.value = SHAPE_Y;

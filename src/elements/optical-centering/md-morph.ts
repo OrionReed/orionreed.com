@@ -171,7 +171,7 @@ export class MdMorph extends Diagram {
       }),
     );
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       for (let i = 0; i < KEYFRAMES.length; i++) {
         const next = KEYFRAMES[(i + 1) % KEYFRAMES.length];
         status.value = `→ ${next.name}`;

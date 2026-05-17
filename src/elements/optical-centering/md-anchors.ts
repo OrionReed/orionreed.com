@@ -19,7 +19,7 @@ export class MdAnchors extends Diagram {
     // origin (box center), so the LOCAL center is invariant while
     // every corner/edge anchor sweeps through PARENT frame.
     const reset = snapshot(r.rotate, r.scale);
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       reset();
       yield [
         r.rotate.to(Math.PI * 2, 6),

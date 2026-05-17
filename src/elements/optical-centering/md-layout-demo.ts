@@ -35,7 +35,7 @@ export class MdLayoutDemo extends Diagram {
     arrange(cards, "row", { gap: GAP, align: 0.5 });
 
     // Spring pulls the highlighted card's width back to rest when released.
-    this.anim.run(() =>
+    this.anim.start(() =>
       spring(widths[SPRING_IDX], SPRING_REST, { stiffness: 220, damping: 16 }),
     );
 

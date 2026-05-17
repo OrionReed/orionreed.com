@@ -13,12 +13,11 @@
 // out earned no clarity and added inter-folder imports.
 
 import {
-  suspend,
   type Animator,
   type Yieldable,
   type PayloadOf,
 } from "../core/anim";
-import { spawnYieldable } from "../core/compose";
+import { spawnYieldable, suspend } from "../core/compose";
 import { effect } from "./signal";
 import { type ReadonlyCell } from "./cell";
 

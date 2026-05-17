@@ -1,16 +1,17 @@
-// Signal-free generator combinators that don't fit the fluent `Play`
-// surface — they keep typed-tuple returns or pick branches at random,
-// neither of which `play(...)` expresses. The fluent factories
-// (`play`, `loop`, `every`) live in `signals/` because `Play` itself
-// is signal-coupled (`.until(sig) / .while(sig) / .at(Val<number>)`).
+// Signal-free generator combinators + the two userland Yieldable
+// constructors (`drive`, `suspend`). The fluent factories (`play`,
+// `loop`, `every`) live in `signals/` because `Play` itself is
+// signal-coupled (`.until(sig) / .while(sig) / .at(Val<number>)`).
 //
+//   yield* drive((dt) => …)                        // per-frame work
+//   const v = yield* suspend((wake) => () => …)    // typed callback
 //   const [a, b] = yield* all(workA(), workB());   // typed-tuple return
 //   yield* rand(branch0, branch1, branch2);        // pick one uniformly
 
 import {
   Anim,
+  asGen,
   isGen,
-  suspend,
   type Animator,
   type SpawnFn,
   type SuspendFn,
@@ -18,10 +19,29 @@ import {
   type PayloadOf,
 } from "./anim";
 
+/** `yield* drive(cb)` parks each frame until `cb` returns `false`.
+ *  Plain generator — composes with `mapDt`, `tap`, `record`,
+ *  `withTimeout`, etc. through the standard yield seam. */
+export function* drive(
+  cb: (dt: number, t: number) => boolean | void,
+): Animator<void> {
+  let t = 0;
+  while (true) {
+    const dt = yield;
+    t += dt;
+    if (cb(dt, t) === false) return;
+  }
+}
+
+/** `yield* suspend(impl)` parks until `wake(value)`; resumes with the
+ *  typed `value`. Pure type-narrowing sugar over `(yield impl) as T`. */
+export function* suspend<T = void>(impl: SuspendFn<T>): Animator<T> {
+  return (yield impl) as T;
+}
+
 /** Subscribe a Yieldable from inside a SuspendFn body — bare SuspendFns
  *  subscribe directly (sharing the parent's `spawn` so nested combinators
- *  don't re-wrap), other shapes get a one-shot generator wrap. Returns
- *  the disposer. Used by `all`, `race`, and similar combinators. */
+ *  don't re-wrap), other shapes get wrapped via `asGen`. */
 export function spawnYieldable(
   y: Yieldable,
   spawn: SpawnFn,
@@ -33,7 +53,7 @@ export function spawnYieldable(
       w: (v: any) => void, s: SpawnFn, a: Anim,
     ) => () => void)(onDone, spawn, anim);
   }
-  return spawn((function* () { yield y; })(), onDone);
+  return spawn(asGen(y), onDone);
 }
 
 /** Run children in parallel; complete when all finish; resume with a

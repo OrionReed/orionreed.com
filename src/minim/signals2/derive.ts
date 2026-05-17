@@ -4,13 +4,19 @@
 //   field(p, k, Type)  typed Lens<P[K]> wearing Type's instance interface
 //   derived(C, fn)     Computed-backed instance of C (chainable result)
 
-import { Signal, Computed } from "./signal";
+import { Signal, Computed, batch, type Val } from "./signal";
+
+/** Per-field reactive-init record — `{ [K in keyof T]?: Val<T[K]> }`.
+ *  Used by composite factories (`vec`, `transform`) so each axis can
+ *  accept any of plain T, signal, or thunk. */
+export type ReactiveInit<T> = { [K in keyof T]?: Val<T[K]> };
 
 // ════════════════════════════════════════════════════════════════════
-// Chain<T>
+// BaseChain<T> — the mutating builder used inside `cell.derive(c => …)`.
+// Each value-type extends with its own `Vec.Chain`, `Num.Chain`, etc.
 // ════════════════════════════════════════════════════════════════════
 
-export class Chain<T> {
+export class BaseChain<T> {
   value: T;
   constructor(v: T) { this.value = v; }
 }
@@ -85,4 +91,23 @@ export function field<P, K extends keyof P, Type extends new (...args: never[]) 
   );
   cache[key as string] = fl;
   return fl as unknown as InstanceType<Type>;
+}
+
+/** Bind a record of axes on a composite cell — used by factories like
+ *  `vec(x, y)` and `transform({...})`. Wraps in `batch()` so observers
+ *  don't see intermediate states.
+ *
+ *  Each value in `init` may be plain T, a signal, or a thunk. Reads
+ *  the typed lens via `field(sig, key, ...)` — assumes the cell exposes
+ *  a getter for each key (which value-type classes do via `get k()`). */
+export function bindFields<P, I extends ReactiveInit<P>>(sig: Signal<P>, init: I): void {
+  batch(() => {
+    for (const k in init) {
+      const v = init[k];
+      if (v !== undefined) {
+        const lens = (sig as unknown as Record<string, Signal<unknown>>)[k];
+        if (lens) lens.bind(v as Val<unknown>);
+      }
+    }
+  });
 }

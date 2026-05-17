@@ -3,23 +3,26 @@
 // Yield contract:
 //   undefined        park 1 frame; resume with dt
 //   number > 0       sleep N seconds; resume with dt of waking step
+//   number ≤ 0       tail-call; resume immediately with the next yield
 //   Animator         spawn child; resume with R when it completes
 //   Yieldable[]      parallel-all; resume with results[] when all done
 //   SuspendFn        callback wake; resume with wake's value
-//   PromiseLike<T>   await; resume with resolved value (or throw on reject)
+//   PromiseLike<T>   await; resume with T (or throw on reject)
+//   detach(g)        spawn `g` at engine-root; resume immediately
 //
+// Errors propagate via `gen.throw()` to the parent's yield site.
 // Cancel via `gen.return()` (silent; runs `try/finally`).
-// Errors propagate via `gen.throw()` to the parent's yield site
-// (model-a: thrown children, rejected promises, and `wake.throw(e)`
-// all raise at the parent's `yield` rather than going to a side channel).
 //
-// SuspendFn ctx: a narrow `(clock, onFrame, run)` surface — engine
-// internals (step, stop) are not exposed. Prod composers' three-arg
-// form `(wake, spawn, anim) => dispose` is supported via arity dispatch.
+// One state machine (Active = generator + wakeAt + parent), one
+// resumption seam (gen.next(dt)), one composition rule (yield/yield*),
+// one escape hatch (detach). Per-frame work (drive, every) is just
+// generators that `while(true) yield;` — no special engine support.
 
 const DEAD = -Infinity;
 const READY = 0;
 const PARKED = Infinity;
+
+const DETACH_KEY = Symbol.for("minim.detach");
 
 export type Yieldable =
   | undefined
@@ -27,14 +30,15 @@ export type Yieldable =
   | Animator<any>
   | readonly Yieldable[]
   | SuspendFn<any>
-  | PromiseLike<unknown>;
-export type Animator<R = void> = Generator<Yieldable, R, any>;
+  | PromiseLike<unknown>
+  | Detach;
+export type Animator<R = void> = Generator<Yieldable, R, number>;
 export type Wake<T = void> = ([T] extends [void]
   ? () => void
   : (value: T) => void) & { throw(error: unknown): void };
 
 /** Resume payload of a yielded shape — child Animator's R, SuspendFn's T,
- *  or void for non-typed yields. Used by `race` / `all` to type wakes. */
+ *  or void for non-typed yields. */
 export type PayloadOf<Y> =
   Y extends Animator<infer R> ? R
   : Y extends SuspendFn<infer R> ? R
@@ -46,23 +50,31 @@ export type SpawnFn = <R>(
   onDone?: (v: R) => void,
 ) => () => void;
 
-/** SuspendFn signature: `(wake, spawn, anim) => dispose`. The `anim`
- *  arg exposes `clock`, `onFrame`, and `run`. New SuspendFns may
- *  ignore `spawn` and use `anim.run(...)` instead — both shapes are
- *  supported (the engine arity-dispatches). */
+/** SuspendFn signature: `(wake, spawn, anim) => dispose`. Return is
+ *  optional: scoped children spawned via `spawn` are cancelled
+ *  automatically with the parent. */
 export type SuspendFn<T = void> = (
   wake: Wake<T>,
   spawn: SpawnFn,
   anim: Anim,
-) => () => void;
+) => void | (() => void);
 
-/** Optional per-engine lifecycle observer (assert/spans). One slot;
- *  user code composes multiple subscribers. */
+/** Optional per-engine lifecycle observer (assert/spans). */
 export interface AnimObserver {
   spawn?(id: number, parentId: number | undefined, clock: number, gen: Animator<any>): void;
   complete?(id: number, clock: number): void;
   cancel?(id: number, clock: number): void;
 }
+
+/** Brand for `detach(g)`. Loosely typed at the symbol level — only the
+ *  `detach(...)` helper constructs valid instances. */
+export type Detach = { readonly [k: symbol]: Animator };
+
+/** Spawn `g` at engine-root, outliving the yielding parent. Resume is
+ *  synchronous (the parent does NOT park). Use sparingly — most
+ *  animations should be scoped to their parent's lifetime. */
+export const detach = <R>(g: Animator<R>): Detach =>
+  ({ [DETACH_KEY]: g as Animator });
 
 export const isGen = (v: unknown): v is Animator =>
   v !== null &&
@@ -73,21 +85,16 @@ const isThenable = (v: unknown): v is PromiseLike<unknown> =>
   typeof v === "object" &&
   typeof (v as { then?: unknown }).then === "function";
 
-type OnSettle = (v: unknown, slot: number, err: unknown) => void;
+/** Wrap any non-generator Yieldable in a one-shot generator. Lets
+ *  `yield [0.2, work()]` mix sleeps and gens in parallel. */
+export function* asGen(y: Yieldable): Animator<any> { yield y; }
 
-interface Ticker {
-  cb: (dt: number, t: number) => void;
-  alive: boolean;
-  /** Engine clock at registration; per-tick `t` is `clock - t0`. */
-  t0: number;
-}
+type OnSettle = (v: unknown, err: unknown) => void;
 
 class Active {
   wakeAt = READY;
   cleanup: (() => void) | null = null;
   onSettle: OnSettle | null = null;
-  /** Slot in parent's `parallel` results; 0 otherwise. */
-  slot = 0;
   /** Re-entrancy guards — cancel-during-advance defers `gen.return()`. */
   busy = false;
   pendingReturn = false;
@@ -99,70 +106,56 @@ class Active {
 
 export class Anim {
   protected actives: Active[] = [];
-  private tickers: Ticker[] = [];
   private deads = 0;
   private nextObserveId = 0;
+  /** Lazy: only allocated if there are subscribers. */
+  private stepListeners: Set<(dt: number) => void> | null = null;
   observer: AnimObserver | undefined = undefined;
   onError: (e: unknown) => void = (e) => {
     console.error("minim:", e);
   };
-  clock = 0;
+  /** Engine time in seconds since last `stop()`. Read-only externally;
+   *  internal mutations during `step()` advance it. */
+  #clock = 0;
+  get clock(): number { return this.#clock; }
 
-  /** Run `g` (or its result if a factory). Returns a disposer. */
-  run<R = any>(
-    g: Animator<R> | (() => Animator<R>),
-    onDone?: (v: R) => void,
-  ): () => void {
-    const onSettle: OnSettle | null = onDone
-      ? (v, _i, err) => {
-          if (err === undefined) onDone(v as R);
-        }
-      : null;
+  /** Run `g` (or its result if a factory) until it completes; returns
+   *  a disposer. */
+  start(g: Animator<any> | (() => Animator<any>)): () => void {
     const a = this.spawn(
       (typeof g === "function" ? g() : g) as Animator,
       null,
-      onSettle,
+      null,
     );
     return () => this.cancel(a);
+  }
+
+  /** Subscribe to `step()` calls. The callback fires every step with
+   *  the same `dt` the engine receives. Use sparingly — for true
+   *  animation work prefer a generator that yields per frame, which
+   *  composes with `mapDt`/`tap`/`withTimeout`. Returns a disposer. */
+  onStep(cb: (dt: number) => void): () => void {
+    (this.stepListeners ??= new Set()).add(cb);
+    return () => { this.stepListeners?.delete(cb); };
   }
 
   /** Cancel everything; reset clock. */
   stop(): void {
     const snap = this.actives.slice();
     this.actives.length = 0;
-    this.tickers.length = 0;
-    this.clock = 0;
+    this.#clock = 0;
     for (const a of snap) this.cancel(a);
   }
 
-  /** Per-frame callback `(dt, t-since-registration)`. Returns a disposer. */
-  onFrame(cb: (dt: number, t: number) => void): () => void {
-    const t: Ticker = { cb, alive: true, t0: this.clock };
-    this.tickers.push(t);
-    return () => {
-      t.alive = false;
-    };
-  }
-
   step(dt: number): void {
-    if (dt > 0 && Number.isFinite(dt)) this.clock += dt;
-    const c = this.clock;
-    const ts = this.tickers;
-    const len = ts.length;
-    let w = 0;
-    for (let i = 0; i < len; i++) {
-      const t = ts[i];
-      if (!t.alive) continue;
-      try {
-        t.cb(dt, c - t.t0);
-      } catch (e) {
-        this.onError(e);
-        t.alive = false;
+    if (dt > 0 && Number.isFinite(dt)) this.#clock += dt;
+    const c = this.#clock;
+    if (this.stepListeners) {
+      for (const cb of this.stepListeners) {
+        try { cb(dt); }
+        catch (e) { this.onError(e); }
       }
-      if (t.alive) ts[w++] = t;
     }
-    if (ts.length > len) for (let i = len; i < ts.length; i++) ts[w++] = ts[i];
-    ts.length = w;
     const as = this.actives;
     const alen = as.length;
     const d0 = this.deads;
@@ -187,11 +180,9 @@ export class Anim {
     gen: Animator,
     parent: Active | null,
     onSettle: OnSettle | null,
-    slot = 0,
   ): Active {
     const a = new Active(gen);
     a.onSettle = onSettle;
-    a.slot = slot;
     a.parent = parent;
     this.actives.push(a);
     if (this.observer) {
@@ -199,7 +190,7 @@ export class Anim {
       this.observer.spawn?.(
         a.observeId,
         parent?.observeId || undefined,
-        this.clock,
+        this.#clock,
         gen,
       );
     }
@@ -211,7 +202,7 @@ export class Anim {
     if (a.wakeAt === DEAD) return;
     a.wakeAt = DEAD;
     this.deads++;
-    this.observer?.cancel?.(a.observeId, this.clock);
+    this.observer?.cancel?.(a.observeId, this.#clock);
     const c = a.cleanup;
     a.cleanup = null;
     a.onSettle = null;
@@ -220,19 +211,13 @@ export class Anim {
       a.pendingReturn = true;
       return;
     }
-    try {
-      a.gen.return(undefined);
-    } catch (e) {
-      this.onError(e);
-    }
+    try { a.gen.return(undefined); }
+    catch (e) { this.onError(e); }
   }
 
   private safe(fn: (() => void) | null | undefined): void {
-    try {
-      fn?.();
-    } catch (e) {
-      this.onError(e);
-    }
+    try { fn?.(); }
+    catch (e) { this.onError(e); }
   }
 
   protected settle(
@@ -244,42 +229,49 @@ export class Anim {
     if (a.wakeAt === DEAD) return;
     a.wakeAt = DEAD;
     this.deads++;
-    if (!errored) this.observer?.complete?.(a.observeId, this.clock);
+    if (!errored) this.observer?.complete?.(a.observeId, this.#clock);
     const cb = a.onSettle;
     a.onSettle = null;
-    if (cb)
-      cb(errored ? undefined : value, a.slot, errored ? error : undefined);
+    if (cb) cb(errored ? undefined : value, errored ? error : undefined);
     else if (errored) this.onError(error);
   }
 
-  private advance(a: Active, payload: unknown, asThrow: boolean): void {
+  private advance(a: Active, payload: any, asThrow: boolean): void {
     a.busy = true;
     try {
-      const r = asThrow ? a.gen.throw(payload) : a.gen.next(payload);
-      if (r.done) return this.settle(a, r.value, false, undefined);
-      if (a.wakeAt === DEAD) return;
-      const v = r.value;
-      if (v === undefined) return;
-      if (typeof v === "number") {
-        if (v > 0) a.wakeAt = this.clock + v;
-        return;
+      let r = asThrow ? a.gen.throw(payload) : a.gen.next(payload);
+      while (!r.done) {
+        if (a.wakeAt === DEAD) return;
+        const v = r.value;
+        if (v === undefined) return;
+        if (typeof v === "number") {
+          if (v > 0) {
+            a.wakeAt = this.#clock + v;
+            return;
+          }
+          r = a.gen.next(0);
+          continue;
+        }
+        if (typeof v === "function") return this.suspend(a, v);
+        if (Array.isArray(v)) return this.parallel(a, v);
+        if (isGen(v)) return this.child(a, v);
+        if (isThenable(v)) return this.thenable(a, v);
+        if (typeof v === "object" && v !== null && DETACH_KEY in v) {
+          this.spawn((v as Record<symbol, Animator>)[DETACH_KEY], null, null);
+          r = a.gen.next(0);
+          continue;
+        }
+        throw new TypeError(`anim: unsupported yield ${typeof v}`);
       }
-      if (typeof v === "function") return this.suspend(a, v);
-      if (Array.isArray(v)) return this.parallel(a, v);
-      if (isGen(v)) return this.child(a, v);
-      if (isThenable(v)) return this.thenable(a, v);
-      throw new TypeError(`anim: unsupported yield ${typeof v}`);
+      return this.settle(a, r.value, false, undefined);
     } catch (e) {
       this.settle(a, undefined, true, e);
     } finally {
       a.busy = false;
       if (a.pendingReturn) {
         a.pendingReturn = false;
-        try {
-          a.gen.return(undefined);
-        } catch (e) {
-          this.onError(e);
-        }
+        try { a.gen.return(undefined); }
+        catch (e) { this.onError(e); }
       }
     }
   }
@@ -297,33 +289,42 @@ export class Anim {
     };
     const wake = ((v?: unknown) =>
       finish(() => this.advance(a, v, false))) as Wake<any>;
-    wake.throw = (e: unknown): void => finish(() => this.advance(a, e, true));
-    // Per-suspend spawn closure: spawned children inherit `a` as parent
-    // (so observer / cancel cascade can walk the tree), and cancelling
-    // the parent cancels the child.
+    wake.throw = (e: unknown): void =>
+      finish(() => this.advance(a, e, true));
+    let subKids: Active[] | null = null;
     const spawnFn: SpawnFn = (g, onDone) => {
       const onSettle: OnSettle | null = onDone
-        ? (v, _i, err) => {
-            if (err === undefined) onDone(v as never);
-          }
+        ? (v, err) => { if (err === undefined) onDone(v as never); }
         : null;
       const child = this.spawn(
         (typeof g === "function" ? g() : g) as Animator,
         a,
         onSettle,
       );
+      (subKids ??= []).push(child);
       return () => this.cancel(child);
     };
-    let dispose: () => void;
-    try {
-      dispose = impl(wake, spawnFn, this);
-    } catch (e) {
+    let userDispose: (() => void) | undefined;
+    try { userDispose = impl(wake, spawnFn, this) ?? undefined; }
+    catch (e) {
       if (!resumed && a.wakeAt !== DEAD) {
         resumed = true;
         this.advance(a, e, true);
       } else this.onError(e);
       return;
     }
+    // Lazy-wrap: only allocate the cascading dispose when subKids
+    // actually exist. Most SuspendFns don't spawn, so this is the
+    // common path.
+    const dispose: () => void =
+      subKids === null
+        ? (userDispose ?? (() => {}))
+        : () => {
+            this.safe(userDispose);
+            const ks = subKids!;
+            subKids = null;
+            for (const c of ks) if (c.wakeAt !== DEAD) this.cancel(c);
+          };
     if (resumed || a.wakeAt === DEAD) this.safe(dispose);
     else {
       a.wakeAt = PARKED;
@@ -334,9 +335,7 @@ export class Anim {
   private thenable(a: Active, p: PromiseLike<unknown>): void {
     a.wakeAt = PARKED;
     let cancelled = false;
-    a.cleanup = () => {
-      cancelled = true;
-    };
+    a.cleanup = () => { cancelled = true; };
     p.then(
       (v) => {
         if (!cancelled && a.wakeAt !== DEAD) {
@@ -358,10 +357,8 @@ export class Anim {
   private child(a: Active, child: Animator): void {
     a.wakeAt = PARKED;
     let c: Active | null = null;
-    a.cleanup = () => {
-      if (c && c.wakeAt !== DEAD) this.cancel(c);
-    };
-    c = this.spawn(child, a, (v, _i, err) => {
+    a.cleanup = () => { if (c && c.wakeAt !== DEAD) this.cancel(c); };
+    c = this.spawn(child, a, (v, err) => {
       if (a.wakeAt === DEAD || a.cleanup === null) return;
       a.cleanup = null;
       a.wakeAt = READY;
@@ -371,9 +368,6 @@ export class Anim {
 
   private parallel(a: Active, kids: readonly Yieldable[]): void {
     if (kids.length === 0) return this.advance(a, [], false);
-    for (const k of kids)
-      if (!isGen(k))
-        throw new TypeError("anim: parallel array elements must be Animators");
     const children: Active[] = [];
     const results = new Array<unknown>(kids.length);
     let left = kids.length;
@@ -383,68 +377,32 @@ export class Anim {
       aborted = true;
       for (const c of children) if (c.wakeAt !== DEAD) this.cancel(c);
     };
-    const onChild: OnSettle = (value, slot, error) => {
-      if (aborted) return;
-      if (error !== undefined) {
-        aborted = true;
-        a.cleanup = null;
-        a.wakeAt = READY;
-        for (const c of children) if (c.wakeAt !== DEAD) this.cancel(c);
-        this.advance(a, error, true);
-        return;
-      }
-      results[slot] = value;
-      if (--left === 0) {
-        aborted = true;
-        a.cleanup = null;
-        a.wakeAt = READY;
-        this.advance(a, results, false);
-      }
-    };
     for (let j = 0; j < kids.length; j++) {
       if (aborted) return;
-      // `slot` MUST be set before spawn calls advance — sync-completing
-      // kids would otherwise see slot=0 and corrupt `results`.
-      children.push(this.spawn(kids[j] as Animator, a, onChild, j));
+      const k = kids[j];
+      const idx = j;
+      // Per-kid closure captures `idx` directly — no `slot` field needed
+      // on Active. Sync-completing kids settle their slot before the
+      // loop progresses, so `results` is correctly indexed.
+      children.push(this.spawn(isGen(k) ? k : asGen(k), a, (value, error) => {
+        if (aborted) return;
+        if (error !== undefined) {
+          aborted = true;
+          a.cleanup = null;
+          a.wakeAt = READY;
+          for (const c of children) if (c.wakeAt !== DEAD) this.cancel(c);
+          this.advance(a, error, true);
+          return;
+        }
+        results[idx] = value;
+        if (--left === 0) {
+          aborted = true;
+          a.cleanup = null;
+          a.wakeAt = READY;
+          this.advance(a, results, false);
+        }
+      }));
     }
   }
 }
 
-/** Per-frame callback. `yield* drive(cb)` (or `anim.run(drive(cb))`)
- *  parks until `cb` returns `false`. Each tick is one function call —
- *  no generator resumption. `cb` throws → propagates to parent's yield. */
-export function drive(
-  cb: (dt: number, t: number) => boolean | void,
-): Animator {
-  return suspend<void>((wake, _spawn, anim) =>
-    anim.onFrame((dt, t) => {
-      try {
-        if (cb(dt, t) === false) wake();
-      } catch (e) {
-        wake.throw(e);
-      }
-    }),
-  );
-}
-
-/** `yield* suspend(impl)` parks until `wake(value)`; resumes with `value`. */
-export function* suspend<T = void>(impl: SuspendFn<T>): Animator<T> {
-  return (yield impl) as T;
-}
-
-/** Browser RAF adapter. Caps single-frame dt at 32 ms so tab-switch
- *  catch-up doesn't fire one giant step. Returns a detach function. */
-export function attachRaf(anim: Anim): () => void {
-  if (typeof requestAnimationFrame !== "function") return () => {};
-  const FRAME_CAP_MS = 32;
-  let rafId = 0;
-  let last = 0;
-  const tick = (now: number): void => {
-    rafId = requestAnimationFrame(tick);
-    const dt = last ? Math.min(now - last, FRAME_CAP_MS) / 1000 : 0;
-    last = now;
-    anim.step(dt);
-  };
-  rafId = requestAnimationFrame(tick);
-  return () => cancelAnimationFrame(rafId);
-}

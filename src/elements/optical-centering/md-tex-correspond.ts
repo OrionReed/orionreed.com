@@ -90,7 +90,7 @@ export class MdTexCorrespond extends Diagram {
       status,
     );
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       reset();
       yield 0.3;
 

@@ -114,7 +114,7 @@ export class MdClaimDemo extends Diagram {
     ));
 
     // ── Loop — just keep running `intro`. Variant cycles inside. ─
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       yield* intro.run();
       yield 0.8;
     }));

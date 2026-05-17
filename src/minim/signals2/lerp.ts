@@ -1,44 +1,26 @@
-// animations.ts — temporal cell methods, organised as trait bundles.
+// lerp.ts — the signals → generators bridge.
 //
-// Each trait is (slot + impl + interface). Stamping a class with the
-// trait installs the methods runtime-side; declaration-merging the
-// matching interface installs them type-side. Both sides explicit,
-// adjacent in the value-type's file.
+// Where signals live ON cells (state), this file lives BETWEEN cells
+// and the runtime. It contains:
 //
-// Built-in trait bundles:
-//
-//   [LERP]        → .to(target, dur, ease?)         finite tween
-//   [LINEAR]      → .add/.sub/.scale (already in values.ts as methods)
-//   [LINEAR]      → no animation methods alone
-//   [LINEAR + METRIC] → .spring(), .toward()         (declared on Num/Vec)
-//
-// Universal cell-temporal methods (no trait required):
-//
-//   .from(source)       generator-scoped reactive bind
-//   .holding(v, dur)    set, wait, restore
-//   .driven(stepFn)     escape-hatch frame-driven mutation
-//
-// Free-function forms exist alongside the methods — they're what the
-// methods delegate to and let users animate trait-equipped third-party
-// types without subclassing.
+//   • The `[LERP]` trait method bundle (`.to()` on cells)
+//   • Free-fn temporal animators dispatched by traits:
+//       tween (LERP), spring/toward (LINEAR + METRIC),
+//       holding/from/driven (no trait needed)
+//   • The `Tween<T>` chainable wrapper for `.to(A).to(B).from(start)`
+//   • `play(...)` fluent surface — `.until / .then / .at`
+//   • `untilTrue(sig)` — wait until cell value is truthy
 
 import { Signal, effect, type Val } from "./signal";
-import { LERP, LINEAR, METRIC } from "./traits";
+import {
+  LERP, LINEAR, METRIC, EQUALS,
+  type Linear, type Lerp, type Metric, type Equals,
+} from "./traits";
 import {
   drive, suspend, race, type Animator, type Yieldable,
 } from "./anim";
-
-// ════════════════════════════════════════════════════════════════════
-// Easings — small bundled set; users can pass any (t: number) => number
-// ════════════════════════════════════════════════════════════════════
-
-export type Easing = (t: number) => number;
-
-export const linear: Easing  = (t) => t;
-export const easeIn: Easing  = (t) => t * t;
-export const easeOut: Easing = (t) => 1 - (1 - t) * (1 - t);
-export const easeInOut: Easing = (t) =>
-  t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t);
+import { type Easing, easeOut } from "./easings";
+export { type Easing, linear, easeIn, easeOut, easeInOut } from "./easings";
 
 const defaultEase = easeOut;
 
@@ -51,14 +33,26 @@ const defaultEase = easeOut;
 export class Tween<T> implements Animator<void> {
   constructor(private sig: Signal<T>, private gen: Animator<void>) {}
 
+  /** Append a tween segment from current value to `target` over `dur`. */
   to(target: T, dur: Val<number>, ease?: Easing): Tween<T> {
     const sig = this.sig;
     const prior = this.gen;
-    const next = (function* (): Animator<void> {
+    return new Tween(sig, (function* (): Animator<void> {
       yield* prior;
       yield* tweenStep(sig, target, dur, ease);
-    })();
-    return new Tween(sig, next);
+    })());
+  }
+
+  /** Pose-then-tween prefix: write `start` to the cell as the first
+   *  step, then run the rest of the chain. Reads as
+   *  `opacity.from(0).to(1, 0.5)` → "from 0, to 1 over 0.5s." */
+  from(start: T): Tween<T> {
+    const sig = this.sig;
+    const prior = this.gen;
+    return new Tween(sig, (function* (): Animator<void> {
+      sig.value = start;
+      yield* prior;
+    })());
   }
 
   // Animator protocol — delegate to the wrapped generator.
@@ -211,45 +205,16 @@ export function* driven<T>(
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Method-bundle interfaces — for declaration merging on value classes
+// Method bundle for [LERP] — `.to()` is the only cell method.
+//
+// Everything else (spring/toward/holding/from/driven) is a free fn that
+// dispatches via traits — strictly more general (works on any cell with
+// the right traits, including third-party types stamped post-hoc).
 // ════════════════════════════════════════════════════════════════════
 
-/** Methods that come with `[LERP]`. Merge into a class declaration:
- *      interface Vec extends LerpMethods<Vec.Value> {}
- *  …and call `installLerpMethods(Vec)` after stamping the slot. */
 export interface LerpMethods<T> {
   to(target: T, dur: Val<number>, ease?: Easing): Tween<T>;
 }
-
-/** Methods that come with `[LINEAR] + [METRIC]`. */
-export interface PhysicsMethods<T> {
-  spring(target: T, stiffness?: number, damping?: number): Animator<void>;
-  toward(target: T, speed: Val<number>): Animator<void>;
-}
-
-/** Universal methods — no trait required. */
-export interface CellMethods<T> {
-  from(source: Val<T>): Animator<void>;
-  holding(v: T, dur: Val<number>): Animator<void>;
-  driven(step: (dt: number, t: number, v: T) => T | false): Animator<void>;
-}
-
-// ════════════════════════════════════════════════════════════════════
-// Method bundle implementations — exported for `Object.assign` onto
-// value-type prototypes.
-//
-// Usage in a value-type file:
-//
-//   class Vec extends Signal<Vec.Value> {}
-//   interface Vec extends LerpMethods<Vec.Value>, PhysicsMethods<Vec.Value> {}
-//
-//   Vec.prototype[LINEAR] = vLinear;
-//   Vec.prototype[LERP]   = vLerp;
-//   Vec.prototype[METRIC] = vMetric;
-//   Vec.prototype[EQUALS] = vEquals;
-//
-//   Object.assign(Vec.prototype, lerpImpl, physicsImpl);
-// ════════════════════════════════════════════════════════════════════
 
 export const lerpImpl = {
   to<T>(this: Signal<T>, target: T, dur: Val<number>, ease?: Easing): Tween<T> {
@@ -257,33 +222,33 @@ export const lerpImpl = {
   },
 };
 
-export const physicsImpl = {
-  spring<T>(this: Signal<T>, target: T, k = 100, c = 10): Animator<void> {
-    return spring(this, target, k, c);
-  },
-  toward<T>(this: Signal<T>, target: T, speed: Val<number>): Animator<void> {
-    return toward(this, target, speed);
-  },
+// ════════════════════════════════════════════════════════════════════
+// defineTrait(Cls, slot, impl)
+//
+// Stamps `Cls.prototype[slot] = impl` and, if the slot has an associated
+// method bundle (e.g. `.to()` for LERP), installs that too. Use in
+// value-type files instead of writing the prototype assignments by hand:
+//
+//   defineTrait(Vec, LINEAR, { add, sub, scale });
+//   defineTrait(Vec, LERP,   lerp);     // also installs .to()
+//   defineTrait(Vec, METRIC, metric);
+//   defineTrait(Vec, EQUALS, equals);
+// ════════════════════════════════════════════════════════════════════
+
+const TRAIT_METHODS: Record<symbol, object | undefined> = {
+  [LERP]: lerpImpl,
+  // future: extra (slot → method-bundle) pairs go here
 };
 
-const cellImpl = {
-  from<T>(this: Signal<T>, source: Val<T>): Animator<void> {
-    return from(this, source);
-  },
-  holding<T>(this: Signal<T>, v: T, dur: Val<number>): Animator<void> {
-    return holding(this, v, dur);
-  },
-  driven<T>(this: Signal<T>, step: (dt: number, t: number, v: T) => T | false): Animator<void> {
-    return driven(this, step);
-  },
-};
-
-// Universal cell-temporal methods are available on every Signal.
-Object.assign(Signal.prototype, cellImpl);
-
-// Type-side declaration of the universal methods.
-declare module "./signal" {
-  interface Signal<T> extends CellMethods<T> {}
+interface ProtoTarget { prototype: object }
+export function defineTrait<T>(Cls: ProtoTarget, slot: typeof LERP,   impl: Lerp<T>): void;
+export function defineTrait<T>(Cls: ProtoTarget, slot: typeof LINEAR, impl: Linear<T>): void;
+export function defineTrait<T>(Cls: ProtoTarget, slot: typeof METRIC, impl: Metric<T>): void;
+export function defineTrait<T>(Cls: ProtoTarget, slot: typeof EQUALS, impl: Equals<T>): void;
+export function defineTrait(Cls: ProtoTarget, slot: symbol, impl: unknown): void {
+  (Cls.prototype as Record<symbol, unknown>)[slot] = impl;
+  const methods = TRAIT_METHODS[slot];
+  if (methods) Object.assign(Cls.prototype, methods);
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -373,19 +338,20 @@ function scaledGen<R>(g: Animator<R>, scale: Val<number>): Animator<R> {
   return mapDt(g, (dt) => dt * get());
 }
 
+/** Scale every dt the gen sees:
+ *  • sleep durations (`yield N`) yielded out are passed through f
+ *  • dts the runtime resumes us with are passed back to gen as f(dt)
+ *
+ *  Both directions cover sleep-based pacing AND drive-based per-frame
+ *  loops (since drive is now yield-based — the runtime feeds dt via
+ *  gen.next(dt)). */
 function* mapDt<R>(g: Animator<R>, f: (dt: number) => number): Animator<R> {
   let r = g.next();
-  let resume: any;
   while (!r.done) {
     const v = r.value;
-    if (typeof v === "number") {
-      // Numeric resume values (sleep duration) get f-scaled.
-      resume = (yield f(v));
-      r = g.next(typeof resume === "number" ? resume : 0);
-    } else {
-      resume = (yield v);
-      r = g.next(resume);
-    }
+    const out: Yieldable = typeof v === "number" ? f(v) : v;
+    const resume = (yield out);
+    r = g.next(typeof resume === "number" ? f(resume) : resume);
   }
   return r.value;
 }

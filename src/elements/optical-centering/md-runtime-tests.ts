@@ -26,7 +26,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let done = false;
-      a.run(function* () {
+      a.start(function* () {
         yield 0.5;
         done = true;
       });
@@ -46,7 +46,7 @@ const TESTS: TestCase[] = [
       // user code calls `step`, the gen is already at its first yield.
       const a = new Anim();
       const dts: number[] = [];
-      a.run(function* () {
+      a.start(function* () {
         dts.push(yield);
         dts.push(yield);
       });
@@ -63,7 +63,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let n = 0;
-      a.run(function* () {
+      a.start(function* () {
         n = 1;
         yield 0;
         n = 2;
@@ -83,7 +83,7 @@ const TESTS: TestCase[] = [
         yield 0.1;
         n = 2;
       }
-      a.run(function* () {
+      a.start(function* () {
         yield* inner();
         n = 3;
       });
@@ -99,7 +99,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let done = false;
-      a.run(function* () {
+      a.start(function* () {
         yield (function* (): Animator {
           yield 0.3;
         })();
@@ -117,7 +117,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let done = false;
-      a.run(function* () {
+      a.start(function* () {
         yield [
           (function* (): Animator {
             yield 0.2;
@@ -140,7 +140,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let done = false;
-      a.run(function* () {
+      a.start(function* () {
         yield [
           (function* (): Animator {})(),
           (function* (): Animator {})(),
@@ -158,7 +158,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let done = false;
-      a.run(function* () {
+      a.start(function* () {
         yield [
           0.2,
           undefined,
@@ -181,7 +181,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       let aftermath = false;
       let finallyRan = false;
-      a.run(function* () {
+      a.start(function* () {
         try {
           a.stop();
           yield 1;
@@ -200,14 +200,14 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let runs = 0;
-      a.run(function* () {
+      a.start(function* () {
         runs++;
         yield 0.5;
         runs++;
       });
       a.step(0);
       a.stop();
-      a.run(function* () {
+      a.start(function* () {
         runs++;
         yield 0.5;
         runs++;
@@ -229,12 +229,12 @@ const TESTS: TestCase[] = [
         /* expected */
       };
       try {
-        a.run(function* () {
+        a.start(function* () {
           yield* (function* (): Animator {
             throw new Error("boom");
           })();
         });
-        a.run(function* () {
+        a.start(function* () {
           goodRan++;
           yield 0.1;
           goodRan++;
@@ -258,11 +258,11 @@ const TESTS: TestCase[] = [
         /* expected */
       };
       try {
-        a.run(function* () {
+        a.start(function* () {
           yield 0.05;
           throw new Error("boom");
         });
-        a.run(function* () {
+        a.start(function* () {
           goodRan++;
           yield 0.1;
           goodRan++;
@@ -288,7 +288,7 @@ const TESTS: TestCase[] = [
         /* expected */
       };
       try {
-        a.run(function* () {
+        a.start(function* () {
           yield [
             (function* (): Animator {
               throw new Error("boom");
@@ -335,7 +335,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const bus = new EventBus();
       let woken = false;
-      a.run(function* () {
+      a.start(function* () {
         yield bus.until("go");
         woken = true;
       });
@@ -353,7 +353,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       let captured: (() => void) | undefined;
       let woken = false;
-      a.run(function* () {
+      a.start(function* () {
         yield (wake) => {
           captured = wake;
           return () => {};
@@ -374,7 +374,7 @@ const TESTS: TestCase[] = [
       // Subscribe calls wake before returning; gen advances re-entrantly.
       const a = new Anim();
       let phase = 0;
-      a.run(function* () {
+      a.start(function* () {
         phase = 1;
         yield (wake) => {
           wake();
@@ -392,7 +392,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let disposed = false;
-      const handle = a.run(function* () {
+      const handle = a.start(function* () {
         yield (_wake) => () => {
           disposed = true;
         };
@@ -408,7 +408,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let finallyRan = false;
-      const handle = a.run(function* () {
+      const handle = a.start(function* () {
         try {
           yield 5;
         } finally {
@@ -428,7 +428,7 @@ const TESTS: TestCase[] = [
       let aFinally = 0;
       let bFinally = 0;
       let parentDone = false;
-      a.run(function* () {
+      a.start(function* () {
         yield race(
           (function* (): Animator {
             try {
@@ -460,7 +460,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let childFinally = 0;
-      const handle = a.run(function* () {
+      const handle = a.start(function* () {
         yield [
           (function* (): Animator {
             try {
@@ -489,7 +489,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let parentDone = false;
-      a.run(function* () {
+      a.start(function* () {
         yield race(
           (function* (): Animator {
             yield* (function* (): Animator {
@@ -521,7 +521,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const bus = new EventBus();
       let winner = "";
-      a.run(function* () {
+      a.start(function* () {
         yield race(
           0.5,
           bus.until("go"),
@@ -542,7 +542,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let resumed = false;
-      a.run(function* () {
+      a.start(function* () {
         yield race(
           0.1,
           (function* (): Animator {
@@ -563,7 +563,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const stop = cell(false);
       let phase = 0;
-      a.run(function* () {
+      a.start(function* () {
         yield* play(
           (function* (): Animator {
             phase = 1;
@@ -588,7 +588,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let childFinally = 0;
-      const handle = a.run(function* () {
+      const handle = a.start(function* () {
         yield (_wake, spawn) => {
           spawn!(
             (function* (): Animator {
@@ -625,7 +625,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let captured: ((g: Animator) => () => void) | undefined;
-      a.run(function* () {
+      a.start(function* () {
         yield (_wake, spawn) => {
           captured = spawn!;
           return () => {};
@@ -653,7 +653,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       let completes = 0;
       let cancels = 0;
-      a.run(function* () {
+      a.start(function* () {
         yield (_wake, spawn) => {
           spawn!(
             (function* (): Animator {
@@ -693,7 +693,7 @@ const TESTS: TestCase[] = [
         complete: (id: number) => events.push({ type: "complete", id }),
         cancel: (id: number) => events.push({ type: "cancel", id }),
       };
-      const handle = a.run(function* () {
+      const handle = a.start(function* () {
         yield 0.1;
       });
       a.step(0);
@@ -714,13 +714,13 @@ const TESTS: TestCase[] = [
       a.observer = {
         spawn: () => count++,
       };
-      a.run(function* () {
+      a.start(function* () {
         yield;
       });
       a.step(0);
       assert(count === 1, `pre-stop spawn should be observed`);
       a.observer = undefined;
-      a.run(function* () {
+      a.start(function* () {
         yield;
       });
       a.step(0);
@@ -813,7 +813,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       const p = vec(0, 0);
-      a.run(function* () {
+      a.start(function* () {
         yield [p.x.to(10, 0.1), p.y.to(20, 0.1)];
       });
       a.step(0);
@@ -1007,7 +1007,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const sh1 = { translate: vec(0, 0) };
       const sh2 = { translate: vec(100, 50) };
-      a.run(function* () {
+      a.start(function* () {
         yield* swap(sh1, sh2, 0.1);
       });
       a.step(0);
@@ -1030,7 +1030,7 @@ const TESTS: TestCase[] = [
         { translate: vec(0, 0) },
         { translate: vec(0, 0) },
       ];
-      a.run(function* () {
+      a.start(function* () {
         yield* splay(centre, 50, shapes, 0.1);
       });
       a.step(0);
@@ -1055,7 +1055,7 @@ const TESTS: TestCase[] = [
         { x: 100, y: 0 },
         { x: 0, y: 100 },
       ];
-      a.run(function* () {
+      a.start(function* () {
         yield* assemble(shapes, targets, 0.1);
       });
       a.step(0);
@@ -1070,7 +1070,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       const p = num(0);
-      a.run(every(0.1, () => { p.value++; }));
+      a.start(every(0.1, () => { p.value++; }));
       assert(p.value === 0, `starts at 0`);
       a.step(0);
       a.step(0.15);
@@ -1084,7 +1084,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const sig = num(0);
       let done = false;
-      a.run(function* () {
+      a.start(function* () {
         yield* spring(sig, 100, { precision: 0.01 });
         done = true;
       });
@@ -1100,7 +1100,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       const sig = num(50);
-      a.run(() => oscillate(sig, 10, 1)); // amp=10, freq=1Hz
+      a.start(() => oscillate(sig, 10, 1)); // amp=10, freq=1Hz
       a.step(0);
       a.step(0.25); // quarter period → near base + amp
       assert(Math.abs(sig.value - 60) < 0.5, `quarter: ${sig.value}`);
@@ -1114,7 +1114,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       const sig = num(0);
-      a.run(() => drift(sig, 100));
+      a.start(() => drift(sig, 100));
       a.step(0);
       a.step(0.5);
       assert(Math.abs(sig.value - 50) < 0.001, `at t=0.5: ${sig.value}`);
@@ -1126,7 +1126,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       const sig = num(0);
-      a.run(() => attract(sig, 100, 1));
+      a.start(() => attract(sig, 100, 1));
       a.step(0);
       // After t=1 at rate=1, approaches 1 - e^-1 ≈ 0.632.
       for (let i = 0; i < 100; i++) a.step(0.01);
@@ -1143,7 +1143,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const sig = cell(0);
       let woke = false;
-      a.run(function* () {
+      a.start(function* () {
         yield untilChange(sig);
         woke = true;
       });
@@ -1160,7 +1160,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const sig = cell(42);
       let woke = false;
-      a.run(function* () {
+      a.start(function* () {
         yield untilChange(sig);
         woke = true;
       });
@@ -1180,7 +1180,7 @@ const TESTS: TestCase[] = [
         resolve = r;
       });
       let woke = false;
-      const dispose = a.run(function* () {
+      const dispose = a.start(function* () {
         yield untilPromise(p);
         woke = true;
       });
@@ -1285,7 +1285,7 @@ export class MdRuntimeTests extends Diagram {
       ),
     );
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       for (let i = 0; i < TESTS.length; i++) {
         statuses[i].value = "pending";
         messages[i].value = "";

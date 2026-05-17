@@ -57,15 +57,8 @@ class Active {
   constructor(readonly gen: Animator<any>) {}
 }
 
-class Ticker {
-  alive = true;
-  t0 = 0;
-  constructor(readonly cb: (dt: number, t: number) => void) {}
-}
-
 export class Anim {
   private actives: Active[] = [];
-  private tickers: Ticker[] = [];
   private deadSeen = 0;
   /** Engine time in seconds since last `stop()`. */
   clock = 0;
@@ -82,7 +75,6 @@ export class Anim {
   stop(): void {
     for (const a of this.actives) this.cancel(a);
     this.actives.length = 0;
-    this.tickers.length = 0;
     this.clock = 0;
   }
 
@@ -90,18 +82,6 @@ export class Anim {
   step(dt: number): void {
     if (dt > 0) this.clock += dt;
     const clock = this.clock;
-    const onErr = this.onError;
-
-    const ts = this.tickers;
-    let tw = 0;
-    for (let i = 0; i < ts.length; i++) {
-      const t = ts[i];
-      if (!t.alive) continue;
-      try { t.cb(dt, clock - t.t0); }
-      catch (e) { onErr(e); t.alive = false; }
-      if (t.alive) ts[tw++] = t;
-    }
-    ts.length = tw;
 
     const arr = this.actives;
     const len = arr.length;
@@ -120,14 +100,6 @@ export class Anim {
       }
       arr.length = w;
     }
-  }
-
-  /** Per-frame callback. Used by `drive`. */
-  onFrame(cb: (dt: number, t: number) => void): () => void {
-    const t = new Ticker(cb);
-    t.t0 = this.clock;
-    this.tickers.push(t);
-    return () => { t.alive = false; };
   }
 
   private spawn(
@@ -259,11 +231,17 @@ export class Anim {
 // Standard combinators
 // ════════════════════════════════════════════════════════════════════
 
-/** Tick `step(dt, t)` each frame. Return `false` to complete. */
-export function drive(step: (dt: number, t: number) => boolean | void): Animator {
-  return suspend<void>((wake, _spawn, anim) =>
-    anim.onFrame((dt, t) => { if (step(dt, t) === false) wake(); }),
-  );
+/** Tick `step(dt, t)` each frame. Return `false` to complete.
+ *
+ *  `dt` is the runtime-resumed delta — so wrappers like `mapDt` (used
+ *  by `play().at(scale)`) pipe through transparently. */
+export function* drive(step: (dt: number, t: number) => boolean | void): Animator {
+  let t = 0;
+  while (true) {
+    const dt = (yield) as number;
+    t += dt;
+    if (step(dt, t) === false) return;
+  }
 }
 
 /** Spawn `g` and DON'T wait — parent resumes immediately. The fork

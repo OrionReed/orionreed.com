@@ -67,7 +67,7 @@ export class MdBehaviors extends Diagram {
     const ax = num(cx);
     const ay = num(laneY(0));
     const av = num(180);
-    this.anim.run(
+    this.anim.start(
       play([
         drift(ax, av),
         oscillate(ay, 32, 0.4),
@@ -76,7 +76,7 @@ export class MdBehaviors extends Diagram {
     );
     s(circle(vec(ax, ay), 9, { fill: "#1a1a1a" }));
     trail(ax, ay, "#5b8def", (sig, target) => {
-      this.anim.run(attract(sig, target, 9));
+      this.anim.start(attract(sig, target, 9));
     });
 
     // ── Lane 1: spring (red), pauses ────────────────────────────────
@@ -86,7 +86,7 @@ export class MdBehaviors extends Diagram {
     const by = num(laneY(1));
     const bv = num(-150);
     const byAmp = num(32);
-    this.anim.run(
+    this.anim.start(
       play([
         drift(bx, bv),
         oscillate(by, byAmp, 0.7),
@@ -96,7 +96,7 @@ export class MdBehaviors extends Diagram {
     // Pause: both axes stop together, hold, then snap back to motion.
     // Pure sequence — `play([...]).then(...)` reads as "do these
     // together, then continue".
-    this.anim.run(
+    this.anim.start(
       loop(function* () {
         yield 1.5;
         yield* play([
@@ -110,7 +110,7 @@ export class MdBehaviors extends Diagram {
     );
     s(circle(vec(bx, by), 9, { fill: "#1a1a1a" }));
     trail(bx, by, "#e25c5c", (sig, target) => {
-      this.anim.run(spring(sig, target, { stiffness: 200, damping: 15 }));
+      this.anim.start(spring(sig, target, { stiffness: 200, damping: 15 }));
     });
 
     // ── Lane 2: fixed-link play(teal) ─────────────────────────────
@@ -118,7 +118,7 @@ export class MdBehaviors extends Diagram {
     // forward: link[i] is placed exactly LINK_LEN from link[i-1].
     const lc = { x: cx, y: laneY(2) };
     const phase = num(0);
-    this.anim.run(drift(phase, 1));
+    this.anim.start(drift(phase, 1));
     const headPos = vec(
       () => lc.x + 90 * Math.sin(phase.value * 1.6),
       () => lc.y + 26 * Math.sin(phase.value * 2.3 + 0.6),
@@ -128,7 +128,7 @@ export class MdBehaviors extends Diagram {
     const links: Vec.Writable[] = Array.from({ length: N_CHAIN }, (_, i) =>
       vec(lc.x - i * LINK_LEN, lc.y),
     );
-    this.anim.run(
+    this.anim.start(
       drive(() => {
         let prev = headPos.value;
         for (let i = 0; i < N_CHAIN; i++) {

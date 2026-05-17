@@ -116,7 +116,7 @@ export class MdQrtpHandshake extends Diagram {
     // ── Animation ────────────────────────────────────────────────────
 
     const reset = snapshot(state);
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       reset();
       for (let i = 0; i < N; i++) {
         const [first, second] = R.shuffle(["A", "B"] as const);

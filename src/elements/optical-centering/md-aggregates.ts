@@ -50,7 +50,7 @@ export class MdAggregates extends Diagram {
       ),
     );
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       const sec = R.float(1.4, 2.0);
       const centre = view.center.value;
       yield [

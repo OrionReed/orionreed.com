@@ -2,7 +2,7 @@
 // the graph; signals drive updates. Owns the SVG element, the
 // viewBox (`view`/`fit`), and the host CSS sizing (`--d-w`/`--d-h`).
 
-import { Anim, attachRaf } from "@minim/core";
+import { Anim } from "@minim/core";
 import { toSig, type Val } from "@minim/signals";
 import { effect } from "@minim/signals";
 import { Shape, SVG_NS, mount, ensureArrowMarker, type Mount } from "@minim/shapes";
@@ -12,6 +12,23 @@ import { Marker } from "@minim/tex";
 // (other web/ files: relative imports stay local to keep the package self-contained)
 
 export const css = String.raw;
+
+/** Browser RAF adapter. Caps single-frame `dt` at 32 ms so tab-switch
+ *  catch-up doesn't deliver one giant step. Returns a detach function. */
+function attachRaf(anim: Anim): () => void {
+  if (typeof requestAnimationFrame !== "function") return () => {};
+  const FRAME_CAP_MS = 32;
+  let rafId = 0;
+  let last = 0;
+  const tick = (now: number): void => {
+    rafId = requestAnimationFrame(tick);
+    const dt = last ? Math.min(now - last, FRAME_CAP_MS) / 1000 : 0;
+    last = now;
+    anim.step(dt);
+  };
+  rafId = requestAnimationFrame(tick);
+  return () => cancelAnimationFrame(rafId);
+}
 
 export type Padding =
   | number

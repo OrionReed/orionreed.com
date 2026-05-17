@@ -65,7 +65,7 @@ export class MdTransitions extends Diagram {
         lane.shape(s, LEFT_PAD + i * stride, y),
       );
 
-      this.anim.run(loop(function* () {
+      this.anim.start(loop(function* () {
         yield* stagger(0.07, shapes, lane.intro);
         yield 0.6;
         yield* stagger(0.04, shapes, lane.outro);

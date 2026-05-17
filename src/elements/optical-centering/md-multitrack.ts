@@ -156,7 +156,7 @@ export class MdMultitrack extends Diagram {
       ),
     );
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       reset();
       yield* tl;
       yield 0.4;

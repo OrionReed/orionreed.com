@@ -153,7 +153,7 @@ export class MdRand extends Diagram {
       yield* body;
     }
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       reset();
       yield* rand(...MOVES.map((m) => record(m, m.run(subject))));
       yield 0.35;

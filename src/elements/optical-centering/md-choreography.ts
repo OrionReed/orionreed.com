@@ -71,7 +71,7 @@ export class MdChoreography extends Diagram {
     const orbitRate = num(0);
     const orbitCentre = vec(ORBIT_CENTRE.x, ORBIT_CENTRE.y);
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       reset();
       orbitRate.value = 0;
 

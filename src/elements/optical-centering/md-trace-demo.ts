@@ -72,7 +72,7 @@ export class MdTraceDemo extends Diagram {
     const now = clockSignal(this.anim);
     const trace = spans(this.anim);
 
-    this.anim.run(
+    this.anim.start(
       tag(function* demoAnim() {
         yield [t.fadeIn(a, 0.3), t.fadeUp(b, 0.7), t.spinIn(c, 0.5)];
         yield 0.2;

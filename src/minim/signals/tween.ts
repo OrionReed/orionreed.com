@@ -32,12 +32,11 @@
 // `Vec.signal(...)`, etc., for tweenable cells.
 
 import {
-  suspend,
   isGen,
-  drive,
   type Animator,
   type Yieldable,
 } from "../core/anim";
+import { drive, suspend } from "../core/compose";
 import { mapDt } from "../core/composability";
 import { easeOut } from "../core/easings";
 import { signal, Signal } from "./signal";

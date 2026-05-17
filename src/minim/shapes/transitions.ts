@@ -15,14 +15,25 @@ import type { Writable } from "./shape";
 type Lerpable = number | Vec;
 
 /** Eagerly advance `factory()` to its first yield (flushing pose side-
- *  effects), then return an Animator that re-yields and delegates. */
+ *  effects), then return an Animator that re-yields and forwards the
+ *  resumed value back into the inner gen. (Plain `yield* g` would
+ *  discard the first resume — the spec calls `g.next()` with no arg —
+ *  so a tween's `dt = yield` would get `undefined` on its first wake.) */
 const eager = <R>(factory: () => Animator<R>): Animator<R> => {
   const g = factory();
   const first = g.next();
   return (function* (): Animator<R> {
     if (first.done) return first.value;
-    yield first.value as Yieldable;
-    return yield* g;
+    let r: any = yield first.value as Yieldable;
+    try {
+      while (true) {
+        const step = g.next(r);
+        if (step.done) return step.value;
+        r = yield step.value;
+      }
+    } finally {
+      g.return(undefined as any);
+    }
   })();
 };
 

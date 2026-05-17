@@ -207,7 +207,7 @@ export class MdLerps extends Diagram {
       },
     ];
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       for (const f of FRAMES) {
         yield [
           n.to(f.n, DUR),

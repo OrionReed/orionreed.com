@@ -121,7 +121,7 @@ export class MdTimelineEditor extends Diagram {
       ),
     );
 
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       reset();
       yield* tl;
     }));

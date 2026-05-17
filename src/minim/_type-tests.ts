@@ -84,7 +84,7 @@ function* run(): Animator {
 }
 
 // Keep the function reachable so it gets typechecked.
-anim.run(run);
+anim.start(run);
 
 // ── Pure type-level assertions ────────────────────────────────────────
 

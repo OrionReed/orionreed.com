@@ -18,7 +18,7 @@ function makeRawYieldLoop(N: number, frames: number) {
     const a = new Anim();
     let acc = 0;
     function* w(): Animator { while (true) { const dt: number = yield; acc += dt; } }
-    for (let i = 0; i < N; i++) a.run(w);
+    for (let i = 0; i < N; i++) a.start(w);
     for (let f = 0; f < frames; f++) a.step(1 / 60);
     a.stop();
     return acc;
@@ -29,7 +29,7 @@ function makeDriveLoop(N: number, frames: number) {
   return () => {
     const a = new Anim();
     let acc = 0;
-    for (let i = 0; i < N; i++) a.run(drive((dt) => { acc += dt; }));
+    for (let i = 0; i < N; i++) a.start(drive((dt) => { acc += dt; }));
     for (let f = 0; f < frames; f++) a.step(1 / 60);
     a.stop();
     return acc;
@@ -43,7 +43,7 @@ function makeSpringSim(N: number, frames: number) {
     const vs = new Float64Array(N);
     for (let i = 0; i < N; i++) {
       const idx = i;
-      a.run(drive((dt) => {
+      a.start(drive((dt) => {
         const force = (1 - xs[idx]) * 170;
         const drag = -26 * vs[idx];
         vs[idx] += (force + drag) * dt;
@@ -62,7 +62,7 @@ function makeTween(N: number, frames: number) {
     const out = new Float64Array(N);
     for (let i = 0; i < N; i++) {
       const idx = i;
-      a.run(drive((_dt, t) => {
+      a.start(drive((_dt, t) => {
         if (t >= 1) { out[idx] = 1; return false; }
         out[idx] = t;
       }));
@@ -75,8 +75,8 @@ function makeTween(N: number, frames: number) {
 function makeSleepIdle(N: number, K: number, frames: number) {
   return () => {
     const a = new Anim();
-    for (let i = 0; i < N; i++) a.run(sleeper);
-    for (let i = 0; i < K; i++) a.run(driver);
+    for (let i = 0; i < N; i++) a.start(sleeper);
+    for (let i = 0; i < K; i++) a.start(driver);
     for (let f = 0; f < frames; f++) a.step(1 / 60);
     a.stop();
   };
@@ -86,7 +86,7 @@ function makeSpawnComplete(N: number) {
   return () => {
     const a = new Anim();
     function* w(): Animator {}
-    for (let i = 0; i < N; i++) a.run(w);
+    for (let i = 0; i < N; i++) a.start(w);
     a.step(0);
     a.stop();
   };
@@ -97,7 +97,7 @@ function makeSpawnCancel(N: number) {
     const a = new Anim();
     function* w(): Animator { yield; }
     const ds: (() => void)[] = [];
-    for (let i = 0; i < N; i++) ds.push(a.run(w));
+    for (let i = 0; i < N; i++) ds.push(a.start(w));
     for (const d of ds) d();
     a.stop();
   };
@@ -110,7 +110,7 @@ function makeSuspendWake(N: number) {
     function* w(): Animator {
       yield* suspend((wake) => { wakes.push(wake); return () => {}; });
     }
-    for (let i = 0; i < N; i++) a.run(w);
+    for (let i = 0; i < N; i++) a.start(w);
     a.step(1 / 60);
     for (const w of wakes) w();
     a.step(1 / 60);
@@ -126,7 +126,7 @@ function makeParallel(N: number, K: number) {
       const kids = Array.from({ length: K }, () => child());
       yield kids;
     }
-    for (let i = 0; i < N; i++) a.run(w);
+    for (let i = 0; i < N; i++) a.start(w);
     a.step(1 / 60); a.step(1 / 60); a.step(1 / 60);
     a.stop();
   };
@@ -145,7 +145,7 @@ function makeDeepYieldStar(N: number, depth: number) {
       return cur;
     }
     const f = makeChain(depth);
-    for (let i = 0; i < N; i++) a.run(f);
+    for (let i = 0; i < N; i++) a.start(f);
     a.step(1 / 60); a.step(1 / 60);
     a.stop();
   };
@@ -156,15 +156,15 @@ function makeMixed(_N: number, frames: number) {
     const a = new Anim();
     let dummy = 0;
     const Ndrive = 150, Nsleep = 150, Nsuspend = 100, Nshort = 100;
-    for (let i = 0; i < Ndrive; i++) a.run(drive((dt) => { dummy += dt; }));
-    for (let i = 0; i < Nsleep; i++) a.run(sleeper);
+    for (let i = 0; i < Ndrive; i++) a.start(drive((dt) => { dummy += dt; }));
+    for (let i = 0; i < Nsleep; i++) a.start(sleeper);
     const wakes: Array<() => void> = [];
     function* susp(): Animator {
       yield* suspend((w) => { wakes.push(w); return () => {}; });
     }
-    for (let i = 0; i < Nsuspend; i++) a.run(susp);
+    for (let i = 0; i < Nsuspend; i++) a.start(susp);
     function* shortLived(): Animator { yield; yield; }
-    for (let i = 0; i < Nshort; i++) a.run(shortLived);
+    for (let i = 0; i < Nshort; i++) a.start(shortLived);
     for (let f = 0; f < frames; f++) {
       a.step(1 / 60);
       if (f % 10 === 0 && wakes.length > 0) wakes.pop()!();
@@ -191,7 +191,7 @@ function makeUiButtons(N: number, frames: number) {
         yield 0.3;
       }
     }
-    for (let i = 0; i < N; i++) a.run(button);
+    for (let i = 0; i < N; i++) a.start(button);
     for (let f = 0; f < frames; f++) {
       a.step(1 / 60);
       for (let k = 0; k < 5 && wakes.length; k++) wakes.shift()!();

@@ -15,7 +15,7 @@ export class MdOrbits extends Diagram {
     const angularMotion = (period: number, sig?: Cell<number>) => {
       const a = sig ?? cell(Math.random() * 2 * Math.PI);
       const omega = (2 * Math.PI) / period;
-      this.anim.run(drive((dt) => { a.value = (a.peek() + omega * dt) % (2 * Math.PI); }));
+      this.anim.start(drive((dt) => { a.value = (a.peek() + omega * dt) % (2 * Math.PI); }));
       return a;
     };
 
@@ -71,7 +71,7 @@ export class MdOrbits extends Diagram {
     // Orbits keep integrating during the off-phase, so phases drift
     // freely and the next intro picks them up wherever they ended up.
     const bodies = [sun, mercury, venus, earth, saturn, outer];
-    this.anim.run(loop(function* () {
+    this.anim.start(loop(function* () {
       yield* stagger(0.2, bodies, (b) => bounceIn(b, 0.9));
       yield 6;
       yield* stagger(0.1, [...bodies].reverse(), (b) => zoomOut(b, 0.6));

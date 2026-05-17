@@ -114,7 +114,7 @@ export class MdReact extends Diagram {
       hits.value = 0;
       misses.value = 0;
       status.value = "running";
-      dispose = anim.run(loop(function* () {
+      dispose = anim.start(loop(function* () {
         const target = spawnTarget();
         yield* bounceIn(target, 0.3);
         yield* round(target);

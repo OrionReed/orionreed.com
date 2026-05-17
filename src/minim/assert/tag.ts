@@ -3,7 +3,7 @@
 // production stays untagged.
 //
 //     const t = tagAll({ fadeIn, fadeUp });
-//     anim.run(function*() {
+//     anim.start(function*() {
 //       yield [t.fadeIn(a, 0.3), t.fadeUp(b, 0.5)];
 //     });
 

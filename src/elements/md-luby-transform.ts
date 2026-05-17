@@ -21,7 +21,7 @@ export class MdLubyTransform extends Diagram {
 
     // Re-roll the cell pattern and source-edge gating each tick.
     const tick = num(0);
-    this.anim.run(every(0.5, () => { tick.value++; }));
+    this.anim.start(every(0.5, () => { tick.value++; }));
     const cells = derive(tick, () => R.bools(QR_GRID * QR_GRID));
     const edges = derive(tick, () => R.bools(N.value, 0.3, 1));
 

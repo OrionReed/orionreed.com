@@ -8,6 +8,7 @@ import {
   Anim,
   suspend,
   drive,
+  detach,
   type AnimObserver,
   type Animator,
 } from "@minim/core";
@@ -20,7 +21,7 @@ describe("yield contract", () => {
   it("yield; parks one frame", () => {
     let log = "";
     function* g(): any { log += "a"; yield; log += "b"; }
-    anim.run(g);
+    anim.start(g);
     expect(log).toBe("a");
     anim.step(0.016);
     expect(log).toBe("ab");
@@ -29,7 +30,7 @@ describe("yield contract", () => {
   it("the resume value of a frame yield is dt", () => {
     let saw: number | undefined;
     function* g(): any { saw = yield; }
-    anim.run(g);
+    anim.start(g);
     anim.step(0.025);
     expect(saw).toBeCloseTo(0.025, 9);
   });
@@ -37,7 +38,7 @@ describe("yield contract", () => {
   it("repeated parking ticks once per frame", () => {
     let n = 0;
     function* g(): any { while (true) { yield; n++; } }
-    anim.run(g);
+    anim.start(g);
     for (let i = 0; i < 10; i++) anim.step(0.016);
     expect(n).toBe(10);
   });
@@ -45,7 +46,7 @@ describe("yield contract", () => {
   it("yield N sleeps for ~N seconds", () => {
     let woke = false;
     function* g(): any { yield 0.1; woke = true; }
-    anim.run(g);
+    anim.start(g);
     anim.step(0.05); expect(woke).toBe(false);
     anim.step(0.06); anim.step(0.001);
     expect(woke).toBe(true);
@@ -54,21 +55,21 @@ describe("yield contract", () => {
   it("yield 0 is a tail-call (no frame consumed)", () => {
     let order = "";
     function* g(): any { order += "a"; yield 0; order += "b"; }
-    anim.run(g);
+    anim.start(g);
     expect(order).toBe("ab");
   });
 
   it("many tail-calls in one frame", () => {
     let n = 0;
     function* g(): any { for (let i = 0; i < 100; i++) { yield 0; n++; } }
-    anim.run(g);
+    anim.start(g);
     expect(n).toBe(100);
   });
 
   it("sleep across many small frames is FP-safe", () => {
     let woke = false;
     function* g(): any { yield 1.0; woke = true; }
-    anim.run(g);
+    anim.start(g);
     for (let i = 0; i < 999; i++) anim.step(0.001);
     expect(woke).toBe(false);
     anim.step(0.001); anim.step(0.001);
@@ -79,7 +80,7 @@ describe("yield contract", () => {
     let v: number | undefined;
     function* child(): any { yield; return 42; }
     function* parent(): any { v = yield* child(); }
-    anim.run(parent);
+    anim.start(parent);
     anim.step(0.016); anim.step(0.016);
     expect(v).toBe(42);
   });
@@ -95,7 +96,7 @@ describe("yield contract", () => {
       }
       return cur;
     }
-    anim.run(makeChain(8));
+    anim.start(makeChain(8));
     anim.step(0.016);
     expect(leafTicks).toBe(1);
   });
@@ -105,7 +106,7 @@ describe("yield contract", () => {
     function* a(): any { yield; }
     function* b(): any { yield; yield; }
     function* g(): any { yield [a(), b()]; done = true; }
-    anim.run(g);
+    anim.start(g);
     anim.step(0.016); expect(done).toBe(false);
     anim.step(0.016); expect(done).toBe(true);
   });
@@ -113,7 +114,7 @@ describe("yield contract", () => {
   it("yield [] sync-completes", () => {
     let done = false;
     function* g(): any { yield [] as any; done = true; }
-    anim.run(g);
+    anim.start(g);
     expect(done).toBe(true);
   });
 
@@ -125,7 +126,7 @@ describe("yield contract", () => {
       const kids = Array.from({ length: N }, () => leaf());
       yield kids; done = true;
     }
-    anim.run(g);
+    anim.start(g);
     anim.step(0.016); anim.step(0.016);
     expect(done).toBe(true);
   });
@@ -134,7 +135,7 @@ describe("yield contract", () => {
     let after = false;
     function* child(): any { yield; yield; }   // two-frame child
     function* g(): any { yield child(); after = true; }
-    anim.run(g);
+    anim.start(g);
     anim.step(0.016); expect(after).toBe(false);   // child still on its 2nd yield
     anim.step(0.016); expect(after).toBe(true);    // child completes; parent advances
   });
@@ -152,7 +153,7 @@ describe("suspend / wake", () => {
       const v = yield* suspend<number>((wake) => { storedWake = wake; return () => {}; });
       received = v;
     }
-    anim.run(g);
+    anim.start(g);
     storedWake!(7);
     expect(received).toBe(7);
   });
@@ -163,7 +164,7 @@ describe("suspend / wake", () => {
       yield* suspend<void>((wake) => { wake(); return () => {}; });
       after = true;
     }
-    anim.run(g);
+    anim.start(g);
     expect(after).toBe(true);
   });
 
@@ -175,7 +176,7 @@ describe("suspend / wake", () => {
       n++;
       yield* suspend<void>(() => () => {});
     }
-    anim.run(g);
+    anim.start(g);
     storedWake!(); storedWake!();
     expect(n).toBe(1);
   });
@@ -193,7 +194,7 @@ describe("suspend / wake", () => {
       yield* suspend<void>((w) => { wB = w; return () => {}; });
       bResumed = true;
     }
-    anim.run(a); anim.run(b);
+    anim.start(a); anim.start(b);
     wA!();
     expect(aResumed).toBe(true);
     expect(bResumed).toBe(true);
@@ -207,7 +208,7 @@ describe("suspend / wake", () => {
         n++;
       }
     }
-    anim.run(g);
+    anim.start(g);
     expect(n).toBe(5);
   });
 
@@ -218,7 +219,7 @@ describe("suspend / wake", () => {
       yield* suspend<void>((w) => { storedWake = w; return () => {}; });
       advanced = true;
     }
-    anim.run(g);
+    anim.start(g);
     anim.stop();
     storedWake!();
     expect(advanced).toBe(false);
@@ -233,7 +234,7 @@ describe("cancel", () => {
   it("dispose cancels and runs SuspendFn dispose", () => {
     let disposed = false;
     function* g(): any { yield* suspend<void>(() => () => { disposed = true; }); }
-    const d = anim.run(g);
+    const d = anim.start(g);
     anim.step(0.016);
     d();
     expect(disposed).toBe(true);
@@ -245,7 +246,7 @@ describe("cancel", () => {
       try { yield* suspend<void>(() => () => {}); }
       finally { cleaned = true; }
     }
-    const d = anim.run(g);
+    const d = anim.start(g);
     d();
     expect(cleaned).toBe(true);
   });
@@ -257,7 +258,7 @@ describe("cancel", () => {
     }
     function* gMid(): any { try { yield* gLeaf(); } finally { mid = true; } }
     function* gParent(): any { try { yield* gMid(); } finally { parent = true; } }
-    const d = anim.run(gParent);
+    const d = anim.start(gParent);
     anim.step(0.016);
     d();
     expect(leaf).toBe(true);
@@ -268,7 +269,7 @@ describe("cancel", () => {
   it("dispose called twice is idempotent", () => {
     let cleaned = 0;
     function* g(): any { try { yield* suspend(() => () => {}); } finally { cleaned++; } }
-    const d = anim.run(g);
+    const d = anim.start(g);
     d(); d(); d();
     expect(cleaned).toBe(1);
   });
@@ -280,7 +281,7 @@ describe("cancel", () => {
       yield* suspend<void>((_w) => { dispose!(); return () => {}; });
       after++;
     }
-    dispose = anim.run(g);
+    dispose = anim.start(g);
     expect(after).toBe(0);
   });
 
@@ -295,7 +296,7 @@ describe("cancel", () => {
       yield;
       afterMore++;
     }
-    dispose = anim.run(g);
+    dispose = anim.start(g);
     anim.step(0.016);
     expect(after).toBe(1);
     anim.step(0.016);
@@ -308,7 +309,7 @@ describe("cancel", () => {
     function* parent(): any {
       yield* suspend((_w, spawn) => { spawn(leaf()); return () => {}; });
     }
-    const d = anim.run(parent);
+    const d = anim.start(parent);
     anim.step(0.016);
     d();
     expect(leafDisposed).toBe(true);
@@ -320,7 +321,7 @@ describe("cancel", () => {
       try { yield* suspend(() => () => {}); } finally { leafDisposed = true; }
     }
     function* parent(): any { yield [leaf(), leaf()]; }
-    const d = anim.run(parent);
+    const d = anim.start(parent);
     anim.step(0.016);
     d();
     expect(leafDisposed).toBe(true);
@@ -329,7 +330,7 @@ describe("cancel", () => {
   it("stop() during a step doesn't lose pending cancels", () => {
     let cleaned = 0;
     function* g(): any { try { yield; } finally { cleaned++; } }
-    anim.run(g); anim.run(g); anim.run(g);
+    anim.start(g); anim.start(g); anim.start(g);
     anim.stop();
     expect(cleaned).toBe(3);
   });
@@ -339,7 +340,7 @@ describe("cancel", () => {
       try { yield* suspend(() => () => {}); }
       finally { anim.stop(); }
     }
-    const d = anim.run(g);
+    const d = anim.start(g);
     expect(() => d()).not.toThrow();
   });
 });
@@ -355,8 +356,8 @@ describe("error isolation", () => {
       let other = false;
       function* bad(): any { throw new Error("boom"); yield; }
       function* good(): any { yield; other = true; }
-      anim.run(bad);
-      anim.run(good);
+      anim.start(bad);
+      anim.start(good);
       anim.step(0.016);
       expect(other).toBe(true);
     } finally { console.error = orig; }
@@ -371,7 +372,7 @@ describe("error isolation", () => {
         try { yield* bad(); } catch { /* swallow */ }
         parentDone = true;
       }
-      anim.run(parent);
+      anim.start(parent);
       anim.step(0.016); anim.step(0.016);
       expect(parentDone).toBe(true);
     } finally { console.error = orig; }
@@ -381,8 +382,8 @@ describe("error isolation", () => {
     const orig = console.error; console.error = () => {};
     try {
       let other = 0;
-      anim.run(drive(() => { throw new Error("drive boom"); }));
-      anim.run(drive(() => { other++; }));
+      anim.start(drive(() => { throw new Error("drive boom"); }));
+      anim.start(drive(() => { other++; }));
       anim.step(1 / 60); anim.step(1 / 60);
       expect(other).toBeGreaterThan(0);
     } finally { console.error = orig; }
@@ -396,21 +397,21 @@ describe("drive", () => {
 
   it("accumulates dt", () => {
     let acc = 0;
-    anim.run(drive((dt) => { acc += dt; }));
+    anim.start(drive((dt) => { acc += dt; }));
     for (let i = 0; i < 10; i++) anim.step(0.1);
     expect(acc).toBeCloseTo(1.0, 9);
   });
 
   it("completes on returning false", () => {
     let n = 0;
-    anim.run(drive(() => { n++; if (n >= 3) return false; }));
+    anim.start(drive(() => { n++; if (n >= 3) return false; }));
     for (let i = 0; i < 10; i++) anim.step(1 / 60);
     expect(n).toBe(3);
   });
 
   it("cancel mid-flight stops the cb firing", () => {
     let n = 0;
-    const d = anim.run(drive(() => { n++; }));
+    const d = anim.start(drive(() => { n++; }));
     anim.step(1 / 60); anim.step(1 / 60);
     const at = n;
     d();
@@ -420,7 +421,7 @@ describe("drive", () => {
 
   it("`t` is time since registration", () => {
     let lastT = 0;
-    anim.run(drive((_dt, t) => { lastT = t; }));
+    anim.start(drive((_dt, t) => { lastT = t; }));
     anim.step(0.1); anim.step(0.1); anim.step(0.1);
     expect(lastT).toBeCloseTo(0.3, 9);
   });
@@ -434,7 +435,7 @@ describe("lifecycle", () => {
   it("zero-dt step still ticks parked actives", () => {
     let n = 0;
     function* g(): any { while (true) { yield; n++; } }
-    anim.run(g);
+    anim.start(g);
     anim.step(0); anim.step(0); anim.step(0);
     expect(n).toBe(3);
   });
@@ -442,16 +443,16 @@ describe("lifecycle", () => {
   it("anim is reusable after stop", () => {
     let n = 0;
     function* g(): any { yield; n++; }
-    anim.run(g); anim.step(0.016);
+    anim.start(g); anim.step(0.016);
     anim.stop();
     expect(n).toBe(1);
-    anim.run(g); anim.step(0.016);
+    anim.start(g); anim.step(0.016);
     expect(n).toBe(2);
   });
 
   it("clock resets to 0 on stop", () => {
     function* g(): any { while (true) yield; }
-    anim.run(g);
+    anim.start(g);
     anim.step(0.5); anim.step(0.5);
     expect(anim.clock).toBeCloseTo(1.0, 9);
     anim.stop();
@@ -461,7 +462,7 @@ describe("lifecycle", () => {
   it("cancelling 1000 actives in a tight loop doesn't crash or leak", () => {
     const ds: Array<() => void> = [];
     function* g(): any { yield; }
-    for (let i = 0; i < 1000; i++) ds.push(anim.run(g));
+    for (let i = 0; i < 1000; i++) ds.push(anim.start(g));
     anim.step(0.016);
     for (const d of ds) d();
     anim.step(0.016);
@@ -483,7 +484,7 @@ describe("AnimObserver", () => {
     };
     anim.observer = obs;
     function* g(): any { yield; }
-    anim.run(g); anim.run(g);
+    anim.start(g); anim.start(g);
     anim.step(0.016); anim.step(0.016);
     const spawns = spans.filter((s) => s[0] === "spawn");
     expect(spawns.length).toBe(2);
@@ -496,7 +497,7 @@ describe("AnimObserver", () => {
     let cancels = 0;
     anim.observer = { cancel: () => cancels++ };
     function* g(): any { yield* suspend(() => () => {}); }
-    const d = anim.run(g);
+    const d = anim.start(g);
     d();
     expect(cancels).toBe(1);
   });
@@ -508,7 +509,7 @@ describe("AnimObserver", () => {
     function* parent(): any {
       yield* suspend((_w, spawn) => { spawn(leaf()); return () => {}; });
     }
-    anim.run(parent);
+    anim.start(parent);
     anim.step(0.016);
     expect(spawns.length).toBe(2);
     expect(spawns[0][1]).toBeUndefined();    // parent has no parentId
@@ -522,7 +523,7 @@ describe("composability", () => {
     const anim = new Anim();
     let lastDt = 0;
     function* g(): any { while (true) { lastDt = yield; } }
-    anim.run(mapDt((dt) => dt * 0.5, g()));
+    anim.start(mapDt((dt) => dt * 0.5, g()));
     anim.step(1.0);
     expect(lastDt).toBeCloseTo(0.5, 9);
     anim.stop();
@@ -535,7 +536,7 @@ describe("composability", () => {
     function* slow(): any {
       try { while (true) yield; } finally { cleaned = true; }
     }
-    anim.run(withTimeout(0.1, slow()));
+    anim.start(withTimeout(0.1, slow()));
     for (let i = 0; i < 20; i++) anim.step(0.02);
     expect(cleaned).toBe(true);
     anim.stop();
@@ -547,17 +548,112 @@ describe("composability", () => {
     function* src(): any { runCount++; yield 0.05; yield 0.05; }
     const anim = new Anim();
     const trace: any[] = [];
-    anim.run(record(trace, src()));
+    anim.start(record(trace, src()));
     for (let f = 0; f < 10; f++) anim.step(0.02);
     anim.stop();
     expect(runCount).toBe(1);
     runCount = 0;
     for (let r = 0; r < 10; r++) {
       const a2 = new Anim();
-      a2.run(replay(trace) as Animator);
+      a2.start(replay(trace) as Animator);
       for (let f = 0; f < 10; f++) a2.step(0.02);
       a2.stop();
     }
     expect(runCount).toBe(0);
+  });
+});
+
+describe("detach", () => {
+  let anim: Anim;
+  beforeEach(() => { anim = new Anim(); });
+  afterEach(() => { anim.stop(); });
+
+  it("resumes parent immediately (does NOT park)", () => {
+    let log = "";
+    function* sub(): any { yield 999; }
+    function* parent(): any {
+      log += "before ";
+      yield detach(sub());
+      log += "after";
+    }
+    anim.start(parent);
+    expect(log).toBe("before after");
+  });
+
+  it("survives parent cancel", () => {
+    let subTicks = 0;
+    function* sub(): any { while (true) { yield; subTicks++; } }
+    function* parent(): any { yield detach(sub()); yield 999; }
+    const stop = anim.start(parent);
+    anim.step(0.016);
+    expect(subTicks).toBe(1);
+    stop();
+    anim.step(0.016);
+    expect(subTicks).toBe(2);
+  });
+
+  it("dies on engine.stop()", () => {
+    let subTicks = 0;
+    function* sub(): any { while (true) { yield; subTicks++; } }
+    anim.start(function* () { yield detach(sub()); });
+    anim.step(0.016);
+    expect(subTicks).toBe(1);
+    anim.stop();
+    anim.step(0.016);
+    expect(subTicks).toBe(1);
+  });
+});
+
+describe("onStep", () => {
+  it("fires every step with dt; disposer unsubscribes", () => {
+    const anim = new Anim();
+    const dts: number[] = [];
+    const off = anim.onStep((dt) => dts.push(dt));
+    anim.step(0.016);
+    anim.step(0.02);
+    off();
+    anim.step(0.03);
+    expect(dts).toEqual([0.016, 0.02]);
+    anim.stop();
+  });
+
+  it("multiple subscribers fire in order; safe across throws", () => {
+    const anim = new Anim();
+    anim.onError = () => {};
+    const calls: string[] = [];
+    anim.onStep(() => { calls.push("a"); });
+    anim.onStep(() => { calls.push("b"); throw new Error("boom"); });
+    anim.onStep(() => { calls.push("c"); });
+    anim.step(0.016);
+    expect(calls).toEqual(["a", "b", "c"]);
+    anim.stop();
+  });
+});
+
+describe("composition", () => {
+  it("drive composes with mapDt for time-scaling", async () => {
+    const { mapDt } = await import("@minim/core");
+    const anim = new Anim();
+    let total = 0;
+    anim.start(function* () {
+      yield* mapDt((dt: number) => dt * 2, drive((dt) => { total += dt; }));
+    });
+    anim.step(0.05);
+    anim.step(0.05);
+    expect(total).toBeCloseTo(0.2, 9); // 2 * (0.05 + 0.05)
+    anim.stop();
+  });
+
+  it("yield [number, gen] mixes sleeps and gens in parallel", () => {
+    const anim = new Anim();
+    let order = "";
+    function* gen(): any { order += "gen-start "; yield; order += "gen-end "; }
+    function* g(): any { order += "before "; yield [0.05, gen()]; order += "after"; }
+    anim.start(g);
+    expect(order).toBe("before gen-start ");
+    anim.step(0.05);
+    anim.step(0.001);
+    expect(order).toBe("before gen-start gen-end after");
+    anim.stop();
   });
 });
