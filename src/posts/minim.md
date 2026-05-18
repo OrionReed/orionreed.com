@@ -291,9 +291,13 @@ Nothing here is SVG-specific. The same generator + signal pipeline drives `<canv
 
 <md-canvas-field></md-canvas-field>
 
-The `code` package is a sibling of `tex` — same architecture (Prism-tokenized HTML inside a `<foreignObject>`, addressable token spans, reactive `source` signal), different content. Writing `c.source.value = newSrc` re-renders; `c.morphTo(newSrc, dur)` runs the same swap but with a Code Hike-style token diff between the old and new layouts. Matched tokens translate from their old position; added tokens fade in; removed tokens fade out in place.
+The `code` package is a sibling of `tex` — same architecture (a reactive `source` signal driving a `<foreignObject>`-hosted text wrapper), different content. Writing `c.source.value = newSrc` re-renders; `c.morphTo(newSrc, dur)` runs a token-level LCS diff between old and new, surgically wraps the changed ranges in inline-block spans, and lerps their widths (and heights, for multi-line edits) over the duration. Matched content stays as plain text and reflows naturally as the spans size up and down. Syntax colours come from CSS Custom Highlights painted over the wrapper's text ranges; they don't add DOM nodes.
 
 <md-code-demo></md-code-demo>
+
+Multi-line edits — extracting a local, hoisting a helper — fall out of the same machinery. The diff sees newline tokens like any other; coalesced delete/insert spans that contain newlines also animate height, so the lines collapse / open up vertically while surrounding code reflows.
+
+<md-code-refactor></md-code-refactor>
 
 <md-centering></md-centering>
 

@@ -1,8 +1,9 @@
-// Token-level code morph — three generator-shaped functions, each
+// Token-level code morph — four generator-shaped functions, each
 // differing from the previous by a small edit. CodeShape.morphTo runs
-// the snapshot-diff: matched tokens (the `function*` keyword, `let t =
-// 0`, the `while` loop scaffold) translate to new positions; added
-// tokens fade in; removed tokens fade out in place.
+// a token-level LCS diff, then surgically wraps deletes/inserts in
+// inline-block spans that shrink/grow in width. Surrounding text
+// reflows naturally as the spans change size; no per-token absolute
+// positioning, no WAAPI.
 
 import {Anchor, Diagram, Mount, css, label, loop, signal, vec, type Content} from "../../minim";
 import {code, codeStyles} from "../../minim/code";
@@ -24,29 +25,29 @@ const STATES = [
     opacity.value = t / secs;
   }
 }`,
-  `function* slideIn(x, dur) {
+  `function* fadeIn(opacity, secs, ease) {
   let t = 0;
-  while (t < dur) {
+  while (t < secs) {
     const dt = yield;
     t += dt;
-    x.value = lerp(start, end, t / dur);
+    opacity.value = ease(t / secs);
   }
 }`,
-  `function* spring(sig, target) {
-  let v = 0;
-  while (true) {
+  `function* fadeIn(sig, secs, ease) {
+  let t = 0;
+  while (t < secs) {
     const dt = yield;
-    v += (target - sig.value) * dt;
-    sig.value += v * dt;
+    t += dt;
+    sig.value = ease(t / secs);
   }
 }`,
 ];
 
 const LABELS = [
-  "fadeOut → fadeIn — flip the lerp direction",
-  "fadeIn → slideIn — change role (opacity → position)",
-  "slideIn → spring — different integrator, same skeleton",
-  "spring → fadeOut — closing the cycle",
+  "fadeOut → fadeIn — flip the lerp direction (small inline edit)",
+  "fadeIn → fadeIn(…, ease) — add a parameter, wrap the expression",
+  "rename opacity → sig — local rename, trailing tokens slide",
+  "back to fadeOut — close the cycle",
 ];
 
 export class MdCodeDemo extends Diagram {

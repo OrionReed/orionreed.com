@@ -90,8 +90,11 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   private readonly _children = signal<readonly AnyShape[]>([]);
   readonly children: Signal<readonly AnyShape[]> = this._children;
 
-  #parent: AnyShape | null = null;
-  get parent(): AnyShape | null { return this.#parent; }
+  // Reactive parent ref so descendants' `worldFrame` (and anything
+  // derived from it) invalidates on reparent. Plain field would leave
+  // `worldFrame` reading a stale matrix until something else dirtied it.
+  readonly #parentSig = signal<AnyShape | null>(null);
+  get parent(): AnyShape | null { return this.#parentSig.peek(); }
 
   constructor(
     intrinsicType?: string,
@@ -152,10 +155,9 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
       return compose(t, r, sc, tr.origin.value);
     });
 
-    // Re-parenting is NOT reactive; parent ref is a plain field.
     this.worldFrame = computed(() => {
       const local = this.localFrame.value;
-      const p = this.#parent;
+      const p = this.#parentSig.value;
       return p ? multiply(p.worldFrame.value, local) : local;
     });
 
@@ -280,7 +282,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   add(...children: AnyShape[]): AnyShape | AnyShape[] {
     for (const child of children) {
       this.el.appendChild(child.el);
-      child.#parent = this;
+      child.#parentSig.value = this;
     }
     if (children.length > 0) {
       this._children.value = [...this._children.peek(), ...children];
@@ -313,7 +315,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     this._children.value = [];
     this.disposers.forEach((d) => d());
     this.disposers = [];
-    this.#parent = null;
+    this.#parentSig.value = null;
     this.el.remove();
   }
 }

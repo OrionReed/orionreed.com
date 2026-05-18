@@ -1,29 +1,56 @@
 {
-  "name": "minim",
-  "version": "0.0.1",
+  "name": "@minim/minim",
+  "version": "0.1.0",
   "description": "Generator-driven animated SVG diagrams.",
   "type": "module",
   "main": "./index.ts",
   "module": "./index.ts",
   "types": "./index.ts",
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "import": "./index.ts"
+    }
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
   "sideEffects": false,
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json --resolve-full-paths",
     "test": "cd ../.. && vitest --config vitest.config.ts run",
     "test:watch": "cd ../.. && vitest --config vitest.config.ts",
     "bench": "node --expose-gc ../../node_modules/.bin/vite-node",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm test && npm run build"
+  },
+  "dependencies": {
+    "prism-esm": "^1.29.0-fix.6",
+    "temml": "^0.13.2"
   },
   "devDependencies": {
-    "alien-signals": "^3.2.1",
     "mitata": "^1.0.34",
     "reactive-framework-test-suite": "^0.0.2",
+    "tsc-alias": "^1.8.17",
     "vitest": "^4.1.6"
   },
+  "keywords": ["svg", "animation", "diagrams", "signals", "reactive"],
   "author": "Orion Reed",
   "license": "ISC",
   "repository": {
     "type": "git",
     "url": "https://github.com/OrionReed/orionreed.com",
     "directory": "src/minim"
-  }
+  },
+  "homepage": "https://orionreed.com",
+  "bugs": "https://github.com/OrionReed/orionreed.com/issues"
 }

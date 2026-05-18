@@ -3,6 +3,7 @@
 
 import {
   cut,
+  now,
   scaled,
   type Animator,
   type Cut,
@@ -11,15 +12,16 @@ import {
   type Resume,
 } from "./anim";
 
-/** Park each frame until `cb` returns `false`. */
+/** Park each frame until `cb` returns `false`. `t` is computed against
+ *  the engine/scaled clock via `now()` — no float accumulation. */
 export function* drive(
   cb: (dt: number, t: number) => boolean | void,
 ): Animator<void> {
-  let t = 0;
+  let t0 = NaN;
   while (true) {
     const dt = yield;
-    t += dt;
-    if (cb(dt, t) === false) return;
+    if (t0 !== t0) t0 = now() - dt;
+    if (cb(dt, now() - t0) === false) return;
   }
 }
 

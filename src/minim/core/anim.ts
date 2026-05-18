@@ -22,6 +22,16 @@ const DETACH_KEY = Symbol.for("minim.detach");
 const SCALE_KEY = Symbol.for("minim.scale");
 const CUT_KEY = Symbol.for("minim.cut");
 
+// Ambient clock for the currently-advancing Active. Symmetric with
+// `activeSub` in signals: swapped on entry, restored on exit, read by
+// primitives that need "what time is it" (tween/spring/drive/every).
+// In a scaled subtree, returns the locally-scaled clock; otherwise the
+// engine clock. Outside any advance, returns NaN.
+let activeClock = NaN;
+
+/** Local clock of the currently-advancing Active (NaN outside an advance). */
+export const now = (): number => activeClock;
+
 // `any` in Animator / Suspend / Scaled below is a generator-effect
 // boundary: TS generators can't type per-yield resume values, so the
 // runtime erases R at the Yieldable site. Combinators cast back to the
@@ -318,6 +328,8 @@ export class Anim {
 
   private advance(a: Active, payload: any, asThrow: boolean): void {
     a.busy = true;
+    const prevClock = activeClock;
+    activeClock = a.inScaledSubtree ? a.localClock : this.#clock;
     try {
       let r = asThrow ? a.gen.throw(payload) : a.gen.next(payload);
       while (!r.done) {
@@ -357,6 +369,7 @@ export class Anim {
     } catch (e) {
       this.settle(a, undefined, true, e);
     } finally {
+      activeClock = prevClock;
       a.busy = false;
       if (a.pendingReturn) {
         a.pendingReturn = false;

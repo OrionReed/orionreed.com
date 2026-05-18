@@ -1,21 +1,20 @@
-// CodeShape — tokenized source code rendered inside a `<foreignObject>`,
-// with a reactive `source` signal as the source of truth.
+// CodeShape — source code as a reactive Shape with a `source: Signal<string>`
+// as the source of truth.
 //
-// Architecture mirrors `tex`: one Shape, one foreignObject, one wrapper
-// `<div>` holding tokenized HTML. Tokens are `<span>`s carrying both
-// Prism's standard class ("token keyword") and a `minim-code-token`
-// marker class so morph can find them. Each token also carries a
-// `data-key` for diff matching.
+// Default rendering: plain text in a `<foreignObject>`/`<div>` wrapper.
+// No spans for syntax highlighting (that lands later via CSS Custom
+// Highlights painted on Range objects — same approach the existing
+// `md-syntax.ts` already uses, can be lifted in).
 //
-// Direct writes to `code.source` re-render synchronously (no animation).
-// `code.morphTo(target, dur)` writes the source AND animates a
-// token-level diff between old and new layouts — see `morph.ts`.
+// Animation: `code.morphTo(target, dur)` runs a token-level diff and
+// surgically cuts the wrapper's text into inline-block spans only where
+// edits happen. See `morph.ts`.
 
 import {effect, signal, type Signal, type Val, value} from "@minim/signals";
 import {Shape, type ShapeOpts} from "@minim/shapes";
 import {type Animator, type Easing} from "@minim/core";
-import {tokenize, type Token} from "./tokenize";
-import {morph as morphTokens} from "./morph";
+import {morph} from "./morph";
+import {tokenize} from "./tokenize";
 
 export interface CodeOpts extends ShapeOpts {
   /** Font size in user units. Default 14. */
@@ -26,31 +25,13 @@ export interface CodeOpts extends ShapeOpts {
   language?: string;
 }
 
-/** Class stamped on every token span for morph's `querySelectorAll`. */
-export const TOKEN_CLASS = "minim-code-token";
+/** Class stamped on every span that morph creates surgically. Demos /
+ *  consumers can target `.minim-code-del` / `.minim-code-ins` separately
+ *  if they want to style the in-flight states. */
+export const TOKEN_CLASS = "minim-code-tok";
 
 const DEFAULT_FONT =
   "ui-monospace, SFMono-Regular, Menlo, 'Cascadia Code', monospace";
-
-const esc = (s: string): string =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-/** Build the inner HTML for a token sequence. Typed tokens become
- *  `<span class="minim-code-token token TYPE">`; untyped runs (whitespace
- *  / plain text) splice through as raw text. `white-space: pre` on the
- *  wrapper preserves newlines and indentation. */
-export const renderHTML = (toks: readonly Token[]): string => {
-  let out = "";
-  for (const t of toks) {
-    if (t.type) {
-      const k = `${t.type}:${esc(t.text)}`;
-      out += `<span class="${TOKEN_CLASS} token ${t.type}" data-tok-key="${k}">${esc(t.text)}</span>`;
-    } else {
-      out += esc(t.text);
-    }
-  }
-  return out;
-};
 
 const wrapperCss = (fontSize: number, fontFamily: string): string =>
   [
@@ -65,13 +46,16 @@ const wrapperCss = (fontSize: number, fontFamily: string): string =>
     "color:var(--text-color)",
   ].join(";");
 
-/** Measure rendered HTML offscreen; returns the wrapper's box size in
- *  the same font/CSS regime the live wrapper will use. Avoids a flash
- *  by sizing the foreignObject correctly before first paint. */
-const measure = (html: string, fontSize: number, fontFamily: string): {w: number; h: number} => {
+/** Measure rendered plain text offscreen; used to seed the foreignObject
+ *  size on construction without a paint-flash. */
+const measure = (
+  text: string,
+  fontSize: number,
+  fontFamily: string,
+): {w: number; h: number} => {
   const div = document.createElement("div");
   div.style.cssText = `position:absolute;left:-99999px;top:0;visibility:hidden;${wrapperCss(fontSize, fontFamily)}`;
-  div.innerHTML = html;
+  div.textContent = text;
   document.body.appendChild(div);
   try {
     return {w: div.offsetWidth, h: div.offsetHeight};
@@ -80,21 +64,25 @@ const measure = (html: string, fontSize: number, fontFamily: string): {w: number
   }
 };
 
-/** A Shape rendering syntax-highlighted source via Prism. `source` is
- *  the writable source of truth; direct writes re-render synchronously,
- *  `.morphTo(target, dur)` writes and animates the transition. */
+/** A Shape rendering source code. Writable `source` signal drives both
+ *  the static view (direct writes re-render plain text) and the
+ *  animated view (`morphTo` runs the surgical diff). */
 export class CodeShape extends Shape {
   readonly source: Signal<string>;
   readonly width: Signal<number>;
   readonly height: Signal<number>;
   readonly language: string;
-  /** Live HTML wrapper inside the foreignObject. Token spans are direct
-   *  children; morph reads `wrapper.querySelectorAll(".minim-code-token")`. */
   readonly wrapper: HTMLDivElement;
 
-  /** When true, `source` writes are made by morph itself and the
-   *  auto-rerender effect skips work (morph owns the DOM swap). */
+  /** When true, the auto-rerender effect bails out — morph manages the
+   *  DOM swap itself and only commits to `source` at the end. */
   #inMorph = false;
+
+  /** Ranges currently registered into the global `CSS.highlights`
+   *  registry for syntax colouring. We track them per-instance so
+   *  cleanup / re-paint can target exactly the ranges this CodeShape
+   *  added, without touching other CodeShapes' ranges. */
+  readonly #highlightRanges: Range[] = [];
 
   constructor(initial: Val<string>, opts: CodeOpts = {}) {
     const fontSize = opts.size ?? 14;
@@ -102,8 +90,7 @@ export class CodeShape extends Shape {
     const language = opts.language ?? "typescript";
 
     const initialStr = value(initial);
-    const initialHtml = renderHTML(tokenize(initialStr, language));
-    const {w: w0, h: h0} = measure(initialHtml, fontSize, fontFamily);
+    const {w: w0, h: h0} = measure(initialStr, fontSize, fontFamily);
 
     const w = signal(w0);
     const h = signal(h0);
@@ -123,50 +110,103 @@ export class CodeShape extends Shape {
     const fo = this.intrinsic as SVGForeignObjectElement;
     fo.setAttribute("x", "0");
     fo.setAttribute("y", "0");
+    // Both flavours of overflow:visible — Chromium honours the SVG
+    // attribute over the CSS one. Spans in mid-morph that extend past
+    // the FO bounds should still render.
+    fo.setAttribute("overflow", "visible");
     fo.style.overflow = "visible";
     this.attr("width", w);
     this.attr("height", h);
 
     this.wrapper = document.createElement("div");
     this.wrapper.style.cssText = wrapperCss(fontSize, fontFamily);
-    this.wrapper.innerHTML = initialHtml;
+    this.wrapper.textContent = initialStr;
     fo.appendChild(this.wrapper);
 
-    // Direct source writes re-render. Morph sets the flag to suppress
-    // this so it can manage the DOM swap itself.
+    // Direct writes to `source` re-render synchronously. Morph sets
+    // the flag to skip this and own the DOM swap itself.
     this.disposers.push(
       effect(() => {
         const src = this.source.value;
         if (this.#inMorph) return;
         this.#render(src);
       }),
+      () => this.#clearHighlights(),
     );
-
-    // If `initial` was reactive, bind one-way.
-    if (initial !== initialStr && typeof initial !== "string") {
-      this.disposers.push(this.source.bind(initial));
-    }
   }
 
-  /** Re-tokenize + replace innerHTML + remeasure. */
+  /** Plain-text re-render: replace wrapper text, remeasure, push sizes,
+   *  re-paint syntax-colour highlights. */
   #render(src: string): void {
-    this.wrapper.innerHTML = renderHTML(tokenize(src, this.language));
+    this.wrapper.textContent = src;
     const nw = this.wrapper.offsetWidth;
     const nh = this.wrapper.offsetHeight;
     if (nw !== this.width.peek()) this.width.value = nw;
     if (nh !== this.height.peek()) this.height.value = nh;
+    this.#paintHighlights(src);
   }
 
-  /** Animate from the current source to `target`. Matched tokens move
-   *  from their old position to their new position; added tokens fade
-   *  in; removed tokens fade out in place. */
+  /** Tokenize `src` and register a Range for each typed token into the
+   *  global `CSS.highlights` registry under the token's type name. The
+   *  shadow stylesheet's `::highlight(keyword)` rules then paint colour
+   *  over those ranges without mutating the DOM. Old ranges from a
+   *  previous render are cleared first. */
+  #paintHighlights(src: string): void {
+    this.#clearHighlights();
+    if (typeof CSS === "undefined" || !("highlights" in CSS)) return;
+    const textNode = this.wrapper.firstChild;
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
+
+    let pos = 0;
+    for (const tok of tokenize(src, this.language)) {
+      if (tok.type !== "") {
+        const r = new Range();
+        try {
+          r.setStart(textNode, pos);
+          r.setEnd(textNode, pos + tok.text.length);
+          let h = CSS.highlights.get(tok.type);
+          if (h === undefined) {
+            h = new Highlight();
+            CSS.highlights.set(tok.type, h);
+          }
+          h.add(r);
+          this.#highlightRanges.push(r);
+        } catch {
+          // setStart/setEnd can throw if the offset is out of bounds —
+          // shouldn't happen with our concatenated text, but be safe.
+        }
+      }
+      pos += tok.text.length;
+    }
+  }
+
+  /** @internal Used by `morph` to wipe highlights before the wrapper's
+   *  DOM is restructured (so old Ranges don't paint over the morph
+   *  spans at stale positions). Re-painted by the next `#render`. */
+  _clearHighlights(): void {
+    this.#clearHighlights();
+  }
+
+  #clearHighlights(): void {
+    if (this.#highlightRanges.length === 0) return;
+    if (typeof CSS !== "undefined" && "highlights" in CSS) {
+      for (const r of this.#highlightRanges) {
+        for (const [, h] of CSS.highlights as unknown as Map<string, Highlight>) {
+          h.delete(r);
+        }
+      }
+    }
+    this.#highlightRanges.length = 0;
+  }
+
+  /** Animate from the current source to `target` via token-level diff
+   *  + surgical-cut morph. See `morph.ts`. */
   morphTo(target: string, dur: number, ease?: Easing): Animator<void> {
-    return morphTokens(this, target, dur, ease);
+    return morph(this, target, dur, ease);
   }
 
-  /** @internal Used by `morph` to write the source without triggering
-   *  the auto-rerender effect (morph manages the swap itself). Also
-   *  performs the swap so layout is settled before morph snapshots. */
+  /** @internal Used by `morph` to commit the new source at completion
+   *  while suppressing the auto-rerender effect. */
   _setSourceAndRender(src: string): void {
     this.#inMorph = true;
     try {
@@ -182,36 +222,40 @@ export class CodeShape extends Shape {
 export const code = (source: Val<string>, opts?: CodeOpts): CodeShape =>
   new CodeShape(source, opts);
 
-/** Default Prism-token CSS. Drop into your `Diagram.styles` (via the
- *  `css` tag) so token spans render with theme colours. Uses
- *  `--prettylights-*` vars if present (set globally by `md-syntax.css`)
- *  and falls back to GitHub-ish hex values otherwise. */
+/** Styling for syntax-colour highlights (via CSS Custom Highlights —
+ *  ranges painted by Prism token type) and for morph delete/insert
+ *  spans during animation. Drop into a `Diagram.styles` block via the
+ *  `css` tag so the rules land in the Diagram's shadow root, where
+ *  the CodeShape's wrapper lives. */
 export const codeStyles = `
-  .minim-code-token.token { color: inherit; }
-  .minim-code-token.keyword,
-  .minim-code-token.rule { color: var(--prettylights-keyword, #cf222e); }
-  .minim-code-token.string,
-  .minim-code-token.attr-value { color: var(--prettylights-string, #0a3069); }
-  .minim-code-token.comment,
-  .minim-code-token.prolog,
-  .minim-code-token.doctype,
-  .minim-code-token.cdata { color: var(--prettylights-comment, #59636e); }
-  .minim-code-token.function,
-  .minim-code-token.class-name,
-  .minim-code-token.entity,
-  .minim-code-token.selector { color: var(--prettylights-entity, #6639ba); }
-  .minim-code-token.tag,
-  .minim-code-token.boolean,
-  .minim-code-token.property,
-  .minim-code-token.symbol { color: var(--prettylights-entity-tag, #0550ae); }
-  .minim-code-token.constant,
-  .minim-code-token.attr-name,
-  .minim-code-token.builtin,
-  .minim-code-token.char,
-  .minim-code-token.operator { color: var(--prettylights-constant, #0550ae); }
-  .minim-code-token.number,
-  .minim-code-token.punctuation,
-  .minim-code-token.atrule { color: var(--prettylights-fg, inherit); }
-  .minim-code-token.variable { color: var(--prettylights-variable, #953800); }
-  .minim-code-token.regex { color: var(--prettylights-string-regexp, #116329); font-weight: bold; }
+  .minim-code-del { color: var(--prettylights-deleted-text, inherit); }
+  .minim-code-ins { color: var(--prettylights-inserted-text, inherit); }
+
+  /* Syntax colours via CSS Custom Highlights. Token type names match
+     Prism's standard classification. Fallback hex matches GitHub's
+     light theme; pages that set --prettylights-* (e.g. md-syntax.css)
+     get their dark/light dual theme automatically. */
+  ::highlight(keyword),
+  ::highlight(rule) { color: var(--prettylights-keyword, #cf222e); }
+  ::highlight(string),
+  ::highlight(attr-value) { color: var(--prettylights-string, #0a3069); }
+  ::highlight(comment),
+  ::highlight(prolog),
+  ::highlight(doctype),
+  ::highlight(cdata) { color: var(--prettylights-comment, #59636e); }
+  ::highlight(function),
+  ::highlight(class-name),
+  ::highlight(entity),
+  ::highlight(selector) { color: var(--prettylights-entity, #6639ba); }
+  ::highlight(tag),
+  ::highlight(boolean),
+  ::highlight(property),
+  ::highlight(symbol) { color: var(--prettylights-entity-tag, #0550ae); }
+  ::highlight(constant),
+  ::highlight(attr-name),
+  ::highlight(builtin),
+  ::highlight(char),
+  ::highlight(operator) { color: var(--prettylights-constant, #0550ae); }
+  ::highlight(variable) { color: var(--prettylights-variable, #953800); }
+  ::highlight(regex) { color: var(--prettylights-string-regexp, #116329); }
 `;

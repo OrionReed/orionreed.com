@@ -20,6 +20,7 @@ import {
 } from "./traits";
 import {
   drive,
+  now,
   suspend,
   race,
   withScale,
@@ -31,47 +32,52 @@ import {
 
 const defaultEase = easeOut;
 
-/** Chainable Animator wrapper so `.to(A).to(B).from(start)` reads naturally. */
+type Seg<T> =
+  | { readonly kind: "pose"; readonly target: T }
+  | { readonly kind: "to"; readonly target: T; readonly dur: Val<number>; readonly ease?: Easing };
+
+/** Chainable Animator over a Signal: `.to(...).to(...).from(start)` reads
+ *  naturally. `.to`/`.from` are pure data — segments accumulate; the
+ *  generator is built lazily on first `next()` and runs them in order. */
 export class Tween<T> implements Animator<void> {
-  constructor(
-    private sig: Signal<T>,
-    private gen: Animator<void>,
-  ) {}
+  readonly #sig: Signal<T>;
+  readonly #segs: readonly Seg<T>[];
+  #gen?: Animator<void>;
+
+  constructor(sig: Signal<T>, segs: readonly Seg<T>[] = []) {
+    this.#sig = sig;
+    this.#segs = segs;
+  }
 
   /** Append a tween segment from current value to `target` over `dur`. */
   to(target: T, dur: Val<number>, ease?: Easing): Tween<T> {
-    const sig = this.sig;
-    const prior = this.gen;
-    return new Tween(
-      sig,
-      (function* (): Animator<void> {
-        yield* prior;
-        yield* tweenStep(sig, target, dur, ease);
-      })(),
-    );
+    return new Tween(this.#sig, [...this.#segs, { kind: "to", target, dur, ease }]);
   }
 
   /** Pose `start` as the first step, then run the rest of the chain. */
   from(start: T): Tween<T> {
-    const sig = this.sig;
-    const prior = this.gen;
-    return new Tween(
-      sig,
-      (function* (): Animator<void> {
-        sig.value = start;
-        yield* prior;
-      })(),
-    );
+    return new Tween(this.#sig, [{ kind: "pose", target: start }, ...this.#segs]);
+  }
+
+  #run(): Animator<void> {
+    const sig = this.#sig;
+    const segs = this.#segs;
+    return (function* () {
+      for (const seg of segs) {
+        if (seg.kind === "pose") { sig.value = seg.target; continue; }
+        yield* tweenStep(sig, seg.target, seg.dur, seg.ease);
+      }
+    })();
   }
 
   next(v?: number): IteratorResult<Yieldable, void> {
-    return this.gen.next(v as number);
+    return (this.#gen ??= this.#run()).next(v as number);
   }
   return(v?: void): IteratorResult<Yieldable, void> {
-    return this.gen.return(v as void);
+    return (this.#gen ??= this.#run()).return(v as void);
   }
   throw(e: unknown): IteratorResult<Yieldable, void> {
-    return this.gen.throw(e);
+    return (this.#gen ??= this.#run()).throw(e);
   }
   [Symbol.iterator](): this {
     return this;
@@ -90,16 +96,17 @@ function* tweenStep<T>(
   }
   const start = sig.peek();
   const D = valFn(dur);
-  // Epsilon: with dt=1/60, six frames give 0.0999...8 — without the
-  // guard a `dur=0.1` tween completes on frame 7, not 6.
-  yield* drive((_dt, t) => {
+  // `t` is sampled (`now() - t0`) every frame, not accumulated locally
+  // — so the only float drift left is the engine clock itself. Sub-dt
+  // tolerance at the comparison boundary handles that; we are not
+  // hiding a compounding accumulator, just the one-step rounding.
+  yield* drive((dt, t) => {
     const total = D();
-    if (t + 1e-9 >= total) {
+    if (total <= 0 || t + dt * 1e-3 >= total) {
       sig.value = target;
       return false;
     }
-    const u = total > 0 ? t / total : 1;
-    sig.value = lerpFn(start, target, ease(u));
+    sig.value = lerpFn(start, target, ease(t / total));
   });
 }
 
@@ -110,7 +117,7 @@ export function tween<T>(
   dur: Val<number>,
   ease?: Easing,
 ): Tween<T> {
-  return new Tween(sig, tweenStep(sig, target, dur, ease));
+  return new Tween(sig, [{ kind: "to", target, dur, ease }]);
 }
 
 export interface SpringOpts {
@@ -128,8 +135,10 @@ export interface SpringOpts {
 }
 
 /** Pull `sig` toward `target` with second-order damped-spring dynamics:
- *  `x'' = ω²·(target - x) - 2ζω·x'`. `target` may be reactive (read each
- *  frame). Settles when both distance and velocity drop below `precision`. */
+ *  `x'' = ω²·(target - x) - 2ζω·x'`. Closed-form per step — unconditionally
+ *  stable at any `dt`, branches by damping regime. `target` may be reactive
+ *  (sampled each frame, treated as piecewise constant over `dt`). Settles
+ *  when `‖x - target‖ < eps` and `‖v‖ < eps · ω`. */
 export function* spring<T>(
   sig: Signal<T>,
   target: Val<T>,
@@ -144,21 +153,66 @@ export function* spring<T>(
   }
   const omega = opts.omega ?? 13;
   const zeta = opts.zeta ?? 1;
-  const stiffness = omega * omega; // k = ω²
-  const damping = 2 * zeta * omega; // c = 2ζω
   const eps = opts.precision ?? 1e-4;
   const T = valFn(target);
-  let vel: T | undefined;
+
+  // Zero-vector of the value's algebra; produced by scaling any T by 0.
+  const zero: T = lin.scale(sig.peek(), 0);
+  let vel: T = zero;
+
   yield* drive((dt) => {
     const t = T();
     const cur = sig.peek();
-    const disp = lin.sub(t, cur); // target - cur
-    const vAccel = lin.scale(disp, stiffness); // ω² · disp
-    const damp = vel ? lin.scale(vel, damping) : lin.scale(disp, 0);
-    const accel = lin.sub(vAccel, damp); // ω²·disp - 2ζω·v
-    vel = vel ? lin.add(vel, lin.scale(accel, dt)) : lin.scale(accel, dt);
-    sig.value = lin.add(cur, lin.scale(vel, dt));
-    if (eps > 0 && met(cur, t) < eps && met(vel, t) < eps * 100) {
+    // Solve in displacement-space: e = cur - target (so target ≡ origin).
+    // Closed-form for ė = v, v̇ = -ω²·e - 2ζω·v over a step of length dt.
+    const e0 = lin.sub(cur, t);
+    const v0 = vel;
+
+    let e1: T, v1: T;
+    if (zeta < 1 - 1e-6) {
+      // Underdamped: oscillating envelope.
+      const zw = zeta * omega;
+      const wd = omega * Math.sqrt(1 - zeta * zeta);
+      const E = Math.exp(-zw * dt);
+      const c = Math.cos(wd * dt);
+      const s = Math.sin(wd * dt);
+      // B = (v0 + zw·e0) / wd
+      const B = lin.scale(lin.add(v0, lin.scale(e0, zw)), 1 / wd);
+      // e1 = E · (e0·c + B·s)
+      const inner = lin.add(lin.scale(e0, c), lin.scale(B, s));
+      e1 = lin.scale(inner, E);
+      // v1 = -zw·e1 + E·wd · (B·c - e0·s)
+      const swing = lin.sub(lin.scale(B, c), lin.scale(e0, s));
+      v1 = lin.add(lin.scale(e1, -zw), lin.scale(swing, E * wd));
+    } else if (zeta > 1 + 1e-6) {
+      // Overdamped: two real roots.
+      const r = omega * Math.sqrt(zeta * zeta - 1);
+      const r1 = -zeta * omega + r;
+      const r2 = -zeta * omega - r;
+      const denom = r2 - r1;
+      // B = (v0 - r1·e0) / (r2 - r1); A = e0 - B
+      const B = lin.scale(lin.sub(v0, lin.scale(e0, r1)), 1 / denom);
+      const A = lin.sub(e0, B);
+      const E1 = Math.exp(r1 * dt);
+      const E2 = Math.exp(r2 * dt);
+      e1 = lin.add(lin.scale(A, E1), lin.scale(B, E2));
+      v1 = lin.add(lin.scale(A, r1 * E1), lin.scale(B, r2 * E2));
+    } else {
+      // Critically damped (ζ ≈ 1).
+      const E = Math.exp(-omega * dt);
+      // B = v0 + ω·e0; e(t) = (e0 + B·t)·E
+      const B = lin.add(v0, lin.scale(e0, omega));
+      const Bt = lin.scale(B, dt);
+      e1 = lin.scale(lin.add(e0, Bt), E);
+      // v(t) = B·E - ω·e(t)
+      v1 = lin.sub(lin.scale(B, E), lin.scale(e1, omega));
+    }
+
+    vel = v1;
+    sig.value = lin.add(t, e1); // x_new = target + e_new
+
+    // Settle: both displacement and velocity small (dimensionally matched).
+    if (eps > 0 && met(e1, zero) < eps && met(v1, zero) < eps * omega) {
       sig.value = t;
       return false;
     }
@@ -421,20 +475,22 @@ export function loop(factory: () => Animator): Play {
   );
 }
 
-/** Run `fn` every `sec` seconds (drift-corrected, `sec` may be reactive). */
+/** Run `fn` every `sec` seconds (drift-corrected, `sec` may be reactive).
+ *  Schedules against `now()` so there's no float accumulation. */
 export function every(sec: Val<number>, fn: () => void): Play {
   const getSec = valFn(sec);
   return play(
     (function* (): Animator {
-      let acc = 0;
+      yield; // wait one frame so now() is established
+      let nextAt = now() + Math.max(0, getSec());
       while (true) {
-        const dt = yield;
-        acc += dt;
+        yield;
+        const t = now();
         const period = getSec();
-        if (period <= 0) continue;
-        while (acc >= period) {
+        if (period <= 0) { nextAt = t; continue; }
+        while (t >= nextAt) {
           fn();
-          acc -= period;
+          nextAt += period;
         }
       }
     })(),

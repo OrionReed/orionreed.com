@@ -43,6 +43,19 @@ function flatten(t: PrismToken | string, inheritedType = ""): Token[] {
   return (t.content as (PrismToken | string)[]).flatMap((c) => flatten(c, type));
 }
 
+/** Split untyped runs (plain identifiers, whitespace, etc.) on word/
+ *  whitespace boundaries. Prism leaves plain identifiers untyped and
+ *  glues surrounding whitespace onto them, so without this an identifier
+ *  rename like `opacity → sig` shows up as one delete `\n    opacity`
+ *  vs one insert `\n    sig` — with the newline trapped inside the
+ *  rename's span. Splitting yields separate `\n    `, `opacity`, ...
+ *  tokens that the diff can align correctly. */
+function splitUntyped(text: string): string[] {
+  // Alternating runs of whitespace and non-whitespace. Empty input
+  // returns []. We use a global match so we don't lose any chars.
+  return text.match(/\s+|\S+/g) ?? [];
+}
+
 /** Tokenize `source` against `language`. Concatenating all `tok.text`
  *  recovers the original input. Unknown language → one untyped token
  *  spanning the whole source. */
@@ -50,5 +63,16 @@ export function tokenize(source: string, language = "typescript"): Token[] {
   const lang = prism.languages[language];
   if (!lang) return source === "" ? [] : [{type: "", text: source}];
   const raw = prism.tokenize(source, lang) as (PrismToken | string)[];
-  return raw.flatMap((t) => flatten(t));
+  const flat = raw.flatMap((t) => flatten(t));
+  // Post-process: split each untyped token at word/whitespace
+  // boundaries. Typed tokens stay intact (Prism never produces
+  // typed tokens with internal whitespace runs).
+  const out: Token[] = [];
+  for (const tok of flat) {
+    if (tok.type !== "") { out.push(tok); continue; }
+    for (const piece of splitUntyped(tok.text)) {
+      out.push({type: "", text: piece});
+    }
+  }
+  return out;
 }

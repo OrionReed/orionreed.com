@@ -5,6 +5,7 @@ export {
   detach,
   isCut,
   isGen,
+  now,
   scaled,
   type Animator,
   type AnimObserver,

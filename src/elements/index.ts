@@ -37,6 +37,7 @@ import {MdTexProse} from "./optical-centering/md-tex-prose";
 import {MdOscillator} from "./optical-centering/md-oscillator";
 import {MdTrails} from "./optical-centering/md-trails";
 import {MdCodeDemo} from "./optical-centering/md-code-demo";
+import {MdCodeRefactor} from "./optical-centering/md-code-refactor";
 import {MdTex, MdMarker} from "../minim/web";
 
 DarkModeToggle.define();
@@ -78,5 +79,6 @@ MdTexProse.define();
 MdOscillator.define();
 MdTrails.define();
 MdCodeDemo.define();
+MdCodeRefactor.define();
 MdTex.define();
 MdMarker.define();
