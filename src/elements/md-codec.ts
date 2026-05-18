@@ -49,7 +49,7 @@ export class MdCodec extends Diagram {
     const charWidth = LABEL_SIZE * CHAR_FACTOR;
 
     const row = s(rect(0, 0, TOTAL_W, CELL_H));
-    const slots = split(row, "x", parts.map((p) => p.unitSize));
+    const slots = split(row.box, "x", parts.map((p) => p.unitSize));
 
     parts.forEach((part, i) => {
       if (i === parts.length - 1) return;

@@ -3,7 +3,7 @@ import {
   signal, computed, effect, Signal, derived,
   Vec, Num, Transform, Box,
   compose, multiply, matrixToString, transformBox, transformPoint,
-  type VecValue, type BoxValue, type Matrix2DValue, type Val,
+  type VecValue, type BoxValue, type MatrixValue, type Val,
   mean, BoxMath, value,
 } from "@minim/signals";
 
@@ -67,10 +67,10 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly opacity: Num;
 
   /** Composed local-frame matrix: `T(t) T(p) R(r) S(s) T(-p)`. */
-  readonly localFrame: Signal<Matrix2DValue>;
+  readonly localFrame: Signal<MatrixValue>;
 
   /** Cumulative scene-root frame: `parent.worldFrame × localFrame`. */
-  readonly worldFrame: Signal<Matrix2DValue>;
+  readonly worldFrame: Signal<MatrixValue>;
 
   /** Local-frame box; reach into `.x`, `.center`, `.at(u,v)`, etc. */
   readonly box: Box;

@@ -1,7 +1,7 @@
 // Bounded transitions. `from(sig, start, end)` for intros, `sig.to(target)` for outros.
 
-import {easeIn, easeInOut, easeOut, type Animator, type Yieldable} from "@minim/core";
-import {tween, Dir, type Signal, type Easing, type Val, type VecValue} from "@minim/signals";
+import {easeIn, easeInOut, easeOut, type Animator, type Easing, type Yieldable} from "@minim/core";
+import {tween, Dir, type Signal, type Val, type VecValue} from "@minim/signals";
 import type {Has} from "./shape";
 
 /** Eagerly advance `factory()` to its first yield (flushing pose side-

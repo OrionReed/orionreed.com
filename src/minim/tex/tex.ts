@@ -71,11 +71,16 @@ const compileTemplate = (
   return { source, markers };
 };
 
-const renderToMathML = (source: string, displayMode: boolean): string => {
+/** Render LaTeX → MathML via Temml. Wraps Temml's options with the
+ *  defaults used across the codebase (trust on, lenient errors). */
+export const renderToMathML = (
+  source: string,
+  opts: { displayMode?: boolean } = {},
+): string => {
   try {
     return temml.renderToString(source, {
       trust: true,
-      displayMode,
+      displayMode: opts.displayMode ?? false,
       strict: false,
       throwOnError: false,
     });
@@ -204,7 +209,7 @@ export class TexShape<Names extends string = string> extends Shape {
     const displayMode = opts.display === "block";
 
     const { source, markers } = compileTemplate(strings, values);
-    const initialMathml = renderToMathML(source, displayMode);
+    const initialMathml = renderToMathML(source, { displayMode });
     const measured = measureMathML(initialMathml, fontSize, fontFamily);
     const w = signal(measured.width);
     const h = signal(measured.height);
@@ -280,7 +285,7 @@ export class TexShape<Names extends string = string> extends Shape {
         return;
       }
       const next = compileTemplate(strings, values);
-      mountInto(renderToMathML(next.source, displayMode));
+      mountInto(renderToMathML(next.source, { displayMode }));
     });
 
     // Re-measure once webfonts have loaded — `New CM Math` ships from
@@ -291,7 +296,7 @@ export class TexShape<Names extends string = string> extends Shape {
       void fonts.ready.then(() => {
         const cur = compileTemplate(strings, values);
         const fresh = measureMathML(
-          renderToMathML(cur.source, displayMode),
+          renderToMathML(cur.source, { displayMode }),
           fontSize,
           fontFamily,
         );

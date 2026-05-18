@@ -1,7 +1,7 @@
 // Prose-linking element for plain (non-math) text — same wiring as <md-tex sym="...">.
 
 import {effect} from "@minim/signals";
-import {hover, getMarker as getGlobalMarker, type Marker} from "@minim/tex";
+import {hover, highlightTint, getMarker as getGlobalMarker, type Marker} from "@minim/tex";
 
 type MarkerHost = { getMarker?: (id: string) => Marker | undefined };
 
@@ -33,9 +33,7 @@ export class MdMarker extends HTMLElement {
       effect(() => {
         const color = m.color.value;
         this.style.backgroundColor =
-          m.active.value && color
-            ? `color-mix(in srgb, ${color} 15%, transparent)`
-            : "";
+          m.active.value && color ? highlightTint(color) : "";
       }),
     );
   }

@@ -1,4 +1,6 @@
-// Reactive engine. Signal → Computed (Lens = Computed with setter).
+// Reactive engine. Signal (writable) → Computed (readonly view) →
+// Lens (Computed with a setter). One runtime class backs both
+// Computed and Lens; the split is type-level only.
 // Algorithm is alien-signals; trait dispatch via `./traits`.
 
 import { EQUALS, type Equals } from "./traits";
@@ -336,7 +338,7 @@ export class Signal<T = unknown> implements ReactiveNode {
   }
 }
 
-export class Computed<T = unknown> extends Signal<T> {
+class ComputedImpl<T = unknown> extends Signal<T> {
   cachedValue: T | undefined = undefined;
   getter: () => T;
   /** Lens-mode iff set; otherwise writes throw. */
@@ -422,8 +424,22 @@ export class Computed<T = unknown> extends Signal<T> {
   }
 }
 
-/** Lens is a Computed with a setter; no separate runtime class. */
-export type Lens<T = unknown> = Computed<T>;
+/** Read-only computed signal. Writing to `.value` is a type error;
+ *  use `lens()` / `field()` for writable variants. */
+export type Computed<T = unknown> = Omit<ComputedImpl<T>, "value"> & {
+  readonly value: T;
+};
+
+/** Writable computed view — a `Computed` backed by a setter. */
+export type Lens<T = unknown> = ComputedImpl<T>;
+
+/** Runtime class. Use for `instanceof Computed` and direct construction;
+ *  passing a `setter` returns a `Lens<T>`, otherwise a `Computed<T>`. */
+export const Computed = ComputedImpl as {
+  new <T>(getter: () => T): Computed<T>;
+  new <T>(getter: () => T, setter: (v: T) => void): Lens<T>;
+  readonly prototype: ComputedImpl;
+};
 
 class Effect implements ReactiveNode {
   subs: Link | undefined = undefined;
@@ -514,8 +530,8 @@ class Effect implements ReactiveNode {
 export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> {
   return new Signal(initial, opts);
 }
-export function computed<T>(getter: () => T): Computed<T> { return new Computed(getter); }
-export function lens<T>(getter: () => T, setter: (v: T) => void): Lens<T> { return new Computed(getter, setter); }
+export function computed<T>(getter: () => T): Computed<T> { return new ComputedImpl(getter); }
+export function lens<T>(getter: () => T, setter: (v: T) => void): Lens<T> { return new ComputedImpl(getter, setter); }
 export function effect(fn: () => void | (() => void)): () => void {
   const e = new Effect(fn);
   return () => e._unwatched();

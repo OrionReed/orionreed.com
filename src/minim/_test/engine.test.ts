@@ -44,7 +44,7 @@ describe("engine", () => {
       check("after dispose, no update", s.value === 50);
     }
 
-    section("bind with cell source");
+    section("bind with signal source");
     {
       const src = signal(100);
       const t = signal(0);

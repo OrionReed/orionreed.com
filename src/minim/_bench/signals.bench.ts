@@ -13,7 +13,7 @@ import {
 
 // ── Construction ────────────────────────────────────────────────────
 
-group("construction (cost per cell)", () => {
+group("construction (cost per signal)", () => {
   bench("signal(0)", () => do_not_optimize(signal(0))).baseline(true);
   bench("vec(0, 0)", () => do_not_optimize(vec(0, 0)));
   bench("num(0)", () => do_not_optimize(num(0)));

@@ -8,9 +8,9 @@ import {signal, computed, type Signal} from "@minim/signals";
 
 /** A clip on a timeline. `t` extends past the endpoints (0 before,
  *  1 after) so `computed(() => (ease)(clip.t.value))` works without conditional checks.
- *  Generic over input flavor — passing a literal or writable `Cell`
- *  gives a writable `at`/`dur`; passing a `ReadonlyCell` or thunk
- *  gives the read-only flavor. */
+ *  Generic over input flavor — passing a literal or writable `Signal`
+ *  gives a writable `at`/`dur`; passing a `Read` or thunk gives the
+ *  read-only flavor. */
 export type Clip<A = number, D = number> = {
   readonly at: ResolvedField<A>;
   readonly dur: ResolvedField<D>;
@@ -23,8 +23,8 @@ export type Clip<A = number, D = number> = {
 // Inlined per-field flavor narrowing (replaces the dropped `ResolveSig`
 // helper). A writable `Signal<number>` or a literal number gives back a
 // `Signal<number>`; anything that's only readable (or a thunk) gives back
-// `Signal<number>`. The order matters: `Cell` is checked before
-// `ReadonlyCell` because `Signal<T>` is structurally a `Signal<T>`.
+// `Signal<number>`. The order matters: writable `Signal` is checked
+// before `Read` because `Signal<T>` is structurally a `Read<T>`.
 type ResolvedField<A> = [A] extends [Signal<number>]
   ? Signal<number>
   : [A] extends [Signal<number> | (() => number)]

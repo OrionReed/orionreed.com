@@ -1,10 +1,14 @@
 // Claims — labeled `Signal<boolean>`s with a chain algebra (`.and`, `.during`, `.before`, …).
 
-import { type Animator } from "@minim/core";
+import { type Animator, race } from "@minim/core";
 import {
-  signal, computed, effect, race,
-  Signal, vec, Vec,
-  type Box, type Boxed, type BoxValue,
+  signal,
+  computed,
+  effect,
+  Signal,
+  vec,
+  Vec,
+  type Box,
 } from "@minim/signals";
 import { circle } from "@minim/shapes";
 
@@ -79,11 +83,16 @@ function latchFalse(p: Signal<boolean>, label?: string): Claim {
     const pv = p.value;
     if (held.peek() && !pv) held.value = false;
   });
-  return finalize(held, label, () => {
-    held.value = true;
-    // Re-evaluate immediately in case the predicate is already false.
-    if (!p.peek()) held.value = false;
-  }, stop);
+  return finalize(
+    held,
+    label,
+    () => {
+      held.value = true;
+      // Re-evaluate immediately in case the predicate is already false.
+      if (!p.peek()) held.value = false;
+    },
+    stop,
+  );
 }
 
 /** Liveness latch: signal is `false` until `p` is ever `true`, then
@@ -96,16 +105,26 @@ function latchTrue(p: Signal<boolean>, label?: string): Claim {
     const pv = p.value;
     if (!held.peek() && pv) held.value = true;
   });
-  return finalize(held, label, () => {
-    held.value = p.peek() ? true : false;
-  }, stop);
+  return finalize(
+    held,
+    label,
+    () => {
+      held.value = p.peek() ? true : false;
+    },
+    stop,
+  );
 }
 
 /** No latching — the claim is just `p`. Used for `ends.X`: read the
  *  predicate at scope close. Resetting is a no-op. */
 function passthrough(p: Signal<boolean>, label?: string): Claim {
   const wrapped = computed(() => p.value);
-  return finalize(wrapped as Signal<boolean>, label, () => {}, () => {});
+  return finalize(
+    wrapped as Signal<boolean>,
+    label,
+    () => {},
+    () => {},
+  );
 }
 
 function finalize(
@@ -146,7 +165,10 @@ function _and(a: Claim, b: Claim): Claim {
   return finalize(
     computed(() => a.value && b.value),
     `${labelOf(a)} ∧ ${labelOf(b)}`,
-    () => { a.reset(); b.reset(); },
+    () => {
+      a.reset();
+      b.reset();
+    },
     () => {},
   );
 }
@@ -155,7 +177,10 @@ function _or(a: Claim, b: Claim): Claim {
   return finalize(
     computed(() => a.value || b.value),
     `${labelOf(a)} ∨ ${labelOf(b)}`,
-    () => { a.reset(); b.reset(); },
+    () => {
+      a.reset();
+      b.reset();
+    },
     () => {},
   );
 }
@@ -276,10 +301,17 @@ export class Predicates<T> {
   private build(pred: Signal<boolean>, what: string): Claim {
     const label = `${this.lbl ?? "signal"} ${this.mood} ${what}`;
     switch (this.mood) {
-      case "stays":   return latchFalse(pred, label);
-      case "never":   return latchFalse(computed(() => !pred.value), label);
-      case "becomes": return latchTrue(pred, label);
-      case "ends":    return passthrough(pred, label);
+      case "stays":
+        return latchFalse(pred, label);
+      case "never":
+        return latchFalse(
+          computed(() => !pred.value),
+          label,
+        );
+      case "becomes":
+        return latchTrue(pred, label);
+      case "ends":
+        return passthrough(pred, label);
     }
   }
 
@@ -332,18 +364,16 @@ export class Predicates<T> {
     );
   }
 
-  /** Predicate that the point lies inside `region`. Accepts a
-   *  `Boxed` (Shape, view, split result…) or a `Signal<BoxValue>`. */
+  /** Predicate that the point lies inside `region` — pass `shape.box`
+   *  for a Shape, or a Box directly (e.g. from `split` / view / etc.). */
   inside(
     this: Predicates<import("@minim/signals").VecValue>,
-    region: Boxed | Signal<BoxValue>,
+    region: Box,
   ): Claim {
-    const boxSig: Signal<BoxValue> =
-      "box" in region ? region.box : region;
     return this.build(
       computed(() => {
         const v = this.sig.value;
-        const b = boxSig.value;
+        const b = region.value;
         return v.x >= b.x && v.x <= b.x + b.w && v.y >= b.y && v.y <= b.y + b.h;
       }),
       `inside bounds`,
@@ -351,7 +381,7 @@ export class Predicates<T> {
   }
 
   /** Pointwise equality with another signal of the same type. */
-  equalTo(other: Signal<T>): Claim {
+  isEqual(other: Signal<T>): Claim {
     return this.build(
       computed(() => this.sig.value === other.value),
       `= other`,
@@ -420,9 +450,6 @@ function makeProcess(
 
   const run = (): Animator =>
     (function* (): Animator {
-      // Reset signals + claims so a fresh execution observes a
-      // clean slate. Writes are independent — preact-signals
-      // batches notifications within this synchronous block.
       for (const c of claims) c.reset();
       if (started.peek()) started.value = false;
       if (alive.peek()) alive.value = false;
@@ -462,9 +489,7 @@ function makeProcess(
  *  that's `true` iff every claim is currently `true`. Force-reads all
  *  values so the computed registers them all as deps (plain
  *  `Array.every` short-circuits, breaking reactivity). */
-export function held(
-  ...claims: readonly Signal<boolean>[]
-): Signal<boolean> {
+export function held(...claims: readonly Signal<boolean>[]): Signal<boolean> {
   return computed(() => {
     let all = true;
     for (const c of claims) {
@@ -475,9 +500,7 @@ export function held(
 }
 
 /** OR-reduction. `true` iff at least one is `true`. */
-export function any(
-  ...claims: readonly Signal<boolean>[]
-): Signal<boolean> {
+export function any(...claims: readonly Signal<boolean>[]): Signal<boolean> {
   return computed(() => {
     let some = false;
     for (const c of claims) {
@@ -498,9 +521,7 @@ export function track(
 ): Claim {
   const tol = opts.tol ?? 1e-9;
   const label = opts.label ?? "track";
-  const pred = computed(
-    () => Math.abs(actual.value - expected.value) <= tol,
-  );
+  const pred = computed(() => Math.abs(actual.value - expected.value) <= tol);
   return latchFalse(pred, label);
 }
 

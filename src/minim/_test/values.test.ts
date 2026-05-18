@@ -156,7 +156,7 @@ describe("values", () => {
       check("linearOf returns undefined on plain signal", linearOf(plain) === undefined);
     }
 
-    section("traits + classOf on derived/lensed cells");
+    section("traits + classOf on derived/lensed signals");
     {
       const v = vec(1, 2);
       const d = v.add({ x: 3, y: 4 });

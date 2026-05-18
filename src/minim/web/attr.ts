@@ -1,4 +1,4 @@
-// HTML attributes mapped to reactive cells on a custom element. The
+// HTML attributes mapped to reactive signals on a custom element. The
 // decorated field IS the signal.
 //
 //   @attr.str()      declare width: Signal<string | undefined>;

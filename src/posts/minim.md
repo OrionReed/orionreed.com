@@ -291,6 +291,10 @@ Nothing here is SVG-specific. The same generator + signal pipeline drives `<canv
 
 <md-canvas-field></md-canvas-field>
 
+The `code` package is a sibling of `tex` — same architecture (Prism-tokenized HTML inside a `<foreignObject>`, addressable token spans, reactive `source` signal), different content. Writing `c.source.value = newSrc` re-renders; `c.morphTo(newSrc, dur)` runs the same swap but with a Code Hike-style token diff between the old and new layouts. Matched tokens translate from their old position; added tokens fade in; removed tokens fade out in place.
+
+<md-code-demo></md-code-demo>
+
 <md-centering></md-centering>
 
 <md-runtime-tests></md-runtime-tests>

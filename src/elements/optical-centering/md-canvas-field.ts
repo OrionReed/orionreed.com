@@ -1,7 +1,7 @@
 // Canvas demo: minim's runtime + signals + generators driving a non-SVG renderer.
 
 import {Anim, signal, drive, effect, every, loop, num, vec, Num, Vec} from "../../minim";
-import {attachRaf} from "@minim/web";
+import {attachRaf} from "@minim/core";
 
 const N = 1500;
 const W = 640;

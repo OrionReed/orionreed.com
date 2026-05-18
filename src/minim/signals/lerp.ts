@@ -103,7 +103,7 @@ function* tweenStep<T>(
   });
 }
 
-/** Free-fn form of `.to()` for cells without the method installed. */
+/** Free-fn form of `.to()` for signals without the method installed. */
 export function tween<T>(
   sig: Signal<T>,
   target: T,
@@ -293,13 +293,13 @@ export function defineTrait(
   if (methods) Object.assign(Cls.prototype, methods);
 }
 
-// `Signal<any>` not `Read<unknown>`: invariance in T blocks the latter,
-// and `playableGen` only knows how to handle real `Signal` instances.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type PlayTrigger = Yieldable | Signal<any>;
+// `Read<unknown>` (covariant) accepts any `Signal<T>` / `Computed<T>`;
+// `Signal<unknown>` doesn't (invariant in T) and `Signal<any>` is
+// bivariant noise. `playableGen` narrows back to `Signal` at runtime.
+export type PlayTrigger = Yieldable | Read<unknown>;
 
 export interface Play<R = void> extends Animator<R> {
-  /** End when `p` fires (truthy cell / animator completion / sleep). */
+  /** End when `p` fires (truthy signal / animator completion / sleep). */
   until(p: PlayTrigger): Play<R>;
   /** Sequence: this, then `next`. */
   then(next: PlayTrigger): Play<unknown>;
@@ -352,7 +352,7 @@ class PlayImpl<R> implements Play<R> {
   }
 }
 
-/** Lift any yieldable / cell-trigger / animator-factory into a Play. */
+/** Lift any yieldable / signal-trigger / animator-factory into a Play. */
 export function play<R>(g: Animator<R> | (() => Animator<R>)): Play<R>;
 export function play(p: PlayTrigger | (() => Animator)): Play<unknown>;
 export function play(p: PlayTrigger | (() => Animator)): Play<unknown> {
@@ -378,7 +378,7 @@ function* playableGen(p: PlayTrigger): Animator<unknown> {
 }
 
 /** Wait until `sig.value` is truthy. Wakes immediately if already true. */
-export function when(sig: Signal<any>): Animator<void> {
+export function when(sig: Read<unknown>): Animator<void> {
   return suspend<void>((wake) => {
     let resolved = false;
     return effect(() => {

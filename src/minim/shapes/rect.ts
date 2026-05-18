@@ -1,16 +1,11 @@
 import {
   computed, derived,
   Vec, Num, num, Box,
-  type BoxValue, type Read, type Val,
+  type Val,
 } from "@minim/signals";
 import { Shape, type Segment } from "./shape";
 import { tokens } from "./tokens";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
-
-/** Anything carrying a Box cell — Shape, Box itself, layout split, etc. */
-interface HasBox { readonly box: Read<BoxValue> }
-const hasBox = (v: unknown): v is HasBox =>
-  v !== null && typeof v === "object" && "box" in v;
 
 export interface RectOpts extends CommonOpts {
   corner?: Val<number>;
@@ -127,11 +122,11 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
 /** Rect factory:
  *
  *   rect(x, y, w, h, opts?)             — corner-based (canonical)
- *   rect(src: { box }, opts?)           — fill another Box (Shape, view, split…)
+ *   rect(box, opts?)                    — fill another Box (use `shape.box`)
  *   rect(center: Point, w, h, opts?)    — centered on a Point
  *   rect(p1: Point, p2: Point, opts?)   — between two corner Points
  */
-export function rect<const O extends RectOpts>(b: HasBox, opts?: O): Rect<O>;
+export function rect<const O extends RectOpts>(b: Box, opts?: O): Rect<O>;
 export function rect<const O extends RectOpts>(
   p1: Vec,
   p2: Vec,
@@ -151,19 +146,18 @@ export function rect<const O extends RectOpts>(
   opts?: O,
 ): Rect<O>;
 export function rect(
-  a: Val<number> | HasBox | Vec,
+  a: Val<number> | Box | Vec,
   b?: Val<number> | Vec | RectOpts,
   c?: Val<number>,
   d?: Val<number> | RectOpts,
   e?: RectOpts,
 ): Rect {
-  if (hasBox(a)) {
-    const bx = a.box;
+  if (a instanceof Box) {
     return new Rect(
-      computed(() => bx.value.x),
-      computed(() => bx.value.y),
-      computed(() => bx.value.w),
-      computed(() => bx.value.h),
+      computed(() => a.value.x),
+      computed(() => a.value.y),
+      computed(() => a.value.w),
+      computed(() => a.value.h),
       b as RectOpts | undefined,
     );
   }

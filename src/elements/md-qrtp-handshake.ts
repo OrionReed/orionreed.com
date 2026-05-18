@@ -41,7 +41,7 @@ export class MdQrtpHandshake extends Diagram {
     const buildRow = (device: "A" | "B", y: number) =>
       Array.from({ length: N }, (_, i) => {
         const r = s(rect(i * PITCH + PAD_X, y + PAD_Y, CHUNK_W, CHUNK_H));
-        const [data, ack] = split(r, "x", [3, 2]);
+        const [data, ack] = split(r.box, "x", [3, 2]);
         s(
           line(data.at(1, 0), data.at(1, 1), { thin: true }),
           r.outline(4, {

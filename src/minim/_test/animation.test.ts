@@ -284,7 +284,7 @@ describe("animation", () => {
       const anim = new Anim();
       const flag = signal(false);
       const neg = not(flag);
-      check("not(sig) is reactive cell with peek/value", neg.peek() === true && neg.value === true);
+      check("not(sig) is a reactive signal with peek/value", neg.peek() === true && neg.value === true);
       flag.value = true;
       check("not(sig) flips with source", neg.value === false);
       // Also: not(sig) must be acceptable as a play-trigger (instanceof Signal).

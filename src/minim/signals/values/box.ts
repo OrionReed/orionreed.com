@@ -76,11 +76,6 @@ export class Box extends Signal<Value> implements BoxOps<Box> {
   get w() { return field(this, "w", Num); }
   get h() { return field(this, "h", Num); }
 
-  /** Self-reference so any Box is uniformly `{ box: Box }` — the same
-   *  field path works on Box, Shape, Part, split results, etc.
-   *  (`b.box === b`). */
-  get box(): Box { return this; }
-
   get area() { return this._area ??= derived(Num, () => this.value.w * this.value.h); }
   private _area?: Num;
 
@@ -157,7 +152,3 @@ export const box = (
   return out;
 };
 
-/** Anything that exposes a `Box` cell. */
-export interface Boxed {
-  readonly box: Box;
-}

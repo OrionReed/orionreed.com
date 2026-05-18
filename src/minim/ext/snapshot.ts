@@ -1,13 +1,13 @@
 // `snapshot(...sigs)` — capture current signal values; return a reset
-// function. Args are cells or plain records whose signal-valued
+// function. Args are signals or plain records whose signal-valued
 // properties get flattened. Useful at the top of `loop(...)` bodies so
 // each iteration starts from a known baseline.
 
 import { Signal, type Read } from "@minim/signals";
 
-/** Capture current values; return a reset function. Args are cells
+/** Capture current values; return a reset function. Args are signals
  *  (any concrete `T`) or plain records whose signal-valued properties
- *  get flattened. Restoration is type-safe per cell — each is restored
+ *  get flattened. Restoration is type-safe per signal — each is restored
  *  to its own captured value.
  *
  *      const reset = snapshot(score, position);

@@ -3,7 +3,7 @@
 
 import {
   num, derived, transformBox, Box, BoxMath,
-  type Boxed, type Val,
+  type Val,
 } from "@minim/signals";
 import type { Shape } from "./shape";
 
@@ -56,9 +56,9 @@ export function arrange(
 }
 
 /** Inflate a Box on each side by `by`. */
-export function expand(b: Boxed, by: Val<number>): Box {
+export function expand(b: Box, by: Val<number>): Box {
   const bys = num(by);
-  return derived(Box, () => BoxMath.expand(b.box.value, bys.value));
+  return derived(Box, () => BoxMath.expand(b.value, bys.value));
 }
 
 /** Split a Box along an axis into N reactive sub-Boxes.
@@ -68,7 +68,7 @@ export function expand(b: Boxed, by: Val<number>): Box {
  *   split(b, "x", 3, { gap: 4 })  — 4px between
  */
 export function split(
-  source: Boxed,
+  source: Box,
   axis: "x" | "y",
   parts: number | number[],
   opts: { gap?: Val<number> } = {},
@@ -81,7 +81,7 @@ export function split(
   const gapSig = num(opts.gap ?? 0);
   return ratios.map((r, i) =>
     derived(Box, () => {
-      const b = source.box.value;
+      const b = source.value;
       const gap = gapSig.value;
       const gapTotal = gap * (ratios.length - 1);
       if (axis === "x") {
@@ -99,7 +99,7 @@ export function split(
 /** Two-axis split into a `rows × cols` grid (sugar over `split`).
  *  Returns `[row][col]`. */
 export function grid(
-  source: Boxed,
+  source: Box,
   rows: number,
   cols: number,
   opts: { gap?: Val<number> } = {},

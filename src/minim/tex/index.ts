@@ -1,6 +1,7 @@
 export {
   TexShape,
   tex,
+  renderToMathML,
   type TexInterp,
   type TexOpts,
   type NamesOf,
@@ -20,6 +21,7 @@ export {
   marker,
   palette,
   hover,
+  highlightTint,
   getMarker,
   registerMarker,
 } from "./marker";

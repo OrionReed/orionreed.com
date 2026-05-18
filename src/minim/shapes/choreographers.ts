@@ -3,9 +3,9 @@
 // `drive` step over N translates). For rigid group translate, reach for
 // `centroid(...shapes).to(...)` instead.
 
-import { drive, type Animator } from "@minim/core";
+import { drive, type Animator, type Easing } from "@minim/core";
 import {
-  play, num, Vec, type Easing, type Val, type VecValue,
+  play, num, Vec, type Val, type VecValue,
 } from "@minim/signals";
 import type { Has } from "./shape";
 

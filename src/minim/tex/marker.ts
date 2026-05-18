@@ -56,6 +56,10 @@ export function palette(n: number): Marker[] {
   );
 }
 
+/** 15%-opacity background tint used for marker / part highlights. */
+export const highlightTint = (color: string): string =>
+  `color-mix(in srgb, ${color} 15%, transparent)`;
+
 /** Wire a DOM element's hover into a Marker. */
 export function hover(el: Element, m: Marker): () => void {
   const local = signal(false);

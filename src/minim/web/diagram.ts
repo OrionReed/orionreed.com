@@ -3,7 +3,6 @@
 // viewBox (`view`/`fit`), and the host CSS sizing (`--d-w`/`--d-h`).
 
 import { Anim, attachRaf } from "@minim/core";
-export { attachRaf };
 import {
   num, derived, computed, effect,
   Box, type Val,

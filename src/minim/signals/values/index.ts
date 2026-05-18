@@ -1,19 +1,19 @@
 export { Num, num, type Value as NumValue } from "./num";
 export { Vec, vec, polar, type Value as VecValue } from "./vec";
 export { Color, rgb, rgba, type Value as ColorValue } from "./color";
-export { Box, box, type Boxed, type Value as BoxValue } from "./box";
+export { Box, box, type Value as BoxValue } from "./box";
 export {
   Transform, transform,
   type Value as TransformValue,
   type Init as TransformInit,
 } from "./transform";
 export {
-  Matrix2D, matrix,
+  Matrix, matrix,
   identity, fromTranslate, fromScale, fromRotate,
   isIdentity, multiply, invert, determinant,
   transformPoint, transformBox, compose,
   toString as matrixToString,
-  type Value as Matrix2DValue,
+  type Value as MatrixValue,
 } from "./matrix";
 export { Anchor, Dir } from "./anchor";
 
@@ -21,13 +21,13 @@ import { Signal, type Read } from "../signal";
 import { requireLinear } from "../traits";
 import { derived } from "../derive";
 
-/** N-to-1 lens cell flavored as `parts[0]`'s class. */
+/** N-to-1 lens flavored as `parts[0]`'s class. */
 export function combine<T, S extends Read<T>>(
   parts: readonly S[],
   merge: (vs: readonly T[]) => T,
   distribute: (next: T, prev: readonly T[]) => readonly T[],
 ): S {
-  if (parts.length === 0) throw new Error("combine: need ≥1 cell");
+  if (parts.length === 0) throw new Error("combine: need ≥1 signal");
   const Cls = (parts[0] as object).constructor as new (...args: never[]) => Signal<T>;
   return derived(Cls,
     () => {
@@ -48,12 +48,12 @@ export function combine<T, S extends Read<T>>(
 }
 
 /** Writable arithmetic mean; writes distribute the delta. Needs `[LINEAR]`. */
-export function mean<T, S extends Read<T>>(...cells: S[]): S {
-  if (cells.length === 0) throw new Error("mean: need ≥1 cell");
-  const lin = requireLinear(cells[0]);
-  const invN = 1 / cells.length;
+export function mean<T, S extends Read<T>>(...signals: S[]): S {
+  if (signals.length === 0) throw new Error("mean: need ≥1 signal");
+  const lin = requireLinear(signals[0]);
+  const invN = 1 / signals.length;
   return combine<T, S>(
-    cells,
+    signals,
     (vs) => {
       let acc = vs[0];
       for (let i = 1; i < vs.length; i++) acc = lin.add(acc, vs[i]);

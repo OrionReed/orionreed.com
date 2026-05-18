@@ -7,7 +7,7 @@ import {
   Signal, num, Box,
   type Val,
 } from "@minim/signals";
-import {marker, hover, registerMarker, type Marker} from "./marker";
+import {marker, hover, highlightTint, registerMarker, type Marker} from "./marker";
 import type {TexShape} from "./tex";
 
 export type { Marker };
@@ -55,9 +55,7 @@ export class Part<N extends string = string> {
       effect(() => {
         if (this.highlighted.value) {
           const color = effectiveColor(this.marker);
-          el.style.backgroundColor = color
-            ? `color-mix(in srgb, ${color} 15%, transparent)`
-            : highlightColor;
+          el.style.backgroundColor = color ? highlightTint(color) : highlightColor;
         } else {
           el.style.backgroundColor = "transparent";
         }

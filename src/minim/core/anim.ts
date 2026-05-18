@@ -22,6 +22,10 @@ const DETACH_KEY = Symbol.for("minim.detach");
 const SCALE_KEY = Symbol.for("minim.scale");
 const CUT_KEY = Symbol.for("minim.cut");
 
+// `any` in Animator / Suspend / Scaled below is a generator-effect
+// boundary: TS generators can't type per-yield resume values, so the
+// runtime erases R at the Yieldable site. Combinators cast back to the
+// concrete R when they read it. Not a fixable type; don't try to narrow.
 export type Yieldable =
   | undefined
   | number

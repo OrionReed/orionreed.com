@@ -1,8 +1,13 @@
 // Inline math custom element with optional prose-linking via `for`/`sym`.
 
-import temml from "temml";
 import {effect} from "@minim/signals";
-import {hover, getMarker as getGlobalMarker, type Marker} from "@minim/tex";
+import {
+  hover,
+  highlightTint,
+  renderToMathML,
+  getMarker as getGlobalMarker,
+  type Marker,
+} from "@minim/tex";
 
 const SYM_RE = /\\sym\{([^}]+)\}\{([^}]*)\}/g;
 const symClass = (id: string): string =>
@@ -27,7 +32,7 @@ export class MdTex extends HTMLElement {
     const src = this.textContent?.trim() ?? "";
 
     if (singleId) {
-      this.innerHTML = temml.renderToString(src, { throwOnError: false, trust: true });
+      this.innerHTML = renderToMathML(src);
       const m = resolveMarker(singleId, forId);
       if (m) this.#wire(this as unknown as HTMLElement, m);
       return;
@@ -41,7 +46,7 @@ export class MdTex extends HTMLElement {
       return `\\class{${cls}}{${content}}`;
     });
 
-    this.innerHTML = temml.renderToString(processedSrc, { throwOnError: false, trust: true });
+    this.innerHTML = renderToMathML(processedSrc);
 
     for (const [cls, id] of symIds) {
       const m = resolveMarker(id, forId);
@@ -61,9 +66,7 @@ export class MdTex extends HTMLElement {
       effect(() => {
         const color = m.color.value;
         el.style.backgroundColor =
-          m.active.value && color
-            ? `color-mix(in srgb, ${color} 15%, transparent)`
-            : "";
+          m.active.value && color ? highlightTint(color) : "";
       }),
     );
   }

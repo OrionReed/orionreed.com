@@ -25,6 +25,6 @@ export {
   untilEvent, untilPromise,
   attachRaf,
   type Settled,
-} from "./compose";
+} from "./combinators";
 
 export { type Easing, linear, easeIn, easeOut, easeInOut } from "./easings";

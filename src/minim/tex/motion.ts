@@ -1,7 +1,7 @@
 // Motion combinators over tex shapes (`pluck`, `morph`, …).
 
-import {easeInOut, easeOut, type Animator} from "@minim/core";
-import {effect, signal, type Easing} from "@minim/signals";
+import {easeInOut, easeOut, type Animator, type Easing} from "@minim/core";
+import {effect, signal} from "@minim/signals";
 import {Shape} from "@minim/shapes";
 import {box, num} from "@minim/signals";
 import {Part, type PartMarker} from "./parts";

@@ -104,7 +104,7 @@ export function brace(
 }
 
 /** Surrounding rectangle around a part, inset by `gap`. (Named `frame`
- *  to avoid collision with the `box(x, y, w, h)` cell factory.) */
+ *  to avoid collision with the `box(x, y, w, h)` factory.) */
 export function frame(
   part: Part,
   opts: DecorationOpts & { corner?: number } = {},

@@ -5,7 +5,7 @@ import { EQUALS } from "../traits";
 import { BaseChain, derived, field, bindFields } from "../derive";
 import { defineTrait } from "../lerp";
 import { Num } from "./num";
-import { type Value as VecValue } from "./vec";
+import type { Value as VecValue } from "./vec";
 
 export interface Value {
   a: number;
@@ -142,18 +142,18 @@ export function compose(t: VecValue, r: number, s: VecValue, pivot: VecValue): V
 export const toString = (m: Value): string =>
   `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
 
-/** Op surface — closed-on-Matrix2D operations. Implemented by reactive
- *  `Matrix2D` and the mutating `Chain`. */
-interface Matrix2DOps<R> {
+/** Op surface — closed-on-Matrix operations. Implemented by reactive
+ *  `Matrix` and the mutating `Chain`. */
+interface MatrixOps<R> {
   multiply(b: Val<Value>): R;
   invert(): R;
 }
 
-export class Matrix2D extends Signal<Value> implements Matrix2DOps<Matrix2D> {
+export class Matrix extends Signal<Value> implements MatrixOps<Matrix> {
   constructor(v: Value = identity()) { super(v); }
 
-  multiply(b: Val<Value>) { return derived(Matrix2D, () => multiply(this.value, value(b))); }
-  invert() { return derived(Matrix2D, () => invert(this.value)); }
+  multiply(b: Val<Value>) { return derived(Matrix, () => multiply(this.value, value(b))); }
+  invert() { return derived(Matrix, () => invert(this.value)); }
 
   get a() { return field(this, "a", Num); }
   get b() { return field(this, "b", Num); }
@@ -166,24 +166,24 @@ export class Matrix2D extends Signal<Value> implements Matrix2DOps<Matrix2D> {
   private _det?: Num;
 
   derive(fn: (c: Chain) => Chain) {
-    return derived(Matrix2D, () => fn(new Chain(this.value)).value);
+    return derived(Matrix, () => fn(new Chain(this.value)).value);
   }
 }
 
-class Chain extends BaseChain<Value> implements Matrix2DOps<Chain> {
+class Chain extends BaseChain<Value> implements MatrixOps<Chain> {
   multiply(b: Val<Value>) { this.value = multiply(this.value, value(b)); return this; }
   invert() { this.value = invert(this.value); return this; }
 }
 
-defineTrait(Matrix2D, EQUALS, equals);
+defineTrait(Matrix, EQUALS, equals);
 
-/** Construct a Matrix2D; reactive per-component args bind the lens. */
+/** Construct a Matrix; reactive per-component args bind the lens. */
 export const matrix = (
   a: Val<number> = 1, b: Val<number> = 0,
   c: Val<number> = 0, d: Val<number> = 1,
   e: Val<number> = 0, f: Val<number> = 0,
-): Matrix2D => {
-  const m = new Matrix2D();
+): Matrix => {
+  const m = new Matrix();
   bindFields(m, { a, b, c, d, e, f });
   return m;
 };

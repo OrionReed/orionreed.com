@@ -52,7 +52,7 @@ export class MdLubyTransform extends Diagram {
 
     const cellsLayer = s(group());
     cellsLayer.attr("clip-path", clipPath(qr), "wrapper");
-    grid(qr, QR_GRID, QR_GRID).flat().forEach((cellB, i) =>
+    grid(qr.box, QR_GRID, QR_GRID).flat().forEach((cellB, i) =>
       cellsLayer.add(rect(cellB, {
         fill: true,
         corner: 0,

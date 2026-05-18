@@ -3,7 +3,6 @@
 import {
   derived, computed,
   Vec, Box, transformBox, transformPoint,
-  type Boxed,
 } from "@minim/signals";
 import { Shape, type AnyShape } from "./shape";
 import { circle } from "./circle";
@@ -24,25 +23,26 @@ const outlineOpts = {
   ...baseOpts,
 };
 
-/** Parent-frame Box cell. Shapes have their transform applied (so the
- *  Box reflects the visual footprint); other Boxed things pass through. */
-function parentBox(b: Boxed): Box {
+/** Parent-frame Box. Shapes have their transform applied (so the
+ *  Box reflects the visual footprint); raw Boxes pass through. */
+function parentBox(b: Shape | Box): Box {
   if (b instanceof Shape) {
     return derived(Box, () => transformBox(b.localFrame.value, b.box.value));
   }
-  return b.box;
+  return b;
 }
 
-/** Dashed rect on a Box's parent-frame Box. */
-const boxOutline = (b: Boxed) => rect(parentBox(b), outlineOpts);
+/** Dashed rect over a Shape's parent-frame box (or a raw Box). */
+const boxOutline = (b: Shape | Box) => rect(parentBox(b), outlineOpts);
 
-/** Small filled dot at a point or a Box's center. */
-const dot = (p: Vec | Boxed, r = 2.5) =>
-  circle(p instanceof Vec ? p : p.box.center, r, {
-    fill: COLOR,
-    stroke: "none",
-    ...baseOpts,
-  });
+/** Small filled dot at a point or a Box's / Shape's center. */
+const dot = (p: Vec | Shape | Box, r = 2.5) => {
+  const at =
+    p instanceof Vec ? p :
+    p instanceof Shape ? p.center :
+    p.center;
+  return circle(at, r, { fill: COLOR, stroke: "none", ...baseOpts });
+};
 
 /** Crosshair at a Shape's rotate/scale pivot, in parent frame. */
 const origin = (s: Shape, size = 8) => {
@@ -67,12 +67,12 @@ const origin = (s: Shape, size = 8) => {
 
 /** Dots at the 9 standard anchor positions: corners, edge midpoints,
  *  center. */
-const anchors = (b: Boxed, r = 2.5) => {
+const anchors = (b: Shape | Box, r = 2.5) => {
   const g = group({ aside: true, opacity: 0.7 });
   for (const u of [0, 0.5, 1]) {
     for (const v of [0, 0.5, 1]) {
       g.add(
-        circle(b.box.at(u, v), r, {
+        circle(b.at(u, v), r, {
           fill: COLOR,
           stroke: "none",
         }),
