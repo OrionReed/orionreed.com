@@ -1,4 +1,7 @@
-// WAAPI / scroll / viewport bridges. Two surfaces, both lazy:
+// WAAPI / scroll / viewport bridges. Three surfaces, all lazy:
+//
+//   Animators — `yield* …` runs a native browser animation:
+//     native(el, kf, opts)     compositor-driven tween as an Animator
 //
 //   Awaitables — `yield* …` inside an animator; compose with race/endOn:
 //     untilAnimation(a)        wake on Animation 'finish' (typed)
@@ -19,6 +22,52 @@
 
 import {suspend, type Animator} from "@minim/core";
 import {signal, type Signal} from "@minim/signals";
+
+// ── Native animator ─────────────────────────────────────────────────
+//
+// `native(el, keyframes, opts)` is the thin escape hatch to WAAPI.
+// Returns an `Animator<void>` so it composes with `all`, `race`,
+// `stagger`, and `try/finally` like any other minim animator. Runs
+// on the compositor for `opacity`, `transform`, `filter`, etc. —
+// no main-thread work per frame.
+//
+// Time convention:
+//   • A bare `number` for `opts` is **seconds** (matches minim's
+//     `to(target, dur)`): `native(el, { opacity: [0,1] }, 0.4)`.
+//   • An options object is passed through to `Element.animate` as-is,
+//     so `duration`/`delay` are **milliseconds** (matches the WAAPI
+//     spec verbatim — no surprises for anyone already using it).
+//
+// Lifecycle:
+//   • On natural finish we `commitStyles()` (best-effort) then
+//     `cancel()` the `Animation` so the visible state sticks without
+//     leaking the object or holding `fill: forwards` forever.
+//   • On cancellation (parent `gen.return()`, `race` loss, etc.) the
+//     `finally` cancels the `Animation`; whatever frame the compositor
+//     last rendered is discarded — visible state snaps to the
+//     pre-animation value, matching how `cancel()` works.
+//   • Errors from `commitStyles` are swallowed: it throws when the
+//     element is disconnected or the property isn't committable. Not
+//     worth surfacing.
+
+/** WAAPI animation as a minim Animator. Bare-number `opts` is seconds;
+ *  object `opts` passes through to `Element.animate` (ms). */
+export function* native(
+  el: Element,
+  keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+  opts: number | KeyframeAnimationOptions = {},
+): Animator<void> {
+  const native = typeof opts === "number"
+    ? { duration: opts * 1000 }
+    : opts;
+  const a = el.animate(keyframes, native);
+  try {
+    yield* untilAnimation(a);
+    try { a.commitStyles(); } catch { /* disconnected or non-committable */ }
+  } finally {
+    a.cancel();
+  }
+}
 
 // ── Awaitables ──────────────────────────────────────────────────────
 

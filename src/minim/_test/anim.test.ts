@@ -231,7 +231,7 @@ describe("cancel", () => {
   beforeEach(() => { anim = new Anim(); });
   afterEach(() => { anim.stop(); });
 
-  it("dispose cancels and runs SuspendFn dispose", () => {
+  it("dispose cancels and runs Suspend dispose", () => {
     let disposed = false;
     function* g(): any { yield* suspend<void>(() => () => { disposed = true; }); }
     const d = anim.start(g);
@@ -303,7 +303,7 @@ describe("cancel", () => {
     expect(afterMore).toBe(0);
   });
 
-  it("parent cancel cascades to child spawned via SuspendFn's spawn arg", () => {
+  it("parent cancel cascades to child spawned via Suspend's spawn arg", () => {
     let leafDisposed = false;
     function* leaf(): any { yield* suspend(() => () => { leafDisposed = true; }); }
     function* parent(): any {
@@ -676,5 +676,162 @@ describe("composition", () => {
     anim.step(0.001);
     expect(order).toBe("before gen-start gen-end after");
     anim.stop();
+  });
+});
+
+describe("scope-scale (withScale)", () => {
+  let anim: Anim;
+  beforeEach(() => { anim = new Anim(); });
+  afterEach(() => { anim.stop(); });
+
+  // ── Basic withScale semantics ────────────────────────────────────────
+
+  it("withScale(0.5, g) halves dt seen by g", async () => {
+    const { withScale } = await import("@minim/core");
+    const dts: number[] = [];
+    function* g(): any { while (true) dts.push(yield); }
+    anim.start(withScale(() => 0.5, g()));
+    anim.step(0.1);
+    anim.step(0.1);
+    expect(dts[0]).toBeCloseTo(0.05, 9);
+    expect(dts[1]).toBeCloseTo(0.05, 9);
+  });
+
+  it("withScale(0, g) pauses execution — gen body never runs after first yield", async () => {
+    const { withScale } = await import("@minim/core");
+    let ticks = 0;
+    function* g(): any { while (true) { yield; ticks++; } }
+    anim.start(withScale(() => 0, g()));
+    for (let i = 0; i < 20; i++) anim.step(0.016);
+    expect(ticks).toBe(0);
+  });
+
+  it("withScale(0, g) freezes numeric sleeps", async () => {
+    const { withScale } = await import("@minim/core");
+    let done = false;
+    function* g(): any { yield 1.0; done = true; }
+    anim.start(withScale(() => 0, g()));
+    for (let i = 0; i < 200; i++) anim.step(0.016);
+    expect(done).toBe(false);
+  });
+
+  it("withScale(2, g) doubles speed: 0.5s sleep finishes in ~0.25s real", async () => {
+    const { withScale } = await import("@minim/core");
+    let done = false;
+    function* g(): any { yield 0.5; done = true; }
+    anim.start(withScale(() => 2, g()));
+    for (let i = 0; i < 14; i++) anim.step(1 / 60); // ~0.23s real — not done yet
+    expect(done).toBe(false);
+    for (let i = 0; i < 3; i++) anim.step(1 / 60);  // ~0.28s real — past 0.25s
+    expect(done).toBe(true);
+  });
+
+  // ── Propagation through orchestration ────────────────────────────────
+
+  it("withScale(0, race(a, b)) pauses both children", async () => {
+    const { withScale, race } = await import("@minim/core");
+    let log = "";
+    function* a(): any { while (true) { yield; log += "a"; } }
+    function* b(): any { while (true) { yield; log += "b"; } }
+    anim.start(withScale(() => 0, race(a(), b())));
+    for (let i = 0; i < 10; i++) anim.step(0.016);
+    expect(log).toBe("");
+  });
+
+  it("withScale(0, race(a, b)) can be cancelled cleanly", async () => {
+    const { withScale, race } = await import("@minim/core");
+    let cleanedA = false, cleanedB = false;
+    function* a(): any {
+      try { while (true) yield; } finally { cleanedA = true; }
+    }
+    function* b(): any {
+      try { while (true) yield; } finally { cleanedB = true; }
+    }
+    const stop = anim.start(withScale(() => 0, race(a(), b())));
+    for (let i = 0; i < 5; i++) anim.step(0.016);
+    stop();
+    expect(cleanedA).toBe(true);
+    expect(cleanedB).toBe(true);
+  });
+
+  it("withScale(0.5, race(a, b)) slows both children's timers", async () => {
+    const { withScale, race } = await import("@minim/core");
+    let done = false;
+    function* a(): any { yield 0.2; done = true; }
+    function* b(): any { while (true) yield; }
+    anim.start(withScale(() => 0.5, race(a(), b())));
+    // 15 frames × 1/60 ≈ 0.25s real → 0.125s local: not done
+    for (let i = 0; i < 15; i++) anim.step(1 / 60);
+    expect(done).toBe(false);
+    // 25 more frames × 1/60 ≈ 0.67s total real → 0.33s local: past 0.2
+    for (let i = 0; i < 25; i++) anim.step(1 / 60);
+    expect(done).toBe(true);
+  });
+
+  it("withScale(0, yield [a, b]) pauses all parallel children", async () => {
+    const { withScale } = await import("@minim/core");
+    let ticks = 0;
+    function* child(): any { while (true) { yield; ticks++; } }
+    function* parent(): any { yield [child(), child()]; }
+    anim.start(withScale(() => 0, parent()));
+    for (let i = 0; i < 10; i++) anim.step(0.016);
+    expect(ticks).toBe(0);
+  });
+
+  // ── Reactive scale ───────────────────────────────────────────────────
+
+  it("reactive scale: pause then resume continues from where it stopped", async () => {
+    const { withScale } = await import("@minim/core");
+    let scale = 1;
+    let ticks = 0;
+    function* g(): any { while (true) { yield; ticks++; } }
+    anim.start(withScale(() => scale, g()));
+    anim.step(0.016); anim.step(0.016);
+    expect(ticks).toBe(2);
+    scale = 0;
+    for (let i = 0; i < 100; i++) anim.step(0.016);
+    expect(ticks).toBe(2);
+    scale = 1;
+    anim.step(0.016); anim.step(0.016);
+    expect(ticks).toBe(4);
+  });
+
+  it("reactive scale: sleep resumes after pause without drift", async () => {
+    const { withScale } = await import("@minim/core");
+    let done = false;
+    let scale = 1;
+    function* g(): any { yield 1.0; done = true; }
+    anim.start(withScale(() => scale, g()));
+    for (let i = 0; i < 30; i++) anim.step(1 / 60);     // ~0.5s local
+    expect(done).toBe(false);
+    scale = 0;
+    for (let i = 0; i < 1000; i++) anim.step(1 / 60);   // paused, no progress
+    expect(done).toBe(false);
+    scale = 1;
+    for (let i = 0; i < 40; i++) anim.step(1 / 60);     // ~0.67s more local
+    expect(done).toBe(true);
+  });
+
+  // ── Nesting ──────────────────────────────────────────────────────────
+
+  it("nested withScale(0.5, withScale(0.5, g)) compounds to 0.25x", async () => {
+    const { withScale } = await import("@minim/core");
+    const dts: number[] = [];
+    function* g(): any { while (true) dts.push(yield); }
+    function* inner(): any { yield* withScale(() => 0.5, g()); }
+    anim.start(withScale(() => 0.5, inner()));
+    anim.step(1.0);
+    expect(dts[0]).toBeCloseTo(0.25, 3);
+  });
+
+  it("withScale(1, race(slow, timer)) still resolves via timer", async () => {
+    const { withScale, race } = await import("@minim/core");
+    let cleaned = false;
+    function* slow(): any {
+      try { while (true) yield; } finally { cleaned = true; }
+    }
+    anim.start(withScale(() => 1, race(slow(), 0.1)));
+    for (let i = 0; i < 20; i++) anim.step(0.02);
+    expect(cleaned).toBe(true);
   });
 });

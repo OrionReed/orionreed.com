@@ -8,9 +8,9 @@ export {
   type Animator,
   type AnimObserver,
   type Detach,
-  type PayloadOf,
+  type Resume,
   type SpawnFn,
-  type SuspendFn,
+  type Suspend,
   type Wake,
   type Yieldable,
 } from "./anim";
@@ -18,7 +18,7 @@ export {
 export {
   drive, suspend,
   all, race, rand,
-  mapDt,
+  mapDt, withScale,
   untilEvent, untilPromise,
   attachRaf,
 } from "./compose";

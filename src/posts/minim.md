@@ -42,11 +42,11 @@ No polling, no per-frame work while suspended.
 Generators compose through one entry point. `play(p)` lifts any `Playable` — a number (sleep), an array (parallel), a generator, a bare suspend-fn, or a reactive cell (wait truthy) — into the fluent surface. `loop(factory)` is its iterating cousin. Methods read subject-first — the running process comes first, the temporal qualifier follows:
 
 ```ts
-spring(w, rest).until(dragging);             // spring, until dragging
+spring(w, rest).until(dragging); // spring, until dragging
 play([lane0, lane1, lane2]).until(hardStop); // parallel lanes, until hardStop
-play(0.5).then(fadeIn(shape, 0.3));          // sleep, then fade in
-play(ready).then(work);                      // wait truthy, then work
-orbit(centre, shapes).at(playback);          // orbit at playback rate
+play(0.5).then(fadeIn(shape, 0.3)); // sleep, then fade in
+play(ready).then(work); // wait truthy, then work
+orbit(centre, shapes).at(playback); // orbit at playback rate
 ```
 
 `.until / .then / .at` are sugar — each composes with existing primitives (`race`, internal until-truthy, sleep). For the "while truthy" idiom use `.until(not(sig))`. The runtime never sees the fluent surface; it sees the same `Yieldable` shapes it always has.
@@ -57,8 +57,8 @@ Time scoping is per-generator. `.at(scale)` accepts a number, a signal, or a thu
 
 ```ts
 const playback = num(1);
-yield* play([intro, hold, outro]).at(playback);   // whole scene rate-controlled
-playback.value = 0;                               // pause everything
+yield * play([intro, hold, outro]).at(playback); // whole scene rate-controlled
+playback.value = 0; // pause everything
 ```
 
 `Anim` itself has no signal dependency: the runtime exposes time as `anim.clockMs` (a plain number) and `anim.onClock(cb)` (a callback subscription). For reactive access, the signals layer ships `clockSignal(anim)` — a tiny adapter that mirrors the number into a `ReadonlyCell<number>`.
@@ -82,14 +82,14 @@ Every animatable property of every shape is a signal. The DOM is wired to them o
 `.to(target, dur, ease?)` is installed by the struct framework on each registered Reactive's prototype — not on plain `Signal`. So `num(0).to(100, 0.5)` works (Num is a registered struct); plain `signal(0)` does not. The standalone `tween(sig, target, dur, ease?, lerp?)` is the escape hatch for value types you don't want to declare as a full struct.
 
 ```ts
-yield* x.to(100, 0.5, easeInOut);    // x is `Num.signal` (has `.to`)
-yield* tween(plainSig, 100, 0.5);    // escape hatch for plain Signal
+yield * x.to(100, 0.5, easeInOut); // x is `Num.signal` (has `.to`)
+yield * tween(plainSig, 100, 0.5); // escape hatch for plain Signal
 ```
 
 `.to(...)` returns a `Tween<T> extends Play<void>` — it composes with the rest of the fluent vocabulary, and chains another segment via `.to`:
 
 ```ts
-yield* x.to(100, 0.5).to(0, 0.5).until(stop);
+yield * x.to(100, 0.5).to(0, 0.5).until(stop);
 //          ^ tween     ^ tween   ^ Play method — stops whichever
 //                                  segment is currently running
 ```
@@ -189,8 +189,8 @@ Rate-controlled playback is just `.at(scale)` on whatever generator owns the wor
 
 ```ts
 const playback = num(1);
-yield* play([intro, hold, outro]).at(playback);
-yield* playback.to(0, 0.5, easeOut);         // ease into pause
+yield * play([intro, hold, outro]).at(playback);
+yield * playback.to(0, 0.5, easeOut); // ease into pause
 slider.oninput = () => (playback.value = +slider.value);
 ```
 
@@ -199,6 +199,35 @@ The same `(wake) => dispose` shape carries out to native browser primitives. `un
 ```ts
 yield * untilInView(el);
 yield * fadeIn(circle, 0.5);
+```
+
+That bridge runs in both directions. `native(el, keyframes, opts)` wraps an `Element.animate` call as an `Animator<void>`, so a compositor-driven tween composes with `stagger`, `all`, `race`, and `try/finally` like any other animator. The expensive properties — `filter`, `backdrop-filter`, multi-keyframe `transform` choreography across many elements — run off the main thread for free, while the surrounding scene still drives through signals.
+
+```ts
+yield *
+  stagger(0.05, particles, (el) =>
+    native(
+      el,
+      [
+        {
+          transform: "translateY(0) scale(1)",
+          filter: "blur(0)",
+          opacity: 0.35,
+        },
+        {
+          transform: "translateY(-22px) scale(1.6)",
+          filter: "blur(2px)",
+          opacity: 1,
+        },
+        {
+          transform: "translateY(0) scale(1)",
+          filter: "blur(0)",
+          opacity: 0.35,
+        },
+      ],
+      { duration: 1400, easing: "ease-in-out" },
+    ),
+  );
 ```
 
 <md-waapi-demo></md-waapi-demo>
@@ -251,3 +280,5 @@ Live-checked specs without a separate test framework.
 <md-centering></md-centering>
 
 <md-runtime-tests></md-runtime-tests>
+
+<md-trails></md-trails>

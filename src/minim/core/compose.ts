@@ -1,20 +1,15 @@
 // Signal-free generator combinators on top of `Anim`.
 //
-// Three categories:
-//
 //   Yieldable constructors:  drive, suspend
 //   Concurrency:             all, race, rand
-//   Wrappers:                mapDt
+//   Wrappers:                mapDt, withScale
+//   Bridges:                 untilEvent, untilPromise
+//   RAF adapter:             attachRaf
 //
-// Plus the RAF adapter — `attachRaf(anim)` wires `anim.step(dt)` to
-// `requestAnimationFrame`. None of these touch signals.
-//
-// Notable absences: timeout/cancel wrappers (`withTimeout`, `unless`,
-// etc.) are intentionally NOT here. They're 1-2 line compositions over
-// `race` + a numeric sleep, and shipping them as named helpers
-// metastasized into API sprawl. Inline the composition at the call
-// site: `race(work, 5)` for a 5-second cap, `race(work, when(stop))`
-// for a signal-bound cancel.
+// Notable absences: timeout/cancel wrappers (`withTimeout`, `unless`).
+// They were 1-2 line compositions over `race` + a numeric sleep and
+// metastasized into API sprawl. Inline the composition: `race(work, 5)`
+// for a 5-second cap, `race(work, when(stop))` for a signal-bound cancel.
 
 import {
   Anim,
@@ -22,9 +17,9 @@ import {
   isGen,
   type Animator,
   type SpawnFn,
-  type SuspendFn,
+  type Suspend,
   type Yieldable,
-  type PayloadOf,
+  type Resume,
 } from "./anim";
 
 // ════════════════════════════════════════════════════════════════════
@@ -47,7 +42,7 @@ export function* drive(
 
 /** `yield* suspend(impl)` parks until `wake(value)`; resumes with the
  *  typed `value`. Pure type-narrowing sugar over `(yield impl) as T`. */
-export function* suspend<T = void>(impl: SuspendFn<T>): Animator<T> {
+export function* suspend<T = void>(impl: Suspend<T>): Animator<T> {
   return (yield impl) as T;
 }
 
@@ -64,17 +59,26 @@ export function untilEvent<E extends Event = Event>(
   });
 }
 
-/** Wait for a promise; resume with its resolved value (rejection propagates). */
-export function* untilPromise<T>(p: PromiseLike<T>): Animator<T> {
-  return (yield p) as T;
+/** Wait for a promise; resume with its resolved value (rejection
+ *  propagates via `gen.throw`). The engine does not recognize raw
+ *  thenables — this is the user-space bridge. */
+export function untilPromise<T>(p: PromiseLike<T>): Animator<T> {
+  return suspend<T>((wake) => {
+    let cancelled = false;
+    p.then(
+      (v) => { if (!cancelled) wake(v); },
+      (e) => { if (!cancelled) wake.throw(e); },
+    );
+    return () => { cancelled = true; };
+  });
 }
 
 // ════════════════════════════════════════════════════════════════════
 // Concurrency combinators
 // ════════════════════════════════════════════════════════════════════
 
-/** Internal: subscribe a Yieldable from inside a SuspendFn body. Bare
- *  SuspendFns subscribe directly (sharing the parent's `spawn` so
+/** Internal: subscribe a Yieldable from inside a Suspend body. Bare
+ *  Suspend impls subscribe directly (sharing the parent's `spawn` so
  *  nested combinators don't re-wrap); generators pass through to
  *  preserve their return value; other shapes wrap via `asGen`. */
 function spawnYieldable(
@@ -85,7 +89,7 @@ function spawnYieldable(
 ): () => void {
   if (isGen(y)) return spawn(y, onDone);
   if (typeof y === "function") {
-    return (y as SuspendFn<any> as (
+    return (y as Suspend<any> as (
       w: (v: any) => void, s: SpawnFn, a: Anim,
     ) => () => void)(onDone, spawn, anim);
   }
@@ -96,8 +100,8 @@ function spawnYieldable(
  *  when all complete. Errors propagate from the first kid that throws. */
 export function all<Cs extends readonly Yieldable[]>(
   ...children: Cs
-): Animator<{ [K in keyof Cs]: PayloadOf<Cs[K]> }> {
-  type R = { [K in keyof Cs]: PayloadOf<Cs[K]> };
+): Animator<{ [K in keyof Cs]: Resume<Cs[K]> }> {
+  type R = { [K in keyof Cs]: Resume<Cs[K]> };
   return suspend<R>((wake, spawn, anim) => {
     if (children.length === 0) {
       wake([] as unknown as R);
@@ -121,8 +125,8 @@ export function all<Cs extends readonly Yieldable[]>(
  *  cancelled. */
 export function race<Cs extends readonly Yieldable[]>(
   ...children: Cs
-): Animator<PayloadOf<Cs[number]>> {
-  type R = PayloadOf<Cs[number]>;
+): Animator<Resume<Cs[number]>> {
+  type R = Resume<Cs[number]>;
   return suspend<R>((wake, spawn, anim) => {
     let won = false;
     const disposers: (() => void)[] = [];
@@ -154,30 +158,26 @@ export function* rand(...children: Animator[]): Animator {
 // ════════════════════════════════════════════════════════════════════
 // Wrappers — drive other gens via the standard yield seam
 //
-// Wrappers MUST `try/finally { gen.return() }`. JS doesn't propagate
-// `.return()` across independently-driven gens — only across `yield*`
-// delegation. Our wrappers iterate manually, so we own the cleanup.
+// `mapDt` is a generator-local wrapper: scale flows through the single
+// gen's yields but does NOT propagate to children spawned by race/all
+// inside it. For multi-active propagation use `withScale`.
+//
+// `withScale` is the engine-native time-scale primitive: it installs
+// the scale on a child Active so the scale propagates through every
+// orchestration boundary via the parent pointer.
 // ════════════════════════════════════════════════════════════════════
 
 /** Transform `dt` flowing through an inner gen.
  *
  *  Two cases:
+ *    • Numeric yields (sleeps) expand into a per-frame accumulator that
+ *      adds `fn(dt)` each tick until the original N is reached.
+ *      Reactive `fn` (e.g. paused → 0) stalls the timer mid-flight.
+ *    • Resume values (per-frame `dt` to the gen) pass through `fn` so
+ *      frame-yielding generators see the scaled `dt`.
  *
- *    • Numeric yields (sleep durations, `yield N`) get expanded into a
- *      per-frame accumulator that adds `fn(dt)` each tick until the
- *      original N is reached. This means time-scaling is *continuous*
- *      across the sleep: a reactive `fn` whose value flips to 0
- *      mid-sleep pauses the timer; flipping back to 1 resumes it. A
- *      naive single-shot `yield fn(N)` would lose this property — it'd
- *      scale once at emit time then drift wall-clock from there.
- *
- *    • Resume values (per-frame `dt` the runtime hands the gen) get
- *      passed through `fn` so frame-yielding generators (drive, etc.)
- *      see the scaled `dt`.
- *
- *  Non-numeric / non-positive / non-finite yields pass through. Used
- *  by `play().at(scale)` to give one coherent time-scale primitive
- *  that subsumes pause (`at(0)`), slow-mo, fast-forward, scrub. */
+ *  Generator-local — does NOT propagate to spawned children. Use
+ *  `withScale` for scope-propagating scaling. */
 export function* mapDt<R>(fn: (dt: number) => number, gen: Animator<R>): Animator<R> {
   let resume: number = 0;
   try {
@@ -186,9 +186,6 @@ export function* mapDt<R>(fn: (dt: number) => number, gen: Animator<R>): Animato
       if (r.done) return r.value;
       const v = r.value;
       if (typeof v === "number" && Number.isFinite(v) && v > 0) {
-        // Expand sleep into a frame-budgeted accumulator. acc grows by
-        // the *scaled* per-frame dt — pauses stall it, slow-mo slows it,
-        // and the inner gen sees a single `yield N` semantically.
         let acc = 0;
         while (acc < v) acc += fn(yield);
         resume = 0;
@@ -198,6 +195,20 @@ export function* mapDt<R>(fn: (dt: number) => number, gen: Animator<R>): Animato
       }
     }
   } finally { gen.return(undefined as never); }
+}
+
+/** Spawn `gen` as a child Active with `scaleFn` as its time-scale.
+ *
+ *  Every descendant inherits the scale via the parent chain, so
+ *  `withScale(() => 0, race(a, b))` truly pauses both children. This
+ *  is the engine-native alternative to wrapping with `mapDt` — no
+ *  per-frame accumulator, propagates through orchestration boundaries,
+ *  and `scaleFn() === 0` skips the subtree entirely (gen.next is never
+ *  called → frame counters freeze, drive callbacks don't fire). */
+export function* withScale<R>(scaleFn: () => number, gen: Animator<R>): Animator<R> {
+  return yield* suspend<R>((_wake, spawn) => {
+    return spawn(gen, (v) => _wake(v as R), scaleFn);
+  });
 }
 
 // ════════════════════════════════════════════════════════════════════

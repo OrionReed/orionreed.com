@@ -60,10 +60,10 @@ export {
   // Runtime engine
   Anim, asGen, detach, isGen,
   type Animator, type AnimObserver, type Detach,
-  type PayloadOf, type SpawnFn, type SuspendFn,
+  type Resume, type SpawnFn, type Suspend,
   type Wake, type Yieldable,
   // Combinators (signal-free)
-  drive, suspend, all, race, rand, mapDt,
+  drive, suspend, all, race, rand, mapDt, withScale,
   untilEvent, untilPromise, attachRaf,
   // Easings
   type Easing, linear, easeIn, easeOut, easeInOut,

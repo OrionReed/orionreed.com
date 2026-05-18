@@ -17,7 +17,7 @@ import {
   type Linear, type Lerp, type Metric, type Equals,
 } from "./traits";
 import {
-  drive, suspend, race, mapDt, type Animator, type Yieldable,
+  drive, suspend, race, withScale, type Animator, type Yieldable,
   type Easing, easeOut,
 } from "../core";
 
@@ -381,7 +381,12 @@ class PlayImpl<R> implements Play<R> {
   }
 
   at(scale: Val<number>): Play<R> {
-    return new PlayImpl(scaledGen(this.g, scale));
+    // `withScale` installs the scale on a child Active so it propagates
+    // through every orchestration boundary (race/all/parallel/etc) via
+    // the parent pointer. scale=0 truly pauses the subtree — no
+    // gen.next() calls, sleeps frozen.
+    const get = valFn(scale);
+    return new PlayImpl(withScale(() => get(), this.g));
   }
 }
 
@@ -485,9 +490,3 @@ export function every(sec: Val<number>, fn: () => void): Play {
   })());
 }
 
-/** Wrap a gen so all `dt` flowing through it (yielded sleeps + resumed
- *  per-frame dts) is multiplied by `scale`. Used by `play().at(...)`. */
-function scaledGen<R>(g: Animator<R>, scale: Val<number>): Animator<R> {
-  const get = valFn(scale);
-  return mapDt((dt) => dt * get(), g);
-}

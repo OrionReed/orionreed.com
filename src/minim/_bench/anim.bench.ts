@@ -8,7 +8,7 @@
 
 import "../_test/setup";
 import { bench, group, run, do_not_optimize } from "mitata";
-import { Anim, suspend, drive, type Animator, type SuspendFn } from "@minim/core";
+import { Anim, suspend, drive, type Animator } from "@minim/core";
 
 function* sleeper(): Animator { yield 0.5; }
 function* driver(): Animator { while (true) yield; }

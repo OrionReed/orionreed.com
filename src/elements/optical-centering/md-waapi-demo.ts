@@ -1,23 +1,31 @@
-// WAAPI / scroll bridge demo. Exercises the three reactive signals
-// from `minim/waapi.ts`:
+// WAAPI / scroll bridge demo. Two halves:
 //
-//   scrollProgress() — page-global [0, 1], rendered as a fill bar.
-//   viewProgress(this) — this element's view-timeline progress,
-//     rendered as a fill bar and as a tracker tracing a prolate
-//     cycloid (loops while moving forward).
-//   inView(this) — Boolean visibility, rendered as a live label.
+//   1. Reactive signals from `minim/ext/waapi.ts`:
+//        scrollProgress()   — page-global [0, 1], rendered as a bar.
+//        viewProgress(this) — view-timeline progress, rendered as a
+//          bar + a tracker tracing a prolate cycloid.
+//        inView(this)       — Boolean visibility, live label.
+//      These are pure signals — no animator needed; the existing
+//      attr/transform effects re-render as the reader scrolls.
 //
-// All three are pure signals — no `anim.loop` needed; the existing
-// attr/transform effects re-render the bars and tracker as the reader
-// scrolls. The awaitable surface (`untilAnimation`, `untilInView`,
-// `untilOutOfView`) isn't exercised here.
+//   2. `native(el, kf, opts)` — a row of particles each running a
+//      compositor-driven WAAPI animation (transform, opacity, filter
+//      blur, hue-rotate) choreographed across keyframes and staggered.
+//      Driven by a `loop` on the diagram's animator; the `native()`
+//      generator yields back when WAAPI's `finish` event fires, so it
+//      composes with `stagger`, `all`, `race` like any other animator.
+//      Multi-property filter interpolation across N particles is
+//      exactly the case where the generator runtime would spend the
+//      most main-thread time per frame; here it costs ~nothing.
 
-import {Anchor, Diagram, polar, Mount, circle, computed, label, vec, rect, type Signal} from "../../minim";
-import {inView, scrollProgress, viewProgress} from "../../minim/ext";
+import {Anchor, Diagram, polar, Mount, circle, computed, label, vec, rect, loop, stagger, type Signal} from "../../minim";
+import {inView, native, scrollProgress, viewProgress} from "../../minim/ext";
+
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 export class MdWaapiDemo extends Diagram {
   protected scene(s: Mount): void {
-    const view = this.view(560, 230);
+    const view = this.view(560, 310);
     const X = 56;
     const BW = 440;
 
@@ -86,6 +94,66 @@ export class MdWaapiDemo extends Diagram {
         () => (inView(this).value ? "in view" : "offscreen"),
         { size: 11, align: Anchor.Center, opacity: 0.6 },
       ),
+    );
+
+    // ── Native (WAAPI) particle row ─────────────────────────────────
+    // A row of bare SVG circles animated by `native()`. The shapes
+    // aren't `Shape`s — they're raw DOM nodes appended under the scene
+    // root so minim's per-frame transform/opacity effects don't fight
+    // the WAAPI animation. Each particle's `transform-origin` is pinned
+    // to its centre so `scale()` grows about the dot, not the SVG (0,0).
+    const PARTICLES = 18;
+    const PY = 270;
+    const PR = 5;
+    const particles: SVGCircleElement[] = [];
+    for (let i = 0; i < PARTICLES; i++) {
+      const cx = X + (BW * (i + 0.5)) / PARTICLES;
+      const c = document.createElementNS(SVG_NS, "circle");
+      c.setAttribute("cx", String(cx));
+      c.setAttribute("cy", String(PY));
+      c.setAttribute("r", String(PR));
+      c.setAttribute("fill", "currentColor");
+      c.style.transformOrigin = `${cx}px ${PY}px`;
+      this.root.el.appendChild(c);
+      particles.push(c);
+    }
+
+    s(
+      label(view.top.down(248), "native — WAAPI keyframes via `native()`", {
+        size: 12,
+        align: Anchor.Center,
+        opacity: 0.6,
+      }),
+      label(
+        view.top.down(295),
+        "transform · opacity · filter — compositor-only, ~0 main-thread cost",
+        { size: 10, align: Anchor.Center, opacity: 0.5 },
+      ),
+    );
+
+    // One animation pass: every particle runs the same 3-keyframe
+    // routine, staggered by `stride`. `native()` returns an Animator,
+    // so `stagger` (a generic shape-agnostic helper) composes over it
+    // exactly like over `to()` / `spring()` / etc. `loop` repeats; the
+    // beat after each pass keeps things from looking frantic.
+    const kfs: Keyframe[] = [
+      { transform: "translateY(0px) scale(1)",
+        filter: "blur(0px) hue-rotate(0turn)",
+        opacity: 0.35, offset: 0 },
+      { transform: "translateY(-22px) scale(1.6)",
+        filter: "blur(2px) hue-rotate(0.5turn)",
+        opacity: 1, offset: 0.5 },
+      { transform: "translateY(0px) scale(1)",
+        filter: "blur(0px) hue-rotate(1turn)",
+        opacity: 0.35, offset: 1 },
+    ];
+    this.anim.start(
+      loop(function* () {
+        yield* stagger(0.05, particles, (el) =>
+          native(el, kfs, { duration: 1400, easing: "ease-in-out" }),
+        );
+        yield 0.4;
+      }),
     );
   }
 }

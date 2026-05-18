@@ -19,6 +19,7 @@ export { EventBus } from "./events";
 export { snapshot } from "./snapshot";
 
 export {
+  native,
   untilAnimation,
   untilInView,
   untilOutOfView,

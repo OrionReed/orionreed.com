@@ -626,7 +626,7 @@ const TESTS: TestCase[] = [
   {
     name: "spawn after setup is permitted (scoped to active suspension)",
     run: (assert) => {
-      // Calling `spawn` after the SuspendFn body returns is fine while
+      // Calling `spawn` after the Suspend body returns is fine while
       // the suspension is still parked — the spawned child cascades
       // with the parent on cancel. Previous engine threw; the new
       // contract is more permissive and uses `detach(g)` for genuinely-
