@@ -1,14 +1,4 @@
-// Prose-linking element for plain (non-math) text.
-//
-// Same signal wiring as <md-tex sym="...">, but renders no math — the
-// text content stays in the prose font. Use for full words or phrases;
-// use <md-tex> for symbols that should render in the math font.
-//
-//      The <md-marker for="d" sym="ball">ball</md-marker> has kinetic energy
-//      <md-tex for="d" sym="v">v^2</md-tex>.
-//
-// `for` names the diagram element's id. Falls back to global registry
-// if absent (transitional — prefer the scoped path).
+// Prose-linking element for plain (non-math) text — same wiring as <md-tex sym="...">.
 
 import {effect} from "@minim/signals";
 import {hover, getMarker as getGlobalMarker, type Marker} from "@minim/tex";

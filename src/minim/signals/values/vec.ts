@@ -53,7 +53,6 @@ export class Vec extends Signal<Value> implements VecOps<Vec> {
     return derived(Vec, () => lerp(this.value, value(b), value(t)));
   }
 
-  // ── Cardinal-direction shorthands (y-down convention) ────────────
   up(n: Val<number>)    { return derived(Vec, () => ({ x: this.value.x,            y: this.value.y - value(n) })); }
   down(n: Val<number>)  { return derived(Vec, () => ({ x: this.value.x,            y: this.value.y + value(n) })); }
   left(n: Val<number>)  { return derived(Vec, () => ({ x: this.value.x - value(n), y: this.value.y })); }

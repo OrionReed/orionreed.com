@@ -9,8 +9,7 @@ import {
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
-/** Stroke segment — line or arc. Subclasses override `segments()` to
- *  expose geometry to the dashed renderer. */
+/** Stroke segment for the dashed renderer; override `segments()`. */
 export type Segment =
   | { type: "line"; from: VecValue; to: VecValue }
   | {
@@ -22,9 +21,8 @@ export type Segment =
       a1: () => number;
     };
 
-/** Construction options shared by every Shape. Each prop accepts
- *  `Val<T>` (literal / Signal / thunk). `aside` excludes from
- *  parent's bounds. */
+/** Shared Shape opts; each prop accepts `Val<T>`. `aside` excludes
+ *  from parent bounds. */
 export interface ShapeOpts {
   translate?: Val<VecValue>;
   rotate?: Val<number>;
@@ -48,24 +46,15 @@ export type AnimatableKey =
 type AnimatableField<K extends AnimatableKey> =
   K extends "translate" | "scale" | "origin" ? Vec : Num;
 
-/** Anything carrying the listed animatable axes (Shape, Part, mock,
- *  derived). Combinable via union — `Has<"translate" | "opacity">`.
- *  The field is `readonly` (you can't reassign it) but the *cell* at
- *  the field is writable via its `.value` setter. */
+/** Anything carrying the listed animatable axes. Combine via union. */
 export type Has<K extends AnimatableKey> = {
   readonly [P in K]: AnimatableField<P>;
 };
 
-/** Universal scene-graph node. Wraps an SVG `<g>` (transform + opacity
- *  + children); subclasses add an intrinsic element and geometry. A
- *  bare `new Shape()` is a group. Animatable state lives in
- *  `this.transform: Transform`. Field aliases (`translate`, `rotate`,
- *  …) forward to the transform's nested signals — same reference.
- *
- *  Reach into `shape.box.x` / `shape.box.center` for box-local axes &
- *  cardinals. Shape's own `center`/`top`/…/`at(u,v)` differ: they
- *  return *parent-frame* points (post-transform), and writing to them
- *  adjusts `translate` so the anchor lands at the new position. */
+/** Scene-graph node wrapping an SVG `<g>`. Field aliases (`translate`,
+ *  `rotate`, …) forward to `this.transform`'s nested signals. Shape's
+ *  `center`/`top`/…/`at(u,v)` return parent-frame points (writes adjust
+ *  `translate`); `shape.box.center` is local-frame. */
 export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly el: SVGGElement;
   readonly intrinsic?: SVGElement;
@@ -83,13 +72,10 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   /** Cumulative scene-root frame: `parent.worldFrame × localFrame`. */
   readonly worldFrame: Signal<Matrix2DValue>;
 
-  /** Local-frame Box. Use `shape.box.x`, `.center`, `.at(u,v)`, etc.
-   *  for box-local geometry. */
+  /** Local-frame box; reach into `.x`, `.center`, `.at(u,v)`, etc. */
   readonly box: Box;
 
-  /** Lens-backed parent-frame anchors. Reads return post-transform
-   *  position; writes shift `translate` by the delta. Distinct from
-   *  `shape.box.center` (local frame) — these track visual position. */
+  /** Lens-backed parent-frame anchors; writes shift `translate`. */
   get center(): Vec { return this.#anchor("center", 0.5, 0.5); }
   get top(): Vec    { return this.#anchor("top",    0.5, 0); }
   get bottom(): Vec { return this.#anchor("bottom", 0.5, 1); }
@@ -111,14 +97,12 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     intrinsicType?: string,
     boxFn?: () => BoxValue,
     opts: O = {} as O,
-    /** Subclass per-prop defaults (kept off `O` so call-site types stay
-     *  driven by user input only). */
+    /** Subclass per-prop defaults (kept off `O`). */
     defaults: ShapeOpts = {},
   ) {
     this.el = document.createElementNS(SVG_NS, "g") as SVGGElement;
-    // CSS transforms (vs SVG `transform`) hit the GPU composite path.
-    // Pin transform-origin to the SVG userspace origin so our composed
-    // pivot math is correct (browser defaults vary).
+    // CSS `transform` (vs SVG `transform`) hits the GPU composite path.
+    // Pin origin to userspace 0,0 so composed pivot math is correct.
     this.el.style.transformOrigin = "0 0";
     if (intrinsicType) {
       this.intrinsic = document.createElementNS(SVG_NS, intrinsicType);
@@ -126,7 +110,6 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     }
 
     this.transform = new Transform();
-    // Per-field bind via Val<T>. Each axis accepts plain/signal/thunk.
     const setField = <T>(target: Signal<T>, src: Val<T> | undefined): void => {
       if (src !== undefined) target.bind(src);
     };
@@ -143,9 +126,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     this.opacity = this.transform.opacity;
     this.aside = opts.aside ?? defaults.aside ?? false;
 
-    // Group default: union of non-aside children's boxes, each composed
-    // through its localFrame. `derived(Box, ...)` returns a Computed
-    // wearing Box's surface (cardinals, x/y/w/h field lenses, ...).
+    // Group default: union of non-aside children's boxes composed
+    // through their localFrame.
     const boxSig = derived(Box,
       boxFn ??
         (() => {
@@ -158,8 +140,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
     this.box = boxSig;
 
-    // Local frame: composed matrix from per-field signals. Identity
-    // short-circuit avoids reading `origin` for no-transform groups.
+    // Identity short-circuit avoids reading `origin` on no-transform groups.
     const tr = this.transform;
     this.localFrame = computed(() => {
       const t = tr.translate.value;
@@ -171,8 +152,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
       return compose(t, r, sc, tr.origin.value);
     });
 
-    // World frame: cumulative through ancestors. Re-parenting is NOT
-    // reactive (parent ref is plain); rebuild manually if needed.
+    // Re-parenting is NOT reactive; parent ref is a plain field.
     this.worldFrame = computed(() => {
       const local = this.localFrame.value;
       const p = this.#parent;
@@ -189,9 +169,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     );
   }
 
-  /** Perimeter point toward `target` (parent frame, so connectors land
-   *  on the visual edge after translate/rotate/scale). Default = Box
-   *  edge math; tighter shapes (Circle, Rect) override. */
+  /** Parent-frame perimeter point toward `target`; tighter shapes override. */
   boundary(toward: Vec): Vec {
     return derived(Vec, () =>
       BoxMath.edgeFrom(
@@ -200,8 +178,6 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
       ),
     );
   }
-
-  // ── Lazy anchor construction ────────────────────────────────────────
 
   #makeAnchor(u: number, v: number): Vec {
     const boxSig = this.box;
@@ -234,7 +210,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     return val;
   }
 
-  /** Stroke segments — used by the dashed renderer. Default = bounding rect. */
+  /** Stroke segments for the dashed renderer; default = bounding rect. */
   segments(): Segment[] {
     const b = this.box.value;
     return [
@@ -245,7 +221,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     ];
   }
 
-  /** Bind one SVG attribute; static value sets once, reactive runs as effect. */
+  /** Bind one SVG attribute; static sets once, reactive runs as effect. */
   attr(
     name: string,
     val: Val<string | number>,
@@ -267,8 +243,6 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   /** Reactive effect torn down with the shape. */
   effect(fn: () => void): void { this.disposers.push(effect(fn)); }
 
-  // ── DOM events ──────────────────────────────────────────────────────
-
   on(
     name: string,
     handler: (e: Event) => void,
@@ -289,7 +263,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     });
   }
 
-  /** Map client-space coords into this shape's local frame via `getScreenCTM`. */
+  /** Map client coords into this shape's local frame. */
   toLocal(evt: { clientX: number; clientY: number }): VecValue {
     const target = (this.intrinsic ?? this.el) as SVGGraphicsElement;
     const ctm = target.getScreenCTM();
@@ -344,24 +318,19 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   }
 }
 
-// ── Aggregates over multiple shapes ─────────────────────────────────
-//
-// Each is a writable view via `mean`: tween the result to move the
-// group rigidly. Generic `mean(...sigs)` is in `signals/values/`;
-// these are shape-specific sugar.
+// Shape-specific sugar over generic `mean(...)`.
 
-/** Centroid of shapes' translates, as a writable Vec. Accepts anything
- *  with a writable `.translate: Vec` (Shape, mock, derived). */
+/** Writable centroid of shapes' translates. */
 export function centroid(...shapes: { translate: Vec }[]): Vec {
   return mean(...shapes.map((s) => s.translate));
 }
 
-/** Mean rotation as a writable Num. */
+/** Writable mean rotation. */
 export function meanRotation(...shapes: { rotate: Num }[]): Num {
   return mean(...shapes.map((s) => s.rotate));
 }
 
-/** Mean scale as a writable Vec. */
+/** Writable mean scale. */
 export function meanScale(...shapes: { scale: Vec }[]): Vec {
   return mean(...shapes.map((s) => s.scale));
 }

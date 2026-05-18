@@ -1,11 +1,4 @@
-// Tag a generator factory so each instance is tagged for the trace
-// machinery. Use at the call site (not inside library primitives) so
-// production stays untagged.
-//
-//     const t = tagAll({ fadeIn, fadeUp });
-//     anim.start(function*() {
-//       yield [t.fadeIn(a, 0.3), t.fadeUp(b, 0.5)];
-//     });
+// Tag a generator factory so each spawned instance is identifiable in traces.
 
 import {Animator} from "@minim/core";
 

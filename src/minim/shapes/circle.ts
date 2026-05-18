@@ -22,10 +22,6 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
       { origin: () => center.value },
     );
     this.radius = r;
-    // Note: the inherited Box `this.center` (a Vec computed
-    // from the Box) resolves to the same point as `center` reactively;
-    // internal methods read it via `this.center` rather than capturing
-    // the constructor parameter.
     wireStroke(this, opts, true, () => {
       this.attr("cx", center.x);
       this.attr("cy", center.y);

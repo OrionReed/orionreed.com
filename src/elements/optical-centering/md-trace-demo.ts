@@ -1,12 +1,3 @@
-// Self-rendering trace demo. A small animation up top; below it, every
-// generator the runtime spawns becomes a live Gantt row. Built on
-// `spans(anim)` + `counter` + `traceTree` + `tag`/`tagAll` +
-// `anim.clock` (the reactive logical-time signal).
-//
-// Layout: per-parent subtree blocks. A span plus its descendants form
-// one contiguous block; concurrent siblings stack into separate
-// blocks; sequential batches under one parent reuse lanes.
-
 import {
   Diagram,
   Mount,
@@ -48,8 +39,7 @@ const MAX_LANES = 10;
 
 const ROW_FILL = ["#1a1a1a", "#5b8def", "#7aa6f0", "#a5c2f5"] as const;
 
-/** Lane assignment. Each subtree owns a contiguous block of lanes
- *  below its root; sequential batches reuse lanes. */
+/** Each subtree owns a contiguous lane block; sequential batches reuse lanes. */
 function assignLanes(tree: TraceTree): {
   lanes: Map<number, number>;
   total: number;
@@ -70,24 +60,19 @@ function assignLanes(tree: TraceTree): {
   return { lanes, total: cursor || 1 };
 }
 
-// Tag library factories locally — library exports stay untagged so
-// production code pays nothing.
+// Tag locally so production library exports stay untagged.
 const t = tagAll({ fadeIn, fadeUp, fadeOut, fadeUpOut, spinIn, zoomOut });
 
 export class MdTraceDemo extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(W, ROWS_Y + MAX_LANES * (ROW_H + ROW_GAP) + 24);
 
-    // ── Top: three circles the demo animates ───────────────────────
     const row = view.top.down(TOP_H / 2);
     const a = s(circle(row.left(100), 18, { fill: "#5b8def" }));
     const b = s(circle(row, 18, { fill: "#f5a623" }));
     const c = s(circle(row.right(100), 18, { fill: "#e25c5c" }));
 
-    // `clockSignal(anim)` projects `anim.clockMs` (plain number) into
-    // a reactive `Signal<number>` for use in `computed`. Anim itself
-    // has no signal dependency — the adapter lives in the signals
-    // layer. Built before `spans()` so it doesn't appear as a span.
+    // Built before `spans()` so the clock adapter doesn't appear as a span.
     const now = clockSignal(this.anim);
     const trace = spans(this.anim);
 
@@ -95,7 +80,6 @@ export class MdTraceDemo extends Diagram {
       tag(function* demoAnim() {
         yield [t.fadeIn(a, 0.3), t.fadeUp(b, 0.7), t.spinIn(c, 0.5)];
         yield 0.2;
-        // Single-axis tween via the lens.
         yield a.translate.x.to(-50, 0.4, easeOut);
         yield [
           a.translate.to({ x: 0, y: -30 }, 0.5, easeOut),
@@ -107,9 +91,7 @@ export class MdTraceDemo extends Diagram {
       }),
     );
 
-    // ── Reactive derivations ───────────────────────────────────────
-    // Bumps on each spawn/complete/cancel. Sparse, event-paced — tree
-    // and layout only recompute when structure changes.
+    // Bumps on each spawn/complete/cancel; sparse, event-paced.
     const version = signal(0);
     trace.onChange(() => {
       version.value++;
@@ -122,14 +104,13 @@ export class MdTraceDemo extends Diagram {
     const layout = computed(() => assignLanes(tree.value));
 
     const GANTT_W = W - 2 * PAD;
-    // SCALE depends on `now` so the gantt re-fits as in-flight time grows.
+    // Depends on `now` so the gantt re-fits as in-flight time grows.
     const SCALE = computed(() => {
       now.value;
       version.value;
       return GANTT_W / Math.max(trace.duration(), SCALE_MIN);
     });
 
-    // ── Header ─────────────────────────────────────────────────────
     s(
       label(vec(PAD, HEADER_Y), "trace", {
         size: 12,
@@ -149,9 +130,7 @@ export class MdTraceDemo extends Diagram {
       ),
     );
 
-    // ── Rows ───────────────────────────────────────────────────────
-    // A fresh slice per version-bump forces forEach to diff when new
-    // spans appear; per-frame growth flows through per-row computeds.
+    // Fresh slice per version-bump forces forEach to diff when new spans appear.
     const spansSig = computed(() => {
       version.value;
       return trace.spans.slice();
@@ -201,7 +180,6 @@ export class MdTraceDemo extends Diagram {
       { key: (span) => span },
     );
 
-    // ── Footer ─────────────────────────────────────────────────────
     s(
       label(
         view.bottom.up(10),

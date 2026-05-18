@@ -1,8 +1,4 @@
-// Ink color system. Three exports — `ink(hue)`, `grey`, `stroke` —
-// share a single spread anchor (m=1) and differ in their mark anchor
-// (m=0). `.mod(m)` interpolates between mark and spread in OKLCH.
-// Anchor L values live in color.css; see `deriveAnchors` below for
-// the APCA inversion that produced them.
+// Ink system: `ink`/`grey`/`stroke` share a spread anchor (m=1); `.mod(m)` interpolates in OKLCH.
 
 export const HUE = {
   red: 25,
@@ -35,8 +31,7 @@ export interface Ink {
   toString(): string;
 }
 
-// L and C are CSS expressions referencing --ink-* vars, so dark-mode
-// flips propagate without re-rendering.
+// L/C are CSS exprs over --ink-* vars; dark-mode flips propagate without re-render.
 function makeInk(
   baseL: string,
   baseC: string,
@@ -94,15 +89,7 @@ export const stroke: Ink = makeInk(
   "0",
 );
 
-/**
- * APCA-inverse: OKLCH-L for a given bg-L and target Lc. Not called at
- * runtime — kept here as the documented derivation of the L numbers in
- * color.css. Run in a console to re-tune.
- *
- *   bg lighter than fg: Lc = 114·(Y_bg^0.56 − Y_fg^0.57)
- *   bg darker  than fg: Lc = 114·(Y_fg^0.62 − Y_bg^0.65)
- *   For greys, Y ≈ (L/100)³.
- */
+/** APCA-inverse: OKLCH-L for a given bg-L and target Lc. Re-derives anchors in color.css. */
 export function deriveAnchors(bgL: number, lcTarget: number): number {
   const yBg = Math.pow(bgL / 100, 3);
   const yBgC = yBg < 0.022 ? Math.pow(0.022 - yBg, 1.414) + yBg : yBg;

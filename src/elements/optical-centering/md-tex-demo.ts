@@ -1,28 +1,4 @@
-// minim/tex demo: factory-with-interpolation API + the full motion
-// surface (write, highlight, decorations, morph, pluck/unpluck,
-// writeOut, per-part stagger via the standard `stagger` combinator).
-//
-// The animation walks four sections:
-//
-//   A. Pythagorean derivation  ─── 5 forms of a + b = c, stresses every
-//      MathML context (top-level, msup base, mfrac numerator, …).
-//
-//   B. Multiplication cycle    ─── 4 ways to write a · b. Includes a
-//      morph through `b · a` to demonstrate "swap-via-morph": when
-//      two arrangements both exist, morph naturally exchanges
-//      matched-name parts. (No need for a separate `swap` primitive
-//      for this case.)
-//
-//   C. Derivative cycle        ─── 3 ways to write df/dx; rewrite
-//      mode (auto cross-fade for differing-content parts) shows when
-//      x leaves the picture.
-//
-//   D. Pluck & outro           ─── lift `f` out and orbit it, then
-//      morph back to a part-rich form for a per-part staggered fade.
-//
-// Note on `tex` and backslashes: the template tag reads `strings.raw`,
-// so author-side LaTeX uses single backslashes (e.g. `\frac`, `\dot`,
-// `\cdot`) — JS template literals don't get to eat your `\f` / `\t`.
+// `tex` reads strings.raw, so use single backslashes (`\frac`, `\dot`, `\cdot`).
 
 import {Anchor, Diagram, Mount, signal, label, loop, snapshot, stagger, type Content} from "../../minim";
 import {brace, frame, highlight, morph, parts, pluck, tex, underline, unpluck, write, writeOut} from "../../minim/tex";
@@ -46,32 +22,21 @@ export class MdTexDemo extends Diagram {
       }),
     );
 
-    // ── Persistent identities ────────────────────────────────────────
-    // a, b, c carry the Pythagorean cycle and (for a, b) the
-    // multiplication cycle. f, x carry the derivative cycle.
-    // `cross` (= the 2ab term) appears partway through the
-    // Pythagorean derivation.
     const { a, b, c, cross } = parts("a", "b", "c", { cross: "2ab" });
     const { f, x } = parts("f", "x");
 
-    // Default math size (`tokens.tex.size`) is already large enough
-    // for diagrams; no per-shape size override needed.
-
-    // ── Pythagorean: 5 forms ─────────────────────────────────────────
     const p1 = s(tex`${a} + ${b} = ${c}`);
     const p2 = s(tex`(${a} + ${b})^2 = ${c}^2`);
     const p3 = s(tex`${a}^2 + ${cross} + ${b}^2 = ${c}^2`);
     const p4 = s(tex`${a}^2 + ${b}^2 = ${c}^2 - ${cross}`);
     const p5 = s(tex`\frac{${a}^2 + ${b}^2}{${c}^2 - ${cross}} = 1`);
 
-    // ── Multiplication: 4 forms + the swap-via-morph variant ─────────
     const m1 = s(tex`${a} \cdot ${b}`);
-    const m1r = s(tex`${b} \cdot ${a}`); // commutativity target
+    const m1r = s(tex`${b} \cdot ${a}`);
     const m2 = s(tex`${a} \times ${b}`);
     const m3 = s(tex`${a}${b}`);
     const m4 = s(tex`(${a})(${b})`);
 
-    // ── Derivative: 3 forms ──────────────────────────────────────────
     const d1 = s(tex`\frac{d${f}}{d${x}}`);
     const d2 = s(tex`${f}'(${x})`);
     const d3 = s(tex`\dot{${f}}`);
@@ -83,8 +48,6 @@ export class MdTexDemo extends Diagram {
       eq.opacity.value = 0;
     }
 
-    // Decorations on p1 — three parts, one decoration each.
-    // Reads as "look at each side of the equation".
     const aBox = frame(p1.parts.a, { gap: 3 });
     const bUnderline = underline(p1.parts.b);
     const cBrace = brace(p1.parts.c, { placement: "below" });
@@ -106,7 +69,6 @@ export class MdTexDemo extends Diagram {
       for (const eq of eqs) eq.el.style.clipPath = "";
       yield 0.3;
 
-      // ── A. Pythagorean derivation ────────────────────────────────
       status.value = "write — clip-path sweep, left → right";
       p1.opacity.value = 1;
       yield* write(p1, 0.7);
@@ -154,7 +116,6 @@ export class MdTexDemo extends Diagram {
       yield* morph(p5, p1, 0.8);
       yield 0.5;
 
-      // ── B. Multiplication cycle ──────────────────────────────────
       status.value = "morph — rewrite as a product (cross-cycle)";
       yield* morph(p1, m1, 0.7);
       yield 0.5;
@@ -181,7 +142,6 @@ export class MdTexDemo extends Diagram {
       yield* morph(m4, m1, 0.6);
       yield 0.5;
 
-      // ── C. Derivative cycle ──────────────────────────────────────
       status.value = "morph — to df/dx (cross-cycle)";
       yield* morph(m1, d1, 0.8);
       yield 0.5;
@@ -198,7 +158,6 @@ export class MdTexDemo extends Diagram {
       yield* morph(d3, d1, 0.7);
       yield 0.5;
 
-      // ── D. Pluck demo ────────────────────────────────────────────
       status.value = "pluck — lift f out, orbit, then unpluck back";
       const fHandle = pluck(d1.parts.f);
       const home = fHandle.translate.peek();
@@ -209,17 +168,11 @@ export class MdTexDemo extends Diagram {
       yield* unpluck(fHandle, undefined, 0.5);
       yield 0.5;
 
-      // ── Outro ────────────────────────────────────────────────────
-      // Land on m1 (a · b) so writeParts has something meaningful to
-      // stagger — both letters are parts, the dot is the only static
-      // glyph, so the reveal reads as "letters appear, dot stays".
       status.value = "morph — back to a · b for the outro";
       yield* morph(d1, m1, 0.7);
       yield 0.4;
 
       status.value = "stagger — per-part fade-in over a + b";
-      // No dedicated `writeParts` primitive — minim's `stagger` is the
-      // general form. Setup: zero opacities; animate: stagger fade-in.
       for (const p of m1.parts) p.opacity.value = 0;
       yield* stagger(0.12, m1.parts, (p) => p.opacity.to(1, 0.4));
       yield 0.5;

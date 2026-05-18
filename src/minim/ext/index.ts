@@ -1,11 +1,3 @@
-// Extras — opt-in extensions that don't need to be in `core/`. Each
-// module is independently useful and self-contained:
-//
-//   timeline   declarative clip composition over a clock
-//   events     named-event bus with `until(name)` suspension
-//   waapi      Web Animations / scroll / view-timeline bridges
-//   snapshot   capture-and-restore for cells (loop bodies, cancels)
-
 export {
   timeline,
   sequential,

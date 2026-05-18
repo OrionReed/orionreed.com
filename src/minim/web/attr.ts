@@ -78,8 +78,6 @@ function register(
   });
 }
 
-// ── Factories ───────────────────────────────────────────────────────
-
 function str(): PropertyDecorator;
 function str(default_: string): PropertyDecorator;
 function str(default_?: string): PropertyDecorator {
@@ -99,8 +97,6 @@ function bool(default_?: boolean): PropertyDecorator {
 }
 
 export const attr = { str, num, bool };
-
-// ── Plumbing for Diagram ────────────────────────────────────────────
 
 /** Walk the prototype chain collecting `_attributes`. Used by
  *  `Diagram.observedAttributes` so subclasses see parent decls. */

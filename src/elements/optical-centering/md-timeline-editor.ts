@@ -1,8 +1,3 @@
-// Editable named durations driving a looping animation. Drag the
-// knobs to retime; clip durations ripple through to subsequent starts
-// via `sequential`. Actor opacities are pure signal bindings on
-// `clip.t`.
-
 import {Diagram, EventBus, Mount, Anchor, signal, circle, computed, draggable, label, line, loop, vec, rect, sequential, snapshot, timeline} from "../../minim";
 
 const PHASES = ["intro", "hold", "outro"] as const;
@@ -13,7 +8,6 @@ export class MdTimelineEditor extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(600, 320);
 
-    // ── Editable timeline ──────────────────────────────────────────
     const tl = timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));
     const reset = snapshot(tl.clock);
 
@@ -27,7 +21,6 @@ export class MdTimelineEditor extends Diagram {
       taps.value = taps.peek() + 1;
     });
 
-    // ── Header ─────────────────────────────────────────────────────
     s(
       label(
         view.top.down(24),
@@ -36,7 +29,6 @@ export class MdTimelineEditor extends Diagram {
       ),
     );
 
-    // ── Timeline strip (top) ───────────────────────────────────────
     const STRIP_X = 60;
     const STRIP_W = view.w.value - 120;
     const STRIP_Y = 60;
@@ -70,7 +62,6 @@ export class MdTimelineEditor extends Diagram {
       }),
     );
 
-    // ── Slider knobs ───────────────────────────────────────────────
     const SLIDER_Y = 150;
     const SLIDER_GAP = 24;
     const SLIDER_W = (view.w.value - 120 - SLIDER_GAP * 2) / 3;
@@ -96,12 +87,11 @@ export class MdTimelineEditor extends Diagram {
       );
       draggable(knob, (local) => {
         const u = Math.min(Math.max((local.x - x0) / SLIDER_W, 0), 1);
-        // Floor at 0.1s — a zero-duration phase would freeze the loop.
+        // Floor at 0.1s — zero-duration phase would freeze the loop.
         dur.value = Math.max(0.1, u * MAX_DUR);
       });
     });
 
-    // ── Stage actors ───────────────────────────────────────────────
     const STAGE_Y = 240;
     const actors = PHASES.map((name, i) => {
       const c = circle(vec(120 + i * 180, STAGE_Y), 24, {

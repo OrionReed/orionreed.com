@@ -1,22 +1,4 @@
-// Inline math custom element with optional prose-linking.
-//
-// Three usage modes:
-//
-// 1. Pure math — no linking, just Temml rendering:
-//
-//      <md-tex>a^2 + b^2 = c^2</md-tex>
-//
-// 2. Single-symbol linking — text content is LaTeX for one symbol:
-//
-//      <md-tex for="d" sym="v">v^2</md-tex>
-//
-// 3. Multi-symbol expression — full LaTeX with \sym{id}{content} macros:
-//
-//      <md-tex for="d">\dfrac{1}{2}\sym{m}{m}\sym{v}{v^2}</md-tex>
-//
-// `for` names the diagram element's id. Markers are looked up on that
-// Diagram instance (scoped). Falls back to the global registry if `for`
-// is absent (transitional — prefer the scoped path).
+// Inline math custom element with optional prose-linking via `for`/`sym`.
 
 import temml from "temml";
 import {effect} from "@minim/signals";
@@ -45,14 +27,13 @@ export class MdTex extends HTMLElement {
     const src = this.textContent?.trim() ?? "";
 
     if (singleId) {
-      // Mode 2: single-symbol
       this.innerHTML = temml.renderToString(src, { throwOnError: false, trust: true });
       const m = resolveMarker(singleId, forId);
       if (m) this.#wire(this as unknown as HTMLElement, m);
       return;
     }
 
-    // Modes 1 & 3: full expression — pre-process \sym{id}{content}
+    // Full expression — pre-process \sym{id}{content}
     const symIds = new Map<string, string>(); // cssClass → registryId
     const processedSrc = src.replace(SYM_RE, (_, id: string, content: string) => {
       const cls = symClass(id);

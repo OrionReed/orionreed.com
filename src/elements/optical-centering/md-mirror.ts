@@ -1,32 +1,10 @@
-// Bidirectional-lens showcase. A small "F" on the left of a draggable
-// mirror; the F on the right is the reflection — every vertex is a lens
-// of the original via the mirror. Reflection is its own inverse, so the
-// same formula gives reads AND writes, and `handle(reflectedPoint)`
-// works without any special-casing.
-//
-// What you can drag:
-//   – any vertex of either F (4 + 4)
-//   – either endpoint of the mirror (2)
-//
-// What happens for free:
-//   – flipping one F mirrors the other in real time
-//   – moving the mirror sweeps the reflection across space
-//   – the dashed "centroid line" stays perpendicular to the mirror, a
-//     classical geometric truth that falls out of the algebra
-//
-// Doing this in a non-reactive system means one event handler per
-// vertex, a manual constraint propagator, and re-derivation of every
-// dependent on every change. Here it's about ten lines of bookkeeping
-// over one tiny `reflect` formula.
-
 import {
   Anchor, Diagram, Mount,
   Vec, type VecValue, derived,
   handle, label, line, vec,
 } from "../../minim";
 
-/** Reflect point `p` across the line through `a` and `b`. Degenerate
- *  line (a == b) returns `p` unchanged. */
+/** Reflect `p` across line a–b; returns `p` unchanged when a==b. */
 function reflect(p: VecValue, a: VecValue, b: VecValue): VecValue {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -42,15 +20,10 @@ export class MdMirror extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(720, 360);
 
-    // Mirror endpoints — two free Points. Everything reflects through
-    // the line they define, so dragging either re-aligns the world.
     const mA = vec(360, 30);
     const mB = vec(360, 330);
 
-    // The reflection lens. `read` reflects the source across the
-    // current mirror; `write` reflects back — the same formula, since
-    // reflection is an involution (`R∘R = id`). One closure → both
-    // directions of the handle for free.
+    // Reflection is an involution — same formula reads and writes.
     const mirrorOf = (src: Vec): Vec =>
       derived(Vec,
         () => reflect(src.value, mA.value, mB.value),
@@ -59,15 +32,12 @@ export class MdMirror extends Diagram {
         },
       );
 
-    // ── Original F: four free vertices, three lines ──────────────────
     const stemTop = vec(200, 90);
     const stemBot = vec(200, 270);
     const topRight = vec(280, 90);
     const midRight = vec(260, 180);
     const F = "#5b8def";
 
-    // Middle bar attaches to the stem's midpoint — derived, so the bar
-    // rides up and down when the stem stretches.
     const stemMid = stemTop.lerp(stemBot, 0.5);
 
     s(
@@ -76,7 +46,6 @@ export class MdMirror extends Diagram {
       line(stemMid, midRight, { stroke: F, strokeWidth: 4 }),
     );
 
-    // ── Reflected F: lensed vertices, same topology ──────────────────
     const stemTopR = mirrorOf(stemTop);
     const stemBotR = mirrorOf(stemBot);
     const topRightR = mirrorOf(topRight);
@@ -91,14 +60,8 @@ export class MdMirror extends Diagram {
       line(stemMidR, midRightR, { stroke: FR, strokeWidth: 4 }),
     );
 
-    // ── Mirror line + centroid-link overlay ──────────────────────────
     s(line(mA, mB, { thin: true, dashed: true, opacity: 0.5 }));
 
-    // ── Handles ──────────────────────────────────────────────────────
-    // The atom `handle(point)` doesn't care whether the Vec is free
-    // or lensed — it just reads + writes. So the reflected F's vertices
-    // are draggable too: grabbing one inverts the reflection and pulls
-    // the original behind it.
     s(
       handle(stemTop),
       handle(stemBot),
@@ -112,7 +75,6 @@ export class MdMirror extends Diagram {
       handle(mB),
     );
 
-    // ── Labels ──────────────────────────────────────────────────────
     s(
       label(
         view.top.down(20),

@@ -1,12 +1,4 @@
-// Derived shapes that decorate a tex Part. Each one re-derives from
-// `part.box` so the decoration tracks its target through any
-// re-measurement or animation.
-//
-// Mount as a child of the parent TexShape if you want the decoration
-// to follow the formula's transform:
-//
-//      const eq = s(tex`${part("a", "...")} ...`);
-//      eq.add(brace(eq.parts.a));
+// Derived shapes that decorate a tex Part (tracks `part.box` reactively).
 
 import { computed, type Signal, type BoxValue } from "@minim/signals";
 import { Shape, tokens } from "@minim/shapes";

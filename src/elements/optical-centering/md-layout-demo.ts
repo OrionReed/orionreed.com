@@ -1,7 +1,3 @@
-// `arrange` reflows reactively as handles resize cards.
-// The highlighted card has a spring on its width: drag it wider and
-// it snaps back when released — handle + spring composing on one signal.
-
 import {Diagram, Mount, Anchor, Vec, derived, arrange, handle, label, num, play, rect, spring} from "../../minim";
 
 const WIDTHS = [72, 68, 80, 60, 76];
@@ -16,8 +12,7 @@ export class MdLayoutDemo extends Diagram {
     const view = this.view(560, 200);
     const cy = view.h.value / 2;
 
-    // `num(w)` (vs `signal(w)`) so `spring(...)` can read the `[ALGEBRA]`
-    // slot — plain Signal<number> has no algebra installed.
+    // `num` (not `signal`) so `spring` can read the `[ALGEBRA]` slot.
     const widths = WIDTHS.map((w) => num(w));
     widths[SPRING_IDX].value = SPRING_REST;
 
@@ -34,9 +29,6 @@ export class MdLayoutDemo extends Diagram {
     cards[0].translate.value = { x: 30, y: cy - HEIGHTS[0] / 2 };
     arrange(cards, "row", { gap: GAP, align: 0.5 });
 
-    // Right-edge resize handle for every card. The SPRING_IDX handle's
-    // `.dragging` signal gates the spring below via `at(reactive)` —
-    // `at(0)` freezes the spring while the user drags, `at(1)` resumes.
     const handles = widths.map((w, i) => {
       const card = cards[i];
       const h = HEIGHTS[i];
@@ -52,9 +44,7 @@ export class MdLayoutDemo extends Diagram {
       return s(handle(pos, { cursor: "ew-resize", r: 5 }));
     });
 
-    // Spring pulls the highlighted card's width back to rest. While
-    // dragging, `at(0)` freezes it; on release, `at(1)` resumes from
-    // the dragged value. One running spring, no restart cycles.
+    // `at(0)` freezes the spring while dragging; `at(1)` resumes on release.
     const dragging = handles[SPRING_IDX].dragging;
     this.anim.start(function* () {
       yield* play(spring(widths[SPRING_IDX], SPRING_REST, { omega: 15, zeta: 0.55 }))

@@ -1,10 +1,3 @@
-// minim/tex demo: matrix × vector, written compact then evaluated.
-//
-// Exercises display mode (for `\begin{pmatrix}` rendering),
-// per-signal identity across structural rewrites, and 1↔2 fan-out
-// for cells that appear once on the compact side and twice on the
-// evaluated side (vector cells x, y, used by both result rows).
-
 import {Anchor, Diagram, Mount, signal, label, loop, snapshot, type Content} from "../../minim";
 import {highlight, morph, part, parts, tex, tint, write, writeOut} from "../../minim/tex";
 
@@ -12,7 +5,6 @@ const RED = "#e25c5c";
 const BLUE = "#5b8def";
 const GREEN = "#3aa56b";
 
-// JS-string constants — avoids Cursor TS grammar trips.
 const PMATRIX_OPEN = "\\begin{pmatrix}";
 const PMATRIX_CLOSE = "\\end{pmatrix}";
 
@@ -37,18 +29,13 @@ export class MdTexMatrix extends Diagram {
       }),
     );
 
-    // a, b, c, d appear once on each side — simple 1↔1 ride.
-    // x and y appear once on the compact side but twice on the
-    // evaluated side, so we `expand` them: the two evaluated
-    // appearances are components of one identity → 1↔2 fan-out.
+    // x/y appear twice on the evaluated side → `expand` so both share one identity.
     const { a, b, c, d } = parts("a", "b", "c", "d");
     const x = part("x");
     const y = part("y");
     const { xTop, xBot } = x.expand({ xTop: "x", xBot: "x" });
     const { yTop, yBot } = y.expand({ yTop: "y", yBot: "y" });
 
-    // `\\` between rows is LaTeX's row separator (raw-template mode
-    // preserves both backslashes — temml sees `\\`).
     const compact = s(
       block`${PMATRIX_OPEN} ${a} & ${b} \\ ${c} & ${d} ${PMATRIX_CLOSE} ${PMATRIX_OPEN} ${x} \\ ${y} ${PMATRIX_CLOSE}`,
     );
@@ -62,8 +49,6 @@ export class MdTexMatrix extends Diagram {
       eq.opacity.value = 0;
     }
 
-    // Color by row: a, b red; c, d blue. x, y green and cascade to
-    // their expanded children (xTop/xBot, yTop/yBot).
     const tagColors = (): void => {
       tint(RED, a, b);
       tint(BLUE, c, d);

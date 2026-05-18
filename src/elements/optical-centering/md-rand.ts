@@ -1,8 +1,3 @@
-// `yield* rand(...gens)` — only the chosen branch runs, so unselected
-// generators' side-effects (label updates, history pushes) never fire.
-// Visualised by a current pick label, a candidates menu, and a rolling
-// history strip.
-
 import {Diagram, Mount, Anchor, bounceIn, signal, computed, circle, easeIn, easeInOut, easeOut, fadeOut, label, loop, vec, rand, snapshot, type Animator, type Content, type Has} from "../../minim";
 
 const STAGE_X = 240;
@@ -78,12 +73,10 @@ export class MdRand extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(600, 280);
 
-    // ── State ────────────────────────────────────────────────────────
     const current = signal<Pick | null>(null);
     const currentName = computed<Content>(() => current.value?.name ?? "—");
     const currentColor = computed(() => current.value?.color ?? "#1a1a1a");
 
-    // ── Header ───────────────────────────────────────────────────────
     s(
       label(vec(20, 24), "rand", {
         size: 13,
@@ -98,7 +91,6 @@ export class MdRand extends Diagram {
       ),
     );
 
-    // ── Stage ────────────────────────────────────────────────────────
     const subject = s(
       circle(vec(STAGE_X, STAGE_Y), 22, { fill: currentColor }),
     );
@@ -109,8 +101,6 @@ export class MdRand extends Diagram {
         align: Anchor.Center,
       }),
     );
-    // Each iteration starts from a clean pose — moves are free to
-    // mutate translate/rotate/scale/opacity.
     const reset = snapshot(
       subject.translate,
       subject.rotate,
@@ -118,7 +108,6 @@ export class MdRand extends Diagram {
       subject.opacity,
     );
 
-    // ── Candidates menu ──────────────────────────────────────────────
     const MENU_X = 440;
     const MENU_Y = 70;
     const ROW_H = 22;
@@ -145,9 +134,6 @@ export class MdRand extends Diagram {
       );
     });
 
-    // ── Loop ────────────────────────────────────────────────────────
-    // `record` sets the current pick + appends to history, then runs
-    // the move body. Only the selected wrapper's side-effects fire.
     function* record(move: Move, body: Animator): Animator {
       current.value = { name: move.name, color: move.color };
       yield* body;

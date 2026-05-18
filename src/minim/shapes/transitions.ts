@@ -1,11 +1,4 @@
-// Bounded transitions. `from(sig, start, end)` for intros (needs a
-// start pose); plain `sig.to(target)` for outros. Each compound
-// `yield`s an array of those atoms.
-//
-// Intros are wrapped in `eager(function* () { … })` so the start-pose
-// fires at construction time, not on first engine advance — otherwise
-// `stagger` would let bodies sit at their default pose until their
-// slot's tween begins.
+// Bounded transitions. `from(sig, start, end)` for intros, `sig.to(target)` for outros.
 
 import {easeIn, easeInOut, easeOut, type Animator, type Yieldable} from "@minim/core";
 import {tween, Dir, type Signal, type Easing, type Val, type VecValue} from "@minim/signals";
@@ -34,8 +27,6 @@ const eager = <R>(factory: () => Animator<R>): Animator<R> => {
   })();
 };
 
-// ── Primitive ────────────────────────────────────────────────────────
-
 /** Pose-then-tween. Sets `sig.value = start` synchronously, then tweens
  *  to `end`. */
 export const from = <T>(
@@ -49,8 +40,6 @@ export const from = <T>(
     sig.value = start;
     yield* tween(sig, end, sec, ease);
   });
-
-// ── Atoms ────────────────────────────────────────────────────────────
 
 /** Fade opacity 0 → 1. */
 export const fadeIn = (
@@ -67,8 +56,6 @@ export function* fadeOut(
 ): Animator {
   yield* s.opacity.to(0, sec, ease);
 }
-
-// ── Compounds ────────────────────────────────────────────────────────
 
 /** Slide up from `dy` below + fade in. */
 export const fadeUp = (

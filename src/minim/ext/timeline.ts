@@ -6,8 +6,6 @@ import {type Animator} from "@minim/core";
 import { num,type Val} from "@minim/signals";
 import {signal, computed, type Signal} from "@minim/signals";
 
-// ── Types ────────────────────────────────────────────────────────────
-
 /** A clip on a timeline. `t` extends past the endpoints (0 before,
  *  1 after) so `computed(() => (ease)(clip.t.value))` works without conditional checks.
  *  Generic over input flavor — passing a literal or writable `Cell`
@@ -52,8 +50,6 @@ export type TimelineOf<T extends Record<string, ClipSpec>> = Timeline & {
     ? Clip<A, D>
     : Clip;
 };
-
-// ── Implementation ───────────────────────────────────────────────────
 
 class TimelineImpl implements Timeline {
   readonly clock: Signal<number>;
@@ -124,8 +120,6 @@ export function timeline<T extends Record<string, ClipSpec>>(
   Object.assign(tl, named);
   return tl as TimelineOf<T>;
 }
-
-// ── sequential ───────────────────────────────────────────────────────
 
 type Durations = Record<string, Val<number>>;
 

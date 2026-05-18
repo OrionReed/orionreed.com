@@ -1,18 +1,4 @@
-// handle.* — writable derived shapes: small draggable circles wired to
-// a Vec (or Signal-pair). Reads come from the source; writes go back.
-//
-// The atom is `handle(point)`. Every other helper is sugar that picks
-// the writable source — `handle.move(shape)` wires to `shape.center`,
-// `handle.centroid(...shapes)` wires to the centroid lens, etc. Same
-// algebra as `centroid(...)`: a lens with a visible UI shadow.
-//
-// Every `handle(...)` returns a `Handle` (a `Shape` with `.dragging:
-// Signal<boolean>`). Use the signal to coordinate animations with the
-// drag — e.g. `play(spring(...)).at(() => h.dragging.value ? 0 : 1)`
-// freezes the spring while the user is pressing the handle.
-//
-// All handles are `aside: true` (no autofit contribution) and themable
-// via the `--minim-handle` CSS var.
+// handle.* — writable derived shapes (draggable circles wired to a Vec).
 
 import { derived, signal, Signal, Vec, mean } from "@minim/signals";
 import { type AnyShape, type Has } from "./shape";
@@ -58,9 +44,8 @@ export class Handle extends Circle {
     this.dragging = signal(false);
 
     // Capture the grab offset on pointerdown so the handle stays under
-    // the cursor at the grab point — without this, the target snaps so
-    // its origin is exactly at the pointer, which feels jumpy for
-    // anything other than tiny handles.
+    // the cursor at the grab point (otherwise the target snaps so its
+    // origin is exactly at the pointer, which feels jumpy).
     let dx = 0;
     let dy = 0;
     this.on("pointerdown", (e) => {

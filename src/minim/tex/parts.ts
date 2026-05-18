@@ -1,23 +1,6 @@
-// Lightweight observable handles into a tex-rendered formula.
-//
-//      const { a, b, c } = parts("a", "b", "c");
-//      tex`${a} + ${b} = ${c}`
-//
-// Identity for morph is by *marker reference*, not name. `PartMarker`
-// composes a `Marker` (from `core/marker`) for the active/bind/register
-// surface. All members of a group play(`with`, `expand`) share the root's
-// inner Marker, so any binding — prose hover, shape hover, animation — sets
-// `active` for all of them simultaneously.
-//
-// Color is per-`PartMarker` and cascades up the `group` chain via
-// `effectiveColor`, independently of the shared Marker. This lets you color
-// a root marker and have the cascade reach all derived parts.
-//
-// `bindParts(eq, markers)` is the bridge between a TexShape and a set of
-// Markers: it wires hover on each Part.el to the corresponding Marker and
-// makes marker.active drive part.highlighted.
-//
-// Reach into part.box for axes/cardinals: `part.box.center`, `part.box.x`, etc.
+// Observable handles into a tex-rendered formula. Identity for morph
+// is by marker reference; `with`/`expand` share the root's identity.
+// Color cascades up the `group` chain via `effectiveColor`.
 
 import {
   signal, computed, effect,
@@ -29,12 +12,9 @@ import type {TexShape} from "./tex";
 
 export type { Marker };
 
-/** A part's content can be a literal string, a signal, or a thunk. */
 export type PartContent = Val<string>;
 
-/** Walk the `marker.group` chain to find the first marker with a
- *  non-null color. Setting `v.color` on a root marker tints `v` and
- *  every `v.expand({...})` child whose own color is null. */
+/** Walk the `marker.group` chain to first non-null color. */
 const effectiveColor = (m: PartMarker): string | null => {
   for (let cur: PartMarker | null = m; cur; cur = cur.group) {
     const c = cur.color.value;
@@ -43,19 +23,11 @@ const effectiveColor = (m: PartMarker): string | null => {
   return null;
 };
 
-// ── Part ──────────────────────────────────────────────────────────────────────
-
-/** A named, addressable region of a TexShape. Reach into `part.box`
- *  for axes/cardinals (`part.box.center`, `part.box.at(u,v)`, etc.)
- *  in the TexShape's local frame — read-only, template-bound. */
+/** Named, addressable region of a TexShape (read-only, template-bound).
+ *  Reach into `part.box` for axes/cardinals. */
 export class Part<N extends string = string> {
-  /** Per-instance highlight for animations. Drives the background tint
-   *  when set by `highlight()` or other animation code. Identity-level
-   *  highlighting (from `Marker.active`) is wired externally via
-   *  `bindParts()` which writes to this same signal. */
+  /** Background-tint highlight; written by `highlight()` and `bindParts()`. */
   readonly highlighted: Signal<boolean> = signal(false);
-  /** Opacity in [0, 1]. Wired to `el.style.opacity`. `Num.signal` so
-   *  `.to(target, dur)` is available for per-part tweens. */
   readonly opacity = num(1);
 
   readonly box: Box;
@@ -82,9 +54,6 @@ export class Part<N extends string = string> {
     this.#disposers.push(
       effect(() => {
         if (this.highlighted.value) {
-          // Use the marker's identity color if set, otherwise fall back
-          // to the configured highlight token (e.g. from animation code
-          // that calls highlight() directly, where no color is set).
           const color = effectiveColor(this.marker);
           el.style.backgroundColor = color
             ? `color-mix(in srgb, ${color} 15%, transparent)`
@@ -110,25 +79,14 @@ export class Part<N extends string = string> {
   }
 }
 
-// ── PartMarker ────────────────────────────────────────────────────────────────
-
-/** Marker emitted by `part(name, content)` and `parts({...})`. Only
- *  valid inside `tex\`…\`` template holes. Identity for morph is by
- *  marker reference; `group` threads parent-marker through derived
- *  markers so `v` and `v.expand({vx,vy,vz})` count as one identity
- *  (1↔3 morphs).
- *
- *  Composes a `Marker` (from `core/marker`) via a private `#m` field.
- *  All members of a group chain share the root's `#m` instance, so
- *  `active`/`bind`/`register` always refer to the root identity. Color
- *  is per-instance and cascades separately via the group chain. */
+/** Marker emitted by `part()` / `parts()`; valid inside `tex\`…\`` holes.
+ *  Group members share one inner `Marker` so they share identity. */
 export class PartMarker<N extends string = string> {
-  /** Per-instance color. `null` → walk up to parent via `effectiveColor`. */
+  /** Per-instance color; `null` walks up the group chain. */
   readonly color: Signal<string | null> = signal<string | null>(null);
   readonly content: Signal<string>;
 
-  /** Shared inner Marker. All members of a group chain share the root's
-   *  instance, so bind/active/register all target the same identity. */
+  /** Shared inner Marker; all group members alias the root's instance. */
   #m: Marker;
 
   constructor(
@@ -141,41 +99,31 @@ export class PartMarker<N extends string = string> {
       : typeof source === "function"
         ? computed(source)
         : signal(source as string);
-    // Children inherit the root's Marker so all group members share one identity.
     this.#m = group ? group.#m : marker();
   }
 
-  /** Identity active signal — true when any rendering of this marker
-   *  (prose, shape, animation) is currently active. */
+  /** True when any rendering of this identity (prose/shape/anim) is active. */
   get active(): Signal<boolean> {
     return this.#m.active;
   }
 
-  /** Bind a local boolean signal to this marker's identity. Returns a disposer.
-   *  See `Marker.bind` for full docs. */
+  /** Bind a local boolean signal to this marker's identity. */
   bind(local: Signal<boolean>): () => void {
     return this.#m.bind(local);
   }
 
-  /** Register in the global lookup under `id`. Registers the PartMarker
-   *  itself (not the inner Marker), so prose elements receive the full
-   *  PartMarker interface including the group-chain color. */
+  /** Register in the global lookup under `id`. */
   register(id: string): this {
     registerMarker(id, this);
     return this;
   }
 
-  /** One-off content override, same identity. Child shares this marker's
-   *  `#m`, so morph identity, color cascade, and active state are preserved. */
+  /** One-off content override, same identity. */
   with(content: PartContent): PartMarker<N> {
     return new PartMarker(this.name, content, this);
   }
 
-  /** Expand into named child markers sharing this identity (1↔N morph).
-   *
-   *      const v = part("v", "\\vec{v}");
-   *      const { vx, vy, vz } = v.expand({ vx: "v_x", vy: "v_y", vz: "v_z" });
-   */
+  /** Expand into named child markers sharing this identity (1↔N morph). */
   expand<T extends Record<string, PartContent>>(
     spec: T,
   ): { readonly [K in keyof T & string]: PartMarker<K> } {
@@ -184,8 +132,6 @@ export class PartMarker<N extends string = string> {
     return out as { readonly [K in keyof T & string]: PartMarker<K> };
   }
 }
-
-// ── Factories ─────────────────────────────────────────────────────────────────
 
 export function part<N extends string>(
   name: N,
@@ -225,19 +171,8 @@ export function tint(
   for (const m of markers) m.color.value = color;
 }
 
-// ── Bridge ────────────────────────────────────────────────────────────────────
-
-/** Wire hover on each named `Part.el` to the corresponding `Marker`, and
- *  make `marker.active` drive `part.highlighted`. Call in `scene()` and
- *  pass the result to `this.root.track()` for cleanup.
- *
- *      const [m, v] = palette(2);
- *      m.register("post:m"); v.register("post:v");
- *      const eq = s(tex`${part("m")}${part("v")}`);
- *      this.root.track(bindParts(eq, { m, v }));
- *
- *  `markers` is keyed by part name. Unrecognised keys and parts with no
- *  matching marker are silently skipped. */
+/** Wire hover on each `Part.el` to its `Marker`; drive `highlighted`
+ *  from `active`. Unmatched names are silently skipped. */
 export function bindParts(
   eq: { parts: Iterable<Part<string>> },
   markers: Partial<Record<string, Marker>>,
@@ -251,8 +186,6 @@ export function bindParts(
   }
   return () => { for (const d of ds) d(); };
 }
-
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 export type PartList<Names extends string = string> = readonly Part[] & {
   readonly [K in Names]: Part<K>;

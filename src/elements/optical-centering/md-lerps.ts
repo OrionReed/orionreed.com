@@ -1,24 +1,3 @@
-// "One .to(), every type" — showcase for minim's generalized tween
-// engine. The struct framework registers a `lerp` op for value types
-// (Vec, Box, Color, …); `Signal.prototype.to` looks it up via a
-// hidden prototype slot and dispatches. Adding a new value type
-// (with a `lerp`) gets you `.to()` for free, no engine changes.
-//
-// Five rows — each animates a different value type. They all run
-// simultaneously via the same `.to()` call shape:
-//
-//   yield [
-//     num.to(0.85, 0.6),
-//     pos.to({ x: 220, y: 0 }, 0.6),
-//     box.to({ x: 60, y: 0, w: 60, h: 36 }, 0.6),
-//     col.to({ r: 0.95, g: 0.4, b: 0.2, a: 1 }, 0.6),
-//     txt.to("goodbye", 0.6),
-//   ]
-//
-// Strings (and other non-record types) author a tiny `class Foo extends
-// Signal<T>` + `defineTrait(Foo, LERP, lerpFn)` — same one-method
-// pattern Vec / Box / Color use.
-
 import {
   Anchor, Box, Color, Diagram, Mount, Vec,
   circle, computed, label, loop, num, tween, vec, rect, rgb,
@@ -37,15 +16,13 @@ const READ_X = VIS_X + VIS_W + 24;
 const DUR = 0.7;
 const DWELL = 0.45;
 
-/** Shrink-then-grow string lerp. Visible length goes
- *  `a.length → 0 → b.length` over `t ∈ [0, 1]`; the source switches
- *  at the midpoint, so the text reads as "type out, then type in". */
+/** Shrink-then-grow string lerp; source switches at the midpoint. */
 const stringLerp: Lerp<string> = (a, b, t) => {
   if (t <= 0.5) return a.slice(0, Math.round(a.length * (1 - t * 2)));
   return b.slice(0, Math.round(b.length * (t - 0.5) * 2));
 };
 
-/** A reactive string with a `[LERP]` slot — same pattern Vec / Box use. */
+/** Reactive string with a `[LERP]` slot. */
 class Text extends Signal<string> {}
 interface Text extends LerpMethods<string> {}
 defineTrait(Text, LERP, stringLerp);
@@ -64,8 +41,6 @@ const fmtColor = (c: { r: number; g: number; b: number }) =>
     )
     .join("")}`;
 
-// Per-row geometry. Visuals get drawn within `[VIS_X, VIS_X + VIS_W]`
-// horizontally; the per-row `y` baseline locates each row vertically.
 const rowY = (i: number) => TOP + ROW_H * i;
 
 export class MdLerps extends Diagram {
@@ -85,27 +60,13 @@ export class MdLerps extends Diagram {
       ),
     );
 
-    // ── State (one per value type) ─────────────────────────────────
-    //
-    // Each is a different `lerp`-capable reactive: a raw `Signal<number>`
-    // (default scalar lerp), a `Reactive<V>` / `Reactive<Box>` /
-    // `Reactive<C>` (lerp registered as a struct op), and a
-    // `Signal<string>` whose lerp was wired via `lerpable(...)`. They
-    // ALL expose `.to(target, dur)` because they all carry a [LERP] slot.
     const baseY = (i: number) => rowY(i) + 9;
     const n = num(0.15);
     const pos = vec(VIS_X + 12, baseY(1) );
     const box = new Box({ x: VIS_X + 4, y: rowY(2) - 6, w: 30, h: 20 });
     const col = rgb(0.4, 0.6, 0.9);
-    // Custom value type: subclass `Signal<string>` + `defineTrait(LERP)`
-    // gives `txt.to(target, dur)` the same as Vec/Box/Color.
     const txt = new Text("hello");
 
-    // ── Visuals ────────────────────────────────────────────────────
-    //
-    // Each row: a left-aligned type-name label, a track + bound visual,
-    // and a right-aligned live readout. The visuals are bound to the
-    // state above; nothing reads through `this`.
     const rowLabel = (i: number, name: string) =>
       label(vec(LABEL_X, baseY(i)), name, {
         size: 11,
@@ -131,7 +92,6 @@ export class MdLerps extends Diagram {
         corner: Math.min(h / 2, 4),
       });
 
-    // Row 0 — number: width-bound fill bar over a track.
     s(
       rowLabel(0, "number"),
       track(VIS_X, rowY(0) + 4, VIS_W, 10, 0.18),
@@ -142,7 +102,6 @@ export class MdLerps extends Diagram {
       readout(0, computed(() => (fmtNum)(n.value))),
     );
 
-    // Row 1 — Vec: a dot whose center IS the Vec signal.
     s(
       rowLabel(1, "Vec"),
       track(VIS_X, rowY(1) + 5, VIS_W, 8, 0.1),
@@ -150,8 +109,6 @@ export class MdLerps extends Diagram {
       readout(1, computed(() => (fmtVec)(pos.value))),
     );
 
-    // Row 2 — Box: every axis (x, y, w, h) is a Signal<number> lens
-    // projection of `box`; .to() drives all four through Box.lerp.
     s(
       rowLabel(2, "Box"),
       track(VIS_X, rowY(2) - 14, VIS_W, 36, 0.1),
@@ -163,8 +120,6 @@ export class MdLerps extends Diagram {
       readout(2, computed(() => (fmtBox)(box.value))),
     );
 
-    // Row 3 — Color: `col.css` is a lazy getter (cached as own-prop on
-    // first read) that yields a ReadonlySignal<string>. Bind it as fill.
     s(
       rowLabel(3, "Color"),
       rect(VIS_X, rowY(3) - 6, VIS_W, 22, {
@@ -175,9 +130,6 @@ export class MdLerps extends Diagram {
       readout(3, computed(() => (fmtColor)(col.value))),
     );
 
-    // Row 4 — string: lerpable() stamps the [LERP] slot on a plain
-    // Signal<string>. The same .to() machinery the structs use works
-    // through the same dispatch.
     s(
       rowLabel(4, "string"),
       track(VIS_X, rowY(4) - 6, VIS_W, 22, 0.08),
@@ -188,11 +140,6 @@ export class MdLerps extends Diagram {
       readout(4, computed(() => ((str) => `len=${str.length}`)(txt.value))),
     );
 
-    // ── Drive ──────────────────────────────────────────────────────
-    //
-    // Three keyframes; each transition runs all five .to()s as one
-    // parallel batch — `yield [a.to(...), b.to(...), …]` — so they
-    // all step through the same `tweenStep` function in core/tween.
     const FRAMES = [
       {
         n: 0.85,
@@ -224,8 +171,6 @@ export class MdLerps extends Diagram {
           pos.to(f.v, DUR),
           box.to(f.b, DUR),
           col.to(f.c, DUR),
-          // `txt` is a plain Signal<string> with a `[LERP]` slot
-          // (via `lerpable`). No `.to`; use the standalone `tween()`.
           tween(txt, f.t, DUR),
         ];
         yield DWELL;

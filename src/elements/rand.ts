@@ -1,5 +1,3 @@
-// Randomness helpers — namespace import: `import * as R from "./rand"`.
-
 /** Random float in [min, max). */
 export function float(min: number, max: number): number {return Math.random() * (max - min) + min;}
 
@@ -50,9 +48,7 @@ export function chance(probability = 0.5): boolean {
   return Math.random() < probability;
 }
 
-/** Array of `count` random booleans, each true with probability `p`
- *  (default 0.5). If fewer than `min` true values land naturally, extra
- *  random positions are flipped on until the count is met. */
+/** Array of `count` booleans (P=`p`); extra positions flipped on if fewer than `min` land true. */
 export function bools(count: number, p = 0.5, min = 0): boolean[] {
   const arr = new Array<boolean>(count);
   const falseIdx: number[] = [];
@@ -66,8 +62,7 @@ export function bools(count: number, p = 0.5, min = 0): boolean[] {
       falseIdx.push(i);
     }
   }
-  // Partial Fisher-Yates over the false indices to flip exactly the
-  // shortfall — O(count) worst case, no rejection sampling.
+  // Partial Fisher-Yates over false indices: O(count), no rejection sampling.
   const need = Math.min(min - trues, falseIdx.length);
   for (let i = 0; i < need; i++) {
     const j = i + Math.floor(Math.random() * (falseIdx.length - i));

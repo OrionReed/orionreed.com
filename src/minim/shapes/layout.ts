@@ -55,11 +55,6 @@ export function arrange(
   }
 }
 
-// ── Box operations ──────────────────────────────────────────────────
-// Functions over `Boxed` ({ box: Box }). Inputs: any reactive
-// rectangle (Shape, view, another split result). Outputs: derived
-// Box cells that update reactively as the source changes.
-
 /** Inflate a Box on each side by `by`. */
 export function expand(b: Boxed, by: Val<number>): Box {
   const bys = num(by);

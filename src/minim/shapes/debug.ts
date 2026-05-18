@@ -1,16 +1,4 @@
 // debug.* — read-only diagnostic shapes that visualize layout state.
-//
-// Every debug shape is `aside: true` (so it's excluded from autofit) and
-// uses a shared visual idiom: dashed magenta strokes, low opacity, small
-// markers. Drop `s(debug.box(thing))` while developing, delete when done.
-//
-// All debug shapes report in PARENT frame: for a `Shape`, the Box is
-// transformed through the shape's transform first (so you see the visual
-// footprint, not the pre-transform local one); for non-Shape Boxes (a
-// view, a split, a grid signal), the Box is already parent-frame.
-//
-// The `--minim-debug` CSS var lets authors theme; the fallback is
-// magenta so debug shapes always read as "scaffolding".
 
 import {
   derived, computed,

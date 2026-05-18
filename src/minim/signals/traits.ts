@@ -1,21 +1,8 @@
-// traits.ts — generic dispatch via prototype-stamped Symbol slots.
-//
-// A trait is a function (or bag) attached to a value-type's prototype:
-//
-//   Vec.prototype[LINEAR] = { add: vAdd, sub: vSub, scale: vScale };
-//
-// Reads walk the prototype chain (`v[LINEAR]`); per-instance writes
-// shadow the class slot. Symbol.for makes the slot identity shared
-// across realms so plugins can stamp third-party types without coupling.
-//
-// New traits: `export const X = Symbol.for("minim.x")` + module-augment
-// `Signal<T>` to add `[X]?: ...`.
+// Generic dispatch via prototype-stamped `Symbol.for` slots; per-instance
+// writes shadow the class slot. New traits: declare a symbol + augment
+// the `Signal<T>` interface below.
 
 import type { Signal, Read } from "./signal";
-
-// ════════════════════════════════════════════════════════════════════
-// Trait shapes
-// ════════════════════════════════════════════════════════════════════
 
 export interface Linear<T> {
   add(a: T, b: T): T;
@@ -25,10 +12,6 @@ export interface Linear<T> {
 export type Lerp<T>   = (a: T, b: T, t: number) => T;
 export type Metric<T> = (a: T, b: T) => number;
 export type Equals<T> = (a: T, b: T) => boolean;
-
-// ════════════════════════════════════════════════════════════════════
-// Slot symbols + type-level slot declaration
-// ════════════════════════════════════════════════════════════════════
 
 export const LINEAR = Symbol.for("minim.linear");
 export const LERP   = Symbol.for("minim.lerp");
@@ -44,10 +27,6 @@ declare module "./signal" {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Inspection
-// ════════════════════════════════════════════════════════════════════
-
 export interface ValueClass<T = unknown> {
   new (...args: never[]): Signal<T>;
   readonly name: string;
@@ -56,16 +35,6 @@ export interface ValueClass<T = unknown> {
 export function classOf<T>(s: Read<T>): ValueClass<T> {
   return (s as object).constructor as ValueClass<T>;
 }
-
-// ════════════════════════════════════════════════════════════════════
-// Per-trait accessors
-//
-//   xOf(s)      → Slot | undefined  (optional-trait code paths)
-//   requireX(s) → Slot              (throws if missing)
-//
-// Parameters typed `Read<T>` (covariant) so subclass-T cells flow
-// through; slots live on the `Signal` prototype, accessed structurally.
-// ════════════════════════════════════════════════════════════════════
 
 export const linearOf = <T>(s: Read<T>): Linear<T> | undefined => (s as Signal<T>)[LINEAR];
 export const lerpOf   = <T>(s: Read<T>): Lerp<T>   | undefined => (s as Signal<T>)[LERP];

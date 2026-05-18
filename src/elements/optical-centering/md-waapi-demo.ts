@@ -1,23 +1,3 @@
-// WAAPI / scroll bridge demo. Two halves:
-//
-//   1. Reactive signals from `minim/ext/waapi.ts`:
-//        scrollProgress()   — page-global [0, 1], rendered as a bar.
-//        viewProgress(this) — view-timeline progress, rendered as a
-//          bar + a tracker tracing a prolate cycloid.
-//        inView(this)       — Boolean visibility, live label.
-//      These are pure signals — no animator needed; the existing
-//      attr/transform effects re-render as the reader scrolls.
-//
-//   2. `native(el, kf, opts)` — a row of particles each running a
-//      compositor-driven WAAPI animation (transform, opacity, filter
-//      blur, hue-rotate) choreographed across keyframes and staggered.
-//      Driven by a `loop` on the diagram's animator; the `native()`
-//      generator yields back when WAAPI's `finish` event fires, so it
-//      composes with `stagger`, `all`, `race` like any other animator.
-//      Multi-property filter interpolation across N particles is
-//      exactly the case where the generator runtime would spend the
-//      most main-thread time per frame; here it costs ~nothing.
-
 import {Anchor, Diagram, polar, Mount, circle, computed, label, vec, rect, loop, stagger, type Signal} from "../../minim";
 import {inView, native, scrollProgress, viewProgress} from "../../minim/ext";
 
@@ -62,13 +42,6 @@ export class MdWaapiDemo extends Diagram {
     const vp = viewProgress(this);
     bar(86, "view", vp);
 
-    // Prolate cycloid via `polar(center, radius, angle)`:
-    // - `center` advances linearly along the bar with view progress.
-    // - `tracker` orbits it at fixed radius; angular speed scales as
-    //   `2π · LOOPS` over the [0,1] progress range.
-    // The path loops (crosses itself) when `R · 2π · LOOPS > BW` —
-    // i.e. the orbit's reverse phase outpaces the center's forward
-    // motion. With BW=440, LOOPS=4, R=25 we clear that by ~40%.
     const LOOPS = 15;
     const R = 15;
     const center = vec(computed(() => ((p) => X + BW * p)(vp.value)), 150);
@@ -96,12 +69,7 @@ export class MdWaapiDemo extends Diagram {
       ),
     );
 
-    // ── Native (WAAPI) particle row ─────────────────────────────────
-    // A row of bare SVG circles animated by `native()`. The shapes
-    // aren't `Shape`s — they're raw DOM nodes appended under the scene
-    // root so minim's per-frame transform/opacity effects don't fight
-    // the WAAPI animation. Each particle's `transform-origin` is pinned
-    // to its centre so `scale()` grows about the dot, not the SVG (0,0).
+    // Raw SVG nodes (not Shapes) so minim's per-frame effects don't fight WAAPI.
     const PARTICLES = 18;
     const PY = 270;
     const PR = 5;
@@ -131,11 +99,6 @@ export class MdWaapiDemo extends Diagram {
       ),
     );
 
-    // One animation pass: every particle runs the same 3-keyframe
-    // routine, staggered by `stride`. `native()` returns an Animator,
-    // so `stagger` (a generic shape-agnostic helper) composes over it
-    // exactly like over `to()` / `spring()` / etc. `loop` repeats; the
-    // beat after each pass keeps things from looking frantic.
     const kfs: Keyframe[] = [
       { transform: "translateY(0px) scale(1)",
         filter: "blur(0px) hue-rotate(0turn)",

@@ -40,9 +40,7 @@ export class MdCentering extends Diagram {
     const F = [0.2, 0.45, 0.7];
     const subs = ["min", "c", "max"];
 
-    // y-axis tip slides along x→y as morph plays.
     const yTip = xEnd.lerp(yEnd, morphT);
-    // y-axis is "on stage" once morph starts.
     const yShown = () => tl.morph.t.value ? 1 : 0;
 
     s(line(O, O.lerp(xEnd, lineT)), line(O, yTip, { opacity: yShown }));

@@ -1,6 +1,4 @@
-// Pixel-perfect dashing. Avoids browser `stroke-dasharray` quirks and
-// corner artifacts by emitting explicit `<path>` commands at the
-// computed dash positions.
+// Pixel-perfect dashing via explicit `<path>` commands (sidesteps `stroke-dasharray` corner artifacts).
 
 import type {Segment} from "./shape";
 

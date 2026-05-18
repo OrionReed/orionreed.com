@@ -1,13 +1,4 @@
-// Callable mount handle: `s(shape)` adds children under a root Shape;
-// returns the child (or array, for vararg calls). Replaces the old
-// `Scene` callable — the SVG-specific bits (`view`/`fit`/`svg`) now
-// live on `Diagram` itself.
-//
-// Headless tests can construct one directly:
-//
-//     const root = new Shape();
-//     const s = mount(root);
-//     s(circle(...));
+// Callable mount handle: `s(shape)` adds children under a root Shape and returns them.
 
 import type {AnyShape} from "./shape";
 

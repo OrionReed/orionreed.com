@@ -1,7 +1,3 @@
-// Observability + verification. Both `trace` (spans, tree, tags) and
-// `claim` (labeled bool-signal assertions) live here — independent
-// imports, shared "observe/assert behaviour" flavor.
-
 export { spans, type Span, type Trace } from "./spans";
 
 export {

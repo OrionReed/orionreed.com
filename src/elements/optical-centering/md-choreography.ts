@@ -1,6 +1,3 @@
-// Six shapes cycle through every group operation. `snapshot` captures
-// the initial pose so each iteration loops perfectly.
-
 import {Diagram, Mount, Anchor, assemble, centroid, play, circle, easeInOut, label, loop, num, orbit, signal, vec, snapshot, splay, stagger, swap, type Content} from "../../minim";
 
 const W = 600;
@@ -36,7 +33,6 @@ const DIAMOND = [
   { x: W / 2 - 110, y: 130 },
 ];
 
-// (0↔3, 1↔4, 2↔5) — opposite diamond vertices.
 const PAIRS: [number, number][] = [
   [0, 3],
   [1, 4],
@@ -63,11 +59,9 @@ export class MdChoreography extends Diagram {
       circle(c, 3, { fill: "#1a1a1a", opacity: 0.7 }),
     );
 
-    // Without this, orbit's frame-time integration drifts positions
-    // slightly each cycle.
+    // Without this, orbit's frame-time integration drifts positions each cycle.
     const reset = snapshot(...shapes.map((sh) => sh.translate));
 
-    // Orbit speed as a Num signal — tween for ease-in / hold / ease-out.
     const orbitRate = num(0);
     const orbitCentre = vec(ORBIT_CENTRE.x, ORBIT_CENTRE.y);
 
@@ -97,9 +91,6 @@ export class MdChoreography extends Diagram {
       yield* c.to(ORBIT_CENTRE, 0.7, easeInOut);
       yield 0.3;
 
-      // Orbit runs UNTIL the ramp sequence completes — no manual
-      // spawn/dispose pair. The orbit gets cancelled the moment
-      // rampSequence finishes, then the next phase continues.
       phase.value = "orbit (eased)";
       const rampSequence = play(orbitRate.to(1, 0.5, easeInOut))
         .then(1.4)

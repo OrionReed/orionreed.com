@@ -1,6 +1,3 @@
-// Multi-track timeline editor — overlapping clips, drag-to-edit
-// handles, one ball driven by all four clip progresses in parallel.
-
 import {Diagram, Mount, Anchor, signal, circle, computed, draggable, label, line, loop, vec, rect, snapshot, timeline} from "../../minim";
 
 const STRIP_X = 40;
@@ -14,7 +11,6 @@ export class MdMultitrack extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(600, 320);
 
-    // Overlap is fine; each clip has its own at + dur.
     const tl = timeline({
       fadeIn:  { at: 0,   dur: 1.0 },
       scale:   { at: 0.4, dur: 2.6 },
@@ -24,7 +20,7 @@ export class MdMultitrack extends Diagram {
 
     const reset = snapshot(tl.clock);
 
-    // Order matters for render order (later clips draw on top).
+    // Order = render order; later clips draw on top.
     const tracks = [
       { name: "fadeIn",  clip: tl.fadeIn,  row: 0, color: "#5b8def" },
       { name: "fadeOut", clip: tl.fadeOut, row: 0, color: "#e25c5c" },
@@ -32,7 +28,6 @@ export class MdMultitrack extends Diagram {
       { name: "shift",   clip: tl.shift,   row: 2, color: "#7ed321" },
     ];
 
-    // ── Strip ─────────────────────────────────────────────────────
     const STRIP_W = view.w.value - 2 * STRIP_X;
     const SCALE = computed(() =>
       tl.duration.value > 0 ? STRIP_W / tl.duration.value : 0,
@@ -50,13 +45,11 @@ export class MdMultitrack extends Diagram {
       }));
     }
 
-    // ── Each clip: body + start/end handles + label ────────────────
     tracks.forEach(({ name, clip, row, color }) => {
       const trackY = STRIP_Y + STRIP_PAD + row * TRACK_H;
       const bodyY = trackY + 2;
       const bodyH = TRACK_H - 4;
 
-      // Body — drag to move the clip.
       const body = s(rect(
         computed(() => (a => STRIP_X + a * SCALE.value)(clip.at.value)),
         bodyY,
@@ -65,8 +58,7 @@ export class MdMultitrack extends Diagram {
         { fill: color, opacity: 0.78, corner: 3, stroke: "none" },
       ));
 
-      // Capture click offset (clip-time units) so the clip stays under
-      // the cursor at the original grab point.
+      // Click offset in clip-time units — keeps the grab point under the cursor.
       let clickOffset = 0;
       body.on("pointerdown", (e) => {
         const local = body.toLocal(e as PointerEvent);
@@ -77,8 +69,6 @@ export class MdMultitrack extends Diagram {
         clip.at.value = Math.max(0, cursorTime - clickOffset);
       });
 
-      // Start handle — anchored to the body's mid-left, drags `at`
-      // while keeping `end` fixed.
       const startKnob = s(circle(body.left, 4.5, {
         fill: color, stroke: "white", strokeWidth: 1.5,
       }));
@@ -93,7 +83,6 @@ export class MdMultitrack extends Diagram {
         clip.dur.value = snapEnd - newAt;
       });
 
-      // End handle — anchored to the body's mid-right, drags `dur`.
       const endKnob = s(circle(body.right, 4.5, {
         fill: color, stroke: "white", strokeWidth: 1.5,
       }));
@@ -118,13 +107,8 @@ export class MdMultitrack extends Diagram {
       { strokeWidth: 1.5, aside: true },
     ));
 
-    // ── Stage: one ball driven by all four clip progresses ────────
     const STAGE_Y = 210;
 
-    //   fadeIn.t  → opacity ramps up
-    //   scale.t   → radius oscillates (sin: 0 at endpoints)
-    //   shift.t   → x oscillates the same way
-    //   fadeOut.t → opacity ramps down
     const ballX = computed(
       () => view.center.x.value + Math.sin(tl.shift.t.value * Math.PI) * 110,
     );
@@ -140,7 +124,6 @@ export class MdMultitrack extends Diagram {
       opacity: ballOpacity,
     }));
 
-    // ── Footer ─────────────────────────────────────────────────────
     s(
       label(
         view.bottom.up(32),

@@ -1,10 +1,4 @@
 // matrix.ts — reactive 2D affine matrix (SVG/Canvas convention).
-//
-//   | a c e |
-//   | b d f |
-//   | 0 0 1 |
-//
-// `multiply(A, B)` is `A·B` — B applies first (SVG `transform` order).
 
 import { Signal, value, type Val } from "../signal";
 import { EQUALS } from "../traits";
@@ -24,8 +18,6 @@ export interface Value {
 
 // Plain Box shape (kept local to avoid a circular import with `./box`).
 type BoxValue = { x: number; y: number; w: number; h: number };
-
-// ── Pure math ──────────────────────────────────────────────────────
 
 export const identity = (): Value =>
   ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
@@ -149,8 +141,6 @@ export function compose(t: VecValue, r: number, s: VecValue, pivot: VecValue): V
 /** Comma-separated — valid as both SVG `transform` and CSS `transform`. */
 export const toString = (m: Value): string =>
   `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
-
-// ── Reactive class ─────────────────────────────────────────────────
 
 /** Op surface — closed-on-Matrix2D operations. Implemented by reactive
  *  `Matrix2D` and the mutating `Chain`. */

@@ -1,12 +1,6 @@
-// `centroid`/`meanRotation`/`meanScale` composing freely on one set
-// of (heterogeneous) shapes, each iteration picking fresh random
-// targets so the offsets-are-preserved property is visible.
-
 import * as R from "../rand";
 import {Diagram, Mount, Anchor, centroid, computed, easeInOut, label, loop, meanRotation, meanScale, vec, rect} from "../../minim";
 
-// Heterogeneous sizes, colors, starting rotations — so it reads as
-// "each shape's offset survives the tween."
 const SHAPES = [
   { x: 130, y: 130, w: 38, h: 10, rot: -0.6, fill: "#5b8def" },
   { x: 280, y: 100, w: 26, h: 8, rot: 0.0, fill: "#f5a623" },

@@ -10,16 +10,10 @@ JsLoader(prism);
 TsLoader(prism);
 CssLoader(prism);
 
-/**
- * Create & register the token `Highlight`'s in the `CSS.highlights` registry.
- * This enables the use of `::highlight(tokenType)` in CSS to style them.
- */
+/** Registers token `Highlight`s in `CSS.highlights` for `::highlight(tokenType)` styling. */
 function setupTokenHighlights() {
-  /**
-   * https://prismjs.com/tokens.html#standard-tokens
-   */
+  // https://prismjs.com/tokens.html#standard-tokens
   for (const tokenType of [
-    // Standard tokens
     "atrule",
     "attr-name",
     "attr-value",
@@ -68,22 +62,13 @@ interface PrismToken {
   length: number;
 }
 
-/**
- *
- * @param text - The text to tokenize.
- * @param language - The syntax language grammar.
- * @returns An array of flattened prismjs tokens.
- */
 function tokenize(text: string, language: string): PrismToken[] {
   const lang = prism.languages[language] || undefined;
   const tokens = prism.tokenize(text, lang);
   return tokens.flatMap(getFlatToken);
 }
 
-/**
- * Flatten tokens for e.g. html attributes etc.
- * @param token - A prismjs token object.
- */
+/** Flatten tokens for e.g. html attributes. */
 function getFlatToken(token: any): PrismToken | PrismToken[] {
   if (typeof token?.content === "string") {
     return token;
@@ -132,7 +117,6 @@ export class MdSyntax extends HTMLElement {
   }
 
   connectedCallback() {
-    // Make focusable via keyboard navigation
     if (!this.hasAttribute("tabindex")) {
       this.setAttribute("tabindex", "0");
     }
@@ -147,7 +131,7 @@ export class MdSyntax extends HTMLElement {
     const originalText = this.innerText;
     const trimmedText = originalText.trim();
 
-    // Normalize whitespace: replace multiple consecutive empty lines with at most one empty line
+    // Collapse 3+ blank lines to at most one.
     const normalizedText = trimmedText.replace(/\n\s*\n\s*\n+/g, "\n\n");
 
     if (normalizedText !== originalText) {

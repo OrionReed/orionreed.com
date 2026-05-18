@@ -1,9 +1,4 @@
 // box.ts — reactive axis-aligned rectangle.
-//
-// Anything box-shaped exposes a `box: Box` field (Box itself returns
-// `this`; Shape/Part hold an internal Box). Consumers reach axes and
-// cardinals via that field — `shape.box.center`, `part.box.x`, etc.
-// One uniform access path; no `BoxLike` façade, no `delegate` metaprogramming.
 
 import { Signal, computed, type Computed, value, type Val } from "../signal";
 import { LINEAR, LERP, EQUALS } from "../traits";
@@ -13,8 +8,6 @@ import { Num } from "./num";
 import { Vec, type Value as VecValue } from "./vec";
 
 export interface Value { x: number; y: number; w: number; h: number }
-
-// ── Pure math ──────────────────────────────────────────────────────
 
 export const add = (a: Value, b: Value): Value =>
   ({ x: a.x + b.x, y: a.y + b.y, w: a.w + b.w, h: a.h + b.h });
@@ -64,8 +57,6 @@ export function edgeFrom(b: Value, toward: VecValue): VecValue {
 export const contains = (b: Value, p: VecValue): boolean =>
   p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 
-// ── Reactive class ─────────────────────────────────────────────────
-
 /** Op surface — closed-on-Box operations. Implemented by reactive
  *  `Box` and the mutating `Chain`. */
 interface BoxOps<R> {
@@ -80,13 +71,10 @@ interface BoxOps<R> {
 export class Box extends Signal<Value> implements BoxOps<Box> {
   constructor(v: Value = { x: 0, y: 0, w: 0, h: 0 }) { super(v); }
 
-  // ── Field lenses ─────────────────────────────────────────────────
   get x() { return field(this, "x", Num); }
   get y() { return field(this, "y", Num); }
   get w() { return field(this, "w", Num); }
   get h() { return field(this, "h", Num); }
-
-  // ── Scalars, cardinals, `.at(u, v)` ─────────────────────────────
 
   /** Self-reference so any Box is uniformly `{ box: Box }` — the same
    *  field path works on Box, Shape, Part, split results, etc.
@@ -115,7 +103,6 @@ export class Box extends Signal<Value> implements BoxOps<Box> {
   private _left?: Vec;
   private _right?: Vec;
 
-  // ── Reactive ops ────────────────────────────────────────────────
   add(b: Val<Value>) { return derived(Box, () => add(this.value, value(b))); }
   sub(b: Val<Value>) { return derived(Box, () => sub(this.value, value(b))); }
   scale(k: Val<number>) { return derived(Box, () => scale(this.value, value(k))); }
@@ -170,11 +157,7 @@ export const box = (
   return out;
 };
 
-// ── Boxed — minimal "carries a Box" shape ──────────────────────────
-
-/** Anything that exposes a `Box` cell (Box, Shape, Part, layout split,
- *  …). Consumers reach axes, cardinals, area via `b.box.x`, `b.box.center`,
- *  etc. — one access path, no surface duplication. */
+/** Anything that exposes a `Box` cell. */
 export interface Boxed {
   readonly box: Box;
 }

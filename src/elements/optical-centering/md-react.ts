@@ -1,8 +1,3 @@
-// Reaction game. Each round is `race(timeout, trackedClick)` — hit
-// runs `zoomOut`, miss runs `fadeOut`. STOP cancels the loop; the
-// cascade kills any in-flight click listener via its awaitable
-// disposer.
-
 import {Diagram, Mount, Anchor, bounceIn, button, signal, circle, computed, fadeOut, label, loop, vec, race, rect, suspend, zoomOut, type Animator, type Content, type Has} from "../../minim";
 
 const W = 380;
@@ -18,9 +13,7 @@ const BTN_W = 80;
 const BTN_H = 26;
 const BTN_GAP = 12;
 
-/** Wake on a click; resume with the `MouseEvent`. Race winners get
- *  this payload; race losers (timeout) get `undefined` — the
- *  discriminator for hit vs miss in the round. */
+/** Wake on click with the `MouseEvent`; race timeout yields `undefined`. */
 function trackedClick(target: EventTarget): Animator<MouseEvent> {
   return suspend<MouseEvent>((wake) => {
     const handler = (e: Event): void => wake(e as MouseEvent);
@@ -75,9 +68,6 @@ export class MdReact extends Diagram {
     const anim = this.anim;
     let dispose: (() => void) | undefined;
 
-    /** Target needs writable opacity/scale (for intro/outro) plus
-     *  `el` (for trackedClick) plus `dispose()` (for round cleanup).
-     *  `circle(...)` satisfies all three. */
     type Target = Has<"opacity" | "scale"> & {
       el: EventTarget;
       dispose(): void;
@@ -92,9 +82,6 @@ export class MdReact extends Diagram {
 
     function* round(target: Target): Animator {
       try {
-        // `yield* race(...)` resolves to the winner's payload — a
-        // `MouseEvent` if the click landed, `undefined` if the timeout
-        // ran out. The discriminator IS the payload; no flag needed.
         const evt = yield* race(ROUND_TIMEOUT, trackedClick(target.el));
         if (evt) {
           hits.value = hits.peek() + 1;
@@ -104,8 +91,7 @@ export class MdReact extends Diagram {
           yield* fadeOut(target, 0.35);
         }
       } finally {
-        // Runs on natural completion AND cancel — without this, SVG
-        // nodes would accumulate across rounds.
+        // Runs on cancel too; otherwise SVG nodes accumulate across rounds.
         target.dispose();
       }
     }

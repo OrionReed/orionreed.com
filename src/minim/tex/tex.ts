@@ -1,9 +1,4 @@
 // LaTeX → MathML shape, rendered via Temml.
-//
-// One `tex\`…\`` template is one Shape, one `<foreignObject>`, one
-// MathML render. Sub-formulas are addressed via `${part(...)}` /
-// `${parts(...)}` interpolations — see `parts.ts`. Names flow into
-// the type so `eq.parts.a` is typed and `eq.parts.x` is a TS error.
 
 import temml from "temml";
 import { signal, Box, type Signal, type BoxValue } from "@minim/signals";
@@ -277,7 +272,6 @@ export class TexShape<Names extends string = string> extends Shape {
 
     mountInto(initialMathml, measured);
 
-    // Reactive re-render on any content-signal change.
     let firstRun = true;
     this.effect(() => {
       for (const m of markers) void m.content.value; // track

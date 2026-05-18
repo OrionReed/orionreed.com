@@ -1,6 +1,3 @@
-// Gallery for the transitions in `motion/transitions.ts`. Each row
-// loops intro → hold → outro, staggered so the intro reads as a wave.
-
 import {Anchor, Diagram, Dir, Mount, Shape, bounceIn, circle, fadeOut, fadeUp, fadeUpOut, label, loop, vec, rect, scaleIn, slideIn, slideOut, spinIn, stagger, zoomOut, type Animator} from "../../minim";
 
 const LANES = 5;

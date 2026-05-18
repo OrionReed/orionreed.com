@@ -35,10 +35,6 @@ export class MdQrtpProtocol extends Diagram {
     const view = this.view(rOut * 2, rOut * 2);
     const center = view.center;
 
-    // ── State ───────────────────────────────────────────────────────
-    // Plain record of signals — `state.cells.value` etc. for both read
-    // and write. `snapshot(state)` flattens all signal-valued
-    // properties for one-call reset.
     const state = {
       cells: signal(new Map<number, CellState>()),
       overrides: signal(new Map<number, string>()),
@@ -46,8 +42,7 @@ export class MdQrtpProtocol extends Diagram {
       lastBroadcast: signal(-1),
     };
 
-    // Per-signal color: override > broadcast highlight > state-based.
-    // Returns null when the signal should be invisible.
+    // Precedence: override > broadcast highlight > state. Null hides the cell.
     const cellColor = (i: number) =>
       computed((): string | null => {
         const ov = state.overrides.value.get(i);
@@ -61,10 +56,7 @@ export class MdQrtpProtocol extends Diagram {
       });
     const colors = Array.from({ length: N }, (_, i) => cellColor(i));
 
-    // ── Render ──────────────────────────────────────────────────────
-
-    // Cell sectors first (filled), then outline circles + radial dividers
-    // on top so seams between sectors stay clean.
+    // Sectors first; outline circles + radial dividers on top to hide seams.
     for (let i = 0; i < N; i++) {
       const a0 = start + (i * TAU) / N;
       const a1 = a0 + TAU / N;
@@ -91,8 +83,6 @@ export class MdQrtpProtocol extends Diagram {
     }
 
     if (labelText) s(label(center, labelText, { bold: true }));
-
-    // ── Helpers ─────────────────────────────────────────────────────
 
     const cellsWithState = (st: CellState): number[] => {
       const out: number[] = [];
@@ -137,11 +127,7 @@ export class MdQrtpProtocol extends Diagram {
 
     const reset = snapshot(state);
 
-    // ── Animation ───────────────────────────────────────────────────
-
-    // Disposer for the flood-fill loop so we can tear it down between
-    // full cycles. Tracked by hand — `anim.loop(...)` returns the
-    // disposer, we hold it, and call it on reset.
+    // Held so we can tear down the flood loop between full cycles.
     let floodDispose: (() => void) | undefined;
 
     function* doFloodFill(): Animator {
@@ -184,7 +170,6 @@ export class MdQrtpProtocol extends Diagram {
     if (backchannel) startFloodFillLoop();
 
     this.anim.start(loop(function* () {
-      // Skip already-acknowledged cells.
       if (
         backchannel &&
         state.cells.peek().get(state.broadcast.peek()) === "acknowledged"
@@ -197,7 +182,6 @@ export class MdQrtpProtocol extends Diagram {
       handleReception(state.broadcast.peek());
       state.broadcast.value = (state.broadcast.peek() + 1) % N;
 
-      // Full cycle complete — reset and (if backchannel) restart flood.
       if (state.cells.peek().size === N) {
         yield T.beforeReset;
         floodDispose?.();

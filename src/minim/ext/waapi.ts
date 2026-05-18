@@ -1,54 +1,9 @@
-// WAAPI / scroll / viewport bridges. Three surfaces, all lazy:
-//
-//   Animators — `yield* …` runs a native browser animation:
-//     native(el, kf, opts)     compositor-driven tween as an Animator
-//
-//   Awaitables — `yield* …` inside an animator; compose with race/endOn:
-//     untilAnimation(a)        wake on Animation 'finish' (typed)
-//     untilInView(el, opts?)   wake when `el` becomes intersecting
-//     untilOutOfView(el, opts?) wake when `el` stops intersecting
-//
-//   Signals — read from anywhere reactive:
-//     scrollProgress()         page-global [0, 1]
-//     viewProgress(el, range)  view-timeline-style [0, 1]
-//     inView(el, opts?)        Boolean visibility
-//
-// The scroll/view signals are lazy through the signal's `watched`/
-// `unwatched` hooks: no scroll listener is attached until something
-// actually reads them. One shared capture-phase listener serves every
-// scroll/view signal; per-element IntersectionObservers are owned by
-// their `inView` signal. Range names follow the CSS `view-timeline`
-// spec (cover / entry / contain / exit) so semantics port over.
+// WAAPI / scroll / viewport bridges. Scroll signals are lazy via the
+// signal's `watched`/`unwatched` hooks; one shared capture-phase
+// listener serves them all. Range names mirror CSS `view-timeline`.
 
 import {suspend, type Animator} from "@minim/core";
 import {signal, type Signal} from "@minim/signals";
-
-// ── Native animator ─────────────────────────────────────────────────
-//
-// `native(el, keyframes, opts)` is the thin escape hatch to WAAPI.
-// Returns an `Animator<void>` so it composes with `all`, `race`,
-// `stagger`, and `try/finally` like any other minim animator. Runs
-// on the compositor for `opacity`, `transform`, `filter`, etc. —
-// no main-thread work per frame.
-//
-// Time convention:
-//   • A bare `number` for `opts` is **seconds** (matches minim's
-//     `to(target, dur)`): `native(el, { opacity: [0,1] }, 0.4)`.
-//   • An options object is passed through to `Element.animate` as-is,
-//     so `duration`/`delay` are **milliseconds** (matches the WAAPI
-//     spec verbatim — no surprises for anyone already using it).
-//
-// Lifecycle:
-//   • On natural finish we `commitStyles()` (best-effort) then
-//     `cancel()` the `Animation` so the visible state sticks without
-//     leaking the object or holding `fill: forwards` forever.
-//   • On cancellation (parent `gen.return()`, `race` loss, etc.) the
-//     `finally` cancels the `Animation`; whatever frame the compositor
-//     last rendered is discarded — visible state snaps to the
-//     pre-animation value, matching how `cancel()` works.
-//   • Errors from `commitStyles` are swallowed: it throws when the
-//     element is disconnected or the property isn't committable. Not
-//     worth surfacing.
 
 /** WAAPI animation as a minim Animator. Bare-number `opts` is seconds;
  *  object `opts` passes through to `Element.animate` (ms). */
@@ -69,12 +24,7 @@ export function* native(
   }
 }
 
-// ── Awaitables ──────────────────────────────────────────────────────
-
-/** Wake on the WAAPI animation's `finish` event; resume with the
- *  event. Disposing the suspension removes the listener; the animation
- *  itself keeps running. Use a `finally` (or `endOn`) to cancel `a`
- *  if you want playback to stop alongside the generator. */
+/** Wake on the animation's `finish` event; resume with the event. */
 export function untilAnimation(a: Animation): Animator<AnimationPlaybackEvent> {
   return suspend<AnimationPlaybackEvent>((wake) => {
     const handler = (e: Event): void => wake(e as AnimationPlaybackEvent);
@@ -83,9 +33,7 @@ export function untilAnimation(a: Animation): Animator<AnimationPlaybackEvent> {
   });
 }
 
-/** Wake when `el` enters the viewport (or hits the configured IO
- *  threshold). Wakes immediately if already intersecting — matches
- *  `untilTrue` semantics over a derived boolean. */
+/** Wake when `el` enters the viewport. Wakes immediately if already in. */
 export function untilInView(
   el: Element,
   opts?: IntersectionObserverInit,
@@ -104,8 +52,7 @@ export function untilInView(
   });
 }
 
-/** Wake when `el` leaves the viewport. Wakes immediately if already
- *  out. Complement of `untilInView`. */
+/** Wake when `el` leaves the viewport. Wakes immediately if already out. */
 export function untilOutOfView(
   el: Element,
   opts?: IntersectionObserverInit,
@@ -124,17 +71,9 @@ export function untilOutOfView(
   });
 }
 
-// ── Shared scroll/resize plumbing ───────────────────────────────────
-//
-// All scroll/view signals share one capture-phase `scroll` + `resize`
-// listener, rAF-coalesced. Capture phase picks up scrolls on nested
-// overflow containers (the `scroll` event doesn't bubble), so signals
-// stay live for elements inside scrollable parents.
-//
-// `pageTotal` (scrollable height) is cached and only refreshed on
-// resize — it doesn't change on scroll. Slight staleness if the page
-// grows from async content loads between resizes; `clamp01` on the
-// reader side caps the visible effect to "fills slightly early."
+// Shared scroll plumbing: capture-phase picks up nested overflow
+// containers (scroll doesn't bubble). `pageTotal` is cached and
+// only refreshed on resize.
 
 const subscribers = new Set<() => void>();
 let rafId = 0;
@@ -147,8 +86,7 @@ function refreshPageTotal(): void {
 
 function tick(): void {
   rafId = 0;
-  // Snapshot before iterating: a callback may dispose another scroll
-  // signal (`unwatched` → `unwatchTick`), mutating the live set.
+  // Snapshot: a callback may dispose another scroll signal mid-iter.
   const snapshot = [...subscribers];
   for (let i = 0; i < snapshot.length; i++) snapshot[i]();
 }
@@ -191,8 +129,6 @@ function unwatchTick(cb: () => void): void {
   if (subscribers.size === 0) detach();
 }
 
-/** Lazy scroll-driven signal. `read()` runs on every scroll/resize
- *  (rAF-coalesced) only while the signal has subscribers. */
 function scrollSignal<T>(read: () => T, initial: T): Signal<T> {
   let pull: (() => void) | undefined;
   const sig = signal<T>(initial, {
@@ -211,12 +147,7 @@ function scrollSignal<T>(read: () => T, initial: T): Signal<T> {
   return sig;
 }
 
-// ── Scroll signals ──────────────────────────────────────────────────
-
-/** Global page scroll progress in `[0, 1]`. `0` at top, `1` at the
- *  bottom of the scrollable area; `0` when the page doesn't scroll.
- *  Uses the cached `pageTotal` — refreshed on resize, not on every
- *  scroll tick. */
+/** Global page scroll progress in `[0, 1]`; `0` if page doesn't scroll. */
 export function scrollProgress(): Signal<number> {
   return scrollSignal(
     () => (pageTotal > 0 ? clamp01(window.scrollY / pageTotal) : 0),
@@ -224,13 +155,12 @@ export function scrollProgress(): Signal<number> {
   );
 }
 
-/** Which slice of the element's traversal through the viewport maps
- *  to `[0, 1]`. Names match the CSS `view-timeline` spec:
- *
- *    cover   leading edge enters ↦ trailing edge exits  (full traversal)
- *    entry   leading edge enters ↦ element fully in view
- *    contain element fully in view (pinned at 0.5 when taller than vp)
- *    exit    element starts exiting ↦ trailing edge exits */
+/** Slice of an element's viewport traversal mapped to `[0, 1]`. Names
+ *  match CSS `view-timeline`:
+ *    cover   leading enters ↦ trailing exits
+ *    entry   leading enters ↦ fully in view
+ *    contain fully in view (pinned at 0.5 when taller than vp)
+ *    exit    starts exiting ↦ trailing exits */
 export type ViewRange = "cover" | "entry" | "contain" | "exit";
 
 function clamp01(x: number): number {
@@ -242,40 +172,32 @@ function rangeProgress(rect: DOMRect, vp: number, range: ViewRange): number {
   const h = rect.height;
   switch (range) {
     case "cover": {
-      // Starts entering at top===vp, fully gone at top===-h.
       const total = vp + h;
       return total > 0 ? clamp01((vp - top) / total) : 0;
     }
     case "entry": {
-      // Leading edge enters ↦ fully in view (rect.bottom===vp).
       return h > 0 ? clamp01((vp - top) / h) : 1;
     }
     case "contain": {
-      // Fully entered ↦ about to exit. When taller than vp this range
-      // doesn't exist; pin to 0.5 so dependents stay stable.
+      // Taller than vp: range doesn't exist — pin at 0.5 for stability.
       const total = vp - h;
       if (total <= 0) return 0.5;
       return clamp01((vp - h - top) / total);
     }
     case "exit": {
-      // Top edge at vp top ↦ bottom edge at vp top.
       return h > 0 ? clamp01(-top / h) : 1;
     }
   }
 }
 
-/** Element view-progress in `[0, 1]` over the given `range` (default
- *  `cover`). Tracks `getBoundingClientRect` against the viewport on
- *  every scroll/resize.
- *
- *  Memoized by `(el, range)` — repeat calls return the same signal,
- *  so N consumers share one layout read per tick. WeakMap entries
- *  are GC'd when `el` is dropped. */
+// Memoize `viewProgress` by (el, range) so N readers share one layout
+// read per tick. WeakMap GCs when el is dropped.
 const viewCache = new WeakMap<
   Element,
   Partial<Record<ViewRange, Signal<number>>>
 >();
 
+/** Element view-progress in `[0, 1]` over `range` (default `cover`). */
 export function viewProgress(
   el: Element,
   range: ViewRange = "cover",
@@ -288,8 +210,6 @@ export function viewProgress(
   ));
 }
 
-// ── Visibility signal ───────────────────────────────────────────────
-
 function elInViewport(el: Element): boolean {
   const r = el.getBoundingClientRect();
   return (
@@ -300,10 +220,8 @@ function elInViewport(el: Element): boolean {
   );
 }
 
-/** Reactive boolean — `true` while `el` intersects the viewport. Backed
- *  by `IntersectionObserver`. The initial value is seeded from
- *  `getBoundingClientRect` so reads are correct before the observer's
- *  first async callback. */
+/** Reactive boolean; `true` while `el` intersects the viewport. Seeded
+ *  synchronously from rect, then maintained by IntersectionObserver. */
 export function inView(
   el: Element,
   opts?: IntersectionObserverInit,

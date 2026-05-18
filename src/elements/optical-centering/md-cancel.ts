@@ -1,17 +1,3 @@
-// Two cancellation modes.
-//
-//   EXIT — cooperative: flip the `stop` signal; each lifecycle's
-//          `oscillate(...).until(stop)` resolves, and `fadeOut` runs
-//          as the sequel in the same generator.
-//
-//   STOP — hard cancel: flip `hardStop`; the loop's outer scope
-//          (`play([lifecycles]).until(hardStop)`) tears the entire
-//          subtree down, mid-fade if necessary.
-//
-// No `disposers[]` array, no `anim.start()` from button callbacks. Both
-// modes are signal-coordinated — buttons set signals, generators react
-// via the standard fluent vocabulary.
-
 import {Diagram, Mount, Anchor, button, signal, play, circle, wave, fadeOut, label, loop, num, vec, type Animator, type Signal, type Content, type Has, Num} from "../../minim";
 
 /** Sine oscillation around `sig`'s start value. */
@@ -52,8 +38,7 @@ export class MdCancel extends Diagram {
 
     type Slot = {
       x: number;
-      // `y` is a `Num.signal` (rather than plain `signal(...)`) so the
-      // oscillate integrator can read its `[ALGEBRA]` slot.
+      // `Num` (not plain signal) — oscillate reads its `[ALGEBRA]` slot.
       y: Num;
       shape: Has<"opacity">;
     };
@@ -66,8 +51,6 @@ export class MdCancel extends Diagram {
       slots.push({ x, y, shape });
     }
 
-    // Two signals coordinate the outer loop. Buttons set them; the
-    // generator observes via `untilChange` / `untilTrue`.
     const stop = signal(false);
     const hardStop = signal(false);
 
@@ -96,13 +79,6 @@ export class MdCancel extends Diagram {
       ),
     );
 
-    // One outer loop. Each iteration:
-    //   1. Reset slots + signals.
-    //   2. Run all Num lifecycles in parallel, with `.until(hardStop)`
-    //      wrapping the whole subtree — hardStop cascades cancellation
-    //      to every child instantly.
-    //   3. Decide post-cycle delay based on which signal fired.
-    //   4. Loop restarts; everything fresh.
     this.anim.start(
       loop(function* () {
         for (const slot of slots) slot.shape.opacity.value = 1;

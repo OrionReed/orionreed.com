@@ -1,17 +1,3 @@
-// minim/tex correspondence demo: identity across structurally
-// distinct representations.
-//
-//   1↔N (fan-out)  ─── one symbol corresponds to many: \vec{v} ↔
-//                      (v_x, v_y, v_z), \sum a_i ↔ a_1 + a_2 + a_3.
-//                      Authoring: marker.expand({...}).
-//
-//   substitution  ─── same identity, different content: a + b = c
-//                      → 2 + 3 = 5 via marker.with(newContent).
-//
-// Color is set on markers (not Parts) and cascades through the
-// expand chain — `tint(BLUE, ai)` colors a_i, a_1, a_2, a_3
-// together.
-
 import {Anchor, Diagram, Mount, signal, label, loop, snapshot, type Content} from "../../minim";
 import {highlight, morph, part, parts, tex, tint, write, writeOut} from "../../minim/tex";
 
@@ -19,8 +5,7 @@ const RED = "#e25c5c";
 const BLUE = "#5b8def";
 const GREEN = "#3aa56b";
 
-// Extracted as JS-string constants — avoids Cursor's TS grammar
-// trip on `_{i=…}` patterns inside template literals.
+// JS-string constants avoid Cursor's TS grammar trip on `_{i=…}` in template literals.
 const VEC_V = "\\vec{v}";
 const SUM_RANGE = "\\sum_{i=1}^{3}";
 
@@ -43,19 +28,16 @@ export class MdTexCorrespond extends Diagram {
       }),
     );
 
-    // ── A: vector ↔ components (1↔3 via expand) ───────────────────
     const v = part("v", VEC_V);
     const { vx, vy, vz } = v.expand({ vx: "v_x", vy: "v_y", vz: "v_z" });
     const vSym = s(tex`${v}`);
     const vComp = s(tex`(${vx}, ${vy}, ${vz})`);
 
-    // ── B: sum ↔ expansion (1↔3 via expand) ───────────────────────
     const ai = part("ai", "a_i");
     const { a1, a2, a3 } = ai.expand({ a1: "a_1", a2: "a_2", a3: "a_3" });
     const sigma = s(tex`${SUM_RANGE} ${ai}`);
     const flat = s(tex`${a1} + ${a2} + ${a3}`);
 
-    // ── C: concrete numbers (staggered substitution via .with) ────
     const { a, b, c } = parts("a", "b", "c");
     const sym = s(tex`${a} + ${b} = ${c}`);
     const sub1 = s(tex`${a.with("2")} + ${b} = ${c}`);
@@ -68,9 +50,7 @@ export class MdTexCorrespond extends Diagram {
       eq.opacity.value = 0;
     }
 
-    // Snapshot the identity-root markers' colors — color cascades
-    // from these via the expand chain, so capturing the roots
-    // resets every derived child too.
+    // Snapshot roots; color cascades to expand-children, so resetting roots resets all.
     const reset = snapshot(
       ...eqs.map((eq) => eq.opacity),
       v.color,
@@ -85,14 +65,13 @@ export class MdTexCorrespond extends Diagram {
       reset();
       yield 0.3;
 
-      // ── A. Vector ↔ components ───────────────────────────────────
       status.value = "write — \\vec{v}";
       vSym.opacity.value = 1;
       yield* write(vSym, 0.6);
       yield 0.3;
 
       status.value = "color — tag v's identity (cascades to vx, vy, vz)";
-      tint(RED, v); // colors v AND vx, vy, vz via cascade
+      tint(RED, v);
       yield* highlight(vSym.parts.v, 0.4);
       yield 0.4;
 
@@ -108,7 +87,6 @@ export class MdTexCorrespond extends Diagram {
       yield* writeOut(vSym, 0.4);
       yield 0.2;
 
-      // ── B. Sum ↔ expansion ───────────────────────────────────────
       sigma.opacity.value = 1;
       status.value = "write — \\sum_{i=1}^{3} a_i";
       yield* write(sigma, 0.6);
@@ -132,15 +110,12 @@ export class MdTexCorrespond extends Diagram {
       yield* writeOut(sigma, 0.4);
       yield 0.2;
 
-      // ── C. Concrete numbers (staggered substitution) ─────────────
       sym.opacity.value = 1;
       status.value = "write — a + b = c";
       yield* write(sym, 0.6);
       yield 0.3;
 
       status.value = "color — green tag the substitutables";
-      // a, b, c are independent identities (no shared root) so we
-      // tint all three. `.with("2")` children inherit via group.
       tint(GREEN, a, b, c);
       yield 0.5;
 

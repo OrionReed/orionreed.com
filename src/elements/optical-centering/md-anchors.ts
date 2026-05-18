@@ -1,23 +1,12 @@
-// Stage-2 showcase. A rect rotates and breathes; the writable anchors
-// `r.at(u, v)` / `r.top` / `r.right` / … return *post-transform* points
-// (parent-frame), so every dependent — bound dots, line endpoints,
-// labels — tracks the visual position without an `anim.run` of its own.
-
 import {Anchor, Diagram, Mount, circle, easeInOut, label, line, loop, rect, snapshot} from "../../minim";
 
 export class MdAnchors extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(560, 320);
 
-    // One-shot placement: `set` writes a delta to translate so r's
-    // post-transform center lands on view.center exactly.
     const r = s(rect(0, 0, 130, 86, { thin: true, corner: 4 }));
     r.center.set(view.center);
 
-    // Two reactive composers — rotate goes round once per loop, scale
-    // breathes through three sizes. Both pivot around r's default
-    // origin (box center), so the LOCAL center is invariant while
-    // every corner/edge anchor sweeps through PARENT frame.
     const reset = snapshot(r.rotate, r.scale);
     this.anim.start(loop(function* () {
       reset();
@@ -31,9 +20,6 @@ export class MdAnchors extends Diagram {
       ];
     }));
 
-    // Corner dots — `bind` reads r.at(u, v) every frame and writes it
-    // through each dot's anchor lens, which collapses to a translate
-    // delta. Net effect: each dot's visual center == the visual corner.
     const corners: [number, number][] = [
       [0, 0],
       [1, 0],
@@ -45,16 +31,12 @@ export class MdAnchors extends Diagram {
       dot.center.bind(r.at(u, v));
     }
 
-    // Mid-edge markers — bound to the cardinals so they slide along
-    // the rotating axis.
     const edges = [r.top, r.right, r.bottom, r.left];
     for (const e of edges) {
       const m = s(circle(view.center, 3.5, { fill: "var(--accent)" }));
       m.center.bind(e);
     }
 
-    // Crossed diagonals — endpoints are reactive Points, so each
-    // diagonal traces a rotating diameter that breathes with scale.
     s(
       line(r.at(0, 0), r.at(1, 1), {
         thin: true,
@@ -68,9 +50,6 @@ export class MdAnchors extends Diagram {
       }),
     );
 
-    // Pendulum — a fixed satellite, with a line drawn to r.right.
-    // As r rotates, r.right swings around the center: the line acts
-    // like a clock hand pinned to the satellite end.
     const sat = s(circle(view.right.left(48), 7, { fill: true, opacity: 0.6 }));
     s(line(sat.center, r.right, { thin: true, opacity: 0.4 }));
 

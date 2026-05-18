@@ -1,12 +1,3 @@
-// Polygon morph — the polygon is a reactive value type whose value
-// carries an array of vertices. `Polygon = { vertices: Vec[] }` is just
-// a struct with a custom `lerp` op; `.to(targetPolygon, dur)` falls out.
-//
-// The demo walks circle → square → triangle → 5-point star →
-// hexagon → back-to-circle, all via the same `polygon.to(...)` API
-// that Vec / Box / Color use. One reactive value, one tween call,
-// any shape with N matching vertices.
-
 import {
   Anchor, Diagram, Path, Vec, type VecValue,
   Signal, signal, derived, defineTrait, LERP, EQUALS,
@@ -17,9 +8,7 @@ import {
 const W = 640;
 const H = 360;
 
-// Vertex count for every keyframe. 24 divides cleanly into 3 / 4 / 6
-// / 8 / 12, so each n-gon's corners fall on integer vertex indices.
-// Keeping N constant means the lerp can walk vertex-by-vertex.
+// 24 divides cleanly into 3/4/6/8/12 so each n-gon's corners land on integer indices.
 const N = 24;
 const R = 110;
 
@@ -40,9 +29,7 @@ const polygonEquals = (a: PolygonValue, b: PolygonValue): boolean => {
   return true;
 };
 
-/** Component-wise lerp. Cycles through whichever array is shorter,
- *  so polygons of different lengths still morph cleanly (in this
- *  demo every keyframe has exactly N vertices). */
+/** Component-wise lerp; cycles through the shorter array so unequal lengths still morph. */
 const polygonLerp = (a: PolygonValue, b: PolygonValue, t: number): PolygonValue => {
   const n = Math.max(a.vertices.length, b.vertices.length);
   const out: VecValue[] = new Array(n);
@@ -54,8 +41,6 @@ const polygonLerp = (a: PolygonValue, b: PolygonValue, t: number): PolygonValue 
   return { vertices: out };
 };
 
-/** Custom reactive value type — `polygon.to(target, dur)` falls out
- *  of the `[LERP]` trait stamp. */
 class Polygon extends Signal<PolygonValue> {
   constructor(v: PolygonValue = { vertices: [] }) { super(v); }
 }
@@ -63,13 +48,7 @@ interface Polygon extends LerpMethods<PolygonValue> {}
 defineTrait(Polygon, LERP, polygonLerp);
 defineTrait(Polygon, EQUALS, polygonEquals);
 
-// ── Keyframe builders ──────────────────────────────────────────────
-//
-// Each emits exactly N vertices. For shapes with fewer than N
-// "real" corners, vertices double up at the same position — the
-// lerp then SPLITS them apart smoothly when morphing to a finer
-// shape. (This is what makes circle→triangle look like the triangle
-// "puffs up" into a circle, rather than rotating into place.)
+// Each builder emits N vertices; coarse shapes repeat corners so the lerp splits them apart.
 
 /** Regular n-gon, padded to N vertices by repeating each corner. */
 function ngon(corners: number, radius: number): VecValue[] {
@@ -136,11 +115,8 @@ export class MdMorph extends Diagram {
       ),
     );
 
-    // The polygon is one reactive value carrying N vertices.
     const poly = new Polygon({ vertices: KEYFRAMES[0].verts });
 
-    // Derive N reactive Points from the array, centered at (cx, cy).
-    // Each `path` vertex tracks one slot of poly.value.vertices.
     const points = Array.from({ length: N }, (_, i) =>
       derived(Vec, () => {
         const v = poly.value.vertices[i] ?? { x: 0, y: 0 };
@@ -157,11 +133,6 @@ export class MdMorph extends Diagram {
       }),
     );
 
-    // Vertex dots — visual evidence that there are N=24 points
-    // moving through space, not a single morphing shape primitive.
-    // Dots that share a position (e.g. when shape has < N "real"
-    // corners) overlap into a brighter point; you can see them
-    // separate as the shape morphs to a finer keyframe.
     for (let i = 0; i < N; i++) {
       s(
         circle(points[i], 2.5, {
@@ -172,7 +143,6 @@ export class MdMorph extends Diagram {
       );
     }
 
-    // Status label updates as we cycle through keyframes.
     const status = signal<Content>(KEYFRAMES[0].name);
     s(
       label(view.top.down(46), status, {
@@ -186,8 +156,6 @@ export class MdMorph extends Diagram {
       for (let i = 0; i < KEYFRAMES.length; i++) {
         const next = KEYFRAMES[(i + 1) % KEYFRAMES.length];
         status.value = `→ ${next.name}`;
-        // The punchline. One method call, animates 24 vertices
-        // simultaneously through Polygon.lerp.
         yield* poly.to({ vertices: next.verts }, DUR);
         status.value = next.name;
         yield DWELL;

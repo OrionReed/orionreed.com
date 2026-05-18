@@ -33,38 +33,29 @@ export class MdQrtpHandshake extends Diagram {
     const H = CHUNK_H * 2 + DEVICE_GAP;
     this.view(W + 50, H + 2 * PAD_Y);
 
-    // Single source of truth — both rows + arrow visibility computed from
-    // the chunk arrays. Arrows fire iff the corresponding chunk's `ack`
-    // is set.
     const state = {
       A: signal(initialChunks("A", N)),
       B: signal(initialChunks("B", N)),
     };
 
-    // Build one row of N chunks reading from `state[device]`. Returns
-    // the [data, ack] bounds per chunk so arrows can land on them.
     const buildRow = (device: "A" | "B", y: number) =>
       Array.from({ length: N }, (_, i) => {
         const r = s(rect(i * PITCH + PAD_X, y + PAD_Y, CHUNK_W, CHUNK_H));
         const [data, ack] = split(r, "x", [3, 2]);
         s(
           line(data.at(1, 0), data.at(1, 1), { thin: true }),
-          // Dashed outline around the "current" chunk only — concentric
-          // outline keeps the corner radius matching the inner rect.
           r.outline(4, {
             dashed: true,
             cap: "round",
             opacity: () => (state[device].value[i].status === "current") ? 1 : 0,
             aside: true,
           }),
-          // Data slot: value (only when not future) + muted "data" tag.
           label(data.center.up(5), () => {
             const c = state[device].value[i];
             if (c.status === "future") return "";
             return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
           }),
           label(data.center.down(8), t("data").muted(), { size: 12 }),
-          // Ack slot: hash (when set) + muted "ack" tag.
           label(ack.center.up(5), () => state[device].value[i].ack),
           label(ack.center.down(8), t("ack").muted(), { size: 12 }),
         );
@@ -84,9 +75,6 @@ export class MdQrtpHandshake extends Diagram {
       ),
     );
 
-    // 2N pre-built arrows (A→B and B→A per chunk index). Visibility
-    // derives directly from the source chunk's `ack` — no separate
-    // arrows array to keep in sync.
     for (let i = 0; i < N; i++) {
       s(
         arrow(slotsA[i].ack.bottom, slotsB[i].data.top, {
@@ -97,8 +85,6 @@ export class MdQrtpHandshake extends Diagram {
         }),
       );
     }
-
-    // ── Mutation helpers ────────────────────────────────────────────
 
     const addAck = (device: "A" | "B", i: number, hash: string) => {
       const next = [...state[device].peek()];
@@ -112,8 +98,6 @@ export class MdQrtpHandshake extends Diagram {
       if (i + 1 < N) next[i + 1] = { ...next[i + 1], status: "current" };
       state[device].value = next;
     };
-
-    // ── Animation ────────────────────────────────────────────────────
 
     const reset = snapshot(state);
     this.anim.start(loop(function* () {

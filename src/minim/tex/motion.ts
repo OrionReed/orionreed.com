@@ -1,11 +1,4 @@
-// Motion combinators over tex shapes. `pluck` is the primitive: it
-// lifts a Part into a free-standing Plucked Shape. `morph` composes
-// on top, branching by identity-cardinality (1↔1, 1↔N, N↔1) using
-// `marker.group` chains. Per-part stagger uses minim's existing
-// `stagger` directly:
-//
-//      for (const p of eq.parts) p.opacity.value = 0;
-//      yield* stagger(0.05, eq.parts, p => p.opacity.to(1, 0.3));
+// Motion combinators over tex shapes (`pluck`, `morph`, …).
 
 import {easeInOut, easeOut, type Animator} from "@minim/core";
 import {effect, signal, type Easing} from "@minim/signals";
@@ -168,7 +161,6 @@ export function pluck(part: Part): Plucked {
   fo.style.pointerEvents = "none";
   fo.appendChild(clonedWrapper);
 
-  // Land the matched mrow exactly where the source one is right now.
   plucked.translate.value = pose;
 
   host.parent.add(plucked);

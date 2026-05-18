@@ -1,5 +1,3 @@
-// Core: signal-free generator runtime + combinators.
-
 export {
   Anim,
   asGen,

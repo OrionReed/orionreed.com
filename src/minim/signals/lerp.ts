@@ -1,72 +1,83 @@
-// lerp.ts — the signals ↔ generators surface.
-//
-// Where signals live ON values (state), this file lives BETWEEN signals
-// and the runtime. It contains:
-//
-//   • The `[LERP]` trait method bundle (`.to()` on signals)
-//   • Free-fn temporal animators dispatched by traits:
-//       tween (LERP), spring/toward (LINEAR + METRIC), attract (LINEAR),
-//       follow/driven (no trait needed)
-//   • The `Tween<T>` chainable wrapper for `.to(A).to(B).from(start)`
-//   • `play(...)` fluent surface — `.until / .then / .at`
-//   • `when(sig)` — wait until signal value is truthy
-//   • `untilChange(sig)` — wait until signal changes; resume with new value
+// signals ↔ generators bridge: .to(), spring/toward/attract, play, when.
 
-import { Signal, Computed, computed, effect, type Val, type Read } from "./signal";
 import {
-  LERP, LINEAR, METRIC, EQUALS,
-  type Linear, type Lerp, type Metric, type Equals,
+  Signal,
+  Computed,
+  computed,
+  effect,
+  type Val,
+  type Read,
+} from "./signal";
+import {
+  LERP,
+  LINEAR,
+  METRIC,
+  EQUALS,
+  type Linear,
+  type Lerp,
+  type Metric,
+  type Equals,
 } from "./traits";
 import {
-  drive, suspend, race, withScale, type Animator, type Yieldable,
-  type Easing, easeOut,
+  drive,
+  suspend,
+  race,
+  withScale,
+  type Animator,
+  type Yieldable,
+  type Easing,
+  easeOut,
 } from "../core";
 
 const defaultEase = easeOut;
 
-// ════════════════════════════════════════════════════════════════════
-// Tween<T> — small chainable Animator wrapper for `.to(...).to(...)`.
-// NOT a class hierarchy; just an Animator that knows its target sig
-// so `.to(...)` can append fresh segments.
-// ════════════════════════════════════════════════════════════════════
-
+/** Chainable Animator wrapper so `.to(A).to(B).from(start)` reads naturally. */
 export class Tween<T> implements Animator<void> {
-  constructor(private sig: Signal<T>, private gen: Animator<void>) {}
+  constructor(
+    private sig: Signal<T>,
+    private gen: Animator<void>,
+  ) {}
 
   /** Append a tween segment from current value to `target` over `dur`. */
   to(target: T, dur: Val<number>, ease?: Easing): Tween<T> {
     const sig = this.sig;
     const prior = this.gen;
-    return new Tween(sig, (function* (): Animator<void> {
-      yield* prior;
-      yield* tweenStep(sig, target, dur, ease);
-    })());
+    return new Tween(
+      sig,
+      (function* (): Animator<void> {
+        yield* prior;
+        yield* tweenStep(sig, target, dur, ease);
+      })(),
+    );
   }
 
-  /** Pose-then-tween prefix: write `start` to the cell as the first
-   *  step, then run the rest of the chain. Reads as
-   *  `opacity.from(0).to(1, 0.5)` → "from 0, to 1 over 0.5s." */
+  /** Pose `start` as the first step, then run the rest of the chain. */
   from(start: T): Tween<T> {
     const sig = this.sig;
     const prior = this.gen;
-    return new Tween(sig, (function* (): Animator<void> {
-      sig.value = start;
-      yield* prior;
-    })());
+    return new Tween(
+      sig,
+      (function* (): Animator<void> {
+        sig.value = start;
+        yield* prior;
+      })(),
+    );
   }
 
-  // Animator protocol — delegate to the wrapped generator.
-  next(v?: number): IteratorResult<Yieldable, void> { return this.gen.next(v as number); }
-  return(v?: void): IteratorResult<Yieldable, void> { return this.gen.return(v as void); }
-  throw(e: unknown): IteratorResult<Yieldable, void> { return this.gen.throw(e); }
-  [Symbol.iterator](): this { return this; }
+  next(v?: number): IteratorResult<Yieldable, void> {
+    return this.gen.next(v as number);
+  }
+  return(v?: void): IteratorResult<Yieldable, void> {
+    return this.gen.return(v as void);
+  }
+  throw(e: unknown): IteratorResult<Yieldable, void> {
+    return this.gen.throw(e);
+  }
+  [Symbol.iterator](): this {
+    return this;
+  }
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Tween primitive — reads [LERP] from the cell, writes per frame
-// ════════════════════════════════════════════════════════════════════
-
-/** One tween segment: drive `sig` from current to `target` over `dur` */
 function* tweenStep<T>(
   sig: Signal<T>,
   target: T,
@@ -79,19 +90,20 @@ function* tweenStep<T>(
   }
   const start = sig.peek();
   const D = valFn(dur);
-  // Epsilon guards against FP imprecision in dt accumulation: e.g. with
-  // synthetic dt = 1/60, six frames give clock=0.0999...8, missing the
-  // `>= 0.1` exact-equality and pushing tween completion to the 7th frame.
+  // Epsilon: with dt=1/60, six frames give 0.0999...8 — without the
+  // guard a `dur=0.1` tween completes on frame 7, not 6.
   yield* drive((_dt, t) => {
     const total = D();
-    if (t + 1e-9 >= total) { sig.value = target; return false; }
+    if (t + 1e-9 >= total) {
+      sig.value = target;
+      return false;
+    }
     const u = total > 0 ? t / total : 1;
     sig.value = lerpFn(start, target, ease(u));
   });
 }
 
-/** Free-fn tween — useful for ad-hoc third-party types where the
- *  method form isn't installed. Returns a chainable `Tween<T>`. */
+/** Free-fn form of `.to()` for cells without the method installed. */
 export function tween<T>(
   sig: Signal<T>,
   target: T,
@@ -100,12 +112,6 @@ export function tween<T>(
 ): Tween<T> {
   return new Tween(sig, tweenStep(sig, target, dur, ease));
 }
-
-// ════════════════════════════════════════════════════════════════════
-// Spring / Toward / Oscillate / Drift / Attract
-// All need [LINEAR]; spring/toward additionally need [METRIC] for the
-// distance-based settle / step.
-// ════════════════════════════════════════════════════════════════════
 
 export interface SpringOpts {
   /** Natural angular frequency (rad/s). Period of unforced oscillation
@@ -132,22 +138,24 @@ export function* spring<T>(
   const lin = sig[LINEAR];
   const met = sig[METRIC];
   if (!lin || !met) {
-    throw new Error(`spring: ${sig.constructor.name} needs [LINEAR] + [METRIC]`);
+    throw new Error(
+      `spring: ${sig.constructor.name} needs [LINEAR] + [METRIC]`,
+    );
   }
   const omega = opts.omega ?? 13;
   const zeta = opts.zeta ?? 1;
-  const stiffness = omega * omega;            // k = ω²
-  const damping = 2 * zeta * omega;           // c = 2ζω
+  const stiffness = omega * omega; // k = ω²
+  const damping = 2 * zeta * omega; // c = 2ζω
   const eps = opts.precision ?? 1e-4;
   const T = valFn(target);
   let vel: T | undefined;
   yield* drive((dt) => {
     const t = T();
     const cur = sig.peek();
-    const disp = lin.sub(t, cur);                 // target - cur
-    const vAccel = lin.scale(disp, stiffness);    // ω² · disp
+    const disp = lin.sub(t, cur); // target - cur
+    const vAccel = lin.scale(disp, stiffness); // ω² · disp
     const damp = vel ? lin.scale(vel, damping) : lin.scale(disp, 0);
-    const accel = lin.sub(vAccel, damp);          // ω²·disp - 2ζω·v
+    const accel = lin.sub(vAccel, damp); // ω²·disp - 2ζω·v
     vel = vel ? lin.add(vel, lin.scale(accel, dt)) : lin.scale(accel, dt);
     sig.value = lin.add(cur, lin.scale(vel, dt));
     if (eps > 0 && met(cur, t) < eps && met(vel, t) < eps * 100) {
@@ -157,8 +165,7 @@ export function* spring<T>(
   });
 }
 
-/** Constant-speed approach. `speed` is units-of-T per second (via metric).
- *  `target` and `speed` may be reactive. */
+/** Constant-speed approach (units-of-T per second). */
 export function* toward<T>(
   sig: Signal<T>,
   target: Val<T>,
@@ -167,7 +174,9 @@ export function* toward<T>(
   const lin = sig[LINEAR];
   const met = sig[METRIC];
   if (!lin || !met) {
-    throw new Error(`toward: ${sig.constructor.name} needs [LINEAR] + [METRIC]`);
+    throw new Error(
+      `toward: ${sig.constructor.name} needs [LINEAR] + [METRIC]`,
+    );
   }
   const T = valFn(target);
   const S = valFn(speed);
@@ -176,14 +185,16 @@ export function* toward<T>(
     const cur = sig.peek();
     const dist = met(cur, t);
     const step = S() * dt;
-    if (dist <= step) { sig.value = t; return false; }
+    if (dist <= step) {
+      sig.value = t;
+      return false;
+    }
     const dir = lin.scale(lin.sub(t, cur), 1 / dist);
     sig.value = lin.add(cur, lin.scale(dir, step));
   });
 }
 
-/** Exponential pull toward `target` with rate `k` per second
- *  (k=1 closes ~63% of distance per second). No overshoot. */
+/** Exponential pull toward `target` at rate `k`/s (no overshoot). */
 export function* attract<T>(
   sig: Signal<T>,
   target: Val<T>,
@@ -200,50 +211,25 @@ export function* attract<T>(
   });
 }
 
-/** Coerce a `Val<T>` into a `() => T` getter (no signal tracking — used
- *  inside `drive` lambdas which are untracked). The `Read<T>` arm of
- *  `Val<T>` is a *type-only* abstraction; at runtime, only `Signal`
- *  instances need detection. Anything else is the plain value. */
 function valFn<T>(v: Val<T>): () => T {
   if (v instanceof Signal) return () => v.value;
   if (typeof v === "function") return v as () => T;
   return () => v as T;
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Universal signal-temporal methods — no trait required
-// ════════════════════════════════════════════════════════════════════
-
-/** Generator-scoped reactive bind: `sig` follows `source` until the
- *  enclosing generator ends or is cancelled. Sugar over `sig.bind(source)`
- *  with automatic cleanup tied to the parent's lifetime.
- *
- *      yield* race(follow(b, a), untilTrue(stop));   // b follows a until stop
- */
+/** Generator-scoped reactive bind; cleans up when the parent ends. */
 export function follow<T>(sig: Signal<T>, source: Val<T>): Animator<void> {
-  return suspend<void>((_wake) => {
-    const stop = sig.bind(source);
-    return stop;
-  });
+  return suspend<void>((_wake) => sig.bind(source));
 }
 
-/** Drive `sig` per frame from a closed-form function of elapsed time
- *  and its starting value. The general pattern for any animation that
- *  can be written as `f(t, initial)` — closed-form `tween`/`attract`/
- *  sinusoids/sawtooths/lissajous, etc. `initial` is captured once at
- *  scope entry via `sig.peek()`, so the caller can express motion
- *  relative to "wherever this was" without storing it themselves:
- *
- *      yield* wave(opacity, (t, base) => base + 0.1 * Math.sin(2 * Math.PI * t));
- *      yield* wave(x,       (t, x0)   => x0 + 100 * t);                  // linear sweep
- *      yield* wave(angle,   (t, a0)   => a0 + 2 * Math.PI * (t % 1));    // sawtooth phase
- */
 export function* wave<T>(
   sig: Signal<T>,
   fn: (t: number, initial: T) => T,
 ): Animator<void> {
   const initial = sig.peek();
-  yield* drive((_dt, t) => { sig.value = fn(t, initial); });
+  yield* drive((_dt, t) => {
+    sig.value = fn(t, initial);
+  });
 }
 
 /** Escape hatch: drive sig per frame with `step(dt, t, current)`.
@@ -259,14 +245,6 @@ export function* driven<T>(
   });
 }
 
-// ════════════════════════════════════════════════════════════════════
-// Method bundle for [LERP] — `.to()` is the only cell method.
-//
-// Everything else (spring/toward/attract/follow/driven) is a free fn that
-// dispatches via traits — strictly more general (works on any cell with
-// the right traits, including third-party types stamped post-hoc).
-// ════════════════════════════════════════════════════════════════════
-
 export interface LerpMethods<T> {
   to(target: T, dur: Val<number>, ease?: Easing): Tween<T>;
 }
@@ -277,57 +255,51 @@ export const lerpImpl = {
   },
 };
 
-// ════════════════════════════════════════════════════════════════════
-// defineTrait(Cls, slot, impl)
-//
-// Stamps `Cls.prototype[slot] = impl` and, if the slot has an associated
-// method bundle (e.g. `.to()` for LERP), installs that too. Use in
-// value-type files instead of writing the prototype assignments by hand:
-//
-//   defineTrait(Vec, LINEAR, { add, sub, scale });
-//   defineTrait(Vec, LERP,   lerp);     // also installs .to()
-//   defineTrait(Vec, METRIC, metric);
-//   defineTrait(Vec, EQUALS, equals);
-// ════════════════════════════════════════════════════════════════════
-
 const TRAIT_METHODS: Record<symbol, object | undefined> = {
   [LERP]: lerpImpl,
-  // future: extra (slot → method-bundle) pairs go here
 };
 
-interface ProtoTarget { prototype: object }
-export function defineTrait<T>(Cls: ProtoTarget, slot: typeof LERP,   impl: Lerp<T>): void;
-export function defineTrait<T>(Cls: ProtoTarget, slot: typeof LINEAR, impl: Linear<T>): void;
-export function defineTrait<T>(Cls: ProtoTarget, slot: typeof METRIC, impl: Metric<T>): void;
-export function defineTrait<T>(Cls: ProtoTarget, slot: typeof EQUALS, impl: Equals<T>): void;
-export function defineTrait(Cls: ProtoTarget, slot: symbol, impl: unknown): void {
+/** Stamp `Cls.prototype[slot] = impl`; installs method bundle if any. */
+interface ProtoTarget {
+  prototype: object;
+}
+export function defineTrait<T>(
+  Cls: ProtoTarget,
+  slot: typeof LERP,
+  impl: Lerp<T>,
+): void;
+export function defineTrait<T>(
+  Cls: ProtoTarget,
+  slot: typeof LINEAR,
+  impl: Linear<T>,
+): void;
+export function defineTrait<T>(
+  Cls: ProtoTarget,
+  slot: typeof METRIC,
+  impl: Metric<T>,
+): void;
+export function defineTrait<T>(
+  Cls: ProtoTarget,
+  slot: typeof EQUALS,
+  impl: Equals<T>,
+): void;
+export function defineTrait(
+  Cls: ProtoTarget,
+  slot: symbol,
+  impl: unknown,
+): void {
   (Cls.prototype as Record<symbol, unknown>)[slot] = impl;
   const methods = TRAIT_METHODS[slot];
   if (methods) Object.assign(Cls.prototype, methods);
 }
 
-// ════════════════════════════════════════════════════════════════════
-// play() — thin fluent facade for .until/.then/.at over any Animator
-// ════════════════════════════════════════════════════════════════════
-
-/** Triggers that bound a `play(...)`. A `Read<unknown>` waits until the
- *  cell's value is truthy; an `Animator` waits for completion; a
- *  number sleeps that many seconds. */
-// A play-trigger is either a generator/animator to delegate to, or a
-// reactive cell whose truthiness we wait on. We accept `Signal<any>`
-// (not `Read<unknown>`) because `playableGen`'s only handling for
-// "cell" inputs is `instanceof Signal` + `effect` subscription —
-// plain Read-shaped objects (no observer hookup) would silently fall
-// through and crash with "unsupported yield object". `any` is the
-// intentional bivariance escape: `Signal<T>` is invariant in T (T
-// appears in trait slots like `Lerp<T>` which use T in both
-// positions), so `Signal<unknown>` would not accept `Signal<boolean>`.
-// At this site we don't read the value's type, only its truthiness.
+// `Signal<any>` not `Read<unknown>`: invariance in T blocks the latter,
+// and `playableGen` only knows how to handle real `Signal` instances.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type PlayTrigger = Yieldable | Signal<any>;
 
 export interface Play<R = void> extends Animator<R> {
-  /** End when `p` fires (truthy cell, animator completion, n-second sleep, etc.) */
+  /** End when `p` fires (truthy cell / animator completion / sleep). */
   until(p: PlayTrigger): Play<R>;
   /** Sequence: this, then `next`. */
   then(next: PlayTrigger): Play<unknown>;
@@ -337,19 +309,28 @@ export interface Play<R = void> extends Animator<R> {
 
 class PlayImpl<R> implements Play<R> {
   constructor(private g: Animator<R>) {}
-  next(v?: number) { return this.g.next(v as number); }
-  return(v?: R) { return this.g.return(v as R); }
-  throw(e: unknown) { return this.g.throw(e); }
-  [Symbol.iterator]() { return this; }
+  next(v?: number) {
+    return this.g.next(v as number);
+  }
+  return(v?: R) {
+    return this.g.return(v as R);
+  }
+  throw(e: unknown) {
+    return this.g.throw(e);
+  }
+  [Symbol.iterator]() {
+    return this;
+  }
 
   until(p: PlayTrigger): Play<R> {
     const trigger = playableGen(p);
     const g = this.g;
     return new PlayImpl<R>(
-      // race(this, trigger) — first to settle wins, other cancels.
-      // We only care about the value if `this` won.
       (function* () {
-        const result = yield* (race(g as Animator<unknown>, trigger) as Animator<unknown>);
+        const result = yield* race(
+          g as Animator<unknown>,
+          trigger,
+        ) as Animator<unknown>;
         return result as R;
       })(),
     );
@@ -358,34 +339,25 @@ class PlayImpl<R> implements Play<R> {
   then(next: PlayTrigger): Play<unknown> {
     const g = this.g;
     return new PlayImpl(
-      (function* () { yield* g; yield* playableGen(next); })(),
+      (function* () {
+        yield* g;
+        yield* playableGen(next);
+      })(),
     );
   }
 
   at(scale: Val<number>): Play<R> {
-    // `withScale` installs the scale on a child Active so it propagates
-    // through every orchestration boundary (race/all/parallel/etc) via
-    // the parent pointer. scale=0 truly pauses the subtree — no
-    // gen.next() calls, sleeps frozen.
     const get = valFn(scale);
     return new PlayImpl(withScale(() => get(), this.g));
   }
 }
 
-/** Lift any yieldable, cell-trigger, or animator-factory into a Play.
- *  Cells become wait-until-truthy. Factories (`() => Animator<R>`) are
- *  invoked here, then the resulting animator is wrapped — passing a
- *  factory is just a convenience that thunks instantiation to the call
- *  site (useful when constructing a play through helpers that build
- *  fresh animators on demand). */
+/** Lift any yieldable / cell-trigger / animator-factory into a Play. */
 export function play<R>(g: Animator<R> | (() => Animator<R>)): Play<R>;
 export function play(p: PlayTrigger | (() => Animator)): Play<unknown>;
 export function play(p: PlayTrigger | (() => Animator)): Play<unknown> {
   if (p instanceof PlayImpl) return p;
-  // A nullary function is an animator factory — invoke to get a fresh
-  // generator. We discriminate from Suspend impls (which take `(wake)`
-  // and have `.length === 1`) by arity. Generator instances and Tween
-  // are objects, not functions, so they skip this.
+  // Nullary fn = factory; arity-1 `Suspend` impls aren't unwrapped here.
   if (typeof p === "function" && (p as Function).length === 0) {
     p = (p as () => Animator)();
   }
@@ -399,40 +371,32 @@ function* playableGen(p: PlayTrigger): Animator<unknown> {
   }
   if (p === undefined || p === null) return undefined;
   if (typeof p === "object" && (p as Animator<unknown>).next) {
-    return yield* (p as Animator<unknown>);
+    return yield* p as Animator<unknown>;
   }
   yield p as Yieldable;
   return undefined;
 }
 
-/** Wait until `sig.value` is truthy. Wakes immediately if already true.
- *  Requires a real `Signal` — `effect()` only tracks reads on tracked
- *  cells, so a plain Read shape would never re-fire. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/** Wait until `sig.value` is truthy. Wakes immediately if already true. */
 export function when(sig: Signal<any>): Animator<void> {
   return suspend<void>((wake) => {
     let resolved = false;
     return effect(() => {
       if (resolved) return;
-      if (sig.value) { resolved = true; wake(); }
+      if (sig.value) {
+        resolved = true;
+        wake();
+      }
     });
   });
 }
 
-/** Reactive boolean negation — `not(sig).value === !sig.value`. Pair
- *  with `when` / `play().until(...)` to wait on falsy conditions.
- *
- *  Returns a `Computed<boolean>` (a real Signal instance), so the
- *  result is `instanceof Signal` and slots into anywhere a reactive
- *  cell is expected — `play(not(active))`, `attr(..., not(hidden))`,
- *  etc. */
+/** Reactive boolean negation as a `Computed<boolean>`. */
 export function not(sig: Read<unknown>): Computed<boolean> {
   return computed(() => !sig.value);
 }
 
-/** Wait until `sig` changes value (via `===`/`equals` trait). Resumes
- *  with the new value. Useful when you want the *next* update and
- *  don't care about a specific predicate. */
+/** Wait until `sig` changes; resumes with the new value. */
 export function untilChange<T>(sig: Signal<T>): Animator<T> {
   return suspend<T>((wake) => {
     const initial = sig.peek();
@@ -440,13 +404,15 @@ export function untilChange<T>(sig: Signal<T>): Animator<T> {
     return effect(() => {
       const v = sig.value;
       if (resolved) return;
-      if (v !== initial) { resolved = true; wake(v); }
+      if (v !== initial) {
+        resolved = true;
+        wake(v);
+      }
     });
   });
 }
 
-/** Repeat `factory()` forever — fresh generator each iteration.
- *  Returns a `Play` so you can `.until(sig)` to bound the loop. */
+/** Repeat `factory()` forever; bound via `.until(sig)`. */
 export function loop(factory: () => Animator): Play {
   return play(
     (function* (): Animator {
@@ -455,20 +421,22 @@ export function loop(factory: () => Animator): Play {
   );
 }
 
-/** Run `fn` every `sec` seconds. Drift-corrects (missed firings catch
- *  up on the next frame). `sec` may be reactive. Side-effect only —
- *  for awaited per-cycle work, use `loop(() => play(sec).then(work))`. */
+/** Run `fn` every `sec` seconds (drift-corrected, `sec` may be reactive). */
 export function every(sec: Val<number>, fn: () => void): Play {
   const getSec = valFn(sec);
-  return play((function* (): Animator {
-    let acc = 0;
-    while (true) {
-      const dt = yield;
-      acc += dt;
-      const period = getSec();
-      if (period <= 0) continue;
-      while (acc >= period) { fn(); acc -= period; }
-    }
-  })());
+  return play(
+    (function* (): Animator {
+      let acc = 0;
+      while (true) {
+        const dt = yield;
+        acc += dt;
+        const period = getSec();
+        if (period <= 0) continue;
+        while (acc >= period) {
+          fn();
+          acc -= period;
+        }
+      }
+    })(),
+  );
 }
-

@@ -1,10 +1,3 @@
-// ── Scene base ──────────────────────────────────────────────────────
-//
-// `Shape` is the universal SVG node. It owns `transform` (translate /
-// rotate / scale / origin / opacity), `aabb`, `localFrame` /
-// `worldFrame` (compose-on-read), event suspensions, and `add(child)`.
-// `mount(svgEl, anim)` returns the callable `Mount` handle that flushes
-// shapes into the DOM.
 export {
   Shape,
   SVG_NS,
@@ -20,7 +13,6 @@ export {
 export { draggable, hoverSignal } from "./interaction";
 export { mount, type Mount } from "./mount";
 
-// ── Visuals + composition ───────────────────────────────────────────
 export {
   applyOpts,
   setupDashed,
@@ -51,13 +43,6 @@ export { Text, t, type Content, type TextPart } from "./text";
 export { arrange, expand, grid, split, type ArrangeOpts } from "./layout";
 export { forEach, type ForEachOptions } from "./list";
 
-// ── Animations ──────────────────────────────────────────────────────
-//
-// `transitions` are bounded poses (`fadeIn`, `slideOut`, …) that operate
-// on a Shape's animatable fields. `choreographers` are multi-shape
-// recipes (`swap`, `splay`, `stagger`, `orbit`). Both compose over the
-// generic `tween` engine — see `@minim/signals` for `spring`/`attract`
-// (single-signal continuous behaviors).
 export {
   from,
   fadeIn,

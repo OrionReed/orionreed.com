@@ -1,11 +1,4 @@
-// Span recording via `anim.observer`. Pure consumer — the runtime
-// has a single optional `observer` slot; this module sets it. Tags
-// are looked up from a WeakMap keyed on the spawned generator
-// (see `./tag`).
-//
-// Multiple subscribers: today there's only one (this module). If a
-// future caller needs fan-out, compose observers in user code and
-// assign the composition to `anim.observer`.
+// Span recording via `anim.observer` (single-subscriber).
 
 import {Anim, AnimObserver, Animator} from "@minim/core";
 import {tagOf} from "./tag";

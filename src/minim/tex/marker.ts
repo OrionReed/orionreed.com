@@ -1,61 +1,26 @@
-// Marker — named reactive identity linking diagram parts to prose.
-//
-// Lives in `@minim/tex` alongside `PartMarker` (which composes it).
-//
-// Canonical usage: scoped to a Diagram instance. Call
-// `diagram.registerMarker(id, m)` in `scene()` and use `for="diagram-id"`
-// on `<md-tex>` / `<md-marker>`. Markers are scoped so two diagrams on
-// the same page can both have a "mass" marker without collisions.
-//
-//      class MyDiagram extends Diagram {
-//        scene(s) {
-//          const [m, v] = palette(2);
-//          this.registerMarker("m", m);
-//          this.registerMarker("v", v);
-//          // hover(shape.el, m) wires a shape
-//        }
-//      }
-//
-//      <my-diagram id="d"></my-diagram>
-//      <md-tex for="d" sym="v">v^2</md-tex>
-//
-// `getMarker` / `registerMarker` free functions and `marker.register(id)`
-// remain for backward compatibility. Prefer the scoped path for new code.
+// Named reactive identity linking diagram parts to prose. Prefer the
+// scoped registration on `Diagram` over the global registry below.
 
 import {computed, signal, type Signal} from "@minim/signals";
 
-// ── Global registry (transitional) ────────────────────────────────────────────
-
 const registry = new Map<string, Marker>();
 
-/** Look up a registered marker by id (global registry). */
 export function getMarker(id: string): Marker | undefined {
   return registry.get(id);
 }
 
-/** Register a marker by id (global registry). */
 export function registerMarker(id: string, m: Marker): void {
   registry.set(id, m);
 }
 
-// ── Type ──────────────────────────────────────────────────────────────────────
-
-/** Named reactive identity shared across any number of renderings.
- *  `active` is OR over all bound locals — simultaneous activations
- *  from multiple sources are counted correctly. */
+/** Identity shared across renderings; `active` is OR over bound locals. */
 export type Marker = {
   color: Signal<string | null>;
-  /** True when any bound rendering is active. Read-only; use `bind()`. */
   active: Signal<boolean>;
-  /** Bind a local boolean signal. Returns a disposer. */
   bind(local: Signal<boolean>): () => void;
-  /** Register in the global lookup under `id` and return `this`. */
   register(id: string): Marker;
 };
 
-// ── Factory ───────────────────────────────────────────────────────────────────
-
-/** Create a Marker, optionally pre-seeded with a color. */
 export function marker(color?: string): Marker {
   const colorCell = signal<string | null>(color ?? null);
   const locals = new Set<Signal<boolean>>();
@@ -84,24 +49,14 @@ export function marker(color?: string): Marker {
   return m;
 }
 
-// ── Sugar ─────────────────────────────────────────────────────────────────────
-
-/** N perceptually equidistant colors via OKLCH hue rotation.
- *
- *      const [mass, vel] = palette(2);
- *      this.registerMarker("mass", mass);
- */
+/** N perceptually-equidistant OKLCH colors. */
 export function palette(n: number): Marker[] {
   return Array.from({ length: n }, (_, i) =>
     marker(`oklch(0.65 0.15 ${((i / n) * 360).toFixed(1)})`),
   );
 }
 
-/** Wire a DOM element's hover into a Marker. Returns a disposer.
- *
- *      this.root.track(hover(circle.el, m));   // in scene()
- *      this.#disposers.push(hover(this, m));   // in a custom element
- */
+/** Wire a DOM element's hover into a Marker. */
 export function hover(el: Element, m: Marker): () => void {
   const local = signal(false);
   const unbind = m.bind(local);

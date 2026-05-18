@@ -1,31 +1,4 @@
-// Canvas renderer demo — proves minim's runtime + signals + structs +
-// generators are renderer-agnostic. No `Diagram`, no `Shape`, no SVG;
-// just a custom element that owns a `<canvas>` and pushes pixels each
-// frame. The minim stdlib does the time, the reactivity, and the
-// orchestration; rendering is a per-frame for-loop with Canvas2D
-// calls.
-//
-// Every non-rendering piece comes straight from minim:
-//
-//   - `Anim` is the runtime — same instance type, same per-Active
-//     time scaling, same cancellation, just no SVG attached.
-//   - `drive((dt, t) => ...)` is the per-frame substrate. The
-//     integration + render path is one closure, no manual yield loop.
-//   - `every(sec, fn)` is a Play factory that loops the side
-//     effect at a fixed interval on the same clock.
-//   - `num(...)` / `signal(...)` carry reactive knobs (phase index,
-//     hue base, particle size). `Num.signal.to(...)` works here
-//     exactly as on a shape's `opacity` — same engine.
-//   - `vec(...)` builds the pointer as a reactive Vec. It behaves
-//     identically to one feeding an SVG shape's `translate`; input →
-//     value-type doesn't care what's rendering.
-//   - Generators (`loop(...)`) drive the phase progression with the
-//     same `yield N` / `yield* sig.to(...)` vocabulary as the SVG
-//     demos.
-//
-// Per-particle position/velocity lives in typed arrays (1500
-// reactives would be silly). Reactivity is in the knobs that *shape*
-// the particles, not in each particle.
+// Canvas demo: minim's runtime + signals + generators driving a non-SVG renderer.
 
 import {Anim, signal, drive, effect, every, loop, num, vec, Num, Vec} from "../../minim";
 import {attachRaf} from "@minim/web";
@@ -34,14 +7,7 @@ const N = 1500;
 const W = 640;
 const H = 360;
 
-// ── Phases ──────────────────────────────────────────────────────────
-//
-// Each phase is a pure function `(i, t, px, py) => {x, y}` returning
-// the target position for particle `i` given clock `t` and current
-// pointer `(px, py)`. Spring integration chases the target; phase
-// transitions happen by swapping the function — particles ease into
-// the new layout without any per-particle tween orchestration.
-
+// Each phase returns target `(x, y)` for particle `i`; spring integration chases it.
 type Phase = (
   i: number,
   t: number,
@@ -62,7 +28,6 @@ const grid: Phase = (i) => {
   return { x: GRID_PAD_X + col * GRID_DX, y: GRID_PAD_Y + row * GRID_DY };
 };
 
-// Phyllotactic spiral — golden-angle placement.
 const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 const phyllo: Phase = (i) => {
   const r = 5.2 * Math.sqrt(i + 1);
@@ -70,7 +35,6 @@ const phyllo: Phase = (i) => {
   return { x: W / 2 + r * Math.cos(a), y: H / 2 + r * Math.sin(a) };
 };
 
-// Flowing sinusoidal band — animates within the phase via clock `t`.
 const wave: Phase = (i, t) => {
   const u = i / N;
   return {
@@ -82,7 +46,6 @@ const wave: Phase = (i, t) => {
   };
 };
 
-// Orbital swarm centered on the pointer (or canvas center if not in).
 const swarm: Phase = (i, t, px, py) => {
   const angle = (i / N) * Math.PI * 6 + t * 0.6;
   const r = 30 + 110 * (((i * 1.61803) % 1));
@@ -99,11 +62,9 @@ const PHASES: Array<{ name: string; fn: Phase }> = [
   { name: "swarm (move your cursor)", fn: swarm },
 ];
 
-const STIFF = 90;   // spring stiffness pulling each particle to its target
-const DAMP = 13;    // velocity damping (critically-damped-ish)
-const DWELL = 3.5;  // seconds per phase
-
-// ── Custom element ──────────────────────────────────────────────────
+const STIFF = 90;
+const DAMP = 13;
+const DWELL = 3.5;
 
 export class MdCanvasField extends HTMLElement {
   static get tagName(): string {
@@ -123,18 +84,15 @@ export class MdCanvasField extends HTMLElement {
   private disposers: Array<() => void> = [];
   #detachRaf: (() => void) | null = null;
 
-  // Reactive knobs — the *renderer-agnostic* state.
   private phaseIdx = num(0);
   private hueBase: Num = num(210);
   private hueSpread = signal(80);
   private size = signal(2.1);
   private pointer: Vec = vec(W / 2, H / 2);
   private statusText = signal("");
-  // Rolling-average fps, refreshed every 0.5s via `every(...)`.
   private fpsSmoothed = signal(0);
 
-  // Per-particle state — typed arrays. 1500 reactives would be
-  // wasteful; reactivity lives in the knobs that *shape* the particles.
+  // Typed arrays: 1500 reactives would be wasteful — reactivity lives in the knobs.
   private px = new Float32Array(N);
   private py = new Float32Array(N);
   private pvx = new Float32Array(N);
@@ -209,9 +167,6 @@ export class MdCanvasField extends HTMLElement {
 
     this.shadow.appendChild(wrap);
 
-    // Bind reactive text via `effect` — the only `effect`s in the
-    // demo. Everything else reads peek()'d snapshots inside the
-    // per-frame hot loop.
     this.disposers.push(
       effect(() => {
         statusEl.textContent = this.statusText.value;
@@ -240,16 +195,13 @@ export class MdCanvasField extends HTMLElement {
     this.disposers = [];
   }
 
-  // ── Setup ─────────────────────────────────────────────────────────
-
   private setupCanvasSize(): void {
     const apply = (): void => {
       const rect = this.canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       this.canvas.width = Math.max(1, Math.round(rect.width * dpr));
       this.canvas.height = Math.max(1, Math.round(rect.height * dpr));
-      // Map (W, H) user-units to physical pixels; absorbs both DPR
-      // and CSS size in one transform.
+      // Map (W, H) user-units → physical pixels; absorbs DPR + CSS size.
       const sx = this.canvas.width / W;
       const sy = this.canvas.height / H;
       this.ctx.setTransform(sx, 0, 0, sy, 0, 0);
@@ -261,8 +213,6 @@ export class MdCanvasField extends HTMLElement {
   }
 
   private initParticles(): void {
-    // Scatter once. The first phase springs them into place from
-    // wherever they happen to land.
     for (let i = 0; i < N; i++) {
       this.px[i] = Math.random() * W;
       this.py[i] = Math.random() * H;
@@ -291,27 +241,9 @@ export class MdCanvasField extends HTMLElement {
     });
   }
 
-  // ── Animation ─────────────────────────────────────────────────────
-  //
-  // Three minim primitives, none of them SVG-aware:
-  //
-  //   - `drive((dt, t) => ...)` — the per-frame substrate. Integrate
-  //     + render, no manual `while (true) { yield }` bookkeeping.
-  //   - `loop(function* () { ... })` — Play factory, run as a
-  //     top-level child via `anim.start(loop(...))`. Phase cycler with
-  //     `yield DWELL` / `yield* hueBase.to(...)`, same vocabulary as
-  //     the SVG demos.
-  //   - `every(0.5, fn)` — Play factory, fixed-interval fps emit
-  //     on the same clock everything else uses.
-  //
-  // All three share `anim.clockMs`, and any `.at(scale)` scope
-  // applied to the parent generator scales them in lockstep.
-
   private startLoops(): void {
     const self = this;
 
-    // Hot loop — drive yields `dt` each frame; `t` is elapsed since
-    // start (used as the wave-phase clock). Never returns.
     this.anim.start(
       drive((dt, t) => {
         self.integrate(dt, t);
@@ -321,18 +253,13 @@ export class MdCanvasField extends HTMLElement {
       }),
     );
 
-    // Phase cycler.
     this.anim.start(loop(function* () {
       self.statusText.value = `phase: ${PHASES[self.phaseIdx.peek()].name}`;
       yield DWELL;
       self.phaseIdx.value = (self.phaseIdx.peek() + 1) % PHASES.length;
-      // `hueBase` is a `Num.signal`, so `.to(...)` works via the
-      // per-struct prototype install — same engine that drives
-      // Vec/Box/Color tweens. No SVG, no Shape, same engine.
       yield* self.hueBase.to((self.hueBase.peek() + 70) % 360, 0.9);
     }));
 
-    // Fps emit — averages over the last 0.5s window of frames.
     this.anim.start(every(0.5, () => {
       if (self.fpsFrames > 0) {
         self.fpsSmoothed.value = self.fpsFrames / self.fpsAccum;
@@ -342,12 +269,9 @@ export class MdCanvasField extends HTMLElement {
     }));
   }
 
-  // ── Per-frame ─────────────────────────────────────────────────────
-
   private integrate(dt: number, clock: number): void {
     if (dt <= 0) return;
-    // Snapshot the reactive knobs once per frame — reading inside
-    // the inner loop would track-on-read on every particle.
+    // Snapshot once per frame — reading inside the loop would track-on-read per particle.
     const phaseFn = PHASES[this.phaseIdx.peek()].fn;
     const p = this.pointer.peek();
 
@@ -358,8 +282,7 @@ export class MdCanvasField extends HTMLElement {
     const stiff = STIFF;
     const damp = DAMP;
 
-    // Semi-implicit Euler: integrate velocity first using current
-    // displacement, then update position. Stable at large dt.
+    // Semi-implicit Euler: velocity first, then position. Stable at large dt.
     for (let i = 0; i < N; i++) {
       const t = phaseFn(i, clock, p.x, p.y);
       const dx = t.x - px[i];
@@ -371,11 +294,7 @@ export class MdCanvasField extends HTMLElement {
     }
   }
 
-  // Index ranges → hue bins. Particles are indexed 0..N and hue
-  // depends on i, so contiguous index ranges share a fillStyle —
-  // one beginPath / many arcs / one fill per bin. Twelve bins is
-  // a good compromise between visible color gradient and number of
-  // fillStyle changes.
+  // Contiguous index ranges share a fillStyle → one beginPath/fill per bin.
   private static readonly BINS = 12;
 
   private render(): void {
@@ -398,9 +317,7 @@ export class MdCanvasField extends HTMLElement {
       const start = ((b * N) / BINS) | 0;
       const end = (((b + 1) * N) / BINS) | 0;
       for (let i = start; i < end; i++) {
-        // moveTo before arc avoids a connecting line from the
-        // previous arc's endpoint — the canvas path treats it as a
-        // continuous stroke otherwise.
+        // moveTo before arc — otherwise canvas connects from prev arc's endpoint.
         ctx.moveTo(px[i] + size, py[i]);
         ctx.arc(px[i], py[i], size, 0, TAU);
       }
@@ -408,8 +325,6 @@ export class MdCanvasField extends HTMLElement {
     }
   }
 
-  // Fps accumulator state — touched by the drive callback, drained
-  // by the `every(...)` tick.
   private fpsAccum = 0;
   private fpsFrames = 0;
 }

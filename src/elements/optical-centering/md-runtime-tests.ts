@@ -1,6 +1,4 @@
-// Runtime correctness tests. Each test creates a fresh `Anim` and
-// drives it via `step(dt)` — synchronous and deterministic, no RAF.
-// Re-runs every few seconds so regressions surface live.
+// Runtime correctness tests; each runs on a fresh `Anim` driven by `step(dt)`.
 
 import {
   Anim, Diagram, EventBus, Vec, Mount, Anchor,

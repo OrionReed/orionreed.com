@@ -1,29 +1,4 @@
-// Claims — a one-file, one-idea testing/spec layer.
-//
-// A claim is a labeled `Signal<boolean>`. `true` = currently holding;
-// `false` = violated (or not yet fulfilled, for liveness claims).
-// Claims compose by chaining — `.and`, `.or`, `.not`, `.during(p)`,
-// `.before(other)`, `.labelled(...)` — each returning a fresh Claim.
-// There is no Witness, no Verdict object, no Policy enum.
-//
-//     const bounded  = claim(c.opacity, "α").stays.in([0, 1]);
-//     const reaches1 = claim(c.opacity, "α").becomes.equal(1);
-//     const introOk  = bounded.and(reaches1).labelled("intro spec");
-//
-//     const intro = process(function* () {
-//       yield* fadeIn(c, 0.3);
-//     }, bounded, reaches1);
-//
-//     this.anim.loop(function* () {
-//       yield* intro.run();
-//     });
-//
-// `process(factory, ...claims)` returns a persistent handle whose
-// lifecycle signals (`alive` / `started` / `completed` / `duration`)
-// survive across `.run()` calls. Cross-process and `.during(p)`
-// claims subscribe to those signals once and observe every run.
-//
-// Everything reduces to bool signals. There's nothing else to learn.
+// Claims — labeled `Signal<boolean>`s with a chain algebra (`.and`, `.during`, `.before`, …).
 
 import { type Animator } from "@minim/core";
 import {
@@ -32,8 +7,6 @@ import {
   type Box, type Boxed, type BoxValue,
 } from "@minim/signals";
 import { circle } from "@minim/shapes";
-
-// ── Types ────────────────────────────────────────────────────────────
 
 /** A claim is a labeled `Signal<boolean>` with a small chain algebra
  *  for composition. `.value === true` while the claim holds; flips to
@@ -57,7 +30,6 @@ export type Claim = Signal<boolean> & {
   or(other: Claim): Claim;
   not(): Claim;
 
-  // Modifiers.
   /** Gate this claim by a process's lifetime — vacuously `true` when
    *  `p` is sleeping. Re-arms the underlying claim when `p` enters. */
   during(p: Process): Claim;
@@ -94,8 +66,6 @@ export type Process = {
    *  claims and the lifecycle signals on entry. */
   run(): Animator;
 };
-
-// ── Latching helpers ─────────────────────────────────────────────────
 
 /** Invariant latch: signal is `true` until `p` is ever `false`, then
  *  latches `false` until `reset`. Used for `stays.X` / `never.X`.
@@ -138,8 +108,6 @@ function passthrough(p: Signal<boolean>, label?: string): Claim {
   return finalize(wrapped as Signal<boolean>, label, () => {}, () => {});
 }
 
-// ── finalize: tack metadata + chain methods onto a bool signal ───────
-
 function finalize(
   sig: Signal<boolean>,
   label: string | undefined,
@@ -173,8 +141,6 @@ function finalize(
 
   return Object.assign(sig, meta) as unknown as Claim;
 }
-
-// ── Chain helpers ────────────────────────────────────────────────────
 
 function _and(a: Claim, b: Claim): Claim {
   return finalize(
@@ -259,8 +225,6 @@ function labelOf(c: Claim | Process): string {
   return c.label ?? "?";
 }
 
-// ── Fluent entry: claim(sig).stays.X / .becomes.X / .never.X / .ends.X
-
 /** Start a claim sentence about a signal: `claim(sig, "α").stays.in([0, 1])`.
  *  The optional `label` shows up in failure metadata and rendered labels. */
 export function claim<T>(sig: Signal<T>, label?: string): SignalClaim<T> {
@@ -319,8 +283,6 @@ export class Predicates<T> {
     }
   }
 
-  // ── Generic (any T) ───────────────────────────────────────────────
-
   /** Exact equality (`===`). */
   equal(v: T): Claim {
     return this.build(
@@ -336,8 +298,6 @@ export class Predicates<T> {
       label,
     );
   }
-
-  // ── Numeric (T = number) ──────────────────────────────────────────
 
   /** Inclusive range. Only callable on `Predicates<number>`. */
   in(this: Predicates<number>, range: [number, number]): Claim {
@@ -372,8 +332,6 @@ export class Predicates<T> {
     );
   }
 
-  // ── Point / Vec ────────────────────────────────────────────────────
-
   /** Predicate that the point lies inside `region`. Accepts a
    *  `Boxed` (Shape, view, split result…) or a `Signal<BoxValue>`. */
   inside(
@@ -391,8 +349,6 @@ export class Predicates<T> {
       `inside bounds`,
     );
   }
-
-  // ── Signal-vs-signal ───────────────────────────────────────────────
 
   /** Pointwise equality with another signal of the same type. */
   equalTo(other: Signal<T>): Claim {
@@ -414,8 +370,6 @@ export class Predicates<T> {
     );
   }
 }
-
-// ── process() — persistent scope binding for a unit of work ──────────
 
 /** Build a reusable named process. The factory is invoked once per
  *  `.run()` call; the returned `Process` has persistent lifecycle
@@ -504,8 +458,6 @@ function makeProcess(
   return proc as unknown as Process;
 }
 
-// ── n-ary composition (handy for spread cases) ───────────────────────
-
 /** AND-reduction over claim signals. Returns a `Signal<boolean>`
  *  that's `true` iff every claim is currently `true`. Force-reads all
  *  values so the computed registers them all as deps (plain
@@ -537,8 +489,6 @@ export function any(
 
 // (`not` lives in signals/ — `not(sig)` works on any `Read<unknown>`)
 
-// ── Bisimulation ─────────────────────────────────────────────────────
-
 /** Pointwise tracking — produces a `stays`-style claim that the two
  *  numeric signals agree within `tol` at every observation. */
 export function track(
@@ -553,8 +503,6 @@ export function track(
   );
   return latchFalse(pred, label);
 }
-
-// ── Rendering ────────────────────────────────────────────────────────
 
 /** A single dot that turns red when its bound bool signal is `false`,
  *  green when `true`. Useful for live pass/fail readouts inside a
@@ -577,8 +525,6 @@ export function verdictDot(
     stroke: "none",
   });
 }
-
-// ── Internals ────────────────────────────────────────────────────────
 
 function fmt(v: unknown): string {
   if (typeof v === "number") return String(+v.toFixed(6));

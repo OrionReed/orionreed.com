@@ -1,36 +1,18 @@
-// Three trails showing different following primitives.
-//
-// Lane 0 (top):    attract — exponential pull, no memory
-// Lane 1 (middle): spring  — elastic, carries velocity; head pauses
-//                            briefly so the trail can visibly catch up
-//                            and overshoot before the head bolts again
-// Lane 2 (bottom): chain   — fixed-link geometric constraint; no physics
-//
-// All three are driven by the same minim vocabulary:
-//
-//   play([drift(x, v), oscillate(y, A, f), bounceFlip(x, v, lo, hi)])
-//   loop(function* () { ... pause cycle ... })
-//   play(spring(s, target, opts)) — fluent over raw behaviors
-
 import {Diagram, Mount, Anchor, attract, signal, circle, driven, drive, easeInOut, label, loop, num, play, vec, spring, value, wave, type Val, Num, Vec} from "../../minim";
 
 const N_TRAIL = 14;
 const N_CHAIN = 10;
 const LINK_LEN = 11;
 
-/** Constant-velocity advance — `sig += v·dt`. Uses `driven` (needs `dt`). */
+/** Constant-velocity advance — `sig += v·dt`. */
 const drift = (sig: Num, v: Val<number>) =>
   driven(sig, (dt, _t, cur) => cur + value(v) * dt);
 
-// ── A few wave shapes for use with `wave(sig, f(t, initial))` ────────
-//   each maps `t → [-1, 1]` for one cycle of `freq` Hz
 const sine     = (t: number, f: number) => Math.sin(2 * Math.PI * f * t);
 const triangle = (t: number, f: number) => 1 - 4 * Math.abs(((t * f) % 1) - 0.5);
 const sawtooth = (t: number, f: number) => 2 * ((t * f) % 1) - 1;
 
-/** A `drift`-with-walls integrator — flips velocity when bounded. One
- *  generator instead of two; the wall-flip is structural, not a
- *  separate concurrent process. */
+/** `drift` with walls: flips velocity at bounds. */
 function bounceFlip(x: Num, v: Num, lo: number, hi: number) {
   return drive(() => {
     if (x.value > hi && v.value > 0) v.value = -v.value;
@@ -45,10 +27,6 @@ export class MdBehaviors extends Diagram {
     const cx = view.w.value / 2;
     const laneY = (i: number) => view.h.value * ((i + 1) / 4);
 
-    // ── Shared trail factory ─────────────────────────────────────────
-    // Num circles, each chasing the previous link's position via the
-    // caller-supplied `attach` (an `(sig, target) => Animator` that
-    // we run as a child of the top-level scene generator).
     const trail = (
       seedX: Num,
       seedY: Num,
@@ -73,14 +51,12 @@ export class MdBehaviors extends Diagram {
       }
     };
 
-    // ── Lane 0: attract (blue) ──────────────────────────────────────
     const ax = num(cx);
     const ay = num(laneY(0));
     const av = num(180);
     this.anim.start(
       play([
         drift(ax, av),
-        // Smooth sine — attract trail traces it without lag.
         wave(ay, (t, y0) => y0 + 32 * sine(t, 0.4)),
         bounceFlip(ax, av, 40, wall),
       ]),
@@ -90,9 +66,7 @@ export class MdBehaviors extends Diagram {
       this.anim.start(attract(sig, target, 9));
     });
 
-    // ── Lane 1: spring (red), pauses ────────────────────────────────
-    // `byAmp` is reactive so the pause loop can tween it to zero —
-    // both axes stop together so the head truly freezes, not just on x.
+    // `byAmp` reactive: pause loop tweens it to 0 so both axes freeze together.
     const bx = num(cx);
     const by = num(laneY(1));
     const bv = num(-150);
@@ -100,15 +74,10 @@ export class MdBehaviors extends Diagram {
     this.anim.start(
       play([
         drift(bx, bv),
-        // Triangle wave — sharp turnarounds let the bouncy spring trail
-        // overshoot and catch up at each corner.
         wave(by, (t, y0) => y0 + byAmp.peek() * triangle(t, 0.7)),
         bounceFlip(bx, bv, 40, wall),
       ]),
     );
-    // Pause: both axes stop together, hold, then snap back to motion.
-    // Pure sequence — `play([...]).then(...)` reads as "do these
-    // together, then continue".
     this.anim.start(
       loop(function* () {
         yield 1.5;
@@ -126,9 +95,6 @@ export class MdBehaviors extends Diagram {
       this.anim.start(spring(sig, target, { omega: 14, zeta: 0.5 }));
     });
 
-    // ── Lane 2: fixed-link play(teal) ─────────────────────────────
-    // Head wanders on a Lissajous path; each frame the chain is solved
-    // forward: link[i] is placed exactly LINK_LEN from link[i-1].
     const lc = { x: cx, y: laneY(2) };
     const phase = num(0);
     this.anim.start(drift(phase, 1));
