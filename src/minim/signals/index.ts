@@ -4,7 +4,7 @@
 //   ./signal     Signal / Computed / Lens + effect / batch / untracked
 //   ./traits    LINEAR / LERP / METRIC / EQUALS slots + accessors
 //   ./derive    BaseChain / derived / field / bindFields / ReactiveInit
-//   ./lerp      Tween, tween/spring/toward/attract/from/driven, play, defineTrait
+//   ./lerp      Tween, tween/spring/toward/attract/wave/driven, play, defineTrait
 //   ./values/*  Num / Vec / Color / Box / Transform built-in cells
 //
 // The signal-free runtime (Anim, drive, suspend, race, etc.) lives in
@@ -44,7 +44,7 @@ export {
 // ── Lerp / temporal cell methods ───────────────────────────────────
 export {
   Tween,
-  tween, spring, toward, attract, follow, driven,
+  tween, spring, toward, attract, follow, wave, driven,
   play, when, not, untilChange,
   loop, every,
   defineTrait, lerpImpl,

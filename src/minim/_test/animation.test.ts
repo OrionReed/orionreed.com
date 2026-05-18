@@ -198,7 +198,7 @@ describe("animation", () => {
       const anim = new Anim();
       const x = num(0);
       let settled = false;
-      anim.start(function* () { yield* spring(x, 100, { stiffness: 100, damping: 20 }); settled = true; });
+      anim.start(function* () { yield* spring(x, 100, { omega: 10, zeta: 1 }); settled = true; });
       tick(anim, 600);
       check("spring final very close to 100", approx(x.value, 100, 0.5));
       check("spring eventually settles (or near it)", settled || approx(x.value, 100, 1));
@@ -212,7 +212,7 @@ describe("animation", () => {
         translate: { x: 100, y: 50 }, scale: { x: 2, y: 2 }, origin: { x: 0, y: 0 },
         rotate: Math.PI, opacity: 0.5,
       };
-      anim.start(function* () { yield* spring(tr, target, { stiffness: 80, damping: 18 }); });
+      anim.start(function* () { yield* spring(tr, target, { omega: 9, zeta: 1 }); });
       tick(anim, 600);
       check("spring on Transform: translate.x → ~100", approx(tr.value.translate.x, 100, 1));
       check("spring on Transform: scale.x → ~2", approx(tr.value.scale.x, 2, 0.05));
@@ -308,7 +308,7 @@ describe("animation", () => {
       const x = num(0);
       const drag = signal(false);
       anim.start(function* () {
-        yield* play(spring(x, 100, { stiffness: 200, damping: 24 }))
+        yield* play(spring(x, 100, { omega: 14, zeta: 0.85 }))
           .at(() => drag.value ? 0 : 1);
       });
       tick(anim, 60);

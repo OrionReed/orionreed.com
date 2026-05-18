@@ -115,7 +115,7 @@ yield* x.to(100, 0.5, easeInOut);
 yield* x.from(0).to(100, 0.5).to(0, 0.5).until(stop);
 ```
 
-`tween(sig, target, dur, ease?)` is the free-fn form for plain signals where the method isn't installed. `spring(sig, target, opts?)`, `toward(sig, target, speed)`, `attract(sig, target, k)` are integrators that pull toward a (possibly reactive) target with different curves — overshoot-capable, constant-speed, exponential. `driven(sig, step)` is the escape hatch — write whatever per-frame function you want.
+`tween(sig, target, dur, ease?)` is the free-fn form for plain signals where the method isn't installed. `spring(sig, target, opts?)`, `toward(sig, target, speed)`, `attract(sig, target, k)` are integrators that pull toward a (possibly reactive) target with different curves — overshoot-capable, constant-speed, exponential. `wave(sig, (t, initial) => f(t, initial))` covers anything that's a closed-form function of elapsed time and starting value — oscillators, sawtooths, lissajous, even `tween` itself is a special case (`(t, x0) => lerp(x0, target, ease(t/dur))`). `driven(sig, (dt, t, cur) => …)` is the full escape hatch when you need `dt` or live current state.
 
 <md-behaviors></md-behaviors>
 

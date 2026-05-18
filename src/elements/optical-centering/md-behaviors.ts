@@ -12,23 +12,21 @@
 //   loop(function* () { ... pause cycle ... })
 //   play(spring(s, target, opts)) — fluent over raw behaviors
 
-import {Diagram, Mount, Anchor, attract, signal, circle, driven, drive, easeInOut, label, loop, num, play, vec, spring, value, type Val, Num, Vec} from "../../minim";
+import {Diagram, Mount, Anchor, attract, signal, circle, driven, drive, easeInOut, label, loop, num, play, vec, spring, value, wave, type Val, Num, Vec} from "../../minim";
 
 const N_TRAIL = 14;
 const N_CHAIN = 10;
 const LINK_LEN = 11;
 
-/** Constant-velocity advance — `sig += v·dt`. Inlined because the lib
- *  no longer ships a named `drift`; one-liner over `driven`. */
+/** Constant-velocity advance — `sig += v·dt`. Uses `driven` (needs `dt`). */
 const drift = (sig: Num, v: Val<number>) =>
   driven(sig, (dt, _t, cur) => cur + value(v) * dt);
 
-/** Sine oscillation around `sig`'s start value. Inlined because the
- *  lib no longer ships a named `oscillate`. */
-const oscillate = (sig: Num, amp: Val<number>, freq: number) => {
-  const base = sig.peek();
-  return driven(sig, (_dt, t) => base + value(amp) * Math.sin(2 * Math.PI * freq * t));
-};
+// ── A few wave shapes for use with `wave(sig, f(t, initial))` ────────
+//   each maps `t → [-1, 1]` for one cycle of `freq` Hz
+const sine     = (t: number, f: number) => Math.sin(2 * Math.PI * f * t);
+const triangle = (t: number, f: number) => 1 - 4 * Math.abs(((t * f) % 1) - 0.5);
+const sawtooth = (t: number, f: number) => 2 * ((t * f) % 1) - 1;
 
 /** A `drift`-with-walls integrator — flips velocity when bounded. One
  *  generator instead of two; the wall-flip is structural, not a
@@ -82,7 +80,8 @@ export class MdBehaviors extends Diagram {
     this.anim.start(
       play([
         drift(ax, av),
-        oscillate(ay, 32, 0.4),
+        // Smooth sine — attract trail traces it without lag.
+        wave(ay, (t, y0) => y0 + 32 * sine(t, 0.4)),
         bounceFlip(ax, av, 40, wall),
       ]),
     );
@@ -101,7 +100,9 @@ export class MdBehaviors extends Diagram {
     this.anim.start(
       play([
         drift(bx, bv),
-        oscillate(by, byAmp, 0.7),
+        // Triangle wave — sharp turnarounds let the bouncy spring trail
+        // overshoot and catch up at each corner.
+        wave(by, (t, y0) => y0 + byAmp.peek() * triangle(t, 0.7)),
         bounceFlip(bx, bv, 40, wall),
       ]),
     );
@@ -122,7 +123,7 @@ export class MdBehaviors extends Diagram {
     );
     s(circle(vec(bx, by), 9, { fill: "#1a1a1a" }));
     trail(bx, by, "#e25c5c", (sig, target) => {
-      this.anim.start(spring(sig, target, { stiffness: 200, damping: 15 }));
+      this.anim.start(spring(sig, target, { omega: 14, zeta: 0.5 }));
     });
 
     // ── Lane 2: fixed-link play(teal) ─────────────────────────────

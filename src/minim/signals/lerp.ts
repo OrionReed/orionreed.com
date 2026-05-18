@@ -108,18 +108,22 @@ export function tween<T>(
 // ════════════════════════════════════════════════════════════════════
 
 export interface SpringOpts {
-  /** Hooke stiffness; higher → faster pull. Default 170. */
-  stiffness?: number;
-  /** Velocity damping; higher → less oscillation. Default 26. */
-  damping?: number;
+  /** Natural angular frequency (rad/s). Period of unforced oscillation
+   *  ≈ 2π/ω. Default 13 (≈ 0.48 s period). Equivalent to the older
+   *  Hooke `stiffness = ω²`. */
+  omega?: number;
+  /** Damping ratio (dimensionless). `<1` underdamped (oscillates),
+   *  `=1` critically damped (fastest non-overshooting), `>1` overdamped
+   *  (sluggish). Default 1. Equivalent to `damping = 2·ζ·ω`. */
+  zeta?: number;
   /** Settle threshold; snap+complete when distance < precision and
    *  velocity magnitude < precision*100. Default 1e-4. `0` runs forever. */
   precision?: number;
 }
 
-/** Pull `sig` toward `target` with critically-damped-ish dynamics.
- *  `target` may be reactive (read each frame). Settles when both
- *  distance and velocity drop below `opts.precision`. */
+/** Pull `sig` toward `target` with second-order damped-spring dynamics:
+ *  `x'' = ω²·(target - x) - 2ζω·x'`. `target` may be reactive (read each
+ *  frame). Settles when both distance and velocity drop below `precision`. */
 export function* spring<T>(
   sig: Signal<T>,
   target: Val<T>,
@@ -130,8 +134,10 @@ export function* spring<T>(
   if (!lin || !met) {
     throw new Error(`spring: ${sig.constructor.name} needs [LINEAR] + [METRIC]`);
   }
-  const stiffness = opts.stiffness ?? 170;
-  const damping = opts.damping ?? 26;
+  const omega = opts.omega ?? 13;
+  const zeta = opts.zeta ?? 1;
+  const stiffness = omega * omega;            // k = ω²
+  const damping = 2 * zeta * omega;           // c = 2ζω
   const eps = opts.precision ?? 1e-4;
   const T = valFn(target);
   let vel: T | undefined;
@@ -139,9 +145,9 @@ export function* spring<T>(
     const t = T();
     const cur = sig.peek();
     const disp = lin.sub(t, cur);                 // target - cur
-    const vAccel = lin.scale(disp, stiffness);    // k * disp
+    const vAccel = lin.scale(disp, stiffness);    // ω² · disp
     const damp = vel ? lin.scale(vel, damping) : lin.scale(disp, 0);
-    const accel = lin.sub(vAccel, damp);          // k*disp - c*v
+    const accel = lin.sub(vAccel, damp);          // ω²·disp - 2ζω·v
     vel = vel ? lin.add(vel, lin.scale(accel, dt)) : lin.scale(accel, dt);
     sig.value = lin.add(cur, lin.scale(vel, dt));
     if (eps > 0 && met(cur, t) < eps && met(vel, t) < eps * 100) {
@@ -221,8 +227,27 @@ export function follow<T>(sig: Signal<T>, source: Val<T>): Animator<void> {
   });
 }
 
+/** Drive `sig` per frame from a closed-form function of elapsed time
+ *  and its starting value. The general pattern for any animation that
+ *  can be written as `f(t, initial)` — closed-form `tween`/`attract`/
+ *  sinusoids/sawtooths/lissajous, etc. `initial` is captured once at
+ *  scope entry via `sig.peek()`, so the caller can express motion
+ *  relative to "wherever this was" without storing it themselves:
+ *
+ *      yield* wave(opacity, (t, base) => base + 0.1 * Math.sin(2 * Math.PI * t));
+ *      yield* wave(x,       (t, x0)   => x0 + 100 * t);                  // linear sweep
+ *      yield* wave(angle,   (t, a0)   => a0 + 2 * Math.PI * (t % 1));    // sawtooth phase
+ */
+export function* wave<T>(
+  sig: Signal<T>,
+  fn: (t: number, initial: T) => T,
+): Animator<void> {
+  const initial = sig.peek();
+  yield* drive((_dt, t) => { sig.value = fn(t, initial); });
+}
+
 /** Escape hatch: drive sig per frame with `step(dt, t, current)`.
- *  Return `false` to terminate. */
+ *  Return `false` to terminate. Use `wave` instead for pure `f(t)`. */
 export function* driven<T>(
   sig: Signal<T>,
   step: (dt: number, t: number, v: T) => T | false,

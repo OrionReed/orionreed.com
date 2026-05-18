@@ -57,7 +57,7 @@ export class MdLayoutDemo extends Diagram {
     // the dragged value. One running spring, no restart cycles.
     const dragging = handles[SPRING_IDX].dragging;
     this.anim.start(function* () {
-      yield* play(spring(widths[SPRING_IDX], SPRING_REST, { stiffness: 220, damping: 16 }))
+      yield* play(spring(widths[SPRING_IDX], SPRING_REST, { omega: 15, zeta: 0.55 }))
         .at(() => dragging.value ? 0 : 1);
     });
 

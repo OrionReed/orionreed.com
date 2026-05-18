@@ -86,8 +86,8 @@ export class MdTrails extends Diagram {
 
     this.anim.start(function* () {
       yield* play(spring(follower.transform, target.transform, {
-        stiffness: 120,
-        damping: 9,     // ratio ≈ 0.41 — visibly bouncy
+        omega: 11,
+        zeta: 0.4,      // visibly bouncy
         precision: 0,   // never settle; live tracking
       })).at(() => master.value);
     });
