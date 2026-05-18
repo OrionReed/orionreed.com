@@ -1,9 +1,8 @@
 // Reactive list rendering. Diffs `parent`'s children as `source`
 // changes; stable keys preserve per-shape state across updates.
 
-import {toSignal, type Val} from "@minim/signals";
-import {effect, untracked} from "@minim/signals";
-import type {AnyShape} from "./shape";
+import { effect, untracked, value, type Val } from "@minim/signals";
+import type { AnyShape } from "./shape";
 
 export interface ForEachOptions<T> {
   /** Stable identity per item; defaults to index (fine for fixed
@@ -33,13 +32,12 @@ export function forEach<T>(
   render: (item: T, index: number) => AnyShape | AnyShape[],
   options: ForEachOptions<T> = {},
 ): ForEachResult {
-  const sourceSig = toSignal(source);
   const { key: keyOf } = options;
 
   let entries: Entry[] = [];
 
   const eff = effect(() => {
-    const next = sourceSig.value;
+    const next = value(source);
     // Diff in `untracked` so internal reads/writes don't re-trigger.
     untracked(() => {
       const prevByKey = new Map<unknown, Entry>();

@@ -1,7 +1,10 @@
-import {toSignal, Vec, type VecValue, type Val} from "@minim/signals";
-import {Shape, type ShapeOpts} from "./shape";
-import {tokens} from "./tokens";
-import {renderContent, flattenText, type Content} from "./text";
+import {
+  Signal, signal, computed, num,
+  Vec, type VecValue, type Val,
+} from "@minim/signals";
+import { Shape, type ShapeOpts } from "./shape";
+import { tokens } from "./tokens";
+import { renderContent, flattenText, type Content } from "./text";
 
 export interface LabelOpts extends ShapeOpts {
   size?: Val<number>;
@@ -26,8 +29,12 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
     content: Val<Content>,
     opts: O = {} as O,
   ) {
-    const contentSig = toSignal(content);
-    const sizeSig = toSignal(opts.size ?? tokens.fontSize);
+    const contentSig: Signal<Content> = content instanceof Signal
+      ? content
+      : typeof content === "function"
+        ? computed(content)
+        : signal(content as Content);
+    const sizeSig = num(opts.size ?? tokens.fontSize);
     const a = opts.align ?? { x: 0.5, y: 0.5 };
     super(
       "text",

@@ -152,7 +152,14 @@ export const toString = (m: Value): string =>
 
 // ── Reactive class ─────────────────────────────────────────────────
 
-export class Matrix2D extends Signal<Value> {
+/** Op surface — closed-on-Matrix2D operations. Implemented by reactive
+ *  `Matrix2D` and the mutating `Chain`. */
+interface Matrix2DOps<R> {
+  multiply(b: Val<Value>): R;
+  invert(): R;
+}
+
+export class Matrix2D extends Signal<Value> implements Matrix2DOps<Matrix2D> {
   constructor(v: Value = identity()) { super(v); }
 
   multiply(b: Val<Value>) { return derived(Matrix2D, () => multiply(this.value, value(b))); }
@@ -173,7 +180,7 @@ export class Matrix2D extends Signal<Value> {
   }
 }
 
-class Chain extends BaseChain<Value> {
+class Chain extends BaseChain<Value> implements Matrix2DOps<Chain> {
   multiply(b: Val<Value>) { this.value = multiply(this.value, value(b)); return this; }
   invert() { this.value = invert(this.value); return this; }
 }

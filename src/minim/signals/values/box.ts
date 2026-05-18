@@ -1,7 +1,9 @@
-// box.ts — reactive axis-aligned rectangle. Also defines `BoxLike` —
-// the structural surface every box-shaped thing (reactive Box cells,
-// Shape, Part, splits, ...) implements: `.box`, `.x/y/w/h`, cardinals,
-// `.at(u, v)`. Consumers take `BoxLike` and don't care which.
+// box.ts — reactive axis-aligned rectangle.
+//
+// Anything box-shaped exposes a `box: Box` field (Box itself returns
+// `this`; Shape/Part hold an internal Box). Consumers reach axes and
+// cardinals via that field — `shape.box.center`, `part.box.x`, etc.
+// One uniform access path; no `BoxLike` façade, no `delegate` metaprogramming.
 
 import { Signal, computed, type Computed, value, type Val } from "../signal";
 import { LINEAR, LERP, EQUALS } from "../traits";
@@ -64,7 +66,18 @@ export const contains = (b: Value, p: VecValue): boolean =>
 
 // ── Reactive class ─────────────────────────────────────────────────
 
-export class Box extends Signal<Value> {
+/** Op surface — closed-on-Box operations. Implemented by reactive
+ *  `Box` and the mutating `Chain`. */
+interface BoxOps<R> {
+  add(b: Val<Value>): R;
+  sub(b: Val<Value>): R;
+  scale(k: Val<number>): R;
+  lerp(b: Val<Value>, t: Val<number>): R;
+  expand(n: Val<number>): R;
+  union(...others: Val<Value>[]): R;
+}
+
+export class Box extends Signal<Value> implements BoxOps<Box> {
   constructor(v: Value = { x: 0, y: 0, w: 0, h: 0 }) { super(v); }
 
   // ── Field lenses ─────────────────────────────────────────────────
@@ -73,9 +86,11 @@ export class Box extends Signal<Value> {
   get w() { return field(this, "w", Num); }
   get h() { return field(this, "h", Num); }
 
-  // ── BoxLike: self-reference, scalars, cardinals, `.at(u, v)` ────
+  // ── Scalars, cardinals, `.at(u, v)` ─────────────────────────────
 
-  /** Self-reference so reactive Box cells satisfy `BoxLike` (`b.box === b`). */
+  /** Self-reference so any Box is uniformly `{ box: Box }` — the same
+   *  field path works on Box, Shape, Part, split results, etc.
+   *  (`b.box === b`). */
   get box(): Box { return this; }
 
   get area() { return this._area ??= derived(Num, () => this.value.w * this.value.h); }
@@ -101,15 +116,19 @@ export class Box extends Signal<Value> {
   private _right?: Vec;
 
   // ── Reactive ops ────────────────────────────────────────────────
-  expand(n: Val<number>) {
-    return derived(Box, () => expand(this.value, value(n)));
-  }
   add(b: Val<Value>) { return derived(Box, () => add(this.value, value(b))); }
   sub(b: Val<Value>) { return derived(Box, () => sub(this.value, value(b))); }
   scale(k: Val<number>) { return derived(Box, () => scale(this.value, value(k))); }
+  lerp(b: Val<Value>, t: Val<number>) {
+    return derived(Box, () => lerp(this.value, value(b), value(t)));
+  }
+  expand(n: Val<number>) {
+    return derived(Box, () => expand(this.value, value(n)));
+  }
   union(...others: Val<Value>[]) {
     return derived(Box, () => union(this.value, ...others.map(value)));
   }
+  /** Reactive boolean: is `p` inside this box? */
   contains(p: Val<VecValue>): Computed<boolean> {
     return computed(() => contains(this.value, value(p)));
   }
@@ -120,7 +139,7 @@ export class Box extends Signal<Value> {
 }
 export interface Box extends LerpMethods<Value> {}
 
-class Chain extends BaseChain<Value> {
+class Chain extends BaseChain<Value> implements BoxOps<Chain> {
   add(b: Val<Value>) { this.value = add(this.value, value(b)); return this; }
   sub(b: Val<Value>) { this.value = sub(this.value, value(b)); return this; }
   scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
@@ -130,6 +149,9 @@ class Chain extends BaseChain<Value> {
   expand(n: Val<number>) {
     this.value = expand(this.value, value(n)); return this;
   }
+  union(...others: Val<Value>[]) {
+    this.value = union(this.value, ...others.map(value)); return this;
+  }
 }
 
 defineTrait(Box, LINEAR, { add, sub, scale });
@@ -137,88 +159,22 @@ defineTrait(Box, LERP,   lerp);
 defineTrait(Box, EQUALS, equals);
 
 /** Construct a Box; reactive per-component args bind the field lens. */
-export function box(x?: Val<number>, y?: Val<number>, w?: Val<number>, h?: Val<number>): Box;
-/** Construct a Box from a `BoxLike` source. */
-export function box(src: BoxLike): Box;
-export function box(
-  a: Val<number> | BoxLike = 0,
+export const box = (
+  x: Val<number> = 0,
   y: Val<number> = 0,
   w: Val<number> = 0,
   h: Val<number> = 0,
-): Box {
-  if (isBoxLike(a)) {
-    const out = new Box();
-    out.bind(() => ({ ...a.box.value }));
-    return out;
-  }
+): Box => {
   const out = new Box();
-  bindFields(out, { x: a, y, w, h });
+  bindFields(out, { x, y, w, h });
   return out;
-}
+};
 
-/** Reactive parametric anchor — `boxAt(b, u, v) === b.at(u, v)`. */
-export const boxAt = (b: BoxLike, u: number, v: number): Vec => b.at(u, v);
+// ── Boxed — minimal "carries a Box" shape ──────────────────────────
 
-// ── BoxLike — structural surface ───────────────────────────────────
-
-/** Reactive rectangular region with cardinals + `at(u, v)`. Implemented
- *  by `Shape`, `Part`, and any reactive `Box` cell. The typed surface
- *  uses the rich `Vec`/`Num` cells so chainable methods (`.up(n)`,
- *  `.add(b)`, `.scale(k)`, `.to(target, dur)`) work all the way
- *  through. */
-export interface BoxLike {
-  readonly box: Signal<Value>;
-  readonly x: import("./num").Num;
-  readonly y: import("./num").Num;
-  readonly w: import("./num").Num;
-  readonly h: import("./num").Num;
-  readonly center: Vec;
-  readonly top: Vec;
-  readonly bottom: Vec;
-  readonly left: Vec;
-  readonly right: Vec;
-  at(u: number, v: number): Vec;
-}
-
-/** Detect a `BoxLike` value structurally — anything with `box` and `at`. */
-export function isBoxLike(v: unknown): v is BoxLike {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    "box" in v &&
-    typeof (v as { at?: unknown }).at === "function"
-  );
-}
-
-// ── delegateBoxLike(hostProto, key) ────────────────────────────────
-//
-// Install forwarding getters on `hostProto` so `host.x / .y / .center
-// / .at(u, v) / ...` resolve to `host[key].x / .center / .at(...)`.
-// Used by Part/TexShape etc. that hold a Box internally and want to
-// expose its surface without hand-writing each forwarder.
-
-const BOX_AXES = ["x", "y", "w", "h"] as const;
-const BOX_ANCHORS = ["center", "top", "bottom", "left", "right", "area"] as const;
-
-/** Install the `BoxLike` surface (`x`/`y`/`w`/`h` axes + cardinals +
- *  `at(u,v)`) on `hostProto`, forwarding to `host[key]`. First read on
- *  an instance caches the inner reference as an own-property so
- *  subsequent reads skip the proto getter. */
-export function delegateBoxLike(hostProto: object, key: string): void {
-  for (const name of [...BOX_AXES, ...BOX_ANCHORS]) {
-    Object.defineProperty(hostProto, name, {
-      configurable: true,
-      get(this: Record<string, unknown>) {
-        const v = (this[key] as Record<string, unknown>)[name];
-        Object.defineProperty(this, name, { value: v, configurable: true });
-        return v;
-      },
-    });
-  }
-  Object.defineProperty(hostProto, "at", {
-    configurable: true,
-    value(this: Record<string, BoxLike>, u: number, v: number) {
-      return this[key].at(u, v);
-    },
-  });
+/** Anything that exposes a `Box` cell (Box, Shape, Part, layout split,
+ *  …). Consumers reach axes, cardinals, area via `b.box.x`, `b.box.center`,
+ *  etc. — one access path, no surface duplication. */
+export interface Boxed {
+  readonly box: Box;
 }

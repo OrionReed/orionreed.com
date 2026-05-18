@@ -15,8 +15,9 @@ export {
   Signal,
   Computed,
   signal, computed, lens, effect, batch, untracked,
-  value, toSignal, isSignal,
+  value, isSignal,
   type Lens,
+  type Read,
   type Val,
   type SignalOptions,
 } from "./signal";
@@ -45,11 +46,12 @@ export {
   Tween,
   tween, spring, toward, follow, holding, driven,
   oscillate, attract, drift,
-  play, untilTrue, when, untilEvent, untilPromise, untilChange,
+  play, when, not, untilChange,
   loop, every,
-  defineTrait, lerpImpl, lerpable,
+  defineTrait, lerpImpl,
   type LerpMethods,
   type SpringOpts,
+  type PlayTrigger,
 } from "./lerp";
 
 // Easings + signal-free runtime — re-exported for the common case of
@@ -61,7 +63,8 @@ export {
   type PayloadOf, type SpawnFn, type SuspendFn,
   type Wake, type Yieldable,
   // Combinators (signal-free)
-  drive, suspend, all, race, rand, mapDt, withTimeout, attachRaf,
+  drive, suspend, all, race, rand, mapDt, withTimeout,
+  untilEvent, untilPromise, attachRaf,
   // Easings
   type Easing, linear, easeIn, easeOut, easeInOut,
 } from "../core";
@@ -74,7 +77,7 @@ export {
   Num, num, type NumValue,
   Vec, vec, polar, type VecValue,
   Color, rgb, rgba, type ColorValue,
-  Box, box, boxAt, isBoxLike, delegateBoxLike, type BoxValue, type BoxLike,
+  Box, box, type Boxed, type BoxValue,
   Transform, transform, type TransformValue, type TransformInit,
   Matrix2D, matrix, type Matrix2DValue,
   identity, fromTranslate, fromScale, fromRotate,

@@ -44,6 +44,24 @@ export function* suspend<T = void>(impl: SuspendFn<T>): Animator<T> {
   return (yield impl) as T;
 }
 
+/** Wait for a DOM event on `target`; resume with the event. */
+export function untilEvent<E extends Event = Event>(
+  target: EventTarget,
+  name: string,
+  opts?: AddEventListenerOptions,
+): Animator<E> {
+  return suspend<E>((wake) => {
+    const handler = (e: Event): void => wake(e as E);
+    target.addEventListener(name, handler, opts);
+    return () => target.removeEventListener(name, handler, opts);
+  });
+}
+
+/** Wait for a promise; resume with its resolved value (rejection propagates). */
+export function* untilPromise<T>(p: PromiseLike<T>): Animator<T> {
+  return (yield p) as T;
+}
+
 // ════════════════════════════════════════════════════════════════════
 // Concurrency combinators
 // ════════════════════════════════════════════════════════════════════
@@ -134,18 +152,25 @@ export function* rand(...children: Animator[]): Animator {
 // delegation. Our wrappers iterate manually, so we own the cleanup.
 // ════════════════════════════════════════════════════════════════════
 
-/** Transform `dt` before the inner gen sees it: slow-mo, fast-forward,
- *  reactive time-scale. `fn` is called with whatever the runtime hands
- *  us; what `fn` returns is what the inner gen receives. */
-export function* mapDt<R>(fn: (resume: any) => any, gen: Animator<R>): Animator<R> {
-  let arg: any = undefined;
+/** Transform `dt` flowing through an inner gen — both directions:
+ *
+ *    • numeric yields (sleep durations, `yield N`) → `fn(out)`
+ *    • resume values (per-frame dts the runtime hands us)  → `fn(in)`
+ *
+ *  Use for time-scaling (`play().at(scale)`), unit conversions, etc.
+ *  Non-numeric yields/resumes pass through unchanged. */
+export function* mapDt<R>(fn: (dt: number) => number, gen: Animator<R>): Animator<R> {
+  let resume: number | undefined = undefined;
   try {
     while (true) {
-      const r = gen.next(arg);
+      const r = gen.next(resume as number);
       if (r.done) return r.value;
-      arg = fn(yield r.value);
+      const v = r.value;
+      const out: Yieldable = typeof v === "number" ? fn(v) : v;
+      const back = (yield out) as unknown;
+      resume = typeof back === "number" ? fn(back) : (back as number);
     }
-  } finally { gen.return(undefined as any); }
+  } finally { gen.return(undefined as never); }
 }
 
 /** Hard-cap by engine time. `gen` and a sibling `seconds` sleep race;

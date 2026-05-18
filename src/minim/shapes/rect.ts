@@ -1,7 +1,16 @@
-import {signal, computed, toSignal, derived, Vec, vec, Num, num, Box, box, isBoxLike, type BoxLike, type Val} from "@minim/signals";
-import {Shape, type Segment} from "./shape";
-import {tokens} from "./tokens";
-import {intrinsicType, wireStroke, type CommonOpts} from "./common";
+import {
+  computed, derived,
+  Vec, Num, num, Box,
+  type BoxValue, type Read, type Val,
+} from "@minim/signals";
+import { Shape, type Segment } from "./shape";
+import { tokens } from "./tokens";
+import { intrinsicType, wireStroke, type CommonOpts } from "./common";
+
+/** Anything carrying a Box cell — Shape, Box itself, layout split, etc. */
+interface HasBox { readonly box: Read<BoxValue> }
+const hasBox = (v: unknown): v is HasBox =>
+  v !== null && typeof v === "object" && "box" in v;
 
 export interface RectOpts extends CommonOpts {
   corner?: Val<number>;
@@ -10,10 +19,10 @@ export interface RectOpts extends CommonOpts {
 const HALF_PI = Math.PI / 2;
 
 export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
-  override readonly x: Num;
-  override readonly y: Num;
-  override readonly w: Num;
-  override readonly h: Num;
+  readonly x: Num;
+  readonly y: Num;
+  readonly w: Num;
+  readonly h: Num;
   readonly corner: Num;
 
   constructor(
@@ -75,7 +84,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   /** Concentric outline — a new unmounted Rect inflated by `by` per
    *  side; corner radius bumps to keep curves parallel. */
   outline(by: Val<number>, opts?: RectOpts): Rect {
-    const bys = toSignal(by);
+    const bys = num(by);
     return new Rect(
       () => this.x.value - bys.value,
       () => this.y.value - bys.value,
@@ -118,11 +127,11 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
 /** Rect factory:
  *
  *   rect(x, y, w, h, opts?)             — corner-based (canonical)
- *   rect(box: BoxLike, opts?)           — fill another Box (Shape, view, split…)
+ *   rect(src: { box }, opts?)           — fill another Box (Shape, view, split…)
  *   rect(center: Point, w, h, opts?)    — centered on a Point
  *   rect(p1: Point, p2: Point, opts?)   — between two corner Points
  */
-export function rect<const O extends RectOpts>(b: BoxLike, opts?: O): Rect<O>;
+export function rect<const O extends RectOpts>(b: HasBox, opts?: O): Rect<O>;
 export function rect<const O extends RectOpts>(
   p1: Vec,
   p2: Vec,
@@ -142,14 +151,21 @@ export function rect<const O extends RectOpts>(
   opts?: O,
 ): Rect<O>;
 export function rect(
-  a: Val<number> | BoxLike | Vec,
+  a: Val<number> | HasBox | Vec,
   b?: Val<number> | Vec | RectOpts,
   c?: Val<number>,
   d?: Val<number> | RectOpts,
   e?: RectOpts,
 ): Rect {
-  if (isBoxLike(a)) {
-    return new Rect(a.x, a.y, a.w, a.h, b as RectOpts | undefined);
+  if (hasBox(a)) {
+    const bx = a.box;
+    return new Rect(
+      computed(() => bx.value.x),
+      computed(() => bx.value.y),
+      computed(() => bx.value.w),
+      computed(() => bx.value.h),
+      b as RectOpts | undefined,
+    );
   }
   if (a instanceof Vec && b instanceof Vec) {
     // Bounding rect of two points (any orientation).
@@ -164,8 +180,8 @@ export function rect(
   if (a instanceof Vec) {
     const w = b as Val<number>;
     const h = c as Val<number>;
-    const ws = toSignal(w);
-    const hs = toSignal(h);
+    const ws = num(w);
+    const hs = num(h);
     return new Rect(
       computed(() => a.x.value - ws.value / 2),
       computed(() => a.y.value - hs.value / 2),

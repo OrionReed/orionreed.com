@@ -14,7 +14,16 @@ export const lerp = (a: Value, b: Value, t: number) => a + (b - a) * t;
 export const metric = (a: Value, b: Value) => Math.abs(a - b);
 export const equals = (a: Value, b: Value) => a === b;
 
-export class Num extends Signal<Value> {
+/** Op surface — implemented by both reactive `Num` and the mutating
+ *  `Chain` so drift is a type error. */
+interface NumOps<R> {
+  add(b: Val<Value>): R;
+  sub(b: Val<Value>): R;
+  scale(k: Val<number>): R;
+  clamp(lo: Val<Value>, hi: Val<Value>): R;
+}
+
+export class Num extends Signal<Value> implements NumOps<Num> {
   constructor(v: Value = 0) { super(v); }
 
   add(b: Val<Value>) { return derived(Num, () => add(this.value, value(b))); }
@@ -33,7 +42,7 @@ export class Num extends Signal<Value> {
 }
 export interface Num extends LerpMethods<Value> {}
 
-class Chain extends BaseChain<Value> {
+class Chain extends BaseChain<Value> implements NumOps<Chain> {
   add(b: Val<Value>) { this.value += value(b); return this; }
   sub(b: Val<Value>) { this.value -= value(b); return this; }
   scale(k: Val<number>) { this.value *= value(k); return this; }

@@ -5,14 +5,14 @@
 
 import { drive, type Animator } from "@minim/core";
 import {
-  play, toSignal, Vec, type Easing, type Val, type VecValue,
+  play, num, Vec, type Easing, type Val, type VecValue,
 } from "@minim/signals";
-import type { Writable } from "./shape";
+import type { Has } from "./shape";
 
 /** Swap two shapes' positions over `sec`. */
 export function* swap(
-  a: Writable<"translate">,
-  b: Writable<"translate">,
+  a: Has<"translate">,
+  b: Has<"translate">,
   sec = 0.5,
   ease?: Easing,
 ): Animator {
@@ -37,7 +37,7 @@ export function* stagger<S>(
 export function* splay(
   center: Vec,
   radius: number,
-  shapes: readonly Writable<"translate">[],
+  shapes: readonly Has<"translate">[],
   sec = 0.5,
   ease?: Easing,
 ): Animator {
@@ -57,7 +57,7 @@ export function* splay(
 
 /** Tween each shape to its paired target (matched by index). */
 export function* assemble(
-  shapes: readonly Writable<"translate">[],
+  shapes: readonly Has<"translate">[],
   targets: readonly (Vec | VecValue)[],
   sec = 0.5,
   ease?: Easing,
@@ -74,11 +74,11 @@ export function* assemble(
  *  reverses; 0 pauses. */
 export function orbit(
   center: Vec,
-  shapes: readonly Writable<"translate">[],
+  shapes: readonly Has<"translate">[],
   opts: { period?: number; rate?: Val<number> } = {},
 ): Animator {
   const period = opts.period ?? 4;
-  const rate = toSignal(opts.rate ?? 1);
+  const rate = num(opts.rate ?? 1);
   const omega = (2 * Math.PI) / period;
   const N = shapes.length;
   const c0 = center.value;

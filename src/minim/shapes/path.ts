@@ -1,4 +1,4 @@
-import {derived, computed, signal, toSignal, Vec, type Signal, type Val} from "@minim/signals";
+import { num,derived, computed, signal, Vec, type Signal, type Val} from "@minim/signals";
 import {Shape, type Segment} from "./shape";
 import {wireStroke, type CommonOpts} from "./common";
 
@@ -52,15 +52,15 @@ function sampler(pts: Signal<readonly Vec[]>) {
     });
 
   const at = (t: Val<number>): Vec => {
-    const ts = toSignal(t);
+    const ts = num(t);
     return sampleAt(computed(() => clamp01(ts.value) * length.value));
   };
 
   /** Sample at absolute arc-length (px from start). */
-  const atDistance = (d: Val<number>): Vec => sampleAt(toSignal(d));
+  const atDistance = (d: Val<number>): Vec => sampleAt(num(d));
 
   const tangentAt = (t: Val<number>): Vec => {
-    const ts = toSignal(t);
+    const ts = num(t);
     return derived(Vec, () => {
       const points = pts.value;
       if (points.length < 2) return { x: 1, y: 0 };
@@ -207,8 +207,8 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   }
   /** Walk `dist` at `angle` (radians, y-down). */
   along(angle: Val<number>, dist: Val<number>) {
-    const a = toSignal(angle);
-    const d = toSignal(dist);
+    const a = num(angle);
+    const d = num(dist);
     return this.extend(
       this.last.offset(
         computed(() => Math.cos(a.value) * d.value),

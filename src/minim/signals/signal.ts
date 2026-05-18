@@ -235,38 +235,27 @@ function unlinkChildEffects(node: ReactiveNode): void {
 // Val<T> — "anything that yields a T"
 // ════════════════════════════════════════════════════════════════════
 
-/** Plain T, thunk `() => T`, or reactive Signal. Branded nominally via
- *  `instanceof Signal` so plain objects with `.value` aren't mistaken
- *  for cells.
- *
- *  Reactive forms are typed via a *covariant* `Readable<T>` shape so
- *  `Signal<number>` flows into `Val<string | number>`, etc. */
-export type Val<T> = T | (() => T) | Readable<T>;
+/** Plain T, thunk `() => T`, or any read-shape (Signal/Computed/…).
+ *  Reactive forms are typed via the covariant `Read<T>` view so a
+ *  concrete `Signal<number>` flows into `Val<string | number>`, etc.
+ *  Branded nominally via `instanceof Signal` at runtime so plain
+ *  objects with `.value` aren't mistaken for cells. */
+export type Val<T> = T | (() => T) | Read<T>;
 
-/** Covariant read-only signal surface. Anything with `value: T` (e.g.
- *  `Signal<T>`, `Computed<T>`). Used at *type* sites where covariance
- *  matters; runtime checks still go through `v instanceof Signal`. */
-export interface Readable<T> { readonly value: T }
+/** Covariant read-only signal surface. Anything with `value: T` +
+ *  `peek(): T`. Used at *parameter* sites where Signal's invariance
+ *  would block subclass-T cells; runtime checks still go through
+ *  `v instanceof Signal`. */
+export interface Read<out T> {
+  readonly value: T;
+  peek(): T;
+}
 
 /** Unwrap to T. Reactive forms auto-track inside an effect/computed body. */
 export function value<T>(v: Val<T>): T {
   if (v instanceof Signal) return v.value;
   if (typeof v === "function") return (v as () => T)();
   return v as T;
-}
-
-/** Coerce a `Val<T>` into a readable `Signal<T>`:
- *
- *    plain T   → static Signal<T>     (cell holding the value)
- *    () => T   → Computed<T>          (re-runs on dep change)
- *    Signal<T> → pass through
- *
- *  Use when downstream code needs `.value`/`.peek()` outside an
- *  effect/computed body (e.g. inside a `drive` lambda). */
-export function toSignal<T>(v: Val<T>): Signal<T> {
-  if (v instanceof Signal) return v as Signal<T>;
-  if (typeof v === "function") return computed(v as () => T);
-  return new Signal<T>(v as T);
 }
 
 export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signal;
@@ -350,13 +339,6 @@ export class Signal<T = unknown> implements ReactiveNode {
       this.currentValue = this.pendingValue;
     }
     return this.currentValue;
-  }
-
-  /** Subscribe to value changes. The callback fires once synchronously
-   *  with the current value, then on every subsequent change. Returns a
-   *  disposer. Equivalent to `effect(() => cb(sig.value))`. */
-  subscribe(cb: (v: T) => void): () => void {
-    return effect(() => cb(this.value));
   }
 
   /** One-shot write of `value(v)`. Severs any prior `.bind(...)`. Chainable. */
@@ -600,11 +582,6 @@ export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> {
 }
 export function computed<T>(getter: () => T): Computed<T> { return new Computed(getter); }
 export function lens<T>(getter: () => T, setter: (v: T) => void): Lens<T> { return new Computed(getter, setter); }
-
-// `signal.derived(fn)` and `signal.lens(get, set)` as factory-method
-// aliases. Lets callers reach for `signal.*` as a uniform namespace.
-signal.derived = computed;
-signal.lens = lens;
 export function effect(fn: () => void | (() => void)): () => void {
   const e = new Effect(fn);
   return () => e._unwatched();

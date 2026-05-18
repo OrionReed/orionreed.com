@@ -1,7 +1,7 @@
 // Connectors. Uses `shape.boundary` so analytic edges work without
 // per-kind dispatch.
 
-import {computed, toSignal, type Val} from "@minim/signals";
+import { num,computed, type Val} from "@minim/signals";
 import {signal} from "@minim/signals";
 import {Shape, SVG_NS} from "./shape";
 import {Vec} from "@minim/signals";
@@ -42,7 +42,7 @@ export function arrow(
   const bBase =
     b instanceof Shape ? b.boundary(a instanceof Shape ? a.center : a) : b;
 
-  const gapSig = toSignal(opts.gap ?? ARROW_GAP_DEFAULT);
+  const gapSig = num(opts.gap ?? ARROW_GAP_DEFAULT);
   const dir = bBase.sub(aBase).normalize();
   const aP = aBase.add(dir.scale(computed(() => gapSig.value + tokens.weight)));
   const bP = bBase.sub(dir.scale(computed(() => gapSig.value + ARROW_W)));

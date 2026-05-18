@@ -6,18 +6,18 @@
 //   • The `[LERP]` trait method bundle (`.to()` on cells)
 //   • Free-fn temporal animators dispatched by traits:
 //       tween (LERP), spring/toward (LINEAR + METRIC),
-//       holding/from/driven (no trait needed)
+//       holding/follow/driven (no trait needed)
 //   • The `Tween<T>` chainable wrapper for `.to(A).to(B).from(start)`
 //   • `play(...)` fluent surface — `.until / .then / .at`
-//   • `untilTrue(sig)` — wait until cell value is truthy
+//   • `when(sig)` — wait until cell value is truthy
 
-import { Signal, effect, type Val } from "./signal";
+import { Signal, effect, type Val, type Read } from "./signal";
 import {
   LERP, LINEAR, METRIC, EQUALS,
   type Linear, type Lerp, type Metric, type Equals,
 } from "./traits";
 import {
-  drive, suspend, race, type Animator, type Yieldable,
+  drive, suspend, race, mapDt, type Animator, type Yieldable,
   type Easing, easeOut,
 } from "../core";
 
@@ -226,12 +226,13 @@ export function* drift<T>(
 }
 
 /** Coerce a `Val<T>` into a `() => T` getter (no signal tracking — used
- *  inside `drive` lambdas which are untracked). */
+ *  inside `drive` lambdas which are untracked). The `Read<T>` arm of
+ *  `Val<T>` is a *type-only* abstraction; at runtime, only `Signal`
+ *  instances need detection. Anything else is the plain value. */
 function valFn<T>(v: Val<T>): () => T {
-  if (v instanceof Signal) return () => (v as Signal<T>).value;
+  if (v instanceof Signal) return () => v.value;
   if (typeof v === "function") return v as () => T;
-  const k = v as T;
-  return () => k;
+  return () => v as T;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -294,24 +295,6 @@ export const lerpImpl = {
   },
 };
 
-/** Make a fresh `Signal<T>` carrying an ad-hoc `[LERP]` impl plus the
- *  `.to(target, dur)` method. Useful for value types you don't want to
- *  promote to a full class (custom strings, opaque domain values, etc.):
- *
- *      const status = lerpable("idle", (a, b, t) => t < 0.5 ? a : b);
- *      yield* status.to("done", 0.3);
- */
-export function lerpable<T>(
-  initial: T,
-  lerpFn: Lerp<T>,
-  opts?: import("./signal").SignalOptions<T>,
-): Signal<T> & LerpMethods<T> {
-  const s = new Signal<T>(initial, opts) as Signal<T> & LerpMethods<T>;
-  (s as unknown as Record<symbol, unknown>)[LERP] = lerpFn;
-  Object.assign(s, lerpImpl);
-  return s;
-}
-
 // ════════════════════════════════════════════════════════════════════
 // defineTrait(Cls, slot, impl)
 //
@@ -345,13 +328,16 @@ export function defineTrait(Cls: ProtoTarget, slot: symbol, impl: unknown): void
 // play() — thin fluent facade for .until/.then/.at over any Animator
 // ════════════════════════════════════════════════════════════════════
 
+/** Triggers that bound a `play(...)`. A `Read<unknown>` waits until the
+ *  cell's value is truthy; an `Animator` waits for completion; a
+ *  number sleeps that many seconds. */
+export type PlayTrigger = Yieldable | Read<unknown>;
+
 export interface Play<R = void> extends Animator<R> {
   /** End when `p` fires (truthy cell, animator completion, n-second sleep, etc.) */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  until(p: Yieldable | Signal<any>): Play<R>;
+  until(p: PlayTrigger): Play<R>;
   /** Sequence: this, then `next`. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  then(next: Yieldable | Signal<any>): Play<unknown>;
+  then(next: PlayTrigger): Play<unknown>;
   /** Time-scale this and its children. */
   at(scale: Val<number>): Play<R>;
 }
@@ -363,8 +349,8 @@ class PlayImpl<R> implements Play<R> {
   throw(e: unknown) { return this.g.throw(e); }
   [Symbol.iterator]() { return this; }
 
-  until(p: Yieldable | Signal<unknown>): Play<R> {
-    const trigger = playableGen(p as Yieldable | Signal<unknown>);
+  until(p: PlayTrigger): Play<R> {
+    const trigger = playableGen(p);
     const g = this.g;
     return new PlayImpl<R>(
       // race(this, trigger) — first to settle wins, other cancels.
@@ -376,10 +362,10 @@ class PlayImpl<R> implements Play<R> {
     );
   }
 
-  then(next: Yieldable | Signal<unknown>): Play<unknown> {
+  then(next: PlayTrigger): Play<unknown> {
     const g = this.g;
     return new PlayImpl(
-      (function* () { yield* g; yield* playableGen(next as Yieldable | Signal<unknown>); })(),
+      (function* () { yield* g; yield* playableGen(next); })(),
     );
   }
 
@@ -388,20 +374,18 @@ class PlayImpl<R> implements Play<R> {
   }
 }
 
-/** Lift any yieldable into a Play. Cells become wait-until-truthy. */
+/** Lift any yieldable or cell-trigger into a Play. Cells become
+ *  wait-until-truthy. */
 export function play<R>(g: Animator<R>): Play<R>;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function play(p: Yieldable | Signal<any>): Play<unknown>;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function play(p: Yieldable | Signal<any>): Play<unknown> {
+export function play(p: PlayTrigger): Play<unknown>;
+export function play(p: PlayTrigger): Play<unknown> {
   if (p instanceof PlayImpl) return p;
   return new PlayImpl(playableGen(p));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function* playableGen(p: Yieldable | Signal<any>): Animator<unknown> {
+function* playableGen(p: PlayTrigger): Animator<unknown> {
   if (p instanceof Signal) {
-    yield* untilTrue(p);
+    yield* when(p);
     return undefined;
   }
   if (p === undefined || p === null) return undefined;
@@ -412,9 +396,8 @@ function* playableGen(p: Yieldable | Signal<any>): Animator<unknown> {
   return undefined;
 }
 
-/** Wait until `sig.value` is truthy. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function untilTrue(sig: Signal<any>): Animator<void> {
+/** Wait until `sig.value` is truthy. Wakes immediately if already true. */
+export function when(sig: Read<unknown>): Animator<void> {
   return suspend<void>((wake) => {
     let resolved = false;
     return effect(() => {
@@ -424,31 +407,16 @@ export function untilTrue(sig: Signal<any>): Animator<void> {
   });
 }
 
-/** Alias of `untilTrue` reading as "when sig becomes truthy". */
-export const when = untilTrue;
-
-/** Wait for a DOM event on `target`; resume with the event. */
-export function untilEvent<E extends Event = Event>(
-  target: EventTarget,
-  name: string,
-  opts?: AddEventListenerOptions,
-): Animator<E> {
-  return suspend<E>((wake) => {
-    const handler = (e: Event): void => wake(e as E);
-    target.addEventListener(name, handler, opts);
-    return () => target.removeEventListener(name, handler, opts);
-  });
-}
-
-/** Wait for a promise; resume with its resolved value (rejection propagates). */
-export function* untilPromise<T>(p: PromiseLike<T>): Animator<T> {
-  return (yield p) as T;
+/** Reactive boolean negation — `not(sig).value === !sig.value`. Pair
+ *  with `when` / `play().until(...)` to wait on falsy conditions. */
+export function not(sig: Read<unknown>): Read<boolean> {
+  return { get value() { return !sig.value; }, peek: () => !sig.peek() };
 }
 
 /** Wait until `sig` changes value (via `===`/`equals` trait). Resumes
  *  with the new value. Useful when you want the *next* update and
  *  don't care about a specific predicate. */
-export function untilChange<T>(sig: Signal<T>): Animator<T> {
+export function untilChange<T>(sig: Read<T>): Animator<T> {
   return suspend<T>((wake) => {
     const initial = sig.peek();
     let resolved = false;
@@ -487,21 +455,9 @@ export function every(sec: Val<number>, fn: () => void): Play {
   })());
 }
 
-/** Wrap a gen so child resume-dts are scaled. Static scale skips the
- *  read. Unlike `core.mapDt` (resume side only), this also scales the
- *  outbound yields so `yield N` sleeps stay correct under .at(). */
+/** Wrap a gen so all `dt` flowing through it (yielded sleeps + resumed
+ *  per-frame dts) is multiplied by `scale`. Used by `play().at(...)`. */
 function scaledGen<R>(g: Animator<R>, scale: Val<number>): Animator<R> {
   const get = valFn(scale);
-  return scaleBoth(g, get);
-}
-
-function* scaleBoth<R>(g: Animator<R>, f: () => number): Animator<R> {
-  let r = g.next();
-  while (!r.done) {
-    const v = r.value;
-    const out: Yieldable = typeof v === "number" ? v * f() : v;
-    const resume = (yield out);
-    r = g.next(typeof resume === "number" ? resume * f() : resume);
-  }
-  return r.value;
+  return mapDt((dt) => dt * get(), g);
 }

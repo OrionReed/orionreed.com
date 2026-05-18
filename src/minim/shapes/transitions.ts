@@ -9,7 +9,7 @@
 
 import {easeIn, easeInOut, easeOut, type Animator, type Yieldable} from "@minim/core";
 import {tween, Dir, type Signal, type Easing, type Val, type VecValue} from "@minim/signals";
-import type {Writable} from "./shape";
+import type {Has} from "./shape";
 
 /** Eagerly advance `factory()` to its first yield (flushing pose side-
  *  effects), then return an Animator that re-yields and forwards the
@@ -54,14 +54,14 @@ export const from = <T>(
 
 /** Fade opacity 0 → 1. */
 export const fadeIn = (
-  s: Writable<"opacity">,
+  s: Has<"opacity">,
   sec: Val<number> = 0.3,
   ease: Easing = easeOut,
 ): Animator => from(s.opacity, 0, 1, sec, ease);
 
 /** Fade opacity 1 → 0. */
 export function* fadeOut(
-  s: Writable<"opacity">,
+  s: Has<"opacity">,
   sec: Val<number> = 0.3,
   ease: Easing = easeIn,
 ): Animator {
@@ -72,7 +72,7 @@ export function* fadeOut(
 
 /** Slide up from `dy` below + fade in. */
 export const fadeUp = (
-  s: Writable<"translate" | "opacity">,
+  s: Has<"translate" | "opacity">,
   sec = 0.4,
   dy = 16,
 ): Animator =>
@@ -85,7 +85,7 @@ export const fadeUp = (
 
 /** Slide up + fade out. Mirror of `fadeUp`. */
 export function* fadeUpOut(
-  s: Writable<"translate" | "opacity">,
+  s: Has<"translate" | "opacity">,
   sec = 0.3,
   dy = 16,
 ): Animator {
@@ -94,7 +94,7 @@ export function* fadeUpOut(
 
 /** Slide in from `dir` + fade in. */
 export const slideIn = (
-  s: Writable<"translate" | "opacity">,
+  s: Has<"translate" | "opacity">,
   dir: VecValue = Dir.Left,
   sec = 0.4,
   dist = 30,
@@ -114,7 +114,7 @@ export const slideIn = (
 
 /** Slide out toward a side + fade out. */
 export function* slideOut(
-  s: Writable<"translate" | "opacity">,
+  s: Has<"translate" | "opacity">,
   dir: VecValue = Dir.Right,
   sec = 0.3,
   dist = 30,
@@ -127,7 +127,7 @@ export function* slideOut(
 
 /** Scale 0 → 1 + fade in. */
 export const scaleIn = (
-  s: Writable<"scale" | "opacity">,
+  s: Has<"scale" | "opacity">,
   sec = 0.3,
 ): Animator =>
   eager(function* () {
@@ -139,7 +139,7 @@ export const scaleIn = (
 
 /** Scale 1 → 0 + fade out. */
 export function* zoomOut(
-  s: Writable<"scale" | "opacity">,
+  s: Has<"scale" | "opacity">,
   sec = 0.3,
 ): Animator {
   yield [s.scale.to({ x: 0, y: 0 }, sec, easeIn), fadeOut(s, sec)];
@@ -147,7 +147,7 @@ export function* zoomOut(
 
 /** Overshoot-and-settle scale + fade in. */
 export const bounceIn = (
-  s: Writable<"scale" | "opacity">,
+  s: Has<"scale" | "opacity">,
   sec = 0.5,
 ): Animator =>
   eager(function* () {
@@ -162,7 +162,7 @@ export const bounceIn = (
 
 /** Spin in: rotate -π → 0 + scale 0.5 → 1 + fade in. */
 export const spinIn = (
-  s: Writable<"rotate" | "scale" | "opacity">,
+  s: Has<"rotate" | "scale" | "opacity">,
   sec = 0.5,
 ): Animator =>
   eager(function* () {

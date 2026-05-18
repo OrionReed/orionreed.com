@@ -75,10 +75,24 @@ export const metric = (a: Value, b: Value) =>
   Math.abs(a.rotate  - b.rotate) +
   Math.abs(a.opacity - b.opacity);
 
-export class Transform extends Signal<Value> {
+/** Op surface — closed-on-Transform operations. Implemented by
+ *  reactive `Transform` and the mutating `Chain`.
+ *
+ *  Note: scalar `scale(k)` is intentionally **not** here. `transform.scale`
+ *  is the per-axis Vec lens (`tr.scale.value = {x:2,y:2}`); scalar
+ *  multiplication of the whole Transform is the [LINEAR] trait, accessed
+ *  via `tr.derive(c => c.scale(k))` or `requireLinear(tr).scale(v, k)`. */
+interface TransformOps<R> {
+  add(b: Val<Value>): R;
+  sub(b: Val<Value>): R;
+  lerp(b: Val<Value>, t: Val<number>): R;
+}
+
+export class Transform extends Signal<Value> implements TransformOps<Transform> {
   constructor(v: Value = DEFAULT) { super(v); }
 
   add(b: Val<Value>) { return derived(Transform, () => add(this.value, value(b))); }
+  sub(b: Val<Value>) { return derived(Transform, () => sub(this.value, value(b))); }
   lerp(b: Val<Value>, t: Val<number>) {
     return derived(Transform, () => lerp(this.value, value(b), value(t)));
   }
@@ -95,8 +109,12 @@ export class Transform extends Signal<Value> {
 }
 export interface Transform extends LerpMethods<Value> {}
 
-class Chain extends BaseChain<Value> {
+class Chain extends BaseChain<Value> implements TransformOps<Chain> {
   add(b: Val<Value>) { this.value = add(this.value, value(b)); return this; }
+  sub(b: Val<Value>) { this.value = sub(this.value, value(b)); return this; }
+  /** Scalar multiply (only available in Chain to avoid clashing with
+   *  the `transform.scale` axis lens on the reactive class). */
+  scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
   lerp(b: Val<Value>, t: Val<number>) {
     this.value = lerp(this.value, value(b), value(t)); return this;
   }

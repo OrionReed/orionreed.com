@@ -3,25 +3,23 @@
 // properties get flattened. Useful at the top of `loop(...)` bodies so
 // each iteration starts from a known baseline.
 
-import {Signal} from "@minim/signals";
+import { Signal, type Read } from "@minim/signals";
 
-/** Capture current values; return a reset function. Args are cells or
- *  plain records whose signal-valued properties get flattened.
+/** Capture current values; return a reset function. Args are cells
+ *  (any concrete `T`) or plain records whose signal-valued properties
+ *  get flattened. Restoration is type-safe per cell — each is restored
+ *  to its own captured value.
  *
  *      const reset = snapshot(score, position);
  *      // … later, on cancel/reset …
  *      reset();
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function snapshot(
-  ...args: ReadonlyArray<Signal<any> | Record<string, unknown>>
+  ...args: ReadonlyArray<Read<unknown> | Record<string, unknown>>
 ): () => void {
   const sigs: Signal<unknown>[] = [];
   for (const arg of args) {
-    if (arg instanceof Signal) {
-      sigs.push(arg);
-      continue;
-    }
+    if (arg instanceof Signal) { sigs.push(arg); continue; }
     for (const v of Object.values(arg)) {
       if (v instanceof Signal) sigs.push(v);
     }

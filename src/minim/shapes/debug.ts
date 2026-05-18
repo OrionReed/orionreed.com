@@ -12,15 +12,18 @@
 // The `--minim-debug` CSS var lets authors theme; the fallback is
 // magenta so debug shapes always read as "scaffolding".
 
-import {derived, computed} from "@minim/signals";
-import {Shape, type AnyShape} from "./shape";
-import {Vec, Box, transformBox, transformPoint, type BoxLike} from "@minim/signals";
-import {circle} from "./circle";
-import {line} from "./line";
-import {label} from "./label";
-import {rect} from "./rect";
-import {group} from "./group";
-import type {Path} from "./path";
+import {
+  derived, computed,
+  Vec, Box, transformBox, transformPoint,
+  type Boxed,
+} from "@minim/signals";
+import { Shape, type AnyShape } from "./shape";
+import { circle } from "./circle";
+import { line } from "./line";
+import { label } from "./label";
+import { rect } from "./rect";
+import { group } from "./group";
+import type { Path } from "./path";
 
 const COLOR = "var(--minim-debug, #c026d3)";
 
@@ -33,22 +36,21 @@ const outlineOpts = {
   ...baseOpts,
 };
 
-/** Parent-frame Box for any BoxLike. Shapes get their transform applied
- *  (so the Box reflects the visual footprint); non-Shape Boxes pass
- *  through. */
-function parentBox(b: BoxLike): BoxLike {
+/** Parent-frame Box cell. Shapes have their transform applied (so the
+ *  Box reflects the visual footprint); other Boxed things pass through. */
+function parentBox(b: Boxed): Box {
   if (b instanceof Shape) {
     return derived(Box, () => transformBox(b.localFrame.value, b.box.value));
   }
-  return b;
+  return b.box;
 }
 
 /** Dashed rect on a Box's parent-frame Box. */
-const boxOutline = (b: BoxLike) => rect(parentBox(b), outlineOpts);
+const boxOutline = (b: Boxed) => rect(parentBox(b), outlineOpts);
 
 /** Small filled dot at a point or a Box's center. */
-const dot = (p: Vec | BoxLike, r = 2.5) =>
-  circle(p instanceof Vec ? p : p.center, r, {
+const dot = (p: Vec | Boxed, r = 2.5) =>
+  circle(p instanceof Vec ? p : p.box.center, r, {
     fill: COLOR,
     stroke: "none",
     ...baseOpts,
@@ -77,12 +79,12 @@ const origin = (s: Shape, size = 8) => {
 
 /** Dots at the 9 standard anchor positions: corners, edge midpoints,
  *  center. */
-const anchors = (b: BoxLike, r = 2.5) => {
+const anchors = (b: Boxed, r = 2.5) => {
   const g = group({ aside: true, opacity: 0.7 });
   for (const u of [0, 0.5, 1]) {
     for (const v of [0, 0.5, 1]) {
       g.add(
-        circle(b.at(u, v), r, {
+        circle(b.box.at(u, v), r, {
           fill: COLOR,
           stroke: "none",
         }),

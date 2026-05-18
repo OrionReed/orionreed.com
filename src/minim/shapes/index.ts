@@ -14,7 +14,7 @@ export {
   type ShapeOpts,
   type AnyShape,
   type AnimatableKey,
-  type Writable,
+  type Has,
   type Segment,
 } from "./shape";
 export { draggable, hoverSignal } from "./interaction";

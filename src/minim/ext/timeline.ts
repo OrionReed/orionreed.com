@@ -3,7 +3,7 @@
 // `duration`. `sequential({...})` produces cumulative-start specs.
 
 import {type Animator} from "@minim/core";
-import {toSignal, type Val} from "@minim/signals";
+import { num,type Val} from "@minim/signals";
 import {signal, computed, type Signal} from "@minim/signals";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -87,8 +87,8 @@ class TimelineImpl implements Timeline {
 }
 
 function makeClip(spec: ClipSpec, clock: Signal<number>): Clip {
-  const at = toSignal(spec.at);
-  const dur = toSignal(spec.dur);
+  const at = num(spec.at);
+  const dur = num(spec.dur);
   const end = computed(() => at.value + dur.value);
   const t = computed(() => {
     const c = clock.value;
@@ -140,7 +140,7 @@ export function sequential<T extends Durations>(
 ): { [K in keyof T]: { at: Signal<number>; dur: ResolvedField<T[K]> } } {
   const keys = Object.keys(durs) as Array<keyof T>;
   const durSigs: Signal<number>[] = keys.map((k) =>
-    toSignal(durs[k] as Val<number>),
+    num(durs[k] as Val<number>),
   );
   const out = {} as Record<
     string,

@@ -1,8 +1,11 @@
 // Spatial composition primitives. Reference points for growth:
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
-import {derived, toSignal, transformBox, Box, BoxMath, type BoxLike, type Val} from "@minim/signals";
-import type {Shape} from "./shape";
+import {
+  num, derived, transformBox, Box, BoxMath,
+  type Boxed, type Val,
+} from "@minim/signals";
+import type { Shape } from "./shape";
 
 export interface ArrangeOpts {
   /** Spacing between adjacent bounding boxes. Default 0. */
@@ -53,13 +56,13 @@ export function arrange(
 }
 
 // ── Box operations ──────────────────────────────────────────────────
-// Pure functions over `BoxLike`. Inputs: any reactive rectangle (a
-// Shape, a `view`, another result of these helpers). Outputs: derived
-// Reactive<Box>(es) that update reactively as the source changes.
+// Functions over `Boxed` ({ box: Box }). Inputs: any reactive
+// rectangle (Shape, view, another split result). Outputs: derived
+// Box cells that update reactively as the source changes.
 
 /** Inflate a Box on each side by `by`. */
-export function expand(b: BoxLike, by: Val<number>): BoxLike {
-  const bys = toSignal(by);
+export function expand(b: Boxed, by: Val<number>): Box {
+  const bys = num(by);
   return derived(Box, () => BoxMath.expand(b.box.value, bys.value));
 }
 
@@ -70,17 +73,17 @@ export function expand(b: BoxLike, by: Val<number>): BoxLike {
  *   split(b, "x", 3, { gap: 4 })  — 4px between
  */
 export function split(
-  source: BoxLike,
+  source: Boxed,
   axis: "x" | "y",
   parts: number | number[],
   opts: { gap?: Val<number> } = {},
-): BoxLike[] {
+): Box[] {
   const ratios = typeof parts === "number" ? new Array(parts).fill(1) : parts;
   const total = ratios.reduce((a, b) => a + b, 0);
   const cumBefore = ratios.map((_, i) =>
     ratios.slice(0, i).reduce((a, b) => a + b, 0),
   );
-  const gapSig = toSignal(opts.gap ?? 0);
+  const gapSig = num(opts.gap ?? 0);
   return ratios.map((r, i) =>
     derived(Box, () => {
       const b = source.box.value;
@@ -101,11 +104,11 @@ export function split(
 /** Two-axis split into a `rows × cols` grid (sugar over `split`).
  *  Returns `[row][col]`. */
 export function grid(
-  source: BoxLike,
+  source: Boxed,
   rows: number,
   cols: number,
   opts: { gap?: Val<number> } = {},
-): BoxLike[][] {
+): Box[][] {
   return split(source, "y", rows, opts).map((row) =>
     split(row, "x", cols, opts),
   );

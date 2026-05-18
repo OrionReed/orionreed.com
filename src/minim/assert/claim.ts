@@ -29,7 +29,7 @@ import { type Animator } from "@minim/core";
 import {
   signal, computed, effect, race,
   Signal, vec, Vec,
-  type Box, type BoxLike, type BoxValue,
+  type Box, type Boxed, type BoxValue,
 } from "@minim/signals";
 import { circle } from "@minim/shapes";
 
@@ -375,10 +375,10 @@ export class Predicates<T> {
   // ── Point / Vec ────────────────────────────────────────────────────
 
   /** Predicate that the point lies inside `region`. Accepts a
-   *  `BoxLike` (Shape, view, split result…) or a `Signal<BoxValue>`. */
+   *  `Boxed` (Shape, view, split result…) or a `Signal<BoxValue>`. */
   inside(
     this: Predicates<import("@minim/signals").VecValue>,
-    region: BoxLike | Signal<BoxValue>,
+    region: Boxed | Signal<BoxValue>,
   ): Claim {
     const boxSig: Signal<BoxValue> =
       "box" in region ? region.box : region;
@@ -535,10 +535,7 @@ export function any(
   });
 }
 
-/** Negation of a bool signal. */
-export function not(p: Signal<boolean>): Signal<boolean> {
-  return computed(() => !p.value);
-}
+// (`not` lives in signals/ — `not(sig)` works on any `Read<unknown>`)
 
 // ── Bisimulation ─────────────────────────────────────────────────────
 

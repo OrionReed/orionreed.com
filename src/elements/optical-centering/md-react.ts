@@ -3,7 +3,7 @@
 // cascade kills any in-flight click listener via its awaitable
 // disposer.
 
-import {Diagram, Mount, Anchor, bounceIn, button, signal, circle, computed, fadeOut, label, loop, vec, race, rect, suspend, zoomOut, type Animator, type Content, type Writable} from "../../minim";
+import {Diagram, Mount, Anchor, bounceIn, button, signal, circle, computed, fadeOut, label, loop, vec, race, rect, suspend, zoomOut, type Animator, type Content, type Has} from "../../minim";
 
 const W = 380;
 const TARGET_R = 14;
@@ -78,7 +78,7 @@ export class MdReact extends Diagram {
     /** Target needs writable opacity/scale (for intro/outro) plus
      *  `el` (for trackedClick) plus `dispose()` (for round cleanup).
      *  `circle(...)` satisfies all three. */
-    type Target = Writable<"opacity" | "scale"> & {
+    type Target = Has<"opacity" | "scale"> & {
       el: EventTarget;
       dispose(): void;
     };

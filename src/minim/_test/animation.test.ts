@@ -9,7 +9,7 @@ import { check, section, approx } from "./_check";
 import {
   signal,
   num, vec, transform,
-  play, untilTrue, Tween,
+  play, when, Tween,
   spring, toward, holding, driven, follow,
 } from "@minim/signals";
 import { Anim, detach, race, linear } from "@minim/core";
@@ -238,7 +238,7 @@ describe("animation", () => {
       const b = num(0);
       const stop = signal(false);
       anim.start(function* () {
-        yield* race(follow(b, a), untilTrue(stop));
+        yield* race(follow(b, a), when(stop));
       });
       tick(anim, 1);
       check("b initially follows a", b.value === 10);

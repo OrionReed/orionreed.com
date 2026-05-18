@@ -21,10 +21,20 @@ export const lerp = (a: Value, b: Value, t: number): Value => ({
 export const equals = (a: Value, b: Value) =>
   a === b || (a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a);
 
-export class Color extends Signal<Value> {
+/** Op surface — closed-on-Color operations. Implemented by reactive
+ *  `Color` and the mutating `Chain`. */
+interface ColorOps<R> {
+  add(b: Val<Value>): R;
+  sub(b: Val<Value>): R;
+  scale(k: Val<number>): R;
+  lerp(b: Val<Value>, t: Val<number>): R;
+}
+
+export class Color extends Signal<Value> implements ColorOps<Color> {
   constructor(v: Value = { r: 0, g: 0, b: 0, a: 1 }) { super(v); }
 
   add(b: Val<Value>) { return derived(Color, () => add(this.value, value(b))); }
+  sub(b: Val<Value>) { return derived(Color, () => sub(this.value, value(b))); }
   scale(k: Val<number>) { return derived(Color, () => scale(this.value, value(k))); }
   lerp(b: Val<Value>, t: Val<number>) {
     return derived(Color, () => lerp(this.value, value(b), value(t)));
@@ -56,8 +66,9 @@ export class Color extends Signal<Value> {
 }
 export interface Color extends LerpMethods<Value> {}
 
-class Chain extends BaseChain<Value> {
+class Chain extends BaseChain<Value> implements ColorOps<Chain> {
   add(b: Val<Value>) { this.value = add(this.value, value(b)); return this; }
+  sub(b: Val<Value>) { this.value = sub(this.value, value(b)); return this; }
   scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
   lerp(b: Val<Value>, t: Val<number>) {
     this.value = lerp(this.value, value(b), value(t)); return this;

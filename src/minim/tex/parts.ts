@@ -17,10 +17,13 @@
 // Markers: it wires hover on each Part.el to the corresponding Marker and
 // makes marker.active drive part.highlighted.
 //
-// The BoxLike surface on `Part` is installed at module load via
-// `delegate(Part.prototype, "box", Box)` — see `values/delegate.ts`.
+// Reach into part.box for axes/cardinals: `part.box.center`, `part.box.x`, etc.
 
-import {signal, effect, toSignal, Signal, num, Box, Vec, delegateBoxLike, type BoxLike, type Val} from "@minim/signals";
+import {
+  signal, computed, effect,
+  Signal, num, Box,
+  type Val,
+} from "@minim/signals";
 import {marker, hover, registerMarker, type Marker} from "./marker";
 import type {TexShape} from "./tex";
 
@@ -42,10 +45,10 @@ const effectiveColor = (m: PartMarker): string | null => {
 
 // ── Part ──────────────────────────────────────────────────────────────────────
 
-/** A named, addressable region of a TexShape. Implements `BoxLike`
- *  so `part.center`, `part.top`, etc. are Pointlikes in the TexShape's
- *  local frame (read-only — parts are template-bound). */
-export class Part<N extends string = string> implements BoxLike {
+/** A named, addressable region of a TexShape. Reach into `part.box`
+ *  for axes/cardinals (`part.box.center`, `part.box.at(u,v)`, etc.)
+ *  in the TexShape's local frame — read-only, template-bound. */
+export class Part<N extends string = string> {
   /** Per-instance highlight for animations. Drives the background tint
    *  when set by `highlight()` or other animation code. Identity-level
    *  highlighting (from `Marker.active`) is wired externally via
@@ -56,18 +59,6 @@ export class Part<N extends string = string> implements BoxLike {
   readonly opacity = num(1);
 
   readonly box: Box;
-
-  declare readonly x: import("@minim/signals").Num;
-  declare readonly y: import("@minim/signals").Num;
-  declare readonly w: import("@minim/signals").Num;
-  declare readonly h: import("@minim/signals").Num;
-  declare readonly center: Vec;
-  declare readonly top: Vec;
-  declare readonly bottom: Vec;
-  declare readonly left: Vec;
-  declare readonly right: Vec;
-  declare readonly at: (u: number, v: number) => Vec;
-  declare readonly area: Signal<number>;
 
   el: HTMLElement | null = null;
   #disposers: Array<() => void> = [];
@@ -119,8 +110,6 @@ export class Part<N extends string = string> implements BoxLike {
   }
 }
 
-delegateBoxLike(Part.prototype, "box");
-
 // ── PartMarker ────────────────────────────────────────────────────────────────
 
 /** Marker emitted by `part(name, content)` and `parts({...})`. Only
@@ -147,7 +136,11 @@ export class PartMarker<N extends string = string> {
     source: PartContent,
     readonly group: PartMarker | null = null,
   ) {
-    this.content = toSignal(source) as Signal<string>;
+    this.content = source instanceof Signal
+      ? source
+      : typeof source === "function"
+        ? computed(source)
+        : signal(source as string);
     // Children inherit the root's Marker so all group members share one identity.
     this.#m = group ? group.#m : marker();
   }

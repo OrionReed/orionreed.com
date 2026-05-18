@@ -1,21 +1,19 @@
-import {derived, toSignal, type Val} from "@minim/signals";
-import {type Signal} from "@minim/signals";
-import {Shape, type Segment} from "./shape";
-import {Vec, box} from "@minim/signals";
-import {TWO_PI} from "./dashed";
-import {intrinsicType, wireStroke, type CommonOpts} from "./common";
+import { derived, Vec, Num, num, type Val } from "@minim/signals";
+import { Shape, type Segment } from "./shape";
+import { TWO_PI } from "./dashed";
+import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
 export interface CircleOpts extends CommonOpts {}
 
 export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
-  readonly radius: Signal<number>;
+  readonly radius: Num;
 
   constructor(
     center: Vec,
     radius: Val<number>,
     opts: O = {} as O,
   ) {
-    const r = toSignal(radius);
+    const r = num(radius);
     super(
       intrinsicType(opts, "circle"),
       () =>
@@ -37,7 +35,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
 
   /** Point on perimeter at angle θ (radians, y-down). */
   atAngle(angle: Val<number>): Vec {
-    const a = toSignal(angle);
+    const a = num(angle);
     return derived(Vec, () => ({
       x: this.center.x.value + this.radius.value * Math.cos(a.value),
       y: this.center.y.value + this.radius.value * Math.sin(a.value),
@@ -45,7 +43,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   }
   /** Unit tangent at angle θ. */
   tangentAt(angle: Val<number>): Vec {
-    const a = toSignal(angle);
+    const a = num(angle);
     return derived(Vec, () => ({
       x: -Math.sin(a.value),
       y: Math.cos(a.value),

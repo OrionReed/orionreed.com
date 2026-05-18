@@ -11,7 +11,7 @@
 // New traits: `export const X = Symbol.for("minim.x")` + module-augment
 // `Signal<T>` to add `[X]?: ...`.
 
-import type { Signal } from "./signal";
+import type { Signal, Read } from "./signal";
 
 // ════════════════════════════════════════════════════════════════════
 // Trait shapes
@@ -53,8 +53,8 @@ export interface ValueClass<T = unknown> {
   readonly name: string;
 }
 
-export function classOf<T>(s: Signal<T>): ValueClass<T> {
-  return s.constructor as ValueClass<T>;
+export function classOf<T>(s: Read<T>): ValueClass<T> {
+  return (s as object).constructor as ValueClass<T>;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -62,25 +62,28 @@ export function classOf<T>(s: Signal<T>): ValueClass<T> {
 //
 //   xOf(s)      → Slot | undefined  (optional-trait code paths)
 //   requireX(s) → Slot              (throws if missing)
+//
+// Parameters typed `Read<T>` (covariant) so subclass-T cells flow
+// through; slots live on the `Signal` prototype, accessed structurally.
 // ════════════════════════════════════════════════════════════════════
 
-export const linearOf = <T>(s: Signal<T>): Linear<T> | undefined => s[LINEAR];
-export const lerpOf   = <T>(s: Signal<T>): Lerp<T>   | undefined => s[LERP];
-export const metricOf = <T>(s: Signal<T>): Metric<T> | undefined => s[METRIC];
-export const equalsOf = <T>(s: Signal<T>): Equals<T> | undefined => s[EQUALS];
+export const linearOf = <T>(s: Read<T>): Linear<T> | undefined => (s as Signal<T>)[LINEAR];
+export const lerpOf   = <T>(s: Read<T>): Lerp<T>   | undefined => (s as Signal<T>)[LERP];
+export const metricOf = <T>(s: Read<T>): Metric<T> | undefined => (s as Signal<T>)[METRIC];
+export const equalsOf = <T>(s: Read<T>): Equals<T> | undefined => (s as Signal<T>)[EQUALS];
 
-const missing = <T>(s: Signal<T>, slot: string): Error =>
+const missing = <T>(s: Read<T>, slot: string): Error =>
   new Error(`require${slot}: ${classOf(s).name} has no [${slot}] slot`);
 
-export function requireLinear<T>(s: Signal<T>): Linear<T> {
-  const v = s[LINEAR]; if (!v) throw missing(s, "Linear"); return v;
+export function requireLinear<T>(s: Read<T>): Linear<T> {
+  const v = linearOf(s); if (!v) throw missing(s, "Linear"); return v;
 }
-export function requireLerp<T>(s: Signal<T>): Lerp<T> {
-  const v = s[LERP]; if (!v) throw missing(s, "Lerp"); return v;
+export function requireLerp<T>(s: Read<T>): Lerp<T> {
+  const v = lerpOf(s); if (!v) throw missing(s, "Lerp"); return v;
 }
-export function requireMetric<T>(s: Signal<T>): Metric<T> {
-  const v = s[METRIC]; if (!v) throw missing(s, "Metric"); return v;
+export function requireMetric<T>(s: Read<T>): Metric<T> {
+  const v = metricOf(s); if (!v) throw missing(s, "Metric"); return v;
 }
-export function requireEquals<T>(s: Signal<T>): Equals<T> {
-  const v = s[EQUALS]; if (!v) throw missing(s, "Equals"); return v;
+export function requireEquals<T>(s: Read<T>): Equals<T> {
+  const v = equalsOf(s); if (!v) throw missing(s, "Equals"); return v;
 }

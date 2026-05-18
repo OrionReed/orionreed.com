@@ -1,5 +1,11 @@
 import {suspend, type Animator} from "@minim/core";
-import {signal, computed, effect, Signal, toSignal, derived, Vec, Num, Transform, Box, compose, multiply, matrixToString, transformBox, transformPoint, type VecValue, type BoxValue, type BoxLike, type Matrix2DValue, type Val, mean, BoxMath} from "@minim/signals";
+import {
+  signal, computed, effect, Signal, derived,
+  Vec, Num, Transform, Box,
+  compose, multiply, matrixToString, transformBox, transformPoint,
+  type VecValue, type BoxValue, type Matrix2DValue, type Val,
+  mean, BoxMath, value,
+} from "@minim/signals";
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -42,10 +48,11 @@ export type AnimatableKey =
 type AnimatableField<K extends AnimatableKey> =
   K extends "translate" | "scale" | "origin" ? Vec : Num;
 
-/** Anything with the listed animatable props writable. Combinable via
- *  union (`Writable<"translate" | "opacity">`); Shape and mock objects
- *  alike satisfy this structurally. */
-export type Writable<K extends AnimatableKey> = {
+/** Anything carrying the listed animatable axes (Shape, Part, mock,
+ *  derived). Combinable via union — `Has<"translate" | "opacity">`.
+ *  The field is `readonly` (you can't reassign it) but the *cell* at
+ *  the field is writable via its `.value` setter. */
+export type Has<K extends AnimatableKey> = {
   readonly [P in K]: AnimatableField<P>;
 };
 
@@ -53,8 +60,13 @@ export type Writable<K extends AnimatableKey> = {
  *  + children); subclasses add an intrinsic element and geometry. A
  *  bare `new Shape()` is a group. Animatable state lives in
  *  `this.transform: Transform`. Field aliases (`translate`, `rotate`,
- *  …) forward to the transform's nested signals — same reference. */
-export class Shape<O extends ShapeOpts = ShapeOpts> implements BoxLike {
+ *  …) forward to the transform's nested signals — same reference.
+ *
+ *  Reach into `shape.box.x` / `shape.box.center` for box-local axes &
+ *  cardinals. Shape's own `center`/`top`/…/`at(u,v)` differ: they
+ *  return *parent-frame* points (post-transform), and writing to them
+ *  adjusts `translate` so the anchor lands at the new position. */
+export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly el: SVGGElement;
   readonly intrinsic?: SVGElement;
 
@@ -71,18 +83,13 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements BoxLike {
   /** Cumulative scene-root frame: `parent.worldFrame × localFrame`. */
   readonly worldFrame: Signal<Matrix2DValue>;
 
-  // ── BoxLike interface ──────────────────────────────────────────────
-  // Source-of-truth: `box` (local-frame Box). x/y/w/h are eager axis
-  // projections so subclasses (Rect) can override with sources.
-
+  /** Local-frame Box. Use `shape.box.x`, `.center`, `.at(u,v)`, etc.
+   *  for box-local geometry. */
   readonly box: Box;
-  readonly x: Num;
-  readonly y: Num;
-  readonly w: Num;
-  readonly h: Num;
 
-  /** Lens-backed cardinal anchors. Reads return parent-frame post-
-   *  transform position; writes shift `translate` by the delta. */
+  /** Lens-backed parent-frame anchors. Reads return post-transform
+   *  position; writes shift `translate` by the delta. Distinct from
+   *  `shape.box.center` (local frame) — these track visual position. */
   get center(): Vec { return this.#anchor("center", 0.5, 0.5); }
   get top(): Vec    { return this.#anchor("top",    0.5, 0); }
   get bottom(): Vec { return this.#anchor("bottom", 0.5, 1); }
@@ -150,10 +157,6 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements BoxLike {
     );
 
     this.box = boxSig;
-    this.x = boxSig.x;
-    this.y = boxSig.y;
-    this.w = boxSig.w;
-    this.h = boxSig.h;
 
     // Local frame: composed matrix from per-field signals. Identity
     // short-circuit avoids reading `origin` for no-transform groups.
@@ -250,9 +253,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> implements BoxLike {
   ): void {
     const el = target === "intrinsic" && this.intrinsic ? this.intrinsic : this.el;
     if (val instanceof Signal || typeof val === "function") {
-      const sig = toSignal(val);
       this.disposers.push(
-        effect(() => el.setAttribute(name, String(sig.value))),
+        effect(() => el.setAttribute(name, String(value(val)))),
       );
     } else {
       el.setAttribute(name, String(val));

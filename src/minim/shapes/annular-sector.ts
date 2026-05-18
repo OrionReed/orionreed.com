@@ -1,4 +1,4 @@
-import {computed, toSignal, Vec, type Signal, type Val} from "@minim/signals";
+import { num,computed, Vec, type Signal, type Val} from "@minim/signals";
 import {Shape, type Segment} from "./shape";
 import {wireStroke, type CommonOpts} from "./common";
 
@@ -21,10 +21,10 @@ export class AnnularSector<
     a1: Val<number>,
     opts: O = {} as O,
   ) {
-    const ro = toSignal(rOuter);
-    const ri = toSignal(rInner);
-    const a0s = toSignal(a0);
-    const a1s = toSignal(a1);
+    const ro = num(rOuter);
+    const ri = num(rInner);
+    const a0s = num(a0);
+    const a1s = num(a1);
     super(
       "path",
       () => ({

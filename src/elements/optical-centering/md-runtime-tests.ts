@@ -2,7 +2,13 @@
 // drives it via `step(dt)` — synchronous and deterministic, no RAF.
 // Re-runs every few seconds so regressions surface live.
 
-import {Anim, Diagram, EventBus, Vec, Mount, Anchor, assemble, attract, centroid, circle, play, computed, detach, drift, signal, lens, every, forEach, label, loop, mean, meanRotation, meanScale, num, oscillate, vec, race, rect, splay, spring, swap, untilChange, untilPromise, type Animator} from "../../minim";
+import {
+  Anim, Diagram, EventBus, Vec, Mount, Anchor,
+  assemble, attract, centroid, circle, play, computed, detach, drift,
+  signal, lens, effect, every, forEach, label, loop, mean,
+  meanRotation, meanScale, num, oscillate, vec, race, rect, splay,
+  spring, swap, untilChange, untilPromise, type Animator,
+} from "../../minim";
 
 type Status = "pending" | "running" | "pass" | "fail";
 
@@ -775,7 +781,7 @@ const TESTS: TestCase[] = [
         { equals: (a, b) => a.x === b.x && a.y === b.y },
       );
       let fires = 0;
-      s.subscribe(() => fires++);
+      effect(() => { void s.value; fires++; });
       assert(fires === 1, `initial fire count was ${fires}, expected 1`);
       s.value = { x: 1, y: 2 };
       assert(fires === 1, `same-value write fired (${fires})`);
@@ -826,8 +832,8 @@ const TESTS: TestCase[] = [
       const p = vec(1, 2);
       let xFires = 0;
       let yFires = 0;
-      p.x.subscribe(() => xFires++);
-      p.y.subscribe(() => yFires++);
+      effect(() => { void p.x.value; xFires++; });
+      effect(() => { void p.y.value; yFires++; });
       assert(xFires === 1 && yFires === 1, `initial fires off`);
       p.x.value = 99;
       assert(xFires === 2, `x didn't fire on x-write (${xFires})`);
@@ -866,25 +872,25 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "vec(literal) → Point; vec(signal) → DerivedPoint",
+    name: "vec(literal) and vec(signal) both produce Vec",
     run: (assert) => {
       const lit = vec(1, 2);
-      assert(Vec.isWritable(lit), `vec(num,num) should be writable Vec`);
+      assert(lit instanceof Vec, `vec(num,num) is Vec`);
       const s = signal(5);
       const der = vec(s, 10);
-      assert(Vec.is(der) && !Vec.isWritable(der), `vec(sig,num) should be derived Vec`);
+      assert(der instanceof Vec, `vec(sig,num) is Vec (derived flavor)`);
       assert(der.x.value === 5 && der.y.value === 10, `derived read off`);
       s.value = 99;
       assert(der.x.value === 99, `derived didn't follow source: ${der.x.value}`);
     },
   },
   {
-    name: "point math returns DerivedPoint",
+    name: "point math returns reactive Vec",
     run: (assert) => {
       const a = vec(1, 2);
       const b = vec(3, 4);
       const sum = a.add(b);
-      assert(Vec.is(sum) && !Vec.isWritable(sum), `add result must be derived Vec`);
+      assert(sum instanceof Vec, `add result must be a Vec (derived)`);
       assert(sum.value.x === 4 && sum.value.y === 6, `sum value off`);
       a.value = { x: 10, y: 20 };
       assert(sum.value.x === 13 && sum.value.y === 24, `sum didn't react`);
@@ -896,7 +902,7 @@ const TESTS: TestCase[] = [
       const a = { translate: vec(0, 0) };
       const b = { translate: vec(100, 50) };
       const c = centroid(a, b);
-      assert(Vec.isWritable(c), `centroid should be a writable Vec`);
+      assert(c instanceof Vec, `centroid should be a writable Vec`);
       assert(c.value.x === 50 && c.value.y === 25, `initial avg off`);
       c.value = { x: 60, y: 35 };
       assert(a.translate.peek().x === 10, `a.x after write: ${a.translate.peek().x}`);
@@ -931,7 +937,7 @@ const TESTS: TestCase[] = [
       const a = vec(0, 0 );
       const b = vec(100, 50 );
       const m = mean(a, b);
-      assert(Vec.isWritable(m), `mean of Vecs should return a writable Vec`);
+      assert(m instanceof Vec, `mean of Vecs should return a writable Vec`);
       assert(m.value.x === 50 && m.value.y === 25, `initial mean off`);
       m.value = { x: 60, y: 35 }; // delta (10, 10)
       assert(a.peek().x === 10 && a.peek().y === 10, `a not shifted: ${JSON.stringify(a.peek())}`);
@@ -969,7 +975,7 @@ const TESTS: TestCase[] = [
       // 100×60 rect at (50, 70). Identity transform → local center
       // == post-transform center == (100, 100).
       const r = rect(50, 70, 100, 60);
-      assert(Vec.isWritable(r.center), `shape.center must be a writable Vec`);
+      assert(r.center instanceof Vec, `shape.center must be a writable Vec`);
       assert(r.center.value.x === 100 && r.center.value.y === 100,
         `center initial: ${JSON.stringify(r.center.value)}`);
       // Write target (250, 300). Translate should shift by (150, 200).

@@ -13,7 +13,7 @@
 // marker signals the same way it does with any other signal, because
 // `marker.active` is just a Signal<boolean>.
 
-import {Diagram, Mount, Shape, signal, play, circle, computed, drive, line, loop, oscillate, vec, tokens, not} from "../../minim";
+import {Diagram, Mount, Shape, signal, play, circle, computed, drive, line, loop, not, oscillate, vec, tokens, type Read} from "../../minim";
 import {parts, tex, bindParts} from "../../minim/tex";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -85,7 +85,7 @@ const computeTicks = (T: number): string => {
 
 // ── Path shape factory ────────────────────────────────────────────────────────
 
-function makePath(d: ReturnType<typeof signal.derived<string>>): Shape {
+function makePath(d: Read<string>): Shape {
   const s = new Shape("path", () => ({ x: TL, y: CY - A_AMP - 12, w: TW, h: (A_AMP + 12) * 2 }));
   s.attr("fill", "none");
   s.attr("stroke-linecap", "round");

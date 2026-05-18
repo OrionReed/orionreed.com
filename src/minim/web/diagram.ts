@@ -5,9 +5,8 @@
 import { Anim, attachRaf } from "@minim/core";
 export { attachRaf };
 import {
-  derived, computed, effect, toSignal,
-  Box, type BoxLike, type BoxValue,
-  type Val,
+  num, derived, computed, effect,
+  Box, type Val,
 } from "@minim/signals";
 import { Shape, SVG_NS, mount, ensureArrowMarker, type Mount } from "@minim/shapes";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
@@ -128,10 +127,10 @@ export class Diagram extends HTMLElement {
    *  First call wins; subsequent calls (and the auto-fit fallback) are
    *  no-ops. Returns a Reactive `Box` for layout use (`view.w.value`,
    *  `view.center`, etc.). */
-  view(w: Val<number>, h: Val<number>): BoxLike {
+  view(w: Val<number>, h: Val<number>): Box {
     if (this.#viewSet) return this.#viewBox;
-    const ws = toSignal(w);
-    const hs = toSignal(h);
+    const ws = num(w);
+    const hs = num(h);
     effect(() => this.setViewBox(0, 0, ws.value, hs.value));
     this.#viewSet = true;
     return this.#viewBox;
@@ -139,7 +138,7 @@ export class Diagram extends HTMLElement {
 
   /** Auto-fit viewBox to the root's bounds + optional padding. Called
    *  automatically after `scene()` when `view()` wasn't invoked. */
-  fit(padding?: Padding): BoxLike {
+  fit(padding?: Padding): Box {
     if (this.#viewSet) return this.#viewBox;
     const p = resolvePadding(padding);
     const b = this.root.box.value;

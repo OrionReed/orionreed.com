@@ -3,7 +3,7 @@
 // Visualised by a current pick label, a candidates menu, and a rolling
 // history strip.
 
-import {Diagram, Mount, Anchor, bounceIn, signal, computed, circle, easeIn, easeInOut, easeOut, fadeOut, label, loop, vec, rand, snapshot, type Animator, type Content, type Writable} from "../../minim";
+import {Diagram, Mount, Anchor, bounceIn, signal, computed, circle, easeIn, easeInOut, easeOut, fadeOut, label, loop, vec, rand, snapshot, type Animator, type Content, type Has} from "../../minim";
 
 const STAGE_X = 240;
 const STAGE_Y = 120;
@@ -14,7 +14,7 @@ interface Pick {
   color: string;
 }
 
-type Subject = Writable<"translate" | "rotate" | "scale" | "opacity">;
+type Subject = Has<"translate" | "rotate" | "scale" | "opacity">;
 
 interface Move {
   name: string;
@@ -80,7 +80,7 @@ export class MdRand extends Diagram {
 
     // ── State ────────────────────────────────────────────────────────
     const current = signal<Pick | null>(null);
-    const currentName = signal.derived<Content>(() => current.value?.name ?? "—");
+    const currentName = computed<Content>(() => current.value?.name ?? "—");
     const currentColor = computed(() => current.value?.color ?? "#1a1a1a");
 
     // ── Header ───────────────────────────────────────────────────────

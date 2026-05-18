@@ -15,10 +15,16 @@
 //     txt.to("goodbye", 0.6),
 //   ]
 //
-// Strings (and other non-record types) use `lerpable(initial, lerp)` —
-// a tiny helper that stamps the same `[LERP]` slot on a plain Signal.
+// Strings (and other non-record types) author a tiny `class Foo extends
+// Signal<T>` + `defineTrait(Foo, LERP, lerpFn)` — same one-method
+// pattern Vec / Box / Color use.
 
-import {Anchor, Box, Color, Diagram, Mount, Vec, circle, computed, label, lerpable, loop, num, tween, vec, rect, rgb, type Lerp} from "../../minim";
+import {
+  Anchor, Box, Color, Diagram, Mount, Vec,
+  circle, computed, label, loop, num, tween, vec, rect, rgb,
+  Signal, defineTrait, LERP,
+  type Lerp, type LerpMethods,
+} from "../../minim";
 
 const W = 640;
 const H = 320;
@@ -38,6 +44,11 @@ const stringLerp: Lerp<string> = (a, b, t) => {
   if (t <= 0.5) return a.slice(0, Math.round(a.length * (1 - t * 2)));
   return b.slice(0, Math.round(b.length * (t - 0.5) * 2));
 };
+
+/** A reactive string with a `[LERP]` slot — same pattern Vec / Box use. */
+class Text extends Signal<string> {}
+interface Text extends LerpMethods<string> {}
+defineTrait(Text, LERP, stringLerp);
 
 const fmtNum = (n: number) => n.toFixed(2);
 const fmtVec = (v: { x: number; y: number }) =>
@@ -86,10 +97,9 @@ export class MdLerps extends Diagram {
     const pos = vec(VIS_X + 12, baseY(1) );
     const box = new Box({ x: VIS_X + 4, y: rowY(2) - 6, w: 30, h: 20 });
     const col = rgb(0.4, 0.6, 0.9);
-    // `lerpable(...)` stamps `[LERP]` on a plain Signal — no `.to()`
-    // method, but the standalone `tween(sig, target, dur)` still works
-    // because `tween()` reads the slot via prototype lookup.
-    const txt = lerpable("hello", stringLerp);
+    // Custom value type: subclass `Signal<string>` + `defineTrait(LERP)`
+    // gives `txt.to(target, dur)` the same as Vec/Box/Color.
+    const txt = new Text("hello");
 
     // ── Visuals ────────────────────────────────────────────────────
     //

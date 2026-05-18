@@ -9,7 +9,7 @@
 //   C ─── CHOICE ─┬─ Z                   (random one-of branch)
 //                 └─ W
 
-import {Diagram, EventBus, Mount, type AnyShape, type Val, type Path, signal, circle, computed, label, linear, loop, num, path, play, vec, rect, toSignal, tokens, Vec} from "../../minim";
+import {Diagram, EventBus, Mount, type AnyShape, type Val, type Path, signal, circle, computed, label, linear, loop, num, path, play, vec, rect, tokens, value, Vec} from "../../minim";
 import * as R from "../rand";
 
 export class MdCircuit extends Diagram {
@@ -76,7 +76,7 @@ export class MdCircuit extends Diagram {
     /** Indicator dot toggled by a reactive boolean. */
     const lit = (at: Vec, on: Val<boolean>) =>
       circle(at, 4, {
-        fill: () => (toSignal(on).value ? tokens.stroke : "transparent"),
+        fill: () => (value(on) ? tokens.stroke : "transparent"),
       });
 
     // Reactive auto-route — endpoints track visual boundaries as

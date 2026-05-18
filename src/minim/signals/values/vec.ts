@@ -25,14 +25,26 @@ export const normalize = (v: Value): Value => {
 /** 90° CCW rotation (y-down: rotates left): `(x, y) → (y, -x)`. */
 export const perp = (v: Value): Value => ({ x: v.y, y: -v.x });
 
-export class Vec extends Signal<Value> {
-  constructor(v: Value = { x: 0, y: 0 }) { super(v); }
+/** Op surface — every closed-on-Vec operation. Both the reactive
+ *  `Vec` class and the mutating `Chain` builder implement this, so
+ *  drift between them is a type error. `R` is the return type
+ *  (`Vec` for the reactive form, `Chain` for the fused form). */
+interface VecOps<R> {
+  add(b: Val<Value>): R;
+  sub(b: Val<Value>): R;
+  scale(k: Val<number>): R;
+  lerp(b: Val<Value>, t: Val<number>): R;
+  up(n: Val<number>): R;
+  down(n: Val<number>): R;
+  left(n: Val<number>): R;
+  right(n: Val<number>): R;
+  offset(dx: Val<number>, dy: Val<number>): R;
+  normalize(): R;
+  perp(): R;
+}
 
-  /** Type guard — `true` for any Vec cell (writable or derived). */
-  static is(v: unknown): v is Vec { return v instanceof Vec; }
-  /** Currently identical to `is(v)` — in the new system every Vec cell
-   *  is writable (derived ones reactively update on parent change). */
-  static isWritable(v: unknown): v is Vec { return v instanceof Vec; }
+export class Vec extends Signal<Value> implements VecOps<Vec> {
+  constructor(v: Value = { x: 0, y: 0 }) { super(v); }
 
   add(b: Val<Value>) { return derived(Vec, () => add(this.value, value(b))); }
   sub(b: Val<Value>) { return derived(Vec, () => sub(this.value, value(b))); }
@@ -72,13 +84,22 @@ export class Vec extends Signal<Value> {
 }
 export interface Vec extends LerpMethods<Value> {}
 
-class Chain extends BaseChain<Value> {
+class Chain extends BaseChain<Value> implements VecOps<Chain> {
   add(b: Val<Value>) { this.value = add(this.value, value(b)); return this; }
   sub(b: Val<Value>) { this.value = sub(this.value, value(b)); return this; }
   scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
   lerp(b: Val<Value>, t: Val<number>) {
     this.value = lerp(this.value, value(b), value(t)); return this;
   }
+  up(n: Val<number>)    { this.value = { x: this.value.x,            y: this.value.y - value(n) }; return this; }
+  down(n: Val<number>)  { this.value = { x: this.value.x,            y: this.value.y + value(n) }; return this; }
+  left(n: Val<number>)  { this.value = { x: this.value.x - value(n), y: this.value.y }; return this; }
+  right(n: Val<number>) { this.value = { x: this.value.x + value(n), y: this.value.y }; return this; }
+  offset(dx: Val<number>, dy: Val<number>) {
+    this.value = { x: this.value.x + value(dx), y: this.value.y + value(dy) }; return this;
+  }
+  normalize() { this.value = normalize(this.value); return this; }
+  perp() { this.value = perp(this.value); return this; }
 }
 
 defineTrait(Vec, LINEAR, { add, sub, scale });
@@ -93,29 +114,20 @@ export const vec = (x: Val<number> = 0, y: Val<number> = 0): Vec => {
   return v;
 };
 
-/** Vec from polar coords (radius, angle in radians). Reactive if any
- *  arg is reactive. With three args, offsets from `center`. */
-export function polar(r: Val<number>, a: Val<number>): Vec;
-export function polar(center: Val<Value>, r: Val<number>, a: Val<number>): Vec;
-export function polar(
-  rOrCenter: Val<number> | Val<Value>,
-  aOrR: Val<number>,
-  a?: Val<number>,
-): Vec {
+/** Reactive Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`.
+ *  All three args may be reactive. For polar around origin pass
+ *  `{ x: 0, y: 0 }` (a Vec literal). */
+export const polar = (
+  center: Val<Value>,
+  r: Val<number>,
+  a: Val<number>,
+): Vec => {
   const out = new Vec();
-  if (a === undefined) {
-    out.bind(() => {
-      const rv = value(rOrCenter as Val<number>);
-      const av = value(aOrR);
-      return { x: rv * Math.cos(av), y: rv * Math.sin(av) };
-    });
-  } else {
-    out.bind(() => {
-      const c = value(rOrCenter as Val<Value>);
-      const rv = value(aOrR);
-      const av = value(a);
-      return { x: c.x + rv * Math.cos(av), y: c.y + rv * Math.sin(av) };
-    });
-  }
+  out.bind(() => {
+    const c = value(center);
+    const rv = value(r);
+    const av = value(a);
+    return { x: c.x + rv * Math.cos(av), y: c.y + rv * Math.sin(av) };
+  });
   return out;
-}
+};

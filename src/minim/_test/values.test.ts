@@ -3,7 +3,7 @@
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 import {
-  signal, effect,
+  Signal, signal, effect,
   classOf, linearOf, requireLinear, requireLerp,
   LINEAR,
   vec, Vec, num, Num, rgb, Color, box, Box, transform, Transform,
@@ -120,6 +120,26 @@ describe("values", () => {
       const linear = linearOf(v)!;
       const sum = linear.add({ x: 1, y: 1 }, { x: 2, y: 3 });
       check("linearOf(v).add works", sum.x === 3);
+    }
+
+    section("instanceof identity — direct + derived");
+    // Regression: derived(Cls, ...) must produce instances that pass
+    // `instanceof Cls`, because consumers use this to narrow (e.g.
+    // `path(start: Vec | Vec[])` distinguishes via `instanceof Vec`).
+    {
+      const lit = vec(1, 2);
+      check("vec(...) instanceof Vec", lit instanceof Vec);
+      const der = lit.add({ x: 1, y: 1 });
+      check("derived Vec instanceof Vec", der instanceof Vec);
+      check("derived Vec instanceof Signal too", der instanceof Signal);
+      const field = lit.x;
+      check("vec.x (field lens) instanceof Num", field instanceof Num);
+
+      const b = box(0, 0, 10, 10);
+      check("box(...) instanceof Box", b instanceof Box);
+      const bDer = b.expand(5);
+      check("derived Box instanceof Box", bDer instanceof Box);
+      check("box.center instanceof Vec", b.center instanceof Vec);
     }
 
     section("requireLinear / requireLerp");

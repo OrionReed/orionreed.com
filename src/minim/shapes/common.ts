@@ -1,7 +1,6 @@
 // Shared style options + applier for stroked/filled shapes.
 
-import {computed, toSignal, type Val} from "@minim/signals";
-import {signal} from "@minim/signals";
+import { computed, signal, value, type Val } from "@minim/signals";
 import type {AnyShape, ShapeOpts} from "./shape";
 import {tokens} from "./tokens";
 import {dashedPath} from "./dashed";
@@ -72,7 +71,7 @@ export function setupDashed<S extends AnyShape>(
   const stroke =
     opts.strokeWidth === undefined
       ? (opts.thin ? tokens.thinWeight : tokens.weight)
-      : toSignal(opts.strokeWidth).value;
+      : value(opts.strokeWidth);
   const capExt = cap === "round" ? stroke : 0;
 
   s.attr(

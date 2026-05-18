@@ -1,7 +1,7 @@
 // Labelled, clickable region — group + tinted-rect + label, with
 // hover/click handlers wired.
 
-import {toSignal, type Val} from "@minim/signals";
+import { num,type Val} from "@minim/signals";
 import {signal, computed, type Signal} from "@minim/signals";
 import {type AnyShape} from "./shape";
 import {Anchor, vec, Vec} from "@minim/signals";
@@ -30,7 +30,7 @@ export function button(
 ): AnyShape {
   const w = opts.width ?? 80;
   const h = opts.height ?? 26;
-  const size = toSignal(opts.size ?? 11);
+  const size = num(opts.size ?? 11);
   const hovered = opts.hovered ?? signal(false);
 
   const g = group({ translate: pos });

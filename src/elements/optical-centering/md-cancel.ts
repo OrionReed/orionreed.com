@@ -12,7 +12,7 @@
 // modes are signal-coordinated — buttons set signals, generators react
 // via the standard fluent vocabulary.
 
-import {Diagram, Mount, Anchor, button, signal, play, circle, fadeOut, label, loop, num, oscillate, vec, type Animator, type Signal, type Content, type Writable, Num} from "../../minim";
+import {Diagram, Mount, Anchor, button, signal, play, circle, fadeOut, label, loop, num, oscillate, vec, type Animator, type Signal, type Content, type Has, Num} from "../../minim";
 
 const N_SLOTS = 12;
 const SHAPE_Y = 40;
@@ -23,7 +23,7 @@ const BTN_H = 26;
 const BTN_GAP = 12;
 
 function* lifecycle(
-  shape: Writable<"opacity">,
+  shape: Has<"opacity">,
   y: Num,
   amp: number,
   freq: number,
@@ -51,7 +51,7 @@ export class MdCancel extends Diagram {
       // `y` is a `Num.signal` (rather than plain `signal(...)`) so the
       // oscillate integrator can read its `[ALGEBRA]` slot.
       y: Num;
-      shape: Writable<"opacity">;
+      shape: Has<"opacity">;
     };
     const slots: Slot[] = [];
     const stride = (view.w.value - 60) / (N_SLOTS - 1);

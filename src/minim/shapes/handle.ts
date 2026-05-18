@@ -10,7 +10,7 @@
 // via the `--minim-handle` CSS var.
 
 import {derived, Vec, mean, type Signal} from "@minim/signals";
-import {Shape, type AnyShape, type Writable} from "./shape";
+import {Shape, type AnyShape, type Has} from "./shape";
 import {draggable} from "./interaction";
 import {circle} from "./circle";
 import type {Path} from "./path";
@@ -60,14 +60,14 @@ function handleFn(target: Vec, opts: HandleOpts = {}): Shape {
 
 /** Drag handle at the shape's center — drags translate the shape. */
 const move = (
-  shape: AnyShape & Writable<"translate">,
+  shape: AnyShape & Has<"translate">,
   opts?: HandleOpts,
 ): Shape => handleFn(shape.center, opts);
 
 /** Drag handle at a specific anchor `(u, v)` of the shape — drag
  *  translates the shape so that anchor lands at the pointer. */
 const anchor = (
-  shape: AnyShape & Writable<"translate">,
+  shape: AnyShape & Has<"translate">,
   u: number,
   v: number,
   opts?: HandleOpts,
@@ -79,7 +79,7 @@ const anchor = (
  *  give the actual centroid of the visible positions (not of translate
  *  deltas — see `centroid` in `shape.ts` for that variant). */
 const centroidHandle = (
-  ...shapes: (AnyShape & Writable<"translate">)[]
+  ...shapes: (AnyShape & Has<"translate">)[]
 ): Shape => handleFn(mean(...shapes.map((s) => s.center)));
 
 /** Drag handle at the midpoint of two writable Points — drags both
@@ -91,7 +91,7 @@ const midpoint = (a: Vec, b: Vec, opts?: HandleOpts): Shape =>
  *  position is `center + (r cos θ, r sin θ)` for `θ = shape.rotate`;
  *  drag the knob to write θ. */
 const rotate = (
-  shape: AnyShape & Writable<"rotate">,
+  shape: AnyShape & Has<"rotate">,
   radius = 40,
   opts?: HandleOpts,
 ): Shape => {
@@ -112,7 +112,7 @@ const rotate = (
 /** Uniform-scale knob — sits along +x from the shape's center at
  *  `radius * scale.x`. Drag x-distance writes both scale axes. */
 const scaleHandle = (
-  shape: AnyShape & Writable<"scale">,
+  shape: AnyShape & Has<"scale">,
   radius = 40,
   opts?: HandleOpts,
 ): Shape => {
