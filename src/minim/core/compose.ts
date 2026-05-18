@@ -1,22 +1,26 @@
 // Signal-free generator combinators on top of `Anim`.
 //
-//   Yieldable constructors:  drive, suspend
-//   Concurrency:             all, race, rand
-//   Wrappers:                mapDt, withScale
-//   Bridges:                 untilEvent, untilPromise
+//   Yieldable constructors:  drive, suspend, untilEvent, untilPromise
+//   Concurrency (over cut):  all, race, firstN, firstMatching,
+//                            anySuccess, allSettled, commit, rand
+//   Time-scale:              withScale (engine-native, propagates)
 //   RAF adapter:             attachRaf
 //
-// Notable absences: timeout/cancel wrappers (`withTimeout`, `unless`).
-// They were 1-2 line compositions over `race` + a numeric sleep and
-// metastasized into API sprawl. Inline the composition: `race(work, 5)`
-// for a 5-second cap, `race(work, when(stop))` for a signal-bound cancel.
+// Every concurrency combinator is a generator that wraps each kid in
+// a function that decides what its completion means for the group
+// (via `cut(v)`). No `spawnYieldable`, no SuspendFn boilerplate, no
+// engine-side strategy abstraction.
+//
+// `mapDt` is gone: the control-up/time-down principle it illustrated
+// (a generator forwarding scaled dt to a child) is shown inline in
+// the post. `withScale` is the engine-native version that propagates
+// through orchestration boundaries.
 
 import {
-  Anim,
-  asGen,
-  isGen,
+  cut,
+  scaled,
   type Animator,
-  type SpawnFn,
+  type Cut,
   type Suspend,
   type Yieldable,
   type Resume,
@@ -27,8 +31,8 @@ import {
 // ════════════════════════════════════════════════════════════════════
 
 /** `yield* drive(cb)` parks each frame until `cb` returns `false`.
- *  Plain generator — composes with `mapDt`, `race`, etc. through the
- *  standard yield seam. */
+ *  Plain generator — composes with `withScale`, `race`, etc. through
+ *  the standard yield seam. */
 export function* drive(
   cb: (dt: number, t: number) => boolean | void,
 ): Animator<void> {
@@ -74,77 +78,99 @@ export function untilPromise<T>(p: PromiseLike<T>): Animator<T> {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Concurrency combinators
+// Concurrency combinators — all express settlement rules via `cut`.
 // ════════════════════════════════════════════════════════════════════
 
-/** Internal: subscribe a Yieldable from inside a Suspend body. Bare
- *  Suspend impls subscribe directly (sharing the parent's `spawn` so
- *  nested combinators don't re-wrap); generators pass through to
- *  preserve their return value; other shapes wrap via `asGen`. */
-function spawnYieldable(
-  y: Yieldable,
-  spawn: SpawnFn,
-  anim: Anim,
-  onDone: (v: any) => void,
-): () => void {
-  if (isGen(y)) return spawn(y, onDone);
-  if (typeof y === "function") {
-    return (y as Suspend<any> as (
-      w: (v: any) => void, s: SpawnFn, a: Anim,
-    ) => () => void)(onDone, spawn, anim);
-  }
-  return spawn(asGen(y), onDone);
+/** Wrap a Yieldable so it cuts its enclosing group with its own result.
+ *  `yield k` directly dispatches on `k`'s shape (gen → child + return,
+ *  number → sleep + dt, etc.) — this is the engine seam. */
+export function* commit<T>(k: Yieldable): Animator<Cut<T>> {
+  return cut((yield k) as T);
 }
 
 /** Run children in parallel; resume with a typed tuple of return values
- *  when all complete. Errors propagate from the first kid that throws. */
-export function all<Cs extends readonly Yieldable[]>(
+ *  when all complete. Pure pass-through over the engine primitive. */
+export function* all<Cs extends readonly Yieldable[]>(
   ...children: Cs
 ): Animator<{ [K in keyof Cs]: Resume<Cs[K]> }> {
-  type R = { [K in keyof Cs]: Resume<Cs[K]> };
-  return suspend<R>((wake, spawn, anim) => {
-    if (children.length === 0) {
-      wake([] as unknown as R);
-      return () => {};
-    }
-    const results = new Array(children.length);
-    let remaining = children.length;
-    const disposers: (() => void)[] = [];
-    for (let i = 0; i < children.length; i++) {
-      const idx = i;
-      disposers.push(spawnYieldable(children[i], spawn, anim, (v) => {
-        results[idx] = v;
-        if (--remaining === 0) wake(results as unknown as R);
-      }));
-    }
-    return () => { for (const d of disposers) d(); };
-  });
+  return (yield children) as { [K in keyof Cs]: Resume<Cs[K]> };
 }
 
-/** First-completion race; resume with the winner's payload. Losers are
- *  cancelled. */
-export function race<Cs extends readonly Yieldable[]>(
+/** First-completion race; resume with the winner's payload. Each kid
+ *  is wrapped in `commit` so its completion cuts the group. */
+export function* race<Cs extends readonly Yieldable[]>(
   ...children: Cs
 ): Animator<Resume<Cs[number]>> {
-  type R = Resume<Cs[number]>;
-  return suspend<R>((wake, spawn, anim) => {
-    let won = false;
-    const disposers: (() => void)[] = [];
-    const safeWake = (v: any): void => {
-      if (won) return;
-      won = true;
-      for (const d of disposers) try { d(); } catch {}
-      wake(v as R);
-    };
-    for (const c of children) {
-      disposers.push(spawnYieldable(c, spawn, anim, safeWake));
-    }
-    return () => {
-      if (won) return;
-      won = true;
-      for (const d of disposers) try { d(); } catch {}
-    };
-  });
+  return (yield children.map((c) => commit(c))) as Resume<Cs[number]>;
+}
+
+/** First N completions win; resume with the first N return values in
+ *  completion order. Closure counter shared across kid wrappers. */
+export function* firstN<R>(
+  n: number,
+  kids: readonly Yieldable[],
+): Animator<R[]> {
+  const collected: R[] = [];
+  return (yield kids.map((k) =>
+    (function* (): Animator<R | Cut<R[]>> {
+      const v = (yield k) as R;
+      collected.push(v);
+      return collected.length >= n ? cut(collected) : v;
+    })(),
+  )) as unknown as R[];
+}
+
+/** First kid whose value matches `pred` cuts the group with that value.
+ *  Non-matching kids contribute their value; if no kid matches, the
+ *  group settles with the full results array. */
+export function* firstMatching<R>(
+  pred: (v: R) => boolean,
+  kids: readonly Yieldable[],
+): Animator<R | R[]> {
+  return (yield kids.map((k) =>
+    (function* (): Animator<R | Cut<R>> {
+      const v = (yield k) as R;
+      return pred(v) ? cut(v) : v;
+    })(),
+  )) as unknown as R | R[];
+}
+
+/** First kid to fulfil (resolve, not throw) cuts the group. If every
+ *  kid throws, settles with `AggregateError` (mirrors `Promise.any`). */
+export function* anySuccess<R>(...kids: readonly Yieldable[]): Animator<R> {
+  const errors: unknown[] = [];
+  return (yield kids.map((k) =>
+    (function* (): Animator<Cut<R> | undefined> {
+      try {
+        return cut((yield k) as R);
+      } catch (e) {
+        errors.push(e);
+        if (errors.length === kids.length) {
+          throw new AggregateError(errors, "anySuccess: all kids failed");
+        }
+        return undefined;
+      }
+    })(),
+  )) as unknown as R;
+}
+
+/** Run every kid; collect results and errors. Never throws. */
+export type Settled<R> =
+  | { readonly ok: true; readonly value: R }
+  | { readonly ok: false; readonly error: unknown };
+
+export function* allSettled<R>(
+  ...kids: readonly Yieldable[]
+): Animator<Settled<R>[]> {
+  return (yield kids.map((k) =>
+    (function* (): Animator<Settled<R>> {
+      try {
+        return { ok: true, value: (yield k) as R };
+      } catch (e) {
+        return { ok: false, error: e };
+      }
+    })(),
+  )) as unknown as Settled<R>[];
 }
 
 /** Pick one of `children` uniformly at random and run it. Construction
@@ -156,59 +182,16 @@ export function* rand(...children: Animator[]): Animator {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Wrappers — drive other gens via the standard yield seam
-//
-// `mapDt` is a generator-local wrapper: scale flows through the single
-// gen's yields but does NOT propagate to children spawned by race/all
-// inside it. For multi-active propagation use `withScale`.
-//
-// `withScale` is the engine-native time-scale primitive: it installs
-// the scale on a child Active so the scale propagates through every
-// orchestration boundary via the parent pointer.
+// Time-scale — one primitive. `mapDt` is gone; the control-up/time-down
+// idiom (a generator forwarding scaled dt to a child) is illustrated
+// inline in the post and doesn't need its own helper.
 // ════════════════════════════════════════════════════════════════════
 
-/** Transform `dt` flowing through an inner gen.
- *
- *  Two cases:
- *    • Numeric yields (sleeps) expand into a per-frame accumulator that
- *      adds `fn(dt)` each tick until the original N is reached.
- *      Reactive `fn` (e.g. paused → 0) stalls the timer mid-flight.
- *    • Resume values (per-frame `dt` to the gen) pass through `fn` so
- *      frame-yielding generators see the scaled `dt`.
- *
- *  Generator-local — does NOT propagate to spawned children. Use
- *  `withScale` for scope-propagating scaling. */
-export function* mapDt<R>(fn: (dt: number) => number, gen: Animator<R>): Animator<R> {
-  let resume: number = 0;
-  try {
-    while (true) {
-      const r = gen.next(resume);
-      if (r.done) return r.value;
-      const v = r.value;
-      if (typeof v === "number" && Number.isFinite(v) && v > 0) {
-        let acc = 0;
-        while (acc < v) acc += fn(yield);
-        resume = 0;
-      } else {
-        const back = (yield v) as unknown;
-        resume = typeof back === "number" ? fn(back) : (back as number);
-      }
-    }
-  } finally { gen.return(undefined as never); }
-}
-
-/** Spawn `gen` as a child Active with `scaleFn` as its time-scale.
- *
- *  Every descendant inherits the scale via the parent chain, so
- *  `withScale(() => 0, race(a, b))` truly pauses both children. This
- *  is the engine-native alternative to wrapping with `mapDt` — no
- *  per-frame accumulator, propagates through orchestration boundaries,
- *  and `scaleFn() === 0` skips the subtree entirely (gen.next is never
- *  called → frame counters freeze, drive callbacks don't fire). */
+/** Spawn `gen` as a child active with `scaleFn` as its time-scale. All
+ *  of gen's descendants inherit the scale through the parent chain, so
+ *  `withScale(() => 0, race(a, b))` truly pauses both children. */
 export function* withScale<R>(scaleFn: () => number, gen: Animator<R>): Animator<R> {
-  return yield* suspend<R>((_wake, spawn) => {
-    return spawn(gen, (v) => _wake(v as R), scaleFn);
-  });
+  return (yield scaled(scaleFn, gen)) as R;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -219,7 +202,7 @@ export function* withScale<R>(scaleFn: () => number, gen: Animator<R>): Animator
  *  backgrounding (where browsers throttle then resume with the
  *  accumulated delta) doesn't deliver one giant frame. Returns a
  *  disposer that cancels the RAF loop. */
-export function attachRaf(anim: Anim): () => void {
+export function attachRaf(anim: { step(dt: number): void }): () => void {
   if (typeof requestAnimationFrame !== "function") return () => {};
   const FRAME_CAP_MS = 32;
   let rafId = 0, last = 0;

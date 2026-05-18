@@ -303,18 +303,6 @@ describe("cancel", () => {
     expect(afterMore).toBe(0);
   });
 
-  it("parent cancel cascades to child spawned via Suspend's spawn arg", () => {
-    let leafDisposed = false;
-    function* leaf(): any { yield* suspend(() => () => { leafDisposed = true; }); }
-    function* parent(): any {
-      yield* suspend((_w, spawn) => { spawn(leaf()); return () => {}; });
-    }
-    const d = anim.start(parent);
-    anim.step(0.016);
-    d();
-    expect(leafDisposed).toBe(true);
-  });
-
   it("parent cancel cascades to children spawned via yield-array", () => {
     let leafDisposed = false;
     function* leaf(): any {
@@ -502,54 +490,41 @@ describe("AnimObserver", () => {
     expect(cancels).toBe(1);
   });
 
-  it("links child to parent via parentId on spawn-from-suspend", () => {
-    const spawns: Array<[number, number | undefined]> = [];
-    anim.observer = { spawn: (id, parentId) => spawns.push([id, parentId]) };
-    function* leaf(): any { yield; }
-    function* parent(): any {
-      yield* suspend((_w, spawn) => { spawn(leaf()); return () => {}; });
-    }
-    anim.start(parent);
-    anim.step(0.016);
-    expect(spawns.length).toBe(2);
-    expect(spawns[0][1]).toBeUndefined();    // parent has no parentId
-    expect(spawns[1][1]).toBe(spawns[0][0]); // leaf's parentId === parent's id
-  });
 });
 
 describe("composability", () => {
-  it("mapDt scales dt seen by the inner gen", async () => {
-    const { mapDt } = await import("@minim/core");
+  it("withScale scales dt seen by the inner gen", async () => {
+    const { withScale } = await import("@minim/core");
     const anim = new Anim();
     let lastDt = 0;
     function* g(): any { while (true) { lastDt = yield; } }
-    anim.start(mapDt((dt) => dt * 0.5, g()));
+    anim.start(withScale(() => 0.5, g()));
     anim.step(1.0);
     expect(lastDt).toBeCloseTo(0.5, 9);
     anim.stop();
   });
 
-  it("mapDt(0, ...) freezes numeric `yield N` sleeps", async () => {
-    // `at(0)` is the universal pause primitive: dt=0 stalls per-frame
-    // drive callbacks AND wall-clock sleeps, because mapDt expands
-    // numeric yields into per-frame accumulators that obey the scale.
-    const { mapDt } = await import("@minim/core");
+  it("withScale(0, ...) freezes numeric `yield N` sleeps", async () => {
+    // `at(0)` is the universal pause primitive: a scale=0 subtree is
+    // skipped entirely — gen.next is never called, wall-clock sleeps
+    // and per-frame drive callbacks alike are frozen.
+    const { withScale } = await import("@minim/core");
     const anim = new Anim();
     let done = false;
     function* g(): any { yield 1.0; done = true; }
-    anim.start(mapDt(() => 0, g()));
+    anim.start(withScale(() => 0, g()));
     for (let i = 0; i < 200; i++) anim.step(0.016);
     expect(done).toBe(false);
     anim.stop();
   });
 
-  it("mapDt with a reactive scale pauses and resumes a sleep", async () => {
-    const { mapDt } = await import("@minim/core");
+  it("withScale with a reactive scale pauses and resumes a sleep", async () => {
+    const { withScale } = await import("@minim/core");
     const anim = new Anim();
     let done = false;
     let scale = 1;
     function* g(): any { yield 1.0; done = true; }
-    anim.start(mapDt((dt) => dt * scale, g()));
+    anim.start(withScale(() => scale, g()));
     // Run halfway under scale=1.
     for (let i = 0; i < 30; i++) anim.step(1 / 60);
     expect(done).toBe(false);
@@ -652,12 +627,12 @@ describe("onStep", () => {
 });
 
 describe("composition", () => {
-  it("drive composes with mapDt for time-scaling", async () => {
-    const { mapDt } = await import("@minim/core");
+  it("drive composes with withScale for time-scaling", async () => {
+    const { withScale } = await import("@minim/core");
     const anim = new Anim();
     let total = 0;
     anim.start(function* () {
-      yield* mapDt((dt: number) => dt * 2, drive((dt) => { total += dt; }));
+      yield* withScale(() => 2, drive((dt) => { total += dt; }));
     });
     anim.step(0.05);
     anim.step(0.05);

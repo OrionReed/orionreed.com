@@ -56,7 +56,7 @@ export { forEach, type ForEachOptions } from "./list";
 // `transitions` are bounded poses (`fadeIn`, `slideOut`, …) that operate
 // on a Shape's animatable fields. `choreographers` are multi-shape
 // recipes (`swap`, `splay`, `stagger`, `orbit`). Both compose over the
-// generic `tween` engine — see `@minim/values` for `spring`/`oscillate`
+// generic `tween` engine — see `@minim/signals` for `spring`/`attract`
 // (single-signal continuous behaviors).
 export {
   from,

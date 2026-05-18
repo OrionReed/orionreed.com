@@ -1,19 +1,34 @@
-// Generator-driven cooperative animation runtime
+// Generator-driven cooperative animation runtime.
 //
-// Yield contract:
+// Three structural attributes a spawned child can carry — each is a
+// yield-shape (a symbol-keyed object) the engine dispatches on:
+//
+//   detach(g)         — child outlives parent (lifecycle-independent)
+//   scaled(rate, g)   — child's dt is time-warped (rate-independent)
+//   cut(v)            — kid's *return value*; settles enclosing group
+//                       with v, cancels siblings (settlement-shape)
+//
+// Plus the primary yield meanings:
+//
 //   undefined     park 1 frame; resume with dt
 //   number > 0    sleep N seconds; resume with dt
 //   number ≤ 0    tail-call; resume immediately (no frame consumed)
-//   Animator      spawn child; resume with R when it completes
+//   Animator      spawn child; resume with its return value
 //   Yieldable[]   run concurrently; resume with results[]
-//   Suspend       callback-wake; resume with wake's value
-//   detach(g)     spawn at engine root; resume immediately
+//   Suspend       callback-wake (pure `(wake) => dispose`)
+//
+// Cut is *return-based only* and *lexically scoped*: a kid in a
+// concurrent group whose final value is `cut(v)` settles its direct
+// parent group with `v`. Outside a group, `cut(v)` is unwrapped to
+// `v` (Prolog's `!` outside a choice point is a no-op).
 
 const DEAD = -Infinity;
 const READY = 0;
 const PARKED = Infinity;
 
 const DETACH_KEY = Symbol.for("minim.detach");
+const SCALE_KEY = Symbol.for("minim.scale");
+const CUT_KEY = Symbol.for("minim.cut");
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -23,7 +38,8 @@ export type Yieldable =
   | Animator<any>
   | readonly Yieldable[]
   | Suspend<any>
-  | Detach;
+  | Detach
+  | Scaled<any>;
 
 export type Animator<R = void> = Generator<Yieldable, R, number>;
 
@@ -32,27 +48,19 @@ export type Wake<T = void> = ([T] extends [void]
   : (value: T) => void) & { throw(error: unknown): void };
 
 /** Resume value of a yielded shape — the type you receive after the
- *  yield completes. Animator → its return value; Suspend → wake's T. */
+ *  yield completes. Animator → its return value; Suspend → wake's T;
+ *  Scaled → inner gen's return. */
 export type Resume<Y> =
-  Y extends Animator<infer R> ? R : Y extends Suspend<infer R> ? R : void;
-
-/** Spawn a child Active from inside a Suspend impl. Optional `scale`
- *  installs a time-scale on the spawned active (and its descendants). */
-export type SpawnFn = <R>(
-  g: Animator<R> | (() => Animator<R>),
-  onDone?: (v: R) => void,
-  scale?: () => number,
-) => () => void;
+  Y extends Animator<infer R> ? R
+  : Y extends Suspend<infer R> ? R
+  : Y extends Scaled<infer R> ? R
+  : void;
 
 /** Callback-wake park primitive. Yielding a `Suspend<T>` parks the
  *  active; the impl receives `wake` and may call `wake(value)` to
- *  resume the gen, or `wake.throw(e)` to throw into it. Children
- *  spawned via `spawn` are auto-cancelled when the parent ends. */
-export type Suspend<T = void> = (
-  wake: Wake<T>,
-  spawn: SpawnFn,
-  anim: Anim,
-) => void | (() => void);
+ *  resume the gen, or `wake.throw(e)` to throw into it. Return an
+ *  optional disposer that runs on cancel. */
+export type Suspend<T = void> = (wake: Wake<T>) => void | (() => void);
 
 export interface AnimObserver {
   spawn?(
@@ -65,11 +73,38 @@ export interface AnimObserver {
   cancel?(id: number, clock: number): void;
 }
 
-export type Detach = { readonly [k: symbol]: Animator };
+// ── Yield shapes (structural attributes) ─────────────────────────────
 
+export type Detach = { readonly [DETACH_KEY]: Animator };
+
+/** Spawn `g` at engine-root, outliving the yielding parent. Resume is
+ *  synchronous (the parent does NOT park). Use sparingly — most
+ *  animations should be scoped to their parent's lifetime. */
 export const detach = <R>(g: Animator<R>): Detach => ({
   [DETACH_KEY]: g as Animator,
 });
+
+/** Spawn the inner gen with `rate` as its time-scale. All descendants
+ *  inherit the scale through the parent chain. `rate() === 0` skips the
+ *  entire subtree (gen.next is never called → no work, sleeps frozen). */
+export type Scaled<R> = {
+  readonly [SCALE_KEY]: { readonly rate: () => number; readonly gen: Animator<R> };
+};
+export const scaled = <R>(rate: () => number, gen: Animator<R>): Scaled<R> => ({
+  [SCALE_KEY]: { rate, gen },
+});
+
+/** Cut sentinel — a kid in a concurrent group whose final value is
+ *  `cut(v)` settles the group with `v` and cancels siblings. Outside a
+ *  group, `cut(v)` is silently unwrapped to `v` by the child/suspend
+ *  paths (Prolog's `!` semantics). */
+export type Cut<T> = { readonly [CUT_KEY]: T };
+export const cut = <T>(value: T): Cut<T> => ({ [CUT_KEY]: value });
+export const isCut = (v: unknown): v is Cut<unknown> =>
+  v !== null && typeof v === "object" && CUT_KEY in (v as object);
+const cutValue = <T>(v: Cut<T>): T => (v as { [CUT_KEY]: T })[CUT_KEY];
+const unwrapIfCut = (v: unknown): unknown =>
+  isCut(v) ? cutValue(v) : v;
 
 export const isGen = (v: unknown): v is Animator =>
   v !== null &&
@@ -328,21 +363,30 @@ export class Anim {
             return;
           }
           // Tail-call: yield N ≤ 0 resumes synchronously. Used by
-          // conditional sleeps like `holding(sig, v, dur)` where dur
-          // may evaluate to 0 — no frame penalty for zero wait.
+          // conditional sleeps where `dur` may evaluate to 0 — no
+          // frame penalty for zero wait.
           r = a.gen.next(0);
           continue;
         }
         if (typeof v === "function") return this.suspend(a, v);
         if (Array.isArray(v)) return this.concurrent(a, v);
         if (isGen(v)) return this.child(a, v);
-        if (typeof v === "object" && v !== null && DETACH_KEY in v) {
-          this.spawn((v as Record<symbol, Animator>)[DETACH_KEY], null, null);
-          r = a.gen.next(0);
-          continue;
+        if (typeof v === "object" && v !== null) {
+          if (DETACH_KEY in v) {
+            this.spawn((v as Record<symbol, Animator>)[DETACH_KEY], null, null);
+            r = a.gen.next(0);
+            continue;
+          }
+          if (SCALE_KEY in v) {
+            const { rate, gen } = (v as Scaled<any>)[SCALE_KEY];
+            return this.scaledChild(a, gen, rate);
+          }
         }
         throw new TypeError(`anim: unsupported yield (${describe(v)})`);
       }
+      // Return-based cut is detected by `concurrent()`'s kid callback;
+      // for non-group consumers (child, top-level), unwrap happens at
+      // the consumer site so cut() outside a group is transparent.
       this.settle(a, r.value, false, undefined);
     } catch (e) {
       this.settle(a, undefined, true, e);
@@ -359,9 +403,7 @@ export class Anim {
     }
   }
 
-  /** `yield Suspend` — park `a`, give the impl a wake callback. Children
-   *  spawned via the `spawn` arg auto-cancel with the parent (safety
-   *  net + makes dispose optional in the common case). */
+  /** `yield Suspend` — park `a`, give the impl a wake callback. */
   private suspend(a: Active, impl: Suspend<any>): void {
     let resumed = false;
     const finish = (action: () => void): void => {
@@ -374,24 +416,12 @@ export class Anim {
       action();
     };
     const wake = ((v?: unknown) =>
-      finish(() => this.advance(a, v, false))) as Wake<any>;
+      finish(() => this.advance(a, unwrapIfCut(v), false))) as Wake<any>;
     wake.throw = (e: unknown) => finish(() => this.advance(a, e, true));
 
-    let subKids: Active[] | null = null;
-    const spawnFn: SpawnFn = (g, onDone, scale?) => {
-      const cb: OnSettle | null = onDone
-        ? (v, err) => {
-            if (err === undefined) onDone(v as never);
-          }
-        : null;
-      const child = this.spawn(asAnimator(g), a, cb, scale ?? null);
-      (subKids ??= []).push(child);
-      return () => this.cancel(child);
-    };
-
-    let userDispose: (() => void) | undefined;
+    let dispose: (() => void) | undefined;
     try {
-      userDispose = impl(wake, spawnFn, this) ?? undefined;
+      dispose = impl(wake) ?? undefined;
     } catch (e) {
       if (!resumed && a.wakeAt !== DEAD) {
         resumed = true;
@@ -402,28 +432,17 @@ export class Anim {
       return;
     }
 
-    // Cleanup runs the user's dispose then cascade-cancels any
-    // auto-tracked children. Checking subKids at call-time (not setup)
-    // catches children attached late, after impl returned.
-    const dispose = (): void => {
-      this.safe(userDispose);
-      if (subKids) {
-        const ks = subKids;
-        subKids = null;
-        for (const c of ks) if (c.wakeAt !== DEAD) this.cancel(c);
-      }
-    };
-
     if (resumed || a.wakeAt === DEAD) {
       this.safe(dispose);
     } else {
       a.wakeAt = PARKED;
-      a.cleanup = dispose;
+      a.cleanup = dispose ?? null;
     }
   }
 
   /** `yield Animator` — spawn child, park parent until it settles.
-   *  Distinct from `yield*` so tracers see the child as its own span. */
+   *  Distinct from `yield*` so tracers see the child as its own span.
+   *  Unwraps a Cut return value transparently. */
   private child(a: Active, child: Animator): void {
     a.wakeAt = PARKED;
     let c: Active | null = null;
@@ -434,12 +453,31 @@ export class Anim {
       if (a.wakeAt === DEAD || a.cleanup === null) return;
       a.cleanup = null;
       a.wakeAt = READY;
-      this.advance(a, err === undefined ? v : err, err !== undefined);
+      this.advance(a, err === undefined ? unwrapIfCut(v) : err, err !== undefined);
     });
   }
 
-  /** `yield [a, b, ...]` — run kids concurrently; resume with the
-   *  results tuple when all complete. First error cancels the rest. */
+  /** `yield scaled(rate, g)` — spawn `g` as a scaled child active,
+   *  park parent until it settles. Symmetric with `child()` except for
+   *  the scale arg passed to spawn. */
+  private scaledChild(a: Active, gen: Animator, rate: () => number): void {
+    a.wakeAt = PARKED;
+    let c: Active | null = null;
+    a.cleanup = () => {
+      if (c && c.wakeAt !== DEAD) this.cancel(c);
+    };
+    c = this.spawn(gen, a, (v, err) => {
+      if (a.wakeAt === DEAD || a.cleanup === null) return;
+      a.cleanup = null;
+      a.wakeAt = READY;
+      this.advance(a, err === undefined ? unwrapIfCut(v) : err, err !== undefined);
+    }, rate);
+  }
+
+  /** `yield [a, b, ...]` — run kids concurrently. Settles with the
+   *  results tuple when every kid completes; a kid returning `cut(v)`
+   *  settles the group immediately with `v` and cancels remaining
+   *  siblings. First error from any kid also cancels the rest. */
   private concurrent(a: Active, kids: readonly Yieldable[]): void {
     if (kids.length === 0) return this.advance(a, [], false);
 
@@ -454,11 +492,12 @@ export class Anim {
       for (const c of children) if (c.wakeAt !== DEAD) this.cancel(c);
     };
 
-    const settle = (v: unknown, asThrow: boolean): void => {
+    const settle = (v: unknown, asThrow: boolean, cancelSibs: boolean): void => {
+      if (aborted) return;
       aborted = true;
       a.cleanup = null;
       a.wakeAt = READY;
-      if (asThrow) {
+      if (cancelSibs) {
         for (const c of children) if (c.wakeAt !== DEAD) this.cancel(c);
       }
       this.advance(a, v, asThrow);
@@ -471,9 +510,12 @@ export class Anim {
       children.push(
         this.spawn(isGen(k) ? k : asGen(k), a, (value, error) => {
           if (aborted) return;
-          if (error !== undefined) return settle(error, true);
+          if (error !== undefined) return settle(error, true, true);
+          // Return-based cut: kid's final value is a Cut. Settle the
+          // group with the unwrapped inner value, cancel siblings.
+          if (isCut(value)) return settle(cutValue(value), false, true);
           results[idx] = value;
-          if (--left === 0) settle(results, false);
+          if (--left === 0) settle(results, false, false);
         }),
       );
     }

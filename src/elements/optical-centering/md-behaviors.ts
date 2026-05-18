@@ -12,11 +12,23 @@
 //   loop(function* () { ... pause cycle ... })
 //   play(spring(s, target, opts)) — fluent over raw behaviors
 
-import {Diagram, Mount, Anchor, attract, signal, circle, drift, drive, easeInOut, label, loop, num, oscillate, play, vec, spring, type Val, Num, Vec} from "../../minim";
+import {Diagram, Mount, Anchor, attract, signal, circle, driven, drive, easeInOut, label, loop, num, play, vec, spring, value, type Val, Num, Vec} from "../../minim";
 
 const N_TRAIL = 14;
 const N_CHAIN = 10;
 const LINK_LEN = 11;
+
+/** Constant-velocity advance — `sig += v·dt`. Inlined because the lib
+ *  no longer ships a named `drift`; one-liner over `driven`. */
+const drift = (sig: Num, v: Val<number>) =>
+  driven(sig, (dt, _t, cur) => cur + value(v) * dt);
+
+/** Sine oscillation around `sig`'s start value. Inlined because the
+ *  lib no longer ships a named `oscillate`. */
+const oscillate = (sig: Num, amp: Val<number>, freq: number) => {
+  const base = sig.peek();
+  return driven(sig, (_dt, t) => base + value(amp) * Math.sin(2 * Math.PI * freq * t));
+};
 
 /** A `drift`-with-walls integrator — flips velocity when bounded. One
  *  generator instead of two; the wall-flip is structural, not a

@@ -4,9 +4,9 @@
 
 import {
   Anim, Diagram, EventBus, Vec, Mount, Anchor,
-  assemble, attract, centroid, circle, play, computed, detach, drift,
+  assemble, attract, centroid, circle, play, computed, detach,
   signal, lens, effect, every, forEach, label, loop, mean,
-  meanRotation, meanScale, num, oscillate, vec, race, rect, splay,
+  meanRotation, meanScale, num, vec, race, rect, splay,
   spring, swap, untilChange, untilPromise, type Animator,
 } from "../../minim";
 
@@ -587,108 +587,6 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "spawn parents children to the suspended host",
-    run: (assert) => {
-      const a = new Anim();
-      let childFinally = 0;
-      const handle = a.start(function* () {
-        yield (_wake, spawn) => {
-          spawn!(
-            (function* (): Animator {
-              try {
-                yield 5;
-              } finally {
-                childFinally++;
-              }
-            })(),
-          );
-          spawn!(
-            (function* (): Animator {
-              try {
-                yield 5;
-              } finally {
-                childFinally++;
-              }
-            })(),
-          );
-          return () => {};
-        };
-      });
-      a.step(0);
-      handle();
-      assert(
-        childFinally === 2,
-        `cascade should run both children's finallys (got ${childFinally})`,
-      );
-      a.stop();
-    },
-  },
-  {
-    name: "spawn after setup is permitted (scoped to active suspension)",
-    run: (assert) => {
-      // Calling `spawn` after the Suspend body returns is fine while
-      // the suspension is still parked — the spawned child cascades
-      // with the parent on cancel. Previous engine threw; the new
-      // contract is more permissive and uses `detach(g)` for genuinely-
-      // decoupled work.
-      const a = new Anim();
-      let captured: ((g: Animator) => () => void) | undefined;
-      let childRan = 0;
-      const handle = a.start(function* () {
-        yield (_wake, spawn) => {
-          captured = spawn!;
-          return () => {};
-        };
-      });
-      a.step(0);
-      const stop = captured!(
-        (function* (): Animator {
-          try { yield 5; } finally { childRan++; }
-        })(),
-      );
-      assert(typeof stop === "function", `spawn should return a disposer`);
-      handle();
-      assert(childRan === 1, `child finally should run on parent cancel`);
-      a.stop();
-    },
-  },
-  {
-    name: "spawn onComplete fires on natural completion",
-    run: (assert) => {
-      // `onComplete` MUST NOT fire on cancel.
-      const a = new Anim();
-      let completes = 0;
-      let cancels = 0;
-      a.start(function* () {
-        yield (_wake, spawn) => {
-          spawn!(
-            (function* (): Animator {
-              yield 0.05;
-            })(),
-            () => completes++,
-          );
-          const cancelChild = spawn!(
-            (function* (): Animator {
-              try {
-                yield 5;
-              } finally {
-                cancels++;
-              }
-            })(),
-            () => completes++, // SHOULD NOT fire — cancelled below
-          );
-          cancelChild();
-          return () => {};
-        };
-      });
-      a.step(0);
-      a.step(0.06);
-      assert(completes === 1, `expected 1 onComplete (got ${completes})`);
-      assert(cancels === 1, `cancelled child's finally should run`);
-      a.stop();
-    },
-  },
-  {
     name: "anim.observer: emits spawn / complete / cancel events",
     run: (assert) => {
       const a = new Anim();
@@ -1137,32 +1035,6 @@ const TESTS: TestCase[] = [
       for (let i = 0; i < 200; i++) a.step(0.016);
       assert(done, `spring should have settled`);
       assert(sig.value === 100, `should snap to target; got ${sig.value}`);
-      a.stop();
-    },
-  },
-  {
-    name: "oscillate: returns to base across one period",
-    run: (assert) => {
-      const a = new Anim();
-      const sig = num(50);
-      a.start(() => oscillate(sig, 10, 1)); // amp=10, freq=1Hz
-      a.step(0);
-      a.step(0.25); // quarter period → near base + amp
-      assert(Math.abs(sig.value - 60) < 0.5, `quarter: ${sig.value}`);
-      a.step(0.75); // full period → back near base
-      assert(Math.abs(sig.value - 50) < 0.5, `period: ${sig.value}`);
-      a.stop();
-    },
-  },
-  {
-    name: "drift: integrates velocity over time",
-    run: (assert) => {
-      const a = new Anim();
-      const sig = num(0);
-      a.start(() => drift(sig, 100));
-      a.step(0);
-      a.step(0.5);
-      assert(Math.abs(sig.value - 50) < 0.001, `at t=0.5: ${sig.value}`);
       a.stop();
     },
   },

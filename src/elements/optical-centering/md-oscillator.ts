@@ -13,7 +13,14 @@
 // marker signals the same way it does with any other signal, because
 // `marker.active` is just a Signal<boolean>.
 
-import {Diagram, Mount, Shape, signal, play, circle, computed, drive, line, loop, not, oscillate, vec, tokens, type Read} from "../../minim";
+import {Diagram, Mount, Shape, signal, play, circle, computed, drive, driven, line, loop, not, vec, tokens, Num, type Read} from "../../minim";
+
+/** Sine oscillation around `sig`'s start value. Inlined per-demo since
+ *  the lib no longer ships a named `oscillate`. */
+const oscillate = (sig: Num, amp: number, freq: number) => {
+  const base = sig.peek();
+  return driven(sig, (_dt, t) => base + amp * Math.sin(2 * Math.PI * freq * t));
+};
 import {parts, tex, bindParts} from "../../minim/tex";
 
 // ── Constants ─────────────────────────────────────────────────────────────────

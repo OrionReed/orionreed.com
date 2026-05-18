@@ -12,7 +12,14 @@
 // modes are signal-coordinated — buttons set signals, generators react
 // via the standard fluent vocabulary.
 
-import {Diagram, Mount, Anchor, button, signal, play, circle, fadeOut, label, loop, num, oscillate, vec, type Animator, type Signal, type Content, type Has, Num} from "../../minim";
+import {Diagram, Mount, Anchor, button, signal, play, circle, driven, fadeOut, label, loop, num, vec, type Animator, type Signal, type Content, type Has, Num} from "../../minim";
+
+/** Sine oscillation around `sig`'s start value. Inlined per-demo since
+ *  the lib no longer ships a named `oscillate`. */
+const oscillate = (sig: Num, amp: number, freq: number) => {
+  const base = sig.peek();
+  return driven(sig, (_dt, t) => base + amp * Math.sin(2 * Math.PI * freq * t));
+};
 
 const N_SLOTS = 12;
 const SHAPE_Y = 40;

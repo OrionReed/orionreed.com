@@ -4,7 +4,7 @@
 //   ./signal     Signal / Computed / Lens + effect / batch / untracked
 //   ./traits    LINEAR / LERP / METRIC / EQUALS slots + accessors
 //   ./derive    BaseChain / derived / field / bindFields / ReactiveInit
-//   ./lerp      Tween, tween/spring/toward/from/holding/driven, play, defineTrait
+//   ./lerp      Tween, tween/spring/toward/attract/from/driven, play, defineTrait
 //   ./values/*  Num / Vec / Color / Box / Transform built-in cells
 //
 // The signal-free runtime (Anim, drive, suspend, race, etc.) lives in
@@ -44,8 +44,7 @@ export {
 // ── Lerp / temporal cell methods ───────────────────────────────────
 export {
   Tween,
-  tween, spring, toward, follow, holding, driven,
-  oscillate, attract, drift,
+  tween, spring, toward, attract, follow, driven,
   play, when, not, untilChange,
   loop, every,
   defineTrait, lerpImpl,
@@ -58,13 +57,15 @@ export {
 // "I'm in signals-land, give me everything to author."
 export {
   // Runtime engine
-  Anim, asGen, detach, isGen,
-  type Animator, type AnimObserver, type Detach,
-  type Resume, type SpawnFn, type Suspend,
+  Anim, asGen, cut, detach, isCut, isGen, scaled,
+  type Animator, type AnimObserver, type Cut, type Detach,
+  type Resume, type Scaled, type Suspend,
   type Wake, type Yieldable,
   // Combinators (signal-free)
-  drive, suspend, all, race, rand, mapDt, withScale,
+  drive, suspend, all, race, rand, withScale,
+  commit, firstN, firstMatching, anySuccess, allSettled,
   untilEvent, untilPromise, attachRaf,
+  type Settled,
   // Easings
   type Easing, linear, easeIn, easeOut, easeInOut,
 } from "../core";

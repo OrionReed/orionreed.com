@@ -1,15 +1,16 @@
-// lerp.ts — the signals → generators bridge.
+// lerp.ts — the signals ↔ generators surface.
 //
-// Where signals live ON cells (state), this file lives BETWEEN cells
+// Where signals live ON values (state), this file lives BETWEEN signals
 // and the runtime. It contains:
 //
-//   • The `[LERP]` trait method bundle (`.to()` on cells)
+//   • The `[LERP]` trait method bundle (`.to()` on signals)
 //   • Free-fn temporal animators dispatched by traits:
-//       tween (LERP), spring/toward (LINEAR + METRIC),
-//       holding/follow/driven (no trait needed)
+//       tween (LERP), spring/toward (LINEAR + METRIC), attract (LINEAR),
+//       follow/driven (no trait needed)
 //   • The `Tween<T>` chainable wrapper for `.to(A).to(B).from(start)`
 //   • `play(...)` fluent surface — `.until / .then / .at`
-//   • `when(sig)` — wait until cell value is truthy
+//   • `when(sig)` — wait until signal value is truthy
+//   • `untilChange(sig)` — wait until signal changes; resume with new value
 
 import { Signal, Computed, computed, effect, type Val, type Read } from "./signal";
 import {
@@ -175,24 +176,6 @@ export function* toward<T>(
   });
 }
 
-/** Sinusoidal oscillation around the signal's value at start. `amp` and
- *  `freq` (Hz) may be reactive. Runs forever — wrap with `race`/`until`
- *  to terminate. */
-export function* oscillate<T>(
-  sig: Signal<T>,
-  amp: Val<T>,
-  freq: Val<number>,
-): Animator<void> {
-  const lin = sig[LINEAR];
-  if (!lin) throw new Error(`oscillate: ${sig.constructor.name} needs [LINEAR]`);
-  const A = valFn(amp);
-  const F = valFn(freq);
-  const base = sig.peek();
-  yield* drive((_dt, t) => {
-    sig.value = lin.add(base, lin.scale(A(), Math.sin(2 * Math.PI * F() * t)));
-  });
-}
-
 /** Exponential pull toward `target` with rate `k` per second
  *  (k=1 closes ~63% of distance per second). No overshoot. */
 export function* attract<T>(
@@ -211,20 +194,6 @@ export function* attract<T>(
   });
 }
 
-/** Constant-velocity advance. `velocity` may be reactive — flip live to
- *  reverse, scale to slow. */
-export function* drift<T>(
-  sig: Signal<T>,
-  velocity: Val<T>,
-): Animator<void> {
-  const lin = sig[LINEAR];
-  if (!lin) throw new Error(`drift: ${sig.constructor.name} needs [LINEAR]`);
-  const V = valFn(velocity);
-  yield* drive((dt) => {
-    sig.value = lin.add(sig.peek(), lin.scale(V(), dt));
-  });
-}
-
 /** Coerce a `Val<T>` into a `() => T` getter (no signal tracking — used
  *  inside `drive` lambdas which are untracked). The `Read<T>` arm of
  *  `Val<T>` is a *type-only* abstraction; at runtime, only `Signal`
@@ -236,20 +205,8 @@ function valFn<T>(v: Val<T>): () => T {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// Universal cell-temporal methods — no trait required
+// Universal signal-temporal methods — no trait required
 // ════════════════════════════════════════════════════════════════════
-
-/** Set sig to value, wait dur, restore previous. Cancellation restores too. */
-export function* holding<T>(
-  sig: Signal<T>,
-  v: T,
-  dur: Val<number>,
-): Animator<void> {
-  const prev = sig.peek();
-  sig.value = v;
-  try { yield valFn(dur)(); }
-  finally { sig.value = prev; }
-}
 
 /** Generator-scoped reactive bind: `sig` follows `source` until the
  *  enclosing generator ends or is cancelled. Sugar over `sig.bind(source)`
@@ -280,7 +237,7 @@ export function* driven<T>(
 // ════════════════════════════════════════════════════════════════════
 // Method bundle for [LERP] — `.to()` is the only cell method.
 //
-// Everything else (spring/toward/holding/from/driven) is a free fn that
+// Everything else (spring/toward/attract/follow/driven) is a free fn that
 // dispatches via traits — strictly more general (works on any cell with
 // the right traits, including third-party types stamped post-hoc).
 // ════════════════════════════════════════════════════════════════════
@@ -401,9 +358,9 @@ export function play(p: PlayTrigger | (() => Animator)): Play<unknown>;
 export function play(p: PlayTrigger | (() => Animator)): Play<unknown> {
   if (p instanceof PlayImpl) return p;
   // A nullary function is an animator factory — invoke to get a fresh
-  // generator. We discriminate from suspend impls (which take
-  // `(wake, spawn, anim)` and have `.length === 3`) by arity. Generator
-  // instances and Tween are objects, not functions, so they skip this.
+  // generator. We discriminate from Suspend impls (which take `(wake)`
+  // and have `.length === 1`) by arity. Generator instances and Tween
+  // are objects, not functions, so they skip this.
   if (typeof p === "function" && (p as Function).length === 0) {
     p = (p as () => Animator)();
   }

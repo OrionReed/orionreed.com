@@ -1,7 +1,8 @@
 // minim — generator-driven SVG diagrams with reactive primitives.
 //
 //   core/       signal-free generator runtime: Anim, drive, suspend,
-//               race, all, rand, mapDt, attachRaf, easings
+//               race, all, rand, cut, scaled, withScale, attachRaf,
+//               easings
 //   signals/    reactive cells + signals→generators bridge: Signal/
 //               Computed/Lens, traits, computed, lerp/Tween/spring/...,
 //               Num/Vec/Color/Box/Transform/Matrix2D value types

@@ -2,7 +2,7 @@
 // Drives the runtime by calling `anim.step(dt)` directly, no RAF.
 //
 // Verifies: tween, chain, parallel, detach, race, until, then, at,
-// spring, toward, from, holding, driven.
+// spring, toward, from, driven.
 
 import { describe, it } from "vitest";
 import { check, section, approx } from "./_check";
@@ -10,7 +10,7 @@ import {
   signal,
   num, vec, transform,
   play, when, not, Tween,
-  spring, toward, holding, driven, follow,
+  spring, toward, driven, follow,
 } from "@minim/signals";
 import { Anim, detach, race, linear } from "@minim/core";
 
@@ -250,20 +250,6 @@ describe("animation", () => {
       a.value = 7;
       tick(anim, 1);
       check("after stop, b no longer follows a", b.value === 99);
-    }
-
-    section("holding(v, dur) — set, wait, restore");
-    {
-      const anim = new Anim();
-      const x = num(50);
-      let done = false;
-      anim.start(function* () { yield* holding(x, 99, 0.2); done = true; });
-      tick(anim, 1);
-      check("during hold: x === 99", x.value === 99);
-      tick(anim, 12);
-      tick(anim, 1);
-      check("hold completes", done);
-      check("after hold: x restored to 50", x.value === 50);
     }
 
     section("driven(stepFn) — escape hatch");
