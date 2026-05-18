@@ -25,10 +25,13 @@ export function hoverSignal(shape: AnyShape, sig: Signal<boolean>): () => void {
 
 /** Wire `handle` for pointer-drag. Each pointermove while pressed
  *  calls `onDrag(local)` with the pointer in `handle`'s local frame;
- *  pointer-captured so drags survive leaving the handle. */
+ *  pointer-captured so drags survive leaving the handle. The optional
+ *  `onState(active)` callback fires `true` on pointerdown and `false`
+ *  on pointerup/cancel — `Handle` uses it to drive `.dragging`. */
 export function draggable(
   handle: AnyShape,
   onDrag: (local: VecValue) => void,
+  onState?: (active: boolean) => void,
 ): () => void {
   let dragging = false;
   let pointerId = -1;
@@ -39,6 +42,7 @@ export function draggable(
       dragging = true;
       pointerId = pe.pointerId;
       handle.el.setPointerCapture(pointerId);
+      onState?.(true);
       onDrag(handle.toLocal(pe));
     }),
   );
@@ -58,6 +62,7 @@ export function draggable(
     }
     dragging = false;
     pointerId = -1;
+    onState?.(false);
   };
   offs.push(handle.on("pointerup", stop));
   offs.push(handle.on("pointercancel", stop));

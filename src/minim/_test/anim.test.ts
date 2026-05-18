@@ -529,14 +529,52 @@ describe("composability", () => {
     anim.stop();
   });
 
-  it("withTimeout cancels inner after the cap", async () => {
-    const { withTimeout } = await import("@minim/core");
+  it("mapDt(0, ...) freezes numeric `yield N` sleeps", async () => {
+    // `at(0)` is the universal pause primitive: dt=0 stalls per-frame
+    // drive callbacks AND wall-clock sleeps, because mapDt expands
+    // numeric yields into per-frame accumulators that obey the scale.
+    const { mapDt } = await import("@minim/core");
+    const anim = new Anim();
+    let done = false;
+    function* g(): any { yield 1.0; done = true; }
+    anim.start(mapDt(() => 0, g()));
+    for (let i = 0; i < 200; i++) anim.step(0.016);
+    expect(done).toBe(false);
+    anim.stop();
+  });
+
+  it("mapDt with a reactive scale pauses and resumes a sleep", async () => {
+    const { mapDt } = await import("@minim/core");
+    const anim = new Anim();
+    let done = false;
+    let scale = 1;
+    function* g(): any { yield 1.0; done = true; }
+    anim.start(mapDt((dt) => dt * scale, g()));
+    // Run halfway under scale=1.
+    for (let i = 0; i < 30; i++) anim.step(1 / 60);
+    expect(done).toBe(false);
+    // Pause: 1000 frames pass, sleep doesn't progress.
+    scale = 0;
+    for (let i = 0; i < 1000; i++) anim.step(1 / 60);
+    expect(done).toBe(false);
+    // Resume: finishes after roughly the remaining half-second.
+    scale = 1;
+    for (let i = 0; i < 60; i++) anim.step(1 / 60);
+    expect(done).toBe(true);
+    anim.stop();
+  });
+
+  it("race(gen, sleep) cancels inner after the time cap", async () => {
+    // What used to be `withTimeout(0.1, slow())` is now just
+    // `race(slow(), 0.1)` — a numeric sleep races against the work,
+    // loser is cancelled. One concept (race) instead of two.
+    const { race } = await import("@minim/core");
     const anim = new Anim();
     let cleaned = false;
     function* slow(): any {
       try { while (true) yield; } finally { cleaned = true; }
     }
-    anim.start(withTimeout(0.1, slow()));
+    anim.start(race(slow(), 0.1));
     for (let i = 0; i < 20; i++) anim.step(0.02);
     expect(cleaned).toBe(true);
     anim.stop();

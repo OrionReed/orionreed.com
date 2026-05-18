@@ -18,7 +18,7 @@ export {
 export {
   drive, suspend,
   all, race, rand,
-  mapDt, withTimeout,
+  mapDt,
   untilEvent, untilPromise,
   attachRaf,
 } from "./compose";

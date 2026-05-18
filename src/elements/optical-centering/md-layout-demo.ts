@@ -2,7 +2,7 @@
 // The highlighted card has a spring on its width: drag it wider and
 // it snaps back when released — handle + spring composing on one signal.
 
-import {Diagram, Mount, Anchor, Vec, derived, arrange, handle, label, num, rect, spring} from "../../minim";
+import {Diagram, Mount, Anchor, Vec, derived, arrange, handle, label, num, play, rect, spring} from "../../minim";
 
 const WIDTHS = [72, 68, 80, 60, 76];
 const HEIGHTS = [52, 44, 60, 48, 56];
@@ -34,15 +34,11 @@ export class MdLayoutDemo extends Diagram {
     cards[0].translate.value = { x: 30, y: cy - HEIGHTS[0] / 2 };
     arrange(cards, "row", { gap: GAP, align: 0.5 });
 
-    // Spring pulls the highlighted card's width back to rest when released.
-    this.anim.start(() =>
-      spring(widths[SPRING_IDX], SPRING_REST, { stiffness: 220, damping: 16 }),
-    );
-
-    // Right-edge resize handle for every card.
-    for (let i = 0; i < widths.length; i++) {
+    // Right-edge resize handle for every card. The SPRING_IDX handle's
+    // `.dragging` signal gates the spring below via `at(reactive)` —
+    // `at(0)` freezes the spring while the user drags, `at(1)` resumes.
+    const handles = widths.map((w, i) => {
       const card = cards[i];
-      const w = widths[i];
       const h = HEIGHTS[i];
       const pos = derived(Vec,
         () => ({
@@ -53,8 +49,17 @@ export class MdLayoutDemo extends Diagram {
           w.value = Math.max(MIN_W, p.x - card.translate.value.x);
         },
       );
-      s(handle(pos, { cursor: "ew-resize", r: 5 }));
-    }
+      return s(handle(pos, { cursor: "ew-resize", r: 5 }));
+    });
+
+    // Spring pulls the highlighted card's width back to rest. While
+    // dragging, `at(0)` freezes it; on release, `at(1)` resumes from
+    // the dragged value. One running spring, no restart cycles.
+    const dragging = handles[SPRING_IDX].dragging;
+    this.anim.start(function* () {
+      yield* play(spring(widths[SPRING_IDX], SPRING_REST, { stiffness: 220, damping: 16 }))
+        .at(() => dragging.value ? 0 : 1);
+    });
 
     s(
       label(view.bottom.up(14), "drag handles to resize · red card springs back", {

@@ -4,10 +4,17 @@
 //
 //   Yieldable constructors:  drive, suspend
 //   Concurrency:             all, race, rand
-//   Wrappers:                mapDt, withTimeout
+//   Wrappers:                mapDt
 //
 // Plus the RAF adapter — `attachRaf(anim)` wires `anim.step(dt)` to
 // `requestAnimationFrame`. None of these touch signals.
+//
+// Notable absences: timeout/cancel wrappers (`withTimeout`, `unless`,
+// etc.) are intentionally NOT here. They're 1-2 line compositions over
+// `race` + a numeric sleep, and shipping them as named helpers
+// metastasized into API sprawl. Inline the composition at the call
+// site: `race(work, 5)` for a 5-second cap, `race(work, when(stop))`
+// for a signal-bound cancel.
 
 import {
   Anim,
@@ -25,8 +32,8 @@ import {
 // ════════════════════════════════════════════════════════════════════
 
 /** `yield* drive(cb)` parks each frame until `cb` returns `false`.
- *  Plain generator — composes with `mapDt`, `withTimeout`, etc.
- *  through the standard yield seam. */
+ *  Plain generator — composes with `mapDt`, `race`, etc. through the
+ *  standard yield seam. */
 export function* drive(
   cb: (dt: number, t: number) => boolean | void,
 ): Animator<void> {
@@ -152,44 +159,45 @@ export function* rand(...children: Animator[]): Animator {
 // delegation. Our wrappers iterate manually, so we own the cleanup.
 // ════════════════════════════════════════════════════════════════════
 
-/** Transform `dt` flowing through an inner gen — both directions:
+/** Transform `dt` flowing through an inner gen.
  *
- *    • numeric yields (sleep durations, `yield N`) → `fn(out)`
- *    • resume values (per-frame dts the runtime hands us)  → `fn(in)`
+ *  Two cases:
  *
- *  Use for time-scaling (`play().at(scale)`), unit conversions, etc.
- *  Non-numeric yields/resumes pass through unchanged. */
+ *    • Numeric yields (sleep durations, `yield N`) get expanded into a
+ *      per-frame accumulator that adds `fn(dt)` each tick until the
+ *      original N is reached. This means time-scaling is *continuous*
+ *      across the sleep: a reactive `fn` whose value flips to 0
+ *      mid-sleep pauses the timer; flipping back to 1 resumes it. A
+ *      naive single-shot `yield fn(N)` would lose this property — it'd
+ *      scale once at emit time then drift wall-clock from there.
+ *
+ *    • Resume values (per-frame `dt` the runtime hands the gen) get
+ *      passed through `fn` so frame-yielding generators (drive, etc.)
+ *      see the scaled `dt`.
+ *
+ *  Non-numeric / non-positive / non-finite yields pass through. Used
+ *  by `play().at(scale)` to give one coherent time-scale primitive
+ *  that subsumes pause (`at(0)`), slow-mo, fast-forward, scrub. */
 export function* mapDt<R>(fn: (dt: number) => number, gen: Animator<R>): Animator<R> {
-  let resume: number | undefined = undefined;
+  let resume: number = 0;
   try {
     while (true) {
-      const r = gen.next(resume as number);
+      const r = gen.next(resume);
       if (r.done) return r.value;
       const v = r.value;
-      const out: Yieldable = typeof v === "number" ? fn(v) : v;
-      const back = (yield out) as unknown;
-      resume = typeof back === "number" ? fn(back) : (back as number);
+      if (typeof v === "number" && Number.isFinite(v) && v > 0) {
+        // Expand sleep into a frame-budgeted accumulator. acc grows by
+        // the *scaled* per-frame dt — pauses stall it, slow-mo slows it,
+        // and the inner gen sees a single `yield N` semantically.
+        let acc = 0;
+        while (acc < v) acc += fn(yield);
+        resume = 0;
+      } else {
+        const back = (yield v) as unknown;
+        resume = typeof back === "number" ? fn(back) : (back as number);
+      }
     }
   } finally { gen.return(undefined as never); }
-}
-
-/** Hard-cap by engine time. `gen` and a sibling `seconds` sleep race;
- *  on timeout the inner is cancelled and the parent resumes with
- *  `undefined`. */
-export function withTimeout<R>(
-  seconds: number,
-  gen: Animator<R>,
-): Animator<R | undefined> {
-  return suspend<R | undefined>((wake, spawn) => {
-    let done = false;
-    const finish = (v: R | undefined): void => { if (done) return; done = true; wake(v); };
-    const stopChild = spawn(gen, (v) => finish(v as R | undefined));
-    const stopTimer = spawn(
-      (function* (): Animator { yield seconds; })(),
-      () => finish(undefined),
-    );
-    return () => { stopTimer(); stopChild(); };
-  });
 }
 
 // ════════════════════════════════════════════════════════════════════

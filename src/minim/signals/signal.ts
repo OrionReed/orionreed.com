@@ -32,6 +32,12 @@ interface Link {
 
 interface Stack<T> { value: T; prev: Stack<T> | undefined }
 
+// Flags match alien-signals v2 exactly. We intentionally do NOT track
+// parent-child effect relationships — `effect()` is for top-level
+// reactive bindings whose lifetime is owned by the call site (returned
+// disposer), not nested-component scopes. See alien-signals v2 release
+// notes for the same rationale; if grouped disposal is ever needed,
+// add an explicit `effectScope` opt-in rather than implicit linkage.
 const F = {
   None: 0,
   Mutable: 1,
@@ -40,7 +46,6 @@ const F = {
   Recursed: 8,
   Dirty: 16,
   Pending: 32,
-  HasChildEffect: 64,
 } as const;
 
 const noop = () => {};
@@ -220,15 +225,6 @@ function purgeDeps(sub: ReactiveNode): void {
 function disposeAllDepsInReverse(sub: ReactiveNode): void {
   let l = sub.depsTail;
   while (l !== undefined) { const prev = l.prevDep; unlink(l, sub); l = prev; }
-}
-
-function unlinkChildEffects(node: ReactiveNode): void {
-  let l = node.depsTail;
-  while (l !== undefined) {
-    const prev = l.prevDep;
-    if (l.dep instanceof Effect) unlink(l, node);
-    l = prev;
-  }
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -447,7 +443,6 @@ export class Computed<T = unknown> extends Signal<T> {
   }
 
   override _update(): boolean {
-    if (this.flags & F.HasChildEffect) unlinkChildEffects(this);
     this.depsTail = undefined;
     this.flags = F.Mutable | F.RecursedCheck;
     const prev = activeSub;
@@ -493,12 +488,11 @@ class Effect implements ReactiveNode {
 
   constructor(fn: () => (() => void) | void) {
     this.fn = fn;
+    // Top-level reactive scope by design — we don't auto-parent nested
+    // effects (see flags comment). `activeSub` is set so this effect's
+    // own body tracks reads against itself, then restored.
     const prev = activeSub;
     activeSub = this;
-    if (prev !== undefined) {
-      link(this, prev, 0);
-      prev.flags |= F.HasChildEffect;
-    }
     try {
       ++runDepth;
       const ret = fn();
@@ -543,7 +537,6 @@ class Effect implements ReactiveNode {
   _run(): void {
     const flags = this.flags;
     if (flags & F.Dirty || (flags & F.Pending && checkDirty(this.deps!, this))) {
-      if (flags & F.HasChildEffect) unlinkChildEffects(this);
       if (this.cleanup) { this._runCleanup(); if (!this.flags) return; }
       this.depsTail = undefined;
       this.flags = F.Watching | F.RecursedCheck;
@@ -560,7 +553,7 @@ class Effect implements ReactiveNode {
         purgeDeps(this);
       }
     } else if (this.deps !== undefined) {
-      this.flags = F.Watching | (flags & F.HasChildEffect);
+      this.flags = F.Watching;
     }
   }
 

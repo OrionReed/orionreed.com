@@ -11,7 +11,7 @@
 //   • `play(...)` fluent surface — `.until / .then / .at`
 //   • `when(sig)` — wait until cell value is truthy
 
-import { Signal, effect, type Val, type Read } from "./signal";
+import { Signal, Computed, computed, effect, type Val, type Read } from "./signal";
 import {
   LERP, LINEAR, METRIC, EQUALS,
   type Linear, type Lerp, type Metric, type Equals,
@@ -331,7 +331,18 @@ export function defineTrait(Cls: ProtoTarget, slot: symbol, impl: unknown): void
 /** Triggers that bound a `play(...)`. A `Read<unknown>` waits until the
  *  cell's value is truthy; an `Animator` waits for completion; a
  *  number sleeps that many seconds. */
-export type PlayTrigger = Yieldable | Read<unknown>;
+// A play-trigger is either a generator/animator to delegate to, or a
+// reactive cell whose truthiness we wait on. We accept `Signal<any>`
+// (not `Read<unknown>`) because `playableGen`'s only handling for
+// "cell" inputs is `instanceof Signal` + `effect` subscription —
+// plain Read-shaped objects (no observer hookup) would silently fall
+// through and crash with "unsupported yield object". `any` is the
+// intentional bivariance escape: `Signal<T>` is invariant in T (T
+// appears in trait slots like `Lerp<T>` which use T in both
+// positions), so `Signal<unknown>` would not accept `Signal<boolean>`.
+// At this site we don't read the value's type, only its truthiness.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type PlayTrigger = Yieldable | Signal<any>;
 
 export interface Play<R = void> extends Animator<R> {
   /** End when `p` fires (truthy cell, animator completion, n-second sleep, etc.) */
@@ -374,13 +385,24 @@ class PlayImpl<R> implements Play<R> {
   }
 }
 
-/** Lift any yieldable or cell-trigger into a Play. Cells become
- *  wait-until-truthy. */
-export function play<R>(g: Animator<R>): Play<R>;
-export function play(p: PlayTrigger): Play<unknown>;
-export function play(p: PlayTrigger): Play<unknown> {
+/** Lift any yieldable, cell-trigger, or animator-factory into a Play.
+ *  Cells become wait-until-truthy. Factories (`() => Animator<R>`) are
+ *  invoked here, then the resulting animator is wrapped — passing a
+ *  factory is just a convenience that thunks instantiation to the call
+ *  site (useful when constructing a play through helpers that build
+ *  fresh animators on demand). */
+export function play<R>(g: Animator<R> | (() => Animator<R>)): Play<R>;
+export function play(p: PlayTrigger | (() => Animator)): Play<unknown>;
+export function play(p: PlayTrigger | (() => Animator)): Play<unknown> {
   if (p instanceof PlayImpl) return p;
-  return new PlayImpl(playableGen(p));
+  // A nullary function is an animator factory — invoke to get a fresh
+  // generator. We discriminate from suspend impls (which take
+  // `(wake, spawn, anim)` and have `.length === 3`) by arity. Generator
+  // instances and Tween are objects, not functions, so they skip this.
+  if (typeof p === "function" && (p as Function).length === 0) {
+    p = (p as () => Animator)();
+  }
+  return new PlayImpl(playableGen(p as PlayTrigger));
 }
 
 function* playableGen(p: PlayTrigger): Animator<unknown> {
@@ -396,8 +418,11 @@ function* playableGen(p: PlayTrigger): Animator<unknown> {
   return undefined;
 }
 
-/** Wait until `sig.value` is truthy. Wakes immediately if already true. */
-export function when(sig: Read<unknown>): Animator<void> {
+/** Wait until `sig.value` is truthy. Wakes immediately if already true.
+ *  Requires a real `Signal` — `effect()` only tracks reads on tracked
+ *  cells, so a plain Read shape would never re-fire. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function when(sig: Signal<any>): Animator<void> {
   return suspend<void>((wake) => {
     let resolved = false;
     return effect(() => {
@@ -408,15 +433,20 @@ export function when(sig: Read<unknown>): Animator<void> {
 }
 
 /** Reactive boolean negation — `not(sig).value === !sig.value`. Pair
- *  with `when` / `play().until(...)` to wait on falsy conditions. */
-export function not(sig: Read<unknown>): Read<boolean> {
-  return { get value() { return !sig.value; }, peek: () => !sig.peek() };
+ *  with `when` / `play().until(...)` to wait on falsy conditions.
+ *
+ *  Returns a `Computed<boolean>` (a real Signal instance), so the
+ *  result is `instanceof Signal` and slots into anywhere a reactive
+ *  cell is expected — `play(not(active))`, `attr(..., not(hidden))`,
+ *  etc. */
+export function not(sig: Read<unknown>): Computed<boolean> {
+  return computed(() => !sig.value);
 }
 
 /** Wait until `sig` changes value (via `===`/`equals` trait). Resumes
  *  with the new value. Useful when you want the *next* update and
  *  don't care about a specific predicate. */
-export function untilChange<T>(sig: Read<T>): Animator<T> {
+export function untilChange<T>(sig: Signal<T>): Animator<T> {
   return suspend<T>((wake) => {
     const initial = sig.peek();
     let resolved = false;

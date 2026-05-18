@@ -9,7 +9,7 @@ import { check, section, approx } from "./_check";
 import {
   signal,
   num, vec, transform,
-  play, when, Tween,
+  play, when, not, Tween,
   spring, toward, holding, driven, follow,
 } from "@minim/signals";
 import { Anim, detach, race, linear } from "@minim/core";
@@ -278,6 +278,63 @@ describe("animation", () => {
       tick(anim, 31);
       check("driven terminated when t > 0.5", done);
       check("driven accumulated value", approx(x.value, 50, 1));
+    }
+
+    section("play(() => gen) — factory thunk invoked at play boundary");
+    {
+      const anim = new Anim();
+      const x = num(0);
+      let factoryCalls = 0;
+      anim.start(function* () {
+        yield* play(() => { factoryCalls++; return x.to(100, 0.1, linear); });
+      });
+      tick(anim, 6);
+      check("play(thunk): final 100", x.value === 100);
+      check("play(thunk): factory invoked once", factoryCalls === 1);
+    }
+
+    section("not(sig) — reactive negation returns a Signal");
+    {
+      const anim = new Anim();
+      const flag = signal(false);
+      const neg = not(flag);
+      check("not(sig) is reactive cell with peek/value", neg.peek() === true && neg.value === true);
+      flag.value = true;
+      check("not(sig) flips with source", neg.value === false);
+      // Also: not(sig) must be acceptable as a play-trigger (instanceof Signal).
+      let woke = false;
+      anim.start(function* () { yield* play(not(flag)); woke = true; });
+      tick(anim, 1);
+      check("play(not(sig)) waits while sig truthy", !woke);
+      flag.value = false;
+      tick(anim, 1);
+      check("play(not(sig)) wakes when sig flips false", woke);
+    }
+
+    section("pause via play(spring).at(0|1) — universal time-scale primitive");
+    {
+      // `play().at(reactive scale)` IS the pause primitive now. Sleep
+      // and per-frame yields both honor the scale; `at(0)` freezes
+      // motion AND timers. Replaces the old `unless` helper — instead
+      // of cancel/restart on guard flip, we time-scale the running
+      // animator continuously by the guard.
+      const anim = new Anim();
+      const x = num(0);
+      const drag = signal(false);
+      anim.start(function* () {
+        yield* play(spring(x, 100, { stiffness: 200, damping: 24 }))
+          .at(() => drag.value ? 0 : 1);
+      });
+      tick(anim, 60);
+      check("at(reactive): spring runs while drag=false → x → ~100", approx(x.value, 100, 1));
+      drag.value = true;
+      const xPaused = x.value;
+      tick(anim, 200);
+      check("at(0) freezes the spring: x unchanged across many frames", x.value === xPaused);
+      drag.value = false;
+      tick(anim, 1);
+      // After resume, spring sees x at its frozen value and continues.
+      check("at(1) resumes the spring cleanly", approx(x.value, 100, 0.5));
     }
 
     section("Tween chain on Vec field lens");

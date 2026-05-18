@@ -85,6 +85,28 @@ const isThenable = (v: unknown): v is PromiseLike<unknown> =>
   typeof v === "object" &&
   typeof (v as { then?: unknown }).then === "function";
 
+/** Human-readable summary of an unexpected yield value, for error
+ *  messages. Truncates objects + arrays to keep messages skim-able. */
+function describe(v: unknown): string {
+  if (v === null) return "null";
+  if (v instanceof Error) return `Error(${v.message})`;
+  const t = typeof v;
+  if (t !== "object") return String(v);
+  const ctor = (v as { constructor?: { name?: string } }).constructor?.name;
+  // Class-named objects: prefix with the class
+  if (ctor && ctor !== "Object") {
+    try {
+      const j = JSON.stringify(v);
+      return j.length > 80 ? `${ctor} ${j.slice(0, 77)}…` : `${ctor} ${j}`;
+    } catch { return ctor; }
+  }
+  // Plain objects: show keys (often clearer than full JSON)
+  const keys = Object.keys(v as object);
+  if (keys.length === 0) return "{}";
+  if (keys.length > 6) return `{ ${keys.slice(0, 6).join(", ")}, … }`;
+  return `{ ${keys.join(", ")} }`;
+}
+
 /** Wrap any non-generator Yieldable in a one-shot generator. Lets
  *  `yield [0.2, work()]` mix sleeps and gens in parallel. */
 export function* asGen(y: Yieldable): Animator<any> { yield y; }
@@ -133,7 +155,7 @@ export class Anim {
   /** Subscribe to `step()` calls. The callback fires every step with
    *  the same `dt` the engine receives. Use sparingly — for true
    *  animation work prefer a generator that yields per frame, which
-   *  composes with `mapDt`/`tap`/`withTimeout`. Returns a disposer. */
+   *  composes with `mapDt`/`tap`. Returns a disposer. */
   onStep(cb: (dt: number) => void): () => void {
     (this.stepListeners ??= new Set()).add(cb);
     return () => { this.stepListeners?.delete(cb); };
@@ -261,7 +283,7 @@ export class Anim {
           r = a.gen.next(0);
           continue;
         }
-        throw new TypeError(`anim: unsupported yield ${typeof v}`);
+        throw new TypeError(`anim: unsupported yield ${describe(v)}`);
       }
       return this.settle(a, r.value, false, undefined);
     } catch (e) {

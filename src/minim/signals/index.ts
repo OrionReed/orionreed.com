@@ -63,7 +63,7 @@ export {
   type PayloadOf, type SpawnFn, type SuspendFn,
   type Wake, type Yieldable,
   // Combinators (signal-free)
-  drive, suspend, all, race, rand, mapDt, withTimeout,
+  drive, suspend, all, race, rand, mapDt,
   untilEvent, untilPromise, attachRaf,
   // Easings
   type Easing, linear, easeIn, easeOut, easeInOut,
