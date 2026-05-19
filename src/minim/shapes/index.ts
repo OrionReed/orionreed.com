@@ -44,7 +44,6 @@ export { arrange, expand, grid, split, type ArrangeOpts } from "./layout";
 export { forEach, type ForEachOptions } from "./list";
 
 export {
-  from,
   fadeIn,
   fadeOut,
   fadeUp,

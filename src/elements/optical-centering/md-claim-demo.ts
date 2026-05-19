@@ -16,19 +16,19 @@ export class MdClaimDemo extends Diagram {
     const intro = process(function* () {
       const variant = iter++ % 3;
       if (variant === 0) {
-        yield* fadeIn(c, 0.5);
+        yield fadeIn(c, 0.5);
         yield 0.6;
-        yield* fadeOut(c, 0.4);
+        yield fadeOut(c, 0.4);
       } else if (variant === 1) {
         yield* c.opacity.to(0.5, 0.2);
         yield* c.opacity.to(1.3, 0.25);
         yield* c.opacity.to(0.95, 0.2);
         yield 0.3;
-        yield* fadeOut(c, 0.35);
+        yield fadeOut(c, 0.35);
       } else {
-        yield* fadeIn(c, 0.9);
+        yield fadeIn(c, 0.9);
         yield 1;
-        yield* fadeOut(c, 0.6);
+        yield fadeOut(c, 0.6);
       }
     }, bounded, reachesHalf, noOvershoot);
 

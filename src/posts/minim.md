@@ -291,13 +291,9 @@ Nothing here is SVG-specific. The same generator + signal pipeline drives `<canv
 
 <md-canvas-field></md-canvas-field>
 
-The `code` package is a sibling of `tex` — same architecture (a reactive `source` signal driving a `<foreignObject>`-hosted text wrapper), different content. Writing `c.source.value = newSrc` re-renders; `c.morphTo(newSrc, dur)` runs a token-level LCS diff between old and new, surgically wraps the changed ranges in inline-block spans, and lerps their widths (and heights, for multi-line edits) over the duration. Matched content stays as plain text and reflows naturally as the spans size up and down. Syntax colours come from CSS Custom Highlights painted over the wrapper's text ranges; they don't add DOM nodes.
+The `code` package is a sibling of `tex` — same architecture (a reactive `source` signal driving a `<foreignObject>`-hosted text wrapper), different content. Writing `c.source.value = newSrc` re-renders; `c.morphTo(newSrc, dur)` runs a line-level LCS diff between old and new sources, then a token-level LCS within each modified line, surgically wraps the changed ranges in inline-block spans, and lerps their widths and heights over the duration. Matched content stays as plain text and reflows naturally. Lines whose trimmed content survives across positions are paired as moves and animate from their old visual position to their new flow position, with any indent change riding as an inline edit. Syntax colours come from CSS Custom Highlights painted over the wrapper's text ranges; they don't add DOM nodes — and the same substrate carries token-level decoration (highlight, underline) and per-token transform (pluck a Range into an inline-block span, animate its transform, restore) for free.
 
-<md-code-demo></md-code-demo>
-
-Multi-line edits — extracting a local, hoisting a helper — fall out of the same machinery. The diff sees newline tokens like any other; coalesced delete/insert spans that contain newlines also animate height, so the lines collapse / open up vertically while surrounding code reflows.
-
-<md-code-refactor></md-code-refactor>
+<md-code></md-code>
 
 <md-centering></md-centering>
 

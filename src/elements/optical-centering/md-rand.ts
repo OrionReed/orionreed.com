@@ -37,7 +37,7 @@ const MOVES: Move[] = [
     name: "pulse",
     color: "#e25c5c",
     run: function* (s) {
-      yield* bounceIn(s, 0.55);
+      yield bounceIn(s, 0.55);
     },
   },
   {
@@ -54,7 +54,7 @@ const MOVES: Move[] = [
     name: "fade",
     color: "#9b59b6",
     run: function* (s) {
-      yield* fadeOut(s, 0.3);
+      yield fadeOut(s, 0.3);
       yield* s.opacity.to(1, 0.4, easeOut);
     },
   },

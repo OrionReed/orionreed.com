@@ -11,7 +11,7 @@ export class MdOrbits extends Diagram {
     const angularMotion = (period: number, sig?: Signal<number>) => {
       const a = sig ?? signal(Math.random() * 2 * Math.PI);
       const omega = (2 * Math.PI) / period;
-      this.anim.start(drive((dt) => { a.value = (a.peek() + omega * dt) % (2 * Math.PI); }));
+      this.anim.start(drive((tick) => { a.value = (a.peek() + omega * tick.dt) % (2 * Math.PI); }));
       return a;
     };
 

@@ -14,7 +14,7 @@
 // run-trace overlays, anim-observer integration. Each is a layered
 // addition on top of the same substrate.
 
-export {CodeShape, code, codeStyles, TOKEN_CLASS, type CodeOpts} from "./code";
+export {CodeShape, code, codeStyles, LINE_CLASS, type CodeOpts} from "./code";
 export {tokenize, type Token} from "./tokenize";
 // `morph` itself is internal — accessed via `codeShape.morphTo(target, dur)`.
 // The symbol name collides with `tex.morph`, and the method form composes

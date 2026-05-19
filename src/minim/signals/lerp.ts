@@ -20,11 +20,12 @@ import {
 } from "./traits";
 import {
   drive,
-  now,
+  isGen,
   suspend,
   race,
   withScale,
   type Animator,
+  type Tick,
   type Yieldable,
   type Easing,
   easeOut,
@@ -37,16 +38,23 @@ type Seg<T> =
   | { readonly kind: "to"; readonly target: T; readonly dur: Val<number>; readonly ease?: Easing };
 
 /** Chainable Animator over a Signal: `.to(...).to(...).from(start)` reads
- *  naturally. `.to`/`.from` are pure data — segments accumulate; the
- *  generator is built lazily on first `next()` and runs them in order. */
+ *  naturally. `.to`/`.from` are pure data — segments accumulate at
+ *  construction; the executor generator runs them in order on iteration. */
 export class Tween<T> implements Animator<void> {
   readonly #sig: Signal<T>;
   readonly #segs: readonly Seg<T>[];
-  #gen?: Animator<void>;
+  readonly #gen: Animator<void>;
 
+  /** @internal — use `tween(...)` or `sig.to(...)` to construct. */
   constructor(sig: Signal<T>, segs: readonly Seg<T>[] = []) {
     this.#sig = sig;
     this.#segs = segs;
+    this.#gen = (function* () {
+      for (const seg of segs) {
+        if (seg.kind === "pose") { sig.value = seg.target; continue; }
+        yield* tweenStep(sig, seg.target, seg.dur, seg.ease);
+      }
+    })();
   }
 
   /** Append a tween segment from current value to `target` over `dur`. */
@@ -59,29 +67,10 @@ export class Tween<T> implements Animator<void> {
     return new Tween(this.#sig, [{ kind: "pose", target: start }, ...this.#segs]);
   }
 
-  #run(): Animator<void> {
-    const sig = this.#sig;
-    const segs = this.#segs;
-    return (function* () {
-      for (const seg of segs) {
-        if (seg.kind === "pose") { sig.value = seg.target; continue; }
-        yield* tweenStep(sig, seg.target, seg.dur, seg.ease);
-      }
-    })();
-  }
-
-  next(v?: number): IteratorResult<Yieldable, void> {
-    return (this.#gen ??= this.#run()).next(v as number);
-  }
-  return(v?: void): IteratorResult<Yieldable, void> {
-    return (this.#gen ??= this.#run()).return(v as void);
-  }
-  throw(e: unknown): IteratorResult<Yieldable, void> {
-    return (this.#gen ??= this.#run()).throw(e);
-  }
-  [Symbol.iterator](): this {
-    return this;
-  }
+  next(v?: Tick): IteratorResult<Yieldable, void> { return this.#gen.next(v as Tick); }
+  return(v?: void): IteratorResult<Yieldable, void> { return this.#gen.return(v as void); }
+  throw(e: unknown): IteratorResult<Yieldable, void> { return this.#gen.throw(e); }
+  [Symbol.iterator](): this { return this; }
 }
 
 function* tweenStep<T>(
@@ -96,13 +85,12 @@ function* tweenStep<T>(
   }
   const start = sig.peek();
   const D = valFn(dur);
-  // `t` is sampled (`now() - t0`) every frame, not accumulated locally
-  // — so the only float drift left is the engine clock itself. Sub-dt
-  // tolerance at the comparison boundary handles that; we are not
-  // hiding a compounding accumulator, just the one-step rounding.
-  yield* drive((dt, t) => {
+  // `t` is `tick.elapsed - start` each frame (no compounding); the
+  // engine clock itself rounds at single-step scale, so a sub-dt
+  // tolerance at the boundary handles that one-step error.
+  yield* drive((tick, t) => {
     const total = D();
-    if (total <= 0 || t + dt * 1e-3 >= total) {
+    if (total <= 0 || t + tick.dt * 1e-3 >= total) {
       sig.value = target;
       return false;
     }
@@ -160,7 +148,8 @@ export function* spring<T>(
   const zero: T = lin.scale(sig.peek(), 0);
   let vel: T = zero;
 
-  yield* drive((dt) => {
+  yield* drive((tick) => {
+    const dt = tick.dt;
     const t = T();
     const cur = sig.peek();
     // Solve in displacement-space: e = cur - target (so target ≡ origin).
@@ -234,11 +223,11 @@ export function* toward<T>(
   }
   const T = valFn(target);
   const S = valFn(speed);
-  yield* drive((dt) => {
+  yield* drive((tick) => {
     const t = T();
     const cur = sig.peek();
     const dist = met(cur, t);
-    const step = S() * dt;
+    const step = S() * tick.dt;
     if (dist <= step) {
       sig.value = t;
       return false;
@@ -258,9 +247,9 @@ export function* attract<T>(
   if (!lin) throw new Error(`attract: ${sig.constructor.name} needs [LINEAR]`);
   const T = valFn(target);
   const K = valFn(k);
-  yield* drive((dt) => {
+  yield* drive((tick) => {
     const cur = sig.peek();
-    const delta = lin.scale(lin.sub(T(), cur), K() * dt);
+    const delta = lin.scale(lin.sub(T(), cur), K() * tick.dt);
     sig.value = lin.add(cur, delta);
   });
 }
@@ -281,7 +270,7 @@ export function* wave<T>(
   fn: (t: number, initial: T) => T,
 ): Animator<void> {
   const initial = sig.peek();
-  yield* drive((_dt, t) => {
+  yield* drive((_tick, t) => {
     sig.value = fn(t, initial);
   });
 }
@@ -292,8 +281,8 @@ export function* driven<T>(
   sig: Signal<T>,
   step: (dt: number, t: number, v: T) => T | false,
 ): Animator<void> {
-  yield* drive((dt, t) => {
-    const next = step(dt, t, sig.peek());
+  yield* drive((tick, t) => {
+    const next = step(tick.dt, t, sig.peek());
     if (next === false) return false;
     sig.value = next;
   });
@@ -363,8 +352,8 @@ export interface Play<R = void> extends Animator<R> {
 
 class PlayImpl<R> implements Play<R> {
   constructor(private g: Animator<R>) {}
-  next(v?: number) {
-    return this.g.next(v as number);
+  next(v?: Tick) {
+    return this.g.next(v as Tick);
   }
   return(v?: R) {
     return this.g.return(v as R);
@@ -466,29 +455,34 @@ export function untilChange<T>(sig: Signal<T>): Animator<T> {
   });
 }
 
-/** Repeat `factory()` forever; bound via `.until(sig)`. */
-export function loop(factory: () => Animator): Play {
+/** Repeat `factory()` forever; bound via `.until(sig)`. Factories
+ *  returning a bare `Animator` delegate via `yield*` (no boundary frame);
+ *  arrays / other Yieldables go through `yield` (parallel / spawn). */
+export function loop(factory: () => Yieldable): Play {
   return play(
     (function* (): Animator {
-      while (true) yield* factory();
+      while (true) {
+        const y = factory();
+        if (isGen(y)) yield* y;
+        else yield y;
+      }
     })(),
   );
 }
 
 /** Run `fn` every `sec` seconds (drift-corrected, `sec` may be reactive).
- *  Schedules against `now()` so there's no float accumulation. */
+ *  Schedules against `tick.elapsed` so there's no float accumulation. */
 export function every(sec: Val<number>, fn: () => void): Play {
   const getSec = valFn(sec);
   return play(
     (function* (): Animator {
-      yield; // wait one frame so now() is established
-      let nextAt = now() + Math.max(0, getSec());
+      let tick = yield;
+      let nextAt = tick.elapsed + Math.max(0, getSec());
       while (true) {
-        yield;
-        const t = now();
+        tick = yield;
         const period = getSec();
-        if (period <= 0) { nextAt = t; continue; }
-        while (t >= nextAt) {
+        if (period <= 0) { nextAt = tick.elapsed; continue; }
+        while (tick.elapsed >= nextAt) {
           fn();
           nextAt += period;
         }

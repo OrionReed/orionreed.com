@@ -410,7 +410,7 @@ export class Predicates<T> {
  *  Pattern:
  *
  *      const intro = process(function* () {
- *        yield* fadeIn(c, 0.3);
+ *        yield fadeIn(c, 0.3);
  *      }, bounded, reachesOne);
  *
  *      this.anim.loop(function* () {
@@ -464,7 +464,7 @@ function makeProcess(
           factory(),
           (function* (): Animator {
             while (true) {
-              const dt = yield;
+              const { dt } = yield;
               elapsed.value = elapsed.peek() + dt;
             }
           })(),

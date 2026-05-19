@@ -5,7 +5,6 @@ export {
   detach,
   isCut,
   isGen,
-  now,
   scaled,
   type Animator,
   type AnimObserver,
@@ -14,6 +13,7 @@ export {
   type Resume,
   type Scaled,
   type Suspend,
+  type Tick,
   type Wake,
   type Yieldable,
 } from "./anim";

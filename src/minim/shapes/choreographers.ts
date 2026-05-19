@@ -3,7 +3,7 @@
 // `drive` step over N translates). For rigid group translate, reach for
 // `centroid(...shapes).to(...)` instead.
 
-import { drive, type Animator, type Easing } from "@minim/core";
+import { drive, type Animator, type Easing, type Yieldable } from "@minim/core";
 import {
   play, num, Vec, type Val, type VecValue,
 } from "@minim/signals";
@@ -27,7 +27,7 @@ export function* swap(
 export function* stagger<S>(
   stride: number,
   items: readonly S[],
-  fn: (item: S, i: number) => Animator,
+  fn: (item: S, i: number) => Yieldable,
 ): Animator {
   yield items.map((item, i) => play(i * stride).then(fn(item, i)));
 }
@@ -89,8 +89,8 @@ export function orbit(
     return { angle: Math.atan2(dy, dx), radius: Math.hypot(dx, dy) };
   });
   let t = 0;
-  return drive((dt) => {
-    t += dt * rate.value;
+  return drive((tick) => {
+    t += tick.dt * rate.value;
     const c = center.value;
     for (let i = 0; i < N; i++) {
       const angle = init[i].angle + omega * t;

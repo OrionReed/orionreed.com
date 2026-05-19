@@ -3,25 +3,25 @@
 
 import {
   cut,
-  now,
   scaled,
   type Animator,
   type Cut,
   type Suspend,
+  type Tick,
   type Yieldable,
   type Resume,
 } from "./anim";
 
-/** Park each frame until `cb` returns `false`. `t` is computed against
- *  the engine/scaled clock via `now()` — no float accumulation. */
+/** Park each frame until `cb` returns `false`. `t` is elapsed since the
+ *  first call (sampled from `tick.elapsed` — no float accumulation). */
 export function* drive(
-  cb: (dt: number, t: number) => boolean | void,
+  cb: (tick: Tick, t: number) => boolean | void,
 ): Animator<void> {
-  let t0 = NaN;
+  let startElapsed = NaN;
   while (true) {
-    const dt = yield;
-    if (t0 !== t0) t0 = now() - dt;
-    if (cb(dt, now() - t0) === false) return;
+    const tick = yield;
+    if (startElapsed !== startElapsed) startElapsed = tick.elapsed - tick.dt;
+    if (cb(tick, tick.elapsed - startElapsed) === false) return;
   }
 }
 

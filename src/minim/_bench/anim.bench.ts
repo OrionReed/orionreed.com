@@ -17,7 +17,7 @@ function makeRawYieldLoop(N: number, frames: number) {
   return () => {
     const a = new Anim();
     let acc = 0;
-    function* w(): Animator { while (true) { const dt: number = yield; acc += dt; } }
+    function* w(): Animator { while (true) { const { dt } = yield; acc += dt; } }
     for (let i = 0; i < N; i++) a.start(w);
     for (let f = 0; f < frames; f++) a.step(1 / 60);
     a.stop();
@@ -29,7 +29,7 @@ function makeDriveLoop(N: number, frames: number) {
   return () => {
     const a = new Anim();
     let acc = 0;
-    for (let i = 0; i < N; i++) a.start(drive((dt) => { acc += dt; }));
+    for (let i = 0; i < N; i++) a.start(drive((tick) => { acc += tick.dt; }));
     for (let f = 0; f < frames; f++) a.step(1 / 60);
     a.stop();
     return acc;
@@ -43,11 +43,11 @@ function makeSpringSim(N: number, frames: number) {
     const vs = new Float64Array(N);
     for (let i = 0; i < N; i++) {
       const idx = i;
-      a.start(drive((dt) => {
+      a.start(drive((tick) => {
         const force = (1 - xs[idx]) * 170;
         const drag = -26 * vs[idx];
-        vs[idx] += (force + drag) * dt;
-        xs[idx] += vs[idx] * dt;
+        vs[idx] += (force + drag) * tick.dt;
+        xs[idx] += vs[idx] * tick.dt;
       }));
     }
     for (let f = 0; f < frames; f++) a.step(1 / 60);
@@ -62,7 +62,7 @@ function makeTween(N: number, frames: number) {
     const out = new Float64Array(N);
     for (let i = 0; i < N; i++) {
       const idx = i;
-      a.start(drive((_dt, t) => {
+      a.start(drive((_tick, t) => {
         if (t >= 1) { out[idx] = 1; return false; }
         out[idx] = t;
       }));
@@ -156,7 +156,7 @@ function makeMixed(_N: number, frames: number) {
     const a = new Anim();
     let dummy = 0;
     const Ndrive = 150, Nsleep = 150, Nsuspend = 100, Nshort = 100;
-    for (let i = 0; i < Ndrive; i++) a.start(drive((dt) => { dummy += dt; }));
+    for (let i = 0; i < Ndrive; i++) a.start(drive((tick) => { dummy += tick.dt; }));
     for (let i = 0; i < Nsleep; i++) a.start(sleeper);
     const wakes: Array<() => void> = [];
     function* susp(): Animator {
@@ -186,8 +186,8 @@ function makeUiButtons(N: number, frames: number) {
     function* button(): Animator {
       for (let i = 0; i < 5; i++) {
         yield* clickWait();
-        yield* drive((_dt, t) => { if (t >= 0.1) return false; acc += 1; });
-        yield* drive((_dt, t) => { if (t >= 0.2) return false; acc += 1; });
+        yield* drive((_tick, t) => { if (t >= 0.1) return false; acc += 1; });
+        yield* drive((_tick, t) => { if (t >= 0.2) return false; acc += 1; });
         yield 0.3;
       }
     }

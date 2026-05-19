@@ -51,8 +51,8 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const dts: number[] = [];
       a.start(function* () {
-        dts.push(yield);
-        dts.push(yield);
+        dts.push((yield).dt);
+        dts.push((yield).dt);
       });
       a.step(0.016);
       a.step(0.02);

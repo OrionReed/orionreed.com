@@ -36,8 +36,7 @@ import {MdCanvasField} from "./optical-centering/md-canvas-field";
 import {MdTexProse} from "./optical-centering/md-tex-prose";
 import {MdOscillator} from "./optical-centering/md-oscillator";
 import {MdTrails} from "./optical-centering/md-trails";
-import {MdCodeDemo} from "./optical-centering/md-code-demo";
-import {MdCodeRefactor} from "./optical-centering/md-code-refactor";
+import {MdCode} from "./optical-centering/md-code";
 import {MdTex, MdMarker} from "../minim/web";
 
 DarkModeToggle.define();
@@ -78,7 +77,6 @@ MdCanvasField.define();
 MdTexProse.define();
 MdOscillator.define();
 MdTrails.define();
-MdCodeDemo.define();
-MdCodeRefactor.define();
+MdCode.define();
 MdTex.define();
 MdMarker.define();

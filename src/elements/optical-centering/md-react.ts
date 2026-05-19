@@ -85,10 +85,10 @@ export class MdReact extends Diagram {
         const evt = yield* race(ROUND_TIMEOUT, trackedClick(target.el));
         if (evt) {
           hits.value = hits.peek() + 1;
-          yield* zoomOut(target, 0.25);
+          yield zoomOut(target, 0.25);
         } else {
           misses.value = misses.peek() + 1;
-          yield* fadeOut(target, 0.35);
+          yield fadeOut(target, 0.35);
         }
       } finally {
         // Runs on cancel too; otherwise SVG nodes accumulate across rounds.
@@ -102,7 +102,7 @@ export class MdReact extends Diagram {
       status.value = "running";
       dispose = anim.start(loop(function* () {
         const target = spawnTarget();
-        yield* bounceIn(target, 0.3);
+        yield bounceIn(target, 0.3);
         yield* round(target);
         yield RESPAWN;
       }));

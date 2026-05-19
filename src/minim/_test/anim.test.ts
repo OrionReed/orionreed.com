@@ -27,12 +27,26 @@ describe("yield contract", () => {
     expect(log).toBe("ab");
   });
 
-  it("the resume value of a frame yield is dt", () => {
-    let saw: number | undefined;
+  it("the resume value of a frame yield is a Tick", () => {
+    let saw: { dt: number; elapsed: number } | undefined;
     function* g(): any { saw = yield; }
     anim.start(g);
     anim.step(0.025);
-    expect(saw).toBeCloseTo(0.025, 9);
+    expect(saw!.dt).toBeCloseTo(0.025, 9);
+    expect(saw!.elapsed).toBeCloseTo(0.025, 9);
+  });
+
+  it("sleep wake reports sub-frame dt (only time owed since wake)", () => {
+    // Gen sleeps until t=0.05. Steps 0.04 then 0.02 — wakes mid-second-step
+    // (clock crosses 0.05 at +0.01 into a 0.02 dt). Effective dt = 0.01.
+    let saw: { dt: number; elapsed: number } | undefined;
+    function* g(): any { saw = yield 0.05; }
+    anim.start(g);
+    anim.step(0.04);
+    expect(saw).toBeUndefined();
+    anim.step(0.02);
+    expect(saw!.dt).toBeCloseTo(0.01, 9);
+    expect(saw!.elapsed).toBeCloseTo(0.06, 9);
   });
 
   it("repeated parking ticks once per frame", () => {
@@ -385,7 +399,7 @@ describe("drive", () => {
 
   it("accumulates dt", () => {
     let acc = 0;
-    anim.start(drive((dt) => { acc += dt; }));
+    anim.start(drive((tick) => { acc += tick.dt; }));
     for (let i = 0; i < 10; i++) anim.step(0.1);
     expect(acc).toBeCloseTo(1.0, 9);
   });
@@ -409,7 +423,7 @@ describe("drive", () => {
 
   it("`t` is time since registration", () => {
     let lastT = 0;
-    anim.start(drive((_dt, t) => { lastT = t; }));
+    anim.start(drive((_tick, t) => { lastT = t; }));
     anim.step(0.1); anim.step(0.1); anim.step(0.1);
     expect(lastT).toBeCloseTo(0.3, 9);
   });
@@ -497,7 +511,7 @@ describe("composability", () => {
     const { withScale } = await import("@minim/core");
     const anim = new Anim();
     let lastDt = 0;
-    function* g(): any { while (true) { lastDt = yield; } }
+    function* g(): any { while (true) { lastDt = (yield).dt; } }
     anim.start(withScale(() => 0.5, g()));
     anim.step(1.0);
     expect(lastDt).toBeCloseTo(0.5, 9);
@@ -632,7 +646,7 @@ describe("composition", () => {
     const anim = new Anim();
     let total = 0;
     anim.start(function* () {
-      yield* withScale(() => 2, drive((dt) => { total += dt; }));
+      yield* withScale(() => 2, drive((tick) => { total += tick.dt; }));
     });
     anim.step(0.05);
     anim.step(0.05);
@@ -664,7 +678,7 @@ describe("scope-scale (withScale)", () => {
   it("withScale(0.5, g) halves dt seen by g", async () => {
     const { withScale } = await import("@minim/core");
     const dts: number[] = [];
-    function* g(): any { while (true) dts.push(yield); }
+    function* g(): any { while (true) dts.push((yield).dt); }
     anim.start(withScale(() => 0.5, g()));
     anim.step(0.1);
     anim.step(0.1);
@@ -792,7 +806,7 @@ describe("scope-scale (withScale)", () => {
   it("nested withScale(0.5, withScale(0.5, g)) compounds to 0.25x", async () => {
     const { withScale } = await import("@minim/core");
     const dts: number[] = [];
-    function* g(): any { while (true) dts.push(yield); }
+    function* g(): any { while (true) dts.push((yield).dt); }
     function* inner(): any { yield* withScale(() => 0.5, g()); }
     anim.start(withScale(() => 0.5, inner()));
     anim.step(1.0);

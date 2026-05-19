@@ -80,7 +80,7 @@ export class MdOscillator extends Diagram {
     const view = this.view(600, 208);
 
     const t = signal(0);
-    this.anim.start(drive((dt) => { t.value = (t.value + dt) % T_LOOP; }));
+    this.anim.start(drive((tick) => { t.value = (t.value + tick.dt) % T_LOOP; }));
 
     const disp = computed(() =>
       A_AMP * Math.exp(-GAMMA * t.value) * Math.cos(OMEGA * t.value),

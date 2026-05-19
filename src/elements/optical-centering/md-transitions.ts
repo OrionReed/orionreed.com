@@ -1,4 +1,4 @@
-import {Anchor, Diagram, Dir, Mount, Shape, bounceIn, circle, fadeOut, fadeUp, fadeUpOut, label, loop, vec, rect, scaleIn, slideIn, slideOut, spinIn, stagger, zoomOut, type Animator} from "../../minim";
+import {Anchor, Diagram, Dir, Mount, Shape, bounceIn, circle, fadeOut, fadeUp, fadeUpOut, label, loop, vec, rect, scaleIn, slideIn, slideOut, spinIn, stagger, zoomOut, type Yieldable} from "../../minim";
 
 const LANES = 5;
 const LANE_GAP = 50;
@@ -9,8 +9,8 @@ const COUNT = 6;
 interface LaneSpec {
   name: string;
   shape: (s: Mount, x: number, y: number) => Shape;
-  intro: (s: Shape) => Animator;
-  outro: (s: Shape) => Animator;
+  intro: (s: Shape) => Yieldable;
+  outro: (s: Shape) => Yieldable;
 }
 
 export class MdTransitions extends Diagram {

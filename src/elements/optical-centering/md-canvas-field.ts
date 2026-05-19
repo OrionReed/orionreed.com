@@ -245,10 +245,10 @@ export class MdCanvasField extends HTMLElement {
     const self = this;
 
     this.anim.start(
-      drive((dt, t) => {
-        self.integrate(dt, t);
+      drive((tick, t) => {
+        self.integrate(tick.dt, t);
         self.render();
-        self.fpsAccum += dt;
+        self.fpsAccum += tick.dt;
         self.fpsFrames += 1;
       }),
     );

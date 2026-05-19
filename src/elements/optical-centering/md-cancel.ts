@@ -20,7 +20,7 @@ function* lifecycle(
   stop: Signal<boolean>,
 ): Animator {
   yield* play(oscillate(y, amp, freq)).until(stop);
-  yield* fadeOut(shape, 0.4);
+  yield fadeOut(shape, 0.4);
 }
 
 export class MdCancel extends Diagram {

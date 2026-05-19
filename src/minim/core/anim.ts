@@ -1,18 +1,27 @@
 // Generator-driven cooperative animation runtime.
 //
 // Yield shapes:
-//   undefined       park 1 frame; resume with dt
-//   number > 0      sleep N seconds; resume with dt
-//   number ≤ 0      tail-call; resume immediately (no frame consumed)
+//   undefined       park 1 frame; resume with Tick
+//   number > 0      sleep N seconds; resume with Tick (sub-frame `dt`
+//                   if the step crossed your wake threshold mid-frame)
+//   number ≤ 0      tail-call; resume immediately with Tick (`dt = 0`)
 //   Animator        spawn child; resume with its return value
 //   Yieldable[]     run concurrently; resume with results[]
 //   Suspend         callback-wake `(wake) => dispose`
-//   detach(g)       child outlives parent
+//   detach(g)       child outlives parent; tail-call resume with Tick
 //   scaled(rate, g) time-warped child
 //
 // Cut is return-based + lexically scoped: a concurrent kid whose final
 // value is `cut(v)` settles its group with `v` and cancels siblings.
 // Outside a group `cut(v)` unwraps to `v` (Prolog's `!`).
+//
+// Composition note: sequential composition across independent animators
+// (`yield* a; yield* b;`, `play(a).then(b)`, `tween1; tween2`) costs
+// **one frame per boundary** — the second animator's first `yield` parks,
+// regardless of how much of the current frame went unused by the first.
+// For frame-accurate total durations within one animator, chain segments
+// on the same primitive (e.g. `Tween.to().to()`). For frame-accurate
+// orchestration across heterogeneous animators, use a `timeline()`.
 
 const DEAD = -Infinity;
 const READY = 0;
@@ -22,15 +31,15 @@ const DETACH_KEY = Symbol.for("minim.detach");
 const SCALE_KEY = Symbol.for("minim.scale");
 const CUT_KEY = Symbol.for("minim.cut");
 
-// Ambient clock for the currently-advancing Active. Symmetric with
-// `activeSub` in signals: swapped on entry, restored on exit, read by
-// primitives that need "what time is it" (tween/spring/drive/every).
-// In a scaled subtree, returns the locally-scaled clock; otherwise the
-// engine clock. Outside any advance, returns NaN.
-let activeClock = NaN;
-
-/** Local clock of the currently-advancing Active (NaN outside an advance). */
-export const now = (): number => activeClock;
+/** Per-yield time payload — resumes every environment yield (park /
+ *  sleep / tail-call / detach). `dt` is the time consumed since the
+ *  last yield (sub-frame-accurate for sleeps that woke mid-step);
+ *  `elapsed` is the local clock at this advance (engine clock, or
+ *  scaled-subtree clock). One fresh instance per yield — safe to capture. */
+export interface Tick {
+  readonly dt: number;
+  readonly elapsed: number;
+}
 
 // `any` in Animator / Suspend / Scaled below is a generator-effect
 // boundary: TS generators can't type per-yield resume values, so the
@@ -45,7 +54,7 @@ export type Yieldable =
   | Detach
   | Scaled<any>;
 
-export type Animator<R = void> = Generator<Yieldable, R, number>;
+export type Animator<R = void> = Generator<Yieldable, R, Tick>;
 
 export type Wake<T = void> = ([T] extends [void]
   ? () => void
@@ -190,8 +199,13 @@ export class Anim {
 
       if (!a.inScaledSubtree) {
         if (a.wakeAt <= c) {
+          // Sub-frame: if `saved > 0` (was sleeping), only the time
+          // since the wake threshold was owed to this gen — not the
+          // whole step. `dt` covers the READY (parked, == 0) case.
+          const saved = a.wakeAt;
           a.wakeAt = READY;
-          this.advance(a, dt, false);
+          const dtEff = saved > 0 ? Math.min(dt, c - saved) : dt;
+          this.advance(a, { dt: dtEff, elapsed: c }, false);
         }
         continue;
       }
@@ -216,8 +230,10 @@ export class Anim {
       const scaledDt = dt * cs;
       if (scaledDt > 0) a.localClock += scaledDt;
       if (a.wakeAt <= a.localClock) {
+        const saved = a.wakeAt;
         a.wakeAt = READY;
-        this.advance(a, scaledDt, false);
+        const dtEff = saved > 0 ? Math.min(scaledDt, a.localClock - saved) : scaledDt;
+        this.advance(a, { dt: dtEff, elapsed: a.localClock }, false);
       }
     }
     if (this.deads !== d0) this.compact();
@@ -328,8 +344,7 @@ export class Anim {
 
   private advance(a: Active, payload: any, asThrow: boolean): void {
     a.busy = true;
-    const prevClock = activeClock;
-    activeClock = a.inScaledSubtree ? a.localClock : this.#clock;
+    const localClock = a.inScaledSubtree ? a.localClock : this.#clock;
     try {
       let r = asThrow ? a.gen.throw(payload) : a.gen.next(payload);
       while (!r.done) {
@@ -344,7 +359,7 @@ export class Anim {
           // Tail-call: yield N ≤ 0 resumes synchronously. Used by
           // conditional sleeps where `dur` may evaluate to 0 — no
           // frame penalty for zero wait.
-          r = a.gen.next(0);
+          r = a.gen.next({ dt: 0, elapsed: localClock });
           continue;
         }
         if (typeof v === "function") return this.suspend(a, v);
@@ -353,7 +368,7 @@ export class Anim {
         if (typeof v === "object" && v !== null) {
           if (DETACH_KEY in v) {
             this.spawn((v as Record<symbol, Animator>)[DETACH_KEY], null, null);
-            r = a.gen.next(0);
+            r = a.gen.next({ dt: 0, elapsed: localClock });
             continue;
           }
           if (SCALE_KEY in v) {
@@ -369,7 +384,6 @@ export class Anim {
     } catch (e) {
       this.settle(a, undefined, true, e);
     } finally {
-      activeClock = prevClock;
       a.busy = false;
       if (a.pendingReturn) {
         a.pendingReturn = false;

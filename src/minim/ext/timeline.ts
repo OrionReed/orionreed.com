@@ -76,7 +76,7 @@ class TimelineImpl implements Timeline {
 
   *[Symbol.iterator](): Animator {
     while (this.clock.value < this.duration.value) {
-      const dt = yield;
+      const { dt } = yield;
       this.clock.value += dt;
     }
   }

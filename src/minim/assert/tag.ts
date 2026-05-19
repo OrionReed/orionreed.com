@@ -1,19 +1,29 @@
 // Tag a generator factory so each spawned instance is identifiable in traces.
 
-import {Animator} from "@minim/core";
+import {Animator, isGen, type Yieldable} from "@minim/core";
 
 /** Gen → tag table. WeakMap so dropped generators are collectable. */
 const tags = new WeakMap<Animator, string>();
 
-type AnyAnimFactory = (...args: any[]) => Animator;
+type AnyAnimFactory = (...args: any[]) => Yieldable;
 
-/** Wrap a factory so each generator it produces is tagged with `name`
- *  (or `fn.name`). Types flow through. */
+/** Recursively tag every Animator inside a Yieldable. Arrays (multi-axis
+ *  transitions) get each member tagged; bare generators are tagged
+ *  directly; other Yieldables (numbers / suspends / undefined) are
+ *  untaggable and silently skipped — they have no identity to attach to. */
+function tagYieldable(y: Yieldable, name: string): void {
+  if (isGen(y)) tags.set(y, name);
+  else if (Array.isArray(y)) for (const k of y) tagYieldable(k, name);
+}
+
+/** Wrap a factory so the generators it produces are tagged with `name`
+ *  (or `fn.name`). Recurses into Yieldable arrays so multi-axis
+ *  transitions get every constituent tween tagged. */
 export function tag<F extends AnyAnimFactory>(fn: F, name?: string): F {
   const tagName = name ?? fn.name;
   return ((...args: Parameters<F>) => {
     const g = fn(...args);
-    tags.set(g, tagName);
+    tagYieldable(g, tagName);
     return g;
   }) as F;
 }
