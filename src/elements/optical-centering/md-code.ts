@@ -108,7 +108,7 @@ function pluck(c: CodeShape, range: Range, className: string): HTMLSpanElement |
     const span = document.createElement("span");
     span.className = className;
     range.surroundContents(span);
-    c._repaintHighlights();
+    c._repaint();
     return span;
   } catch {
     return null;
@@ -123,7 +123,7 @@ function unpluck(c: CodeShape, span: HTMLSpanElement): void {
   while (span.firstChild) parent.insertBefore(span.firstChild, span);
   parent.removeChild(span);
   parent.normalize();
-  c._repaintHighlights();
+  c._repaint();
 }
 
 export class MdCode extends Diagram {

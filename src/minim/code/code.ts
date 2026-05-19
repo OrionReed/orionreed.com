@@ -1,24 +1,30 @@
-// CodeShape — source code as a reactive Shape with a `source: Signal<string>`
-// as the source of truth.
+// CodeShape — source code as a reactive Shape with a `source:
+// Signal<string>` as the source of truth.
 //
 // Layout: the wrapper holds one `<span class="minim-code-line">` per
-// line of source (display: block, width: max-content). Each line element
-// holds either plain text (steady state — paintable via CSS Custom
-// Highlights) or, during morph, inline-block spans for token-level
-// edits within the line. Line additions and deletions animate the line
-// element's height; inline edits animate span widths inside the line.
+// source line (display: block, width: max-content). A line in steady
+// state contains a single text node; during morph a Kept-with-changes
+// line contains coalesced `minim-code-{del,ins,match}` spans instead,
+// and Lost/Gained lines are plain-text line elements animating
+// width/height/opacity from natural to zero (or back). Layout is purely
+// one-line-per-element — no multi-line `inline-block`s, which would
+// trigger the spec's baseline-to-bottom-margin rule and deform flow.
 //
-// Why line-elements: an inline-block span with multi-line content has
-// its baseline at the bottom margin edge per spec, which deforms the
-// surrounding layout during animation. Keeping each source line in its
-// own element sidesteps the problem entirely — multi-line changes are
-// line additions/removals, not multi-line inline-blocks.
+// Highlighting: one paint path. For each line element, the painter
+// either reconstructs a logical text view from `minim-code-{del,ins,
+// match}` children (during morph: "old text" = del+match in document
+// order, "new text" = ins+match) and tokenizes each view, OR — when the
+// line has no morph children — tokenizes the line's full text. Each
+// typed token becomes a Range in the matching descendant text node,
+// registered with CSS Custom Highlights under its token-type name.
+// Same path handles steady state, morph state, and any external
+// wrapping (e.g. a demo `pluck` that wraps a token in its own span).
 
 import {effect, signal, type Signal, type Val, value} from "@minim/signals";
 import {Shape, type ShapeOpts} from "@minim/shapes";
 import {type Animator, type Easing} from "@minim/core";
-import {morph, getAttachedTokens} from "./morph";
-import {tokenize, type Token} from "./tokenize";
+import {morph} from "./morph";
+import {tokenize} from "./tokenize";
 
 export interface CodeOpts extends ShapeOpts {
   /** Font size in user units. Default 14. */
@@ -29,10 +35,12 @@ export interface CodeOpts extends ShapeOpts {
   language?: string;
 }
 
-/** Class stamped on every per-line container in the wrapper. Morph
- *  finds existing lines by class and adds/removes/modifies them in
- *  place. */
+/** Class stamped on every per-line container. */
 export const LINE_CLASS = "minim-code-line";
+
+const CLASS_DEL = "minim-code-del";
+const CLASS_INS = "minim-code-ins";
+const CLASS_MATCH = "minim-code-match";
 
 const DEFAULT_FONT =
   "ui-monospace, SFMono-Regular, Menlo, 'Cascadia Code', monospace";
@@ -52,8 +60,8 @@ const wrapperCss = (fontSize: number, fontFamily: string): string =>
 const lineCssText =
   "display:block;width:max-content;min-height:1.4em;white-space:pre";
 
-/** Build a line element holding `text`. White-space is preserved
- *  (`white-space: pre`) and the element is sized to its content. */
+/** Build a line element holding `text`. White-space preserved
+ *  (`white-space: pre`), sized to content. */
 export function makeLineEl(text: string): HTMLSpanElement {
   const el = document.createElement("span");
   el.className = LINE_CLASS;
@@ -62,9 +70,8 @@ export function makeLineEl(text: string): HTMLSpanElement {
   return el;
 }
 
-/** Measure rendered plain text offscreen; used to seed the foreignObject
- *  size on construction without a paint-flash. Builds a full
- *  line-element wrapper so the measurement matches the live render. */
+/** Offscreen measure for initial foreignObject sizing — avoids a
+ *  first-paint flash. */
 const measure = (
   text: string,
   fontSize: number,
@@ -89,18 +96,12 @@ export class CodeShape extends Shape {
   readonly width: Signal<number>;
   readonly height: Signal<number>;
   readonly language: string;
-  /** Live wrapper inside the foreignObject. Children are line elements
-   *  (each `<span class="minim-code-line">`). */
+  /** Live wrapper inside the foreignObject; children are line elements. */
   readonly wrapper: HTMLDivElement;
 
-  /** When true, the auto-rerender effect bails out — morph manages the
-   *  DOM swap itself and only commits to `source` at the end. */
+  /** When true, the auto-render effect bails — morph owns the DOM. */
   #inMorph = false;
-
-  /** Ranges currently registered into the global `CSS.highlights`
-   *  registry for syntax colouring. We track them per-instance so
-   *  cleanup / re-paint can target exactly the ranges this CodeShape
-   *  added, without touching other CodeShapes' ranges. */
+  /** Ranges this instance has registered in `CSS.highlights`. */
   readonly #highlightRanges: Range[] = [];
 
   constructor(initial: Val<string>, opts: CodeOpts = {}) {
@@ -138,11 +139,8 @@ export class CodeShape extends Shape {
     this.wrapper.style.cssText = wrapperCss(fontSize, fontFamily);
     fo.appendChild(this.wrapper);
 
-    // Initial mount via #render so line elements + highlights are set up.
     this.#render(initialStr);
 
-    // Direct writes to `source` re-render synchronously. Morph sets
-    // the flag to skip this and own the DOM swap itself.
     this.disposers.push(
       effect(() => {
         const src = this.source.value;
@@ -153,85 +151,71 @@ export class CodeShape extends Shape {
     );
   }
 
-  /** Plain-text re-render: rebuild line elements, remeasure, push
-   *  sizes, re-paint syntax-colour highlights. */
+  /** Full rebuild — wipe wrapper, recreate plain line elements, push
+   *  fresh dimensions, repaint. Used on initial mount and on external
+   *  writes to `source`. Morph manages its own DOM swap and skips this. */
   #render(src: string): void {
     while (this.wrapper.firstChild) this.wrapper.removeChild(this.wrapper.firstChild);
-    for (const line of src.split("\n")) {
-      this.wrapper.appendChild(makeLineEl(line));
-    }
+    for (const line of src.split("\n")) this.wrapper.appendChild(makeLineEl(line));
     const nw = this.wrapper.offsetWidth;
     const nh = this.wrapper.offsetHeight;
     if (nw !== this.width.peek()) this.width.value = nw;
     if (nh !== this.height.peek()) this.height.value = nh;
-    this.#paintHighlights();
+    this.#paint();
   }
 
-  /** Walk every line element and register Range-based syntax
-   *  highlights. Each line falls into one of three shapes:
-   *
-   *   - Plain text (steady state, or whole-line insert/delete during
-   *     morph): single text node child, re-tokenize the line text.
-   *   - Morph-modified: element children carry their original Token[]
-   *     metadata (via the off-DOM WeakMap in `morph.ts`); paint from
-   *     that to preserve function-name etc. classifications that
-   *     fragment-context re-tokenization would lose.
-   *   - User-wrapped: external code (e.g. `pluck` in a demo) wrapped
-   *     a token in a span. Children have no attached tokens, so we
-   *     re-tokenize the joined text and route each typed range to the
-   *     text node that contains it. Without this branch the line
-   *     loses all colour the moment any descendant span appears.
-   *
-   *  Custom Highlights are rendered through the element's render
-   *  pipeline in modern browsers, so they fade with element opacity. */
-  #paintHighlights(): void {
+  /** Single paint path. For each line, derive zero, one, or two
+   *  "fragment views" from its children and paint each as a contiguous
+   *  text span: tokenize the joined text, route each typed token to
+   *  the descendant text node containing it. */
+  #paint(): void {
     this.#clearHighlights();
     if (typeof CSS === "undefined" || !("highlights" in CSS)) return;
 
     for (const lineEl of this.wrapper.querySelectorAll<HTMLElement>(`.${LINE_CLASS}`)) {
-      let hasMorphTokens = false;
-      for (const child of Array.from(lineEl.children)) {
-        if (getAttachedTokens(child)) {
-          hasMorphTokens = true;
-          break;
-        }
+      const oldChildren: HTMLElement[] = [];
+      const newChildren: HTMLElement[] = [];
+      let hasMorph = false;
+      for (const child of Array.from(lineEl.children) as HTMLElement[]) {
+        const cl = child.classList;
+        if (cl.contains(CLASS_DEL)) { oldChildren.push(child); hasMorph = true; }
+        else if (cl.contains(CLASS_INS)) { newChildren.push(child); hasMorph = true; }
+        else if (cl.contains(CLASS_MATCH)) { oldChildren.push(child); newChildren.push(child); hasMorph = true; }
       }
-      if (hasMorphTokens) {
-        for (const child of Array.from(lineEl.children)) {
-          const tokens = getAttachedTokens(child);
-          if (!tokens) continue;
-          const tn = child.firstChild;
-          if (tn && tn.nodeType === Node.TEXT_NODE) {
-            this.#paintTokensOnTextNode(tn as Text, tokens);
-          }
-        }
+      if (hasMorph) {
+        this.#paintFragment(oldChildren);
+        this.#paintFragment(newChildren);
       } else {
-        this.#paintLineFromFullText(lineEl);
+        this.#paintFragment([lineEl]);
       }
     }
   }
 
-  /** Steady-state / user-wrapped highlight painter. Tokenizes the
-   *  line's joined text once, then maps each token's [start, end) back
-   *  to the descendant text node that fully contains it. Tokens that
-   *  straddle node boundaries (rare — would require the wrap to cut
+  /** Tokenize the joined text of the given roots and register a Range
+   *  per typed token in the descendant text node that contains it.
+   *  Tokens straddling node boundaries (would require a wrap to cut
    *  through a Prism token) are skipped rather than partially painted. */
-  #paintLineFromFullText(lineEl: HTMLElement): void {
+  #paintFragment(roots: readonly HTMLElement[]): void {
+    if (roots.length === 0) return;
     const textNodes: Text[] = [];
     const starts: number[] = [];
-    const walker = document.createTreeWalker(lineEl, NodeFilter.SHOW_TEXT);
     let off = 0;
-    let n = walker.nextNode();
-    while (n) {
-      const t = n as Text;
-      textNodes.push(t);
-      starts.push(off);
-      off += (t.textContent ?? "").length;
-      n = walker.nextNode();
+    for (const root of roots) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let n = walker.nextNode();
+      while (n) {
+        const t = n as Text;
+        textNodes.push(t);
+        starts.push(off);
+        off += (t.textContent ?? "").length;
+        n = walker.nextNode();
+      }
     }
     if (textNodes.length === 0) return;
 
-    const tokens = tokenize(lineEl.textContent ?? "", this.language);
+    const fullText = textNodes.map((t) => t.textContent ?? "").join("");
+    const tokens = tokenize(fullText, this.language);
+
     let pos = 0;
     for (const tok of tokens) {
       const len = tok.text.length;
@@ -252,7 +236,7 @@ export class CodeShape extends Shape {
               h.add(r);
               this.#highlightRanges.push(r);
             } catch {
-              // Defensive: Range setting can throw on weird offsets.
+              // Defensive: setting Range can throw on weird offsets.
             }
             break;
           }
@@ -260,40 +244,6 @@ export class CodeShape extends Shape {
       }
       pos += len;
     }
-  }
-
-  /** Add a Range per typed token to the global `CSS.highlights`
-   *  registry under its type name, with offsets walking through
-   *  `tokens` against `textNode`. */
-  #paintTokensOnTextNode(textNode: Text, tokens: readonly Token[]): void {
-    let offset = 0;
-    for (const tok of tokens) {
-      if (tok.type !== "" && !tok.text.includes("\n")) {
-        try {
-          const r = new Range();
-          r.setStart(textNode, offset);
-          r.setEnd(textNode, offset + tok.text.length);
-          let h = CSS.highlights.get(tok.type);
-          if (h === undefined) {
-            h = new Highlight();
-            CSS.highlights.set(tok.type, h);
-          }
-          h.add(r);
-          this.#highlightRanges.push(r);
-        } catch {
-          // Range setting can throw if offset is OOB; be safe.
-        }
-      }
-      offset += tok.text.length;
-    }
-  }
-
-  /** @internal Used by `morph` to re-paint highlights mid-flight after
-   *  rebuilding the line structure. Matched + inserted + deleted lines
-   *  hold plain text and get coloured; modified lines (which now hold
-   *  morph spans) are skipped. */
-  _repaintHighlights(): void {
-    this.#paintHighlights();
   }
 
   #clearHighlights(): void {
@@ -308,22 +258,33 @@ export class CodeShape extends Shape {
     this.#highlightRanges.length = 0;
   }
 
-  /** Animate from the current source to `target` via line-aware diff +
-   *  surgical-cut morph. See `morph.ts`. */
+  /** Animate from the current source to `target`. See `morph.ts`. */
   morphTo(target: string, dur: number, ease?: Easing): Animator<void> {
     return morph(this, target, dur, ease);
   }
 
-  /** @internal Used by `morph` to commit the new source at completion
-   *  while suppressing the auto-rerender effect. */
-  _setSourceAndRender(src: string): void {
+  /** @internal Repaint highlights against the current DOM. Used by
+   *  morph (after rebuild + at finalize) and by external code that
+   *  mutates the wrapper (e.g. a demo `pluck` that wraps a token). */
+  _repaint(): void {
+    this.#paint();
+  }
+
+  /** @internal Commit `src` to the source signal with the auto-render
+   *  effect suppressed (caller has already brought the DOM into the
+   *  target state), re-measure, repaint. */
+  _finalize(src: string): void {
     this.#inMorph = true;
     try {
       this.source.value = src;
-      this.#render(src);
     } finally {
       this.#inMorph = false;
     }
+    const nw = this.wrapper.offsetWidth;
+    const nh = this.wrapper.offsetHeight;
+    if (nw !== this.width.peek()) this.width.value = nw;
+    if (nh !== this.height.peek()) this.height.value = nh;
+    this.#paint();
   }
 }
 
@@ -331,11 +292,10 @@ export class CodeShape extends Shape {
 export const code = (source: Val<string>, opts?: CodeOpts): CodeShape =>
   new CodeShape(source, opts);
 
-/** Styling for syntax-colour highlights (via CSS Custom Highlights —
- *  ranges painted by Prism token type) and for morph delete/insert
- *  spans during animation. Drop into a `Diagram.styles` block via the
- *  `css` tag so the rules land in the Diagram's shadow root, where
- *  the CodeShape's wrapper lives. */
+/** Styling for Prism token classes (Custom Highlights, painted per
+ *  Range) and morph del/ins span colours. Drop into a `Diagram.styles`
+ *  block via the `css` tag so the rules land in the Diagram's shadow
+ *  root, where the wrapper lives. */
 export const codeStyles = `
   .minim-code-del { color: var(--prettylights-deleted-text, inherit); }
   .minim-code-ins { color: var(--prettylights-inserted-text, inherit); }
