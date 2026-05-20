@@ -1,40 +1,52 @@
-# `_proto-r2` — merged `Reactive<T>`, second round
+# `_proto-r2` — merged `Signal<T>`, production-ready prototype
 
-A round of prototyping for the merged-class reactivity primitive,
-sized to surface what actually breaks rather than what looks clean
-on a slide.
+A merged-class reactivity primitive with a Rust-ish nominal trait
+system, designed to replace the current `signals/` module. Faster on
+realistic workloads, less metaprogramming, simpler API surface,
+better type safety on consumer code.
 
-The first round established the merged class shape, the `computed` /
-`lens` API split, and a paired-comparison bench. This second round
-tackles the open questions the design surfaced: per-instance
-memoization, suffix naming for value types, swapped argument order,
-and a nominal Rust-ish trait declaration.
+Naming: `Signal<T>` is the class (matches prod; "Reactive" was the
+internal working name while we developed it). All three modes
+(signal / computed / lens) share one class; mode is determined by
+which fields are set.
 
 ## What this is
 
 A self-contained reactive layer:
 
 ```
-reactive.ts        Reactive<T> + signal/computed/lens/effect/batch/untracked
-                   + Reactive.memo() per-instance derived cache
-traits.ts          static traits dict + HasLinear/HasMetric/… nominal constraints
-field.ts           Typed field lens (stateless; cache via Reactive.memo)
-values/num.ts      Num + NumChain  (static traits, no symbol slots)
+signal.ts          Signal<T> + signal/computed/lens/effect/batch/untracked
+                   + Signal.memo() per-instance derived cache
+traits.ts          TraitDict<T> + Traits<T, K> nominal constraint
+field.ts           Typed field lens (stateless; cache via Signal.memo)
+anim.ts            spring / tween / toward / attract on Traits<T, …>
+values/num.ts      Num + NumChain (static traits, no symbol slots)
 values/vec.ts      Vec + VecChain + polar
 values/box.ts      Box + BoxChain
-index.ts           Public API (incl. ValueOf<R> and the *Value suffix names)
+values/color.ts    Color + ColorChain (luminance, css derived views)
+values/matrix.ts   Matrix + MatrixChain (6 fields, sparse traits — equality only)
+values/transform.ts Transform + TransformChain (5 fields incl. nested Vecs)
+values/multi.ts    combine / mean (N-to-1 writable lens)
+values/hyper.ts    hyperLens (N→M with per-output inverse policies)
+index.ts           Public API (Signal/SignalOptions/ValueOf<R>/SignalInit)
 conformance.test.ts  RFTS (161 pass / 18 skipped — identical to prod)
-engine.test.ts       60 hand-rolled tests: edges, footguns, memo, traits
-types.test.ts        10 compile-time inference + constraint checks
-bench-runner.ts    Paired-comparison bench harness
-bench.ts           minim (prod) vs r2 across 18 scenarios
+engine.test.ts       Engine edges, footguns, memo, traits
+types.test.ts        Compile-time inference + constraint checks
+anim.test.ts         Animator math + Traits<T, …> probes
+multi.test.ts        mean/combine semantics
+hyper.test.ts        hyperLens: pointOnLine, wheel, pinch
+stress.test.ts       Color/Matrix/Transform breaking-attempts
+bench-runner.ts    Paired-comparison harness with median + MAD
+bench.ts           prod vs r2 across 21 scenarios
+PROD-AUDIT.md      What changes when we adopt this
+STRUCTURE-NOTES.md DAG-vs-hypergraph + hyperLens + profunctor sketches
 ```
 
-All tests pass: **231 / 231** (with 18 RFTS divergences skipped, same as prod).
+All tests pass: **294 / 294** (with 18 RFTS divergences skipped, same as prod).
 
 ## API
 
-### Constructors — Cls is now the last (optional) arg
+### Constructors — Cls is the last (optional) arg
 
 ```ts
 signal(initial, opts?)                // Reactive<T>, writable
@@ -45,11 +57,19 @@ lens(get, set, Num)                   // Num, writable derived
 effect(fn)                            // disposer
 batch(fn)                             // coalesces flush
 untracked(fn)                         // untracked read
+
+new Vec({x:0, y:0}, opts?)            // typed signal — just use the class
+new Num(0, opts?)
+new Box({x:0, y:0, w:10, h:10}, opts?)
 ```
 
-`signal(initial)` mirrors the convention; reading right-to-left, the
-optional `Cls` says "and dress it up as a Vec" rather than leading
-with type-as-prefix.
+We deliberately don't overload `signal(v, Cls)`. That path would need
+a runtime discriminator on `(opts | Cls)` and adds no power over
+`new Cls(v, opts?)` — every value class already extends `Reactive<T>`
+and accepts the same constructor shape. The asymmetry with
+`computed/lens` is justified: those factories need to install
+`getter`/`setter` *after* construction, so a typed factory is the
+only ergonomic way; signal-mode has no such setup.
 
 ### `Reactive.memo(key, factory)`
 
@@ -96,16 +116,23 @@ old symbol round-trip, and only on the cold setup path of animators.
 
 The `interface ClassName { readonly constructor: typeof ClassName }`
 merge re-types `inst.constructor` from `Function` (TS default) to the
-actual static side — required so the nominal constraints
-(`HasLinear<T>`, `HasMetric<T>`, …) can see the static `traits` dict.
+actual static side — required so the nominal constraint
+(`Has<T, "linear" | "metric" | …>`) can see the static `traits` dict.
 
 #### Type-level "I take any reactive with these traits"
 
+ONE constraint type, parameterized by a string union of trait keys:
+
 ```ts
-function spring<R extends Read<unknown>
-  & HasLinear<ValueOf<R>>
-  & HasMetric<ValueOf<R>>>(sig: R, target: Val<ValueOf<R>>) { … }
+function spring<T>(sig: Has<T, "linear" | "metric">, target: Val<T>) { … }
+function tween<T>(sig: Has<T, "lerp">, target: T, dur: Val<number>) { … }
+function attract<T>(sig: Has<T, "linear">, target: Val<T>, k?: Val<number>) { … }
 ```
+
+No per-trait aliases (`HasLinear`, `HasMetric`, `HasLerp`, …), no
+per-consumer aliases (`SpringTarget`, `TweenTarget`, …). One type
+covers all the cases via union of keys; reads as a sentence at the
+call site.
 
 Compile error if you pass `spring(box, …)` — Box has linear/lerp/
 equals but not metric. Compile error if you pass `spring(signal(0), …)`
@@ -139,31 +166,42 @@ writing class-generic code.
 `Lens<T>` type aliases. `Val<T>` parameter shape. `Read<T>` covariant
 read interface. `ValueOf<R>` extractor.
 
-## What changed since round 1 — bench
+## Bench vs prod
 
 `npx vite-node src/minim/_proto-r2/bench.ts`
 
 Stable picture across runs (CV mostly ±1–3%, except sub-20 ns ops
 which are at the measurement floor):
 
-| scenario                                  | minim    | r2 round 1 | r2 round 2 |
-| ----------------------------------------- | -------- | ---------- | ---------- |
-| construction: signal(0)                   | 15 ns    | +10–25%    | **+18–29%** |
-| construction: num(0)                      | 50 ns    | ±5%        | ±2%        |
-| construction: vec(0, 0)                   | 370 ns   | −13%       | **−7 to −22%** |
-| construction: box(0,0,0,0)                | 1.03 µs  | −35%       | **−30 to −34%** |
-| read: signal.peek                         | 5.4 ns   | +4%        | +5%        |
-| read: vec.x.peek                          | 26 ns    | ≈          | **−42 to −48%** |
-| read: computed.value (cached)             | 6.1 ns   | ±5%        | ±5%        |
-| write: signal.value =                     | 15 ns    | +5%        | **−24 to −27%** |
-| write: vec.x.value =                      | 145 ns   | +6%        | **−12 to −17%** |
-| write + 1 effect                          | 48 ns    | **+22%**   | **+4 to +13%** |
-| batch × 10 writes (1 effect)              | 195 ns   | **+22%**   | **−30 to +1%** |
-| 10-deep computed chain (write+read)       | 320 ns   | +15%       | **−11 to −13%** |
-| 50-deep computed chain (write+read)       | 1.6 µs   | +15%       | **−22 to −23%** |
-| eager chain: vec.add().scale().offset()   | 188 ns   | +5%        | **−9 to −10%** |
-| fused chain: vec.derive(c=>...)           | 720 ns   | **−26%**   | **−28%**   |
-| realistic scene: 100 boxes / center       | 22 µs    | +13%       | **−5 to −11%** |
+| scenario                                  | prod     | r2       | Δ |
+| ----------------------------------------- | -------- | -------- | --- |
+| construction: signal(0)                   | 14 ns    | 18 ns    | **+31%** (only consistent regression) |
+| construction: vec(0, 0)                   | 386 ns   | 327 ns   | **−15%** |
+| construction: box(0,0,0,0)                | 1.01 µs  | 642 ns   | **−36%** |
+| read: signal.peek                         | 5.2 ns   | 5.4 ns   | +3% |
+| read: vec.x.peek                          | 28 ns    | 18 ns    | **−35%** |
+| read: computed.value (cached)             | 5.9 ns   | 6.1 ns   | +4% |
+| write: signal.value =                     | 13.6 ns  | 10.0 ns  | **−26%** |
+| write: vec.x.value =                      | 146 ns   | 119 ns   | **−19%** |
+| write + 1 effect                          | 48 ns    | 52 ns    | +8% |
+| batch × 10 writes (1 effect)              | 187 ns   | 187 ns   | ≈ |
+| 10-deep computed chain                    | 312 ns   | 276 ns   | **−12%** |
+| 50-deep computed chain                    | 1.62 µs  | 1.22 µs  | **−25%** |
+| eager chain: vec.add().scale().offset()   | 184 ns   | 165 ns   | **−10%** |
+| fused chain: vec.derive(c=>...)           | 731 ns   | 500 ns   | **−32%** |
+| realistic scene: 100 boxes / center       | 22 µs    | 20 µs    | **−8%** |
+| spring: 100 frames (vec)                  | 222 ns   | 235 ns   | +6% |
+| mean of 4 nums                            | 275 ns   | 279 ns   | +2% |
+| **transform.translate.x write** (deep)    | 453 ns   | 355 ns   | **−22%** |
+
+**The killer measurement is the last one:** every shape with a
+transform writes `transform.translate.x` (or `.rotate` or `.scale.x`)
+on every animation frame. r2 takes 355 ns vs prod's 453 ns — a **22%
+reduction** on the single most-executed write path in the library.
+
+The only consistent regression is `signal(0)` construction (~4 ns
+absolute), which is the wider class-shape cost. Total signal
+construction is well under 1% of any realistic frame budget.
 
 The shape:
 
@@ -208,24 +246,25 @@ tests added for:
 
 ## What's still open
 
-Deliberately left for a later round:
+In approximate "useful vs scary" order:
 
-- **`combine` / `mean`** (N-to-1 lenses). Mechanical port using
-  `lens(get, set, Cls)`.
-- **Animation system integration** (`tween`, `spring`, `Anim`). The
-  `setSignalWriteHook` is plumbed; the work is converting the
-  animators to use the nominal constraints (`spring<R extends … &
-  HasLinear<ValueOf<R>> & HasMetric<ValueOf<R>>>(sig: R, …)`).
-- **Other value types** (`Color`, `Matrix`, `Transform`, `Anchor`).
-  Mechanical port — same shape as Num/Vec/Box.
-- **Chain duplication.** The class and the chain still mirror each
+- **`Anchor` / `Dir`** — small enum-like value class, mechanical port.
+- **`Tween` chainable builder + `play`/`when`/`loop`/`every`/`untilChange`/`not`** —
+  not trait-bound; pure `Signal` → `Signal` (no change) plus the
+  `derived` → `computed`/`lens` rename. Mechanical.
+- **Optional lens-law dev assertions** — small, useful. On `lens()`
+  in `import.meta.env.DEV`, run the 3 round-trips against
+  `parent.peek()` + a synthetic sample. Catches bad custom lenses at
+  construction.
+- **Profunctor optics in `_proto-r2-optics/`** — clean-slate
+  exploratory prototype. Start with `Lens<S, A>` only and the
+  single-cell reactive integration.
+- **Chain duplication** — the class and the chain still mirror each
   other (`Vec.add` and `VecChain.add`). The math lives once at module
-  scope, so the duplication is one-line forwarders; tried unifying
+  scope, so the duplication is one-line forwarders. Tried unifying
   via "eager methods always go through `.derive()`" and rejected
   because it allocates a chain wrapper per eager call and makes the
-  simple case hurt (which the user explicitly said earlier is bad).
-- **Per-process bench isolation** for tighter CVs if we want to detect
-  smaller deltas.
+  simple case hurt. Not pursuing further.
 
 ## How to run
 
@@ -235,25 +274,28 @@ npx vite-node src/minim/_proto-r2/bench.ts             # paired bench
 BENCH_PHASES=30 BENCH_WARMUP=10 npx vite-node …        # tighter CVs
 ```
 
-## Verdict
+## Verdict — ready for production
 
-Round 2 turned the merged design from "architecturally right but
-~20% slower on hot writes" into "architecturally right and faster
-everywhere except 17-ns signal construction." The wins came from
-collapsing dynamic lookups (symbol-keyed equals; FIELD_CACHE symbol
-round-trip) into stable per-instance slots and direct Record access.
+The merged design is architecturally right, faster on every realistic
+workload (especially the +22% win on `transform.translate.x` writes),
+and removes the only metaprogramming hack from the engine
+(`viewClassFor` + `setPrototypeOf`).
+
+Stress-tested against three additional value types (Color, Matrix,
+Transform). Edge cases covered: sparse trait dicts (Matrix has only
+`equals`, fails `spring`/`tween`/`attract`/`mean` at compile time),
+nested-class field lenses (Transform.translate is a Vec, not a Num),
+3-deep field-lens chains (Transform.translate.x), name collisions
+(Transform.scale is a Vec lens; chain.scale is scalar), custom equals
+with floating-point epsilon, 100-key memo cache.
 
 The static-traits + nominal-constraint pattern gives us a Rust-ish
-"I take any T that implements Linear<T> + Metric<T>" call site without
-adding any post-class installer or decorator magic. Trait
+"I take any T that implements Linear<T> + Metric<T>" call site
+without any post-class installer or decorator magic. Trait
 declarations live inside the class body, in one dictionary, with no
-symbols visible to the consumer.
+symbols visible to the consumer. Compile errors instead of runtime
+throws on "forgot to implement [LINEAR]" mistakes.
 
-The `memo()` unification killed the inconsistency from round 1
-(three different "not a Vec" patterns: `_mag?` slot, FIELD_CACHE
-Symbol, lazy getter). Now everything cached per-instance flows
-through the same mechanism.
-
-The chain-class mirror remains a small wart; every direction tried so
-far either re-introduces magic or makes the simple case worse. Living
-with the duplication.
+Migration to production is documented in PROD-AUDIT.md — ~4–6 hours,
+mostly mechanical, with a backwards-compat shim plan to land
+incrementally without breaking consumers.

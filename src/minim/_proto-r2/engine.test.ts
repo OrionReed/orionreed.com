@@ -10,10 +10,10 @@
 
 import { describe, it, expect } from "vitest";
 import {
-  Reactive, signal, computed, lens, effect, batch, untracked,
+  Signal, signal, computed, lens, effect, batch, untracked,
   isSignal, isLens, isComputed,
   value,
-} from "./reactive";
+} from "./signal";
 import { field as _field } from "./field";
 import { Num, num } from "./values/num";
 import { Vec, vec, polar } from "./values/vec";
@@ -27,6 +27,32 @@ describe("engine: signal", () => {
     expect(s.value).toBe(1);
     s.value = 2;
     expect(s.value).toBe(2);
+  });
+
+  it("typed signals via class constructor (replaces signal(v, Cls))", () => {
+    // No signal(v, Cls) overload — use `new Vec(initial, opts?)` instead.
+    const v = new Vec({ x: 1, y: 2 });
+    expect(v).toBeInstanceOf(Vec);
+    expect(v.value).toEqual({ x: 1, y: 2 });
+    v.value = { x: 10, y: 20 };
+    expect(v.value).toEqual({ x: 10, y: 20 });
+    expect(typeof (v.constructor.traits.linear)).toBe("object");
+  });
+
+  it("typed signal accepts opts via class constructor", () => {
+    const v = new Vec({ x: 0, y: 0 }, { equals: () => true });
+    let runs = 0;
+    effect(() => { void v.value; runs++; });
+    v.value = { x: 9, y: 9 };
+    expect(runs).toBe(1);  // opts.equals overrides Vec.traits.equals
+  });
+
+  it("signal(value, opts) accepts options", () => {
+    const s = signal(1, { equals: () => true });
+    let runs = 0;
+    effect(() => { void s.value; runs++; });
+    s.value = 99;
+    expect(runs).toBe(1);
   });
 
   it("notifies effects", () => {
@@ -73,11 +99,11 @@ describe("engine: computed", () => {
 
   it("write throws", () => {
     const c = computed(() => 1);
-    expect(() => { (c as Reactive<number>).value = 9; }).toThrow(/Cannot write to a Computed/);
+    expect(() => { (c as Signal<number>).value = 9; }).toThrow(/Cannot write to a Computed/);
   });
 
   it("cycle detection", () => {
-    const c: Reactive<number> = computed(() => c.value + 1);
+    const c: Signal<number> = computed(() => c.value + 1);
     expect(() => c.value).toThrow(/[Cc]ycl/);
   });
 
@@ -85,7 +111,7 @@ describe("engine: computed", () => {
     const a = num(3);
     const sum = computed(() => a.value * 2, Num);
     expect(sum).toBeInstanceOf(Num);
-    expect(sum).toBeInstanceOf(Reactive);
+    expect(sum).toBeInstanceOf(Signal);
     expect(sum.value).toBe(6);
   });
 });
@@ -213,10 +239,10 @@ describe("footguns", () => {
 // ─── Value: Num ────────────────────────────────────────────────────
 
 describe("value: Num", () => {
-  it("instanceof Num & Reactive", () => {
+  it("instanceof Num & Signal", () => {
     const n = num(3);
     expect(n).toBeInstanceOf(Num);
-    expect(n).toBeInstanceOf(Reactive);
+    expect(n).toBeInstanceOf(Signal);
   });
 
   it("eager methods produce Num computeds", () => {
@@ -374,7 +400,7 @@ describe("cascade: typed lens chains", () => {
 // ─── value() helper ────────────────────────────────────────────────
 
 describe("value()", () => {
-  it("unwraps Reactive, function, or plain", () => {
+  it("unwraps Signal, function, or plain", () => {
     expect(value(5)).toBe(5);
     expect(value(() => 7)).toBe(7);
     expect(value(signal(9))).toBe(9);
@@ -517,7 +543,7 @@ describe("computed: constant getter", () => {
 
 // ─── memo() ────────────────────────────────────────────────────────
 
-describe("Reactive.memo()", () => {
+describe("Signal.memo()", () => {
   it("caches per (instance, key)", () => {
     const s = signal(1);
     let runs = 0;

@@ -11,7 +11,7 @@ import {
 } from "reactive-framework-test-suite";
 import {
   signal, computed, effect, batch, untracked,
-} from "./reactive";
+} from "./signal";
 
 const fw: ReactiveFramework = {
   name: "minim-r2",

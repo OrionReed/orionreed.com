@@ -3,8 +3,8 @@
 //
 // Run: npx tsx src/minim/_proto/bench.ts
 
-import { Anim as Proto, type Animator as ProtoAnim, type Yieldable as ProtoYield } from "./engine";
-import { scaled as protoScaled } from "./userland";
+import { Anim as Proto, type Animator as ProtoAnim, type Yieldable as ProtoYield } from "./anim";
+import { scaled as protoScaled } from "./transducers";
 import { Anim as Prod } from "../core/anim";
 import { withScale as prodScaled } from "../core/combinators";
 import type { Animator as ProdAnim } from "../core";
@@ -72,12 +72,16 @@ function runProd(make: () => ProdAnim, N: number, depth: number): number {
 }
 
 function median(s: number[]): number { return [...s].sort((a, b) => a - b)[Math.floor(s.length / 2)]; }
-function sample(fn: () => number, n = 5): number { return median(Array.from({ length: n }, fn)); }
+function sample(fn: () => number, n = 11): number { return median(Array.from({ length: n }, fn)); }
 
-// warmup
-for (let i = 0; i < 5; i++) {
+// warmup — both engines, all depths, both workloads
+for (let i = 0; i < 10; i++) {
   runProto(parkerP, 1000, 1);
+  runProto(parkerP, 1000, 2);
+  runProto(tweenP, 1000, 1);
   runProd(parkerR, 1000, 1);
+  runProd(parkerR, 1000, 2);
+  runProd(tweenR, 1000, 1);
 }
 
 console.log(`\nTarget: 10K animations at 125fps (8ms frame budget)`);

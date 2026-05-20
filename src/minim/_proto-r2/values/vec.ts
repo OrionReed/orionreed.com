@@ -4,8 +4,8 @@
 // `this.memo(key, factory)`. No more `_mag?` slot, no per-class
 // FIELD_CACHE Symbol. Same observable behavior, one mechanism.
 
-import { Reactive, computed, value, type Val } from "../reactive";
-import { type Linear, type Traits } from "../traits";
+import { Signal, computed, value, type Val, type SignalOptions } from "../signal";
+import { type Linear, type TraitDict } from "../traits";
 import { field } from "../field";
 import { Num } from "./num";
 
@@ -29,15 +29,15 @@ export const normalize = (v: VecValue): VecValue => {
 /** 90° CCW rotation (y-down: rotates left): `(x, y) → (y, -x)`. */
 export const perp = (v: VecValue): VecValue => ({ x: v.y, y: -v.x });
 
-export class Vec extends Reactive<VecValue> {
-  static traits: Required<Traits<VecValue>> = {
+export class Vec extends Signal<VecValue> {
+  static traits: Required<TraitDict<VecValue>> = {
     linear: { add, sub, scale },
     lerp,
     metric,
     equals,
   };
 
-  constructor(v: VecValue = { x: 0, y: 0 }) { super(v); }
+  constructor(v: VecValue = { x: 0, y: 0 }, opts?: SignalOptions<VecValue>) { super(v, opts); }
 
   add(b: Val<VecValue>) { return computed(() => add(this.value, value(b)), Vec); }
   sub(b: Val<VecValue>) { return computed(() => sub(this.value, value(b)), Vec); }
@@ -103,7 +103,7 @@ export const vec = (x: Val<number> = 0, y: Val<number> = 0): Vec => {
   return v;
 };
 
-/** Reactive Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`. */
+/** Signal Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`. */
 export const polar = (
   center: Val<VecValue>,
   r: Val<number>,

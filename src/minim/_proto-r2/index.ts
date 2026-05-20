@@ -1,7 +1,7 @@
 // Public API for the r2 prototype.
 
 export {
-  Reactive,
+  Signal,
   signal,
   computed,
   lens,
@@ -18,21 +18,38 @@ export {
   type Computed,
   type Lens,
   type ValueOf,
-  type ReactiveOptions,
-} from "./reactive";
+  type SignalOptions,
+} from "./signal";
 
 export {
   linearOf, lerpOf, metricOf, equalsOf,
   requireLinear, requireLerp, requireMetric, requireEquals,
-  classOf,
   type Linear, type Lerp, type Metric, type Equals,
-  type Traits,
-  type HasTraits, type HasLinear, type HasLerp, type HasMetric, type HasEquals,
-  type ValueClass,
+  type Traits, type TraitDict, type TraitKey,
 } from "./traits";
 
-export { field, type ReactiveInit } from "./field";
+export { field, type SignalInit } from "./field";
 
 export { Num, NumChain, num, type NumValue } from "./values/num";
 export { Vec, VecChain, vec, polar, type VecValue } from "./values/vec";
 export { Box, BoxChain, box, type BoxValue } from "./values/box";
+export { Color, ColorChain, rgb, rgba, type ColorValue } from "./values/color";
+export {
+  Matrix, MatrixChain, matrix,
+  identity, fromTranslate, fromScale, fromRotate,
+  isIdentity, multiply, invert, determinant,
+  transformPoint, transformBox, compose,
+  toMatrixString,
+  type MatrixValue,
+} from "./values/matrix";
+export {
+  Transform, TransformChain, transform,
+  type TransformValue, type TransformInit,
+} from "./values/transform";
+export { combine, mean } from "./values/multi";
+export { hyperLens, type InversePolicy } from "./values/hyper";
+
+export {
+  tween, tweenStep, spring, toward, attract,
+  type SpringOpts,
+} from "./anim";

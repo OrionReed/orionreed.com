@@ -10,8 +10,8 @@
 //   - Value type suffixed (`NumValue`) so consumers don't rename on import.
 //   - `computed(fn, Cls)` arg order.
 
-import { Reactive, computed, value, type Val } from "../reactive";
-import { type Linear, type Traits } from "../traits";
+import { Signal, computed, value, type Val, type SignalOptions } from "../signal";
+import { type Linear, type TraitDict } from "../traits";
 
 export type NumValue = number;
 
@@ -24,15 +24,15 @@ export const equals = (a: NumValue, b: NumValue) => a === b;
 
 const linearImpl: Linear<NumValue> = { add, sub, scale };
 
-export class Num extends Reactive<NumValue> {
-  static traits: Required<Traits<NumValue>> = {
+export class Num extends Signal<NumValue> {
+  static traits: Required<TraitDict<NumValue>> = {
     linear: linearImpl,
     lerp,
     metric,
     equals,
   };
 
-  constructor(v: NumValue = 0) { super(v); }
+  constructor(v: NumValue = 0, opts?: SignalOptions<NumValue>) { super(v, opts); }
 
   add(b: Val<NumValue>) { return computed(() => add(this.value, value(b)), Num); }
   sub(b: Val<NumValue>) { return computed(() => sub(this.value, value(b)), Num); }

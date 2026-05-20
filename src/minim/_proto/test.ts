@@ -3,13 +3,15 @@
 //   - reactive pause/resume mid-sleep
 //   - descendants inherit transducer via spawn-chain (no onChild hook)
 //   - deep stacking (N=100) doesn't crash
-//   - userland detach, pauseWhen, slowmoWhen, trace
+//   - userland detach, pauseWhen, slowmoWhen
 //   - yield 0 = park (no tail-call special case)
+//   - protocol-direction transducers (onYield / onResume) fire and stack
 //
 // Hand-rolled runner (no vitest dep) so we can run as a script.
 
-import { Anim, cut, transduce, type Animator, type Yieldable } from "./engine";
-import { scaled, detach, pauseWhen, slowmoWhen, trace } from "./userland";
+import { Anim, cut, transduce, type Animator, type Yieldable } from "./anim";
+import { scaled, pauseWhen, slowmoWhen } from "./transducers";
+import { detach } from "./detach";
 
 let passed = 0;
 let failed = 0;
@@ -378,7 +380,7 @@ suite("detach (userland Suspend.ctx coordinator)", () => {
 
 // ────────────────────────── Userland: extras ──────────────────────────
 
-suite("pauseWhen / slowmoWhen / trace", () => {
+suite("pauseWhen / slowmoWhen / stacking", () => {
   it("pauseWhen freezes via predicate", () => {
     const anim = new Anim();
     let ticks = 0;
@@ -412,16 +414,24 @@ suite("pauseWhen / slowmoWhen / trace", () => {
     eq(done, true);
   });
 
-  it("trace logs yields and resumes", () => {
+  it("onYield + onResume protocol transducer fires on the right edges", () => {
     const anim = new Anim();
-    const logs: string[] = [];
-    function* g(): any { yield; yield 0.1; }
+    const events: string[] = [];
+    function* g(): any { yield; yield; }
     anim.start(function* () {
-      yield trace("t", g(), (m) => logs.push(m)) as Yieldable;
+      yield transduce(
+        {
+          onYield: (v) => { events.push(`y:${v === undefined ? "park" : v}`); return undefined; },
+          onResume: (t) => { events.push(`r:${t.dt.toFixed(3)}`); return undefined; },
+        },
+        g(),
+      ) as Yieldable;
     });
-    anim.step(0.05);
-    truthy(logs.some((l) => l.includes("yield")), "should have yield log");
-    truthy(logs.some((l) => l.includes("resume")), "should have resume log");
+    // Initial advance: gen yields → onYield fires.
+    eq(events.join("|"), "y:park");
+    anim.step(0.016);
+    // step wakes: onResume fires, then gen yields → onYield fires.
+    eq(events.join("|"), "y:park|r:0.016|y:park");
   });
 
   it("scaled + pauseWhen compose freely (stacked transducers)", () => {

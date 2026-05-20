@@ -20,12 +20,19 @@ import * as M_sig from "../signals/signal";
 import * as M_vec from "../signals/values/vec";
 import * as M_num from "../signals/values/num";
 import * as M_box from "../signals/values/box";
+import * as M_lerp from "../signals/lerp";
+import * as M_values from "../signals/values";
 
 // ─── r2 ─────────────────────────────────────────────────────────────
-import * as R from "./reactive";
+import * as R from "./signal";
 import * as R_vec from "./values/vec";
 import * as R_num from "./values/num";
 import * as R_box from "./values/box";
+import * as R_anim from "./anim";
+import * as R_multi from "./values/multi";
+import * as R_transform from "./values/transform";
+
+import type { Tick } from "../core";
 
 // Shared workload tunings
 const ITER = 200_000;
@@ -227,6 +234,53 @@ function defs(side: "minim" | "r2"): Bench[] {
           return 0;
         },
       },
+      {
+        // Drive a spring for 100 frames and count CPU per frame.
+        name: "spring: 100 frames (vec)",
+        iters: 200,
+        setup: () => {
+          const v = M_vec.vec(0, 0);
+          return { v, i: 0 };
+        },
+        run: (st) => {
+          const s = st as { v: M_vec.Vec; i: number };
+          const g = M_lerp.spring(s.v, { x: 100, y: 100 }, { omega: 30, zeta: 1 });
+          for (let f = 0; f < 100; f++) {
+            const tick: Tick = { dt: 1 / 60, elapsed: f / 60 };
+            if (g.next(tick).done) break;
+          }
+          ++s.i;
+          return s.v.value.x;
+        },
+      },
+      {
+        name: "mean of 4 nums (read+write cycle)",
+        iters: 50_000,
+        setup: () => {
+          const a = M_num.num(1); const b = M_num.num(2);
+          const c = M_num.num(3); const d = M_num.num(4);
+          const m = M_values.mean(a, b, c, d);
+          return { m, i: 0 };
+        },
+        run: (st) => {
+          const s = st as { m: M_num.Num; i: number };
+          s.m.value = ++s.i;
+          return s.m.value;
+        },
+      },
+      {
+        name: "transform.translate.x write (deep field lens)",
+        iters: ITER_HEAVY,
+        setup: () => {
+          const tr = M_values.transform();
+          return { tr, i: 0 };
+        },
+        run: (st) => {
+          const s = st as { tr: M_values.Transform; i: number };
+          s.tr.translate.x.value = ++s.i;
+          return s.tr.translate.x.value;
+        },
+      },
     ];
   }
   // r2
@@ -255,7 +309,7 @@ function defs(side: "minim" | "r2"): Bench[] {
       name: "read: signal.peek()",
       iters: ITER,
       setup: () => R.signal(42),
-      run: (s) => (s as R.Reactive<number>).peek(),
+      run: (s) => (s as R.Signal<number>).peek(),
     },
     {
       name: "read: num.peek()",
@@ -284,14 +338,14 @@ function defs(side: "minim" | "r2"): Bench[] {
         void c.value;
         return c;
       },
-      run: (c) => (c as R.Reactive<number>).value,
+      run: (c) => (c as R.Signal<number>).value,
     },
     {
       name: "write: signal.value = i",
       iters: ITER,
       setup: () => ({ s: R.signal(0), i: 0 }),
       run: (st) => {
-        const s = st as { s: R.Reactive<number>; i: number };
+        const s = st as { s: R.Signal<number>; i: number };
         s.s.value = ++s.i;
         return s.s.value;
       },
@@ -315,7 +369,7 @@ function defs(side: "minim" | "r2"): Bench[] {
         return { s, i: 0 };
       },
       run: (st) => {
-        const s = st as { s: R.Reactive<number>; i: number };
+        const s = st as { s: R.Signal<number>; i: number };
         s.s.value = ++s.i;
         return 0;
       },
@@ -329,7 +383,7 @@ function defs(side: "minim" | "r2"): Bench[] {
         return { s, i: 0 };
       },
       run: (st) => {
-        const s = st as { s: R.Reactive<number>; i: number };
+        const s = st as { s: R.Signal<number>; i: number };
         R.batch(() => {
           for (let k = 0; k < 10; k++) s.s.value = ++s.i;
         });
@@ -350,7 +404,7 @@ function defs(side: "minim" | "r2"): Bench[] {
         return { root, chain, i: 0 };
       },
       run: (st) => {
-        const s = st as { root: R.Reactive<number>; chain: { value: number }; i: number };
+        const s = st as { root: R.Signal<number>; chain: { value: number }; i: number };
         s.root.value = ++s.i;
         return s.chain.value;
       },
@@ -369,7 +423,7 @@ function defs(side: "minim" | "r2"): Bench[] {
         return { root, chain, i: 0 };
       },
       run: (st) => {
-        const s = st as { root: R.Reactive<number>; chain: { value: number }; i: number };
+        const s = st as { root: R.Signal<number>; chain: { value: number }; i: number };
         s.root.value = ++s.i;
         return s.chain.value;
       },
@@ -420,6 +474,52 @@ function defs(side: "minim" | "r2"): Bench[] {
           for (const b of s.boxes) b.x.value = t;
         });
         return 0;
+      },
+    },
+    {
+      name: "spring: 100 frames (vec)",
+      iters: 200,
+      setup: () => {
+        const v = R_vec.vec(0, 0);
+        return { v, i: 0 };
+      },
+      run: (st) => {
+        const s = st as { v: R_vec.Vec; i: number };
+        const g = R_anim.spring(s.v, { x: 100, y: 100 }, { omega: 30, zeta: 1 });
+        for (let f = 0; f < 100; f++) {
+          const tick: Tick = { dt: 1 / 60, elapsed: f / 60 };
+          if (g.next(tick).done) break;
+        }
+        ++s.i;
+        return s.v.value.x;
+      },
+    },
+    {
+      name: "mean of 4 nums (read+write cycle)",
+      iters: 50_000,
+      setup: () => {
+        const a = R_num.num(1); const b = R_num.num(2);
+        const c = R_num.num(3); const d = R_num.num(4);
+        const m = R_multi.mean(a, b, c, d);
+        return { m, i: 0 };
+      },
+      run: (st) => {
+        const s = st as { m: R_num.Num; i: number };
+        s.m.value = ++s.i;
+        return s.m.value;
+      },
+    },
+    {
+      name: "transform.translate.x write (deep field lens)",
+      iters: ITER_HEAVY,
+      setup: () => {
+        const tr = R_transform.transform();
+        return { tr, i: 0 };
+      },
+      run: (st) => {
+        const s = st as { tr: R_transform.Transform; i: number };
+        s.tr.translate.x.value = ++s.i;
+        return s.tr.translate.x.value;
       },
     },
   ];

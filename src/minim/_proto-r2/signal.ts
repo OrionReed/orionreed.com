@@ -1,4 +1,4 @@
-// Reactive<T> — merged engine: signal, computed, and lens in one class.
+// Signal<T> — merged engine: signal, computed, and lens in one class.
 //
 // Mode is determined by which fields are set:
 //   - signal mode:   currentValue is truth, getter undefined
@@ -6,7 +6,7 @@
 //   - lens mode:     getter set, setter set, cachedValue is truth (read), setter handles writes
 //
 // This eliminates `viewClassFor` and `setPrototypeOf` from the engine:
-// `Vec extends Reactive` is a natural prototype chain, `derived(Vec, fn)`
+// `Vec extends Signal` is a natural prototype chain, `derived(Vec, fn)`
 // is `new Vec(); set getter; return`, and `instanceof Vec` uses the
 // native chain walk.
 //
@@ -18,7 +18,7 @@
 //   - flush(): re-entrancy guard (cascading bind-effects on field
 //     lenses can otherwise blow the call stack)
 
-import { type Equals, type Traits } from "./traits";
+import { type Equals, type TraitDict } from "./traits";
 
 // ─── Internal types ──────────────────────────────────────────────────
 
@@ -69,9 +69,9 @@ let flushing = false;
 
 // ─── Write hook (for assert/record attribution) ──────────────────────
 
-let writeHook: ((sig: Reactive<unknown>) => void) | undefined;
+let writeHook: ((sig: Signal<unknown>) => void) | undefined;
 export function setSignalWriteHook(
-  fn: ((sig: Reactive<unknown>) => void) | undefined,
+  fn: ((sig: Signal<unknown>) => void) | undefined,
 ): () => void {
   const prev = writeHook;
   writeHook = fn;
@@ -100,7 +100,7 @@ function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
   else sub.deps = newLink;
   if (prevSub !== undefined) prevSub.nextSub = newLink;
   else dep.subs = newLink;
-  if (isFirstSub && dep instanceof Reactive) {
+  if (isFirstSub && dep instanceof Signal) {
     const hook = dep._watched;
     if (hook !== undefined) hook.call(dep);
   }
@@ -216,7 +216,7 @@ function isValidLink(checkLink: Link, sub: ReactiveNode): boolean {
 }
 
 // Re-entrancy guard: effects that write to signals during their run
-// trigger nested flush() via `Reactive.set value`. The outer loop here
+// trigger nested flush() via `Signal.set value`. The outer loop here
 // is designed to drain the queue including entries appended mid-run,
 // so the recursive call is redundant — and at scale (hundreds of
 // cascading bind-effects on field lenses) it blows V8's stack.
@@ -255,7 +255,7 @@ function disposeAllDepsInReverse(sub: ReactiveNode): void {
 
 // ─── Public types ───────────────────────────────────────────────────
 
-/** Plain T, thunk `() => T`, or any read-shape (Reactive/Computed/…). */
+/** Plain T, thunk `() => T`, or any read-shape (Signal/Computed/…). */
 export type Val<T> = T | (() => T) | Read<T>;
 
 /** Covariant read-only surface (parameter-site for `Val<T>`). */
@@ -264,34 +264,34 @@ export interface Read<out T> {
   peek(): T;
 }
 
-/** Type alias for a read-only Reactive (computed). Both runtime-checked
+/** Type alias for a read-only Signal (computed). Both runtime-checked
  *  (writes throw) and TS-narrowed (Read interface). */
-export type Computed<T = unknown> = Omit<Reactive<T>, "value"> & { readonly value: T };
+export type Computed<T = unknown> = Omit<Signal<T>, "value"> & { readonly value: T };
 
-/** Type alias for a writable derived view (lens). Structurally a Reactive
+/** Type alias for a writable derived view (lens). Structurally a Signal
  *  with both getter AND setter set. Treated as writable in TS. */
-export type Lens<T = unknown> = Reactive<T>;
+export type Lens<T = unknown> = Signal<T>;
 
-/** Extract the value type carried by a Reactive (signal/computed/lens). */
-export type ValueOf<R> = R extends Reactive<infer T> ? T : never;
+/** Extract the value type carried by a Signal (signal/computed/lens). */
+export type ValueOf<R> = R extends Signal<infer T> ? T : never;
 
 export function value<T>(v: Val<T>): T {
-  if (v instanceof Reactive) return v.value;
+  if (v instanceof Signal) return v.value;
   if (typeof v === "function") return (v as () => T)();
   return v as T;
 }
 
-export const isSignal = (v: unknown): v is Reactive<unknown> => v instanceof Reactive;
+export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signal;
 
-/** Runtime check: is this Reactive in lens mode (both getter and setter)? */
-export const isLens = (v: unknown): v is Reactive<unknown> =>
-  v instanceof Reactive && v.getter !== undefined && v.setter !== undefined;
+/** Runtime check: is this Signal in lens mode (both getter and setter)? */
+export const isLens = (v: unknown): v is Signal<unknown> =>
+  v instanceof Signal && v.getter !== undefined && v.setter !== undefined;
 
-/** Runtime check: is this Reactive in computed mode (getter, no setter)? */
-export const isComputed = (v: unknown): v is Reactive<unknown> =>
-  v instanceof Reactive && v.getter !== undefined && v.setter === undefined;
+/** Runtime check: is this Signal in computed mode (getter, no setter)? */
+export const isComputed = (v: unknown): v is Signal<unknown> =>
+  v instanceof Signal && v.getter !== undefined && v.setter === undefined;
 
-export interface ReactiveOptions<T = unknown> {
+export interface SignalOptions<T = unknown> {
   /** First subscriber attached. */
   watched?: () => void;
   /** Last subscriber detached. */
@@ -300,7 +300,7 @@ export interface ReactiveOptions<T = unknown> {
   equals?: Equals<T>;
 }
 
-// ─── The Reactive class ──────────────────────────────────────────────
+// ─── The Signal class ──────────────────────────────────────────────
 
 /** Single reactive primitive. Mode is determined by which fields are set.
  *
@@ -311,17 +311,17 @@ export interface ReactiveOptions<T = unknown> {
  *    - `setter` — when set with getter, instance is in lens mode
  *
  *  Construction patterns:
- *    - `new Reactive(initial)` — signal mode
- *    - `signal(initial)` — same as `new Reactive(initial)`
+ *    - `new Signal(initial)` — signal mode
+ *    - `signal(initial)` — same as `new Signal(initial)`
  *    - `computed(fn)` — computed mode (untyped)
  *    - `computed(fn, Vec)` — computed mode (typed as Cls instance)
  *    - `lens(get, set)` — lens mode (untyped)
  *    - `lens(get, set, Num)` — lens mode (typed)
- *    - `new Vec(initial)` where Vec extends Reactive — typed signal mode
+ *    - `new Vec(initial)` where Vec extends Signal — typed signal mode
  *
  *  Type predicates: `isSignal(x)`, `isComputed(x)`, `isLens(x)`.
  */
-export class Reactive<T = unknown> implements ReactiveNode {
+export class Signal<T = unknown> implements ReactiveNode {
   subs: Link | undefined = undefined;
   subsTail: Link | undefined = undefined;
   deps: Link | undefined = undefined;
@@ -341,7 +341,7 @@ export class Reactive<T = unknown> implements ReactiveNode {
   /** Per-instance lazy derived-view cache; allocated on first `.memo()` hit. */
   protected _memoCache?: Record<string | symbol, unknown>;
 
-  constructor(initial: T, opts?: ReactiveOptions<T>) {
+  constructor(initial: T, opts?: SignalOptions<T>) {
     this.currentValue = initial;
     this.pendingValue = initial;
     // Resolve equality once at construction: opts.equals wins; else
@@ -351,7 +351,7 @@ export class Reactive<T = unknown> implements ReactiveNode {
     if (opts?.equals) {
       this._equals = opts.equals;
     } else {
-      const cls = this.constructor as { traits?: Traits<T> };
+      const cls = this.constructor as { traits?: TraitDict<T> };
       if (cls.traits?.equals) this._equals = cls.traits.equals;
     }
     if (opts) {
@@ -434,7 +434,7 @@ export class Reactive<T = unknown> implements ReactiveNode {
     const same = equals ? equals(prev, next) : prev === next;
     if (!same) {
       this.flags = F.Mutable | F.Dirty;
-      if (writeHook !== undefined) writeHook(this as Reactive<unknown>);
+      if (writeHook !== undefined) writeHook(this as Signal<unknown>);
       const subs = this.subs;
       if (subs !== undefined) {
         propagate(subs, runDepth > 0);
@@ -475,7 +475,7 @@ export class Reactive<T = unknown> implements ReactiveNode {
    *  (no-op for plain T). */
   bind(source: Val<T>): () => void {
     if (this._stopBinding) { this._stopBinding(); this._stopBinding = undefined; }
-    if (source instanceof Reactive || typeof source === "function") {
+    if (source instanceof Signal || typeof source === "function") {
       const stop = effect(() => { this.value = value(source); });
       this._stopBinding = stop;
       return stop;
@@ -523,7 +523,7 @@ export class Reactive<T = unknown> implements ReactiveNode {
 
   /** Footgun guard: silently coercing to string/number is almost always a bug. */
   [Symbol.toPrimitive](hint: string): never {
-    throw new TypeError(`Reactive cannot be coerced to ${hint} — use \`.value\``);
+    throw new TypeError(`Signal cannot be coerced to ${hint} — use \`.value\``);
   }
 }
 
@@ -617,24 +617,28 @@ class Effect implements ReactiveNode {
 
 // ─── Public factories ────────────────────────────────────────────────
 
-export function signal<T>(initial: T, opts?: ReactiveOptions<T>): Reactive<T> {
-  return new Reactive(initial, opts);
+/** Plain `Signal<T>` (writable). For typed signals use the class
+ *  constructor directly: `new Vec({x:0, y:0}, opts?)`. We deliberately
+ *  don't overload `signal(v, Cls)` — that path would need a runtime
+ *  discriminator on `(opts | Cls)` and adds no power over `new Cls(v)`. */
+export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> {
+  return new Signal(initial, opts);
 }
 
 // `computed` overloads — optional Cls is the *last* argument:
-//   computed(fn)              → Reactive<T>            (untyped)
+//   computed(fn)              → Signal<T>            (untyped)
 //   computed(fn, Vec)         → Vec  (read-only view)  (typed)
-export function computed<T>(getter: () => T): Reactive<T>;
-export function computed<T, C extends Reactive<T>>(
+export function computed<T>(getter: () => T): Signal<T>;
+export function computed<T, C extends Signal<T>>(
   getter: () => T,
   Cls: new (...args: never[]) => C,
 ): C;
-export function computed<T, C extends Reactive<T>>(
+export function computed<T, C extends Signal<T>>(
   getter: () => T,
   Cls?: new (...args: never[]) => C,
-): C | Reactive<T> {
+): C | Signal<T> {
   if (Cls === undefined) {
-    const r = new Reactive<T>(undefined as T);
+    const r = new Signal<T>(undefined as T);
     r.getter = getter;
     r.flags = 0;
     return r;
@@ -646,21 +650,21 @@ export function computed<T, C extends Reactive<T>>(
 }
 
 // `lens` overloads — optional Cls is the *last* argument:
-//   lens(get, set)            → Reactive<T>            (untyped)
+//   lens(get, set)            → Signal<T>            (untyped)
 //   lens(get, set, Num)       → Num   (writable view)  (typed)
-export function lens<T>(getter: () => T, setter: (v: T) => void): Reactive<T>;
-export function lens<T, C extends Reactive<T>>(
+export function lens<T>(getter: () => T, setter: (v: T) => void): Signal<T>;
+export function lens<T, C extends Signal<T>>(
   getter: () => T,
   setter: (v: T) => void,
   Cls: new (...args: never[]) => C,
 ): C;
-export function lens<T, C extends Reactive<T>>(
+export function lens<T, C extends Signal<T>>(
   getter: () => T,
   setter: (v: T) => void,
   Cls?: new (...args: never[]) => C,
-): C | Reactive<T> {
+): C | Signal<T> {
   if (Cls === undefined) {
-    const r = new Reactive<T>(undefined as T);
+    const r = new Signal<T>(undefined as T);
     r.getter = getter;
     r.setter = setter;
     r.flags = 0;

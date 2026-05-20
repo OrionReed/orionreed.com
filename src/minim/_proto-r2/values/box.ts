@@ -1,7 +1,7 @@
 // box.ts — reactive axis-aligned rectangle (r2 v2).
 
-import { Reactive, computed, type Computed, value, type Val } from "../reactive";
-import { type Linear, type Traits } from "../traits";
+import { Signal, computed, type Computed, value, type Val, type SignalOptions } from "../signal";
+import { type Linear, type TraitDict } from "../traits";
 import { field } from "../field";
 import { Num } from "./num";
 import { Vec, type VecValue } from "./vec";
@@ -27,14 +27,14 @@ export const expand = (b: BoxValue, n: number): BoxValue =>
 export const contains = (b: BoxValue, p: VecValue): boolean =>
   p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 
-export class Box extends Reactive<BoxValue> {
-  static traits: Traits<BoxValue> & { linear: Linear<BoxValue>; lerp: typeof lerp; equals: typeof equals } = {
+export class Box extends Signal<BoxValue> {
+  static traits: TraitDict<BoxValue> & { linear: Linear<BoxValue>; lerp: typeof lerp; equals: typeof equals } = {
     linear: { add, sub, scale },
     lerp,
     equals,
   };
 
-  constructor(v: BoxValue = { x: 0, y: 0, w: 0, h: 0 }) { super(v); }
+  constructor(v: BoxValue = { x: 0, y: 0, w: 0, h: 0 }, opts?: SignalOptions<BoxValue>) { super(v, opts); }
 
   get x(): Num { return this.memo("x", () => field(this, "x", Num)); }
   get y(): Num { return this.memo("y", () => field(this, "y", Num)); }

@@ -7,12 +7,12 @@
 
 import { describe, it, expect } from "vitest";
 import {
-  Reactive, signal, computed, lens, effect, batch, untracked,
+  Signal, signal, computed, lens, effect, batch, untracked,
   type Val, type Read, type Computed, type Lens, type ValueOf,
-} from "./reactive";
+} from "./signal";
 import {
   requireLinear, requireMetric,
-  type HasLinear, type HasMetric,
+  type Traits,
 } from "./traits";
 import { Num, num } from "./values/num";
 import { Vec, vec, polar, type VecValue } from "./values/vec";
@@ -25,15 +25,15 @@ type Expect<T extends true> = T;
 describe("types", () => {
   it("signal", () => {
     const s = signal(1);
-    type _s = Expect<Eq<typeof s, Reactive<number>>>;
+    type _s = Expect<Eq<typeof s, Signal<number>>>;
     const _v: number = s.value;
     expect(_v).toBe(1);
   });
 
   it("computed overloads narrow correctly", () => {
-    // untyped: Reactive<T>
+    // untyped: Signal<T>
     const c1 = computed(() => 1 + 2);
-    type _c1 = Expect<Eq<typeof c1, Reactive<number>>>;
+    type _c1 = Expect<Eq<typeof c1, Signal<number>>>;
 
     // typed: returns Cls instance
     const c2 = computed(() => 5, Num);
@@ -55,7 +55,7 @@ describe("types", () => {
     const s = signal(10);
     // untyped
     const l1 = lens(() => s.value, (v) => { s.value = v; });
-    type _l1 = Expect<Eq<typeof l1, Reactive<number>>>;
+    type _l1 = Expect<Eq<typeof l1, Signal<number>>>;
     // typed
     const a = num(5);
     const l2 = lens(() => a.value, (v: number) => { a.value = v; }, Num);
@@ -65,7 +65,7 @@ describe("types", () => {
     expect(l3.value).toBe(6);
   });
 
-  it("Val<T> accepts plain, fn, Reactive uniformly", () => {
+  it("Val<T> accepts plain, fn, Signal uniformly", () => {
     const a = num(2);
     const _e1 = a.add(1);
     const _e2 = a.add(() => 1);
@@ -114,20 +114,19 @@ describe("types", () => {
     type _vov = Expect<Eq<ValueOf<Vec>, VecValue>>;
     type _bov = Expect<Eq<ValueOf<Box>, BoxValue>>;
     type _nov = Expect<Eq<ValueOf<Num>, number>>;
-    type _ron = Expect<Eq<ValueOf<Reactive<string>>, string>>;
+    type _ron = Expect<Eq<ValueOf<Signal<string>>, string>>;
     expect(true).toBe(true);
   });
 
-  it("HasLinear / HasMetric constrain at call site", () => {
-    // The constraint type means TS rejects a signal whose class lacks
-    // the trait. We exercise the positive cases at runtime; negatives
-    // are compile-time-only (see `_typeOnlyConstraintProbe` below).
-    function mustHaveLinearMetric<R extends Read<unknown> & HasLinear<ValueOf<R>> & HasMetric<ValueOf<R>>>(s: R): R {
+  it("Traits<T, …keys> constrains at call site", () => {
+    // The constraint type rejects signals whose class lacks any listed
+    // trait. We exercise positive cases at runtime; negatives are
+    // compile-time-only (see `_typeOnlyConstraintProbe`).
+    function mustHaveLinearMetric<T>(s: Traits<T, "linear" | "metric">): Traits<T, "linear" | "metric"> {
       requireLinear(s);
       requireMetric(s);
       return s;
     }
-    // Vec & Num both have linear+metric → accepted, runtime OK
     expect(mustHaveLinearMetric(vec(0, 0))).toBeInstanceOf(Vec);
     expect(mustHaveLinearMetric(num(0))).toBeInstanceOf(Num);
   });
@@ -139,8 +138,8 @@ describe("types", () => {
 // doesn't tree-shake the body away (which would defeat the check).
 function _typeOnlyConstraintProbe(): void {
   if (Math.random() < -1) {
-    function needsLinearMetric<R extends Read<unknown> & HasLinear<ValueOf<R>> & HasMetric<ValueOf<R>>>(_s: R): void {}
-    function needsMetric<R extends Read<unknown> & HasMetric<ValueOf<R>>>(_s: R): void {}
+    function needsLinearMetric<T>(_s: Traits<T, "linear" | "metric">): void {}
+    function needsMetric<T>(_s: Traits<T, "metric">): void {}
 
     // ✓ Accepted
     needsLinearMetric(vec(0, 0));
