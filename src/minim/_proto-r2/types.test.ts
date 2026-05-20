@@ -8,11 +8,15 @@
 import { describe, it, expect } from "vitest";
 import {
   Reactive, signal, computed, lens, effect, batch, untracked,
-  type Val, type Read, type Computed, type Lens,
+  type Val, type Read, type Computed, type Lens, type ValueOf,
 } from "./reactive";
+import {
+  requireLinear, requireMetric,
+  type HasLinear, type HasMetric,
+} from "./traits";
 import { Num, num } from "./values/num";
-import { Vec, vec, polar } from "./values/vec";
-import { Box, box } from "./values/box";
+import { Vec, vec, polar, type VecValue } from "./values/vec";
+import { Box, box, type BoxValue } from "./values/box";
 
 // Assert utility: `Expect<Eq<A, B>>` fails to compile if A ≠ B.
 type Eq<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -32,13 +36,13 @@ describe("types", () => {
     type _c1 = Expect<Eq<typeof c1, Reactive<number>>>;
 
     // typed: returns Cls instance
-    const c2 = computed(Num, () => 5);
+    const c2 = computed(() => 5, Num);
     type _c2 = Expect<Eq<typeof c2, Num>>;
     // ← here `c2.add(...)` should resolve to Num's method, returning Num
     const c3 = c2.add(1);
     type _c3 = Expect<Eq<typeof c3, Num>>;
 
-    const c4 = computed(Vec, () => ({ x: 0, y: 0 }));
+    const c4 = computed(() => ({ x: 0, y: 0 }) as { x: number; y: number }, Vec);
     type _c4 = Expect<Eq<typeof c4, Vec>>;
     const c5 = c4.x;
     type _c5 = Expect<Eq<typeof c5, Num>>;
@@ -54,7 +58,7 @@ describe("types", () => {
     type _l1 = Expect<Eq<typeof l1, Reactive<number>>>;
     // typed
     const a = num(5);
-    const l2 = lens(Num, () => a.value, (v) => { a.value = v; });
+    const l2 = lens(() => a.value, (v: number) => { a.value = v; }, Num);
     type _l2 = Expect<Eq<typeof l2, Num>>;
     const l3 = l2.add(1);
     type _l3 = Expect<Eq<typeof l3, Num>>;
@@ -105,4 +109,50 @@ describe("types", () => {
     stop();
     expect(r).toBe(2); expect(u).toBe("x");
   });
+
+  it("ValueOf<R> extracts inner type", () => {
+    type _vov = Expect<Eq<ValueOf<Vec>, VecValue>>;
+    type _bov = Expect<Eq<ValueOf<Box>, BoxValue>>;
+    type _nov = Expect<Eq<ValueOf<Num>, number>>;
+    type _ron = Expect<Eq<ValueOf<Reactive<string>>, string>>;
+    expect(true).toBe(true);
+  });
+
+  it("HasLinear / HasMetric constrain at call site", () => {
+    // The constraint type means TS rejects a signal whose class lacks
+    // the trait. We exercise the positive cases at runtime; negatives
+    // are compile-time-only (see `_typeOnlyConstraintProbe` below).
+    function mustHaveLinearMetric<R extends Read<unknown> & HasLinear<ValueOf<R>> & HasMetric<ValueOf<R>>>(s: R): R {
+      requireLinear(s);
+      requireMetric(s);
+      return s;
+    }
+    // Vec & Num both have linear+metric → accepted, runtime OK
+    expect(mustHaveLinearMetric(vec(0, 0))).toBeInstanceOf(Vec);
+    expect(mustHaveLinearMetric(num(0))).toBeInstanceOf(Num);
+  });
 });
+
+// Type-only probes: these blocks NEVER run; they exist purely so the
+// TS compiler complains if the constraints regress. The function
+// `_typeOnlyConstraintProbe` is referenced by `void 0` so the bundler
+// doesn't tree-shake the body away (which would defeat the check).
+function _typeOnlyConstraintProbe(): void {
+  if (Math.random() < -1) {
+    function needsLinearMetric<R extends Read<unknown> & HasLinear<ValueOf<R>> & HasMetric<ValueOf<R>>>(_s: R): void {}
+    function needsMetric<R extends Read<unknown> & HasMetric<ValueOf<R>>>(_s: R): void {}
+
+    // ✓ Accepted
+    needsLinearMetric(vec(0, 0));
+    needsLinearMetric(num(0));
+
+    // ✗ Plain signal has no traits dict on its class
+    // @ts-expect-error
+    needsLinearMetric(signal(0));
+
+    // ✗ Box has linear+lerp+equals but no metric
+    // @ts-expect-error
+    needsMetric(box(0, 0, 10, 10));
+  }
+}
+void _typeOnlyConstraintProbe;

@@ -1,89 +1,93 @@
-// vec.ts — reactive 2D point (r2 port).
+// vec.ts — reactive 2D point (r2 v2).
 //
-// Eager + chain duality preserved. Field lenses (.x, .y) via field().
+// Per-instance memoization: `.x`, `.y`, `.magnitude` all flow through
+// `this.memo(key, factory)`. No more `_mag?` slot, no per-class
+// FIELD_CACHE Symbol. Same observable behavior, one mechanism.
 
 import { Reactive, computed, value, type Val } from "../reactive";
-import { LINEAR, LERP, METRIC, EQUALS, type Linear } from "../traits";
+import { type Linear, type Traits } from "../traits";
 import { field } from "../field";
 import { Num } from "./num";
 
-export interface Value { x: number; y: number }
+export interface VecValue { x: number; y: number }
 
-export const add = (a: Value, b: Value): Value => ({ x: a.x + b.x, y: a.y + b.y });
-export const sub = (a: Value, b: Value): Value => ({ x: a.x - b.x, y: a.y - b.y });
-export const scale = (a: Value, k: number): Value => ({ x: a.x * k, y: a.y * k });
-export const lerp = (a: Value, b: Value, t: number): Value => ({
+export const add = (a: VecValue, b: VecValue): VecValue => ({ x: a.x + b.x, y: a.y + b.y });
+export const sub = (a: VecValue, b: VecValue): VecValue => ({ x: a.x - b.x, y: a.y - b.y });
+export const scale = (a: VecValue, k: number): VecValue => ({ x: a.x * k, y: a.y * k });
+export const lerp = (a: VecValue, b: VecValue, t: number): VecValue => ({
   x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t,
 });
-export const metric = (a: Value, b: Value) => Math.hypot(a.x - b.x, a.y - b.y);
-export const equals = (a: Value, b: Value) => a === b || (a.x === b.x && a.y === b.y);
+export const metric = (a: VecValue, b: VecValue) => Math.hypot(a.x - b.x, a.y - b.y);
+export const equals = (a: VecValue, b: VecValue) => a === b || (a.x === b.x && a.y === b.y);
 
 /** Unit vector along `v`; `(0, 0)` stays `(0, 0)`. */
-export const normalize = (v: Value): Value => {
+export const normalize = (v: VecValue): VecValue => {
   const m = Math.hypot(v.x, v.y);
   return m === 0 ? { x: 0, y: 0 } : { x: v.x / m, y: v.y / m };
 };
 
 /** 90° CCW rotation (y-down: rotates left): `(x, y) → (y, -x)`. */
-export const perp = (v: Value): Value => ({ x: v.y, y: -v.x });
+export const perp = (v: VecValue): VecValue => ({ x: v.y, y: -v.x });
 
-const linearImpl: Linear<Value> = { add, sub, scale };
+export class Vec extends Reactive<VecValue> {
+  static traits: Required<Traits<VecValue>> = {
+    linear: { add, sub, scale },
+    lerp,
+    metric,
+    equals,
+  };
 
-export class Vec extends Reactive<Value> {
-  constructor(v: Value = { x: 0, y: 0 }) { super(v); }
+  constructor(v: VecValue = { x: 0, y: 0 }) { super(v); }
 
-  get [LINEAR](): Linear<Value> { return linearImpl; }
-  [LERP](a: Value, b: Value, t: number) { return lerp(a, b, t); }
-  [METRIC](a: Value, b: Value) { return metric(a, b); }
-  [EQUALS](a: Value, b: Value) { return equals(a, b); }
-
-  add(b: Val<Value>) { return computed(Vec, () => add(this.value, value(b))); }
-  sub(b: Val<Value>) { return computed(Vec, () => sub(this.value, value(b))); }
-  scale(k: Val<number>) { return computed(Vec, () => scale(this.value, value(k))); }
-  lerp(b: Val<Value>, t: Val<number>) {
-    return computed(Vec, () => lerp(this.value, value(b), value(t)));
+  add(b: Val<VecValue>) { return computed(() => add(this.value, value(b)), Vec); }
+  sub(b: Val<VecValue>) { return computed(() => sub(this.value, value(b)), Vec); }
+  scale(k: Val<number>) { return computed(() => scale(this.value, value(k)), Vec); }
+  lerp(b: Val<VecValue>, t: Val<number>) {
+    return computed(() => lerp(this.value, value(b), value(t)), Vec);
   }
 
-  up(n: Val<number>)    { return computed(Vec, () => ({ x: this.value.x,            y: this.value.y - value(n) })); }
-  down(n: Val<number>)  { return computed(Vec, () => ({ x: this.value.x,            y: this.value.y + value(n) })); }
-  left(n: Val<number>)  { return computed(Vec, () => ({ x: this.value.x - value(n), y: this.value.y })); }
-  right(n: Val<number>) { return computed(Vec, () => ({ x: this.value.x + value(n), y: this.value.y })); }
+  up(n: Val<number>)    { return computed(() => ({ x: this.value.x,            y: this.value.y - value(n) }), Vec); }
+  down(n: Val<number>)  { return computed(() => ({ x: this.value.x,            y: this.value.y + value(n) }), Vec); }
+  left(n: Val<number>)  { return computed(() => ({ x: this.value.x - value(n), y: this.value.y            }), Vec); }
+  right(n: Val<number>) { return computed(() => ({ x: this.value.x + value(n), y: this.value.y            }), Vec); }
 
   offset(dx: Val<number>, dy: Val<number>) {
-    return computed(Vec, () => ({ x: this.value.x + value(dx), y: this.value.y + value(dy) }));
+    return computed(() => ({ x: this.value.x + value(dx), y: this.value.y + value(dy) }), Vec);
   }
-  normalize() { return computed(Vec, () => normalize(this.value)); }
-  perp() { return computed(Vec, () => perp(this.value)); }
-  distance(other: Val<Value>) {
-    return computed(Num, () => metric(this.value, value(other)));
+  normalize() { return computed(() => normalize(this.value), Vec); }
+  perp() { return computed(() => perp(this.value), Vec); }
+  distance(other: Val<VecValue>) {
+    return computed(() => metric(this.value, value(other)), Num);
   }
 
-  get x() { return field(this, "x", Num); }
-  get y() { return field(this, "y", Num); }
+  get x(): Num { return this.memo("x", () => field(this, "x", Num)); }
+  get y(): Num { return this.memo("y", () => field(this, "y", Num)); }
 
-  get magnitude() {
-    return this._mag ??= computed(Num, () => Math.hypot(this.value.x, this.value.y));
+  get magnitude(): Num {
+    return this.memo("magnitude", () =>
+      computed(() => Math.hypot(this.value.x, this.value.y), Num));
   }
-  private _mag?: Num;
 
   derive(fn: (c: VecChain) => VecChain) {
-    return computed(Vec, () => fn(new VecChain(this.value)).value);
+    return computed(() => fn(new VecChain(this.value)).value, Vec);
   }
 }
 
+export interface Vec { readonly constructor: typeof Vec }
+
 export class VecChain {
-  value: Value;
-  constructor(v: Value) { this.value = v; }
-  add(b: Val<Value>) { this.value = add(this.value, value(b)); return this; }
-  sub(b: Val<Value>) { this.value = sub(this.value, value(b)); return this; }
+  value: VecValue;
+  constructor(v: VecValue) { this.value = v; }
+  add(b: Val<VecValue>) { this.value = add(this.value, value(b)); return this; }
+  sub(b: Val<VecValue>) { this.value = sub(this.value, value(b)); return this; }
   scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
-  lerp(b: Val<Value>, t: Val<number>) {
+  lerp(b: Val<VecValue>, t: Val<number>) {
     this.value = lerp(this.value, value(b), value(t)); return this;
   }
   up(n: Val<number>)    { this.value = { x: this.value.x,            y: this.value.y - value(n) }; return this; }
   down(n: Val<number>)  { this.value = { x: this.value.x,            y: this.value.y + value(n) }; return this; }
-  left(n: Val<number>)  { this.value = { x: this.value.x - value(n), y: this.value.y }; return this; }
-  right(n: Val<number>) { this.value = { x: this.value.x + value(n), y: this.value.y }; return this; }
+  left(n: Val<number>)  { this.value = { x: this.value.x - value(n), y: this.value.y            }; return this; }
+  right(n: Val<number>) { this.value = { x: this.value.x + value(n), y: this.value.y            }; return this; }
   offset(dx: Val<number>, dy: Val<number>) {
     this.value = { x: this.value.x + value(dx), y: this.value.y + value(dy) }; return this;
   }
@@ -101,7 +105,7 @@ export const vec = (x: Val<number> = 0, y: Val<number> = 0): Vec => {
 
 /** Reactive Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`. */
 export const polar = (
-  center: Val<Value>,
+  center: Val<VecValue>,
   r: Val<number>,
   a: Val<number>,
 ): Vec => {

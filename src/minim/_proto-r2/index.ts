@@ -17,20 +17,22 @@ export {
   type Read,
   type Computed,
   type Lens,
+  type ValueOf,
   type ReactiveOptions,
 } from "./reactive";
 
 export {
-  LINEAR, LERP, METRIC, EQUALS,
   linearOf, lerpOf, metricOf, equalsOf,
   requireLinear, requireLerp, requireMetric, requireEquals,
   classOf,
   type Linear, type Lerp, type Metric, type Equals,
+  type Traits,
+  type HasTraits, type HasLinear, type HasLerp, type HasMetric, type HasEquals,
   type ValueClass,
 } from "./traits";
 
 export { field, type ReactiveInit } from "./field";
 
-export { Num, NumChain, num } from "./values/num";
-export { Vec, VecChain, vec, polar } from "./values/vec";
-export { Box, BoxChain, box } from "./values/box";
+export { Num, NumChain, num, type NumValue } from "./values/num";
+export { Vec, VecChain, vec, polar, type VecValue } from "./values/vec";
+export { Box, BoxChain, box, type BoxValue } from "./values/box";

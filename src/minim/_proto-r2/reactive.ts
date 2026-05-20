@@ -18,7 +18,7 @@
 //   - flush(): re-entrancy guard (cascading bind-effects on field
 //     lenses can otherwise blow the call stack)
 
-import { EQUALS, type Equals } from "./traits";
+import { type Equals, type Traits } from "./traits";
 
 // ─── Internal types ──────────────────────────────────────────────────
 
@@ -272,6 +272,9 @@ export type Computed<T = unknown> = Omit<Reactive<T>, "value"> & { readonly valu
  *  with both getter AND setter set. Treated as writable in TS. */
 export type Lens<T = unknown> = Reactive<T>;
 
+/** Extract the value type carried by a Reactive (signal/computed/lens). */
+export type ValueOf<R> = R extends Reactive<infer T> ? T : never;
+
 export function value<T>(v: Val<T>): T {
   if (v instanceof Reactive) return v.value;
   if (typeof v === "function") return (v as () => T)();
@@ -311,12 +314,10 @@ export interface ReactiveOptions<T = unknown> {
  *    - `new Reactive(initial)` — signal mode
  *    - `signal(initial)` — same as `new Reactive(initial)`
  *    - `computed(fn)` — computed mode (untyped)
- *    - `computed(Cls, fn)` — computed mode (typed as Cls instance)
+ *    - `computed(fn, Vec)` — computed mode (typed as Cls instance)
  *    - `lens(get, set)` — lens mode (untyped)
- *    - `lens(Cls, get, set)` — lens mode (typed)
+ *    - `lens(get, set, Num)` — lens mode (typed)
  *    - `new Vec(initial)` where Vec extends Reactive — typed signal mode
- *    - `computed(Vec, fn)` — typed computed view of Vec
- *    - `lens(Vec, get, set)` — typed writable view of Vec
  *
  *  Type predicates: `isSignal(x)`, `isComputed(x)`, `isLens(x)`.
  */
@@ -331,18 +332,41 @@ export class Reactive<T = unknown> implements ReactiveNode {
   cachedValue: T | undefined = undefined;
   getter: (() => T) | undefined = undefined;
   setter: ((v: T) => void) | undefined = undefined;
+  /** Per-instance equality override (from `opts.equals`); falls back to
+   *  class-level `traits.equals` then `===`. Hot-read on every write. */
+  _equals: Equals<T> | undefined = undefined;
   _watched?: () => void;
   _unwatchedHook?: () => void;
   protected _stopBinding?: () => void;
+  /** Per-instance lazy derived-view cache; allocated on first `.memo()` hit. */
+  protected _memoCache?: Record<string | symbol, unknown>;
 
   constructor(initial: T, opts?: ReactiveOptions<T>) {
     this.currentValue = initial;
     this.pendingValue = initial;
+    // Resolve equality once at construction: opts.equals wins; else
+    // class-level static `traits.equals` (if the subclass declared one).
+    // This collapses the hot-path equality lookup into a single `_equals`
+    // read per write.
+    if (opts?.equals) {
+      this._equals = opts.equals;
+    } else {
+      const cls = this.constructor as { traits?: Traits<T> };
+      if (cls.traits?.equals) this._equals = cls.traits.equals;
+    }
     if (opts) {
       if (opts.watched) this._watched = opts.watched;
       if (opts.unwatched) this._unwatchedHook = opts.unwatched;
-      if (opts.equals) (this as unknown as { [EQUALS]?: Equals<T> })[EQUALS] = opts.equals;
     }
+  }
+
+  /** Per-instance cached derivation. `key` must be unique within the
+   *  parent's class hierarchy. Factory runs once per (instance, key).
+   *  Used by field lenses and lazy domain getters (`.x`, `.magnitude`). */
+  memo<R>(key: string | symbol, make: () => R): R {
+    const cache = this._memoCache ??= {};
+    const k = key as string;
+    return (cache[k] ?? (cache[k] = make())) as R;
   }
 
   /** Read with tracking. Branches on signal vs computed mode. */
@@ -406,7 +430,7 @@ export class Reactive<T = unknown> implements ReactiveNode {
     }
     const prev = this.pendingValue;
     this.pendingValue = next;
-    const equals = (this as unknown as { [EQUALS]?: Equals<T> })[EQUALS];
+    const equals = this._equals;
     const same = equals ? equals(prev, next) : prev === next;
     if (!same) {
       this.flags = F.Mutable | F.Dirty;
@@ -473,7 +497,7 @@ export class Reactive<T = unknown> implements ReactiveNode {
         const old = this.cachedValue;
         const next = this.cachedValue = this.getter();
         threw = false;
-        const eq = (this as unknown as { [EQUALS]?: Equals<T> })[EQUALS];
+        const eq = this._equals;
         return eq ? !eq(old as T, next) : old !== next;
       } finally {
         activeSub = prev;
@@ -597,61 +621,54 @@ export function signal<T>(initial: T, opts?: ReactiveOptions<T>): Reactive<T> {
   return new Reactive(initial, opts);
 }
 
-// `computed` overloads:
-//   computed(fn)              → Reactive<T>  (untyped)
-//   computed(Cls, fn)         → Cls instance (typed read-only view)
+// `computed` overloads — optional Cls is the *last* argument:
+//   computed(fn)              → Reactive<T>            (untyped)
+//   computed(fn, Vec)         → Vec  (read-only view)  (typed)
 export function computed<T>(getter: () => T): Reactive<T>;
 export function computed<T, C extends Reactive<T>>(
-  Cls: new (...args: never[]) => C,
   getter: () => T,
+  Cls: new (...args: never[]) => C,
 ): C;
 export function computed<T, C extends Reactive<T>>(
-  ClsOrFn: (new (...args: never[]) => C) | (() => T),
-  maybeGetter?: () => T,
+  getter: () => T,
+  Cls?: new (...args: never[]) => C,
 ): C | Reactive<T> {
-  if (maybeGetter === undefined) {
-    // computed(fn) — untyped
-    const fn = ClsOrFn as () => T;
+  if (Cls === undefined) {
     const r = new Reactive<T>(undefined as T);
-    r.getter = fn;
+    r.getter = getter;
     r.flags = 0;
     return r;
   }
-  // computed(Cls, fn) — typed
-  const Cls = ClsOrFn as new (...args: never[]) => C;
   const inst = new Cls();
-  inst.getter = maybeGetter;
+  inst.getter = getter;
   inst.flags = 0;
   return inst;
 }
 
-// `lens` overloads:
-//   lens(get, set)            → Reactive<T>  (untyped writable derived)
-//   lens(Cls, get, set)       → Cls instance (typed writable derived)
+// `lens` overloads — optional Cls is the *last* argument:
+//   lens(get, set)            → Reactive<T>            (untyped)
+//   lens(get, set, Num)       → Num   (writable view)  (typed)
 export function lens<T>(getter: () => T, setter: (v: T) => void): Reactive<T>;
 export function lens<T, C extends Reactive<T>>(
-  Cls: new (...args: never[]) => C,
   getter: () => T,
   setter: (v: T) => void,
+  Cls: new (...args: never[]) => C,
 ): C;
 export function lens<T, C extends Reactive<T>>(
-  ClsOrGetter: (new (...args: never[]) => C) | (() => T),
-  getterOrSetter: (() => T) | ((v: T) => void),
-  maybeSetter?: (v: T) => void,
+  getter: () => T,
+  setter: (v: T) => void,
+  Cls?: new (...args: never[]) => C,
 ): C | Reactive<T> {
-  if (maybeSetter === undefined) {
-    // lens(get, set) — untyped
+  if (Cls === undefined) {
     const r = new Reactive<T>(undefined as T);
-    r.getter = ClsOrGetter as () => T;
-    r.setter = getterOrSetter as (v: T) => void;
+    r.getter = getter;
+    r.setter = setter;
     r.flags = 0;
     return r;
   }
-  // lens(Cls, get, set) — typed
-  const Cls = ClsOrGetter as new (...args: never[]) => C;
   const inst = new Cls();
-  inst.getter = getterOrSetter as () => T;
-  inst.setter = maybeSetter;
+  inst.getter = getter;
+  inst.setter = setter;
   inst.flags = 0;
   return inst;
 }

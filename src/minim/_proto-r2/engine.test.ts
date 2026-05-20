@@ -14,7 +14,6 @@ import {
   isSignal, isLens, isComputed,
   value,
 } from "./reactive";
-import { EQUALS } from "./traits";
 import { field as _field } from "./field";
 import { Num, num } from "./values/num";
 import { Vec, vec, polar } from "./values/vec";
@@ -84,7 +83,7 @@ describe("engine: computed", () => {
 
   it("computed(Cls, fn) returns Cls instance", () => {
     const a = num(3);
-    const sum = computed(Num, () => a.value * 2);
+    const sum = computed(() => a.value * 2, Num);
     expect(sum).toBeInstanceOf(Num);
     expect(sum).toBeInstanceOf(Reactive);
     expect(sum.value).toBe(6);
@@ -103,7 +102,7 @@ describe("engine: lens", () => {
 
   it("typed lens preserves class", () => {
     const a = num(5);
-    const doubled = lens(Num, () => a.value * 2, (v) => { a.value = v / 2; });
+    const doubled = lens(() => a.value * 2, (v) => { a.value = v / 2; }, Num);
     expect(doubled).toBeInstanceOf(Num);
     expect(doubled.value).toBe(10);
     doubled.value = 30;
@@ -241,11 +240,14 @@ describe("value: Num", () => {
     expect(chain.value).toBe(eager.value);
   });
 
-  it("traits resolved on computed Num", () => {
+  it("traits resolved via class on computed Num", () => {
     const a = num(2);
     const dbl = a.scale(2);
-    expect(typeof (dbl as unknown as Record<symbol, unknown>)[Symbol.for("does-not-exist")]).toBe("undefined");
-    expect(typeof dbl[EQUALS]).toBe("function");
+    const cls = (dbl as object).constructor as typeof Num;
+    expect(cls).toBe(Num);
+    expect(typeof cls.traits.equals).toBe("function");
+    expect(typeof cls.traits.lerp).toBe("function");
+    expect(typeof cls.traits.linear).toBe("object");
   });
 });
 
@@ -463,7 +465,7 @@ describe("lens over lens", () => {
   it("field-lens-of-field-lens", () => {
     const v = vec(0, 0);
     // a derived lens that scales x by 10 on read, divides on write
-    const x10 = lens(Num, () => v.x.value * 10, (n) => { v.x.value = n / 10; });
+    const x10 = lens(() => v.x.value * 10, (n) => { v.x.value = n / 10; }, Num);
     expect(x10.value).toBe(0);
     x10.value = 100;
     expect(v.x.value).toBe(10);
@@ -513,19 +515,107 @@ describe("computed: constant getter", () => {
   });
 });
 
+// ─── memo() ────────────────────────────────────────────────────────
+
+describe("Reactive.memo()", () => {
+  it("caches per (instance, key)", () => {
+    const s = signal(1);
+    let runs = 0;
+    const a = s.memo("a", () => { runs++; return computed(() => s.value + 1); });
+    const b = s.memo("a", () => { runs++; return computed(() => s.value + 99); });
+    expect(a).toBe(b);
+    expect(runs).toBe(1);
+    expect(b.value).toBe(2);
+  });
+
+  it("distinct keys produce distinct cached values", () => {
+    const s = signal(0);
+    const a = s.memo("x", () => computed(() => s.value));
+    const b = s.memo("y", () => computed(() => s.value * 2));
+    expect(a).not.toBe(b);
+  });
+
+  it("Symbol keys work", () => {
+    const k1 = Symbol("k");
+    const k2 = Symbol("k");
+    const s = signal(0);
+    const a = s.memo(k1, () => ({}));
+    const b = s.memo(k1, () => ({}));
+    const c = s.memo(k2, () => ({}));
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
+  });
+
+  it("vec.x === vec.x (identity via memo)", () => {
+    const v = vec(0, 0);
+    expect(v.x).toBe(v.x);
+    expect(v.y).toBe(v.y);
+    expect(v.magnitude).toBe(v.magnitude);
+  });
+
+  it("box.center === box.center (no _center slot)", () => {
+    const b = box(0, 0, 10, 10);
+    expect(b.center).toBe(b.center);
+    expect(b.at(0.5, 0.5)).toBe(b.center);   // .at() key matches .center
+    expect(b.at(0.5, 0.5)).toBe(b.at(0.5, 0.5));
+  });
+});
+
+// ─── Static traits ─────────────────────────────────────────────────
+
+describe("static traits", () => {
+  it("Num.traits has linear / lerp / metric / equals", () => {
+    expect(typeof Num.traits.linear?.add).toBe("function");
+    expect(typeof Num.traits.lerp).toBe("function");
+    expect(typeof Num.traits.metric).toBe("function");
+    expect(typeof Num.traits.equals).toBe("function");
+  });
+
+  it("constructor traits available on computed instance", () => {
+    const a = num(1);
+    const dbl = a.scale(2);
+    const cls = (dbl as object).constructor as typeof Num;
+    expect(cls.traits.linear?.add(1, 2)).toBe(3);
+  });
+
+  it("equality dispatch via static traits", () => {
+    const v = vec(1, 2);
+    let runs = 0;
+    effect(() => { void v.value; runs++; });
+    expect(runs).toBe(1);
+    // Box.traits.equals is structural; should dedup the no-op write
+    v.value = { x: 1, y: 2 };
+    expect(runs).toBe(1);
+    v.value = { x: 2, y: 2 };
+    expect(runs).toBe(2);
+  });
+
+  it("opts.equals overrides class-level traits.equals", () => {
+    // Per-instance epsilon-equals on a Num; class equality is strict ===
+    const n = signal(1, { equals: (a, b) => Math.abs((a as number) - (b as number)) < 0.5 });
+    let runs = 0;
+    effect(() => { void n.value; runs++; });
+    expect(runs).toBe(1);
+    n.value = 1.3;  // within epsilon
+    expect(runs).toBe(1);
+    n.value = 2.0;  // outside epsilon
+    expect(runs).toBe(2);
+  });
+});
+
 // ─── isLens runtime predicate stability ────────────────────────────
 
 describe("isLens semantics", () => {
   it("typed lens reports as lens", () => {
     const a = num(5);
-    const l = lens(Num, () => a.value * 2, (v) => { a.value = v / 2; });
+    const l = lens(() => a.value * 2, (v) => { a.value = v / 2; }, Num);
     expect(isLens(l)).toBe(true);
     expect(isComputed(l)).toBe(false);
   });
 
   it("computed reports as not-lens", () => {
     const a = num(5);
-    const c = computed(Num, () => a.value * 2);
+    const c = computed(() => a.value * 2, Num);
     expect(isLens(c)).toBe(false);
     expect(isComputed(c)).toBe(true);
   });
