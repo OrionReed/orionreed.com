@@ -1,9 +1,10 @@
 // vec.ts — reactive 2D point.
 
 import { Signal, value, type Val } from "../signal";
-import { LINEAR, LERP, METRIC, EQUALS } from "../traits";
-import { BaseChain, derived, field, bindFields } from "../derive";
-import { defineTrait, type LerpMethods } from "../lerp";
+import { LINEAR, LERP, METRIC, EQUALS, type Linear } from "../traits";
+import { derived, field } from "../derive";
+import { tween, type Tween } from "../lerp";
+import { type Easing } from "../../core";
 import { Num } from "./num";
 
 export interface Value { x: number; y: number }
@@ -25,26 +26,21 @@ export const normalize = (v: Value): Value => {
 /** 90° CCW rotation (y-down: rotates left): `(x, y) → (y, -x)`. */
 export const perp = (v: Value): Value => ({ x: v.y, y: -v.x });
 
-/** Op surface — every closed-on-Vec operation. Both the reactive
- *  `Vec` class and the mutating `Chain` builder implement this, so
- *  drift between them is a type error. `R` is the return type
- *  (`Vec` for the reactive form, `Chain` for the fused form). */
-interface VecOps<R> {
-  add(b: Val<Value>): R;
-  sub(b: Val<Value>): R;
-  scale(k: Val<number>): R;
-  lerp(b: Val<Value>, t: Val<number>): R;
-  up(n: Val<number>): R;
-  down(n: Val<number>): R;
-  left(n: Val<number>): R;
-  right(n: Val<number>): R;
-  offset(dx: Val<number>, dy: Val<number>): R;
-  normalize(): R;
-  perp(): R;
-}
+const linearImpl: Linear<Value> = { add, sub, scale };
 
-export class Vec extends Signal<Value> implements VecOps<Vec> {
+export class Vec extends Signal<Value> {
   constructor(v: Value = { x: 0, y: 0 }) { super(v); }
+
+  // Trait slots — on prototype, copied by viewClassFor.
+  get [LINEAR](): Linear<Value> { return linearImpl; }
+  [LERP](a: Value, b: Value, t: number) { return lerp(a, b, t); }
+  [METRIC](a: Value, b: Value) { return metric(a, b); }
+  [EQUALS](a: Value, b: Value) { return equals(a, b); }
+
+  /** Tween-builder, implied by [LERP]. */
+  to(target: Value, dur: Val<number>, ease?: Easing): Tween<Value> {
+    return tween(this, target, dur, ease);
+  }
 
   add(b: Val<Value>) { return derived(Vec, () => add(this.value, value(b))); }
   sub(b: Val<Value>) { return derived(Vec, () => sub(this.value, value(b))); }
@@ -77,13 +73,14 @@ export class Vec extends Signal<Value> implements VecOps<Vec> {
   get magnitude() { return this._mag ??= derived(Num, () => Math.hypot(this.value.x, this.value.y)); }
   private _mag?: Num;
 
-  derive(fn: (c: Chain) => Chain) {
-    return derived(Vec, () => fn(new Chain(this.value)).value);
+  derive(fn: (c: VecChain) => VecChain) {
+    return derived(Vec, () => fn(new VecChain(this.value)).value);
   }
 }
-export interface Vec extends LerpMethods<Value> {}
 
-class Chain extends BaseChain<Value> implements VecOps<Chain> {
+export class VecChain {
+  value: Value;
+  constructor(v: Value) { this.value = v; }
   add(b: Val<Value>) { this.value = add(this.value, value(b)); return this; }
   sub(b: Val<Value>) { this.value = sub(this.value, value(b)); return this; }
   scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
@@ -101,15 +98,11 @@ class Chain extends BaseChain<Value> implements VecOps<Chain> {
   perp() { this.value = perp(this.value); return this; }
 }
 
-defineTrait(Vec, LINEAR, { add, sub, scale });
-defineTrait(Vec, LERP,   lerp);
-defineTrait(Vec, METRIC, metric);
-defineTrait(Vec, EQUALS, equals);
-
 /** Construct a Vec; per-axis Val<number> args bind the corresponding lens. */
 export const vec = (x: Val<number> = 0, y: Val<number> = 0): Vec => {
   const v = new Vec();
-  bindFields(v, { x, y });
+  v.x.bind(x);
+  v.y.bind(y);
   return v;
 };
 

@@ -1,14 +1,20 @@
-// Combined code demo: a refactor cycle that exercises every shape of
-// morph (inline edits, multi-line restructure, line moves), interleaved
-// with token-level animation primitives (highlight / pluck / underline
-// / cascade). One diagram, one cycle.
+// Combined code demo on the new monospace substrate.
 //
-// The helpers (findRange, highlight, pluck, unpluck) are still parked
-// here while the surface settles — natural promotion targets for
-// `CodeShape` once we know what we want them to look like.
+//   - `c.parts` is the flat list of parts; each part is a single-line
+//     positioned span with `.position` (Vec) and `.opacity`/`.rotation`
+//     (Num) signals. Animations are just `.to(...)` calls.
+//   - `c.cut(part, [offsets])` carves a sub-region into its own part;
+//     `c.uncut([parts])` merges contiguous parts back. Pluck/wiggle is
+//     "cut, animate, uncut".
+//   - Background highlight + wavy underline still use CSS Custom
+//     Highlights; the substrate's `paint()` doesn't touch their buckets
+//     so they survive any repaints.
+//   - Morph animates parts directly (per-line cross-fade + position
+//     tween on Kept lines; opacity fades for Lost/Gained); there's no
+//     drive loop or DOM rebuild.
 
-import {Anchor, Diagram, Mount, css, effect, label, loop, num, signal, vec, type Content} from "../../minim";
-import {code, codeStyles, type CodeShape} from "../../minim/code";
+import {Anchor, Diagram, Mount, css, label, loop, signal, vec, type Content} from "../../minim";
+import {code, codeStyles, Part, type CodeShape} from "../../minim/code";
 
 const STATES = [
   // 1. Inline original.
@@ -21,9 +27,7 @@ const STATES = [
   }
 }`,
   // 2. Extract a loop generator — drive opens up above, fadeOut
-  //    collapses to a one-line `yield* drive(...)`. Big multi-line
-  //    restructure with implicit moves (let/while/dt/t all relocate
-  //    into the new `drive` body).
+  //    collapses to a one-line `yield* drive(...)`.
   `function* drive(dur, step) {
   let t = 0;
   while (t < dur) {
@@ -36,9 +40,9 @@ const STATES = [
 function* fadeOut(opacity, secs) {
   yield* drive(secs, u => opacity.value = 1 - u);
 }`,
-  // 3. Lift `let t = 0;` out of drive to top level. Clean line-move:
-  //    same trimmed text, different position, with the indent shrink
-  //    riding as an inline edit within the moving line.
+  // 3. Lift `let t = 0;` out of drive — clean line-move with indent
+  //    shrink. Both the line-level and indent changes are handled by
+  //    the same per-line morph machinery.
   `let t = 0;
 
 function* drive(dur, step) {
@@ -57,73 +61,36 @@ function* fadeOut(opacity, secs) {
 const PULSE = "minim-code-pulse";
 const UNDERLINE = "minim-code-underline";
 
-/** First Range in `wrapper` matching `text`. Walks descendant text
- *  nodes in tree order and returns a Range scoped to one node. */
-function findRange(wrapper: HTMLElement, text: string | RegExp): Range | null {
-  const walker = document.createTreeWalker(wrapper, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode() as Text | null;
-  while (node) {
-    const content = node.textContent ?? "";
-    let idx = -1;
-    let len = 0;
-    if (typeof text === "string") {
-      idx = content.indexOf(text);
-      len = text.length;
-    } else {
-      const m = text.exec(content);
-      if (m) {
-        idx = m.index;
-        len = m[0].length;
-      }
-    }
-    if (idx >= 0) {
-      const r = new Range();
-      r.setStart(node, idx);
-      r.setEnd(node, idx + len);
-      return r;
-    }
-    node = walker.nextNode() as Text | null;
+/** Find the first part containing `text`. Returns the part plus the
+ *  start/end character offsets within its text, or null. */
+function findInCode(c: CodeShape, text: string): {part: Part; start: number; end: number} | null {
+  for (const p of c.parts) {
+    const i = p.text.indexOf(text);
+    if (i >= 0) return {part: p, start: i, end: i + text.length};
   }
   return null;
 }
 
-/** Add `range` to the named Custom Highlight; returns a disposer. */
-function highlight(range: Range, name: string): () => void {
+/** Add a Range over `[start, end)` chars of the part's text node to
+ *  the named Custom Highlight. Returns a disposer. */
+function highlightRange(part: Part, start: number, end: number, name: string): () => void {
   if (typeof CSS === "undefined" || !("highlights" in CSS)) return () => {};
+  const tn = part.el.firstChild;
+  if (!tn || tn.nodeType !== Node.TEXT_NODE) return () => {};
+  const r = new Range();
+  try {
+    r.setStart(tn as Text, start);
+    r.setEnd(tn as Text, end);
+  } catch {
+    return () => {};
+  }
   let h = CSS.highlights.get(name);
   if (!h) {
     h = new Highlight();
     CSS.highlights.set(name, h);
   }
-  h.add(range);
-  return () => h?.delete(range);
-}
-
-/** Wrap a Range in an inline-block span so its transform can animate
- *  independently of surrounding flow. Re-paints highlights so the
- *  surrounding (and wrapped) text reattaches its colour against the
- *  freshly-split text nodes. */
-function pluck(c: CodeShape, range: Range, className: string): HTMLSpanElement | null {
-  try {
-    const span = document.createElement("span");
-    span.className = className;
-    range.surroundContents(span);
-    c._repaint();
-    return span;
-  } catch {
-    return null;
-  }
-}
-
-/** Inverse of `pluck`: dissolve the wrapping span, normalise adjacent
- *  text nodes, repaint highlights. */
-function unpluck(c: CodeShape, span: HTMLSpanElement): void {
-  const parent = span.parentNode;
-  if (!parent) return;
-  while (span.firstChild) parent.insertBefore(span.firstChild, span);
-  parent.removeChild(span);
-  parent.normalize();
-  c._repaint();
+  h.add(r);
+  return () => h?.delete(r);
 }
 
 export class MdCode extends Diagram {
@@ -137,11 +104,6 @@ export class MdCode extends Diagram {
     ::highlight(${UNDERLINE}) {
       text-decoration: underline wavy var(--prettylights-keyword, #cf222e);
       text-decoration-thickness: 1.5px;
-    }
-    .minim-code-plucked {
-      display: inline-block;
-      transform-origin: center bottom;
-      will-change: transform;
     }
   `;
 
@@ -164,84 +126,92 @@ export class MdCode extends Diagram {
     );
 
     const c = s(code(STATES[0], {size: 13}));
-    // Top-left anchored: both edges fixed so neither vertical nor
-    // horizontal layout jitters as content grows / collapses.
+    // Top-left anchored.
     const LEFT_X = 40;
     const TOP_Y = 48;
     c.translate.bind(() => vec(LEFT_X, TOP_Y).value);
 
-    const wrapper = c.wrapper;
     this.anim.start(
       loop(function* () {
+        console.log("[code-demo] cycle start; parts:", c.parts.length);
         yield 1.0;
 
-        // ---- Token animations on state 1 ----
+        // 1. Highlight — flash background on a token via Custom Highlight.
         status.value = "highlight — flash background on a token";
         yield 0.4;
         for (const txt of ["opacity", "secs"]) {
-          const r = findRange(wrapper, txt);
-          if (!r) continue;
-          const dispose = highlight(r, PULSE);
+          const found = findInCode(c, txt);
+          if (!found) continue;
+          const dispose = highlightRange(found.part, found.start, found.end, PULSE);
           yield 0.4;
           dispose();
           yield 0.15;
         }
+        console.error("[code-demo] after highlight loop");
         yield 0.5;
 
-        status.value = "pluck — wrap, transform, restore";
+        // 2. Pluck — cut the token out into its own part, animate, uncut.
+        status.value = "pluck — cut, animate, uncut";
+        console.error("[code-demo] entering pluck");
         yield 0.4;
-        const yieldRange = findRange(wrapper, "yield");
-        if (yieldRange) {
-          const span = pluck(c, yieldRange, "minim-code-plucked");
-          if (span) {
-            const ty = num(0);
-            const rot = num(0);
-            const stop = effect(() => {
-              span.style.transform =
-                `translateY(${ty.value}px) rotate(${rot.value}rad)`;
-            });
-            yield [ty.to(-10, 0.25), rot.to(0.18, 0.25)];
-            yield 0.6;
-            yield [ty.to(0, 0.25), rot.to(0, 0.25)];
-            stop();
-            unpluck(c, span);
-          }
+        const yieldFound = findInCode(c, "yield");
+        console.error("[code-demo] yieldFound:", yieldFound);
+        if (yieldFound) {
+          const subs = c.cut(yieldFound.part, [yieldFound.start, yieldFound.end]);
+          console.error("[code-demo] cut subs:", subs.length);
+          // The plucked sub-part is whichever slice maps to [start, end).
+          const middle = yieldFound.start > 0 ? subs[1] : subs[0];
+          const home = middle.position.peek();
+          yield [
+            middle.position.to({x: home.x, y: home.y - 10}, 0.25),
+            middle.rotation.to(0.18, 0.25),
+          ];
+          yield 0.6;
+          yield [
+            middle.position.to(home, 0.25),
+            middle.rotation.to(0, 0.25),
+          ];
+          c.uncut(subs);
         }
         yield 0.5;
 
-        // ---- Morph 1 → 2: extract loop generator (body collapses) ----
+        // Morph 1 → 2.
         status.value = "morph — extract a loop generator (body collapses to one line)";
         yield* c.morphTo(STATES[1], 0.9);
         yield 0.8;
 
+        // 3. Underline — persistent decoration over a span of text.
         status.value = "underline — persistent decoration";
         yield 0.4;
-        const callRange = findRange(wrapper, "yield* drive");
-        if (callRange) {
-          const dispose = highlight(callRange, UNDERLINE);
+        const callFound = findInCode(c, "yield* drive");
+        if (callFound) {
+          const dispose = highlightRange(
+            callFound.part, callFound.start, callFound.end, UNDERLINE,
+          );
           yield 1.0;
           dispose();
         }
         yield 0.5;
 
-        // ---- Morph 2 → 3: lift `let t = 0;` (clean line move) ----
-        status.value = "morph — lift `let t = 0` out (line moves, indent shrinks inline)";
+        // Morph 2 → 3: clean line move (let t = 0) + indent change.
+        status.value = "morph — lift `let t = 0` out (line moves, indent shrinks)";
         yield* c.morphTo(STATES[2], 0.9);
         yield 0.8;
 
+        // 4. Cascade — sequence of highlights.
         status.value = "cascade — sequence of highlights";
         yield 0.4;
         for (const txt of ["let t = 0", "t < dur", "t += dt", "step(t / dur)"]) {
-          const r = findRange(wrapper, txt);
-          if (!r) continue;
-          const dispose = highlight(r, PULSE);
+          const found = findInCode(c, txt);
+          if (!found) continue;
+          const dispose = highlightRange(found.part, found.start, found.end, PULSE);
           yield 0.35;
           dispose();
           yield 0.05;
         }
         yield 0.8;
 
-        // ---- Morph 3 → 1: back to the start ----
+        // Morph 3 → 1.
         status.value = "morph — back to the start";
         yield* c.morphTo(STATES[0], 0.9);
         yield 0.8;

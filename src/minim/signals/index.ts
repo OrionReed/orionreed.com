@@ -37,10 +37,8 @@ export {
 } from "./traits";
 
 export {
-  BaseChain,
   derived,
   field,
-  bindFields,
   type ReactiveInit,
 } from "./derive";
 
@@ -59,9 +57,6 @@ export {
   untilChange,
   loop,
   every,
-  defineTrait,
-  lerpImpl,
-  type LerpMethods,
   type SpringOpts,
   type PlayTrigger,
 } from "./lerp";

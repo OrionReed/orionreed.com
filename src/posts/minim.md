@@ -235,15 +235,17 @@ They update with everything else, because they're just signals deriving from sig
 
 <md-lerps></md-lerps>
 
-Adding a value type is one class and a few stamps:
+Adding a value type is one class with trait slots declared as methods:
 
 ```ts
-class Polygon extends Signal<PolygonValue> {}
-defineTrait(Polygon, LERP, lerpPolygon);
-defineTrait(Polygon, EQUALS, equalsPolygon);
+class Polygon extends Signal<PolygonValue> {
+  [LERP](a, b, t) { return lerpPolygon(a, b, t); }
+  [EQUALS](a, b) { return equalsPolygon(a, b); }
+  to(target, dur, ease?) { return tween(this, target, dur, ease); }
+}
 ```
 
-…and `polygon.to(targetPolygon, dur)` falls out, on the same chain machinery, with the same combinator support. Stamp `[LINEAR]` and `[METRIC]` too and `spring`/`toward`/`attract` work on it the same day. A centroid of `Polygon`s is `mean(p1, p2, p3)`. No special cases anywhere in the pipeline.
+…and `polygon.to(targetPolygon, dur)` falls out, on the same chain machinery, with the same combinator support. Add `[LINEAR]` and `[METRIC]` too and `spring`/`toward`/`attract` work on it the same day. A centroid of `Polygon`s is `mean(p1, p2, p3)`. No special cases anywhere in the pipeline.
 
 <md-morph></md-morph>
 

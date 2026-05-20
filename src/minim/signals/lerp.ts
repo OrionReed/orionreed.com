@@ -8,16 +8,7 @@ import {
   type Val,
   type Read,
 } from "./signal";
-import {
-  LERP,
-  LINEAR,
-  METRIC,
-  EQUALS,
-  type Linear,
-  type Lerp,
-  type Metric,
-  type Equals,
-} from "./traits";
+import { LERP, LINEAR, METRIC } from "./traits";
 import {
   drive,
   isGen,
@@ -286,54 +277,6 @@ export function* driven<T>(
     if (next === false) return false;
     sig.value = next;
   });
-}
-
-export interface LerpMethods<T> {
-  to(target: T, dur: Val<number>, ease?: Easing): Tween<T>;
-}
-
-export const lerpImpl = {
-  to<T>(this: Signal<T>, target: T, dur: Val<number>, ease?: Easing): Tween<T> {
-    return tween(this, target, dur, ease);
-  },
-};
-
-const TRAIT_METHODS: Record<symbol, object | undefined> = {
-  [LERP]: lerpImpl,
-};
-
-/** Stamp `Cls.prototype[slot] = impl`; installs method bundle if any. */
-interface ProtoTarget {
-  prototype: object;
-}
-export function defineTrait<T>(
-  Cls: ProtoTarget,
-  slot: typeof LERP,
-  impl: Lerp<T>,
-): void;
-export function defineTrait<T>(
-  Cls: ProtoTarget,
-  slot: typeof LINEAR,
-  impl: Linear<T>,
-): void;
-export function defineTrait<T>(
-  Cls: ProtoTarget,
-  slot: typeof METRIC,
-  impl: Metric<T>,
-): void;
-export function defineTrait<T>(
-  Cls: ProtoTarget,
-  slot: typeof EQUALS,
-  impl: Equals<T>,
-): void;
-export function defineTrait(
-  Cls: ProtoTarget,
-  slot: symbol,
-  impl: unknown,
-): void {
-  (Cls.prototype as Record<symbol, unknown>)[slot] = impl;
-  const methods = TRAIT_METHODS[slot];
-  if (methods) Object.assign(Cls.prototype, methods);
 }
 
 // `Read<unknown>` (covariant) accepts any `Signal<T>` / `Computed<T>`;

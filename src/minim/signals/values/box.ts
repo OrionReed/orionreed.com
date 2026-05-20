@@ -1,9 +1,10 @@
 // box.ts — reactive axis-aligned rectangle.
 
 import { Signal, computed, type Computed, value, type Val } from "../signal";
-import { LINEAR, LERP, EQUALS } from "../traits";
-import { BaseChain, derived, field, bindFields } from "../derive";
-import { defineTrait, type LerpMethods } from "../lerp";
+import { LINEAR, LERP, EQUALS, type Linear } from "../traits";
+import { derived, field } from "../derive";
+import { tween, type Tween } from "../lerp";
+import { type Easing } from "../../core";
 import { Num } from "./num";
 import { Vec, type Value as VecValue } from "./vec";
 
@@ -57,24 +58,20 @@ export function edgeFrom(b: Value, toward: VecValue): VecValue {
 export const contains = (b: Value, p: VecValue): boolean =>
   p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 
-/** Op surface — closed-on-Box operations. Implemented by reactive
- *  `Box` and the mutating `Chain`. */
-interface BoxOps<R> {
-  add(b: Val<Value>): R;
-  sub(b: Val<Value>): R;
-  scale(k: Val<number>): R;
-  lerp(b: Val<Value>, t: Val<number>): R;
-  expand(n: Val<number>): R;
-  union(...others: Val<Value>[]): R;
-}
+const linearImpl: Linear<Value> = { add, sub, scale };
 
-export class Box extends Signal<Value> implements BoxOps<Box> {
+export class Box extends Signal<Value> {
   constructor(v: Value = { x: 0, y: 0, w: 0, h: 0 }) { super(v); }
 
   get x() { return field(this, "x", Num); }
   get y() { return field(this, "y", Num); }
   get w() { return field(this, "w", Num); }
   get h() { return field(this, "h", Num); }
+
+  /** Self-reference so any Box is uniformly `{ box: Box }` — the same
+   *  field path works on Box, Shape, Part, split results, etc.
+   *  (`b.box === b`). */
+  get box(): Box { return this; }
 
   get area() { return this._area ??= derived(Num, () => this.value.w * this.value.h); }
   private _area?: Num;
@@ -115,13 +112,23 @@ export class Box extends Signal<Value> implements BoxOps<Box> {
     return computed(() => contains(this.value, value(p)));
   }
 
-  derive(fn: (c: Chain) => Chain) {
-    return derived(Box, () => fn(new Chain(this.value)).value);
+  // Trait slots — on prototype.
+  get [LINEAR](): Linear<Value> { return linearImpl; }
+  [LERP](a: Value, b: Value, t: number) { return lerp(a, b, t); }
+  [EQUALS](a: Value, b: Value) { return equals(a, b); }
+
+  to(target: Value, dur: Val<number>, ease?: Easing): Tween<Value> {
+    return tween(this, target, dur, ease);
+  }
+
+  derive(fn: (c: BoxChain) => BoxChain) {
+    return derived(Box, () => fn(new BoxChain(this.value)).value);
   }
 }
-export interface Box extends LerpMethods<Value> {}
 
-class Chain extends BaseChain<Value> implements BoxOps<Chain> {
+export class BoxChain {
+  value: Value;
+  constructor(v: Value) { this.value = v; }
   add(b: Val<Value>) { this.value = add(this.value, value(b)); return this; }
   sub(b: Val<Value>) { this.value = sub(this.value, value(b)); return this; }
   scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
@@ -136,10 +143,6 @@ class Chain extends BaseChain<Value> implements BoxOps<Chain> {
   }
 }
 
-defineTrait(Box, LINEAR, { add, sub, scale });
-defineTrait(Box, LERP,   lerp);
-defineTrait(Box, EQUALS, equals);
-
 /** Construct a Box; reactive per-component args bind the field lens. */
 export const box = (
   x: Val<number> = 0,
@@ -148,7 +151,9 @@ export const box = (
   h: Val<number> = 0,
 ): Box => {
   const out = new Box();
-  bindFields(out, { x, y, w, h });
+  out.x.bind(x);
+  out.y.bind(y);
+  out.w.bind(w);
+  out.h.bind(h);
   return out;
 };
-

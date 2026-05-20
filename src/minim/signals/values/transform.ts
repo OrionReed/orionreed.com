@@ -2,9 +2,10 @@
 // (translate / scale / origin / rotate / opacity).
 
 import { Signal, value, type Val } from "../signal";
-import { LINEAR, LERP, METRIC, EQUALS } from "../traits";
-import { BaseChain, derived, field, bindFields, type ReactiveInit } from "../derive";
-import { defineTrait, type LerpMethods } from "../lerp";
+import { LINEAR, LERP, METRIC, EQUALS, type Linear } from "../traits";
+import { derived, field, type ReactiveInit } from "../derive";
+import { tween, type Tween } from "../lerp";
+import { type Easing } from "../../core";
 import { Num } from "./num";
 import {
   Vec,
@@ -75,20 +76,9 @@ export const metric = (a: Value, b: Value) =>
   Math.abs(a.rotate  - b.rotate) +
   Math.abs(a.opacity - b.opacity);
 
-/** Op surface — closed-on-Transform operations. Implemented by
- *  reactive `Transform` and the mutating `Chain`.
- *
- *  Note: scalar `scale(k)` is intentionally **not** here. `transform.scale`
- *  is the per-axis Vec lens (`tr.scale.value = {x:2,y:2}`); scalar
- *  multiplication of the whole Transform is the [LINEAR] trait, accessed
- *  via `tr.derive(c => c.scale(k))` or `requireLinear(tr).scale(v, k)`. */
-interface TransformOps<R> {
-  add(b: Val<Value>): R;
-  sub(b: Val<Value>): R;
-  lerp(b: Val<Value>, t: Val<number>): R;
-}
+const linearImpl: Linear<Value> = { add, sub, scale };
 
-export class Transform extends Signal<Value> implements TransformOps<Transform> {
+export class Transform extends Signal<Value> {
   constructor(v: Value = DEFAULT) { super(v); }
 
   add(b: Val<Value>) { return derived(Transform, () => add(this.value, value(b))); }
@@ -103,13 +93,24 @@ export class Transform extends Signal<Value> implements TransformOps<Transform> 
   get rotate() { return field(this, "rotate", Num); }
   get opacity() { return field(this, "opacity", Num); }
 
-  derive(fn: (c: Chain) => Chain) {
-    return derived(Transform, () => fn(new Chain(this.value)).value);
+  // Trait slots — on prototype.
+  get [LINEAR](): Linear<Value> { return linearImpl; }
+  [LERP](a: Value, b: Value, t: number) { return lerp(a, b, t); }
+  [METRIC](a: Value, b: Value) { return metric(a, b); }
+  [EQUALS](a: Value, b: Value) { return equals(a, b); }
+
+  to(target: Value, dur: Val<number>, ease?: Easing): Tween<Value> {
+    return tween(this, target, dur, ease);
+  }
+
+  derive(fn: (c: TransformChain) => TransformChain) {
+    return derived(Transform, () => fn(new TransformChain(this.value)).value);
   }
 }
-export interface Transform extends LerpMethods<Value> {}
 
-class Chain extends BaseChain<Value> implements TransformOps<Chain> {
+export class TransformChain {
+  value: Value;
+  constructor(v: Value) { this.value = v; }
   add(b: Val<Value>) { this.value = add(this.value, value(b)); return this; }
   sub(b: Val<Value>) { this.value = sub(this.value, value(b)); return this; }
   /** Scalar multiply (only available in Chain to avoid clashing with
@@ -120,14 +121,15 @@ class Chain extends BaseChain<Value> implements TransformOps<Chain> {
   }
 }
 
-defineTrait(Transform, LINEAR, { add, sub, scale });
-defineTrait(Transform, LERP,   lerp);
-defineTrait(Transform, METRIC, metric);
-defineTrait(Transform, EQUALS, equals);
-
 /** Construct a Transform; per-field Val<T> args bind axes via lenses. */
 export const transform = (init?: Init): Transform => {
   const tr = new Transform();
-  if (init) bindFields(tr, init);
+  if (init) {
+    if (init.translate !== undefined) tr.translate.bind(init.translate);
+    if (init.scale !== undefined) tr.scale.bind(init.scale);
+    if (init.origin !== undefined) tr.origin.bind(init.origin);
+    if (init.rotate !== undefined) tr.rotate.bind(init.rotate);
+    if (init.opacity !== undefined) tr.opacity.bind(init.opacity);
+  }
   return tr;
 };

@@ -1,26 +1,30 @@
-// CodeShape — source code as a reactive Shape with a `source:
-// Signal<string>` as the source of truth.
+// CodeShape — a monospace code substrate.
 //
-// Layout: the wrapper holds one `<span class="minim-code-line">` per
-// source line (display: block, width: max-content). A line in steady
-// state contains a single text node; during morph a Kept-with-changes
-// line contains coalesced `minim-code-{del,ins,match}` spans instead,
-// and Lost/Gained lines are plain-text line elements animating
-// width/height/opacity from natural to zero (or back). Layout is purely
-// one-line-per-element — no multi-line `inline-block`s, which would
-// trigger the spec's baseline-to-bottom-margin rule and deform flow.
+// One concept: a `Part` is a single-line span absolutely-positioned in
+// the wrapper, with reactive `position` (Vec), `opacity` (Num), and
+// `rotation` (Num), plus an optional `key` for identity.
 //
-// Highlighting: one paint path. For each line element, the painter
-// either reconstructs a logical text view from `minim-code-{del,ins,
-// match}` children (during morph: "old text" = del+match in document
-// order, "new text" = ins+match) and tokenizes each view, OR — when the
-// line has no morph children — tokenizes the line's full text. Each
-// typed token becomes a Range in the matching descendant text node,
-// registered with CSS Custom Highlights under its token-type name.
-// Same path handles steady state, morph state, and any external
-// wrapping (e.g. a demo `pluck` that wraps a token in its own span).
+// A `CodeShape` is a flat list of parts. No "line element" container,
+// no flow layout — every part sits at `(col·charW, row·lineH)` via a
+// CSS transform. Monospace means layout is pure multiplication.
+//
+// Three operations on the substrate:
+//   `cut(part, [offsets])` — split a part at character offsets into
+//                            N+1 sub-parts on the same row.
+//   `uncut(parts)`         — merge adjacent same-row contiguous parts
+//                            back into one.
+//   `group(key)`           — query: all parts sharing `key`.
+//
+// Animation is just writes to part signals (`part.position.to(...)`,
+// `part.opacity.to(...)`). A multi-line region is a group of parts
+// sharing a key; "animate the region" broadcasts writes to all members.
+//
+// Syntax colour is CSS Custom Highlights painted over Range objects
+// inside part text nodes. `paint()` tokenises each row's joined text
+// and routes typed tokens to the part containing them. Independent of
+// part structure — adding cuts doesn't change the colours.
 
-import {effect, signal, type Signal, type Val, value} from "@minim/signals";
+import {effect, num, signal, vec, value, type Signal, type Num as NumSignal, type Vec, type Val} from "@minim/signals";
 import {Shape, type ShapeOpts} from "@minim/shapes";
 import {type Animator, type Easing} from "@minim/core";
 import {morph} from "./morph";
@@ -35,85 +39,117 @@ export interface CodeOpts extends ShapeOpts {
   language?: string;
 }
 
-/** Class stamped on every per-line container. */
-export const LINE_CLASS = "minim-code-line";
-
-const CLASS_DEL = "minim-code-del";
-const CLASS_INS = "minim-code-ins";
-const CLASS_MATCH = "minim-code-match";
-
 const DEFAULT_FONT =
   "ui-monospace, SFMono-Regular, Menlo, 'Cascadia Code', monospace";
 
-const wrapperCss = (fontSize: number, fontFamily: string): string =>
-  [
-    `font-family:${fontFamily}`,
-    `font-size:${fontSize}px`,
-    "line-height:1.4",
-    "padding:0",
-    "margin:0",
-    "position:relative",
-    "display:inline-block",
-    "color:var(--text-color)",
-  ].join(";");
+const partCss = "position:absolute;left:0;top:0;white-space:pre;will-change:transform";
 
-const lineCssText =
-  "display:block;width:max-content;min-height:1.4em;white-space:pre";
+/** A single-line span placed absolutely. Position, opacity, and rotation
+ *  are signals — write or `.to(...)` them to move/fade/spin. */
+export class Part {
+  readonly el: HTMLSpanElement;
+  /** Current text content. Use `setText` to update (instant). */
+  text: string;
+  /** Top-left in user units. Animatable via `.to(targetVec, dur)`. */
+  readonly position: Vec;
+  /** [0..1]. Animatable. */
+  readonly opacity: NumSignal;
+  /** Radians around the part's centre. Animatable. */
+  readonly rotation: NumSignal;
+  /** Optional identity tag. Multiple parts can share a key (multi-line
+   *  regions); `c.group(key)` returns the group. */
+  key?: string;
+  #disposers: Array<() => void> = [];
 
-/** Build a line element holding `text`. White-space preserved
- *  (`white-space: pre`), sized to content. */
-export function makeLineEl(text: string): HTMLSpanElement {
-  const el = document.createElement("span");
-  el.className = LINE_CLASS;
-  el.style.cssText = lineCssText;
-  el.textContent = text;
-  return el;
+  constructor(text: string, x: number, y: number, key?: string) {
+    this.text = text;
+    this.key = key;
+    this.position = vec(x, y);
+    this.opacity = num(1);
+    this.rotation = num(0);
+
+    this.el = document.createElement("span");
+    this.el.style.cssText = partCss;
+    this.el.textContent = text;
+
+    this.#disposers.push(
+      effect(() => {
+        const p = this.position.value;
+        const r = this.rotation.value;
+        this.el.style.transform = r === 0
+          ? `translate(${p.x}px, ${p.y}px)`
+          : `translate(${p.x}px, ${p.y}px) rotate(${r}rad)`;
+      }),
+      effect(() => {
+        this.el.style.opacity = String(this.opacity.value);
+      }),
+    );
+  }
+
+  /** Instant text update — for reactive content, animate around it
+   *  rather than tweening text itself. */
+  setText(t: string): void {
+    if (this.text === t) return;
+    this.text = t;
+    this.el.textContent = t;
+  }
+
+  dispose(): void {
+    for (const d of this.#disposers) d();
+    this.#disposers.length = 0;
+    this.el.remove();
+  }
 }
 
-/** Offscreen measure for initial foreignObject sizing — avoids a
- *  first-paint flash. */
-const measure = (
-  text: string,
-  fontSize: number,
-  fontFamily: string,
-): {w: number; h: number} => {
+/** Measure monospace metrics for `(family, size)`. One-off per shape. */
+function measureFont(size: number, family: string): {w: number; h: number} {
   const div = document.createElement("div");
-  div.style.cssText = `position:absolute;left:-99999px;top:0;visibility:hidden;${wrapperCss(fontSize, fontFamily)}`;
-  for (const line of text.split("\n")) div.appendChild(makeLineEl(line));
+  div.style.cssText =
+    `position:absolute;visibility:hidden;left:-9999px;top:0;` +
+    `font-family:${family};font-size:${size}px;line-height:1.4;white-space:pre`;
+  div.textContent = "M";
   document.body.appendChild(div);
-  try {
-    return {w: div.offsetWidth, h: div.offsetHeight};
-  } finally {
-    document.body.removeChild(div);
-  }
-};
+  const w = div.offsetWidth;
+  const h = div.offsetHeight;
+  document.body.removeChild(div);
+  return {w, h};
+}
 
-/** A Shape rendering source code. Writable `source` signal drives both
- *  the static view (direct writes re-render plain text) and the
- *  animated view (`morphTo` runs the line-aware diff). */
+/** A Shape rendering monospace source code as a list of `Part`s. */
 export class CodeShape extends Shape {
   readonly source: Signal<string>;
   readonly width: Signal<number>;
   readonly height: Signal<number>;
   readonly language: string;
-  /** Live wrapper inside the foreignObject; children are line elements. */
+  /** Wrapper that hosts all parts. `position: relative` so parts'
+   *  `position: absolute` resolves against it. */
   readonly wrapper: HTMLDivElement;
+  /** Flat parts list. Order isn't load-bearing (positions are signals);
+   *  morph re-sorts by (row, col) on completion for indexability. */
+  readonly parts: Part[] = [];
+  /** Monospace char width and line height in CSS pixels. */
+  readonly charW: number;
+  readonly lineH: number;
 
-  /** When true, the auto-render effect bails — morph owns the DOM. */
+  /** When true, the auto-rebuild effect bails — morph owns the parts. */
   #inMorph = false;
-  /** Ranges this instance has registered in `CSS.highlights`. */
-  readonly #highlightRanges: Range[] = [];
+  /** Syntax-highlight Ranges we own; cleared on each `paint`. User-
+   *  added highlight Ranges in other CSS.highlights buckets aren't
+   *  tracked here and survive repaints. */
+  readonly #syntaxRanges: Range[] = [];
 
   constructor(initial: Val<string>, opts: CodeOpts = {}) {
     const fontSize = opts.size ?? 14;
     const fontFamily = opts.font ?? DEFAULT_FONT;
     const language = opts.language ?? "typescript";
-
+    const {w: charW, h: lineH} = measureFont(fontSize, fontFamily);
     const initialStr = value(initial);
-    const {w: w0, h: h0} = measure(initialStr, fontSize, fontFamily);
 
-    const w = signal(w0);
-    const h = signal(h0);
+    const lines = initialStr.split("\n");
+    const initW = (lines.reduce((a, l) => Math.max(a, l.length), 0)) * charW;
+    const initH = lines.length * lineH;
+    const w = signal(initW);
+    const h = signal(initH);
 
     super(
       "foreignObject",
@@ -126,6 +162,8 @@ export class CodeShape extends Shape {
     this.height = h;
     this.language = language;
     this.source = signal(initialStr);
+    this.charW = charW;
+    this.lineH = lineH;
 
     const fo = this.intrinsic as SVGForeignObjectElement;
     fo.setAttribute("x", "0");
@@ -136,7 +174,15 @@ export class CodeShape extends Shape {
     this.attr("height", h);
 
     this.wrapper = document.createElement("div");
-    this.wrapper.style.cssText = wrapperCss(fontSize, fontFamily);
+    this.wrapper.style.cssText = [
+      "position:relative",
+      `font-family:${fontFamily}`,
+      `font-size:${fontSize}px`,
+      `line-height:${lineH}px`,
+      "padding:0",
+      "margin:0",
+      "color:var(--text-color)",
+    ].join(";");
     fo.appendChild(this.wrapper);
 
     this.#render(initialStr);
@@ -147,132 +193,191 @@ export class CodeShape extends Shape {
         if (this.#inMorph) return;
         this.#render(src);
       }),
-      () => this.#clearHighlights(),
+      () => this.#clearSyntaxRanges(),
+      () => { for (const p of this.parts) p.dispose(); },
     );
   }
 
-  /** Full rebuild — wipe wrapper, recreate plain line elements, push
-   *  fresh dimensions, repaint. Used on initial mount and on external
-   *  writes to `source`. Morph manages its own DOM swap and skips this. */
+  /** Full rebuild — dispose existing parts, create one per source line
+   *  at (0, row·lineH). Triggered on initial mount and any external
+   *  write to `source`; morph bypasses this via `#inMorph`. */
   #render(src: string): void {
-    while (this.wrapper.firstChild) this.wrapper.removeChild(this.wrapper.firstChild);
-    for (const line of src.split("\n")) this.wrapper.appendChild(makeLineEl(line));
-    const nw = this.wrapper.offsetWidth;
-    const nh = this.wrapper.offsetHeight;
-    if (nw !== this.width.peek()) this.width.value = nw;
-    if (nh !== this.height.peek()) this.height.value = nh;
-    this.#paint();
+    for (const p of this.parts) p.dispose();
+    this.parts.length = 0;
+    const lines = src.split("\n");
+    for (let r = 0; r < lines.length; r++) {
+      const part = new Part(lines[r], 0, r * this.lineH);
+      this.wrapper.appendChild(part.el);
+      this.parts.push(part);
+    }
+    this.#syncSize();
+    this.paint();
   }
 
-  /** Single paint path. For each line, derive zero, one, or two
-   *  "fragment views" from its children and paint each as a contiguous
-   *  text span: tokenize the joined text, route each typed token to
-   *  the descendant text node containing it. */
-  #paint(): void {
-    this.#clearHighlights();
+  /** Recompute wrapper width/height from the parts' bounding extents.
+   *  Absolute children don't contribute to parent size naturally, so we
+   *  reflect the extents into the `width` / `height` signals (which
+   *  drive the foreignObject's attributes). */
+  #syncSize(): void {
+    let maxW = 0;
+    let maxH = 0;
+    for (const p of this.parts) {
+      const pos = p.position.peek();
+      const right = pos.x + p.text.length * this.charW;
+      const bottom = pos.y + this.lineH;
+      if (right > maxW) maxW = right;
+      if (bottom > maxH) maxH = bottom;
+    }
+    if (maxW !== this.width.peek()) this.width.value = maxW;
+    if (maxH !== this.height.peek()) this.height.value = maxH;
+  }
+
+  /** Paint syntax-colour highlights. Groups parts by row, tokenises
+   *  the joined text of each row, routes each typed token to a Range
+   *  in the part text node that contains it. Re-entrant — clears prior
+   *  syntax Ranges first; user-added highlights in other buckets
+   *  (pulse, underline) are untouched. */
+  paint(): void {
+    this.#clearSyntaxRanges();
     if (typeof CSS === "undefined" || !("highlights" in CSS)) return;
 
-    for (const lineEl of this.wrapper.querySelectorAll<HTMLElement>(`.${LINE_CLASS}`)) {
-      const oldChildren: HTMLElement[] = [];
-      const newChildren: HTMLElement[] = [];
-      let hasMorph = false;
-      for (const child of Array.from(lineEl.children) as HTMLElement[]) {
-        const cl = child.classList;
-        if (cl.contains(CLASS_DEL)) { oldChildren.push(child); hasMorph = true; }
-        else if (cl.contains(CLASS_INS)) { newChildren.push(child); hasMorph = true; }
-        else if (cl.contains(CLASS_MATCH)) { oldChildren.push(child); newChildren.push(child); hasMorph = true; }
-      }
-      if (hasMorph) {
-        this.#paintFragment(oldChildren);
-        this.#paintFragment(newChildren);
-      } else {
-        this.#paintFragment([lineEl]);
-      }
+    const byRow = new Map<number, Part[]>();
+    for (const p of this.parts) {
+      const r = Math.round(p.position.peek().y / this.lineH);
+      const arr = byRow.get(r);
+      if (arr) arr.push(p);
+      else byRow.set(r, [p]);
     }
-  }
 
-  /** Tokenize the joined text of the given roots and register a Range
-   *  per typed token in the descendant text node that contains it.
-   *  Tokens straddling node boundaries (would require a wrap to cut
-   *  through a Prism token) are skipped rather than partially painted. */
-  #paintFragment(roots: readonly HTMLElement[]): void {
-    if (roots.length === 0) return;
-    const textNodes: Text[] = [];
-    const starts: number[] = [];
-    let off = 0;
-    for (const root of roots) {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      let n = walker.nextNode();
-      while (n) {
-        const t = n as Text;
-        textNodes.push(t);
+    for (const parts of byRow.values()) {
+      parts.sort((a, b) => a.position.peek().x - b.position.peek().x);
+      const fullText = parts.map((p) => p.text).join("");
+      const tokens = tokenize(fullText, this.language);
+      const starts: number[] = [];
+      let off = 0;
+      for (const p of parts) {
         starts.push(off);
-        off += (t.textContent ?? "").length;
-        n = walker.nextNode();
+        off += p.text.length;
       }
-    }
-    if (textNodes.length === 0) return;
 
-    const fullText = textNodes.map((t) => t.textContent ?? "").join("");
-    const tokens = tokenize(fullText, this.language);
-
-    let pos = 0;
-    for (const tok of tokens) {
-      const len = tok.text.length;
-      if (tok.type !== "" && len > 0 && !tok.text.includes("\n")) {
-        for (let i = 0; i < textNodes.length; i++) {
-          const start = starts[i];
-          const end = start + (textNodes[i].textContent ?? "").length;
-          if (pos >= start && pos + len <= end) {
-            try {
-              const r = new Range();
-              r.setStart(textNodes[i], pos - start);
-              r.setEnd(textNodes[i], pos - start + len);
-              let h = CSS.highlights.get(tok.type);
-              if (h === undefined) {
-                h = new Highlight();
-                CSS.highlights.set(tok.type, h);
+      let pos = 0;
+      for (const tok of tokens) {
+        const len = tok.text.length;
+        if (tok.type !== "" && len > 0 && !tok.text.includes("\n")) {
+          for (let i = 0; i < parts.length; i++) {
+            const start = starts[i];
+            const end = start + parts[i].text.length;
+            if (pos >= start && pos + len <= end) {
+              const tn = parts[i].el.firstChild;
+              if (tn && tn.nodeType === Node.TEXT_NODE) {
+                try {
+                  const r = new Range();
+                  r.setStart(tn as Text, pos - start);
+                  r.setEnd(tn as Text, pos - start + len);
+                  let h = CSS.highlights.get(tok.type);
+                  if (h === undefined) {
+                    h = new Highlight();
+                    CSS.highlights.set(tok.type, h);
+                  }
+                  h.add(r);
+                  this.#syntaxRanges.push(r);
+                } catch {
+                  // Defensive: skip on weird offsets.
+                }
               }
-              h.add(r);
-              this.#highlightRanges.push(r);
-            } catch {
-              // Defensive: setting Range can throw on weird offsets.
+              break;
             }
-            break;
           }
         }
+        pos += len;
       }
-      pos += len;
     }
   }
 
-  #clearHighlights(): void {
-    if (this.#highlightRanges.length === 0) return;
+  #clearSyntaxRanges(): void {
+    if (this.#syntaxRanges.length === 0) return;
     if (typeof CSS !== "undefined" && "highlights" in CSS) {
-      for (const r of this.#highlightRanges) {
+      for (const r of this.#syntaxRanges) {
         for (const [, h] of CSS.highlights as unknown as Map<string, Highlight>) {
           h.delete(r);
         }
       }
     }
-    this.#highlightRanges.length = 0;
+    this.#syntaxRanges.length = 0;
   }
 
-  /** Animate from the current source to `target`. See `morph.ts`. */
+  /** Split `part` at character offsets into N+1 sub-parts on the same
+   *  row. Offsets are 0-based char positions within `part.text`; 0 and
+   *  `text.length` are implicit. Sub-parts inherit `part.key`; re-key
+   *  any of them after if you want different identities. Returns the
+   *  sub-parts in left-to-right order. */
+  cut(part: Part, offsets: readonly number[]): Part[] {
+    const idx = this.parts.indexOf(part);
+    if (idx < 0) throw new Error("cut: part not in this CodeShape");
+    const sorted = [...new Set(offsets)]
+      .sort((a, b) => a - b)
+      .filter((o) => o > 0 && o < part.text.length);
+    if (sorted.length === 0) return [part];
+    const bounds = [0, ...sorted, part.text.length];
+    const pos = part.position.peek();
+    const subs: Part[] = [];
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const start = bounds[i];
+      const end = bounds[i + 1];
+      const sub = new Part(
+        part.text.slice(start, end),
+        pos.x + start * this.charW,
+        pos.y,
+        part.key,
+      );
+      this.wrapper.appendChild(sub.el);
+      subs.push(sub);
+    }
+    this.parts.splice(idx, 1, ...subs);
+    part.dispose();
+    this.paint();
+    return subs;
+  }
+
+  /** Merge `parts` (must be on the same row, contiguous in column
+   *  order — each part's right edge equals the next's left edge) back
+   *  into a single part. The merged part inherits the leftmost's key.
+   *  No-op for a single part; throws for empty input. */
+  uncut(parts: readonly Part[]): Part {
+    if (parts.length === 0) throw new Error("uncut: no parts");
+    if (parts.length === 1) return parts[0];
+    const sorted = [...parts].sort(
+      (a, b) => a.position.peek().x - b.position.peek().x,
+    );
+    const text = sorted.map((p) => p.text).join("");
+    const pos = sorted[0].position.peek();
+    const merged = new Part(text, pos.x, pos.y, sorted[0].key);
+    this.wrapper.appendChild(merged.el);
+    const firstIdx = this.parts.indexOf(sorted[0]);
+    for (const p of sorted) {
+      const i = this.parts.indexOf(p);
+      if (i >= 0) this.parts.splice(i, 1);
+      p.dispose();
+    }
+    this.parts.splice(firstIdx >= 0 ? firstIdx : this.parts.length, 0, merged);
+    this.paint();
+    return merged;
+  }
+
+  /** All parts sharing `key`. Returns a fresh array. */
+  group(key: string): Part[] {
+    return this.parts.filter((p) => p.key === key);
+  }
+
+  /** Animate from current source to `target`. See `morph.ts`. */
   morphTo(target: string, dur: number, ease?: Easing): Animator<void> {
     return morph(this, target, dur, ease);
   }
 
-  /** @internal Repaint highlights against the current DOM. Used by
-   *  morph (after rebuild + at finalize) and by external code that
-   *  mutates the wrapper (e.g. a demo `pluck` that wraps a token). */
-  _repaint(): void {
-    this.#paint();
-  }
-
-  /** @internal Commit `src` to the source signal with the auto-render
-   *  effect suppressed (caller has already brought the DOM into the
-   *  target state), re-measure, repaint. */
+  /** @internal — morph calls this on completion to commit `src` to
+   *  the source signal (with the auto-rebuild effect suppressed),
+   *  sort parts back into row/col order for indexable lookup, and
+   *  refresh size + highlights. */
   _finalize(src: string): void {
     this.#inMorph = true;
     try {
@@ -280,11 +385,13 @@ export class CodeShape extends Shape {
     } finally {
       this.#inMorph = false;
     }
-    const nw = this.wrapper.offsetWidth;
-    const nh = this.wrapper.offsetHeight;
-    if (nw !== this.width.peek()) this.width.value = nw;
-    if (nh !== this.height.peek()) this.height.value = nh;
-    this.#paint();
+    this.parts.sort((a, b) => {
+      const pa = a.position.peek();
+      const pb = b.position.peek();
+      return pa.y - pb.y || pa.x - pb.x;
+    });
+    this.#syncSize();
+    this.paint();
   }
 }
 
@@ -292,14 +399,10 @@ export class CodeShape extends Shape {
 export const code = (source: Val<string>, opts?: CodeOpts): CodeShape =>
   new CodeShape(source, opts);
 
-/** Styling for Prism token classes (Custom Highlights, painted per
- *  Range) and morph del/ins span colours. Drop into a `Diagram.styles`
- *  block via the `css` tag so the rules land in the Diagram's shadow
- *  root, where the wrapper lives. */
+/** Styling for Prism token classes via CSS Custom Highlights. Drop
+ *  into a `Diagram.styles` block via the `css` tag so the rules land
+ *  in the Diagram's shadow root where the wrapper lives. */
 export const codeStyles = `
-  .minim-code-del { color: var(--prettylights-deleted-text, inherit); }
-  .minim-code-ins { color: var(--prettylights-inserted-text, inherit); }
-
   ::highlight(keyword),
   ::highlight(rule) { color: var(--prettylights-keyword, #cf222e); }
   ::highlight(string),

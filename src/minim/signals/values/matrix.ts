@@ -2,8 +2,7 @@
 
 import { Signal, value, type Val } from "../signal";
 import { EQUALS } from "../traits";
-import { BaseChain, derived, field, bindFields } from "../derive";
-import { defineTrait } from "../lerp";
+import { derived, field } from "../derive";
 import { Num } from "./num";
 import type { Value as VecValue } from "./vec";
 
@@ -142,14 +141,7 @@ export function compose(t: VecValue, r: number, s: VecValue, pivot: VecValue): V
 export const toString = (m: Value): string =>
   `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
 
-/** Op surface — closed-on-Matrix operations. Implemented by reactive
- *  `Matrix` and the mutating `Chain`. */
-interface MatrixOps<R> {
-  multiply(b: Val<Value>): R;
-  invert(): R;
-}
-
-export class Matrix extends Signal<Value> implements MatrixOps<Matrix> {
+export class Matrix extends Signal<Value> {
   constructor(v: Value = identity()) { super(v); }
 
   multiply(b: Val<Value>) { return derived(Matrix, () => multiply(this.value, value(b))); }
@@ -165,17 +157,20 @@ export class Matrix extends Signal<Value> implements MatrixOps<Matrix> {
   get determinant() { return this._det ??= derived(Num, () => determinant(this.value)); }
   private _det?: Num;
 
-  derive(fn: (c: Chain) => Chain) {
-    return derived(Matrix, () => fn(new Chain(this.value)).value);
+  // Trait slots — on prototype.
+  [EQUALS](a: Value, b: Value) { return equals(a, b); }
+
+  derive(fn: (c: MatrixChain) => MatrixChain) {
+    return derived(Matrix, () => fn(new MatrixChain(this.value)).value);
   }
 }
 
-class Chain extends BaseChain<Value> implements MatrixOps<Chain> {
+export class MatrixChain {
+  value: Value;
+  constructor(v: Value) { this.value = v; }
   multiply(b: Val<Value>) { this.value = multiply(this.value, value(b)); return this; }
   invert() { this.value = invert(this.value); return this; }
 }
-
-defineTrait(Matrix, EQUALS, equals);
 
 /** Construct a Matrix; reactive per-component args bind the lens. */
 export const matrix = (
@@ -184,6 +179,7 @@ export const matrix = (
   e: Val<number> = 0, f: Val<number> = 0,
 ): Matrix => {
   const m = new Matrix();
-  bindFields(m, { a, b, c, d, e, f });
+  m.a.bind(a); m.b.bind(b); m.c.bind(c);
+  m.d.bind(d); m.e.bind(e); m.f.bind(f);
   return m;
 };

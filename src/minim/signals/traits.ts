@@ -1,6 +1,6 @@
-// Generic dispatch via prototype-stamped `Symbol.for` slots; per-instance
-// writes shadow the class slot. New traits: declare a symbol + augment
-// the `Signal<T>` interface below.
+// Trait slots — module-local Symbols (not Symbol.for) so registry
+// collisions across libraries are impossible. Value classes declare
+// trait slots directly on their prototype (no `defineTrait` registration).
 
 import type { Signal, Read } from "./signal";
 
@@ -13,17 +13,21 @@ export type Lerp<T>   = (a: T, b: T, t: number) => T;
 export type Metric<T> = (a: T, b: T) => number;
 export type Equals<T> = (a: T, b: T) => boolean;
 
-export const LINEAR = Symbol.for("minim.linear");
-export const LERP   = Symbol.for("minim.lerp");
-export const METRIC = Symbol.for("minim.metric");
-export const EQUALS = Symbol.for("minim.equals");
+export const LINEAR = Symbol("linear");
+export const LERP   = Symbol("lerp");
+export const METRIC = Symbol("metric");
+export const EQUALS = Symbol("equals");
 
 declare module "./signal" {
   interface Signal<T> {
     [LINEAR]?: Linear<T>;
-    [LERP]?:   Lerp<T>;
-    [METRIC]?: Metric<T>;
-    [EQUALS]?: Equals<T>;
+    // Trait slots may be implemented as methods (`[LERP](a,b,t) {...}`)
+    // or property-of-function (`[LERP] = lerp`). Use method-shape so
+    // subclasses can declare with class-method syntax without variance
+    // errors.
+    [LERP]?(a: T, b: T, t: number): T;
+    [METRIC]?(a: T, b: T): number;
+    [EQUALS]?(a: T, b: T): boolean;
   }
 }
 

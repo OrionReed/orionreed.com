@@ -1,8 +1,8 @@
 import {
   Anchor, Box, Color, Diagram, Mount, Vec,
   circle, computed, label, loop, num, tween, vec, rect, rgb,
-  Signal, defineTrait, LERP,
-  type Lerp, type LerpMethods,
+  Signal, LERP,
+  type Easing, type Lerp, type Tween, type Val,
 } from "../../minim";
 
 const W = 640;
@@ -23,9 +23,12 @@ const stringLerp: Lerp<string> = (a, b, t) => {
 };
 
 /** Reactive string with a `[LERP]` slot. */
-class Text extends Signal<string> {}
-interface Text extends LerpMethods<string> {}
-defineTrait(Text, LERP, stringLerp);
+class Text extends Signal<string> {
+  [LERP](a: string, b: string, t: number) { return stringLerp(a, b, t); }
+  to(target: string, dur: Val<number>, ease?: Easing): Tween<string> {
+    return tween(this, target, dur, ease);
+  }
+}
 
 const fmtNum = (n: number) => n.toFixed(2);
 const fmtVec = (v: { x: number; y: number }) =>

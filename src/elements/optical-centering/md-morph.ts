@@ -1,8 +1,8 @@
 import {
   Anchor, Diagram, Path, Vec, type VecValue,
-  Signal, signal, derived, defineTrait, LERP, EQUALS,
+  Signal, signal, derived, tween, LERP, EQUALS,
   circle, label, loop,
-  type Content, type Mount, type LerpMethods,
+  type Content, type Easing, type Mount, type Tween, type Val,
 } from "../../minim";
 
 const W = 640;
@@ -43,10 +43,12 @@ const polygonLerp = (a: PolygonValue, b: PolygonValue, t: number): PolygonValue 
 
 class Polygon extends Signal<PolygonValue> {
   constructor(v: PolygonValue = { vertices: [] }) { super(v); }
+  [LERP](a: PolygonValue, b: PolygonValue, t: number) { return polygonLerp(a, b, t); }
+  [EQUALS](a: PolygonValue, b: PolygonValue) { return polygonEquals(a, b); }
+  to(target: PolygonValue, dur: Val<number>, ease?: Easing): Tween<PolygonValue> {
+    return tween(this, target, dur, ease);
+  }
 }
-interface Polygon extends LerpMethods<PolygonValue> {}
-defineTrait(Polygon, LERP, polygonLerp);
-defineTrait(Polygon, EQUALS, polygonEquals);
 
 // Each builder emits N vertices; coarse shapes repeat corners so the lerp splits them apart.
 

@@ -1,13 +1,7 @@
-import { Signal, Computed, batch, type Val } from "./signal";
+import { Signal, Computed, type Val } from "./signal";
 
 /** Per-field reactive init: each axis accepts plain T, signal, or thunk. */
 export type ReactiveInit<T> = { [K in keyof T]?: Val<T[K]> };
-
-/** Mutating builder used inside `sig.derive(c => …)`. */
-export class BaseChain<T> {
-  value: T;
-  constructor(v: T) { this.value = v; }
-}
 
 // View-class synthesis. We want `derived(Vec, …) instanceof Vec` while
 // reusing Computed's eval semantics. Approach: subclass Computed, copy
@@ -75,15 +69,3 @@ export function field<P, K extends keyof P, Type extends new (...args: never[]) 
   return fl as unknown as InstanceType<Type>;
 }
 
-/** Bind a record of axes on a composite signal; batched. */
-export function bindFields<P, I extends ReactiveInit<P>>(sig: Signal<P>, init: I): void {
-  batch(() => {
-    for (const k in init) {
-      const v = init[k];
-      if (v !== undefined) {
-        const lens = (sig as unknown as Record<string, Signal<unknown>>)[k];
-        if (lens) lens.bind(v as Val<unknown>);
-      }
-    }
-  });
-}

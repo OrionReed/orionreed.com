@@ -1,21 +1,21 @@
-// minim/code — syntax-highlighted source as a reactive Shape with
-// token-level morph transitions. Mirrors `minim/tex` in spirit:
+// minim/code — monospace code substrate with reactive `Part` atoms.
 //
-//   code(src, { language, size })      → CodeShape (Shape with a
-//                                          reactive `source` signal)
-//   code.morphTo(target, dur)          → snapshot-diff morph; matched
-//                                          tokens translate, added fade
-//                                          in, removed fade out
-//   codeStyles                         → CSS for Prism token classes
-//                                          to drop into `Diagram.styles`
-//
-// What's deliberately absent for v1: per-token `part()` markers,
-// editing API (replace / insert / remove), CSS Custom Highlights for
-// run-trace overlays, anim-observer integration. Each is a layered
-// addition on top of the same substrate.
+//   code(src, { language, size })      → CodeShape — flat list of
+//                                          absolutely-positioned parts
+//                                          driven by a `source` signal.
+//   c.parts                             → Part[] (single-line spans
+//                                          with `position`, `opacity`,
+//                                          `rotation` signals + `key`).
+//   c.cut(part, [offsets])              → split a part on same row.
+//   c.uncut([parts])                    → merge contiguous parts back.
+//   c.group(key)                        → all parts sharing a key
+//                                          (multi-line regions are
+//                                          just multi-part groups).
+//   c.morphTo(target, dur)              → animate from current source
+//                                          to `target` via per-line
+//                                          cross-fade + position tween.
+//   codeStyles                          → ::highlight() colour rules
+//                                          to drop in `Diagram.styles`.
 
-export {CodeShape, code, codeStyles, LINE_CLASS, type CodeOpts} from "./code";
+export {CodeShape, code, codeStyles, Part, type CodeOpts} from "./code";
 export {tokenize, type Token} from "./tokenize";
-// `morph` itself is internal — accessed via `codeShape.morphTo(target, dur)`.
-// The symbol name collides with `tex.morph`, and the method form composes
-// just as well: `yield* race(c.morphTo(target, 0.4), stop)`.

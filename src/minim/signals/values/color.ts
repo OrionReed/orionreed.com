@@ -1,9 +1,10 @@
 // color.ts — reactive RGBA colour.
 
 import { Signal, computed, type Computed, value, type Val } from "../signal";
-import { LINEAR, LERP, EQUALS } from "../traits";
-import { BaseChain, derived } from "../derive";
-import { defineTrait, type LerpMethods } from "../lerp";
+import { LINEAR, LERP, EQUALS, type Linear } from "../traits";
+import { derived } from "../derive";
+import { tween, type Tween } from "../lerp";
+import { type Easing } from "../../core";
 import { Num } from "./num";
 
 export interface Value { r: number; g: number; b: number; a: number }
@@ -21,16 +22,9 @@ export const lerp = (a: Value, b: Value, t: number): Value => ({
 export const equals = (a: Value, b: Value) =>
   a === b || (a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a);
 
-/** Op surface — closed-on-Color operations. Implemented by reactive
- *  `Color` and the mutating `Chain`. */
-interface ColorOps<R> {
-  add(b: Val<Value>): R;
-  sub(b: Val<Value>): R;
-  scale(k: Val<number>): R;
-  lerp(b: Val<Value>, t: Val<number>): R;
-}
+const linearImpl: Linear<Value> = { add, sub, scale };
 
-export class Color extends Signal<Value> implements ColorOps<Color> {
+export class Color extends Signal<Value> {
   constructor(v: Value = { r: 0, g: 0, b: 0, a: 1 }) { super(v); }
 
   add(b: Val<Value>) { return derived(Color, () => add(this.value, value(b))); }
@@ -60,13 +54,23 @@ export class Color extends Signal<Value> implements ColorOps<Color> {
   }
   private _css?: Computed<string>;
 
-  derive(fn: (c: Chain) => Chain) {
-    return derived(Color, () => fn(new Chain(this.value)).value);
+  // Trait slots — on prototype.
+  get [LINEAR](): Linear<Value> { return linearImpl; }
+  [LERP](a: Value, b: Value, t: number) { return lerp(a, b, t); }
+  [EQUALS](a: Value, b: Value) { return equals(a, b); }
+
+  to(target: Value, dur: Val<number>, ease?: Easing): Tween<Value> {
+    return tween(this, target, dur, ease);
+  }
+
+  derive(fn: (c: ColorChain) => ColorChain) {
+    return derived(Color, () => fn(new ColorChain(this.value)).value);
   }
 }
-export interface Color extends LerpMethods<Value> {}
 
-class Chain extends BaseChain<Value> implements ColorOps<Chain> {
+export class ColorChain {
+  value: Value;
+  constructor(v: Value) { this.value = v; }
   add(b: Val<Value>) { this.value = add(this.value, value(b)); return this; }
   sub(b: Val<Value>) { this.value = sub(this.value, value(b)); return this; }
   scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
@@ -74,10 +78,6 @@ class Chain extends BaseChain<Value> implements ColorOps<Chain> {
     this.value = lerp(this.value, value(b), value(t)); return this;
   }
 }
-
-defineTrait(Color, LINEAR, { add, sub, scale });
-defineTrait(Color, LERP,   lerp);
-defineTrait(Color, EQUALS, equals);
 
 export const rgb = (r: number, g: number, b: number) => new Color({ r, g, b, a: 1 });
 export const rgba = (r: number, g: number, b: number, a: number) => new Color({ r, g, b, a });
