@@ -133,7 +133,6 @@ export class MdCode extends Diagram {
 
     this.anim.start(
       loop(function* () {
-        console.log("[code-demo] cycle start; parts:", c.parts.length);
         yield 1.0;
 
         // 1. Highlight — flash background on a token via Custom Highlight.
@@ -147,19 +146,14 @@ export class MdCode extends Diagram {
           dispose();
           yield 0.15;
         }
-        console.error("[code-demo] after highlight loop");
         yield 0.5;
 
         // 2. Pluck — cut the token out into its own part, animate, uncut.
         status.value = "pluck — cut, animate, uncut";
-        console.error("[code-demo] entering pluck");
         yield 0.4;
         const yieldFound = findInCode(c, "yield");
-        console.error("[code-demo] yieldFound:", yieldFound);
         if (yieldFound) {
           const subs = c.cut(yieldFound.part, [yieldFound.start, yieldFound.end]);
-          console.error("[code-demo] cut subs:", subs.length);
-          // The plucked sub-part is whichever slice maps to [start, end).
           const middle = yieldFound.start > 0 ? subs[1] : subs[0];
           const home = middle.position.peek();
           yield [

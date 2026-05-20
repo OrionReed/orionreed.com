@@ -1,4 +1,17 @@
-import {Diagram, Mount, Anchor, Vec, derived, arrange, handle, label, num, play, rect, spring} from "../../minim";
+import {
+  Diagram,
+  Mount,
+  Anchor,
+  Vec,
+  derived,
+  arrange,
+  handle,
+  label,
+  num,
+  play,
+  rect,
+  spring,
+} from "../../minim";
 
 const WIDTHS = [72, 68, 80, 60, 76];
 const HEIGHTS = [52, 44, 60, 48, 56];
@@ -32,7 +45,8 @@ export class MdLayoutDemo extends Diagram {
     const handles = widths.map((w, i) => {
       const card = cards[i];
       const h = HEIGHTS[i];
-      const pos = derived(Vec,
+      const pos = derived(
+        Vec,
         () => ({
           x: card.translate.value.x + w.value,
           y: card.translate.value.y + h / 2,
@@ -47,16 +61,25 @@ export class MdLayoutDemo extends Diagram {
     // `at(0)` freezes the spring while dragging; `at(1)` resumes on release.
     const dragging = handles[SPRING_IDX].dragging;
     this.anim.start(function* () {
-      yield* play(spring(widths[SPRING_IDX], SPRING_REST, { omega: 15, zeta: 0.55 }))
-        .at(() => dragging.value ? 0 : 1);
+      yield* play(
+        spring(widths[SPRING_IDX], SPRING_REST, {
+          omega: 15,
+          zeta: 0.4,
+          precision: 0,
+        }),
+      ).at(() => (dragging.value ? 0 : 1));
     });
 
     s(
-      label(view.bottom.up(14), "drag handles to resize · red card springs back", {
-        size: 10,
-        align: Anchor.Center,
-        opacity: 0.55,
-      }),
+      label(
+        view.bottom.up(14),
+        "drag handles to resize · red card springs back",
+        {
+          size: 10,
+          align: Anchor.Center,
+          opacity: 0.55,
+        },
+      ),
     );
   }
 }
