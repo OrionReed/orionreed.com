@@ -1,98 +1,99 @@
-// vec.ts — reactive 2D point (r2 v2).
-//
-// Per-instance memoization: `.x`, `.y`, `.magnitude` all flow through
-// `this.memo(key, factory)`. No more `_mag?` slot, no per-class
-// FIELD_CACHE Symbol. Same observable behavior, one mechanism.
+// vec.ts — reactive 2D point.
 
-import { Signal, computed, value, type Val, type SignalOptions } from "../signal";
+import { Signal, computed, value, type Val, type SignalOptions, type RO } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
-import { field } from "../field";
+import { type Op, applyOp1, applyOp2, Chain } from "../ops";
 import { Num } from "./num";
 
-export interface VecValue { x: number; y: number }
+// Module-local; consumers use `Of<Vec>`.
+type V = { x: number; y: number };
 
-export const add = (a: VecValue, b: VecValue): VecValue => ({ x: a.x + b.x, y: a.y + b.y });
-export const sub = (a: VecValue, b: VecValue): VecValue => ({ x: a.x - b.x, y: a.y - b.y });
-export const scale = (a: VecValue, k: number): VecValue => ({ x: a.x * k, y: a.y * k });
-export const lerp = (a: VecValue, b: VecValue, t: number): VecValue => ({
+export const add = (a: V, b: V): V => ({ x: a.x + b.x, y: a.y + b.y });
+export const sub = (a: V, b: V): V => ({ x: a.x - b.x, y: a.y - b.y });
+export const scale = (a: V, k: number): V => ({ x: a.x * k, y: a.y * k });
+export const lerp = (a: V, b: V, t: number): V => ({
   x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t,
 });
-export const metric = (a: VecValue, b: VecValue) => Math.hypot(a.x - b.x, a.y - b.y);
-export const equals = (a: VecValue, b: VecValue) => a === b || (a.x === b.x && a.y === b.y);
+export const metric = (a: V, b: V) => Math.hypot(a.x - b.x, a.y - b.y);
+export const equals = (a: V, b: V) => a === b || (a.x === b.x && a.y === b.y);
 
 /** Unit vector along `v`; `(0, 0)` stays `(0, 0)`. */
-export const normalize = (v: VecValue): VecValue => {
+export const normalize = (v: V): V => {
   const m = Math.hypot(v.x, v.y);
   return m === 0 ? { x: 0, y: 0 } : { x: v.x / m, y: v.y / m };
 };
 
 /** 90° CCW rotation (y-down: rotates left): `(x, y) → (y, -x)`. */
-export const perp = (v: VecValue): VecValue => ({ x: v.y, y: -v.x });
+export const perp = (v: V): V => ({ x: v.y, y: -v.x });
 
-export class Vec extends Signal<VecValue> {
-  static traits: Required<TraitDict<VecValue>> = {
-    linear: { add, sub, scale },
-    lerp,
-    metric,
-    equals,
-  };
+// ─── Invertible ops ────────────────────────────────────────────────
 
-  constructor(v: VecValue = { x: 0, y: 0 }, opts?: SignalOptions<VecValue>) { super(v, opts); }
+const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
+const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
+const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
+const offsetOp: Op<V, [number, number]> = {
+  fwd: (v, dx, dy) => ({ x: v.x + dx, y: v.y + dy }),
+  bwd: (n, dx, dy) => ({ x: n.x - dx, y: n.y - dy }),
+};
 
-  add(b: Val<VecValue>) { return computed(() => add(this.value, value(b)), Vec); }
-  sub(b: Val<VecValue>) { return computed(() => sub(this.value, value(b)), Vec); }
-  scale(k: Val<number>) { return computed(() => scale(this.value, value(k)), Vec); }
-  lerp(b: Val<VecValue>, t: Val<number>) {
-    return computed(() => lerp(this.value, value(b), value(t)), Vec);
+const linearImpl: Linear<V> = { add, sub, scale };
+
+export class Vec extends Signal<V> {
+  static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
+
+  constructor(v: V = { x: 0, y: 0 }, opts?: SignalOptions<V>) { super(v, opts); }
+
+  // ── Invertible (Lens-returning) ──
+  add(b: Val<V>): Vec { return applyOp1(this, addOp, b, Vec); }
+  sub(b: Val<V>): Vec { return applyOp1(this, subOp, b, Vec); }
+  scale(k: Val<number>): Vec { return applyOp1(this, scaleOp, k, Vec); }
+  offset(dx: Val<number>, dy: Val<number>): Vec {
+    return applyOp2(this, offsetOp, dx, dy, Vec);
+  }
+  // axis-aligned offset sugar — all invertible via offsetOp with negation
+  up(n: Val<number>): Vec    { return this.offset(0, computed(() => -value(n))); }
+  down(n: Val<number>): Vec  { return this.offset(0, n); }
+  left(n: Val<number>): Vec  { return this.offset(computed(() => -value(n)), 0); }
+  right(n: Val<number>): Vec { return this.offset(n, 0); }
+
+  // ── Non-invertible (RO<Vec>-returning) ──
+  lerp(b: Val<V>, t: Val<number>): RO<Vec> {
+    return computed(() => lerp(this.value, value(b), value(t)), Vec) as RO<Vec>;
+  }
+  normalize(): RO<Vec> { return computed(() => normalize(this.value), Vec) as RO<Vec>; }
+  perp(): RO<Vec> { return computed(() => perp(this.value), Vec) as RO<Vec>; }
+  distance(other: Val<V>): RO<Num> {
+    return computed(() => metric(this.value, value(other)), Num) as RO<Num>;
   }
 
-  up(n: Val<number>)    { return computed(() => ({ x: this.value.x,            y: this.value.y - value(n) }), Vec); }
-  down(n: Val<number>)  { return computed(() => ({ x: this.value.x,            y: this.value.y + value(n) }), Vec); }
-  left(n: Val<number>)  { return computed(() => ({ x: this.value.x - value(n), y: this.value.y            }), Vec); }
-  right(n: Val<number>) { return computed(() => ({ x: this.value.x + value(n), y: this.value.y            }), Vec); }
+  // ── Field lenses (writable) ──
+  get x(): Num { return this.field("x", Num); }
+  get y(): Num { return this.field("y", Num); }
 
-  offset(dx: Val<number>, dy: Val<number>) {
-    return computed(() => ({ x: this.value.x + value(dx), y: this.value.y + value(dy) }), Vec);
-  }
-  normalize() { return computed(() => normalize(this.value), Vec); }
-  perp() { return computed(() => perp(this.value), Vec); }
-  distance(other: Val<VecValue>) {
-    return computed(() => metric(this.value, value(other)), Num);
-  }
-
-  get x(): Num { return this.memo("x", () => field(this, "x", Num)); }
-  get y(): Num { return this.memo("y", () => field(this, "y", Num)); }
-
-  get magnitude(): Num {
+  // ── Lazy derived (read-only) ──
+  get magnitude(): RO<Num> {
     return this.memo("magnitude", () =>
-      computed(() => Math.hypot(this.value.x, this.value.y), Num));
+      computed(() => Math.hypot(this.value.x, this.value.y), Num)) as RO<Num>;
   }
 
-  derive(fn: (c: VecChain) => VecChain) {
-    return computed(() => fn(new VecChain(this.value)).value, Vec);
+  derive(fn: (c: VecChain) => VecChain): Vec {
+    return fn(new VecChain()).toLens(this, Vec);
   }
 }
 
 export interface Vec { readonly constructor: typeof Vec }
 
-export class VecChain {
-  value: VecValue;
-  constructor(v: VecValue) { this.value = v; }
-  add(b: Val<VecValue>) { this.value = add(this.value, value(b)); return this; }
-  sub(b: Val<VecValue>) { this.value = sub(this.value, value(b)); return this; }
-  scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
-  lerp(b: Val<VecValue>, t: Val<number>) {
-    this.value = lerp(this.value, value(b), value(t)); return this;
+export class VecChain extends Chain<V> {
+  add(b: Val<V>): this { return this.push1(addOp, b); }
+  sub(b: Val<V>): this { return this.push1(subOp, b); }
+  scale(k: Val<number>): this { return this.push1(scaleOp, k); }
+  offset(dx: Val<number>, dy: Val<number>): this {
+    return this.push2(offsetOp, dx, dy);
   }
-  up(n: Val<number>)    { this.value = { x: this.value.x,            y: this.value.y - value(n) }; return this; }
-  down(n: Val<number>)  { this.value = { x: this.value.x,            y: this.value.y + value(n) }; return this; }
-  left(n: Val<number>)  { this.value = { x: this.value.x - value(n), y: this.value.y            }; return this; }
-  right(n: Val<number>) { this.value = { x: this.value.x + value(n), y: this.value.y            }; return this; }
-  offset(dx: Val<number>, dy: Val<number>) {
-    this.value = { x: this.value.x + value(dx), y: this.value.y + value(dy) }; return this;
-  }
-  normalize() { this.value = normalize(this.value); return this; }
-  perp() { this.value = perp(this.value); return this; }
+  up(n: Val<number>): this    { return this.push2(offsetOp, 0, computed(() => -value(n))); }
+  down(n: Val<number>): this  { return this.push2(offsetOp, 0, n); }
+  left(n: Val<number>): this  { return this.push2(offsetOp, computed(() => -value(n)), 0); }
+  right(n: Val<number>): this { return this.push2(offsetOp, n, 0); }
 }
 
 /** Construct a Vec; per-axis Val<number> args bind the corresponding lens. */
@@ -103,9 +104,9 @@ export const vec = (x: Val<number> = 0, y: Val<number> = 0): Vec => {
   return v;
 };
 
-/** Signal Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`. */
+/** Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`. */
 export const polar = (
-  center: Val<VecValue>,
+  center: Val<V>,
   r: Val<number>,
   a: Val<number>,
 ): Vec => {

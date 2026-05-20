@@ -10,7 +10,7 @@
 //   - nominal `HasLinear<T>` constraint on `mean` (was `requireLinear`
 //     with a runtime throw)
 
-import { Signal, lens, type Read, type ValueOf } from "../signal";
+import { Signal, lens, type Read, type Of } from "../signal";
 import { requireLinear, type Traits } from "../traits";
 
 /** N-to-1 lens flavored as `parts[0]`'s class. The merge function reads
@@ -50,15 +50,15 @@ export function combine<T, S extends Read<T>>(
  *  Inference shape:
  *    - `R extends Read<unknown>` anchors the class identity (Num/Vec/…)
  *      so the return type preserves the input class.
- *    - The trait constraint `& HasLinear<ValueOf<R>>` is applied at the
+ *    - The trait constraint `& HasLinear<Of<R>>` is applied at the
  *      parameter site instead of in `R`'s bound; this avoids the
  *      variance trap (`Linear<T>` is invariant, so `HasLinear<number>`
  *      isn't assignable to `HasLinear<unknown>`). */
 export function mean<R extends Read<unknown>>(
-  first: R & Traits<ValueOf<R>, "linear">,
-  ...rest: (R & Traits<ValueOf<R>, "linear">)[]
+  first: R & Traits<Of<R>, "linear">,
+  ...rest: (R & Traits<Of<R>, "linear">)[]
 ): R {
-  type V = ValueOf<R>;
+  type V = Of<R>;
   const signals = [first, ...rest] as ReadonlyArray<Read<V>>;
   const lin = requireLinear(first as Traits<V, "linear">);
   const invN = 1 / signals.length;

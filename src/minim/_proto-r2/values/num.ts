@@ -1,75 +1,68 @@
-// num.ts — reactive scalar number (r2 v2).
+// num.ts — reactive scalar number.
 //
-// Pattern preserved from prod:
-//   - Eager methods: `n.add(b)` allocates one computed Num per call.
-//   - Chain form: `n.derive(c => c.add(b).scale(k))` fuses into a single
-//     computed. Same observable outcome, lower overhead.
-//
-// What's new vs r2-v1:
-//   - Trait dispatch via `static traits = {…}` (one declaration, no symbols).
-//   - Value type suffixed (`NumValue`) so consumers don't rename on import.
-//   - `computed(fn, Cls)` arg order.
+// Eager methods on the class return either a `Num` (writable Lens) when
+// the op is invertible, or `RO<Num>` (read-only Computed) when it isn't.
+// Chain methods on `NumChain` only carry invertible ops — so
+// `n.derive(c => c.add(b).scale(k))` is always a Lens.
 
-import { Signal, computed, value, type Val, type SignalOptions } from "../signal";
+import { Signal, computed, value, type Val, type SignalOptions, type RO } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
+import { type Op, applyOp1, Chain } from "../ops";
 
-export type NumValue = number;
+// Module-local value alias; not exported. Consumers use `Of<Num>` = number.
+type V = number;
 
-export const add = (a: NumValue, b: NumValue) => a + b;
-export const sub = (a: NumValue, b: NumValue) => a - b;
-export const scale = (a: NumValue, k: number) => a * k;
-export const lerp = (a: NumValue, b: NumValue, t: number) => a + (b - a) * t;
-export const metric = (a: NumValue, b: NumValue) => Math.abs(a - b);
-export const equals = (a: NumValue, b: NumValue) => a === b;
+export const add = (a: V, b: V) => a + b;
+export const sub = (a: V, b: V) => a - b;
+export const scale = (a: V, k: number) => a * k;
+export const lerp = (a: V, b: V, t: number) => a + (b - a) * t;
+export const metric = (a: V, b: V) => Math.abs(a - b);
+export const equals = (a: V, b: V) => a === b;
 
-const linearImpl: Linear<NumValue> = { add, sub, scale };
+// ─── Invertible ops (shared between eager methods and chain) ────────
 
-export class Num extends Signal<NumValue> {
-  static traits: Required<TraitDict<NumValue>> = {
-    linear: linearImpl,
-    lerp,
-    metric,
-    equals,
-  };
+const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
+const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
+const scaleOp: Op<V, [number]> = {
+  fwd: scale,
+  bwd: (v, k) => scale(v, 1 / k),
+};
 
-  constructor(v: NumValue = 0, opts?: SignalOptions<NumValue>) { super(v, opts); }
+const linearImpl: Linear<V> = { add, sub, scale };
 
-  add(b: Val<NumValue>) { return computed(() => add(this.value, value(b)), Num); }
-  sub(b: Val<NumValue>) { return computed(() => sub(this.value, value(b)), Num); }
-  scale(k: Val<number>) { return computed(() => scale(this.value, value(k)), Num); }
-  clamp(lo: Val<NumValue>, hi: Val<NumValue>) {
+export class Num extends Signal<V> {
+  static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
+
+  constructor(v: V = 0, opts?: SignalOptions<V>) { super(v, opts); }
+
+  // ── Invertible (Lens-returning) ──
+  add(b: Val<V>): Num { return applyOp1(this, addOp, b, Num); }
+  sub(b: Val<V>): Num { return applyOp1(this, subOp, b, Num); }
+  scale(k: Val<number>): Num { return applyOp1(this, scaleOp, k, Num); }
+
+  // ── Non-invertible (Computed-returning) ──
+  clamp(lo: Val<V>, hi: Val<V>): RO<Num> {
     return computed(() => {
       const v = this.value, l = value(lo), h = value(hi);
       return v < l ? l : v > h ? h : v;
-    }, Num);
+    }, Num) as RO<Num>;
   }
 
-  derive(fn: (c: NumChain) => NumChain) {
-    return computed(() => fn(new NumChain(this.value)).value, Num);
+  derive(fn: (c: NumChain) => NumChain): Num {
+    return fn(new NumChain()).toLens(this, Num);
   }
 }
 
-// Re-type `constructor` on instances so `HasLinear<T>` etc. constraints
-// can see the static `traits` dict through `inst.constructor.traits`.
-// TS interface-merging is the standard workaround for the fact that
-// `Object.prototype.constructor` is typed as `Function` by default.
 export interface Num { readonly constructor: typeof Num }
 
-export class NumChain {
-  value: NumValue;
-  constructor(v: NumValue) { this.value = v; }
-  add(b: Val<NumValue>) { this.value += value(b); return this; }
-  sub(b: Val<NumValue>) { this.value -= value(b); return this; }
-  scale(k: Val<number>) { this.value *= value(k); return this; }
-  clamp(lo: Val<NumValue>, hi: Val<NumValue>) {
-    const v = this.value, l = value(lo), h = value(hi);
-    this.value = v < l ? l : v > h ? h : v;
-    return this;
-  }
+export class NumChain extends Chain<V> {
+  add(b: Val<V>): this { return this.push1(addOp, b); }
+  sub(b: Val<V>): this { return this.push1(subOp, b); }
+  scale(k: Val<number>): this { return this.push1(scaleOp, k); }
 }
 
 /** Construct a Num; reactive source follows live via `.bind()`. */
-export const num = (v: Val<NumValue> = 0): Num => {
+export const num = (v: Val<V> = 0): Num => {
   const n = new Num();
   n.bind(v);
   return n;

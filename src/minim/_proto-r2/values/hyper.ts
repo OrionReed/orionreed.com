@@ -38,11 +38,11 @@
 //   - All outputs observe the same forward closure; they share dirty
 //     state implicitly through the inputs.
 
-import { Signal, lens, type Read, type ValueOf, batch } from "../signal";
+import { Signal, lens, type Read, type Of, batch } from "../signal";
 
 /** A tuple `Ins` of Read-shapes mapped to their inner value types. */
 type ValuesOf<Ins extends readonly Read<unknown>[]> = {
-  readonly [K in keyof Ins]: ValueOf<Ins[K]>;
+  readonly [K in keyof Ins]: Of<Ins[K]>;
 };
 
 /** Per-output inverse policy: takes the output's new value and a

@@ -1,58 +1,55 @@
-// color.ts — reactive RGBA color (r2).
-//
-// 4 channels, all in [0, 1]. Lerp is linear in RGB — fine for most UI
-// uses; if you want oklch interpolation that's a different value type.
-//
-// Two memoized derived views: `luminance` (Num) and `css` (Computed<string>
-// — a string-typed reactive view that's NOT a value class because string
-// has no [LINEAR]/[METRIC]/etc.).
+// color.ts — reactive RGBA color.
 
-import { Signal, computed, type Computed, value, type Val, type SignalOptions } from "../signal";
+import { Signal, computed, type Computed, value, type Val, type SignalOptions, type RO } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
+import { type Op, applyOp1, Chain } from "../ops";
 import { Num } from "./num";
 
-export interface ColorValue { r: number; g: number; b: number; a: number }
+type V = { r: number; g: number; b: number; a: number };
 
-export const add = (a: ColorValue, b: ColorValue): ColorValue =>
+export const add = (a: V, b: V): V =>
   ({ r: a.r + b.r, g: a.g + b.g, b: a.b + b.b, a: a.a + b.a });
-export const sub = (a: ColorValue, b: ColorValue): ColorValue =>
+export const sub = (a: V, b: V): V =>
   ({ r: a.r - b.r, g: a.g - b.g, b: a.b - b.b, a: a.a - b.a });
-export const scale = (a: ColorValue, k: number): ColorValue =>
+export const scale = (a: V, k: number): V =>
   ({ r: a.r * k, g: a.g * k, b: a.b * k, a: a.a * k });
-export const lerp = (a: ColorValue, b: ColorValue, t: number): ColorValue => ({
+export const lerp = (a: V, b: V, t: number): V => ({
   r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t,
   b: a.b + (b.b - a.b) * t, a: a.a + (b.a - a.a) * t,
 });
-export const equals = (a: ColorValue, b: ColorValue) =>
+export const equals = (a: V, b: V) =>
   a === b || (a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a);
 
-export class Color extends Signal<ColorValue> {
-  static traits: TraitDict<ColorValue> & { linear: Linear<ColorValue>; lerp: typeof lerp; equals: typeof equals } = {
-    linear: { add, sub, scale },
-    lerp,
-    equals,
+const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
+const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
+const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
+
+const linearImpl: Linear<V> = { add, sub, scale };
+
+export class Color extends Signal<V> {
+  static traits: TraitDict<V> & { linear: Linear<V>; lerp: typeof lerp; equals: typeof equals } = {
+    linear: linearImpl, lerp, equals,
   };
 
-  constructor(v: ColorValue = { r: 0, g: 0, b: 0, a: 1 }, opts?: SignalOptions<ColorValue>) {
-    super(v, opts);
+  constructor(v: V = { r: 0, g: 0, b: 0, a: 1 }, opts?: SignalOptions<V>) { super(v, opts); }
+
+  // ── Invertible ──
+  add(b: Val<V>): Color { return applyOp1(this, addOp, b, Color); }
+  sub(b: Val<V>): Color { return applyOp1(this, subOp, b, Color); }
+  scale(k: Val<number>): Color { return applyOp1(this, scaleOp, k, Color); }
+
+  // ── Non-invertible ──
+  lerp(b: Val<V>, t: Val<number>): RO<Color> {
+    return computed(() => lerp(this.value, value(b), value(t)), Color) as RO<Color>;
   }
 
-  add(b: Val<ColorValue>) { return computed(() => add(this.value, value(b)), Color); }
-  sub(b: Val<ColorValue>) { return computed(() => sub(this.value, value(b)), Color); }
-  scale(k: Val<number>) { return computed(() => scale(this.value, value(k)), Color); }
-  lerp(b: Val<ColorValue>, t: Val<number>) {
-    return computed(() => lerp(this.value, value(b), value(t)), Color);
-  }
-
-  get luminance(): Num {
+  get luminance(): RO<Num> {
     return this.memo("luminance", () => computed(() => {
       const c = this.value;
       return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-    }, Num));
+    }, Num)) as RO<Num>;
   }
 
-  /** Reactive CSS string — `rgba(r*255, g*255, b*255, a)`. Lazy + cached.
-   *  Returns a `Computed<string>` (no value class for strings). */
   get css(): Computed<string> {
     return this.memo("css", () => computed(() => {
       const c = this.value;
@@ -63,22 +60,17 @@ export class Color extends Signal<ColorValue> {
     })) as Computed<string>;
   }
 
-  derive(fn: (c: ColorChain) => ColorChain) {
-    return computed(() => fn(new ColorChain(this.value)).value, Color);
+  derive(fn: (c: ColorChain) => ColorChain): Color {
+    return fn(new ColorChain()).toLens(this, Color);
   }
 }
 
 export interface Color { readonly constructor: typeof Color }
 
-export class ColorChain {
-  value: ColorValue;
-  constructor(v: ColorValue) { this.value = v; }
-  add(b: Val<ColorValue>) { this.value = add(this.value, value(b)); return this; }
-  sub(b: Val<ColorValue>) { this.value = sub(this.value, value(b)); return this; }
-  scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
-  lerp(b: Val<ColorValue>, t: Val<number>) {
-    this.value = lerp(this.value, value(b), value(t)); return this;
-  }
+export class ColorChain extends Chain<V> {
+  add(b: Val<V>): this { return this.push1(addOp, b); }
+  sub(b: Val<V>): this { return this.push1(subOp, b); }
+  scale(k: Val<number>): this { return this.push1(scaleOp, k); }
 }
 
 export const rgb = (r: number, g: number, b: number) => new Color({ r, g, b, a: 1 });

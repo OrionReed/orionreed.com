@@ -17,8 +17,10 @@ export {
   type Read,
   type Computed,
   type Lens,
-  type ValueOf,
+  type RO,
+  type Of,
   type SignalOptions,
+  type SignalInit,
 } from "./signal";
 
 export {
@@ -28,23 +30,24 @@ export {
   type Traits, type TraitDict, type TraitKey,
 } from "./traits";
 
-export { field, type SignalInit } from "./field";
+export {
+  type Op, applyOp0, applyOp1, applyOp2, Chain,
+} from "./ops";
 
-export { Num, NumChain, num, type NumValue } from "./values/num";
-export { Vec, VecChain, vec, polar, type VecValue } from "./values/vec";
-export { Box, BoxChain, box, type BoxValue } from "./values/box";
-export { Color, ColorChain, rgb, rgba, type ColorValue } from "./values/color";
+export { Num, NumChain, num } from "./values/num";
+export { Vec, VecChain, vec, polar } from "./values/vec";
+export { Box, BoxChain, box } from "./values/box";
+export { Color, ColorChain, rgb, rgba } from "./values/color";
 export {
   Matrix, MatrixChain, matrix,
   identity, fromTranslate, fromScale, fromRotate,
   isIdentity, multiply, invert, determinant,
   transformPoint, transformBox, compose,
   toMatrixString,
-  type MatrixValue,
 } from "./values/matrix";
 export {
   Transform, TransformChain, transform,
-  type TransformValue, type TransformInit,
+  type TransformInit,
 } from "./values/transform";
 export { combine, mean } from "./values/multi";
 export { hyperLens, type InversePolicy } from "./values/hyper";

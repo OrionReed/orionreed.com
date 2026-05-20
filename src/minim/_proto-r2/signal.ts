@@ -43,7 +43,10 @@ interface Link {
   nextDep: Link | undefined;
 }
 
-interface Stack<T> { value: T; prev: Stack<T> | undefined }
+interface Stack<T> {
+  value: T;
+  prev: Stack<T> | undefined;
+}
 
 // Flags match alien-signals v2.
 const F = {
@@ -75,7 +78,9 @@ export function setSignalWriteHook(
 ): () => void {
   const prev = writeHook;
   writeHook = fn;
-  return () => { writeHook = prev; };
+  return () => {
+    writeHook = prev;
+  };
 }
 
 // ─── alien-signals algorithm — link / unlink / propagate / etc. ──────
@@ -90,11 +95,25 @@ function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
     return;
   }
   const prevSub = dep.subsTail;
-  if (prevSub !== undefined && prevSub.version === version && prevSub.sub === sub) return;
+  if (
+    prevSub !== undefined &&
+    prevSub.version === version &&
+    prevSub.sub === sub
+  )
+    return;
   const isFirstSub = dep.subs === undefined;
-  const newLink: Link = (sub.depsTail = dep.subsTail = {
-    version, dep, sub, prevDep, nextDep, prevSub, nextSub: undefined,
-  });
+  const newLink: Link =
+    (sub.depsTail =
+    dep.subsTail =
+      {
+        version,
+        dep,
+        sub,
+        prevDep,
+        nextDep,
+        prevSub,
+        nextSub: undefined,
+      });
   if (nextDep !== undefined) nextDep.prevDep = newLink;
   if (prevDep !== undefined) prevDep.nextDep = newLink;
   else sub.deps = newLink;
@@ -144,23 +163,35 @@ function propagate(start: Link, innerWrite: boolean): void {
       const subSubs: Link | undefined = sub.subs;
       if (subSubs !== undefined) {
         const nextSub = (l = subSubs).nextSub;
-        if (nextSub !== undefined) { stack = { value: next, prev: stack }; next = nextSub; }
+        if (nextSub !== undefined) {
+          stack = { value: next, prev: stack };
+          next = nextSub;
+        }
         continue;
       }
     }
-    if ((l = next!) !== undefined) { next = l.nextSub; continue; }
+    if ((l = next!) !== undefined) {
+      next = l.nextSub;
+      continue;
+    }
     while (stack !== undefined) {
-      l = stack.value; stack = stack.prev;
-      if (l !== undefined) { next = l.nextSub; continue top; }
+      l = stack.value;
+      stack = stack.prev;
+      if (l !== undefined) {
+        next = l.nextSub;
+        continue top;
+      }
     }
     break;
   } while (true);
 }
 
 function checkDirty(startLink: Link, startSub: ReactiveNode): boolean {
-  let l = startLink, sub = startSub;
+  let l = startLink,
+    sub = startSub;
   let stack: Stack<Link> | undefined;
-  let checkDepth = 0, dirty = false;
+  let checkDepth = 0,
+    dirty = false;
   top: do {
     const dep = l.dep;
     const flags = dep.flags;
@@ -172,19 +203,28 @@ function checkDirty(startLink: Link, startSub: ReactiveNode): boolean {
         dirty = true;
       }
     } else if ((flags & (F.Mutable | F.Pending)) === (F.Mutable | F.Pending)) {
-      stack = { value: l, prev: stack }; l = dep.deps!; sub = dep; ++checkDepth; continue;
+      stack = { value: l, prev: stack };
+      l = dep.deps!;
+      sub = dep;
+      ++checkDepth;
+      continue;
     }
     if (!dirty) {
       const nextDep = l.nextDep;
-      if (nextDep !== undefined) { l = nextDep; continue; }
+      if (nextDep !== undefined) {
+        l = nextDep;
+        continue;
+      }
     }
     while (checkDepth--) {
-      l = stack!.value; stack = stack!.prev;
+      l = stack!.value;
+      stack = stack!.prev;
       if (dirty) {
         const subs = sub.subs!;
         if (sub._update()) {
           if (subs.nextSub !== undefined) shallowPropagate(subs);
-          sub = l.sub; continue;
+          sub = l.sub;
+          continue;
         }
         dirty = false;
       } else {
@@ -192,7 +232,10 @@ function checkDirty(startLink: Link, startSub: ReactiveNode): boolean {
       }
       sub = l.sub;
       const nextDep = l.nextDep;
-      if (nextDep !== undefined) { l = nextDep; continue top; }
+      if (nextDep !== undefined) {
+        l = nextDep;
+        continue top;
+      }
     }
     return dirty && !!sub.flags;
   } while (true);
@@ -204,14 +247,18 @@ function shallowPropagate(l: Link): void {
     const flags = sub.flags;
     if ((flags & (F.Pending | F.Dirty)) === F.Pending) {
       sub.flags = flags | F.Dirty;
-      if ((flags & (F.Watching | F.RecursedCheck)) === F.Watching) sub._notify();
+      if ((flags & (F.Watching | F.RecursedCheck)) === F.Watching)
+        sub._notify();
     }
   } while ((l = l.nextSub!) !== undefined);
 }
 
 function isValidLink(checkLink: Link, sub: ReactiveNode): boolean {
   let l = sub.depsTail;
-  while (l !== undefined) { if (l === checkLink) return true; l = l.prevDep; }
+  while (l !== undefined) {
+    if (l === checkLink) return true;
+    l = l.prevDep;
+  }
   return false;
 }
 
@@ -250,7 +297,11 @@ function purgeDeps(sub: ReactiveNode): void {
 
 function disposeAllDepsInReverse(sub: ReactiveNode): void {
   let l = sub.depsTail;
-  while (l !== undefined) { const prev = l.prevDep; unlink(l, sub); l = prev; }
+  while (l !== undefined) {
+    const prev = l.prevDep;
+    unlink(l, sub);
+    l = prev;
+  }
 }
 
 // ─── Public types ───────────────────────────────────────────────────
@@ -266,14 +317,30 @@ export interface Read<out T> {
 
 /** Type alias for a read-only Signal (computed). Both runtime-checked
  *  (writes throw) and TS-narrowed (Read interface). */
-export type Computed<T = unknown> = Omit<Signal<T>, "value"> & { readonly value: T };
+export type Computed<T = unknown> = Omit<Signal<T>, "value"> & {
+  readonly value: T;
+};
 
 /** Type alias for a writable derived view (lens). Structurally a Signal
  *  with both getter AND setter set. Treated as writable in TS. */
 export type Lens<T = unknown> = Signal<T>;
 
+/** Read-only narrowing of a typed Signal subclass (Vec, Num, Box, …).
+ *  Preserves all class methods but makes `.value` readonly and removes
+ *  `.set` / `.bind` so writes are TS errors. Returned by non-invertible
+ *  eager methods (`.normalize()`, `.luminance`, `.distance()`, …).
+ *  No constraint on `R` because `Signal<T>` is invariant in T —
+ *  subclasses parameterised by a concrete T (Signal<number>) aren't
+ *  assignable to `Signal<unknown>`. */
+export type RO<R> = Omit<R, "value" | "set" | "bind">
+  & { readonly value: R extends Signal<infer T> ? T : never };
+
 /** Extract the value type carried by a Signal (signal/computed/lens). */
-export type ValueOf<R> = R extends Signal<infer T> ? T : never;
+export type Of<R> = R extends Signal<infer T> ? T : never;
+
+/** Per-field reactive init: each axis accepts plain T, signal, or thunk.
+ *  Used by composite-value factories like `transform({...})`. */
+export type SignalInit<T> = { [K in keyof T]?: Val<T[K]> };
 
 export function value<T>(v: Val<T>): T {
   if (v instanceof Signal) return v.value;
@@ -281,7 +348,8 @@ export function value<T>(v: Val<T>): T {
   return v as T;
 }
 
-export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signal;
+export const isSignal = (v: unknown): v is Signal<unknown> =>
+  v instanceof Signal;
 
 /** Runtime check: is this Signal in lens mode (both getter and setter)? */
 export const isLens = (v: unknown): v is Signal<unknown> =>
@@ -340,6 +408,9 @@ export class Signal<T = unknown> implements ReactiveNode {
   protected _stopBinding?: () => void;
   /** Per-instance lazy derived-view cache; allocated on first `.memo()` hit. */
   protected _memoCache?: Record<string | symbol, unknown>;
+  /** Per-instance lazy field-lens cache (separate from memo to avoid
+   *  template-literal key allocation per `.x` access). */
+  protected _fields?: Record<string | symbol, unknown>;
 
   constructor(initial: T, opts?: SignalOptions<T>) {
     this.currentValue = initial;
@@ -362,11 +433,38 @@ export class Signal<T = unknown> implements ReactiveNode {
 
   /** Per-instance cached derivation. `key` must be unique within the
    *  parent's class hierarchy. Factory runs once per (instance, key).
-   *  Used by field lenses and lazy domain getters (`.x`, `.magnitude`). */
+   *  Used by lazy domain getters (`.magnitude`) and by `.field()`. */
   memo<R>(key: string | symbol, make: () => R): R {
-    const cache = this._memoCache ??= {};
+    const cache = (this._memoCache ??= {});
     const k = key as string;
     return (cache[k] ?? (cache[k] = make())) as R;
+  }
+
+  /** Typed lens onto `this.value[key]`. Cached per (instance, key).
+   *  Read returns the field; write spread-replaces the composite.
+   *  Only meaningful when `T` is an object (TS narrows accordingly).
+   *
+   *  Uses a dedicated `_fields` cache (not `memo`) so the lookup key is
+   *  the raw field name — avoiding the per-access string allocation
+   *  that a template-literal memo key (`"field:x"`) would force on the
+   *  hot path. */
+  field<K extends keyof T, C extends new (...args: never[]) => Signal<T[K]>>(
+    key: K,
+    Cls: C,
+  ): InstanceType<C> {
+    const cache = (this._fields ??= {});
+    const k = key as string | symbol;
+    let cached = cache[k as string];
+    if (cached === undefined) {
+      cached = lens(
+        () => (this.value as T)[key],
+        // TODO: find a general robust approach to avoid the spread replace, as this is hot path.
+        (v) => { this.value = { ...(this.peek() as object), [key]: v } as T; },
+        Cls,
+      );
+      cache[k as string] = cached;
+    }
+    return cached as InstanceType<C>;
   }
 
   /** Read with tracking. Branches on signal vs computed mode. */
@@ -382,7 +480,8 @@ export class Signal<T = unknown> implements ReactiveNode {
       if (
         flags & F.Dirty ||
         (flags & F.Pending &&
-          (checkDirty(this.deps!, this) || ((this.flags = flags & ~F.Pending), false)))
+          (checkDirty(this.deps!, this) ||
+            ((this.flags = flags & ~F.Pending), false)))
       ) {
         if (this._update()) {
           const subs = this.subs;
@@ -399,7 +498,9 @@ export class Signal<T = unknown> implements ReactiveNode {
           threw = false;
         } finally {
           activeSub = prev;
-          this.flags = threw ? F.Mutable | F.Dirty : (this.flags & ~F.RecursedCheck);
+          this.flags = threw
+            ? F.Mutable | F.Dirty
+            : this.flags & ~F.RecursedCheck;
         }
       }
       if (activeSub !== undefined) link(this, activeSub, cycle);
@@ -450,8 +551,11 @@ export class Signal<T = unknown> implements ReactiveNode {
       // Computed-mode peek: untracked .value
       const prev = activeSub;
       activeSub = undefined;
-      try { return this.value; }
-      finally { activeSub = prev; }
+      try {
+        return this.value;
+      } finally {
+        activeSub = prev;
+      }
     }
     // Signal-mode peek
     if (this.flags & F.Dirty) {
@@ -466,7 +570,10 @@ export class Signal<T = unknown> implements ReactiveNode {
 
   /** One-shot write of `value(v)`. Severs any prior `.bind(...)`. Chainable. */
   set(v: Val<T>): this {
-    if (this._stopBinding) { this._stopBinding(); this._stopBinding = undefined; }
+    if (this._stopBinding) {
+      this._stopBinding();
+      this._stopBinding = undefined;
+    }
     this.value = value(v);
     return this;
   }
@@ -474,9 +581,14 @@ export class Signal<T = unknown> implements ReactiveNode {
   /** Bind to a `Val<T>`; replaces any prior binding. Returns disposer
    *  (no-op for plain T). */
   bind(source: Val<T>): () => void {
-    if (this._stopBinding) { this._stopBinding(); this._stopBinding = undefined; }
+    if (this._stopBinding) {
+      this._stopBinding();
+      this._stopBinding = undefined;
+    }
     if (source instanceof Signal || typeof source === "function") {
-      const stop = effect(() => { this.value = value(source); });
+      const stop = effect(() => {
+        this.value = value(source);
+      });
       this._stopBinding = stop;
       return stop;
     }
@@ -495,13 +607,15 @@ export class Signal<T = unknown> implements ReactiveNode {
       try {
         ++cycle;
         const old = this.cachedValue;
-        const next = this.cachedValue = this.getter();
+        const next = (this.cachedValue = this.getter());
         threw = false;
         const eq = this._equals;
         return eq ? !eq(old as T, next) : old !== next;
       } finally {
         activeSub = prev;
-        this.flags = threw ? F.Mutable | F.Dirty : (this.flags & ~F.RecursedCheck);
+        this.flags = threw
+          ? F.Mutable | F.Dirty
+          : this.flags & ~F.RecursedCheck;
         purgeDeps(this);
       }
     }
@@ -553,7 +667,10 @@ class Effect implements ReactiveNode {
     }
   }
 
-  _update(): boolean { this.flags = F.Mutable; return true; }
+  _update(): boolean {
+    this.flags = F.Mutable;
+    return true;
+  }
 
   _notify(): void {
     let e: Effect = this;
@@ -567,7 +684,8 @@ class Effect implements ReactiveNode {
       e = next;
     } while (true);
     queuedLength = insertIndex;
-    let idx = insertIndex, firstIdx = firstInsertedIndex;
+    let idx = insertIndex,
+      firstIdx = firstInsertedIndex;
     while (firstIdx < --idx) {
       const left = queued[firstIdx];
       queued[firstIdx++] = queued[idx];
@@ -585,14 +703,21 @@ class Effect implements ReactiveNode {
 
   _run(): void {
     const flags = this.flags;
-    if (flags & F.Dirty || (flags & F.Pending && checkDirty(this.deps!, this))) {
-      if (this.cleanup) { this._runCleanup(); if (!this.flags) return; }
+    if (
+      flags & F.Dirty ||
+      (flags & F.Pending && checkDirty(this.deps!, this))
+    ) {
+      if (this.cleanup) {
+        this._runCleanup();
+        if (!this.flags) return;
+      }
       this.depsTail = undefined;
       this.flags = F.Watching | F.RecursedCheck;
       const prev = activeSub;
       activeSub = this;
       try {
-        ++cycle; ++runDepth;
+        ++cycle;
+        ++runDepth;
         const ret = this.fn();
         this.cleanup = typeof ret === "function" ? ret : undefined;
       } finally {
@@ -611,7 +736,11 @@ class Effect implements ReactiveNode {
     this.cleanup = undefined;
     const prev = activeSub;
     activeSub = undefined;
-    try { c(); } finally { activeSub = prev; }
+    try {
+      c();
+    } finally {
+      activeSub = prev;
+    }
   }
 }
 
@@ -684,13 +813,19 @@ export function effect(fn: () => void | (() => void)): () => void {
 
 export function batch<R>(fn: () => R): R {
   ++batchDepth;
-  try { return fn(); }
-  finally { if (!--batchDepth) flush(); }
+  try {
+    return fn();
+  } finally {
+    if (!--batchDepth) flush();
+  }
 }
 
 export function untracked<R>(fn: () => R): R {
   const prev = activeSub;
   activeSub = undefined;
-  try { return fn(); }
-  finally { activeSub = prev; }
+  try {
+    return fn();
+  } finally {
+    activeSub = prev;
+  }
 }

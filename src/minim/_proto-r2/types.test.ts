@@ -8,15 +8,15 @@
 import { describe, it, expect } from "vitest";
 import {
   Signal, signal, computed, lens, effect, batch, untracked,
-  type Val, type Read, type Computed, type Lens, type ValueOf,
+  type Val, type Read, type Computed, type Lens, type Of,
 } from "./signal";
 import {
   requireLinear, requireMetric,
   type Traits,
 } from "./traits";
 import { Num, num } from "./values/num";
-import { Vec, vec, polar, type VecValue } from "./values/vec";
-import { Box, box, type BoxValue } from "./values/box";
+import { Vec, vec, polar } from "./values/vec";
+import { Box, box } from "./values/box";
 
 // Assert utility: `Expect<Eq<A, B>>` fails to compile if A ≠ B.
 type Eq<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -97,7 +97,8 @@ describe("types", () => {
     const b = box(0, 0, 10, 10);
     type _bx = Expect<Eq<typeof b, Box>>;
     type _bxx = Expect<Eq<typeof b.x, Num>>;
-    type _bxc = Expect<Eq<typeof b.center, Vec>>;
+    // `.center` is read-only (RO<Vec>) — `at(u, v)` isn't bidirectional yet
+    type _bxc = Expect<Eq<typeof b.center["value"], { x: number; y: number }>>;
     expect(b.center.value).toEqual({ x: 5, y: 5 });
   });
 
@@ -110,11 +111,11 @@ describe("types", () => {
     expect(r).toBe(2); expect(u).toBe("x");
   });
 
-  it("ValueOf<R> extracts inner type", () => {
-    type _vov = Expect<Eq<ValueOf<Vec>, VecValue>>;
-    type _bov = Expect<Eq<ValueOf<Box>, BoxValue>>;
-    type _nov = Expect<Eq<ValueOf<Num>, number>>;
-    type _ron = Expect<Eq<ValueOf<Signal<string>>, string>>;
+  it("Of<R> extracts inner type", () => {
+    type _vov = Expect<Eq<Of<Vec>, { x: number; y: number }>>;
+    type _bov = Expect<Eq<Of<Box>, { x: number; y: number; w: number; h: number }>>;
+    type _nov = Expect<Eq<Of<Num>, number>>;
+    type _ron = Expect<Eq<Of<Signal<string>>, string>>;
     expect(true).toBe(true);
   });
 

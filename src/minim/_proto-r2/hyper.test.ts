@@ -9,16 +9,17 @@
 import { describe, it, expect } from "vitest";
 import { effect } from "./signal";
 import { num } from "./values/num";
-import { vec, type VecValue } from "./values/vec";
+import { vec, Vec } from "./values/vec";
+import { type Of } from "./signal";
 import { hyperLens } from "./values/hyper";
 
-// Vec math helpers for tests (operating on plain VecValue POJOs).
-const vAdd = (a: VecValue, b: VecValue): VecValue => ({ x: a.x + b.x, y: a.y + b.y });
-const vSub = (a: VecValue, b: VecValue): VecValue => ({ x: a.x - b.x, y: a.y - b.y });
-const vScale = (a: VecValue, k: number): VecValue => ({ x: a.x * k, y: a.y * k });
-const vDist = (a: VecValue, b: VecValue) => Math.hypot(a.x - b.x, a.y - b.y);
-const vMid = (a: VecValue, b: VecValue) => vScale(vAdd(a, b), 0.5);
-const vNorm = (v: VecValue): VecValue => {
+// Vec math helpers for tests (operating on plain Of<Vec> POJOs).
+const vAdd = (a: Of<Vec>, b: Of<Vec>): Of<Vec> => ({ x: a.x + b.x, y: a.y + b.y });
+const vSub = (a: Of<Vec>, b: Of<Vec>): Of<Vec> => ({ x: a.x - b.x, y: a.y - b.y });
+const vScale = (a: Of<Vec>, k: number): Of<Vec> => ({ x: a.x * k, y: a.y * k });
+const vDist = (a: Of<Vec>, b: Of<Vec>) => Math.hypot(a.x - b.x, a.y - b.y);
+const vMid = (a: Of<Vec>, b: Of<Vec>) => vScale(vAdd(a, b), 0.5);
+const vNorm = (v: Of<Vec>): Of<Vec> => {
   const m = Math.hypot(v.x, v.y);
   return m === 0 ? { x: 0, y: 0 } : { x: v.x / m, y: v.y / m };
 };
@@ -112,7 +113,7 @@ describe("hyperLens: wheel(center, radius, n=4)", () => {
     const outs = hyperLens(
       [center, radius] as const,
       ([c, r]) => {
-        const points: Record<string, VecValue> = {};
+        const points: Record<string, Of<Vec>> = {};
         for (let i = 0; i < N; i++) {
           const a = (i / N) * Math.PI * 2;
           points[`p${i}`] = { x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) };
@@ -124,7 +125,7 @@ describe("hyperLens: wheel(center, radius, n=4)", () => {
       Object.fromEntries(
         Array.from({ length: N }, (_, i) => [
           `p${i}`,
-          (next: VecValue, [c, _r]: readonly [VecValue, number]) => {
+          (next: Of<Vec>, [c, _r]: readonly [Of<Vec>, number]) => {
             const r = vDist(c, next);
             return [c, r] as const;
           },
@@ -169,7 +170,7 @@ describe("hyperLens: wheel(center, radius, n=4)", () => {
 // ─── Example 3: pinch(f1, f2) — read 2, write 3 ─────────────────────
 
 describe("hyperLens: pinch(f1, f2) → (center, distance, rotation)", () => {
-  const angleOf = (a: VecValue, b: VecValue) => Math.atan2(b.y - a.y, b.x - a.x);
+  const angleOf = (a: Of<Vec>, b: Of<Vec>) => Math.atan2(b.y - a.y, b.x - a.x);
   const make = () => {
     const f1 = vec(0, 0);
     const f2 = vec(10, 0);
@@ -197,7 +198,7 @@ describe("hyperLens: pinch(f1, f2) → (center, distance, rotation)", () => {
         rotation: (newAng, [a, b]) => {
           const c = vMid(a, b);
           const d = vDist(a, b);
-          const dir: VecValue = { x: Math.cos(newAng), y: Math.sin(newAng) };
+          const dir: Of<Vec> = { x: Math.cos(newAng), y: Math.sin(newAng) };
           return [vSub(c, vScale(dir, d / 2)), vAdd(c, vScale(dir, d / 2))];
         },
       },

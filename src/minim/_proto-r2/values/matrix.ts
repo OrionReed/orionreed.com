@@ -1,52 +1,37 @@
 // matrix.ts — reactive 2D affine matrix (SVG/Canvas convention).
 //
-// Sparse-trait stress test: Matrix has structural equality only — no
-// linear/lerp/metric trait. Matrices don't have a useful linear-combine
-// (the algebraic sense of "linear" in `Linear<T>` doesn't fit for
-// matrices since you'd want matrix multiplication, not element-wise add)
-// and naïve element-wise lerp doesn't decompose properly. Caller wants
-// matrix interpolation? Decompose to Transform first.
+// Sparse-trait stress test: only `equals` declared. Matrices have no
+// useful element-wise linear combine and naïve element-wise lerp
+// doesn't decompose, so `spring`/`tween`/`mean` etc. reject Matrix at
+// compile time (no linear/lerp/metric).
 //
-// 6 fields means 6 field lenses — biggest field count we've put through
-// the system. Stresses the `memo()` cache shape and shows the trade-off
-// at the upper edge of "value type as POJO".
+// Two clearly-invertible ops: `multiply(b)` (inverse is multiply by
+// `invert(b)`) and `invert()` (its own inverse).
 
-import { Signal, computed, value, type Val, type SignalOptions } from "../signal";
+import { Signal, computed, value, type Val, type SignalOptions, type RO, type Of } from "../signal";
 import { type TraitDict } from "../traits";
-import { field } from "../field";
+import { type Op, applyOp0, applyOp1, Chain } from "../ops";
 import { Num } from "./num";
-import type { VecValue } from "./vec";
+import { Vec } from "./vec";
 
-export interface MatrixValue {
-  a: number; b: number; c: number; d: number; e: number; f: number;
-}
-type BoxValueLocal = { x: number; y: number; w: number; h: number };
+type V = { a: number; b: number; c: number; d: number; e: number; f: number };
+type BoxV = { x: number; y: number; w: number; h: number };
 
-export const identity = (): MatrixValue =>
-  ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
-
-export const fromTranslate = (x: number, y: number): MatrixValue =>
-  ({ a: 1, b: 0, c: 0, d: 1, e: x, f: y });
-
-export const fromScale = (x: number, y: number): MatrixValue =>
-  ({ a: x, b: 0, c: 0, d: y, e: 0, f: 0 });
-
-export const fromRotate = (angle: number): MatrixValue => {
-  const s = Math.sin(angle);
-  const c = Math.cos(angle);
+export const identity = (): V => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+export const fromTranslate = (x: number, y: number): V => ({ a: 1, b: 0, c: 0, d: 1, e: x, f: y });
+export const fromScale = (x: number, y: number): V => ({ a: x, b: 0, c: 0, d: y, e: 0, f: 0 });
+export const fromRotate = (angle: number): V => {
+  const s = Math.sin(angle); const c = Math.cos(angle);
   return { a: c, b: s, c: -s, d: c, e: 0, f: 0 };
 };
 
-export const isIdentity = (m: MatrixValue): boolean =>
+export const isIdentity = (m: V): boolean =>
   m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.e === 0 && m.f === 0;
 
-export const equals = (m: MatrixValue, n: MatrixValue): boolean =>
-  m === n || (
-    m.a === n.a && m.b === n.b && m.c === n.c &&
-    m.d === n.d && m.e === n.e && m.f === n.f
-  );
+export const equals = (m: V, n: V): boolean =>
+  m === n || (m.a === n.a && m.b === n.b && m.c === n.c && m.d === n.d && m.e === n.e && m.f === n.f);
 
-export function multiply(a: MatrixValue, b: MatrixValue): MatrixValue {
+export function multiply(a: V, b: V): V {
   return {
     a: a.a * b.a + a.c * b.b,
     b: a.b * b.a + a.d * b.b,
@@ -57,26 +42,26 @@ export function multiply(a: MatrixValue, b: MatrixValue): MatrixValue {
   };
 }
 
-export function invert(m: MatrixValue): MatrixValue {
+export function invert(m: V): V {
   const det = m.a * m.d - m.b * m.c;
   if (det === 0) throw new Error("Matrix not invertible");
   const inv = 1 / det;
   return {
-    a: m.d * inv,
+    a:  m.d * inv,
     b: -m.b * inv,
     c: -m.c * inv,
-    d: m.a * inv,
+    d:  m.a * inv,
     e: (m.c * m.f - m.d * m.e) * inv,
     f: (m.b * m.e - m.a * m.f) * inv,
   };
 }
 
-export const determinant = (m: MatrixValue): number => m.a * m.d - m.b * m.c;
+export const determinant = (m: V): number => m.a * m.d - m.b * m.c;
 
-export const transformPoint = (m: MatrixValue, p: VecValue): VecValue =>
+export const transformPoint = (m: V, p: Of<Vec>): Of<Vec> =>
   ({ x: m.a * p.x + m.c * p.y + m.e, y: m.b * p.x + m.d * p.y + m.f });
 
-export function transformBox(m: MatrixValue, b: BoxValueLocal): BoxValueLocal {
+export function transformBox(m: V, b: BoxV): BoxV {
   if (isIdentity(m)) return b;
   const x0 = b.x, y0 = b.y, x1 = b.x + b.w, y1 = b.y + b.h;
   const ax = m.a * x0 + m.c * y0 + m.e;
@@ -97,7 +82,7 @@ export function transformBox(m: MatrixValue, b: BoxValueLocal): BoxValueLocal {
 
 const SCALE_EPS = 1e-7;
 
-export function compose(t: VecValue, r: number, s: VecValue, pivot: VecValue): MatrixValue {
+export function compose(t: Of<Vec>, r: number, s: Of<Vec>, pivot: Of<Vec>): V {
   const sx = Math.abs(s.x) < SCALE_EPS ? (s.x < 0 ? -SCALE_EPS : SCALE_EPS) : s.x;
   const sy = Math.abs(s.y) < SCALE_EPS ? (s.y < 0 ? -SCALE_EPS : SCALE_EPS) : s.y;
   let m = fromTranslate(t.x, t.y);
@@ -108,55 +93,51 @@ export function compose(t: VecValue, r: number, s: VecValue, pivot: VecValue): M
   return m;
 }
 
-export const toMatrixString = (m: MatrixValue): string =>
+export const toMatrixString = (m: V): string =>
   `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
 
-export class Matrix extends Signal<MatrixValue> {
-  // Sparse trait dict: only `equals`. No linear (matrices don't add
-  // meaningfully element-wise for transforms), no lerp (interpolate the
-  // decomposed Transform instead), no metric.
-  static traits: TraitDict<MatrixValue> & { equals: typeof equals } = { equals };
+// ─── Invertible ops ────────────────────────────────────────────────
 
-  constructor(v: MatrixValue = identity(), opts?: SignalOptions<MatrixValue>) {
-    super(v, opts);
-  }
+const multiplyOp: Op<V, [V]> = {
+  fwd: multiply,
+  bwd: (n, b) => multiply(n, invert(b)),
+};
+const invertOp: Op<V, []> = { fwd: invert, bwd: invert };
 
-  multiply(b: Val<MatrixValue>) {
-    return computed(() => multiply(this.value, value(b)), Matrix);
-  }
-  invert() {
-    return computed(() => invert(this.value), Matrix);
-  }
+export class Matrix extends Signal<V> {
+  static traits: TraitDict<V> & { equals: typeof equals } = { equals };
 
-  get a(): Num { return this.memo("a", () => field(this, "a", Num)); }
-  get b(): Num { return this.memo("b", () => field(this, "b", Num)); }
-  get c(): Num { return this.memo("c", () => field(this, "c", Num)); }
-  get d(): Num { return this.memo("d", () => field(this, "d", Num)); }
-  get e(): Num { return this.memo("e", () => field(this, "e", Num)); }
-  get f(): Num { return this.memo("f", () => field(this, "f", Num)); }
+  constructor(v: V = identity(), opts?: SignalOptions<V>) { super(v, opts); }
 
-  get determinant(): Num {
+  // ── Invertible ──
+  multiply(b: Val<V>): Matrix { return applyOp1(this, multiplyOp, b, Matrix); }
+  invert(): Matrix { return applyOp0(this, invertOp, Matrix); }
+
+  get a(): Num { return this.field("a", Num); }
+  get b(): Num { return this.field("b", Num); }
+  get c(): Num { return this.field("c", Num); }
+  get d(): Num { return this.field("d", Num); }
+  get e(): Num { return this.field("e", Num); }
+  get f(): Num { return this.field("f", Num); }
+
+  // ── Non-invertible ──
+  get determinant(): RO<Num> {
     return this.memo("determinant", () =>
-      computed(() => determinant(this.value), Num));
+      computed(() => determinant(this.value), Num)) as RO<Num>;
   }
 
-  derive(fn: (c: MatrixChain) => MatrixChain) {
-    return computed(() => fn(new MatrixChain(this.value)).value, Matrix);
+  derive(fn: (c: MatrixChain) => MatrixChain): Matrix {
+    return fn(new MatrixChain()).toLens(this, Matrix);
   }
 }
 
 export interface Matrix { readonly constructor: typeof Matrix }
 
-export class MatrixChain {
-  value: MatrixValue;
-  constructor(v: MatrixValue) { this.value = v; }
-  multiply(b: Val<MatrixValue>) {
-    this.value = multiply(this.value, value(b)); return this;
-  }
-  invert() { this.value = invert(this.value); return this; }
+export class MatrixChain extends Chain<V> {
+  multiply(b: Val<V>): this { return this.push1(multiplyOp, b); }
+  invert(): this { return this.push0(invertOp); }
 }
 
-/** Construct a Matrix; per-component reactive args bind via field lens. */
 export const matrix = (
   a: Val<number> = 1, b: Val<number> = 0,
   c: Val<number> = 0, d: Val<number> = 1,

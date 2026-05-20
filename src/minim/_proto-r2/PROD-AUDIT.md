@@ -5,6 +5,10 @@ API, categorized by impact. The headline: **most consumer code is
 trivially mechanical to migrate.** The only "interesting" work is
 authors of bespoke value types (a handful of files).
 
+**The delete-list is aggressive.** See `## DELETE` sections below
+for the full inventory of what disappears, no compat shim, no
+hide-from-public. The merged design is a clean replacement.
+
 ## Counts
 
 | symbol | call sites outside signals/_proto/_test |
@@ -178,29 +182,119 @@ All four are documented in the r2 README + the value-type files
 (`values/num.ts`, `values/vec.ts`, `values/box.ts`) serve as ready
 reference templates.
 
-## Migration sequence (if/when we decide to ship)
+## Migration sequence (no compat shim, take ALL improvements at once)
+
+User decision: **no intermediate compat-shim state**. Land r2 in one
+sitting; delete everything on the delete-list at the same time.
 
 A reasonable order:
 
-1. **Land r2 alongside prod** as a parallel module
-   (`src/minim/r2/`). Both work. Tests reference both.
-2. **Port `Color`, `Matrix`, `Transform`, `Anchor`** value types from
-   `signals/values/` to r2 (mechanical, ~1 hour each).
-3. **Port `Tween` chainable class** and `play`/`when`/`loop`/`every`/`untilChange`/`not`
-   to use Reactive instead of Signal (no trait constraints needed).
-4. **Add a backwards-compat shim**: `signal/index.ts` re-exports r2
-   primitives under their old names (`Signal = Reactive`, etc). This
-   lets consumer code keep importing from `@minim/signals` with no
-   change required.
-5. **One consumer at a time, replace `derived` with `computed` /
-   `lens`** — codemod or manual; ~12 files in shapes/.
-6. **Rename the custom value types** in `md-lerps.ts` and
-   `md-morph.ts` to the `static traits` shape (manual; 2 files).
-7. **Drop the shim and the old `signals/` folder.** All consumers now
-   import directly from r2.
+1. **Rename `src/minim/_proto-r2/` → `src/minim/signals/`** (move /
+   replace). Update all imports across the codebase from `../signals/X`
+   to use the new module paths.
+2. **Codemod the ~12 `derived(Cls, fn[, set])` call sites** in
+   `shapes/` to `computed(fn, Cls)` (no setter) or `lens(get, set, Cls)`
+   (with setter). AST-aware codemod or manual.
+3. **Manually convert the 2 custom value-type files** in
+   `elements/optical-centering/`: `md-lerps.ts` and `md-morph.ts`.
+   Change `[LERP]`/`[EQUALS]` symbols to `static traits = {…}` shape
+   with the `interface ClassName { constructor: typeof ClassName }` merge.
+4. **Retype `setSignalWriteHook` callback** in `assert/record.ts` — type
+   change only, no logic change.
+5. **Drop all `*Value` → `Of<Vec>` aliasing** in consumer code. Find
+   every `import { type Value as VecValue }` pattern and replace with
+   `import { type Of, type Vec }` + `Of<Vec>` use sites.
+6. **Delete the 8 `_proto-*` folders** (after extracting any notes
+   you want to preserve to a permanent location).
+7. **Delete `src/minim/_notes/values-storage-attempts.md`** (historical
+   context now superseded; git log preserves it).
+8. **Run the test suite + bench.** Should be net-faster across
+   realistic workloads; the only consistent regression is `signal(0)`
+   construction (~3 ns absolute).
 
-Estimated effort: 4–6 hours for the whole migration if it's done in
-one sitting. Most of it is codemod-able.
+Estimated effort: 4–6 hours for the whole migration if done in one
+sitting. Most of it is codemod-able.
+
+## DELETE inventory (no rename, no hide, no compat — gone)
+
+### Whole files deleted
+
+- `src/minim/signals/derive.ts` (replaced by `Signal.field()` method)
+- `src/minim/signals/signal.ts` (replaced by r2's `signal.ts`)
+- `src/minim/signals/traits.ts` (replaced by r2's `traits.ts`)
+- `src/minim/signals/index.ts` (replaced by r2's `index.ts`)
+- `src/minim/signals/clock.ts` (only 16 lines; verify no consumers first)
+- `src/minim/signals/values/*.ts` (replaced by r2's `values/*.ts`)
+- `src/minim/_notes/values-storage-attempts.md` (historical)
+- `src/minim/_bench/signals.bench.ts` (replaced by r2's `bench.ts`)
+
+### Whole folders deleted (after merge)
+
+- `src/minim/_proto/`
+- `src/minim/_proto-callable/`
+- `src/minim/_proto-combo-b/`
+- `src/minim/_proto-iso/`
+- `src/minim/_proto-r2/` (becomes `src/minim/signals/`)
+- `src/minim/_proto-reactive/`
+- `src/minim/_proto-vc/`
+- `src/minim/_proto-wrap/`
+
+### Exported symbols deleted
+
+| symbol | from | replacement / why |
+|---|---|---|
+| `ComputedImpl` | `signals/signal.ts` | merged into `Signal<T>` |
+| `Computed` (runtime export) | `signals/signal.ts` | kept only as type alias |
+| `derived` | `signals/derive.ts` | split into `computed(fn, Cls)` + `lens(get, set, Cls)` |
+| `viewClassFor` | `signals/derive.ts` | not needed (natural prototype chain) |
+| `VIEW_CLASS_CACHE` | `signals/derive.ts` | not needed |
+| `copyOwnProps` | `signals/derive.ts` | not needed |
+| `FIELD_CACHE` (Symbol) | `signals/derive.ts` | replaced by `Signal._fields` private slot |
+| `LINEAR` (Symbol) | `signals/traits.ts` | replaced by string key `"linear"` |
+| `LERP` (Symbol) | `signals/traits.ts` | string `"lerp"` |
+| `METRIC` (Symbol) | `signals/traits.ts` | string `"metric"` |
+| `EQUALS` (Symbol) | `signals/traits.ts` | string `"equals"` |
+| `classOf<T>(s)` | `signals/traits.ts` | inline `(s as object).constructor.name` |
+| `ValueClass<T>` | `signals/traits.ts` | not needed |
+| `clockSignal(anim)` | `signals/clock.ts` | verify consumers first; likely delete |
+| `* as VecMath`, `BoxMath`, `ColorMath`, `MatrixMath`, `NumMath`, `TransformMath` | `signals/index.ts` | verify consumers first; consumers import math fns directly from value modules |
+| `type Value` (in each value module) | `signals/values/*.ts` | each module exposes `type V` locally; consumers use `Of<Vec>` |
+| `type VecValue` / `BoxValue` / `NumValue` / `ColorValue` / `MatrixValue` / `TransformValue` | `signals/values/index.ts` | replaced by `Of<Vec>` etc. |
+
+### Patterns deleted across all value-type files
+
+- `get [LINEAR]()` getter on prototype — replaced by `static traits = {…}`
+- `[LERP](…)` / `[METRIC](…)` / `[EQUALS](…)` method declarations
+- `const linearImpl: Linear<Value> = { add, sub, scale }` module-level
+  consts (now inlined into `static traits.linear`)
+- `private _mag?: Num`, `_area?`, `_center?`, `_top?`, `_bottom?`,
+  `_left?`, `_right?`, `_lum?`, `_css?`, `_det?` private slots — all
+  collapse into `this.memo(key, factory)` calls
+
+### Consumer-side patterns deleted
+
+- `import { type Value as XValue }` rename style (every file using it)
+- Every `derived(Cls, fn[, setter])` call site (~12 in `shapes/*.ts`)
+- Every direct `sig[LINEAR]` / `sig[LERP]` / `sig[METRIC]` / `sig[EQUALS]`
+  access (the 2 custom-value-type files in `elements/`)
+
+### Documentation deleted
+
+- Every `_proto-*/README.md` and `_proto-*/MIGRATION-PLAN.md`
+- `_notes/values-storage-attempts.md`
+- Possibly `posts/minim.md` and `posts/optical-centering.md` code
+  samples if they reference deleted patterns
+
+### Summary count
+
+| category | count |
+|---|---|
+| whole files deleted | ~12 (incl. all `signals/values/*.ts`) |
+| whole folders deleted | **8** `_proto-*` folders |
+| exported symbols deleted | ~20+ |
+| symbol-keyed traits | **4** (LINEAR, LERP, METRIC, EQUALS — gone entirely) |
+| private memoization slots across value classes | ~12 (all replaced by `memo()`) |
+| `*Value` interface exports | **6** (per value type) |
 
 ## Risk areas
 

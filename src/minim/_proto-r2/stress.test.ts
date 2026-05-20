@@ -15,23 +15,22 @@
 //     fail spring at compile time)
 
 import { describe, it, expect } from "vitest";
-import { Signal, signal, computed, lens, effect, batch, untracked, type Computed } from "./signal";
+import { Signal, signal, computed, lens, effect, batch, untracked, type Computed, type Of } from "./signal";
 import { type Traits } from "./traits";
 import { Num, num } from "./values/num";
 import { Vec, vec } from "./values/vec";
 import { Box, box } from "./values/box";
 import {
-  Color, ColorChain, rgb, rgba, type ColorValue,
+  Color, ColorChain, rgb, rgba,
 } from "./values/color";
 import {
   Matrix, MatrixChain, matrix,
   identity, fromTranslate, fromScale, fromRotate,
   multiply, invert, determinant, transformPoint, isIdentity,
-  type MatrixValue,
 } from "./values/matrix";
 import {
   Transform, TransformChain, transform,
-  type TransformValue, DEFAULT as TR_DEFAULT,
+  DEFAULT as TR_DEFAULT,
 } from "./values/transform";
 import { spring, tween, attract } from "./anim";
 import { mean } from "./values/multi";
@@ -72,11 +71,14 @@ describe("Color", () => {
     expect(half.value).toEqual({ r: 0.5, g: 0.5, b: 0.5, a: 1 });
   });
 
-  it("chain duality: a.lerp(b, t) === a.derive(c => c.lerp(b, t))", () => {
-    const a = rgb(0, 0, 0); const b = rgb(1, 0, 0);
-    const eager = a.lerp(b, 0.5);
-    const fused = a.derive((c) => c.lerp(b, 0.5));
+  it("chain duality: a.add(b) === a.derive(c => c.add(b)) (invertible)", () => {
+    const a = rgb(0, 0, 0); const b = rgb(0.5, 0.5, 0.5);
+    const eager = a.add(b);
+    const fused = a.derive((c) => c.add(b));
     expect(fused.value).toEqual(eager.value);
+    // Both are writable lenses — chain preserves writability
+    eager.value = { r: 1, g: 1, b: 1, a: 1 };
+    expect(a.value.r).toBe(0.5);  // a + b = 1, so a = 1 - b = 0.5
   });
 
   it("attract works on Color (linear trait sufficient)", () => {
@@ -214,7 +216,7 @@ describe("Transform", () => {
 
   it("spring works on Transform (full trait set)", () => {
     const tr = transform();
-    const target: TransformValue = {
+    const target: Of<Transform> = {
       translate: { x: 10, y: 5 },
       scale: { x: 1.5, y: 1.5 },
       origin: { x: 0, y: 0 },
@@ -333,7 +335,7 @@ describe("memo cache scaling", () => {
 describe("custom equals (epsilon)", () => {
   it("opts.equals on a Color (per-instance epsilon)", () => {
     const eps = 0.01;
-    const colorEq = (a: ColorValue, b: ColorValue) =>
+    const colorEq = (a: Of<Color>, b: Of<Color>) =>
       Math.abs(a.r - b.r) < eps && Math.abs(a.g - b.g) < eps &&
       Math.abs(a.b - b.b) < eps && Math.abs(a.a - b.a) < eps;
     const c = new Color({ r: 0.5, g: 0.5, b: 0.5, a: 1 }, { equals: colorEq });

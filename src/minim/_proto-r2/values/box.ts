@@ -1,94 +1,98 @@
-// box.ts — reactive axis-aligned rectangle (r2 v2).
+// box.ts — reactive axis-aligned rectangle.
 
-import { Signal, computed, type Computed, value, type Val, type SignalOptions } from "../signal";
+import { Signal, computed, value, type Val, type SignalOptions, type RO, type Of } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
-import { field } from "../field";
+import { type Op, applyOp1, Chain } from "../ops";
 import { Num } from "./num";
-import { Vec, type VecValue } from "./vec";
+import { Vec } from "./vec";
 
-export interface BoxValue { x: number; y: number; w: number; h: number }
+type V = { x: number; y: number; w: number; h: number };
 
-export const add = (a: BoxValue, b: BoxValue): BoxValue =>
+export const add = (a: V, b: V): V =>
   ({ x: a.x + b.x, y: a.y + b.y, w: a.w + b.w, h: a.h + b.h });
-export const sub = (a: BoxValue, b: BoxValue): BoxValue =>
+export const sub = (a: V, b: V): V =>
   ({ x: a.x - b.x, y: a.y - b.y, w: a.w - b.w, h: a.h - b.h });
-export const scale = (a: BoxValue, k: number): BoxValue =>
+export const scale = (a: V, k: number): V =>
   ({ x: a.x * k, y: a.y * k, w: a.w * k, h: a.h * k });
-export const lerp = (a: BoxValue, b: BoxValue, t: number): BoxValue => ({
+export const lerp = (a: V, b: V, t: number): V => ({
   x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t,
   w: a.w + (b.w - a.w) * t, h: a.h + (b.h - a.h) * t,
 });
-export const equals = (a: BoxValue, b: BoxValue) =>
+export const equals = (a: V, b: V) =>
   a === b || (a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h);
 
-export const expand = (b: BoxValue, n: number): BoxValue =>
+export const expand = (b: V, n: number): V =>
   ({ x: b.x - n, y: b.y - n, w: b.w + 2 * n, h: b.h + 2 * n });
 
-export const contains = (b: BoxValue, p: VecValue): boolean =>
+export const contains = (b: V, p: Of<Vec>): boolean =>
   p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 
-export class Box extends Signal<BoxValue> {
-  static traits: TraitDict<BoxValue> & { linear: Linear<BoxValue>; lerp: typeof lerp; equals: typeof equals } = {
-    linear: { add, sub, scale },
-    lerp,
-    equals,
+// ─── Invertible ops ────────────────────────────────────────────────
+
+const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
+const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
+const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
+const expandOp: Op<V, [number]> = {
+  fwd: expand,
+  bwd: (v, n) => expand(v, -n),
+};
+
+const linearImpl: Linear<V> = { add, sub, scale };
+
+export class Box extends Signal<V> {
+  static traits: TraitDict<V> & { linear: Linear<V>; lerp: typeof lerp; equals: typeof equals } = {
+    linear: linearImpl, lerp, equals,
   };
 
-  constructor(v: BoxValue = { x: 0, y: 0, w: 0, h: 0 }, opts?: SignalOptions<BoxValue>) { super(v, opts); }
+  constructor(v: V = { x: 0, y: 0, w: 0, h: 0 }, opts?: SignalOptions<V>) { super(v, opts); }
 
-  get x(): Num { return this.memo("x", () => field(this, "x", Num)); }
-  get y(): Num { return this.memo("y", () => field(this, "y", Num)); }
-  get w(): Num { return this.memo("w", () => field(this, "w", Num)); }
-  get h(): Num { return this.memo("h", () => field(this, "h", Num)); }
+  get x(): Num { return this.field("x", Num); }
+  get y(): Num { return this.field("y", Num); }
+  get w(): Num { return this.field("w", Num); }
+  get h(): Num { return this.field("h", Num); }
 
-  get area(): Num {
-    return this.memo("area", () => computed(() => this.value.w * this.value.h, Num));
+  get area(): RO<Num> {
+    return this.memo("area", () => computed(() => this.value.w * this.value.h, Num)) as RO<Num>;
   }
 
-  at(u: number, v: number): Vec {
+  at(u: number, v: number): RO<Vec> {
     return this.memo(`at:${u},${v}`, () => computed(() => {
       const b = this.value;
       return { x: b.x + u * b.w, y: b.y + v * b.h };
-    }, Vec));
+    }, Vec)) as RO<Vec>;
   }
-  get center() { return this.at(0.5, 0.5); }
-  get top()    { return this.at(0.5, 0); }
-  get bottom() { return this.at(0.5, 1); }
-  get left()   { return this.at(0,   0.5); }
-  get right()  { return this.at(1,   0.5); }
+  get center(): RO<Vec> { return this.at(0.5, 0.5); }
+  get top(): RO<Vec>    { return this.at(0.5, 0); }
+  get bottom(): RO<Vec> { return this.at(0.5, 1); }
+  get left(): RO<Vec>   { return this.at(0,   0.5); }
+  get right(): RO<Vec>  { return this.at(1,   0.5); }
 
-  add(b: Val<BoxValue>) { return computed(() => add(this.value, value(b)), Box); }
-  sub(b: Val<BoxValue>) { return computed(() => sub(this.value, value(b)), Box); }
-  scale(k: Val<number>) { return computed(() => scale(this.value, value(k)), Box); }
-  lerp(b: Val<BoxValue>, t: Val<number>) {
-    return computed(() => lerp(this.value, value(b), value(t)), Box);
+  // ── Invertible (Lens-returning) ──
+  add(b: Val<V>): Box { return applyOp1(this, addOp, b, Box); }
+  sub(b: Val<V>): Box { return applyOp1(this, subOp, b, Box); }
+  scale(k: Val<number>): Box { return applyOp1(this, scaleOp, k, Box); }
+  expand(n: Val<number>): Box { return applyOp1(this, expandOp, n, Box); }
+
+  // ── Non-invertible ──
+  lerp(b: Val<V>, t: Val<number>): RO<Box> {
+    return computed(() => lerp(this.value, value(b), value(t)), Box) as RO<Box>;
   }
-  expand(n: Val<number>) {
-    return computed(() => expand(this.value, value(n)), Box);
-  }
-  contains(p: Val<VecValue>): Computed<boolean> {
-    return computed(() => contains(this.value, value(p))) as Computed<boolean>;
+  contains(p: Val<Of<Vec>>) {
+    return computed(() => contains(this.value, value(p)));
   }
 
-  derive(fn: (c: BoxChain) => BoxChain) {
-    return computed(() => fn(new BoxChain(this.value)).value, Box);
+  derive(fn: (c: BoxChain) => BoxChain): Box {
+    return fn(new BoxChain()).toLens(this, Box);
   }
 }
 
 export interface Box { readonly constructor: typeof Box }
 
-export class BoxChain {
-  value: BoxValue;
-  constructor(v: BoxValue) { this.value = v; }
-  add(b: Val<BoxValue>) { this.value = add(this.value, value(b)); return this; }
-  sub(b: Val<BoxValue>) { this.value = sub(this.value, value(b)); return this; }
-  scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
-  lerp(b: Val<BoxValue>, t: Val<number>) {
-    this.value = lerp(this.value, value(b), value(t)); return this;
-  }
-  expand(n: Val<number>) {
-    this.value = expand(this.value, value(n)); return this;
-  }
+export class BoxChain extends Chain<V> {
+  add(b: Val<V>): this { return this.push1(addOp, b); }
+  sub(b: Val<V>): this { return this.push1(subOp, b); }
+  scale(k: Val<number>): this { return this.push1(scaleOp, k); }
+  expand(n: Val<number>): this { return this.push1(expandOp, n); }
 }
 
 /** Construct a Box; reactive per-component args bind the field lens. */

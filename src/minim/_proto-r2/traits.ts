@@ -6,7 +6,7 @@
 //   function spring<T>(sig: Traits<T, "linear" | "metric">, target: Val<T>) …
 //   function tween<T>(sig: Traits<T, "lerp">, target: T, dur: Val<number>) …
 //   function mean<R extends Read<unknown>>(
-//     first: R & Traits<ValueOf<R>, "linear">, …) …
+//     first: R & Traits<Of<R>, "linear">, …) …
 //
 // The inline form reads as a sentence and there's only one type to
 // learn. Naming note: the *dictionary shape* (what subclasses fill
@@ -19,7 +19,7 @@
 // resolved to a per-instance `_equals` slot at construction so the
 // write hot path stays a single field read.
 
-import type { Signal, Read, ValueOf } from "./signal";
+import type { Signal, Read, Of } from "./signal";
 
 // ─── Primitive trait shapes ──────────────────────────────────────────
 
@@ -72,14 +72,14 @@ export type Traits<T, K extends TraitKey = never> = Signal<T> & {
 const dictOf = <T>(s: Read<T>): TraitDict<T> =>
   (((s as object).constructor as { traits?: TraitDict<T> }).traits) ?? {};
 
-export const linearOf = <R extends Read<unknown>>(s: R): Linear<ValueOf<R>> | undefined =>
-  dictOf<ValueOf<R>>(s as unknown as Read<ValueOf<R>>).linear;
-export const lerpOf = <R extends Read<unknown>>(s: R): Lerp<ValueOf<R>> | undefined =>
-  dictOf<ValueOf<R>>(s as unknown as Read<ValueOf<R>>).lerp;
-export const metricOf = <R extends Read<unknown>>(s: R): Metric<ValueOf<R>> | undefined =>
-  dictOf<ValueOf<R>>(s as unknown as Read<ValueOf<R>>).metric;
-export const equalsOf = <R extends Read<unknown>>(s: R): Equals<ValueOf<R>> | undefined =>
-  dictOf<ValueOf<R>>(s as unknown as Read<ValueOf<R>>).equals;
+export const linearOf = <R extends Read<unknown>>(s: R): Linear<Of<R>> | undefined =>
+  dictOf<Of<R>>(s as unknown as Read<Of<R>>).linear;
+export const lerpOf = <R extends Read<unknown>>(s: R): Lerp<Of<R>> | undefined =>
+  dictOf<Of<R>>(s as unknown as Read<Of<R>>).lerp;
+export const metricOf = <R extends Read<unknown>>(s: R): Metric<Of<R>> | undefined =>
+  dictOf<Of<R>>(s as unknown as Read<Of<R>>).metric;
+export const equalsOf = <R extends Read<unknown>>(s: R): Equals<Of<R>> | undefined =>
+  dictOf<Of<R>>(s as unknown as Read<Of<R>>).equals;
 
 const className = (s: object): string =>
   (s.constructor as { name?: string }).name ?? "?";

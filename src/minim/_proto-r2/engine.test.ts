@@ -14,7 +14,6 @@ import {
   isSignal, isLens, isComputed,
   value,
 } from "./signal";
-import { field as _field } from "./field";
 import { Num, num } from "./values/num";
 import { Vec, vec, polar } from "./values/vec";
 import { Box, box } from "./values/box";

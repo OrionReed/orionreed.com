@@ -16,19 +16,20 @@ A self-contained reactive layer:
 
 ```
 signal.ts          Signal<T> + signal/computed/lens/effect/batch/untracked
-                   + Signal.memo() per-instance derived cache
+                   + Signal.memo() + Signal.field() + RO<R> + Of<R>
 traits.ts          TraitDict<T> + Traits<T, K> nominal constraint
-field.ts           Typed field lens (stateless; cache via Signal.memo)
+ops.ts             Op<V, Args> + applyOp0/1/2 + Chain<V> base class
+                   (bidirectional lens infrastructure)
 anim.ts            spring / tween / toward / attract on Traits<T, …>
-values/num.ts      Num + NumChain (static traits, no symbol slots)
+values/num.ts      Num + NumChain (add/sub/scale invertible)
 values/vec.ts      Vec + VecChain + polar
-values/box.ts      Box + BoxChain
+values/box.ts      Box + BoxChain (add/sub/scale/expand invertible)
 values/color.ts    Color + ColorChain (luminance, css derived views)
-values/matrix.ts   Matrix + MatrixChain (6 fields, sparse traits — equality only)
-values/transform.ts Transform + TransformChain (5 fields incl. nested Vecs)
+values/matrix.ts   Matrix + MatrixChain (multiply, invert invertible)
+values/transform.ts Transform + TransformChain (nested-Vec field lenses)
 values/multi.ts    combine / mean (N-to-1 writable lens)
 values/hyper.ts    hyperLens (N→M with per-output inverse policies)
-index.ts           Public API (Signal/SignalOptions/ValueOf<R>/SignalInit)
+index.ts           Public API
 conformance.test.ts  RFTS (161 pass / 18 skipped — identical to prod)
 engine.test.ts       Engine edges, footguns, memo, traits
 types.test.ts        Compile-time inference + constraint checks
@@ -36,13 +37,14 @@ anim.test.ts         Animator math + Traits<T, …> probes
 multi.test.ts        mean/combine semantics
 hyper.test.ts        hyperLens: pointOnLine, wheel, pinch
 stress.test.ts       Color/Matrix/Transform breaking-attempts
+bidirectional.test.ts  Write-through eager + chain + RO type rejection
 bench-runner.ts    Paired-comparison harness with median + MAD
 bench.ts           prod vs r2 across 21 scenarios
 PROD-AUDIT.md      What changes when we adopt this
 STRUCTURE-NOTES.md DAG-vs-hypergraph + hyperLens + profunctor sketches
 ```
 
-All tests pass: **294 / 294** (with 18 RFTS divergences skipped, same as prod).
+All tests pass: **312 / 312** (with 18 RFTS divergences skipped, same as prod).
 
 ## API
 
@@ -71,7 +73,132 @@ and accepts the same constructor shape. The asymmetry with
 `getter`/`setter` *after* construction, so a typed factory is the
 only ergonomic way; signal-mode has no such setup.
 
-### `Reactive.memo(key, factory)`
+### Bidirectional value layer
+
+Every naturally-invertible method on every value type is now a **Lens**
+(writable), not a `Computed` (read-only). Writes through derived
+signals flow back to the source automatically — for free, no custom
+lens wiring per consumer.
+
+```ts
+const a = vec(1, 2); const b = vec(10, 20);
+const sum = a.add(b);                  // Vec (Lens)
+sum.value = { x: 100, y: 200 };
+// a updates to {x: 90, y: 180}; b unchanged.
+
+const m = matrix();
+const product = m.multiply(fromTranslate(10, 0));
+product.value = fromTranslate(50, 20);
+// m becomes fromTranslate(40, 20).
+
+const tr = transform({ translate: { x: 5, y: 5 } });
+const offsetX = tr.translate.x.add(10);  // Num (Lens) — bidirectional through TWO field lenses
+offsetX.value = 100;
+// tr.translate.x = 90; tr.value.translate.x = 90.
+```
+
+The **chain form** is equally bidirectional:
+
+```ts
+const a = vec(0, 0); const b = vec(1, 2);
+const r = a.derive((c) => c.add(b).scale(3).offset(10, 0));
+r.value = { x: 31, y: 30 };
+// Walks inverses in reverse: a = ((r - (10,0)) / 3) - (1,2) = (6, 8)
+expect(a.value).toEqual({ x: 6, y: 8 });
+```
+
+**Invariant:** `parent.foo(args)` and `parent.derive(c => c.foo(args))`
+produce signals with identical read AND write behavior. The chain
+just fuses everything into a single lens (no allocation per chain
+step at read time), but the result behaves the same.
+
+#### What's invertible vs not
+
+| value | invertible (Lens) | not invertible (`RO<Cls>`) |
+|---|---|---|
+| Num | add, sub, scale | clamp |
+| Vec | add, sub, scale, offset, up/down/left/right | normalize, perp, lerp, distance, magnitude |
+| Box | add, sub, scale, expand | lerp, at, area, contains, center/top/bottom/left/right |
+| Color | add, sub, scale | lerp, luminance, css |
+| Matrix | multiply, invert | determinant |
+| Transform | add, sub | lerp |
+
+Non-invertible methods return `RO<Cls>` — a TS narrowing where
+`.value` is readonly and `.set` / `.bind` are absent. Writing to
+them is a **compile error**, not a runtime throw. And the chain
+class doesn't expose them at all — so `vec.derive(c => c.normalize())`
+fails at the `c.normalize()` site with "Property 'normalize' does
+not exist on type 'VecChain'".
+
+This is the type-tracked invertibility guarantee: **if it
+type-checks, it writes correctly.**
+
+#### Shared op infrastructure
+
+Each invertible operation is declared once at module scope as an
+`Op<V, Args>` with paired `fwd` and `bwd`:
+
+```ts
+const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
+const scaleOp: Op<V, [number]> = {
+  fwd: scale,
+  bwd: (v, k) => scale(v, 1 / k),
+};
+```
+
+Both eager methods and chain methods reference the same op constant.
+Math lives in one place; the wiring is one-liner forwarders:
+
+```ts
+class Vec extends Signal<V> {
+  add(b: Val<V>): Vec { return applyOp1(this, addOp, b, Vec); }
+  // …
+}
+class VecChain extends Chain<V> {
+  add(b: Val<V>): this { return this.push1(addOp, b); }
+  // …
+}
+```
+
+Adding a new invertible operation: declare an `Op`, reference it in
+two one-liner methods. No closure allocation per call (the op constant
+is shared), no per-chain-step object allocation beyond two `fwd`/`bwd`
+closures that close over the resolved args.
+
+### Naming: `Of<R>` replaces `*Value` exports
+
+We removed all `*Value` interface exports (`VecValue`, `BoxValue`, …).
+Each value module uses a module-local `type V = …` alias for its math
+helpers. Consumers needing the value shape use `Of<R>`:
+
+```ts
+import { Vec, type Of } from "@minim/signals";
+
+function reflect(p: Of<Vec>, a: Of<Vec>, b: Of<Vec>): Of<Vec> { … }
+// or alias once locally
+type V = Of<Vec>;
+function reflect(p: V, a: V, b: V): V { … }
+```
+
+One name (`Of`) instead of N per-type names. Compositional,
+self-documenting, no rename-on-import boilerplate.
+
+### `Signal.field(key, Cls)` replaces free `field()`
+
+The free `field()` function is gone. Field lenses are now a method on
+Signal, cached in a dedicated `_fields` slot (separate from `memo`
+to avoid template-literal key allocation per access):
+
+```ts
+class Vec extends Signal<V> {
+  get x(): Num { return this.field("x", Num); }
+  get y(): Num { return this.field("y", Num); }
+}
+```
+
+Bench: `vec.x.peek` is −25% vs prod, `vec.x.value =` is −14% vs prod.
+
+### `Signal.memo(key, factory)`
 
 Per-instance lazy cache for derived views. Replaces three ad-hoc
 patterns from the first round:
@@ -170,38 +297,51 @@ read interface. `ValueOf<R>` extractor.
 
 `npx vite-node src/minim/_proto-r2/bench.ts`
 
-Stable picture across runs (CV mostly ±1–3%, except sub-20 ns ops
-which are at the measurement floor):
+Stable picture across two consecutive runs (CV mostly ±1–3%, except
+sub-20 ns ops at the measurement floor):
 
 | scenario                                  | prod     | r2       | Δ |
 | ----------------------------------------- | -------- | -------- | --- |
-| construction: signal(0)                   | 14 ns    | 18 ns    | **+31%** (only consistent regression) |
-| construction: vec(0, 0)                   | 386 ns   | 327 ns   | **−15%** |
-| construction: box(0,0,0,0)                | 1.01 µs  | 642 ns   | **−36%** |
-| read: signal.peek                         | 5.2 ns   | 5.4 ns   | +3% |
-| read: vec.x.peek                          | 28 ns    | 18 ns    | **−35%** |
-| read: computed.value (cached)             | 5.9 ns   | 6.1 ns   | +4% |
-| write: signal.value =                     | 13.6 ns  | 10.0 ns  | **−26%** |
-| write: vec.x.value =                      | 146 ns   | 119 ns   | **−19%** |
-| write + 1 effect                          | 48 ns    | 52 ns    | +8% |
-| batch × 10 writes (1 effect)              | 187 ns   | 187 ns   | ≈ |
-| 10-deep computed chain                    | 312 ns   | 276 ns   | **−12%** |
-| 50-deep computed chain                    | 1.62 µs  | 1.22 µs  | **−25%** |
-| eager chain: vec.add().scale().offset()   | 184 ns   | 165 ns   | **−10%** |
-| fused chain: vec.derive(c=>...)           | 731 ns   | 500 ns   | **−32%** |
-| realistic scene: 100 boxes / center       | 22 µs    | 20 µs    | **−8%** |
-| spring: 100 frames (vec)                  | 222 ns   | 235 ns   | +6% |
-| mean of 4 nums                            | 275 ns   | 279 ns   | +2% |
-| **transform.translate.x write** (deep)    | 453 ns   | 355 ns   | **−22%** |
+| construction: signal(0)                   | 14 ns    | 17 ns    | **+25%** (only consistent regression) |
+| construction: num(0)                      | 47 ns    | 43 ns    | **−9%** |
+| construction: vec(0, 0)                   | 367 ns   | 290 ns   | **−21%** |
+| construction: box(0,0,0,0)                | 1.01 µs  | 573 ns   | **−43%** |
+| read: signal.peek                         | 5.3 ns   | 5.5 ns   | +4% |
+| read: vec.x.peek                          | 28 ns    | 21 ns    | **−25%** |
+| read: computed.value (cached)             | 5.4 ns   | 5.7 ns   | +6% |
+| write: signal.value =                     | 14 ns    | 11 ns    | **−25%** |
+| write: vec.x.value =                      | 148 ns   | 127 ns   | **−14%** |
+| write + 1 effect                          | 48 ns    | 49 ns    | +1% |
+| batch × 10 writes (1 effect)              | 188 ns   | 138 ns   | **−27%** |
+| 10-deep computed chain                    | 316 ns   | 275 ns   | **−13%** |
+| 50-deep computed chain                    | 1.59 µs  | 1.22 µs  | **−23%** |
+| eager chain: vec.add().scale().offset()   | 186 ns   | 141 ns   | **−24%** |
+| **fused chain: vec.derive(c=>...)**       | 707 ns   | 106 ns   | **−85%** |
+| realistic scene: 100 boxes / center       | 22 µs    | 19 µs    | **−11%** |
+| spring: 100 frames (vec)                  | 232 ns   | 219 ns   | **−5%** |
+| mean of 4 nums                            | 281 ns   | 282 ns   | ≈ |
+| **transform.translate.x write** (deep)    | 451 ns   | 370 ns   | **−18%** |
 
-**The killer measurement is the last one:** every shape with a
-transform writes `transform.translate.x` (or `.rotate` or `.scale.x`)
-on every animation frame. r2 takes 355 ns vs prod's 453 ns — a **22%
-reduction** on the single most-executed write path in the library.
+**The two killer measurements:**
 
-The only consistent regression is `signal(0)` construction (~4 ns
-absolute), which is the wider class-shape cost. Total signal
-construction is well under 1% of any realistic frame budget.
+1. **Fused chain `−85%` (707 → 106 ns).** The new `Chain<V>` base
+   composes fwd/bwd functions into a single pair at `toLens()` time.
+   Reads run those functions in order — no per-call allocation, no
+   chain object iteration with arg unwrapping. The old approach
+   constructed a chain object per `.derive()` call, ran each method
+   in sequence, then read the final value. This is a structural
+   speedup, not noise.
+
+2. **`transform.translate.x write` `−18%` (451 → 370 ns).** Every
+   shape with a transform writes `.translate.x` / `.rotate` /
+   `.scale.x` on every animation frame. The dedicated `_fields`
+   cache (separate from `memo()` to avoid template-literal key
+   allocation per `.x` access) makes the field-lens hot path
+   substantially faster than prod.
+
+Aside from `signal(0)` construction (3 ns absolute, the wider
+class-shape cost), **r2 is faster than prod on every measurement
+we care about.**
 
 The shape:
 
