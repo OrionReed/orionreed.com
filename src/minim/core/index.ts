@@ -1,27 +1,30 @@
 export {
   Anim,
-  asGen,
   cut,
-  detach,
-  isCut,
-  isGen,
-  scaled,
+  isGenerator,
+  transduce,
+  TRANSDUCE_KEY,
   type Animator,
   type Cut,
-  type Detach,
   type Resume,
-  type Scaled,
   type Suspend,
   type Tick,
-  type Wake,
+  type Transduced,
+  type Transducer,
   type Yieldable,
 } from "./anim";
+
+export {
+  scaled,
+  pauseWhen,
+  slowmoWhen,
+} from "./transducers";
 
 export {
   drive, suspend,
   all, race, rand,
   commit, firstN, firstMatching, anySuccess, allSettled,
-  withScale,
+  detach,
   untilEvent, untilPromise,
   attachRaf,
   type Settled,

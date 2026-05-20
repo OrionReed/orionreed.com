@@ -11,10 +11,10 @@ import {
 import { LERP, LINEAR, METRIC } from "./traits";
 import {
   drive,
-  isGen,
+  isGenerator,
   suspend,
   race,
-  withScale,
+  scaled,
   type Animator,
   type Tick,
   type Yieldable,
@@ -334,7 +334,12 @@ class PlayImpl<R> implements Play<R> {
 
   at(scale: Val<number>): Play<R> {
     const get = valFn(scale);
-    return new PlayImpl(withScale(() => get(), this.g));
+    const g = this.g;
+    return new PlayImpl(
+      (function* (): Animator<R> {
+        return (yield scaled(() => get(), g)) as R;
+      })(),
+    );
   }
 }
 
@@ -406,7 +411,7 @@ export function loop(factory: () => Yieldable): Play {
     (function* (): Animator {
       while (true) {
         const y = factory();
-        if (isGen(y)) yield* y;
+        if (isGenerator(y)) yield* y;
         else yield y;
       }
     })(),

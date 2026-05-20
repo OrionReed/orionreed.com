@@ -412,14 +412,12 @@ describe("intervals & firstOf", () => {
     const b = signal(false);
     const winner = firstOf(a, b);
     expect(winner.value).toBeUndefined();
-    // Bump the clock first, then fire the event in a tail-call gen
-    // (yield 0 resumes synchronously with currentAnim set, anim.clock
-    // already advanced to the post-step value).
+    // Bump the clock first, then fire the event directly. `firstOf`'s
+    // effect reads `activeRecorder()?.anim.clock` at signal-write time,
+    // so the timestamp is the post-step clock regardless of whether the
+    // write happens inside a gen.
     anim.step(0.5);
-    anim.start(function* () {
-      yield 0;
-      a.value = true;
-    });
+    a.value = true;
     expect(winner.value?.first).toBe(0);
     expect(winner.value?.at).toBeCloseTo(0.5, 1);
     b.value = true;

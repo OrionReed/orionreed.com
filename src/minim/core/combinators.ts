@@ -3,7 +3,6 @@
 
 import {
   cut,
-  scaled,
   type Animator,
   type Cut,
   type Suspend,
@@ -147,9 +146,13 @@ export function* rand(...children: Animator[]): Animator {
   yield* children[i];
 }
 
-/** Spawn `gen` with `scaleFn` as its time-scale; descendants inherit. */
-export function* withScale<R>(scaleFn: () => number, gen: Animator<R>): Animator<R> {
-  return (yield scaled(scaleFn, gen)) as R;
+/** Spawn `g` at engine root, resume parent immediately. Detached child
+ *  outlives the spawning parent (survives parent cancel; dies on engine.stop()). */
+export function* detach<R>(g: Animator<R>): Animator<void> {
+  yield (wake, spawn) => {
+    spawn(g);
+    wake();
+  };
 }
 
 /** RAF adapter; caps dt at 32 ms so tab-backgrounding doesn't deliver
