@@ -165,21 +165,20 @@ yield* tl;
 
 An event bus is one signal per name plus `bus.until(name)`, which is a single suspend call. A snapshot is a closure over a signal's value with a `restore()` method. None of these needed to be in the runtime; the seam was loose enough that they could live in userland and still feel native.
 
-A `claim` is a labeled `Signal<boolean>` over a predicate: `true` while it holds, `false` on violation. Claims compose with `.and`, `.or`, `.not`, `.during(p)`, `.before(other)` — because they _are_ signals. A `process(factory, ...claims)` wraps a unit of work in lifecycle signals (`alive`, `started`, `completed`, `duration`) and re-arms the attached claims on each `.run()`:
+A `claim` is a labeled `Signal<boolean>` over a predicate: `true` while it holds, `false` on violation. Claims compose with `.and`, `.or`, `.not`, `.during(scope)`, `.before(other)` — because they _are_ signals. Wrap a factory with `scope(fn)` and you can attach a claim to its lifetime via `.during(fn)` — each invocation re-arms it. The factory carries lazy `alive` / `last` / `runs` / `duration` / `touched` signals; `authorOf(sig)` reports which span most recently wrote to a signal:
 
 ```ts
-const bounded = claim(c.opacity).stays.in([0, 1]);
-const reaches1 = claim(c.opacity).becomes.equal(1);
-const intro = process(() => fadeIn(c, 0.3), bounded, reaches1);
+const fadeIn = scope(function* fadeIn(s, dur) { /* ... */ });
 
-loop(() => intro.run());
+const bounded  = claim(c.opacity).stays.in([0, 1]).during(fadeIn);
+const reaches1 = claim(c.opacity).becomes.equal(1).during(fadeIn);
+
+loop(() => fadeIn(c, 0.3));
 ```
 
-Live-checked specs without a separate test framework.
+Live-checked specs without a separate test framework. The debugger below pairs the trace (gantt of factory invocations, `yield*` calls visible) with `α(t)` colored by `authorOf`, with claim strips on the same axis. The `nudge` factory is buggy: it overshoots `α=1` mid-run. Pause and step to see the offender name itself.
 
-<md-claim-demo></md-claim-demo>
-
-<md-trace-demo></md-trace-demo>
+<md-debugger></md-debugger>
 
 ## Lenses & traits
 

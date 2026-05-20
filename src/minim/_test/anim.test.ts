@@ -1,7 +1,6 @@
 // Anim runtime tests. Covers the full yield contract, the runtime's
 // re-entrancy / sync-resolve / error-isolation guarantees, and the
-// drive() and AnimObserver integrations. One file because there's
-// one engine.
+// drive() integration. One file because there's one engine.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
@@ -9,7 +8,6 @@ import {
   suspend,
   drive,
   detach,
-  type AnimObserver,
   type Animator,
 } from "@minim/core";
 
@@ -471,39 +469,6 @@ describe("lifecycle", () => {
     // sanity: nothing thrown, anim still usable
     expect(typeof anim.step).toBe("function");
   });
-});
-
-describe("AnimObserver", () => {
-  let anim: Anim;
-  beforeEach(() => { anim = new Anim(); });
-  afterEach(() => { anim.stop(); });
-
-  it("fires spawn/complete with monotonic ids", () => {
-    const spans: Array<[string, number, number | undefined]> = [];
-    const obs: AnimObserver = {
-      spawn: (id, parentId) => spans.push(["spawn", id, parentId]),
-      complete: (id) => spans.push(["complete", id, undefined]),
-    };
-    anim.observer = obs;
-    function* g(): any { yield; }
-    anim.start(g); anim.start(g);
-    anim.step(0.016); anim.step(0.016);
-    const spawns = spans.filter((s) => s[0] === "spawn");
-    expect(spawns.length).toBe(2);
-    expect(spawns[0][1]).toBe(1);
-    expect(spawns[1][1]).toBe(2);
-    expect(spans.filter((s) => s[0] === "complete").length).toBe(2);
-  });
-
-  it("fires cancel on dispose", () => {
-    let cancels = 0;
-    anim.observer = { cancel: () => cancels++ };
-    function* g(): any { yield* suspend(() => () => {}); }
-    const d = anim.start(g);
-    d();
-    expect(cancels).toBe(1);
-  });
-
 });
 
 describe("composability", () => {

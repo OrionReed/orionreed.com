@@ -1,34 +1,35 @@
-// Structural view over `Span[]`. The flat data is canonical; this
-// module groups it as a tree where parent-child, sibling batches, and
-// depth are first-class. Used by gantt layouts and assertions alike.
+// Structural view over `Span[]`. Pure derivation; call from a
+// `computed(() => traceTree(spans.value))` to keep it reactive.
+//
+// `parent` is already a back-link on Span, so this module is mostly
+// about producing forward links (children) and grouping siblings into
+// `batches` — siblings sharing the same `start` (i.e. spawned together
+// via `yield [a, b, c]`) are members of one batch; sequential batches
+// under the same parent become separate entries.
 
-import type {Span} from "./spans";
+import type { Span } from "./span";
 
-/** A yield-array's worth of siblings — same parent, same `spawnedAt`.
- *  Sequential batches under one parent are separate entries. */
-export type TraceBatch = {
-  readonly spawnedAt: number;
+export interface TraceBatch {
+  readonly start: number;
   readonly members: readonly TraceNode[];
-};
+}
 
-/** Tree node. `children` is the flat list across all batches in spawn
- *  order; `batches` preserves yield-array groupings. */
-export type TraceNode = {
+export interface TraceNode {
   readonly span: Span;
   readonly parent?: TraceNode;
   readonly depth: number;
   readonly batches: readonly TraceBatch[];
   readonly children: readonly TraceNode[];
-};
+}
 
-export type TraceTree = {
+export interface TraceTree {
   readonly roots: readonly TraceNode[];
   readonly byId: ReadonlyMap<number, TraceNode>;
   readonly size: number;
-  /** Pre-order DFS: parent before children, batches in spawn-time
-   *  order, siblings within a batch in spawn order. */
+  /** Pre-order DFS: parent first, then batches in start-time order,
+   *  then siblings within a batch in start order. */
   dfs(visit: (node: TraceNode, depth: number) => void): void;
-};
+}
 
 interface MutableNode {
   span: Span;
@@ -38,57 +39,49 @@ interface MutableNode {
   children: TraceNode[];
 }
 
-/** Build a `TraceTree` snapshot. Pure — call from inside a `computed`
- *  (re-runs on trace changes) or once at the end of a run. Spans must
- *  be in spawn order (Trace.spans always is). */
+/** Build a `TraceTree` from a span list. Caller must pass spans in
+ *  start-time order; the recorder always does. */
 export function traceTree(spans: readonly Span[]): TraceTree {
-  // First pass: skeletal nodes so parent/child references can resolve.
   const byId = new Map<number, MutableNode>();
   for (const s of spans) {
-    byId.set(s.id, {
-      span: s,
-      depth: 0,
-      batches: [],
-      children: [],
-    });
+    byId.set(s.id, { span: s, depth: 0, batches: [], children: [] });
   }
 
-  // Group children by parent id, preserving spawn order.
   const childrenOf = new Map<number, MutableNode[]>();
   const roots: MutableNode[] = [];
   for (const s of spans) {
     const node = byId.get(s.id)!;
-    if (s.parentId === undefined) {
+    const parentId = s.parent?.id;
+    if (parentId === undefined) {
       roots.push(node);
       continue;
     }
-    const parent = byId.get(s.parentId);
+    const parent = byId.get(parentId);
     if (!parent) {
       // Parent not in this span list (trace started mid-run). Treat
-      // as root for layout purposes.
+      // as a root for layout purposes.
       roots.push(node);
       continue;
     }
     node.parent = parent as TraceNode;
     node.depth = parent.depth + 1;
-    const arr = childrenOf.get(s.parentId);
+    const arr = childrenOf.get(parentId);
     if (arr) arr.push(node);
-    else childrenOf.set(s.parentId, [node]);
+    else childrenOf.set(parentId, [node]);
   }
 
-  // Second pass: build batches and flat children list per node.
   for (const [parentId, kids] of childrenOf) {
     const parent = byId.get(parentId)!;
     parent.children = kids as TraceNode[];
     let i = 0;
     while (i < kids.length) {
-      const t = kids[i].span.spawnedAt;
+      const t = kids[i].span.start;
       const members: TraceNode[] = [];
-      while (i < kids.length && kids[i].span.spawnedAt === t) {
+      while (i < kids.length && kids[i].span.start === t) {
         members.push(kids[i] as TraceNode);
         i++;
       }
-      parent.batches.push({ spawnedAt: t, members });
+      parent.batches.push({ start: t, members });
     }
   }
 

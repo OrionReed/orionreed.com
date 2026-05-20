@@ -71,17 +71,6 @@ export type Resume<Y> =
  *  Optional return disposer runs on cancel. */
 export type Suspend<T = void> = (wake: Wake<T>) => void | (() => void);
 
-export interface AnimObserver {
-  spawn?(
-    id: number,
-    parentId: number | undefined,
-    clock: number,
-    gen: Animator<any>,
-  ): void;
-  complete?(id: number, clock: number): void;
-  cancel?(id: number, clock: number): void;
-}
-
 export type Detach = { readonly [DETACH_KEY]: Animator };
 
 /** Spawn `g` at engine-root, outliving the yielding parent. */
@@ -135,7 +124,6 @@ class Active {
   /** Cancel-during-advance defers gen.return() to the finally. */
   busy = false;
   pendingReturn = false;
-  observeId = 0;
   parent: Active | null = null;
   constructor(readonly gen: Animator<any>) {}
 }
@@ -143,12 +131,10 @@ class Active {
 export class Anim {
   protected actives: Active[] = [];
   private deads = 0;
-  private nextObserveId = 0;
   /** Bumped each step(); invalidates per-Active cumScale cache. */
   private stepN = 0;
   private stepListeners: Set<(dt: number) => void> | null = null;
 
-  observer: AnimObserver | undefined = undefined;
   onError: (e: unknown) => void = (e) => {
     console.error("minim:", e);
   };
@@ -274,15 +260,6 @@ export class Anim {
       a.inScaledSubtree = parent?.inScaledSubtree === true;
     }
     this.actives.push(a);
-    if (this.observer) {
-      a.observeId = ++this.nextObserveId;
-      this.observer.spawn?.(
-        a.observeId,
-        parent?.observeId || undefined,
-        this.#clock,
-        gen,
-      );
-    }
     this.advance(a, undefined, false);
     return a;
   }
@@ -291,7 +268,6 @@ export class Anim {
     if (a.wakeAt === DEAD) return;
     a.wakeAt = DEAD;
     this.deads++;
-    this.observer?.cancel?.(a.observeId, this.#clock);
     const c = a.cleanup;
     a.cleanup = null;
     a.onSettle = null;
@@ -316,7 +292,6 @@ export class Anim {
     if (a.wakeAt === DEAD) return;
     a.wakeAt = DEAD;
     this.deads++;
-    if (!errored) this.observer?.complete?.(a.observeId, this.#clock);
     const cb = a.onSettle;
     a.onSettle = null;
     if (cb) cb(errored ? undefined : value, errored ? error : undefined);

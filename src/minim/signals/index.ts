@@ -9,6 +9,7 @@ export {
   untracked,
   value,
   isSignal,
+  setSignalWriteHook,
   type Lens,
   type Read,
   type Val,

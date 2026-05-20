@@ -585,52 +585,6 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "anim.observer: emits spawn / complete / cancel events",
-    run: (assert) => {
-      const a = new Anim();
-      type Ev = { type: "spawn" | "complete" | "cancel"; id: number };
-      const events: Ev[] = [];
-      a.observer = {
-        spawn: (id: number) => events.push({ type: "spawn", id }),
-        complete: (id: number) => events.push({ type: "complete", id }),
-        cancel: (id: number) => events.push({ type: "cancel", id }),
-      };
-      const handle = a.start(function* () {
-        yield 0.1;
-      });
-      a.step(0);
-      assert(events.length === 1 && events[0].type === "spawn", `spawn`);
-      const id = events[0].id;
-      handle();
-      const cancelled = events.find((e) => e.type === "cancel");
-      assert(cancelled?.id === id, `cancel event should reference same id`);
-      a.observer = undefined;
-      a.stop();
-    },
-  },
-  {
-    name: "anim.observer: zero events fire after slot is cleared",
-    run: (assert) => {
-      const a = new Anim();
-      let count = 0;
-      a.observer = {
-        spawn: () => count++,
-      };
-      a.start(function* () {
-        yield;
-      });
-      a.step(0);
-      assert(count === 1, `pre-stop spawn should be observed`);
-      a.observer = undefined;
-      a.start(function* () {
-        yield;
-      });
-      a.step(0);
-      assert(count === 1, `no events after slot cleared (got ${count})`);
-      a.stop();
-    },
-  },
-  {
     name: "detach: spawns at root, parent resumes immediately",
     run: (assert) => {
       const a = new Anim();

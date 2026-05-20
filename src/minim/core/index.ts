@@ -7,7 +7,6 @@ export {
   isGen,
   scaled,
   type Animator,
-  type AnimObserver,
   type Cut,
   type Detach,
   type Resume,

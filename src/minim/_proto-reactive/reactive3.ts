@@ -1,9 +1,12 @@
-// Reactive engine. Signal (writable) → Computed (readonly view) →
-// Lens (Computed with a setter). One runtime class backs both
-// Computed and Lens; the split is type-level only.
-// Algorithm is alien-signals; trait dispatch via `./traits`.
+// Reactive v3 — try splitting the value getter into two methods,
+// dispatched by a tiny wrapper. V8 may inline the small wrapper and
+// then specialize each call site to one of the two methods.
+//
+// This is the same prototype-based approach as reactive.ts but with
+// extracted helpers, in case V8's inliner handles small wrappers
+// better than one large function with internal branches.
 
-import { EQUALS, type Equals } from "./traits";
+import { EQUALS, type Equals } from "../signals/traits";
 
 interface ReactiveNode {
   deps?: Link;
@@ -15,7 +18,6 @@ interface ReactiveNode {
   _notify(): void;
   _unwatched(): void;
 }
-
 interface Link {
   version: number;
   dep: ReactiveNode;
@@ -25,53 +27,23 @@ interface Link {
   prevDep: Link | undefined;
   nextDep: Link | undefined;
 }
-
 interface Stack<T> { value: T; prev: Stack<T> | undefined }
 
-// Flags match alien-signals v2. Effects are top-level by design — no
-// implicit parent-child linkage; lifetime owned by the returned disposer.
 const F = {
-  None: 0,
-  Mutable: 1,
-  Watching: 2,
-  RecursedCheck: 4,
-  Recursed: 8,
-  Dirty: 16,
-  Pending: 32,
+  None: 0, Mutable: 1, Watching: 2, RecursedCheck: 4,
+  Recursed: 8, Dirty: 16, Pending: 32,
 } as const;
 
-const noop = () => {};
-
-let cycle = 0;
-let runDepth = 0;
-let batchDepth = 0;
-let notifyIndex = 0;
-let queuedLength = 0;
+let cycle = 0, runDepth = 0, batchDepth = 0, notifyIndex = 0, queuedLength = 0;
 let activeSub: ReactiveNode | undefined;
-const queued: (Effect | undefined)[] = [];
-
-/** Optional write observer; fires inside `Signal.set value` only when the
- *  value actually changed. Used by `assert/record` for write attribution.
- *  One slot, last-writer-wins; assert installs/uninstalls on record start/stop. */
-let writeHook: ((sig: Signal<unknown>) => void) | undefined;
-export function setSignalWriteHook(
-  fn: ((sig: Signal<unknown>) => void) | undefined,
-): () => void {
-  const prev = writeHook;
-  writeHook = fn;
-  return () => {
-    writeHook = prev;
-  };
-}
+const queued: (EffectImpl | undefined)[] = [];
 
 function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
   const prevDep = sub.depsTail;
   if (prevDep !== undefined && prevDep.dep === dep) return;
   const nextDep = prevDep !== undefined ? prevDep.nextDep : sub.deps;
   if (nextDep !== undefined && nextDep.dep === dep) {
-    nextDep.version = version;
-    sub.depsTail = nextDep;
-    return;
+    nextDep.version = version; sub.depsTail = nextDep; return;
   }
   const prevSub = dep.subsTail;
   if (prevSub !== undefined && prevSub.version === version && prevSub.sub === sub) return;
@@ -84,7 +56,7 @@ function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
   else sub.deps = newLink;
   if (prevSub !== undefined) prevSub.nextSub = newLink;
   else dep.subs = newLink;
-  if (isFirstSub && dep instanceof Signal) {
+  if (isFirstSub && dep instanceof Reactive) {
     const hook = dep._watched;
     if (hook !== undefined) hook.call(dep);
   }
@@ -113,16 +85,12 @@ function propagate(start: Link, innerWrite: boolean): void {
     if (!(flags & (F.RecursedCheck | F.Recursed | F.Dirty | F.Pending))) {
       sub.flags = flags | F.Pending;
       if (innerWrite) sub.flags |= F.Recursed;
-    } else if (!(flags & (F.RecursedCheck | F.Recursed))) {
-      flags = F.None;
-    } else if (!(flags & F.RecursedCheck)) {
-      sub.flags = (flags & ~F.Recursed) | F.Pending;
-    } else if (!(flags & (F.Dirty | F.Pending)) && isValidLink(l!, sub)) {
+    } else if (!(flags & (F.RecursedCheck | F.Recursed))) flags = F.None;
+    else if (!(flags & F.RecursedCheck)) sub.flags = (flags & ~F.Recursed) | F.Pending;
+    else if (!(flags & (F.Dirty | F.Pending)) && isValidLink(l!, sub)) {
       sub.flags = flags | (F.Recursed | F.Pending);
       flags &= F.Mutable;
-    } else {
-      flags = F.None;
-    }
+    } else flags = F.None;
     if (flags & F.Watching) sub._notify();
     if (flags & F.Mutable) {
       const subSubs: Link | undefined = sub.subs;
@@ -171,9 +139,7 @@ function checkDirty(startLink: Link, startSub: ReactiveNode): boolean {
           sub = l.sub; continue;
         }
         dirty = false;
-      } else {
-        sub.flags &= ~F.Pending;
-      }
+      } else sub.flags &= ~F.Pending;
       sub = l.sub;
       const nextDep = l.nextDep;
       if (nextDep !== undefined) { l = nextDep; continue top; }
@@ -199,33 +165,17 @@ function isValidLink(checkLink: Link, sub: ReactiveNode): boolean {
   return false;
 }
 
-// Re-entrancy guard: effects that write to signals during their run
-// trigger another `flush()` call via `Signal.set value`. The outer
-// loop here is already designed to drain the queue including entries
-// appended mid-run, so the recursive call is redundant — and at scale
-// (hundreds of cascading bind-effects on field lenses) the recursion
-// depth blows V8's call stack. Guarding turns O(N) stack growth into
-// O(1) regardless of fan-out. See `_proto-reactive/repro-flush-overflow.ts`.
-let flushing = false;
-
 function flush(): void {
-  if (flushing) return; // outer drain will pick up newly queued entries
-  flushing = true;
   try {
     while (notifyIndex < queuedLength) {
-      const e = queued[notifyIndex]!;
-      queued[notifyIndex++] = undefined;
-      e._run();
+      const e = queued[notifyIndex]!; queued[notifyIndex++] = undefined; e._run();
     }
   } finally {
     while (notifyIndex < queuedLength) {
-      const e = queued[notifyIndex]!;
-      queued[notifyIndex++] = undefined;
+      const e = queued[notifyIndex]!; queued[notifyIndex++] = undefined;
       e.flags |= F.Watching | F.Recursed;
     }
-    notifyIndex = 0;
-    queuedLength = 0;
-    flushing = false;
+    notifyIndex = 0; queuedLength = 0;
   }
 }
 
@@ -240,35 +190,27 @@ function disposeAllDepsInReverse(sub: ReactiveNode): void {
   while (l !== undefined) { const prev = l.prevDep; unlink(l, sub); l = prev; }
 }
 
-/** Plain T, thunk `() => T`, or any read-shape (Signal/Computed/…). */
 export type Val<T> = T | (() => T) | Read<T>;
+export interface Read<out T> { readonly value: T; peek(): T; }
 
-/** Covariant read-only signal surface (parameter-site Val arm). */
-export interface Read<out T> {
-  readonly value: T;
-  peek(): T;
-}
-
-/** Unwrap to T; reactive forms auto-track inside an effect/computed. */
 export function value<T>(v: Val<T>): T {
-  if (v instanceof Signal) return v.value;
+  if (v instanceof Reactive) return v.value;
   if (typeof v === "function") return (v as () => T)();
   return v as T;
 }
 
-export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signal;
+export const isSignal = (v: unknown): v is Reactive<unknown> => v instanceof Reactive;
 
-export interface SignalOptions<T = unknown> {
-  /** First subscriber attached. */
+export interface ReactiveOptions<T = unknown> {
   watched?: () => void;
-  /** Last subscriber detached. */
   unwatched?: () => void;
-  /** Per-instance equality; shadows class `[EQUALS]`. */
   equals?: Equals<T>;
 }
 
-/** Writable signal; bind reactively via `.bind(source)`. */
-export class Signal<T = unknown> implements ReactiveNode {
+/** v3: prototype-based methods, internal branch in `value` getter
+ *  delegates to per-mode helper methods. Hypothesis: V8 inlines the
+ *  thin dispatcher and specializes the body at each call site. */
+export class Reactive<T = unknown> implements ReactiveNode {
   subs: Link | undefined = undefined;
   subsTail: Link | undefined = undefined;
   deps: Link | undefined = undefined;
@@ -276,23 +218,37 @@ export class Signal<T = unknown> implements ReactiveNode {
   flags: number = F.Mutable;
   currentValue: T;
   pendingValue: T;
+  cachedValue: T | undefined = undefined;
+  getter: (() => T) | undefined = undefined;
+  setter: ((v: T) => void) | undefined = undefined;
   _watched?: () => void;
   _unwatchedHook?: () => void;
-  /** Disposer for the most recent `.bind(reactive)`. */
   protected _stopBinding?: () => void;
 
-  constructor(initial: T, opts?: SignalOptions<T>) {
+  constructor(initial: T, opts?: ReactiveOptions<T>) {
+    this.currentValue = initial;
+    this.pendingValue = initial;
     if (opts) {
       if (opts.watched) this._watched = opts.watched;
       if (opts.unwatched) this._unwatchedHook = opts.unwatched;
       if (opts.equals) (this as unknown as { [EQUALS]?: Equals<T> })[EQUALS] = opts.equals;
     }
-    this.currentValue = initial;
-    this.pendingValue = initial;
   }
 
-  /** Read with tracking. */
+  /** Tiny dispatcher — V8 should inline this and specialize the
+   *  underlying method per call site (monomorphic). */
   get value(): T {
+    return this.getter !== undefined ? this._readComputed() : this._readSignal();
+  }
+
+  set value(next: T) {
+    if (this.setter !== undefined) { this.setter(next); return; }
+    if (this.getter !== undefined) throw new TypeError("Cannot write to a Computed");
+    this._writeSignal(next);
+  }
+
+  /** @internal */
+  _readSignal(): T {
     if (this.flags & F.Dirty) {
       this.flags = F.Mutable;
       if (this.currentValue !== (this.currentValue = this.pendingValue)) {
@@ -304,91 +260,9 @@ export class Signal<T = unknown> implements ReactiveNode {
     return this.currentValue;
   }
 
-  /** Plain write. */
-  set value(next: T) {
-    const prev = this.pendingValue;
-    this.pendingValue = next;
-    const equals = this[EQUALS];
-    const same = equals ? equals(prev, next) : prev === next;
-    if (!same) {
-      this.flags = F.Mutable | F.Dirty;
-      if (writeHook !== undefined) writeHook(this as Signal<unknown>);
-      const subs = this.subs;
-      if (subs !== undefined) {
-        propagate(subs, !!runDepth);
-        if (!batchDepth) flush();
-      }
-    }
-  }
-
-  /** Untracked read; honors Dirty flag. */
-  peek(): T {
-    if (this.flags & F.Dirty) {
-      this.flags = F.Mutable;
-      if (this.currentValue !== (this.currentValue = this.pendingValue)) {
-        // Subscribers were marked Pending by `set value`'s propagate
-        // but never told the upstream actually changed. Convert their
-        // Pending → Dirty so subsequent reads re-evaluate. Without this,
-        // a peek() between write and downstream read silently strands
-        // computeds at their stale cached values.
-        const subs = this.subs;
-        if (subs !== undefined) shallowPropagate(subs);
-      }
-    }
-    return this.currentValue;
-  }
-
-  /** One-shot write of `value(v)`. Severs any prior `.bind(...)`. Chainable. */
-  set(v: Val<T>): this {
-    if (this._stopBinding) { this._stopBinding(); this._stopBinding = undefined; }
-    this.value = value(v);
-    return this;
-  }
-
-  /** Bind to a `Val<T>`; replaces any prior binding. Returns disposer
-   *  (no-op for plain T). */
-  bind(source: Val<T>): () => void {
-    if (this._stopBinding) { this._stopBinding(); this._stopBinding = undefined; }
-    if (source instanceof Signal || typeof source === "function") {
-      const stop = effect(() => { this.value = value(source); });
-      this._stopBinding = stop;
-      return stop;
-    }
-    this.value = source as T;
-    return noop;
-  }
-
-  _update(): boolean {
-    this.flags = F.Mutable;
-    return this.currentValue !== (this.currentValue = this.pendingValue);
-  }
-  _notify(): void {}
-  _unwatched(): void {
-    if (this._unwatchedHook !== undefined) this._unwatchedHook();
-  }
-
-  /** Footgun guard: coercion throws instead of silently using `[object Object]`. */
-  [Symbol.toPrimitive](hint: string): never {
-    throw new TypeError(`Signal cannot be coerced to ${hint} — use \`.value\``);
-  }
-}
-
-class ComputedImpl<T = unknown> extends Signal<T> {
-  cachedValue: T | undefined = undefined;
-  getter: () => T;
-  /** Lens-mode iff set; otherwise writes throw. */
-  setter?: (v: T) => void;
-
-  constructor(getter: () => T, setter?: (v: T) => void) {
-    super(undefined as T);
-    this.getter = getter;
-    if (setter !== undefined) this.setter = setter;
-    this.flags = 0;
-  }
-
-  override get value(): T {
+  /** @internal */
+  _readComputed(): T {
     const flags = this.flags;
-    // RecursedCheck set only during own sync eval → self-read = cycle.
     if (flags & F.RecursedCheck) {
       throw new RangeError(`Cyclic computed: ${(this.constructor as { name?: string }).name ?? "?"} read its own value`);
     }
@@ -407,11 +281,10 @@ class ComputedImpl<T = unknown> extends Signal<T> {
       activeSub = this;
       let threw = true;
       try {
-        this.cachedValue = this.getter();
+        this.cachedValue = this.getter!();
         threw = false;
       } finally {
         activeSub = prev;
-        // Throw → stay dirty so next read retries.
         this.flags = threw ? F.Mutable | F.Dirty : (this.flags & ~F.RecursedCheck);
       }
     }
@@ -419,64 +292,97 @@ class ComputedImpl<T = unknown> extends Signal<T> {
     return this.cachedValue!;
   }
 
-  override set value(next: T) {
-    if (this.setter !== undefined) this.setter(next);
-    else throw new TypeError("Cannot write to a Computed");
-  }
-
-  override peek(): T {
-    const prev = activeSub;
-    activeSub = undefined;
-    try { return this.value; }
-    finally { activeSub = prev; }
-  }
-
-  override _update(): boolean {
-    this.depsTail = undefined;
-    this.flags = F.Mutable | F.RecursedCheck;
-    const prev = activeSub;
-    activeSub = this;
-    let threw = true;
-    try {
-      ++cycle;
-      const old = this.cachedValue;
-      const next = this.cachedValue = this.getter();
-      threw = false;
-      const eq = this[EQUALS];
-      return eq ? !eq(old as T, next) : old !== next;
-    } finally {
-      activeSub = prev;
-      this.flags = threw ? F.Mutable | F.Dirty : (this.flags & ~F.RecursedCheck);
-      purgeDeps(this);
+  /** @internal */
+  _writeSignal(next: T): void {
+    const prev = this.pendingValue;
+    this.pendingValue = next;
+    const equals = (this as unknown as { [EQUALS]?: Equals<T> })[EQUALS];
+    const same = equals ? equals(prev, next) : prev === next;
+    if (!same) {
+      this.flags = F.Mutable | F.Dirty;
+      const subs = this.subs;
+      if (subs !== undefined) {
+        propagate(subs, !!runDepth);
+        if (!batchDepth) flush();
+      }
     }
   }
 
-  override _unwatched(): void {
-    if (this.depsTail !== undefined) {
+  peek(): T {
+    if (this.getter !== undefined) {
+      const prev = activeSub;
+      activeSub = undefined;
+      try { return this._readComputed(); }
+      finally { activeSub = prev; }
+    }
+    if (this.flags & F.Dirty) {
+      this.flags = F.Mutable;
+      if (this.currentValue !== (this.currentValue = this.pendingValue)) {
+        const subs = this.subs;
+        if (subs !== undefined) shallowPropagate(subs);
+      }
+    }
+    return this.currentValue;
+  }
+
+  set(v: Val<T>): this {
+    if (this._stopBinding) { this._stopBinding(); this._stopBinding = undefined; }
+    this.value = value(v);
+    return this;
+  }
+
+  bind(source: Val<T>): () => void {
+    if (this._stopBinding) { this._stopBinding(); this._stopBinding = undefined; }
+    if (source instanceof Reactive || typeof source === "function") {
+      const stop = effect(() => { this.value = value(source); });
+      this._stopBinding = stop;
+      return stop;
+    }
+    this.value = source as T;
+    return () => {};
+  }
+
+  _update(): boolean {
+    if (this.getter !== undefined) {
+      this.depsTail = undefined;
+      this.flags = F.Mutable | F.RecursedCheck;
+      const prev = activeSub;
+      activeSub = this;
+      let threw = true;
+      try {
+        ++cycle;
+        const old = this.cachedValue;
+        const next = this.cachedValue = this.getter();
+        threw = false;
+        const eq = (this as unknown as { [EQUALS]?: Equals<T> })[EQUALS];
+        return eq ? !eq(old as T, next) : old !== next;
+      } finally {
+        activeSub = prev;
+        this.flags = threw ? F.Mutable | F.Dirty : (this.flags & ~F.RecursedCheck);
+        purgeDeps(this);
+      }
+    }
+    this.flags = F.Mutable;
+    return this.currentValue !== (this.currentValue = this.pendingValue);
+  }
+
+  _notify(): void {}
+
+  _unwatched(): void {
+    if (this.getter !== undefined && this.depsTail !== undefined) {
       this.flags = F.Mutable | F.Dirty;
       disposeAllDepsInReverse(this);
+      return;
     }
+    if (this._unwatchedHook !== undefined) this._unwatchedHook();
+  }
+
+  [Symbol.toPrimitive](hint: string): never {
+    throw new TypeError(`Reactive cannot be coerced to ${hint} — use \`.value\``);
   }
 }
 
-/** Read-only computed signal. Writing to `.value` is a type error;
- *  use `lens()` / `field()` for writable variants. */
-export type Computed<T = unknown> = Omit<ComputedImpl<T>, "value"> & {
-  readonly value: T;
-};
-
-/** Writable computed view — a `Computed` backed by a setter. */
-export type Lens<T = unknown> = ComputedImpl<T>;
-
-/** Runtime class. Use for `instanceof Computed` and direct construction;
- *  passing a `setter` returns a `Lens<T>`, otherwise a `Computed<T>`. */
-export const Computed = ComputedImpl as {
-  new <T>(getter: () => T): Computed<T>;
-  new <T>(getter: () => T, setter: (v: T) => void): Lens<T>;
-  readonly prototype: ComputedImpl;
-};
-
-class Effect implements ReactiveNode {
+class EffectImpl implements ReactiveNode {
   subs: Link | undefined = undefined;
   subsTail: Link | undefined = undefined;
   deps: Link | undefined = undefined;
@@ -499,17 +405,15 @@ class Effect implements ReactiveNode {
       this.flags &= ~F.RecursedCheck;
     }
   }
-
   _update(): boolean { this.flags = F.Mutable; return true; }
-
   _notify(): void {
-    let e: Effect = this;
+    let e: EffectImpl = this;
     let insertIndex = queuedLength;
     const firstInsertedIndex = insertIndex;
     do {
       queued[insertIndex++] = e;
       e.flags &= ~F.Watching;
-      const next = e.subs?.sub as Effect | undefined;
+      const next = e.subs?.sub as EffectImpl | undefined;
       if (next === undefined || !(next.flags & F.Watching)) break;
       e = next;
     } while (true);
@@ -521,7 +425,6 @@ class Effect implements ReactiveNode {
       queued[idx] = left;
     }
   }
-
   _unwatched(): void {
     this.flags = F.None;
     disposeAllDepsInReverse(this);
@@ -529,7 +432,6 @@ class Effect implements ReactiveNode {
     if (sub !== undefined) unlink(sub);
     if (this.cleanup) this._runCleanup();
   }
-
   _run(): void {
     const flags = this.flags;
     if (flags & F.Dirty || (flags & F.Pending && checkDirty(this.deps!, this))) {
@@ -548,11 +450,8 @@ class Effect implements ReactiveNode {
         this.flags &= ~F.RecursedCheck;
         purgeDeps(this);
       }
-    } else if (this.deps !== undefined) {
-      this.flags = F.Watching;
-    }
+    } else if (this.deps !== undefined) this.flags = F.Watching;
   }
-
   _runCleanup(): void {
     const c = this.cleanup!;
     this.cleanup = undefined;
@@ -562,13 +461,24 @@ class Effect implements ReactiveNode {
   }
 }
 
-export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> {
-  return new Signal(initial, opts);
+export function signal<T>(initial: T, opts?: ReactiveOptions<T>): Reactive<T> {
+  return new Reactive(initial, opts);
 }
-export function computed<T>(getter: () => T): Computed<T> { return new ComputedImpl(getter); }
-export function lens<T>(getter: () => T, setter: (v: T) => void): Lens<T> { return new ComputedImpl(getter, setter); }
+export function computed<T>(getter: () => T): Reactive<T> {
+  const r = new Reactive<T>(undefined as T);
+  r.getter = getter;
+  r.flags = 0;
+  return r;
+}
+export function lens<T>(getter: () => T, setter: (v: T) => void): Reactive<T> {
+  const r = new Reactive<T>(undefined as T);
+  r.getter = getter;
+  r.setter = setter;
+  r.flags = 0;
+  return r;
+}
 export function effect(fn: () => void | (() => void)): () => void {
-  const e = new Effect(fn);
+  const e = new EffectImpl(fn);
   return () => e._unwatched();
 }
 export function batch<R>(fn: () => R): R {
@@ -582,4 +492,14 @@ export function untracked<R>(fn: () => R): R {
   try { return fn(); }
   finally { activeSub = prev; }
 }
-
+export function derived<T, C extends Reactive<T>>(
+  Cls: new (...args: never[]) => C,
+  fn: () => T,
+  setter?: (v: T) => void,
+): C {
+  const instance = new Cls();
+  instance.getter = fn;
+  if (setter !== undefined) instance.setter = setter;
+  instance.flags = 0;
+  return instance;
+}
