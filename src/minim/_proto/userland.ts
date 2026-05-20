@@ -19,16 +19,16 @@ import {
  *  `rate() === 0` freezes the subtree (no localClock advance, no wake). */
 export function scaled<R>(
   rate: () => number,
-  target: Animator<R> | Transduced,
-): Transduced {
+  target: Animator<R> | Transduced<R>,
+): Transduced<R> {
   return transduce({ onTick: (dt) => dt * rate() }, target);
 }
 
 /** Pause the subtree while `pred()` is true. Equivalent to scaled(0|1). */
 export function pauseWhen<R>(
   pred: () => boolean,
-  target: Animator<R> | Transduced,
-): Transduced {
+  target: Animator<R> | Transduced<R>,
+): Transduced<R> {
   return scaled(() => (pred() ? 0 : 1), target);
 }
 
@@ -36,15 +36,15 @@ export function pauseWhen<R>(
 export function slowmoWhen<R>(
   pred: () => boolean,
   fraction: number,
-  target: Animator<R> | Transduced,
-): Transduced {
+  target: Animator<R> | Transduced<R>,
+): Transduced<R> {
   return scaled(() => (pred() ? fraction : 1), target);
 }
 
 /** Pause subtree when the document is hidden (tab backgrounded / minimized). */
 export function pauseOnHidden<R>(
-  target: Animator<R> | Transduced,
-): Transduced {
+  target: Animator<R> | Transduced<R>,
+): Transduced<R> {
   return pauseWhen(
     () => typeof document !== "undefined" && document.hidden,
     target,
@@ -56,9 +56,9 @@ export function pauseOnHidden<R>(
 /** Log every yield and wake. Useful for debugging; pay only for what's traced. */
 export function trace<R>(
   tag: string,
-  target: Animator<R> | Transduced,
+  target: Animator<R> | Transduced<R>,
   log: (msg: string) => void = console.log,
-): Transduced {
+): Transduced<R> {
   const trans: Transducer = {
     onYield: (v) => {
       log(`[${tag}] yield ${describeYield(v)}`);

@@ -36,7 +36,7 @@ export type Yieldable =
   | Animator<any>
   | readonly Yieldable[]
   | Suspend<any>
-  | Transduced;
+  | Transduced<any>;
 
 export type Animator<R = void> = Generator<Yieldable, R, Tick>;
 
@@ -55,8 +55,8 @@ export type Resume<Y> =
     ? R
     : Y extends Suspend<infer R>
       ? R
-      : Y extends Transduced
-        ? unknown
+      : Y extends Transduced<infer R>
+        ? R
         : void;
 
 const isGen = (v: unknown): v is Animator =>
@@ -81,27 +81,29 @@ export interface Transducer {
 }
 
 /** Generator + transducer stack. The symbol is just a marker; the engine
- *  reads `gen`/`trans` directly. Outermost-first: engine walks
+ *  reads `gen`/`trans` directly. `R` is the wrapped gen's return type —
+ *  recoverable via `Resume<Transduced<R>>`. Outermost-first: engine walks
  *  innermost→outermost for `onTick` (descendants see scaled dt first);
  *  outermost→innermost for `onResume` (gen sees outermost last). */
-export interface Transduced {
+export interface Transduced<R = unknown> {
   readonly [TRANSDUCE_KEY]: true;
-  readonly gen: Animator<any>;
+  readonly gen: Animator<R>;
   readonly trans: readonly Transducer[];
 }
 
-const isTransduced = (v: unknown): v is Transduced =>
+const isTransduced = (v: unknown): v is Transduced<any> =>
   typeof v === "object" && v !== null && TRANSDUCE_KEY in (v as object);
 
-/** Stack `t` on top of `target`. Pushes onto the list — no eager fusion. */
-export function transduce(
+/** Stack `t` on top of `target`. Pushes onto the list — no eager fusion.
+ *  Preserves the wrapped gen's return type through composition. */
+export function transduce<R>(
   t: Transducer,
-  target: Animator<any> | Transduced,
-): Transduced {
+  target: Animator<R> | Transduced<R>,
+): Transduced<R> {
   if (isTransduced(target)) {
     return {
       [TRANSDUCE_KEY]: true,
-      gen: target.gen,
+      gen: target.gen as Animator<R>,
       trans: [t, ...target.trans],
     };
   }
@@ -131,6 +133,11 @@ class Active {
 export class Anim {
   protected actives: Active[] = [];
   private deads = 0;
+  /** Re-entry guard: true while `step()` is iterating. Calling `step()`
+   *  again from inside a transducer hook or a gen body throws. Other ops
+   *  (start, stop, cancel) remain legal from inside step — they only
+   *  mutate `actives`, which the loop handles via index + skip-checks. */
+  private stepping = false;
 
   onError: (e: unknown) => void = (e) => {
     console.error("minim:", e);
@@ -154,6 +161,18 @@ export class Anim {
   }
 
   step(dt: number): void {
+    if (this.stepping) {
+      throw new Error("minim: re-entrant step() is not supported");
+    }
+    this.stepping = true;
+    try {
+      this.stepInner(dt);
+    } finally {
+      this.stepping = false;
+    }
+  }
+
+  private stepInner(dt: number): void {
     if (dt > 0 && Number.isFinite(dt)) this.#clock += dt;
 
     const as = this.actives;
@@ -163,21 +182,18 @@ export class Anim {
       const a = as[i];
       if (!a || a.wakeAt === DEAD || a.wakeAt === PARKED) continue;
 
-      // Per-active time advance. Only consult transducers when engine
-      // actually advanced (dt > 0) — that way a zero-dt engine step still
-      // wakes READY actives. Inside the dt > 0 branch, subjDt === 0
-      // unambiguously means "transducer froze me" → skip the active.
+      // Per-active time advance. `onTick` always fires (even at dt=0) so
+      // observation-style transducers (trace, stats) see every step. The
+      // freeze guard only triggers when there was real time to consume
+      // (dt > 0) and the transducer chain ate it all (subjDt === 0).
       const trans = a.trans;
-      let subjDt = 0;
-      if (dt > 0) {
-        subjDt = dt;
-        for (let k = trans.length - 1; k >= 0; k--) {
-          const ot = trans[k].onTick;
-          if (ot) subjDt = ot(subjDt);
-        }
-        if (subjDt === 0) continue; // frozen by transducer
-        if (subjDt > 0) a.localClock += subjDt;
+      let subjDt = dt;
+      for (let k = trans.length - 1; k >= 0; k--) {
+        const ot = trans[k].onTick;
+        if (ot) subjDt = ot(subjDt);
       }
+      if (dt > 0 && subjDt === 0) continue; // frozen by transducer
+      if (subjDt > 0) a.localClock += subjDt;
 
       if (a.wakeAt <= a.localClock) {
         const saved = a.wakeAt;

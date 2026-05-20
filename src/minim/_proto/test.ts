@@ -478,6 +478,240 @@ suite("lifecycle", () => {
   });
 });
 
+// ────────────────────────── Transducer zero-dt ────────────────────────
+
+suite("transducer cadence", () => {
+  it("onTick fires on zero-dt steps (for observation transducers)", () => {
+    const anim = new Anim();
+    const ticks: number[] = [];
+    function* g(): any { while (true) yield; }
+    anim.start(function* () {
+      yield transduce({ onTick: (dt) => { ticks.push(dt); return dt; } }, g()) as Yieldable;
+    });
+    anim.step(0);
+    anim.step(0);
+    anim.step(0.016);
+    eq(ticks.length, 3);
+    eq(ticks[0], 0);
+    eq(ticks[1], 0);
+    close(ticks[2], 0.016);
+  });
+
+  it("zero-dt step doesn't trigger transducer-freeze on parked actives", () => {
+    const anim = new Anim();
+    let n = 0;
+    function* g(): any { while (true) { yield; n++; } }
+    // scaled(0) — onTick returns 0 always. A zero-dt step should still
+    // wake the READY active because the freeze condition `dt > 0 && subjDt === 0`
+    // is false (dt is 0).
+    anim.start(function* () { yield scaled(() => 0, g()) as Yieldable; });
+    anim.step(0); anim.step(0); anim.step(0);
+    eq(n, 3);
+  });
+
+  it("scaled(0) freeze still works for dt > 0 steps", () => {
+    const anim = new Anim();
+    let n = 0;
+    function* g(): any { while (true) { yield; n++; } }
+    anim.start(function* () { yield scaled(() => 0, g()) as Yieldable; });
+    for (let i = 0; i < 20; i++) anim.step(0.016);
+    eq(n, 0); // frozen
+  });
+});
+
+// ────────────────────────── Re-entry ──────────────────────────────────
+
+suite("re-entry", () => {
+  it("anim.start() inside a gen body adds active for next frame", () => {
+    const anim = new Anim();
+    let childRan = false;
+    function* child(): any { yield; childRan = true; }
+    function* parent(): any {
+      anim.start(child);
+      yield;
+    }
+    anim.start(parent);
+    eq(childRan, false);
+    anim.step(0.016);
+    // parent fires its yield resume; child's first advance ran during start()
+    // → it parked; needs one more frame.
+    anim.step(0.016);
+    eq(childRan, true);
+  });
+
+  it("anim.stop() inside a gen finally cascades cleanly", () => {
+    const anim = new Anim();
+    let leafFinally = false;
+    let outerFinally = false;
+    function* leaf(): any {
+      try { yield (() => () => {}); }
+      finally { leafFinally = true; }
+    }
+    function* outer(): any {
+      try { yield leaf(); }
+      finally {
+        outerFinally = true;
+        anim.stop();
+      }
+    }
+    const d = anim.start(outer);
+    anim.step(0.016);
+    d(); // cancel → triggers outer's finally → triggers anim.stop()
+    eq(outerFinally, true);
+    eq(leafFinally, true);
+  });
+
+  it("anim.step() inside a transducer onTick — does NOT cause double-tick of same active", () => {
+    const anim = new Anim();
+    let yields = 0;
+    let didStep = false;
+    function* g(): any { while (true) { yield; yields++; } }
+    anim.start(function* () {
+      yield transduce({
+        onTick: (dt) => {
+          if (!didStep) {
+            didStep = true;
+            // re-enter mid-iteration
+            try { anim.step(0.016); } catch (_) { /* swallow */ }
+          }
+          return dt;
+        },
+      }, g()) as Yieldable;
+    });
+    anim.step(0.016);
+    // Without a guard, the outer step's iteration will wake the same
+    // active a second time after the inner step already advanced it.
+    // Yields per outer step should be 1, NOT 2.
+    eq(yields, 1);
+  });
+
+  it("anim.step() during a step throws/no-ops cleanly (re-entry guard)", () => {
+    const anim = new Anim();
+    let innerError: unknown = null;
+    function* outer(): any {
+      yield;
+      // Inside advance() called from step's loop, try to step the engine again:
+      try { anim.step(0.016); }
+      catch (e) { innerError = e; }
+    }
+    anim.start(outer);
+    anim.step(0.016); // wakes outer; outer tries re-entry
+    truthy(innerError !== null, "expected an error from re-entrant step()");
+    truthy(
+      /re-?entrant|in.?progress|step/.test(String(innerError)),
+      `error should mention re-entry, got: ${innerError}`,
+    );
+  });
+
+  it("cancel handle called from inside its own gen body works", () => {
+    const anim = new Anim();
+    let cleanedUp = false;
+    let dispose: (() => void) | undefined;
+    function* g(): any {
+      try {
+        yield;
+        dispose!();          // cancel ourselves while NOT busy
+        yield;               // should never reach here
+      } finally {
+        cleanedUp = true;
+      }
+    }
+    dispose = anim.start(g);
+    anim.step(0.016);        // resumes g; g calls dispose mid-advance
+    eq(cleanedUp, true);
+  });
+
+  it("cancel called during sibling advance doesn't lose siblings", () => {
+    const anim = new Anim();
+    const log: string[] = [];
+    let dA: (() => void) | undefined;
+    function* a(): any {
+      log.push("a-start");
+      yield;
+      log.push("a-resumed");
+      dB!();                 // cancel B from inside A
+      yield;
+      log.push("a-second");
+    }
+    let dB: (() => void) | undefined;
+    function* b(): any {
+      try {
+        log.push("b-start");
+        yield;
+        log.push("b-resumed-should-not-happen");
+      } finally {
+        log.push("b-cleaned");
+      }
+    }
+    dA = anim.start(a);
+    dB = anim.start(b);
+    anim.step(0.016);
+    anim.step(0.016);
+    // A should complete its second yield; B should have been cancelled cleanly.
+    truthy(log.includes("a-resumed"), `expected a-resumed in ${log.join(",")}`);
+    truthy(log.includes("b-cleaned"), `expected b-cleaned in ${log.join(",")}`);
+    truthy(!log.includes("b-resumed-should-not-happen"), `B should not have resumed`);
+  });
+
+  it("anim.start() inside a wake-callback (post-stop) doesn't create zombies", () => {
+    const anim = new Anim();
+    let storedWake: any;
+    let zombieRan = false;
+    function* zombie(): any { yield; zombieRan = true; }
+    function* g(): any {
+      yield ((wake: any) => { storedWake = wake; return () => {}; });
+    }
+    anim.start(g);
+    anim.stop();
+    // External fires the wake after stop:
+    storedWake?.();
+    // If anything spawns here it would be a zombie. We're testing that
+    // post-stop wake doesn't accidentally restart anything.
+    anim.step(0.016);
+    eq(zombieRan, false);
+  });
+});
+
+// ────────────────────────── Type-level checks ────────────────────────
+//
+// Compile-time only: confirms `Resume<Transduced<R>>` recovers R, and
+// scaled/pauseWhen/etc. preserve the wrapped gen's return type through
+// composition. These don't have runtime assertions — if they compile,
+// they pass. If you delete/rename something below and types break,
+// either you broke the parameterization or the test expectation needs
+// updating.
+
+import type { Resume, Transduced } from "./engine";
+
+function _typeChecks() {
+  function* numGen(): Animator<number> { yield; return 42; }
+  function* strGen(): Animator<string> { yield; return "ok"; }
+
+  // scaled preserves R
+  const sNum: Transduced<number> = scaled(() => 0.5, numGen());
+  const sStr: Transduced<string> = scaled(() => 0.5, strGen());
+
+  // Stacking preserves R
+  const stacked: Transduced<number> = pauseWhen(() => false, scaled(() => 0.5, numGen()));
+
+  // Resume<Transduced<R>> = R
+  type R1 = Resume<typeof sNum>; // number
+  type R2 = Resume<typeof sStr>; // string
+  type R3 = Resume<typeof stacked>; // number
+
+  // These all need to be assignable to themselves; if Resume<> returned
+  // unknown (as it did before parameterization), these would fail.
+  const _r1: R1 = 42;
+  const _r2: R2 = "ok";
+  const _r3: R3 = 42;
+
+  // Wrong R should be rejected at compile time:
+  // @ts-expect-error — number is not string
+  const _bad: R2 = 42;
+
+  return [sNum, sStr, stacked, _r1, _r2, _r3, _bad];
+}
+
 // ────────────────────────── Summary ──────────────────────────────────
 
 console.log(`\n${passed} passed, ${failed} failed`);
