@@ -29,9 +29,7 @@
 //     apply / push time via `valFn`. Re-reading is a function call;
 //     reactive args track correctly.
 
-import {
-  Signal, lens, type Val, value, valFn, type Lens,
-} from "./signal";
+import { Signal, lens, type Val, value, valFn, type Lens } from "./signal";
 
 /** A bidirectional operation on V with extra args. */
 export interface Op<V, Args extends readonly unknown[]> {
@@ -49,23 +47,33 @@ export function applyOp1<V, A, C extends new (...args: never[]) => Signal<V>>(
   const get = valFn(arg);
   return lens(
     () => op.fwd(parent.value, get()),
-    (n) => { parent.value = op.bwd(n, get()); },
+    (n) => {
+      parent.value = op.bwd(n, get());
+    },
     Cls,
   ) as InstanceType<C>;
 }
 
 /** Apply a binary Op as a typed Lens on `parent`. */
-export function applyOp2<V, A1, A2, C extends new (...args: never[]) => Signal<V>>(
+export function applyOp2<
+  V,
+  A1,
+  A2,
+  C extends new (...args: never[]) => Signal<V>,
+>(
   parent: Signal<V>,
   op: Op<V, [A1, A2]>,
-  arg1: Val<A1>, arg2: Val<A2>,
+  arg1: Val<A1>,
+  arg2: Val<A2>,
   Cls: C,
 ): InstanceType<C> {
   const get1 = valFn(arg1);
   const get2 = valFn(arg2);
   return lens(
     () => op.fwd(parent.value, get1(), get2()),
-    (n) => { parent.value = op.bwd(n, get1(), get2()); },
+    (n) => {
+      parent.value = op.bwd(n, get1(), get2());
+    },
     Cls,
   ) as InstanceType<C>;
 }
@@ -79,7 +87,9 @@ export function applyOp0<V, C extends new (...args: never[]) => Signal<V>>(
 ): InstanceType<C> {
   return lens(
     () => op.fwd(parent.value),
-    (n) => { parent.value = op.bwd(n); },
+    (n) => {
+      parent.value = op.bwd(n);
+    },
     Cls,
   ) as InstanceType<C>;
 }
@@ -108,7 +118,11 @@ export class Chain<V> {
     return this;
   }
 
-  protected push2<A1, A2>(op: Op<V, [A1, A2]>, arg1: Val<A1>, arg2: Val<A2>): this {
+  protected push2<A1, A2>(
+    op: Op<V, [A1, A2]>,
+    arg1: Val<A1>,
+    arg2: Val<A2>,
+  ): this {
     const get1 = valFn(arg1);
     const get2 = valFn(arg2);
     this.fwds.push((v) => op.fwd(v, get1(), get2()));
@@ -139,6 +153,3 @@ export class Chain<V> {
     ) as InstanceType<C>;
   }
 }
-
-// Re-export Lens so consumers don't need to reach into signal.ts.
-export type { Lens };

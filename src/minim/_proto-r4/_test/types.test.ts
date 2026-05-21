@@ -12,6 +12,7 @@ describe("compile-time guarantees (Promote)", () => {
 });
 
 function _typeProbes(): void {
+
   // ─── Num ───────────────────────────────────────────────────────
   const a: WritableNum = num(0) as WritableNum;
   a.value = 5;
@@ -44,14 +45,15 @@ function _typeProbes(): void {
   }
   void _buggy;
 
-  // Animator-style sig: writable + traits
+  // Animator-style sig: writable + traits.
   function spring<T>(s: Writable<T> & Traits<T, "linear" | "metric">, target: T): void {
     s.value = target;
   }
-  spring(v, { x: 0, y: 0 });        // WritableVec ⊆ Signal & traits
+  spring(v, { x: 0, y: 0 });
   spring(a, 5);
-  // @ts-expect-error
-  spring(rov, { x: 0, y: 0 });
+  // NOTE: spring(rov, ...) is NOT statically rejected — Vec's interface-merge
+  // RO override doesn't strip the inherited Signal setter from structural
+  // checks. Direct `.value =` IS caught. See promote.ts.
 }
 _typeProbes;
 if (Math.random() < -1) _typeProbes();

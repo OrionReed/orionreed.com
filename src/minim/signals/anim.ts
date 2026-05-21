@@ -10,18 +10,29 @@
 // Math is verbatim from prod's lerp.ts.
 
 import {
-  Signal, computed, effect,
-  type Val, type Read, type Computed,
-  value as readVal,
+  Signal,
+  computed,
+  effect,
+  type Val,
+  type Read,
+  type Computed,
   valFn,
 } from "./signal";
 import {
-  requireLinear, requireLerp, requireMetric,
+  requireLinear,
+  requireLerp,
+  requireMetric,
   type Traits,
 } from "./traits";
 import {
-  drive, isGenerator, suspend, race,
-  type Animator, type Tick, type Yieldable, type Easing,
+  drive,
+  isGenerator,
+  suspend,
+  race,
+  type Animator,
+  type Tick,
+  type Yieldable,
+  type Easing,
   easeOut,
 } from "../core";
 
@@ -31,7 +42,12 @@ const defaultEase = easeOut;
 
 type Seg<T> =
   | { readonly kind: "pose"; readonly target: T }
-  | { readonly kind: "to"; readonly target: T; readonly dur: Val<number>; readonly ease?: Easing };
+  | {
+      readonly kind: "to";
+      readonly target: T;
+      readonly dur: Val<number>;
+      readonly ease?: Easing;
+    };
 
 /** Chainable Animator over a Signal: `.to(...).to(...).from(start)` reads
  *  naturally. `.to`/`.from` are pure data — segments accumulate at
@@ -47,7 +63,10 @@ export class Tween<T> implements Animator<void> {
     this.#segs = segs;
     this.#gen = (function* () {
       for (const seg of segs) {
-        if (seg.kind === "pose") { sig.value = seg.target; continue; }
+        if (seg.kind === "pose") {
+          sig.value = seg.target;
+          continue;
+        }
         yield* tweenStep(sig, seg.target, seg.dur, seg.ease);
       }
     })();
@@ -55,18 +74,32 @@ export class Tween<T> implements Animator<void> {
 
   /** Append a tween segment from current value to `target` over `dur`. */
   to(target: T, dur: Val<number>, ease?: Easing): Tween<T> {
-    return new Tween(this.#sig, [...this.#segs, { kind: "to", target, dur, ease }]);
+    return new Tween(this.#sig, [
+      ...this.#segs,
+      { kind: "to", target, dur, ease },
+    ]);
   }
 
   /** Pose `start` as the first step, then run the rest of the chain. */
   from(start: T): Tween<T> {
-    return new Tween(this.#sig, [{ kind: "pose", target: start }, ...this.#segs]);
+    return new Tween(this.#sig, [
+      { kind: "pose", target: start },
+      ...this.#segs,
+    ]);
   }
 
-  next(v?: Tick): IteratorResult<Yieldable, void> { return this.#gen.next(v as Tick); }
-  return(v?: void): IteratorResult<Yieldable, void> { return this.#gen.return(v as void); }
-  throw(e: unknown): IteratorResult<Yieldable, void> { return this.#gen.throw(e); }
-  [Symbol.iterator](): this { return this; }
+  next(v?: Tick): IteratorResult<Yieldable, void> {
+    return this.#gen.next(v as Tick);
+  }
+  return(v?: void): IteratorResult<Yieldable, void> {
+    return this.#gen.return(v as void);
+  }
+  throw(e: unknown): IteratorResult<Yieldable, void> {
+    return this.#gen.throw(e);
+  }
+  [Symbol.iterator](): this {
+    return this;
+  }
 }
 
 // ─── tween ──────────────────────────────────────────────────────────
@@ -264,10 +297,18 @@ export interface Play<R = void> extends Animator<R> {
 
 class PlayImpl<R> implements Play<R> {
   constructor(private g: Animator<R>) {}
-  next(v?: Tick) { return this.g.next(v as Tick); }
-  return(v?: R) { return this.g.return(v as R); }
-  throw(e: unknown) { return this.g.throw(e); }
-  [Symbol.iterator]() { return this; }
+  next(v?: Tick) {
+    return this.g.next(v as Tick);
+  }
+  return(v?: R) {
+    return this.g.return(v as R);
+  }
+  throw(e: unknown) {
+    return this.g.throw(e);
+  }
+  [Symbol.iterator]() {
+    return this;
+  }
 
   until(p: PlayTrigger): Play<R> {
     const trigger = playableGen(p);
@@ -379,7 +420,10 @@ export function every(sec: Val<number>, fn: () => void): Play {
       while (true) {
         tick = yield;
         const period = getSec();
-        if (period <= 0) { nextAt = tick.elapsed; continue; }
+        if (period <= 0) {
+          nextAt = tick.elapsed;
+          continue;
+        }
         while (tick.elapsed >= nextAt) {
           fn();
           nextAt += period;
@@ -388,8 +432,3 @@ export function every(sec: Val<number>, fn: () => void): Play {
     })(),
   );
 }
-
-// ─── helpers ────────────────────────────────────────────────────────
-
-/** Re-export with the proto's `value()` so consumers don't reach into core. */
-export const value = readVal;

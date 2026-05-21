@@ -18,14 +18,22 @@ import { Signal, type Read } from "./signal";
 import { Num } from "./values/num";
 import { Vec } from "./values/vec";
 
-/** Read-only & writable surfaces; Signal extends both at runtime. */
+/** Writable surface — added by Promote on top of value-class types. */
 export interface Writers<T> {
   value: T;
   set(v: T): unknown;
   bind(s: T | (() => T)): () => void;
 }
 
-/** Public sugar — "any writable shape over T". */
+/** Public sugar — "any writable shape over T".
+ *
+ *  Note: at the structural-check level (e.g. animator parameters),
+ *  TS-merge-overridden read-only `value` accessors don't fully strip
+ *  the inherited Signal setter. So a bare `Vec` may still satisfy
+ *  `Writable<V>` structurally, even though direct `.value = ...` is
+ *  caught. Callers wanting strict RO rejection should type-annotate
+ *  with `WritableVec` / `WritableNum` (Promote-lifted) and rely on
+ *  the factory return types. */
 export type Writable<T = unknown> = Signal<T> & Writers<T>;
 
 /** Pick keys whose value is a Read<unknown> (covariant) — i.e. a
