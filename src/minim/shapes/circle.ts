@@ -1,4 +1,4 @@
-import { derived, Vec, Num, num, type Val } from "@minim/signals";
+import { computed, Vec, Num, num, type Val } from "@minim/signals";
 import { Shape, type Segment } from "./shape";
 import { TWO_PI } from "./dashed";
 import { intrinsicType, wireStroke, type CommonOpts } from "./common";
@@ -32,22 +32,22 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   /** Point on perimeter at angle θ (radians, y-down). */
   atAngle(angle: Val<number>): Vec {
     const a = num(angle);
-    return derived(Vec, () => ({
+    return computed(() => ({
       x: this.center.x.value + this.radius.value * Math.cos(a.value),
       y: this.center.y.value + this.radius.value * Math.sin(a.value),
-    }));
+    }), Vec);
   }
   /** Unit tangent at angle θ. */
   tangentAt(angle: Val<number>): Vec {
     const a = num(angle);
-    return derived(Vec, () => ({
+    return computed(() => ({
       x: -Math.sin(a.value),
       y: Math.cos(a.value),
-    }));
+    }), Vec);
   }
 
   override boundary(toward: Vec): Vec {
-    return derived(Vec, () => {
+    return computed(() => {
       const t = toward.value;
       const c = this.center.value;
       const sc = this.scale.value;
@@ -59,7 +59,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
         x: c.x + ((t.x - c.x) / len) * r,
         y: c.y + ((t.y - c.y) / len) * r,
       };
-    });
+    }, Vec);
   }
 
   /** Two half-arcs so each span stays ≤ π (keeps `largeArc` unambiguous).

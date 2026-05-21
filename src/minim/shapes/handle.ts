@@ -1,6 +1,6 @@
 // handle.* — writable derived shapes (draggable circles wired to a Vec).
 
-import { derived, signal, Signal, Vec, mean } from "@minim/signals";
+import { lens, signal, Signal, Vec, mean } from "@minim/signals";
 import { type AnyShape, type Has } from "./shape";
 import { Circle, type CircleOpts } from "./circle";
 import { draggable } from "./interaction";
@@ -105,8 +105,7 @@ const rotate = (
   radius = 40,
   opts?: HandleOpts,
 ): Handle => {
-  const pos = derived(
-    Vec,
+  const pos = lens(
     () => {
       const c = shape.center.value;
       const a = shape.rotate.value;
@@ -116,6 +115,7 @@ const rotate = (
       const c = shape.center.value;
       shape.rotate.value = Math.atan2(target.y - c.y, target.x - c.x);
     },
+    Vec,
   );
   return handleFn(pos, { cursor: "grab", ...opts });
 };
@@ -127,8 +127,7 @@ const scaleHandle = (
   radius = 40,
   opts?: HandleOpts,
 ): Handle => {
-  const pos = derived(
-    Vec,
+  const pos = lens(
     () => {
       const c = shape.center.value;
       const s = shape.scale.value;
@@ -139,6 +138,7 @@ const scaleHandle = (
       const k = Math.max(0.05, Math.abs(target.x - c.x) / radius);
       shape.scale.value = { x: k, y: k };
     },
+    Vec,
   );
   return handleFn(pos, { cursor: "ew-resize", ...opts });
 };
@@ -166,12 +166,12 @@ const tOnPath = (
     }
     return bestT;
   };
-  const pos = derived(
-    Vec,
+  const pos = lens(
     () => p.pointAt(t.value).value,
     (target) => {
       t.value = project(target);
     },
+    Vec,
   );
   return handleFn(pos, opts);
 };

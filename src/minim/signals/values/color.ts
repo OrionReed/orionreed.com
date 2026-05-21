@@ -1,82 +1,83 @@
-// color.ts — reactive RGBA colour.
+// color.ts — reactive RGBA color.
 
-import { Signal, computed, type Computed, value, type Val } from "../signal";
-import { LINEAR, LERP, EQUALS, type Linear } from "../traits";
-import { derived } from "../derive";
-import { tween, type Tween } from "../lerp";
+import { Signal, computed, type Computed, value, type Val, type SignalOptions } from "../signal";
+import { type Linear, type TraitDict } from "../traits";
+import { type Op, applyOp1, Chain } from "../ops";
+import { tween, type Tween } from "../anim";
 import { type Easing } from "../../core";
 import { Num } from "./num";
 
-export interface Value { r: number; g: number; b: number; a: number }
+type V = { r: number; g: number; b: number; a: number };
 
-export const add = (a: Value, b: Value): Value =>
+export const add = (a: V, b: V): V =>
   ({ r: a.r + b.r, g: a.g + b.g, b: a.b + b.b, a: a.a + b.a });
-export const sub = (a: Value, b: Value): Value =>
+export const sub = (a: V, b: V): V =>
   ({ r: a.r - b.r, g: a.g - b.g, b: a.b - b.b, a: a.a - b.a });
-export const scale = (a: Value, k: number): Value =>
+export const scale = (a: V, k: number): V =>
   ({ r: a.r * k, g: a.g * k, b: a.b * k, a: a.a * k });
-export const lerp = (a: Value, b: Value, t: number): Value => ({
+export const lerp = (a: V, b: V, t: number): V => ({
   r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t,
   b: a.b + (b.b - a.b) * t, a: a.a + (b.a - a.a) * t,
 });
-export const equals = (a: Value, b: Value) =>
+export const equals = (a: V, b: V) =>
   a === b || (a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a);
 
-const linearImpl: Linear<Value> = { add, sub, scale };
+const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
+const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
+const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
 
-export class Color extends Signal<Value> {
-  constructor(v: Value = { r: 0, g: 0, b: 0, a: 1 }) { super(v); }
+const linearImpl: Linear<V> = { add, sub, scale };
 
-  add(b: Val<Value>) { return derived(Color, () => add(this.value, value(b))); }
-  sub(b: Val<Value>) { return derived(Color, () => sub(this.value, value(b))); }
-  scale(k: Val<number>) { return derived(Color, () => scale(this.value, value(k))); }
-  lerp(b: Val<Value>, t: Val<number>) {
-    return derived(Color, () => lerp(this.value, value(b), value(t)));
+export class Color extends Signal<V> {
+  static traits: TraitDict<V> & { linear: Linear<V>; lerp: typeof lerp; equals: typeof equals } = {
+    linear: linearImpl, lerp, equals,
+  };
+
+  constructor(v: V = { r: 0, g: 0, b: 0, a: 1 }, opts?: SignalOptions<V>) { super(v, opts); }
+
+  // ── Invertible ──
+  add(b: Val<V>): Color { return applyOp1(this, addOp, b, Color); }
+  sub(b: Val<V>): Color { return applyOp1(this, subOp, b, Color); }
+  scale(k: Val<number>): Color { return applyOp1(this, scaleOp, k, Color); }
+
+  // ── Non-invertible ──
+  lerp(b: Val<V>, t: Val<number>): Color {
+    return computed(() => lerp(this.value, value(b), value(t)), Color);
   }
 
-  get luminance() {
-    return this._lum ??= derived(Num, () => {
+  get luminance(): Num {
+    return this.memo("luminance", () => computed(() => {
       const c = this.value;
       return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-    });
+    }, Num));
   }
-  private _lum?: Num;
 
-  /** Reactive CSS string — `rgba(r*255, g*255, b*255, a)`. Lazy + cached. */
   get css(): Computed<string> {
-    return this._css ??= computed(() => {
+    return this.memo("css", () => computed(() => {
       const c = this.value;
       const r = Math.round(c.r * 255);
       const g = Math.round(c.g * 255);
       const b = Math.round(c.b * 255);
       return `rgba(${r}, ${g}, ${b}, ${c.a})`;
-    });
+    })) as Computed<string>;
   }
-  private _css?: Computed<string>;
 
-  // Trait slots — on prototype.
-  get [LINEAR](): Linear<Value> { return linearImpl; }
-  [LERP](a: Value, b: Value, t: number) { return lerp(a, b, t); }
-  [EQUALS](a: Value, b: Value) { return equals(a, b); }
-
-  to(target: Value, dur: Val<number>, ease?: Easing): Tween<Value> {
+  /** Tween-builder, implied by lerp trait. */
+  to(target: V, dur: Val<number>, ease?: Easing): Tween<V> {
     return tween(this, target, dur, ease);
   }
 
-  derive(fn: (c: ColorChain) => ColorChain) {
-    return derived(Color, () => fn(new ColorChain(this.value)).value);
+  derive(fn: (c: ColorChain) => ColorChain): Color {
+    return fn(new ColorChain()).toLens(this, Color);
   }
 }
 
-export class ColorChain {
-  value: Value;
-  constructor(v: Value) { this.value = v; }
-  add(b: Val<Value>) { this.value = add(this.value, value(b)); return this; }
-  sub(b: Val<Value>) { this.value = sub(this.value, value(b)); return this; }
-  scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
-  lerp(b: Val<Value>, t: Val<number>) {
-    this.value = lerp(this.value, value(b), value(t)); return this;
-  }
+export interface Color { readonly constructor: typeof Color }
+
+export class ColorChain extends Chain<V> {
+  add(b: Val<V>): this { return this.push1(addOp, b); }
+  sub(b: Val<V>): this { return this.push1(subOp, b); }
+  scale(k: Val<number>): this { return this.push1(scaleOp, k); }
 }
 
 export const rgb = (r: number, g: number, b: number) => new Color({ r, g, b, a: 1 });

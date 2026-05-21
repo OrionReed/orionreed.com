@@ -1,9 +1,26 @@
-// Reactive engine. Signal (writable) → Computed (readonly view) →
-// Lens (Computed with a setter). One runtime class backs both
-// Computed and Lens; the split is type-level only.
+// Signal<T> — merged engine: signal, computed, and lens in one class.
+//
+// Mode is determined by which fields are set:
+//   - signal mode:   currentValue is truth, getter undefined
+//   - computed mode: getter set, cachedValue is truth, no setter
+//   - lens mode:     getter set, setter set, cachedValue is truth (read), setter handles writes
+//
+// This eliminates `viewClassFor` and `setPrototypeOf` from the engine:
+// `Vec extends Signal` is a natural prototype chain, `derived(Vec, fn)`
+// is `new Vec(); set getter; return`, and `instanceof Vec` uses the
+// native chain walk.
+//
 // Algorithm is alien-signals; trait dispatch via `./traits`.
+//
+// Bug-fixes incorporated from production minim's signal.ts:
+//   - peek(): shallowPropagate on Dirty-clear (subscribers were marked
+//     Pending by the upstream write; without this they stay stranded)
+//   - flush(): re-entrancy guard (cascading bind-effects on field
+//     lenses can otherwise blow the call stack)
 
-import { EQUALS, type Equals } from "./traits";
+import { type Equals, type TraitDict } from "./traits";
+
+// ─── Internal types ──────────────────────────────────────────────────
 
 interface ReactiveNode {
   deps?: Link;
@@ -26,10 +43,12 @@ interface Link {
   nextDep: Link | undefined;
 }
 
-interface Stack<T> { value: T; prev: Stack<T> | undefined }
+interface Stack<T> {
+  value: T;
+  prev: Stack<T> | undefined;
+}
 
-// Flags match alien-signals v2. Effects are top-level by design — no
-// implicit parent-child linkage; lifetime owned by the returned disposer.
+// Flags match alien-signals v2.
 const F = {
   None: 0,
   Mutable: 1,
@@ -40,8 +59,6 @@ const F = {
   Pending: 32,
 } as const;
 
-const noop = () => {};
-
 let cycle = 0;
 let runDepth = 0;
 let batchDepth = 0;
@@ -50,9 +67,11 @@ let queuedLength = 0;
 let activeSub: ReactiveNode | undefined;
 const queued: (Effect | undefined)[] = [];
 
-/** Optional write observer; fires inside `Signal.set value` only when the
- *  value actually changed. Used by `assert/record` for write attribution.
- *  One slot, last-writer-wins; assert installs/uninstalls on record start/stop. */
+// Re-entrancy guard for flush. See the comment block on `flush()` below.
+let flushing = false;
+
+// ─── Write hook (for assert/record attribution) ──────────────────────
+
 let writeHook: ((sig: Signal<unknown>) => void) | undefined;
 export function setSignalWriteHook(
   fn: ((sig: Signal<unknown>) => void) | undefined,
@@ -64,6 +83,8 @@ export function setSignalWriteHook(
   };
 }
 
+// ─── alien-signals algorithm — link / unlink / propagate / etc. ──────
+
 function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
   const prevDep = sub.depsTail;
   if (prevDep !== undefined && prevDep.dep === dep) return;
@@ -74,11 +95,25 @@ function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
     return;
   }
   const prevSub = dep.subsTail;
-  if (prevSub !== undefined && prevSub.version === version && prevSub.sub === sub) return;
+  if (
+    prevSub !== undefined &&
+    prevSub.version === version &&
+    prevSub.sub === sub
+  )
+    return;
   const isFirstSub = dep.subs === undefined;
-  const newLink: Link = (sub.depsTail = dep.subsTail = {
-    version, dep, sub, prevDep, nextDep, prevSub, nextSub: undefined,
-  });
+  const newLink: Link =
+    (sub.depsTail =
+    dep.subsTail =
+      {
+        version,
+        dep,
+        sub,
+        prevDep,
+        nextDep,
+        prevSub,
+        nextSub: undefined,
+      });
   if (nextDep !== undefined) nextDep.prevDep = newLink;
   if (prevDep !== undefined) prevDep.nextDep = newLink;
   else sub.deps = newLink;
@@ -128,23 +163,35 @@ function propagate(start: Link, innerWrite: boolean): void {
       const subSubs: Link | undefined = sub.subs;
       if (subSubs !== undefined) {
         const nextSub = (l = subSubs).nextSub;
-        if (nextSub !== undefined) { stack = { value: next, prev: stack }; next = nextSub; }
+        if (nextSub !== undefined) {
+          stack = { value: next, prev: stack };
+          next = nextSub;
+        }
         continue;
       }
     }
-    if ((l = next!) !== undefined) { next = l.nextSub; continue; }
+    if ((l = next!) !== undefined) {
+      next = l.nextSub;
+      continue;
+    }
     while (stack !== undefined) {
-      l = stack.value; stack = stack.prev;
-      if (l !== undefined) { next = l.nextSub; continue top; }
+      l = stack.value;
+      stack = stack.prev;
+      if (l !== undefined) {
+        next = l.nextSub;
+        continue top;
+      }
     }
     break;
   } while (true);
 }
 
 function checkDirty(startLink: Link, startSub: ReactiveNode): boolean {
-  let l = startLink, sub = startSub;
+  let l = startLink,
+    sub = startSub;
   let stack: Stack<Link> | undefined;
-  let checkDepth = 0, dirty = false;
+  let checkDepth = 0,
+    dirty = false;
   top: do {
     const dep = l.dep;
     const flags = dep.flags;
@@ -156,19 +203,28 @@ function checkDirty(startLink: Link, startSub: ReactiveNode): boolean {
         dirty = true;
       }
     } else if ((flags & (F.Mutable | F.Pending)) === (F.Mutable | F.Pending)) {
-      stack = { value: l, prev: stack }; l = dep.deps!; sub = dep; ++checkDepth; continue;
+      stack = { value: l, prev: stack };
+      l = dep.deps!;
+      sub = dep;
+      ++checkDepth;
+      continue;
     }
     if (!dirty) {
       const nextDep = l.nextDep;
-      if (nextDep !== undefined) { l = nextDep; continue; }
+      if (nextDep !== undefined) {
+        l = nextDep;
+        continue;
+      }
     }
     while (checkDepth--) {
-      l = stack!.value; stack = stack!.prev;
+      l = stack!.value;
+      stack = stack!.prev;
       if (dirty) {
         const subs = sub.subs!;
         if (sub._update()) {
           if (subs.nextSub !== undefined) shallowPropagate(subs);
-          sub = l.sub; continue;
+          sub = l.sub;
+          continue;
         }
         dirty = false;
       } else {
@@ -176,7 +232,10 @@ function checkDirty(startLink: Link, startSub: ReactiveNode): boolean {
       }
       sub = l.sub;
       const nextDep = l.nextDep;
-      if (nextDep !== undefined) { l = nextDep; continue top; }
+      if (nextDep !== undefined) {
+        l = nextDep;
+        continue top;
+      }
     }
     return dirty && !!sub.flags;
   } while (true);
@@ -188,28 +247,29 @@ function shallowPropagate(l: Link): void {
     const flags = sub.flags;
     if ((flags & (F.Pending | F.Dirty)) === F.Pending) {
       sub.flags = flags | F.Dirty;
-      if ((flags & (F.Watching | F.RecursedCheck)) === F.Watching) sub._notify();
+      if ((flags & (F.Watching | F.RecursedCheck)) === F.Watching)
+        sub._notify();
     }
   } while ((l = l.nextSub!) !== undefined);
 }
 
 function isValidLink(checkLink: Link, sub: ReactiveNode): boolean {
   let l = sub.depsTail;
-  while (l !== undefined) { if (l === checkLink) return true; l = l.prevDep; }
+  while (l !== undefined) {
+    if (l === checkLink) return true;
+    l = l.prevDep;
+  }
   return false;
 }
 
 // Re-entrancy guard: effects that write to signals during their run
-// trigger another `flush()` call via `Signal.set value`. The outer
-// loop here is already designed to drain the queue including entries
-// appended mid-run, so the recursive call is redundant — and at scale
-// (hundreds of cascading bind-effects on field lenses) the recursion
-// depth blows V8's call stack. Guarding turns O(N) stack growth into
-// O(1) regardless of fan-out. See `_proto-reactive/repro-flush-overflow.ts`.
-let flushing = false;
-
+// trigger nested flush() via `Signal.set value`. The outer loop here
+// is designed to drain the queue including entries appended mid-run,
+// so the recursive call is redundant — and at scale (hundreds of
+// cascading bind-effects on field lenses) it blows V8's stack.
+// Guarding turns O(N) stack growth into O(1).
 function flush(): void {
-  if (flushing) return; // outer drain will pick up newly queued entries
+  if (flushing) return;
   flushing = true;
   try {
     while (notifyIndex < queuedLength) {
@@ -237,26 +297,67 @@ function purgeDeps(sub: ReactiveNode): void {
 
 function disposeAllDepsInReverse(sub: ReactiveNode): void {
   let l = sub.depsTail;
-  while (l !== undefined) { const prev = l.prevDep; unlink(l, sub); l = prev; }
+  while (l !== undefined) {
+    const prev = l.prevDep;
+    unlink(l, sub);
+    l = prev;
+  }
 }
+
+// ─── Public types ───────────────────────────────────────────────────
 
 /** Plain T, thunk `() => T`, or any read-shape (Signal/Computed/…). */
 export type Val<T> = T | (() => T) | Read<T>;
 
-/** Covariant read-only signal surface (parameter-site Val arm). */
+/** Covariant read-only surface (parameter-site for `Val<T>`). */
 export interface Read<out T> {
   readonly value: T;
   peek(): T;
 }
 
-/** Unwrap to T; reactive forms auto-track inside an effect/computed. */
+/** Type alias for a read-only Signal (computed). Both runtime-checked
+ *  (writes throw) and TS-narrowed (Read interface). */
+export type Computed<T = unknown> = Omit<Signal<T>, "value"> & {
+  readonly value: T;
+};
+
+/** Type alias for a writable derived view (lens). Structurally a Signal
+ *  with both getter AND setter set. Treated as writable in TS. */
+export type Lens<T = unknown> = Signal<T>;
+
+/** Read-only narrowing of a typed Signal subclass (Vec, Num, Box, …).
+ *  Preserves all class methods but makes `.value` readonly and removes
+ *  `.set` / `.bind` so writes are TS errors. Returned by non-invertible
+ *  eager methods (`.normalize()`, `.luminance`, `.distance()`, …).
+ *  No constraint on `R` because `Signal<T>` is invariant in T —
+ *  subclasses parameterised by a concrete T (Signal<number>) aren't
+ *  assignable to `Signal<unknown>`. */
+export type RO<R> = Omit<R, "value" | "set" | "bind">
+  & { readonly value: R extends Signal<infer T> ? T : never };
+
+/** Extract the value type carried by a Signal (signal/computed/lens). */
+export type Of<R> = R extends Signal<infer T> ? T : never;
+
+/** Per-field reactive init: each axis accepts plain T, signal, or thunk.
+ *  Used by composite-value factories like `transform({...})`. */
+export type SignalInit<T> = { [K in keyof T]?: Val<T[K]> };
+
 export function value<T>(v: Val<T>): T {
   if (v instanceof Signal) return v.value;
   if (typeof v === "function") return (v as () => T)();
   return v as T;
 }
 
-export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signal;
+export const isSignal = (v: unknown): v is Signal<unknown> =>
+  v instanceof Signal;
+
+/** Runtime check: is this Signal in lens mode (both getter and setter)? */
+export const isLens = (v: unknown): v is Signal<unknown> =>
+  v instanceof Signal && v.getter !== undefined && v.setter !== undefined;
+
+/** Runtime check: is this Signal in computed mode (getter, no setter)? */
+export const isComputed = (v: unknown): v is Signal<unknown> =>
+  v instanceof Signal && v.getter !== undefined && v.setter === undefined;
 
 export interface SignalOptions<T = unknown> {
   /** First subscriber attached. */
@@ -267,7 +368,27 @@ export interface SignalOptions<T = unknown> {
   equals?: Equals<T>;
 }
 
-/** Writable signal; bind reactively via `.bind(source)`. */
+// ─── The Signal class ──────────────────────────────────────────────
+
+/** Single reactive primitive. Mode is determined by which fields are set.
+ *
+ *  Fields:
+ *    - `currentValue`/`pendingValue` — signal-mode storage
+ *    - `cachedValue` — computed/lens cached evaluation
+ *    - `getter` — when set, instance is in computed/lens mode
+ *    - `setter` — when set with getter, instance is in lens mode
+ *
+ *  Construction patterns:
+ *    - `new Signal(initial)` — signal mode
+ *    - `signal(initial)` — same as `new Signal(initial)`
+ *    - `computed(fn)` — computed mode (untyped)
+ *    - `computed(fn, Vec)` — computed mode (typed as Cls instance)
+ *    - `lens(get, set)` — lens mode (untyped)
+ *    - `lens(get, set, Num)` — lens mode (typed)
+ *    - `new Vec(initial)` where Vec extends Signal — typed signal mode
+ *
+ *  Type predicates: `isSignal(x)`, `isComputed(x)`, `isLens(x)`.
+ */
 export class Signal<T = unknown> implements ReactiveNode {
   subs: Link | undefined = undefined;
   subsTail: Link | undefined = undefined;
@@ -276,24 +397,118 @@ export class Signal<T = unknown> implements ReactiveNode {
   flags: number = F.Mutable;
   currentValue: T;
   pendingValue: T;
+  cachedValue: T | undefined = undefined;
+  getter: (() => T) | undefined = undefined;
+  setter: ((v: T) => void) | undefined = undefined;
+  /** Per-instance equality override (from `opts.equals`); falls back to
+   *  class-level `traits.equals` then `===`. Hot-read on every write. */
+  _equals: Equals<T> | undefined = undefined;
   _watched?: () => void;
   _unwatchedHook?: () => void;
-  /** Disposer for the most recent `.bind(reactive)`. */
   protected _stopBinding?: () => void;
+  /** Per-instance lazy derived-view cache; allocated on first `.memo()` hit. */
+  protected _memoCache?: Record<string | symbol, unknown>;
+  /** Per-instance lazy field-lens cache (separate from memo to avoid
+   *  template-literal key allocation per `.x` access). */
+  protected _fields?: Record<string | symbol, unknown>;
 
   constructor(initial: T, opts?: SignalOptions<T>) {
+    this.currentValue = initial;
+    this.pendingValue = initial;
+    // Resolve equality once at construction: opts.equals wins; else
+    // class-level static `traits.equals` (if the subclass declared one).
+    // This collapses the hot-path equality lookup into a single `_equals`
+    // read per write.
+    if (opts?.equals) {
+      this._equals = opts.equals;
+    } else {
+      const cls = this.constructor as { traits?: TraitDict<T> };
+      if (cls.traits?.equals) this._equals = cls.traits.equals;
+    }
     if (opts) {
       if (opts.watched) this._watched = opts.watched;
       if (opts.unwatched) this._unwatchedHook = opts.unwatched;
-      if (opts.equals) (this as unknown as { [EQUALS]?: Equals<T> })[EQUALS] = opts.equals;
     }
-    this.currentValue = initial;
-    this.pendingValue = initial;
   }
 
-  /** Read with tracking. */
+  /** Per-instance cached derivation. `key` must be unique within the
+   *  parent's class hierarchy. Factory runs once per (instance, key).
+   *  Used by lazy domain getters (`.magnitude`) and by `.field()`. */
+  memo<R>(key: string | symbol, make: () => R): R {
+    const cache = (this._memoCache ??= {});
+    const k = key as string;
+    return (cache[k] ?? (cache[k] = make())) as R;
+  }
+
+  /** Typed lens onto `this.value[key]`. Cached per (instance, key).
+   *  Read returns the field; write spread-replaces the composite.
+   *  Only meaningful when `T` is an object (TS narrows accordingly).
+   *
+   *  Uses a dedicated `_fields` cache (not `memo`) so the lookup key is
+   *  the raw field name — avoiding the per-access string allocation
+   *  that a template-literal memo key (`"field:x"`) would force on the
+   *  hot path. */
+  field<K extends keyof T, C extends new (...args: never[]) => Signal<T[K]>>(
+    key: K,
+    Cls: C,
+  ): InstanceType<C> {
+    const cache = (this._fields ??= {});
+    const k = key as string | symbol;
+    let cached = cache[k as string];
+    if (cached === undefined) {
+      cached = lens(
+        () => (this.value as T)[key],
+        // TODO: find a general robust approach to avoid the spread replace, as this is hot path.
+        (v) => { this.value = { ...(this.peek() as object), [key]: v } as T; },
+        Cls,
+      );
+      cache[k as string] = cached;
+    }
+    return cached as InstanceType<C>;
+  }
+
+  /** Read with tracking. Branches on signal vs computed mode. */
   get value(): T {
-    if (this.flags & F.Dirty) {
+    const flags = this.flags;
+    if (this.getter !== undefined) {
+      // ── Computed path ──
+      if (flags & F.RecursedCheck) {
+        throw new RangeError(
+          `Cyclic computed: ${(this.constructor as { name?: string }).name ?? "?"} read its own value`,
+        );
+      }
+      if (
+        flags & F.Dirty ||
+        (flags & F.Pending &&
+          (checkDirty(this.deps!, this) ||
+            ((this.flags = flags & ~F.Pending), false)))
+      ) {
+        if (this._update()) {
+          const subs = this.subs;
+          if (subs !== undefined) shallowPropagate(subs);
+        }
+      } else if (!flags) {
+        // First read: lazy init
+        this.flags = F.Mutable | F.RecursedCheck;
+        const prev = activeSub;
+        activeSub = this;
+        let threw = true;
+        try {
+          this.cachedValue = this.getter();
+          threw = false;
+        } finally {
+          activeSub = prev;
+          this.flags = threw
+            ? F.Mutable | F.Dirty
+            : this.flags & ~F.RecursedCheck;
+        }
+      }
+      if (activeSub !== undefined) link(this, activeSub, cycle);
+      return this.cachedValue!;
+    }
+
+    // ── Signal path ──
+    if (flags & F.Dirty) {
       this.flags = F.Mutable;
       if (this.currentValue !== (this.currentValue = this.pendingValue)) {
         const subs = this.subs;
@@ -304,33 +519,48 @@ export class Signal<T = unknown> implements ReactiveNode {
     return this.currentValue;
   }
 
-  /** Plain write. */
   set value(next: T) {
+    // Single branch on the "is this a derived view?" predicate. Signal
+    // writes (the common case) take the fall-through. Computed/lens
+    // writes take the slow path with a second branch.
+    if (this.getter !== undefined) {
+      const set = this.setter;
+      if (set === undefined) throw new TypeError("Cannot write to a Computed");
+      set(next);
+      return;
+    }
     const prev = this.pendingValue;
     this.pendingValue = next;
-    const equals = this[EQUALS];
+    const equals = this._equals;
     const same = equals ? equals(prev, next) : prev === next;
     if (!same) {
       this.flags = F.Mutable | F.Dirty;
       if (writeHook !== undefined) writeHook(this as Signal<unknown>);
       const subs = this.subs;
       if (subs !== undefined) {
-        propagate(subs, !!runDepth);
-        if (!batchDepth) flush();
+        propagate(subs, runDepth > 0);
+        if (batchDepth === 0) flush();
       }
     }
   }
 
-  /** Untracked read; honors Dirty flag. */
+  /** Untracked read; honors Dirty + propagates to subs (fix for stranded
+   *  subscribers when peek follows a write). */
   peek(): T {
+    if (this.getter !== undefined) {
+      // Computed-mode peek: untracked .value
+      const prev = activeSub;
+      activeSub = undefined;
+      try {
+        return this.value;
+      } finally {
+        activeSub = prev;
+      }
+    }
+    // Signal-mode peek
     if (this.flags & F.Dirty) {
       this.flags = F.Mutable;
       if (this.currentValue !== (this.currentValue = this.pendingValue)) {
-        // Subscribers were marked Pending by `set value`'s propagate
-        // but never told the upstream actually changed. Convert their
-        // Pending → Dirty so subsequent reads re-evaluate. Without this,
-        // a peek() between write and downstream read silently strands
-        // computeds at their stale cached values.
         const subs = this.subs;
         if (subs !== undefined) shallowPropagate(subs);
       }
@@ -340,7 +570,10 @@ export class Signal<T = unknown> implements ReactiveNode {
 
   /** One-shot write of `value(v)`. Severs any prior `.bind(...)`. Chainable. */
   set(v: Val<T>): this {
-    if (this._stopBinding) { this._stopBinding(); this._stopBinding = undefined; }
+    if (this._stopBinding) {
+      this._stopBinding();
+      this._stopBinding = undefined;
+    }
     this.value = value(v);
     return this;
   }
@@ -348,133 +581,67 @@ export class Signal<T = unknown> implements ReactiveNode {
   /** Bind to a `Val<T>`; replaces any prior binding. Returns disposer
    *  (no-op for plain T). */
   bind(source: Val<T>): () => void {
-    if (this._stopBinding) { this._stopBinding(); this._stopBinding = undefined; }
+    if (this._stopBinding) {
+      this._stopBinding();
+      this._stopBinding = undefined;
+    }
     if (source instanceof Signal || typeof source === "function") {
-      const stop = effect(() => { this.value = value(source); });
+      const stop = effect(() => {
+        this.value = value(source);
+      });
       this._stopBinding = stop;
       return stop;
     }
     this.value = source as T;
-    return noop;
+    return () => {};
   }
 
   _update(): boolean {
-    this.flags = F.Mutable;
-    return this.currentValue !== (this.currentValue = this.pendingValue);
-  }
-  _notify(): void {}
-  _unwatched(): void {
-    if (this._unwatchedHook !== undefined) this._unwatchedHook();
-  }
-
-  /** Footgun guard: coercion throws instead of silently using `[object Object]`. */
-  [Symbol.toPrimitive](hint: string): never {
-    throw new TypeError(`Signal cannot be coerced to ${hint} — use \`.value\``);
-  }
-}
-
-class ComputedImpl<T = unknown> extends Signal<T> {
-  cachedValue: T | undefined = undefined;
-  getter: () => T;
-  /** Lens-mode iff set; otherwise writes throw. */
-  setter?: (v: T) => void;
-
-  constructor(getter: () => T, setter?: (v: T) => void) {
-    super(undefined as T);
-    this.getter = getter;
-    if (setter !== undefined) this.setter = setter;
-    this.flags = 0;
-  }
-
-  override get value(): T {
-    const flags = this.flags;
-    // RecursedCheck set only during own sync eval → self-read = cycle.
-    if (flags & F.RecursedCheck) {
-      throw new RangeError(`Cyclic computed: ${(this.constructor as { name?: string }).name ?? "?"} read its own value`);
-    }
-    if (
-      flags & F.Dirty ||
-      (flags & F.Pending &&
-        (checkDirty(this.deps!, this) || ((this.flags = flags & ~F.Pending), false)))
-    ) {
-      if (this._update()) {
-        const subs = this.subs;
-        if (subs !== undefined) shallowPropagate(subs);
-      }
-    } else if (!flags) {
+    if (this.getter !== undefined) {
+      // Computed mode: re-run getter
+      this.depsTail = undefined;
       this.flags = F.Mutable | F.RecursedCheck;
       const prev = activeSub;
       activeSub = this;
       let threw = true;
       try {
-        this.cachedValue = this.getter();
+        ++cycle;
+        const old = this.cachedValue;
+        const next = (this.cachedValue = this.getter());
         threw = false;
+        const eq = this._equals;
+        return eq ? !eq(old as T, next) : old !== next;
       } finally {
         activeSub = prev;
-        // Throw → stay dirty so next read retries.
-        this.flags = threw ? F.Mutable | F.Dirty : (this.flags & ~F.RecursedCheck);
+        this.flags = threw
+          ? F.Mutable | F.Dirty
+          : this.flags & ~F.RecursedCheck;
+        purgeDeps(this);
       }
     }
-    if (activeSub !== undefined) link(this, activeSub, cycle);
-    return this.cachedValue!;
+    // Signal mode
+    this.flags = F.Mutable;
+    return this.currentValue !== (this.currentValue = this.pendingValue);
   }
 
-  override set value(next: T) {
-    if (this.setter !== undefined) this.setter(next);
-    else throw new TypeError("Cannot write to a Computed");
-  }
+  _notify(): void {}
 
-  override peek(): T {
-    const prev = activeSub;
-    activeSub = undefined;
-    try { return this.value; }
-    finally { activeSub = prev; }
-  }
-
-  override _update(): boolean {
-    this.depsTail = undefined;
-    this.flags = F.Mutable | F.RecursedCheck;
-    const prev = activeSub;
-    activeSub = this;
-    let threw = true;
-    try {
-      ++cycle;
-      const old = this.cachedValue;
-      const next = this.cachedValue = this.getter();
-      threw = false;
-      const eq = this[EQUALS];
-      return eq ? !eq(old as T, next) : old !== next;
-    } finally {
-      activeSub = prev;
-      this.flags = threw ? F.Mutable | F.Dirty : (this.flags & ~F.RecursedCheck);
-      purgeDeps(this);
-    }
-  }
-
-  override _unwatched(): void {
-    if (this.depsTail !== undefined) {
+  _unwatched(): void {
+    if (this.getter !== undefined && this.depsTail !== undefined) {
       this.flags = F.Mutable | F.Dirty;
       disposeAllDepsInReverse(this);
+      return;
     }
+    if (this._unwatchedHook !== undefined) this._unwatchedHook();
+  }
+
+  /** Footgun guard: silently coercing to string/number is almost always a bug. */
+  [Symbol.toPrimitive](hint: string): never {
+    throw new TypeError(`Signal cannot be coerced to ${hint} — use \`.value\``);
   }
 }
 
-/** Read-only computed signal. Writing to `.value` is a type error;
- *  use `lens()` / `field()` for writable variants. */
-export type Computed<T = unknown> = Omit<ComputedImpl<T>, "value"> & {
-  readonly value: T;
-};
-
-/** Writable computed view — a `Computed` backed by a setter. */
-export type Lens<T = unknown> = ComputedImpl<T>;
-
-/** Runtime class. Use for `instanceof Computed` and direct construction;
- *  passing a `setter` returns a `Lens<T>`, otherwise a `Computed<T>`. */
-export const Computed = ComputedImpl as {
-  new <T>(getter: () => T): Computed<T>;
-  new <T>(getter: () => T, setter: (v: T) => void): Lens<T>;
-  readonly prototype: ComputedImpl;
-};
+// ─── Effect class ───────────────────────────────────────────────────
 
 class Effect implements ReactiveNode {
   subs: Link | undefined = undefined;
@@ -500,7 +667,10 @@ class Effect implements ReactiveNode {
     }
   }
 
-  _update(): boolean { this.flags = F.Mutable; return true; }
+  _update(): boolean {
+    this.flags = F.Mutable;
+    return true;
+  }
 
   _notify(): void {
     let e: Effect = this;
@@ -514,7 +684,8 @@ class Effect implements ReactiveNode {
       e = next;
     } while (true);
     queuedLength = insertIndex;
-    let idx = insertIndex, firstIdx = firstInsertedIndex;
+    let idx = insertIndex,
+      firstIdx = firstInsertedIndex;
     while (firstIdx < --idx) {
       const left = queued[firstIdx];
       queued[firstIdx++] = queued[idx];
@@ -532,14 +703,21 @@ class Effect implements ReactiveNode {
 
   _run(): void {
     const flags = this.flags;
-    if (flags & F.Dirty || (flags & F.Pending && checkDirty(this.deps!, this))) {
-      if (this.cleanup) { this._runCleanup(); if (!this.flags) return; }
+    if (
+      flags & F.Dirty ||
+      (flags & F.Pending && checkDirty(this.deps!, this))
+    ) {
+      if (this.cleanup) {
+        this._runCleanup();
+        if (!this.flags) return;
+      }
       this.depsTail = undefined;
       this.flags = F.Watching | F.RecursedCheck;
       const prev = activeSub;
       activeSub = this;
       try {
-        ++cycle; ++runDepth;
+        ++cycle;
+        ++runDepth;
         const ret = this.fn();
         this.cleanup = typeof ret === "function" ? ret : undefined;
       } finally {
@@ -558,28 +736,96 @@ class Effect implements ReactiveNode {
     this.cleanup = undefined;
     const prev = activeSub;
     activeSub = undefined;
-    try { c(); } finally { activeSub = prev; }
+    try {
+      c();
+    } finally {
+      activeSub = prev;
+    }
   }
 }
 
+// ─── Public factories ────────────────────────────────────────────────
+
+/** Plain `Signal<T>` (writable). For typed signals use the class
+ *  constructor directly: `new Vec({x:0, y:0}, opts?)`. We deliberately
+ *  don't overload `signal(v, Cls)` — that path would need a runtime
+ *  discriminator on `(opts | Cls)` and adds no power over `new Cls(v)`. */
 export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> {
   return new Signal(initial, opts);
 }
-export function computed<T>(getter: () => T): Computed<T> { return new ComputedImpl(getter); }
-export function lens<T>(getter: () => T, setter: (v: T) => void): Lens<T> { return new ComputedImpl(getter, setter); }
+
+// `computed` overloads — optional Cls is the *last* argument:
+//   computed(fn)              → Signal<T>            (untyped)
+//   computed(fn, Vec)         → Vec  (read-only view)  (typed)
+export function computed<T>(getter: () => T): Signal<T>;
+export function computed<T, C extends Signal<T>>(
+  getter: () => T,
+  Cls: new (...args: never[]) => C,
+): C;
+export function computed<T, C extends Signal<T>>(
+  getter: () => T,
+  Cls?: new (...args: never[]) => C,
+): C | Signal<T> {
+  if (Cls === undefined) {
+    const r = new Signal<T>(undefined as T);
+    r.getter = getter;
+    r.flags = 0;
+    return r;
+  }
+  const inst = new Cls();
+  inst.getter = getter;
+  inst.flags = 0;
+  return inst;
+}
+
+// `lens` overloads — optional Cls is the *last* argument:
+//   lens(get, set)            → Signal<T>            (untyped)
+//   lens(get, set, Num)       → Num   (writable view)  (typed)
+export function lens<T>(getter: () => T, setter: (v: T) => void): Signal<T>;
+export function lens<T, C extends Signal<T>>(
+  getter: () => T,
+  setter: (v: T) => void,
+  Cls: new (...args: never[]) => C,
+): C;
+export function lens<T, C extends Signal<T>>(
+  getter: () => T,
+  setter: (v: T) => void,
+  Cls?: new (...args: never[]) => C,
+): C | Signal<T> {
+  if (Cls === undefined) {
+    const r = new Signal<T>(undefined as T);
+    r.getter = getter;
+    r.setter = setter;
+    r.flags = 0;
+    return r;
+  }
+  const inst = new Cls();
+  inst.getter = getter;
+  inst.setter = setter;
+  inst.flags = 0;
+  return inst;
+}
+
 export function effect(fn: () => void | (() => void)): () => void {
   const e = new Effect(fn);
   return () => e._unwatched();
 }
+
 export function batch<R>(fn: () => R): R {
   ++batchDepth;
-  try { return fn(); }
-  finally { if (!--batchDepth) flush(); }
+  try {
+    return fn();
+  } finally {
+    if (!--batchDepth) flush();
+  }
 }
+
 export function untracked<R>(fn: () => R): R {
   const prev = activeSub;
   activeSub = undefined;
-  try { return fn(); }
-  finally { activeSub = prev; }
+  try {
+    return fn();
+  } finally {
+    activeSub = prev;
+  }
 }
-

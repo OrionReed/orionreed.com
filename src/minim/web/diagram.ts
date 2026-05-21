@@ -4,7 +4,7 @@
 
 import { Anim, attachRaf } from "@minim/core";
 import {
-  num, derived, computed, effect,
+  num, computed, effect,
   Box, type Val,
 } from "@minim/signals";
 import { Shape, SVG_NS, mount, ensureArrowMarker, type Mount } from "@minim/shapes";
@@ -71,7 +71,7 @@ export class Diagram extends HTMLElement {
   // call; `connectedCallback` auto-fits if it's still false.
   #viewSet = false;
   #viewSig = signal0Box();
-  #viewBox = derived(Box, () => this.#viewSig.value);
+  #viewBox = computed(() => this.#viewSig.value, Box);
 
   private static styleSheets = new Map<string, CSSStyleSheet>();
   static styles = css`

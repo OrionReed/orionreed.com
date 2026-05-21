@@ -1,8 +1,10 @@
 import {
   Anchor, Diagram, Mount,
-  Vec, type VecValue, derived,
+  Vec, type Of, lens,
   handle, label, line, vec,
 } from "../../minim";
+
+type VecValue = Of<Vec>;
 
 /** Reflect `p` across line a–b; returns `p` unchanged when a==b. */
 function reflect(p: VecValue, a: VecValue, b: VecValue): VecValue {
@@ -25,11 +27,12 @@ export class MdMirror extends Diagram {
 
     // Reflection is an involution — same formula reads and writes.
     const mirrorOf = (src: Vec): Vec =>
-      derived(Vec,
+      lens(
         () => reflect(src.value, mA.value, mB.value),
         (target) => {
           src.value = reflect(target, mA.value, mB.value);
         },
+        Vec,
       );
 
     const stemTop = vec(200, 90);

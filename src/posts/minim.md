@@ -199,7 +199,7 @@ const v = c.derive((c) => c.add(offset).scale(2).perp());
 
 `field(parent, key, Type)` is the underlying machinery. `vec.x` and `vec.y` are returned by `field(this, "x", Num)` / `field(this, "y", Num)` — so they're full `Num` signals, and `vec.x.to(50, 0.3)` is a one-axis tween. Per-axis writes don't fire neighbouring effects.
 
-Aggregates aren't a feature, they're lenses. `derived(Cls, getter, setter?)` returns a writable `Computed` that's also an instance of `Cls` — `derived(Vec, …)` is a Vec. `combine(parts, merge, distribute)` is the N-ary form; `mean(...sigs)` is five lines over `combine`; `centroid(a, b, c, d)` is `mean(a.translate, …)`. Reading returns the mean; writing distributes the delta. Tweening it is a rigid group translate:
+Aggregates aren't a feature, they're lenses. `lens(getter, setter, Cls)` returns a writable computed view that's also an instance of `Cls` — `lens(get, set, Vec)` is a Vec. `combine(parts, merge, distribute)` is the N-ary form; `mean(...sigs)` is five lines over `combine`; `centroid(a, b, c, d)` is `mean(a.translate, …)`. Reading returns the mean; writing distributes the delta. Tweening it is a rigid group translate:
 
 ```ts
 const c = centroid(a, b, c, d);
@@ -230,21 +230,24 @@ s(debug.center(c));
 
 They update with everything else, because they're just signals deriving from signals.
 
-`.to` works uniformly across value types because it dispatches on traits. `tween`, `spring`, `toward`, `attract` read `[LINEAR]` / `[LERP]` / `[METRIC]` from Symbol-keyed prototype slots on the signal — they don't know about `Vec` or `Color` specifically. So `.to` on a `Num`, a `Vec`, a `Box`, a `Color`, a `Transform`, a string — same call, dispatched through the slot:
+`.to` works uniformly across value types because it dispatches on traits. `tween`, `spring`, `toward`, `attract` read `linear` / `lerp` / `metric` from each class's `static traits = {…}` dictionary — they don't know about `Vec` or `Color` specifically, and the constraint is enforced at compile time (`spring<T>(sig: Traits<T, "linear" | "metric">, …)` rejects classes without those traits). So `.to` on a `Num`, a `Vec`, a `Box`, a `Color`, a `Transform`, a string — same call, dispatched through the dict:
 
 <md-lerps></md-lerps>
 
-Adding a value type is one class with trait slots declared as methods:
+Adding a value type is one class with a single trait dictionary:
 
 ```ts
 class Polygon extends Signal<PolygonValue> {
-  [LERP](a, b, t) { return lerpPolygon(a, b, t); }
-  [EQUALS](a, b) { return equalsPolygon(a, b); }
+  static traits = {
+    lerp: lerpPolygon,
+    equals: equalsPolygon,
+  };
   to(target, dur, ease?) { return tween(this, target, dur, ease); }
 }
+interface Polygon { readonly constructor: typeof Polygon }
 ```
 
-…and `polygon.to(targetPolygon, dur)` falls out, on the same chain machinery, with the same combinator support. Add `[LINEAR]` and `[METRIC]` too and `spring`/`toward`/`attract` work on it the same day. A centroid of `Polygon`s is `mean(p1, p2, p3)`. No special cases anywhere in the pipeline.
+…and `polygon.to(targetPolygon, dur)` falls out, on the same chain machinery, with the same combinator support. Add `linear` and `metric` to the dict and `spring`/`toward`/`attract` work on it the same day. A centroid of `Polygon`s is `mean(p1, p2, p3)`. No special cases anywhere in the pipeline.
 
 <md-morph></md-morph>
 

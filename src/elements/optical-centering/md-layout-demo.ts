@@ -3,7 +3,7 @@ import {
   Mount,
   Anchor,
   Vec,
-  derived,
+  lens,
   arrange,
   handle,
   label,
@@ -45,8 +45,7 @@ export class MdLayoutDemo extends Diagram {
     const handles = widths.map((w, i) => {
       const card = cards[i];
       const h = HEIGHTS[i];
-      const pos = derived(
-        Vec,
+      const pos = lens(
         () => ({
           x: card.translate.value.x + w.value,
           y: card.translate.value.y + h / 2,
@@ -54,6 +53,7 @@ export class MdLayoutDemo extends Diagram {
         (p) => {
           w.value = Math.max(MIN_W, p.x - card.translate.value.x);
         },
+        Vec,
       );
       return s(handle(pos, { cursor: "ew-resize", r: 5 }));
     });

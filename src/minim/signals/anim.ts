@@ -1,28 +1,32 @@
-// signals ↔ generators bridge: .to(), spring/toward/attract, play, when.
+// anim.ts — animator primitives over nominal trait constraints,
+// plus the broader signals↔generators bridge (Tween chainable, Play,
+// when, loop, every, follow, etc.).
+//
+// All trait-dispatched signatures inline `Traits<T, "linear" | …>` —
+// no per-consumer alias. Reads as a sentence: "spring takes a signal
+// that has linear + metric." Compile error on `spring(box, …)` (no
+// metric) or `spring(signal(0), …)` (no traits dict).
+//
+// Math is verbatim from prod's lerp.ts.
 
 import {
-  Signal,
-  Computed,
-  computed,
-  effect,
-  type Val,
-  type Read,
+  Signal, computed, effect,
+  type Val, type Read, type Computed,
+  value as readVal,
 } from "./signal";
-import { LERP, LINEAR, METRIC } from "./traits";
 import {
-  drive,
-  isGenerator,
-  suspend,
-  race,
-  scaled,
-  type Animator,
-  type Tick,
-  type Yieldable,
-  type Easing,
+  requireLinear, requireLerp, requireMetric,
+  type Traits,
+} from "./traits";
+import {
+  drive, isGenerator, suspend, race, scaled,
+  type Animator, type Tick, type Yieldable, type Easing,
   easeOut,
 } from "../core";
 
 const defaultEase = easeOut;
+
+// ─── Tween chainable builder ────────────────────────────────────────
 
 type Seg<T> =
   | { readonly kind: "pose"; readonly target: T }
@@ -32,12 +36,12 @@ type Seg<T> =
  *  naturally. `.to`/`.from` are pure data — segments accumulate at
  *  construction; the executor generator runs them in order on iteration. */
 export class Tween<T> implements Animator<void> {
-  readonly #sig: Signal<T>;
+  readonly #sig: Traits<T, "lerp">;
   readonly #segs: readonly Seg<T>[];
   readonly #gen: Animator<void>;
 
   /** @internal — use `tween(...)` or `sig.to(...)` to construct. */
-  constructor(sig: Signal<T>, segs: readonly Seg<T>[] = []) {
+  constructor(sig: Traits<T, "lerp">, segs: readonly Seg<T>[] = []) {
     this.#sig = sig;
     this.#segs = segs;
     this.#gen = (function* () {
@@ -64,34 +68,31 @@ export class Tween<T> implements Animator<void> {
   [Symbol.iterator](): this { return this; }
 }
 
-function* tweenStep<T>(
-  sig: Signal<T>,
+// ─── tween ──────────────────────────────────────────────────────────
+
+/** Append-only tween segment over a reactive target. */
+export function* tweenStep<T>(
+  sig: Traits<T, "lerp">,
   target: T,
   dur: Val<number>,
   ease: Easing = defaultEase,
 ): Animator<void> {
-  const lerpFn = sig[LERP];
-  if (!lerpFn) {
-    throw new Error(`tween: ${sig.constructor.name} has no [LERP] slot`);
-  }
+  const lerp = requireLerp(sig);
   const start = sig.peek();
   const D = valFn(dur);
-  // `t` is `tick.elapsed - start` each frame (no compounding); the
-  // engine clock itself rounds at single-step scale, so a sub-dt
-  // tolerance at the boundary handles that one-step error.
   yield* drive((tick, t) => {
     const total = D();
     if (total <= 0 || t + tick.dt * 1e-3 >= total) {
       sig.value = target;
       return false;
     }
-    sig.value = lerpFn(start, target, ease(t / total));
+    sig.value = lerp(start, target, ease(t / total));
   });
 }
 
-/** Free-fn form of `.to()` for signals without the method installed. */
+/** Free-fn form of one-shot tween — returns a chainable `Tween<T>`. */
 export function tween<T>(
-  sig: Signal<T>,
+  sig: Traits<T, "lerp">,
   target: T,
   dur: Val<number>,
   ease?: Easing,
@@ -99,43 +100,30 @@ export function tween<T>(
   return new Tween(sig, [{ kind: "to", target, dur, ease }]);
 }
 
+// ─── spring ─────────────────────────────────────────────────────────
+
 export interface SpringOpts {
-  /** Natural angular frequency (rad/s). Period of unforced oscillation
-   *  ≈ 2π/ω. Default 13 (≈ 0.48 s period). Equivalent to the older
-   *  Hooke `stiffness = ω²`. */
+  /** Natural angular frequency (rad/s). Default 13 (~0.48 s period). */
   omega?: number;
-  /** Damping ratio (dimensionless). `<1` underdamped (oscillates),
-   *  `=1` critically damped (fastest non-overshooting), `>1` overdamped
-   *  (sluggish). Default 1. Equivalent to `damping = 2·ζ·ω`. */
+  /** Damping ratio. <1 underdamped, =1 critical, >1 overdamped. Default 1. */
   zeta?: number;
-  /** Settle threshold; snap+complete when distance < precision and
-   *  velocity magnitude < precision*100. Default 1e-4. `0` runs forever. */
+  /** Settle threshold; snap+complete when both ‖e‖ < eps and ‖v‖ < eps·ω. */
   precision?: number;
 }
 
-/** Pull `sig` toward `target` with second-order damped-spring dynamics:
- *  `x'' = ω²·(target - x) - 2ζω·x'`. Closed-form per step — unconditionally
- *  stable at any `dt`, branches by damping regime. `target` may be reactive
- *  (sampled each frame, treated as piecewise constant over `dt`). Settles
- *  when `‖x - target‖ < eps` and `‖v‖ < eps · ω`. */
+/** Second-order damped-spring pull. Math unchanged from prod's `spring`. */
 export function* spring<T>(
-  sig: Signal<T>,
+  sig: Traits<T, "linear" | "metric">,
   target: Val<T>,
   opts: SpringOpts = {},
 ): Animator<void> {
-  const lin = sig[LINEAR];
-  const met = sig[METRIC];
-  if (!lin || !met) {
-    throw new Error(
-      `spring: ${sig.constructor.name} needs [LINEAR] + [METRIC]`,
-    );
-  }
+  const lin = requireLinear(sig);
+  const met = requireMetric(sig);
   const omega = opts.omega ?? 13;
   const zeta = opts.zeta ?? 1;
   const eps = opts.precision ?? 1e-4;
   const T = valFn(target);
 
-  // Zero-vector of the value's algebra; produced by scaling any T by 0.
   const zero: T = lin.scale(sig.peek(), 0);
   let vel: T = zero;
 
@@ -143,34 +131,26 @@ export function* spring<T>(
     const dt = tick.dt;
     const t = T();
     const cur = sig.peek();
-    // Solve in displacement-space: e = cur - target (so target ≡ origin).
-    // Closed-form for ė = v, v̇ = -ω²·e - 2ζω·v over a step of length dt.
     const e0 = lin.sub(cur, t);
     const v0 = vel;
 
     let e1: T, v1: T;
     if (zeta < 1 - 1e-6) {
-      // Underdamped: oscillating envelope.
       const zw = zeta * omega;
       const wd = omega * Math.sqrt(1 - zeta * zeta);
       const E = Math.exp(-zw * dt);
       const c = Math.cos(wd * dt);
       const s = Math.sin(wd * dt);
-      // B = (v0 + zw·e0) / wd
       const B = lin.scale(lin.add(v0, lin.scale(e0, zw)), 1 / wd);
-      // e1 = E · (e0·c + B·s)
       const inner = lin.add(lin.scale(e0, c), lin.scale(B, s));
       e1 = lin.scale(inner, E);
-      // v1 = -zw·e1 + E·wd · (B·c - e0·s)
       const swing = lin.sub(lin.scale(B, c), lin.scale(e0, s));
       v1 = lin.add(lin.scale(e1, -zw), lin.scale(swing, E * wd));
     } else if (zeta > 1 + 1e-6) {
-      // Overdamped: two real roots.
       const r = omega * Math.sqrt(zeta * zeta - 1);
       const r1 = -zeta * omega + r;
       const r2 = -zeta * omega - r;
       const denom = r2 - r1;
-      // B = (v0 - r1·e0) / (r2 - r1); A = e0 - B
       const B = lin.scale(lin.sub(v0, lin.scale(e0, r1)), 1 / denom);
       const A = lin.sub(e0, B);
       const E1 = Math.exp(r1 * dt);
@@ -178,20 +158,16 @@ export function* spring<T>(
       e1 = lin.add(lin.scale(A, E1), lin.scale(B, E2));
       v1 = lin.add(lin.scale(A, r1 * E1), lin.scale(B, r2 * E2));
     } else {
-      // Critically damped (ζ ≈ 1).
       const E = Math.exp(-omega * dt);
-      // B = v0 + ω·e0; e(t) = (e0 + B·t)·E
       const B = lin.add(v0, lin.scale(e0, omega));
       const Bt = lin.scale(B, dt);
       e1 = lin.scale(lin.add(e0, Bt), E);
-      // v(t) = B·E - ω·e(t)
       v1 = lin.sub(lin.scale(B, E), lin.scale(e1, omega));
     }
 
     vel = v1;
-    sig.value = lin.add(t, e1); // x_new = target + e_new
+    sig.value = lin.add(t, e1);
 
-    // Settle: both displacement and velocity small (dimensionally matched).
     if (eps > 0 && met(e1, zero) < eps && met(v1, zero) < eps * omega) {
       sig.value = t;
       return false;
@@ -199,19 +175,16 @@ export function* spring<T>(
   });
 }
 
-/** Constant-speed approach (units-of-T per second). */
+// ─── toward / attract ──────────────────────────────────────────────
+
+/** Constant-speed approach (units-of-T per second). Needs linear+metric. */
 export function* toward<T>(
-  sig: Signal<T>,
+  sig: Traits<T, "linear" | "metric">,
   target: Val<T>,
   speed: Val<number>,
 ): Animator<void> {
-  const lin = sig[LINEAR];
-  const met = sig[METRIC];
-  if (!lin || !met) {
-    throw new Error(
-      `toward: ${sig.constructor.name} needs [LINEAR] + [METRIC]`,
-    );
-  }
+  const lin = requireLinear(sig);
+  const met = requireMetric(sig);
   const T = valFn(target);
   const S = valFn(speed);
   yield* drive((tick) => {
@@ -228,14 +201,13 @@ export function* toward<T>(
   });
 }
 
-/** Exponential pull toward `target` at rate `k`/s (no overshoot). */
+/** Exponential pull toward `target` at rate `k`/s (no overshoot). Needs linear. */
 export function* attract<T>(
-  sig: Signal<T>,
+  sig: Traits<T, "linear">,
   target: Val<T>,
   k: Val<number> = 1,
 ): Animator<void> {
-  const lin = sig[LINEAR];
-  if (!lin) throw new Error(`attract: ${sig.constructor.name} needs [LINEAR]`);
+  const lin = requireLinear(sig);
   const T = valFn(target);
   const K = valFn(k);
   yield* drive((tick) => {
@@ -245,17 +217,14 @@ export function* attract<T>(
   });
 }
 
-function valFn<T>(v: Val<T>): () => T {
-  if (v instanceof Signal) return () => v.value;
-  if (typeof v === "function") return v as () => T;
-  return () => v as T;
-}
+// ─── generator-scoped reactive helpers ────────────────────────────
 
 /** Generator-scoped reactive bind; cleans up when the parent ends. */
 export function follow<T>(sig: Signal<T>, source: Val<T>): Animator<void> {
   return suspend<void>((_wake) => sig.bind(source));
 }
 
+/** Drive `sig` per frame with a pure function `f(t, initial)`. */
 export function* wave<T>(
   sig: Signal<T>,
   fn: (t: number, initial: T) => T,
@@ -279,9 +248,11 @@ export function* driven<T>(
   });
 }
 
-// `Read<unknown>` (covariant) accepts any `Signal<T>` / `Computed<T>`;
+// ─── Play / play / when / loop / every ───────────────────────────────
+
+// `Read<unknown>` (covariant) accepts any Signal<T> / Computed<T>;
 // `Signal<unknown>` doesn't (invariant in T) and `Signal<any>` is
-// bivariant noise. `playableGen` narrows back to `Signal` at runtime.
+// bivariant noise. `playableGen` narrows back to Signal at runtime.
 export type PlayTrigger = Yieldable | Read<unknown>;
 
 export interface Play<R = void> extends Animator<R> {
@@ -295,18 +266,10 @@ export interface Play<R = void> extends Animator<R> {
 
 class PlayImpl<R> implements Play<R> {
   constructor(private g: Animator<R>) {}
-  next(v?: Tick) {
-    return this.g.next(v as Tick);
-  }
-  return(v?: R) {
-    return this.g.return(v as R);
-  }
-  throw(e: unknown) {
-    return this.g.throw(e);
-  }
-  [Symbol.iterator]() {
-    return this;
-  }
+  next(v?: Tick) { return this.g.next(v as Tick); }
+  return(v?: R) { return this.g.return(v as R); }
+  throw(e: unknown) { return this.g.throw(e); }
+  [Symbol.iterator]() { return this; }
 
   until(p: PlayTrigger): Play<R> {
     const trigger = playableGen(p);
@@ -348,7 +311,6 @@ export function play<R>(g: Animator<R> | (() => Animator<R>)): Play<R>;
 export function play(p: PlayTrigger | (() => Animator)): Play<unknown>;
 export function play(p: PlayTrigger | (() => Animator)): Play<unknown> {
   if (p instanceof PlayImpl) return p;
-  // Nullary fn = factory; arity-1 `Suspend` impls aren't unwrapped here.
   if (typeof p === "function" && (p as Function).length === 0) {
     p = (p as () => Animator)();
   }
@@ -438,3 +400,14 @@ export function every(sec: Val<number>, fn: () => void): Play {
     })(),
   );
 }
+
+// ─── helpers ────────────────────────────────────────────────────────
+
+function valFn<T>(v: Val<T>): () => T {
+  if (v instanceof Signal) return () => v.value;
+  if (typeof v === "function") return v as () => T;
+  return () => v as T;
+}
+
+/** Re-export with the proto's `value()` so consumers don't reach into core. */
+export const value = readVal;

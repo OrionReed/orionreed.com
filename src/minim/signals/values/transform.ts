@@ -1,33 +1,32 @@
-// transform.ts — reactive 2D affine-style composite
-// (translate / scale / origin / rotate / opacity).
+// transform.ts — reactive 2D transform (translate/scale/origin/rotate/opacity).
+//
+// Nested field lenses (`.translate` → `Vec`), name-collision pattern
+// (`Transform.scale` is the Vec axis lens, scalar multiplication only
+// on TransformChain).
 
-import { Signal, value, type Val } from "../signal";
-import { LINEAR, LERP, METRIC, EQUALS, type Linear } from "../traits";
-import { derived, field, type ReactiveInit } from "../derive";
-import { tween, type Tween } from "../lerp";
+import { Signal, computed, value, type Val, type SignalOptions, type Of, type SignalInit } from "../signal";
+import { type Linear, type TraitDict } from "../traits";
+import { type Op, applyOp1, Chain } from "../ops";
+import { tween, type Tween } from "../anim";
 import { type Easing } from "../../core";
 import { Num } from "./num";
 import {
   Vec,
-  add as vAdd,
-  sub as vSub,
-  scale as vScale,
-  lerp as vLerp,
-  metric as vMetric,
-  equals as vEquals,
-  type Value as VecShape,
+  add as vAdd, sub as vSub, scale as vScale, lerp as vLerp,
+  metric as vMetric, equals as vEquals,
 } from "./vec";
 
-export interface Value {
-  translate: VecShape;
-  scale: VecShape;
-  origin: VecShape;
+type V = {
+  translate: Of<Vec>;
+  scale: Of<Vec>;
+  origin: Of<Vec>;
   rotate: number;
   opacity: number;
-}
-export type Init = ReactiveInit<Value>;
+};
 
-export const DEFAULT: Value = {
+export type TransformInit = SignalInit<V>;
+
+export const DEFAULT: V = {
   translate: { x: 0, y: 0 },
   scale: { x: 1, y: 1 },
   origin: { x: 0, y: 0 },
@@ -35,101 +34,105 @@ export const DEFAULT: Value = {
   opacity: 1,
 };
 
-export const add = (a: Value, b: Value): Value => ({
+export const add = (a: V, b: V): V => ({
   translate: vAdd(a.translate, b.translate),
-  scale: vAdd(a.scale, b.scale),
-  origin: vAdd(a.origin, b.origin),
-  rotate: a.rotate + b.rotate,
-  opacity: a.opacity + b.opacity,
+  scale:     vAdd(a.scale,     b.scale),
+  origin:    vAdd(a.origin,    b.origin),
+  rotate:    a.rotate + b.rotate,
+  opacity:   a.opacity + b.opacity,
 });
-export const sub = (a: Value, b: Value): Value => ({
+export const sub = (a: V, b: V): V => ({
   translate: vSub(a.translate, b.translate),
-  scale: vSub(a.scale, b.scale),
-  origin: vSub(a.origin, b.origin),
-  rotate: a.rotate - b.rotate,
-  opacity: a.opacity - b.opacity,
+  scale:     vSub(a.scale,     b.scale),
+  origin:    vSub(a.origin,    b.origin),
+  rotate:    a.rotate - b.rotate,
+  opacity:   a.opacity - b.opacity,
 });
-export const scale = (a: Value, k: number): Value => ({
+export const scale = (a: V, k: number): V => ({
   translate: vScale(a.translate, k),
-  scale: vScale(a.scale, k),
-  origin: vScale(a.origin, k),
-  rotate: a.rotate * k,
-  opacity: a.opacity * k,
+  scale:     vScale(a.scale,     k),
+  origin:    vScale(a.origin,    k),
+  rotate:    a.rotate * k,
+  opacity:   a.opacity * k,
 });
-export const lerp = (a: Value, b: Value, t: number): Value => ({
+export const lerp = (a: V, b: V, t: number): V => ({
   translate: vLerp(a.translate, b.translate, t),
-  scale: vLerp(a.scale, b.scale, t),
-  origin: vLerp(a.origin, b.origin, t),
-  rotate: a.rotate + (b.rotate - a.rotate) * t,
-  opacity: a.opacity + (b.opacity - a.opacity) * t,
+  scale:     vLerp(a.scale,     b.scale,     t),
+  origin:    vLerp(a.origin,    b.origin,    t),
+  rotate:    a.rotate + (b.rotate - a.rotate) * t,
+  opacity:   a.opacity + (b.opacity - a.opacity) * t,
 });
-export const equals = (a: Value, b: Value) =>
+export const equals = (a: V, b: V) =>
   a === b || (
     vEquals(a.translate, b.translate) && vEquals(a.scale, b.scale) &&
     vEquals(a.origin, b.origin) && a.rotate === b.rotate && a.opacity === b.opacity
   );
-/** Piecewise sum of axis distances. Used by `spring`/`toward` settle-checks. */
-export const metric = (a: Value, b: Value) =>
+
+export const metric = (a: V, b: V) =>
   vMetric(a.translate, b.translate) +
   vMetric(a.scale,     b.scale) +
   vMetric(a.origin,    b.origin) +
   Math.abs(a.rotate  - b.rotate) +
   Math.abs(a.opacity - b.opacity);
 
-const linearImpl: Linear<Value> = { add, sub, scale };
+// ─── Invertible ops ────────────────────────────────────────────────
 
-export class Transform extends Signal<Value> {
-  constructor(v: Value = DEFAULT) { super(v); }
+const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
+const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
+const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
 
-  add(b: Val<Value>) { return derived(Transform, () => add(this.value, value(b))); }
-  sub(b: Val<Value>) { return derived(Transform, () => sub(this.value, value(b))); }
-  lerp(b: Val<Value>, t: Val<number>) {
-    return derived(Transform, () => lerp(this.value, value(b), value(t)));
+const linearImpl: Linear<V> = { add, sub, scale };
+
+export class Transform extends Signal<V> {
+  static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
+
+  constructor(v: V = DEFAULT, opts?: SignalOptions<V>) { super(v, opts); }
+
+  // ── Invertible ──
+  add(b: Val<V>): Transform { return applyOp1(this, addOp, b, Transform); }
+  sub(b: Val<V>): Transform { return applyOp1(this, subOp, b, Transform); }
+
+  // ── Non-invertible ──
+  lerp(b: Val<V>, t: Val<number>): Transform {
+    return computed(() => lerp(this.value, value(b), value(t)), Transform);
   }
 
-  get translate() { return field(this, "translate", Vec); }
-  get scale() { return field(this, "scale", Vec); }
-  get origin() { return field(this, "origin", Vec); }
-  get rotate() { return field(this, "rotate", Num); }
-  get opacity() { return field(this, "opacity", Num); }
+  // Nested-class field lenses: translate/scale/origin are Vecs.
+  // `scale` here is the Vec axis lens — scalar multiplication lives
+  // ONLY on TransformChain to avoid the collision.
+  get translate(): Vec { return this.field("translate", Vec); }
+  get scale(): Vec     { return this.field("scale",     Vec); }
+  get origin(): Vec    { return this.field("origin",    Vec); }
+  get rotate(): Num    { return this.field("rotate",    Num); }
+  get opacity(): Num   { return this.field("opacity",   Num); }
 
-  // Trait slots — on prototype.
-  get [LINEAR](): Linear<Value> { return linearImpl; }
-  [LERP](a: Value, b: Value, t: number) { return lerp(a, b, t); }
-  [METRIC](a: Value, b: Value) { return metric(a, b); }
-  [EQUALS](a: Value, b: Value) { return equals(a, b); }
-
-  to(target: Value, dur: Val<number>, ease?: Easing): Tween<Value> {
+  /** Tween-builder, implied by lerp trait. */
+  to(target: V, dur: Val<number>, ease?: Easing): Tween<V> {
     return tween(this, target, dur, ease);
   }
 
-  derive(fn: (c: TransformChain) => TransformChain) {
-    return derived(Transform, () => fn(new TransformChain(this.value)).value);
+  derive(fn: (c: TransformChain) => TransformChain): Transform {
+    return fn(new TransformChain()).toLens(this, Transform);
   }
 }
 
-export class TransformChain {
-  value: Value;
-  constructor(v: Value) { this.value = v; }
-  add(b: Val<Value>) { this.value = add(this.value, value(b)); return this; }
-  sub(b: Val<Value>) { this.value = sub(this.value, value(b)); return this; }
-  /** Scalar multiply (only available in Chain to avoid clashing with
-   *  the `transform.scale` axis lens on the reactive class). */
-  scale(k: Val<number>) { this.value = scale(this.value, value(k)); return this; }
-  lerp(b: Val<Value>, t: Val<number>) {
-    this.value = lerp(this.value, value(b), value(t)); return this;
-  }
+export interface Transform { readonly constructor: typeof Transform }
+
+export class TransformChain extends Chain<V> {
+  add(b: Val<V>): this { return this.push1(addOp, b); }
+  sub(b: Val<V>): this { return this.push1(subOp, b); }
+  /** Scalar multiply (chain-only — `Transform.scale` is the Vec axis lens). */
+  scale(k: Val<number>): this { return this.push1(scaleOp, k); }
 }
 
-/** Construct a Transform; per-field Val<T> args bind axes via lenses. */
-export const transform = (init?: Init): Transform => {
+export const transform = (init?: TransformInit): Transform => {
   const tr = new Transform();
   if (init) {
     if (init.translate !== undefined) tr.translate.bind(init.translate);
-    if (init.scale !== undefined) tr.scale.bind(init.scale);
-    if (init.origin !== undefined) tr.origin.bind(init.origin);
-    if (init.rotate !== undefined) tr.rotate.bind(init.rotate);
-    if (init.opacity !== undefined) tr.opacity.bind(init.opacity);
+    if (init.scale     !== undefined) tr.scale.bind(init.scale);
+    if (init.origin    !== undefined) tr.origin.bind(init.origin);
+    if (init.rotate    !== undefined) tr.rotate.bind(init.rotate);
+    if (init.opacity   !== undefined) tr.opacity.bind(init.opacity);
   }
   return tr;
 };

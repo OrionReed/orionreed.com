@@ -1,48 +1,37 @@
 // matrix.ts — reactive 2D affine matrix (SVG/Canvas convention).
+//
+// Sparse-trait stress test: only `equals` declared. Matrices have no
+// useful element-wise linear combine and naïve element-wise lerp
+// doesn't decompose, so `spring`/`tween`/`mean` etc. reject Matrix at
+// compile time (no linear/lerp/metric).
+//
+// Two clearly-invertible ops: `multiply(b)` (inverse is multiply by
+// `invert(b)`) and `invert()` (its own inverse).
 
-import { Signal, value, type Val } from "../signal";
-import { EQUALS } from "../traits";
-import { derived, field } from "../derive";
+import { Signal, computed, value, type Val, type SignalOptions, type Of } from "../signal";
+import { type TraitDict } from "../traits";
+import { type Op, applyOp0, applyOp1, Chain } from "../ops";
 import { Num } from "./num";
-import type { Value as VecValue } from "./vec";
+import { Vec } from "./vec";
 
-export interface Value {
-  a: number;
-  b: number;
-  c: number;
-  d: number;
-  e: number;
-  f: number;
-}
+type V = { a: number; b: number; c: number; d: number; e: number; f: number };
+type BoxV = { x: number; y: number; w: number; h: number };
 
-// Plain Box shape (kept local to avoid a circular import with `./box`).
-type BoxValue = { x: number; y: number; w: number; h: number };
-
-export const identity = (): Value =>
-  ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
-
-export const fromTranslate = (x: number, y: number): Value =>
-  ({ a: 1, b: 0, c: 0, d: 1, e: x, f: y });
-
-export const fromScale = (x: number, y: number): Value =>
-  ({ a: x, b: 0, c: 0, d: y, e: 0, f: 0 });
-
-export const fromRotate = (angle: number): Value => {
-  const s = Math.sin(angle);
-  const c = Math.cos(angle);
+export const identity = (): V => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+export const fromTranslate = (x: number, y: number): V => ({ a: 1, b: 0, c: 0, d: 1, e: x, f: y });
+export const fromScale = (x: number, y: number): V => ({ a: x, b: 0, c: 0, d: y, e: 0, f: 0 });
+export const fromRotate = (angle: number): V => {
+  const s = Math.sin(angle); const c = Math.cos(angle);
   return { a: c, b: s, c: -s, d: c, e: 0, f: 0 };
 };
 
-export const isIdentity = (m: Value): boolean =>
+export const isIdentity = (m: V): boolean =>
   m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.e === 0 && m.f === 0;
 
-export const equals = (m: Value, n: Value): boolean =>
-  m === n || (
-    m.a === n.a && m.b === n.b && m.c === n.c &&
-    m.d === n.d && m.e === n.e && m.f === n.f
-  );
+export const equals = (m: V, n: V): boolean =>
+  m === n || (m.a === n.a && m.b === n.b && m.c === n.c && m.d === n.d && m.e === n.e && m.f === n.f);
 
-export function multiply(a: Value, b: Value): Value {
+export function multiply(a: V, b: V): V {
   return {
     a: a.a * b.a + a.c * b.b,
     b: a.b * b.a + a.d * b.b,
@@ -53,27 +42,26 @@ export function multiply(a: Value, b: Value): Value {
   };
 }
 
-export function invert(m: Value): Value {
+export function invert(m: V): V {
   const det = m.a * m.d - m.b * m.c;
   if (det === 0) throw new Error("Matrix not invertible");
   const inv = 1 / det;
   return {
-    a: m.d * inv,
+    a:  m.d * inv,
     b: -m.b * inv,
     c: -m.c * inv,
-    d: m.a * inv,
+    d:  m.a * inv,
     e: (m.c * m.f - m.d * m.e) * inv,
     f: (m.b * m.e - m.a * m.f) * inv,
   };
 }
 
-export const determinant = (m: Value): number => m.a * m.d - m.b * m.c;
+export const determinant = (m: V): number => m.a * m.d - m.b * m.c;
 
-export const transformPoint = (m: Value, p: VecValue): VecValue =>
+export const transformPoint = (m: V, p: Of<Vec>): Of<Vec> =>
   ({ x: m.a * p.x + m.c * p.y + m.e, y: m.b * p.x + m.d * p.y + m.f });
 
-/** Loose Box enclosing the four transformed corners; identity short-circuits. */
-export function transformBox(m: Value, b: BoxValue): BoxValue {
+export function transformBox(m: V, b: BoxV): BoxV {
   if (isIdentity(m)) return b;
   const x0 = b.x, y0 = b.y, x1 = b.x + b.w, y1 = b.y + b.h;
   const ax = m.a * x0 + m.c * y0 + m.e;
@@ -84,95 +72,72 @@ export function transformBox(m: Value, b: BoxValue): BoxValue {
   const cy = m.b * x1 + m.d * y1 + m.f;
   const dx = m.a * x0 + m.c * y1 + m.e;
   const dy = m.b * x0 + m.d * y1 + m.f;
-  const minX = Math.min(ax, bx, cx, dx);
-  const maxX = Math.max(ax, bx, cx, dx);
-  const minY = Math.min(ay, by, cy, dy);
-  const maxY = Math.max(ay, by, cy, dy);
-  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+  return {
+    x: Math.min(ax, bx, cx, dx),
+    y: Math.min(ay, by, cy, dy),
+    w: Math.max(ax, bx, cx, dx) - Math.min(ax, bx, cx, dx),
+    h: Math.max(ay, by, cy, dy) - Math.min(ay, by, cy, dy),
+  };
 }
 
-// Clamp scale magnitude away from zero. Firefox's SVG compositor leaks
-// GPU layer textures when an animated transform is exactly singular
-// (det = 0); any non-zero magnitude dodges it. `1e-7` is sub-pixel.
-// Related: https://bugzilla.mozilla.org/show_bug.cgi?id=1316003
 const SCALE_EPS = 1e-7;
 
-/** Shape transform: `T(t) T(p) R(r) S(s) T(-p)`. Scales clamped away
- *  from zero (Firefox compositor leak on singular matrices). Fast paths
- *  for no-scale / no-rotate. */
-export function compose(t: VecValue, r: number, s: VecValue, pivot: VecValue): Value {
+export function compose(t: Of<Vec>, r: number, s: Of<Vec>, pivot: Of<Vec>): V {
   const sx = Math.abs(s.x) < SCALE_EPS ? (s.x < 0 ? -SCALE_EPS : SCALE_EPS) : s.x;
   const sy = Math.abs(s.y) < SCALE_EPS ? (s.y < 0 ? -SCALE_EPS : SCALE_EPS) : s.y;
-
-  const hasTrans = t.x !== 0 || t.y !== 0;
-  const hasRot = r !== 0;
-  const hasScale = sx !== 1 || sy !== 1;
-  if (!hasTrans && !hasRot && !hasScale) return identity();
-
-  if (!hasRot && !hasScale) {
-    return { a: 1, b: 0, c: 0, d: 1, e: t.x, f: t.y };
-  }
-  if (hasRot && !hasScale) {
-    const cos = Math.cos(r);
-    const sin = Math.sin(r);
-    return {
-      a: cos, b: sin, c: -sin, d: cos,
-      e: t.x + pivot.x - cos * pivot.x + sin * pivot.y,
-      f: t.y + pivot.y - sin * pivot.x - cos * pivot.y,
-    };
-  }
-  if (hasScale && !hasRot) {
-    return {
-      a: sx, b: 0, c: 0, d: sy,
-      e: t.x + pivot.x * (1 - sx),
-      f: t.y + pivot.y * (1 - sy),
-    };
-  }
-
-  let m = hasTrans ? fromTranslate(t.x, t.y) : identity();
+  let m = fromTranslate(t.x, t.y);
   m = multiply(m, fromTranslate(pivot.x, pivot.y));
-  if (hasRot) m = multiply(m, fromRotate(r));
-  if (hasScale) m = multiply(m, fromScale(sx, sy));
+  if (r !== 0) m = multiply(m, fromRotate(r));
+  if (sx !== 1 || sy !== 1) m = multiply(m, fromScale(sx, sy));
   m = multiply(m, fromTranslate(-pivot.x, -pivot.y));
   return m;
 }
 
-/** Comma-separated — valid as both SVG `transform` and CSS `transform`. */
-export const toString = (m: Value): string =>
+export const toMatrixString = (m: V): string =>
   `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
 
-export class Matrix extends Signal<Value> {
-  constructor(v: Value = identity()) { super(v); }
+// ─── Invertible ops ────────────────────────────────────────────────
 
-  multiply(b: Val<Value>) { return derived(Matrix, () => multiply(this.value, value(b))); }
-  invert() { return derived(Matrix, () => invert(this.value)); }
+const multiplyOp: Op<V, [V]> = {
+  fwd: multiply,
+  bwd: (n, b) => multiply(n, invert(b)),
+};
+const invertOp: Op<V, []> = { fwd: invert, bwd: invert };
 
-  get a() { return field(this, "a", Num); }
-  get b() { return field(this, "b", Num); }
-  get c() { return field(this, "c", Num); }
-  get d() { return field(this, "d", Num); }
-  get e() { return field(this, "e", Num); }
-  get f() { return field(this, "f", Num); }
+export class Matrix extends Signal<V> {
+  static traits: TraitDict<V> & { equals: typeof equals } = { equals };
 
-  get determinant() { return this._det ??= derived(Num, () => determinant(this.value)); }
-  private _det?: Num;
+  constructor(v: V = identity(), opts?: SignalOptions<V>) { super(v, opts); }
 
-  // Trait slots — on prototype.
-  [EQUALS](a: Value, b: Value) { return equals(a, b); }
+  // ── Invertible ──
+  multiply(b: Val<V>): Matrix { return applyOp1(this, multiplyOp, b, Matrix); }
+  invert(): Matrix { return applyOp0(this, invertOp, Matrix); }
 
-  derive(fn: (c: MatrixChain) => MatrixChain) {
-    return derived(Matrix, () => fn(new MatrixChain(this.value)).value);
+  get a(): Num { return this.field("a", Num); }
+  get b(): Num { return this.field("b", Num); }
+  get c(): Num { return this.field("c", Num); }
+  get d(): Num { return this.field("d", Num); }
+  get e(): Num { return this.field("e", Num); }
+  get f(): Num { return this.field("f", Num); }
+
+  // ── Non-invertible ──
+  get determinant(): Num {
+    return this.memo("determinant", () =>
+      computed(() => determinant(this.value), Num));
+  }
+
+  derive(fn: (c: MatrixChain) => MatrixChain): Matrix {
+    return fn(new MatrixChain()).toLens(this, Matrix);
   }
 }
 
-export class MatrixChain {
-  value: Value;
-  constructor(v: Value) { this.value = v; }
-  multiply(b: Val<Value>) { this.value = multiply(this.value, value(b)); return this; }
-  invert() { this.value = invert(this.value); return this; }
+export interface Matrix { readonly constructor: typeof Matrix }
+
+export class MatrixChain extends Chain<V> {
+  multiply(b: Val<V>): this { return this.push1(multiplyOp, b); }
+  invert(): this { return this.push0(invertOp); }
 }
 
-/** Construct a Matrix; reactive per-component args bind the lens. */
 export const matrix = (
   a: Val<number> = 1, b: Val<number> = 0,
   c: Val<number> = 0, d: Val<number> = 1,

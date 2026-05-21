@@ -1,7 +1,7 @@
 // Reactive clock — projects `anim.clock` into a reactive signal so
 // callers can subscribe through `computed`/`effect`. The runtime itself
-// (`@minim/core`) has no signal dependency; this adapter lives in
-// `signals/` because it bridges into the reactive layer.
+// (`@minim/core`) has no signal dependency; this adapter lives here
+// because it bridges into the reactive layer.
 
 import { type Anim } from "../core";
 import { signal, type Signal } from "./signal";

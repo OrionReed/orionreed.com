@@ -16,7 +16,7 @@ import { box } from "./values/box";
 import { rgb } from "./values/color";
 import { matrix, identity, fromTranslate, multiply, invert } from "./values/matrix";
 import { transform } from "./values/transform";
-import { Signal, type RO } from "./signal";
+import { Signal } from "./signal";
 
 // ─── Num: eager invertible ─────────────────────────────────────────
 
@@ -229,7 +229,10 @@ describe("Cross-type bidirectional flow", () => {
   });
 });
 
-// ─── Type probes: non-invertible methods return RO<…>, writes are TS errors ──
+// ─── Type-only probes ──
+// Eager non-invertible methods return the typed class (writes throw at
+// runtime, not at TS compile time). The chain class, however, only
+// exposes invertible methods — writability is enforced at the call site.
 function _typeOnlyProbe(): void {
   if (Math.random() < -1) {
     const v = vec(0, 0);
@@ -238,19 +241,7 @@ function _typeOnlyProbe(): void {
     const sum = v.add(vec(1, 1));  // Vec
     sum.value = { x: 0, y: 0 };  // OK
 
-    // Non-invertible methods return RO<...>
-    const norm = v.normalize();        // RO<Vec>
-    const perp = v.perp();             // RO<Vec>
-    const dist = v.distance(vec(0,0)); // RO<Num>
-
-    // @ts-expect-error — RO<Vec>.value is readonly
-    norm.value = { x: 1, y: 1 };
-    // @ts-expect-error — RO<Vec>.value is readonly
-    perp.value = { x: 1, y: 1 };
-    // @ts-expect-error — RO<Num>.value is readonly
-    dist.value = 5;
-
-    // Chain class doesn't expose non-invertible methods
+    // Chain class doesn't expose non-invertible methods → compile errors
     v.derive((c) => {
       // @ts-expect-error — normalize() not on VecChain
       c.normalize();
@@ -263,3 +254,12 @@ function _typeOnlyProbe(): void {
   }
 }
 void _typeOnlyProbe;
+
+describe("non-invertible writes throw at runtime", () => {
+  it("vec.normalize().value = ... throws", () => {
+    const v = vec(3, 4);
+    const n = v.normalize();
+    expect(n.value).toEqual({ x: 0.6, y: 0.8 });
+    expect(() => { n.value = { x: 1, y: 0 }; }).toThrow(/Cannot write/);
+  });
+});

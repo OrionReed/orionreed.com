@@ -1,9 +1,11 @@
 import {
-  Anchor, Diagram, Path, Vec, type VecValue,
-  Signal, signal, derived, tween, LERP, EQUALS,
+  Anchor, Diagram, Path, Vec, type Of,
+  Signal, signal, computed, tween, type TraitDict,
   circle, label, loop,
   type Content, type Easing, type Mount, type Tween, type Val,
 } from "../../minim";
+
+type VecValue = Of<Vec>;
 
 const W = 640;
 const H = 360;
@@ -42,13 +44,19 @@ const polygonLerp = (a: PolygonValue, b: PolygonValue, t: number): PolygonValue 
 };
 
 class Polygon extends Signal<PolygonValue> {
+  static traits: TraitDict<PolygonValue> & {
+    lerp: typeof polygonLerp;
+    equals: typeof polygonEquals;
+  } = {
+    lerp: polygonLerp,
+    equals: polygonEquals,
+  };
   constructor(v: PolygonValue = { vertices: [] }) { super(v); }
-  [LERP](a: PolygonValue, b: PolygonValue, t: number) { return polygonLerp(a, b, t); }
-  [EQUALS](a: PolygonValue, b: PolygonValue) { return polygonEquals(a, b); }
   to(target: PolygonValue, dur: Val<number>, ease?: Easing): Tween<PolygonValue> {
     return tween(this, target, dur, ease);
   }
 }
+interface Polygon { readonly constructor: typeof Polygon }
 
 // Each builder emits N vertices; coarse shapes repeat corners so the lerp splits them apart.
 
@@ -120,10 +128,10 @@ export class MdMorph extends Diagram {
     const poly = new Polygon({ vertices: KEYFRAMES[0].verts });
 
     const points = Array.from({ length: N }, (_, i) =>
-      derived(Vec, () => {
+      computed(() => {
         const v = poly.value.vertices[i] ?? { x: 0, y: 0 };
         return { x: cx + v.x, y: cy + v.y };
-      }),
+      }, Vec),
     );
 
     s(

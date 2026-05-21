@@ -1,7 +1,9 @@
 import {
   Signal, signal, computed, num,
-  Vec, type VecValue, type Val,
+  Vec, type Of, type Val,
 } from "@minim/signals";
+
+type VecValue = Of<Vec>;
 import { Shape, type ShapeOpts } from "./shape";
 import { tokens } from "./tokens";
 import { renderContent, flattenText, type Content } from "./text";

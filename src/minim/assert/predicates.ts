@@ -3,8 +3,10 @@
 // with no special types, so users can compose them with `and` / `or` /
 // `not` / hand-rolled `computed()` interchangeably.
 
-import { computed, type Read } from "@minim/signals";
-import type { Box, VecValue } from "@minim/signals";
+import { computed, type Read, type Of } from "@minim/signals";
+import type { Box, Vec } from "@minim/signals";
+
+type VecValue = Of<Vec>;
 
 /** `lo ≤ s ≤ hi`. */
 export function inRange(

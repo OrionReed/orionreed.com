@@ -1,6 +1,8 @@
 // Derived shapes that decorate a tex Part (tracks `part.box` reactively).
 
-import { computed, type Signal, type BoxValue } from "@minim/signals";
+import { computed, Box, type Signal, type Of } from "@minim/signals";
+
+type BoxValue = Of<Box>;
 import { Shape, tokens } from "@minim/shapes";
 import type { Part } from "./parts";
 

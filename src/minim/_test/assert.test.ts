@@ -331,7 +331,11 @@ describe("intervals & firstOf", () => {
   it("scoped factory's alive flag follows lifetime", () => {
     const anim = new Anim();
     const rec = record(anim);
-    const t_spring = scope(spring, "spring");
+    // `scope(spring)` loses spring's <T> generic, so the wrapped call
+    // sees args typed as Traits<unknown, …>. Cast via `as any` is the
+    // simplest workaround for this generic-erasure edge.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t_spring = scope(spring as any, "spring");
     const op = num(0);
     const aliveLog: boolean[] = [];
     expect(t_spring.alive.value).toBe(false);
@@ -353,8 +357,10 @@ describe("intervals & firstOf", () => {
     const anim = new Anim();
     const rec = record(anim);
 
-    const t_tween = scope(tween, "tween");
-    const t_spring = scope(spring, "spring");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t_tween = scope(tween as any, "tween");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t_spring = scope(spring as any, "spring");
 
     const op = num(0);
 

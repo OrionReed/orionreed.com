@@ -11,8 +11,10 @@
 // underlying predicate, for users who want to pipe into a custom
 // `latch` shape).
 
-import { computed, type Read } from "@minim/signals";
-import type { Box, VecValue } from "@minim/signals";
+import { computed, type Read, type Of } from "@minim/signals";
+import type { Box, Vec } from "@minim/signals";
+
+type VecValue = Of<Vec>;
 import { intervals, latch, type Scope } from "./algebra";
 import {
   above,

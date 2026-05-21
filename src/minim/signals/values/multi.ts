@@ -55,15 +55,14 @@ export function combine<T, S extends Read<T>>(
  *      variance trap (`Linear<T>` is invariant, so `HasLinear<number>`
  *      isn't assignable to `HasLinear<unknown>`). */
 export function mean<R extends Read<unknown>>(
-  first: R & Traits<Of<R>, "linear">,
-  ...rest: (R & Traits<Of<R>, "linear">)[]
+  ...signals: (R & Traits<Of<R>, "linear">)[]
 ): R {
   type V = Of<R>;
-  const signals = [first, ...rest] as ReadonlyArray<Read<V>>;
-  const lin = requireLinear(first as Traits<V, "linear">);
+  if (signals.length === 0) throw new Error("mean: need ≥1 signal");
+  const lin = requireLinear(signals[0] as Traits<V, "linear">);
   const invN = 1 / signals.length;
   return combine<V, Read<V>>(
-    signals,
+    signals as ReadonlyArray<Read<V>>,
     (vs) => {
       let acc = vs[0];
       for (let i = 1; i < vs.length; i++) acc = lin.add(acc, vs[i]);

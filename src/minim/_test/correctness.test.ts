@@ -9,8 +9,10 @@ import { describe, it } from "vitest";
 import { check, section } from "./_check";
 import {
   signal, computed, effect, batch,
-  vec, num, type VecValue,
+  vec, num, Vec, type Of,
 } from "@minim/signals";
+
+type VecValue = Of<Vec>;
 
 describe("correctness", () => {
   it("all checks", () => {

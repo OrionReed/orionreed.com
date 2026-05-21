@@ -1,4 +1,4 @@
-import {derived, computed, Vec, type Signal, type Val} from "@minim/signals";
+import {computed, Vec, type Signal, type Val} from "@minim/signals";
 import {Shape, type Segment} from "./shape";
 import {intrinsicType, wireStroke, type CommonOpts} from "./common";
 
@@ -83,14 +83,14 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
 
   /** Closer endpoint to `toward`. */
   override boundary(toward: Vec): Vec {
-    return derived(Vec, () => {
+    return computed(() => {
       const t = toward.value;
       const a = this.from.value;
       const b = this.to.value;
       const da = (t.x - a.x) ** 2 + (t.y - a.y) ** 2;
       const db = (t.x - b.x) ** 2 + (t.y - b.y) ** 2;
       return da <= db ? a : b;
-    });
+    }, Vec);
   }
 
   override segments(): Segment[] {

@@ -1,7 +1,9 @@
 // LaTeX → MathML shape, rendered via Temml.
 
 import temml from "temml";
-import { signal, Box, type Signal, type BoxValue } from "@minim/signals";
+import { signal, Box, type Signal, type Of } from "@minim/signals";
+
+type BoxValue = Of<Box>;
 import { Shape, type ShapeOpts, tokens } from "@minim/shapes";
 import { Part, PartMarker, type PartList } from "./parts";
 

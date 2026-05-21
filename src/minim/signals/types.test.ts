@@ -97,8 +97,9 @@ describe("types", () => {
     const b = box(0, 0, 10, 10);
     type _bx = Expect<Eq<typeof b, Box>>;
     type _bxx = Expect<Eq<typeof b.x, Num>>;
-    // `.center` is read-only (RO<Vec>) — `at(u, v)` isn't bidirectional yet
-    type _bxc = Expect<Eq<typeof b.center["value"], { x: number; y: number }>>;
+    // `.center` returns Vec (read-only at runtime, since `at(u,v)`
+    // isn't bidirectional yet). Type is Vec; write throws at runtime.
+    type _bxc = Expect<Eq<typeof b.center, Vec>>;
     expect(b.center.value).toEqual({ x: 5, y: 5 });
   });
 

@@ -1,7 +1,7 @@
 // debug.* — read-only diagnostic shapes that visualize layout state.
 
 import {
-  derived, computed,
+  computed,
   Vec, Box, transformBox, transformPoint,
 } from "@minim/signals";
 import { Shape, type AnyShape } from "./shape";
@@ -27,7 +27,7 @@ const outlineOpts = {
  *  Box reflects the visual footprint); raw Boxes pass through. */
 function parentBox(b: Shape | Box): Box {
   if (b instanceof Shape) {
-    return derived(Box, () => transformBox(b.localFrame.value, b.box.value));
+    return computed(() => transformBox(b.localFrame.value, b.box.value), Box);
   }
   return b;
 }
@@ -46,8 +46,8 @@ const dot = (p: Vec | Shape | Box, r = 2.5) => {
 
 /** Crosshair at a Shape's rotate/scale pivot, in parent frame. */
 const origin = (s: Shape, size = 8) => {
-  const pivot = derived(Vec, () =>
-    transformPoint(s.localFrame.value, s.origin.value),
+  const pivot = computed(() =>
+    transformPoint(s.localFrame.value, s.origin.value), Vec,
   );
   const half = size / 2;
   const g = group({ aside: true, opacity: 0.75 });
@@ -118,10 +118,10 @@ const path = (p: Path, ticks = 5) => {
     const t = ticks === 1 ? 0 : i / (ticks - 1);
     const head = p.pointAt(t);
     const tan = p.tangentAt(t);
-    const tip = derived(Vec, () => ({
+    const tip = computed(() => ({
       x: head.value.x + tan.value.x * 6,
       y: head.value.y + tan.value.y * 6,
-    }));
+    }), Vec);
     g.add(
       circle(head, 2.5, { fill: COLOR, stroke: "none" }),
       line(head, tip, { stroke: COLOR, thin: true }),

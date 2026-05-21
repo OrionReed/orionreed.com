@@ -1,6 +1,8 @@
 // DOM input → signal-world bridges that bind to scene-graph shapes.
 
-import {type Signal, type VecValue} from "@minim/signals";
+import {type Signal, Vec, type Of} from "@minim/signals";
+
+type VecValue = Of<Vec>;
 import type {AnyShape} from "./shape";
 
 /** Wire `mouseenter`/`mouseleave` on a shape to a writable boolean signal.

@@ -5,8 +5,10 @@
 
 import { drive, type Animator, type Easing, type Yieldable } from "@minim/core";
 import {
-  play, num, Vec, type Val, type VecValue,
+  play, num, Vec, type Val, type Of,
 } from "@minim/signals";
+
+type VecValue = Of<Vec>;
 import type { Has } from "./shape";
 
 /** Swap two shapes' positions over `sec`. */

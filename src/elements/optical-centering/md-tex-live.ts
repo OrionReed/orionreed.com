@@ -1,4 +1,4 @@
-import {Anchor, Diagram, Mount, Vec, signal, computed, derived, handle, label, line, vec, type Content} from "../../minim";
+import {Anchor, Diagram, Mount, Vec, signal, computed, lens, handle, label, line, vec, type Content} from "../../minim";
 import {part, tex, tint} from "../../minim/tex";
 
 const W = 640;
@@ -47,7 +47,7 @@ export class MdTexLive extends Diagram {
         opacity: 0.4,
       }),
     );
-    const knobPos = derived(Vec,
+    const knobPos = lens(
       () => ({ x: TRACK_X0 + t.value * trackW, y: TRACK_Y }),
       (target) => {
         const clamped = Math.max(
@@ -56,6 +56,7 @@ export class MdTexLive extends Diagram {
         );
         t.value = clamped;
       },
+      Vec,
     );
     s(handle(knobPos));
 

@@ -1,11 +1,15 @@
 import {suspend, type Animator} from "@minim/core";
 import {
-  signal, computed, effect, Signal, derived,
-  Vec, Num, Transform, Box,
-  compose, multiply, matrixToString, transformBox, transformPoint,
-  type VecValue, type BoxValue, type MatrixValue, type Val,
+  signal, computed, effect, lens, Signal,
+  Vec, Num, Transform, Box, Matrix,
+  compose, multiply, toMatrixString, transformBox, transformPoint,
+  type Of, type Val,
   mean, BoxMath, value,
 } from "@minim/signals";
+
+type VecValue = Of<Vec>;
+type BoxValue = Of<Box>;
+type MatrixValue = Of<Matrix>;
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -131,7 +135,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
     // Group default: union of non-aside children's boxes composed
     // through their localFrame.
-    const boxSig = derived(Box,
+    const boxSig = computed(
       boxFn ??
         (() => {
           const cs = this._children.value
@@ -139,6 +143,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
             .map((c) => transformBox(c.localFrame.value, c.box.value));
           return cs.length ? BoxMath.union(...cs) : { x: 0, y: 0, w: 0, h: 0 };
         }),
+      Box,
     );
 
     this.box = boxSig;
@@ -163,7 +168,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
     this.disposers.push(
       effect(() => {
-        this.el.style.transform = matrixToString(this.localFrame.value);
+        this.el.style.transform = toMatrixString(this.localFrame.value);
       }),
       effect(() => {
         this.el.style.opacity = String(this.opacity.value);
@@ -173,11 +178,12 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
   /** Parent-frame perimeter point toward `target`; tighter shapes override. */
   boundary(toward: Vec): Vec {
-    return derived(Vec, () =>
+    return computed(() =>
       BoxMath.edgeFrom(
         transformBox(this.localFrame.value, this.box.value),
         toward.value,
       ),
+      Vec,
     );
   }
 
@@ -185,8 +191,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     const boxSig = this.box;
     const lf = this.localFrame;
     const tr = this.transform;
-    return derived(
-      Vec,
+    return lens(
       () => {
         const b = boxSig.value;
         return transformPoint(lf.value, { x: b.x + u * b.w, y: b.y + v * b.h });
@@ -201,6 +206,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
           y: tNow.y + (target.y - currentWorld.y),
         };
       },
+      Vec,
     );
   }
 

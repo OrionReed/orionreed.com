@@ -1,7 +1,7 @@
 import {
   Anchor, Box, Color, Diagram, Mount, Vec,
   circle, computed, label, loop, num, tween, vec, rect, rgb,
-  Signal, LERP,
+  Signal, type TraitDict,
   type Easing, type Lerp, type Tween, type Val,
 } from "../../minim";
 
@@ -22,13 +22,14 @@ const stringLerp: Lerp<string> = (a, b, t) => {
   return b.slice(0, Math.round(b.length * (t - 0.5) * 2));
 };
 
-/** Reactive string with a `[LERP]` slot. */
+/** Reactive string with a `lerp` trait. */
 class Text extends Signal<string> {
-  [LERP](a: string, b: string, t: number) { return stringLerp(a, b, t); }
+  static traits: TraitDict<string> & { lerp: Lerp<string> } = { lerp: stringLerp };
   to(target: string, dur: Val<number>, ease?: Easing): Tween<string> {
     return tween(this, target, dur, ease);
   }
 }
+interface Text { readonly constructor: typeof Text }
 
 const fmtNum = (n: number) => n.toFixed(2);
 const fmtVec = (v: { x: number; y: number }) =>
@@ -58,7 +59,7 @@ export class MdLerps extends Diagram {
       }),
       label(
         view.bottom.up(20),
-        "Signal.prototype.to dispatches via [LERP] on the prototype chain — Vec, Box, Color all register their own; lerpable(...) wires it for arbitrary types.",
+        "value classes register `lerp` in their `static traits` dict; `.to(target, dur)` finds it via `Traits<T, \"lerp\">`. Same call for Num, Vec, Box, Color, Transform, and arbitrary user types.",
         { size: 10, align: Anchor.Center, opacity: 0.45 },
       ),
     );
