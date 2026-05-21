@@ -1,5 +1,7 @@
-// Anchor: points on the unit box `[0,1]²` (registration on a shape).
-// Dir: unit direction vectors in `[-1,1]²` (displacement from rest).
+// anchor.ts — points on the unit box `[0,1]²` (registration on a shape).
+// dir.ts — unit direction vectors in `[-1,1]²` (displacement from rest).
+//
+// Plain constants — no reactive wrapping. Use as defaults / arguments.
 
 import { type Of } from "../signal";
 import { type Vec } from "./vec";
@@ -24,5 +26,5 @@ export const Dir = {
   Left:  { x: -1, y:  0 } as V,
   Right: { x:  1, y:  0 } as V,
   Up:    { x:  0, y: -1 } as V,
-  Down:  { x:  0, y:  1 } as V,
+  Down:  { x:  0, y: 1  } as V,
 };

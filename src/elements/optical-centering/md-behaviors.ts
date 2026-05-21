@@ -1,11 +1,11 @@
-import {Diagram, Mount, Anchor, attract, signal, circle, driven, drive, easeInOut, label, loop, num, play, vec, spring, value, wave, type Val, Num, Vec} from "../../minim";
+import {Diagram, Mount, Anchor, attract, signal, circle, driven, drive, easeInOut, label, loop, num, play, vec, spring, value, wave, type Val, Num, Vec, type Writable} from "../../minim";
 
 const N_TRAIL = 14;
 const N_CHAIN = 10;
 const LINK_LEN = 11;
 
 /** Constant-velocity advance — `sig += v·dt`. */
-const drift = (sig: Num, v: Val<number>) =>
+const drift = (sig: Writable<Num>, v: Val<number>) =>
   driven(sig, (dt, _t, cur) => cur + value(v) * dt);
 
 const sine     = (t: number, f: number) => Math.sin(2 * Math.PI * f * t);
@@ -13,7 +13,7 @@ const triangle = (t: number, f: number) => 1 - 4 * Math.abs(((t * f) % 1) - 0.5)
 const sawtooth = (t: number, f: number) => 2 * ((t * f) % 1) - 1;
 
 /** `drift` with walls: flips velocity at bounds. */
-function bounceFlip(x: Num, v: Num, lo: number, hi: number) {
+function bounceFlip(x: Writable<Num>, v: Writable<Num>, lo: number, hi: number) {
   return drive(() => {
     if (x.value > hi && v.value > 0) v.value = -v.value;
     else if (x.value < lo && v.value < 0) v.value = -v.value;
@@ -28,10 +28,10 @@ export class MdBehaviors extends Diagram {
     const laneY = (i: number) => view.h.value * ((i + 1) / 4);
 
     const trail = (
-      seedX: Num,
-      seedY: Num,
+      seedX: Writable<Num>,
+      seedY: Writable<Num>,
       color: string,
-      attach: (sig: Num, target: Val<number>) => void,
+      attach: (sig: Writable<Num>, target: Val<number>) => void,
     ) => {
       let prevX: Val<number> = seedX;
       let prevY: Val<number> = seedY;
@@ -104,7 +104,7 @@ export class MdBehaviors extends Diagram {
     );
     s(circle(headPos, 9, { fill: "#1a1a1a" }));
 
-    const links: Vec[] = Array.from({ length: N_CHAIN }, (_, i) =>
+    const links: Writable<Vec>[] = Array.from({ length: N_CHAIN }, (_, i) =>
       vec(lc.x - i * LINK_LEN, lc.y),
     );
     this.anim.start(

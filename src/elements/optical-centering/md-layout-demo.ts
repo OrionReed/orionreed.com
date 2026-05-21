@@ -3,6 +3,7 @@ import {
   Mount,
   Anchor,
   Vec,
+  type Writable,
   lens,
   arrange,
   handle,
@@ -53,7 +54,7 @@ export class MdLayoutDemo extends Diagram {
           w.value = Math.max(MIN_W, p.x - card.translate.value.x);
         },
         Vec,
-      );
+      ) as unknown as Writable<Vec>;
       return s(handle(pos, { cursor: "ew-resize", r: 5 }));
     });
 

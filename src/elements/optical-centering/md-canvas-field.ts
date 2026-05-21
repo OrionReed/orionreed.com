@@ -1,6 +1,6 @@
 // Canvas demo: minim's runtime + signals + generators driving a non-SVG renderer.
 
-import {Anim, signal, drive, effect, every, loop, num, vec, Num, Vec} from "../../minim";
+import {Anim, signal, drive, effect, every, loop, num, vec, Num, Vec, type Writable} from "../../minim";
 import {attachRaf} from "@minim/web";
 
 const N = 1500;
@@ -88,7 +88,7 @@ export class MdCanvasField extends HTMLElement {
   private hueBase: Num = num(210);
   private hueSpread = signal(80);
   private size = signal(2.1);
-  private pointer: Vec = vec(W / 2, H / 2);
+  private pointer: Writable<Vec> = vec(W / 2, H / 2);
   private statusText = signal("");
   private fpsSmoothed = signal(0);
 

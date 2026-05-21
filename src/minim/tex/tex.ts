@@ -1,7 +1,7 @@
 // LaTeX → MathML shape, rendered via Temml.
 
 import temml from "temml";
-import { signal, Box, type Signal, type Of } from "@minim/signals";
+import { signal, Box, type Signal, type Of, type Writable } from "@minim/signals";
 
 type BoxValue = Of<Box>;
 import { Shape, type ShapeOpts, tokens } from "@minim/shapes";
@@ -242,10 +242,10 @@ export class TexShape<Names extends string = string> extends Shape {
     // and binds each Part to its live el. `boxWriters` holds the
     // writable handles to each part's bounds for re-measure.
     const list: Part[] = [];
-    const boxWriters = new Map<string, Box>();
+    const boxWriters = new Map<string, Writable<Box>>();
     for (const m of markers) {
       const cls = partClass(m.name);
-      const boxSig = new Box(measured.rects.get(cls) ?? { x: 0, y: 0, w: 0, h: 0 });
+      const boxSig = new Box(measured.rects.get(cls) ?? { x: 0, y: 0, w: 0, h: 0 }) as unknown as Writable<Box>;
       boxWriters.set(cls, boxSig);
       list.push(new Part(m.name, m.content, boxSig, m, this as TexShape));
     }

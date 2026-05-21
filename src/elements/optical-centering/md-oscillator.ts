@@ -1,9 +1,9 @@
 // Damped oscillator x(t) = Ae^{-γt}cos(ωt); A/γ/ω markers cross-reference formula, diagram, prose.
 
-import {Diagram, Mount, Shape, signal, play, circle, computed, drive, wave, line, loop, not, vec, tokens, Num, type Read} from "../../minim";
+import {Diagram, Mount, Shape, signal, play, circle, computed, drive, wave, line, loop, not, vec, tokens, Num, type Read, type Writable} from "../../minim";
 
 /** Sine oscillation around `sig`'s start value. */
-const oscillate = (sig: Num, amp: number, freq: number) =>
+const oscillate = (sig: Writable<Num>, amp: number, freq: number) =>
   wave(sig, (t, base) => base + amp * Math.sin(2 * Math.PI * freq * t));
 import {parts, tex, bindParts} from "../../minim/tex";
 

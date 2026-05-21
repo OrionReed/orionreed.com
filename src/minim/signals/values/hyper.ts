@@ -4,43 +4,9 @@
 // per-output inverse policies: when output K is written, only the
 // policy registered for K runs; this lets each output have its own
 // "which inputs do I redistribute to" semantics.
-//
-// API shape:
-//
-//   const { center, distance } = hyperLens(
-//     [f1, f2] as const,
-//     // forward: inputs → outputs (typed record)
-//     ([f1, f2]) => ({
-//       center: midpoint(f1, f2),
-//       distance: dist(f1, f2),
-//     }),
-//     // backward: per-output inverse policies
-//     {
-//       center: (newCenter, [f1, f2]) => [
-//         vAdd(f1, vSub(newCenter, midpoint(f1, f2))),
-//         vAdd(f2, vSub(newCenter, midpoint(f1, f2))),
-//       ],
-//       distance: (newD, [f1, f2]) => {
-//         const mid = midpoint(f1, f2);
-//         const dir = vNorm(vSub(f2, f1));
-//         return [vSub(mid, vScale(dir, newD/2)), vAdd(mid, vScale(dir, newD/2))];
-//       },
-//     },
-//   );
-//
-// Each output is a typed `Signal<…>`; you can read/write any of them
-// independently. Writes flow back to the inputs per-output policy.
-// Reads observe the entire input tuple (fan-in).
-//
-// Identity guarantees:
-//   - The returned record's fields are stable references (memoized on
-//     the hyperLens internal state).
-//   - All outputs observe the same forward closure; they share dirty
-//     state implicitly through the inputs.
 
-import { Signal, lens, type Read, type Of, batch } from "../signal";
+import { Signal, lens, type Read, type Of, batch, type WritableBrand } from "../signal";
 
-/** A tuple `Ins` of Read-shapes mapped to their inner value types. */
 type ValuesOf<Ins extends readonly Read<unknown>[]> = {
   readonly [K in keyof Ins]: Of<Ins[K]>;
 };
@@ -51,25 +17,22 @@ export type InversePolicy<Outs, Ins extends readonly Read<unknown>[]> = {
   [K in keyof Outs]: (next: Outs[K], prevInputs: ValuesOf<Ins>) => ValuesOf<Ins>;
 };
 
-/** N→M reactive view.
- *
- *  - `inputs` — the N reactive parents.
- *  - `forward` — pure function: inputs → typed record of outputs.
- *  - `backward` — per-output: how to push that output's new value
- *    back to the inputs. Writes go through `batch()` so all inputs
- *    update atomically per write.
- *
- *  Returns a record of `Signal<Outs[K]>` — each output is its own
- *  reactive cell, readable and (if a policy exists for K) writable. */
+/** N→M reactive view. Outputs with a backward policy are writable
+ *  (return type includes `WritableBrand`); outputs without are RO
+ *  Signal<Outs[K]>. */
 export function hyperLens<
   const Ins extends readonly Read<unknown>[],
   Outs extends Record<string, unknown>,
+  Back extends Partial<InversePolicy<Outs, Ins>>,
 >(
   inputs: Ins,
   forward: (vs: ValuesOf<Ins>) => Outs,
-  backward: Partial<InversePolicy<Outs, Ins>>,
-): { [K in keyof Outs]: Signal<Outs[K]> } {
-  // Snapshot input values into a tuple shape every read; cheap.
+  backward: Back,
+): {
+  [K in keyof Outs]: K extends keyof Back
+    ? (Back[K] extends undefined ? Signal<Outs[K]> : Signal<Outs[K]> & WritableBrand)
+    : Signal<Outs[K]>;
+} {
   const readAll = (): ValuesOf<Ins> => {
     const out = new Array<unknown>(inputs.length);
     for (let i = 0; i < inputs.length; i++) out[i] = inputs[i].value;
@@ -81,30 +44,24 @@ export function hyperLens<
     return out as unknown as ValuesOf<Ins>;
   };
 
-  // Build one output cell per key. Read = forward(readAll())[key]; write
-  // = look up policy[key], compute new inputs, batch-write back.
-  //
-  // We need the output keys to build the result. The cleanest way to
-  // get them without a separate "shape" arg is to evaluate `forward`
-  // once with peek (no tracking) to discover the keys.
+  // Discover output keys by sampling forward once (untracked).
   const sampleOuts = forward(peekAll());
   const keys = Object.keys(sampleOuts) as (keyof Outs)[];
 
-  const result = {} as { [K in keyof Outs]: Signal<Outs[K]> };
+  const result: Record<string, unknown> = {};
   for (const k of keys) {
-    const policy = backward[k];
+    const policy = backward[k as keyof Back];
     if (policy === undefined) {
-      // Read-only output (no inverse) — use plain computed (writes throw)
-      result[k] = lens<Outs[typeof k]>(
+      result[k as string] = lens<Outs[typeof k]>(
         () => forward(readAll())[k],
-        () => { throw new TypeError(`hyperLens: output "${String(k)}" is read-only (no inverse policy)`); },
-      ) as Signal<Outs[typeof k]>;
+        () => { throw new TypeError(`hyperLens: output "${String(k)}" is read-only (no inverse policy)`) },
+      );
     } else {
-      result[k] = lens<Outs[typeof k]>(
+      result[k as string] = lens<Outs[typeof k]>(
         () => forward(readAll())[k],
         (next) => {
           const prev = peekAll();
-          const updated = policy(next, prev);
+          const updated = (policy as InversePolicy<Outs, Ins>[keyof Outs])(next, prev);
           batch(() => {
             for (let i = 0; i < inputs.length; i++) {
               const inp = inputs[i];
@@ -112,8 +69,8 @@ export function hyperLens<
             }
           });
         },
-      ) as Signal<Outs[typeof k]>;
+      );
     }
   }
-  return result;
+  return result as never;
 }

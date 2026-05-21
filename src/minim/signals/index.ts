@@ -1,78 +1,78 @@
-// Public API for the r2 prototype.
+// Public API for the signals module.
+//
+// Design: writability is a generic modifier (`Writable<R>`) on top of
+// RO-by-default value classes. The brand on factory returns gates
+// `.value =`, `.set`, `.bind` so untyped consumers can't accidentally
+// mutate a derived (read-only) signal. Animator-style constraints use
+// `WritableOf<T> & Traits<T, K>` and reject bare RO values at compile
+// time.
 
+// ─── Engine ───────────────────────────────────────────────────────
 export {
   Signal,
-  signal,
-  computed,
-  lens,
-  effect,
-  batch,
-  untracked,
-  value,
-  valFn,
-  isSignal,
-  isLens,
-  isComputed,
+  signal, computed, lens, computedCls, lensCls,
+  effect, batch, untracked,
+  isSignal, isComputed, isLens,
+  value, valFn,
   setSignalWriteHook,
-  type Val,
-  type Read,
-  type Computed,
-  type Lens,
-  type RO,
-  type Of,
+  type Read, type Val, type Of,
   type SignalOptions,
-  type SignalInit,
+  type WritableBrand,
 } from "./signal";
 
+// ─── Traits ───────────────────────────────────────────────────────
 export {
-  requireLinear, requireLerp, requireMetric, requireEquals,
   type Linear, type Lerp, type Metric, type Equals,
   type Traits, type TraitDict, type TraitKey,
+  requireLinear, requireLerp, requireMetric, requireEquals,
 } from "./traits";
 
-export {
-  type Op, applyOp0, applyOp1, applyOp2, Chain,
-} from "./ops";
+// ─── Ops (for value-class authors) ────────────────────────────────
+export { type Op, applyOp0, applyOp1, applyOp2 } from "./ops";
 
-export { Num, NumChain, num } from "./values/num";
-export { Vec, VecChain, vec, polar } from "./values/vec";
+// ─── Writable modifier ────────────────────────────────────────────
 export {
-  Box, BoxChain, box,
-  // box math fns
+  type Writable,
+  type WritableOf,
+  invertibles,
+} from "./writable";
+
+// ─── Value classes ────────────────────────────────────────────────
+export { Num, num } from "./values/num";
+export { Vec, vec, polar } from "./values/vec";
+export {
+  Box, box,
   union as boxUnion,
   edgeFrom,
 } from "./values/box";
-export { Color, ColorChain, rgb, rgba } from "./values/color";
+export { Transform, transform, type TransformInit } from "./values/transform";
+export { Color, rgb, rgba } from "./values/color";
 export {
-  Matrix, MatrixChain, matrix,
+  Matrix, matrix,
   identity, fromTranslate, fromScale, fromRotate,
-  isIdentity, multiply, invert, determinant,
-  transformPoint, transformBox, compose,
-  toMatrixString,
+  multiply, invert, determinant,
+  transformPoint, transformBox, compose, toMatrixString,
+  isIdentity,
 } from "./values/matrix";
-export {
-  Transform, TransformChain, transform,
-  type TransformInit,
-} from "./values/transform";
 export { Anchor, Dir } from "./values/anchor";
+
+// ─── Combinators ──────────────────────────────────────────────────
 export { combine, mean } from "./values/multi";
 export { hyperLens, type InversePolicy } from "./values/hyper";
 
+// ─── Animators ────────────────────────────────────────────────────
 export {
-  tween, tweenStep, spring, toward, attract,
-  Tween,
-  wave, driven,
-  play, when, not, untilChange, loop, every,
-  type Play, type PlayTrigger,
-  type SpringOpts,
+  Tween, tween, tweenStep, spring, toward, attract,
+  wave, driven, when, not, untilChange, loop, every,
+  play, type Play, type PlayTrigger, type SpringOpts,
 } from "./anim";
 
+// ─── Clock bridge ─────────────────────────────────────────────────
 export { clockSignal } from "./clock";
 
-// Math-helper namespace exports, mirroring prod's `VecMath`/`BoxMath`/…
-// pattern. Lets consumers do `BoxMath.union(...)` without having to
-// import each math fn separately. (We also expose `boxUnion` /
-// `edgeFrom` as named exports for direct import.)
+// ─── Math-helper namespaces ───────────────────────────────────────
+// Mirrors prod's `VecMath`/`BoxMath`/… pattern. Lets consumers do
+// `BoxMath.union(...)` etc. without importing each math fn separately.
 export * as NumMath from "./values/num";
 export * as VecMath from "./values/vec";
 export * as BoxMath from "./values/box";

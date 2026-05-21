@@ -1,6 +1,6 @@
 // handle.* — writable derived shapes (draggable circles wired to a Vec).
 
-import { lens, signal, Signal, Vec, mean } from "@minim/signals";
+import { lens, signal, Signal, Vec, mean, type Writable } from "@minim/signals";
 import { type AnyShape, type Has } from "./shape";
 import { Circle, type CircleOpts } from "./circle";
 import { draggable } from "./interaction";
@@ -29,7 +29,7 @@ export interface HandleOpts {
  */
 export class Handle extends Circle {
   readonly dragging: Signal<boolean>;
-  constructor(target: Vec, opts: HandleOpts = {}) {
+  constructor(target: Writable<Vec>, opts: HandleOpts = {}) {
     const circleOpts: CircleOpts = {
       fill: opts.fill ?? COLOR,
       // Background-colored halo so the handle pops on either theme.
@@ -65,7 +65,7 @@ export class Handle extends Circle {
   }
 }
 
-function handleFn(target: Vec, opts: HandleOpts = {}): Handle {
+function handleFn(target: Writable<Vec>, opts: HandleOpts = {}): Handle {
   return new Handle(target, opts);
 }
 
@@ -92,7 +92,7 @@ const centroidHandle = (...shapes: (AnyShape & Has<"translate">)[]): Handle =>
 
 /** Drag handle at the midpoint of two writable Points — drags both
  *  along with it. */
-const midpoint = (a: Vec, b: Vec, opts?: HandleOpts): Handle =>
+const midpoint = (a: Writable<Vec>, b: Writable<Vec>, opts?: HandleOpts): Handle =>
   handleFn(mean(a, b), opts);
 
 /** Rotation knob orbiting the shape's center at `radius`. The knob
@@ -114,7 +114,7 @@ const rotate = (
       shape.rotate.value = Math.atan2(target.y - c.y, target.x - c.x);
     },
     Vec,
-  );
+  ) as unknown as Writable<Vec>;
   return handleFn(pos, { cursor: "grab", ...opts });
 };
 
@@ -137,7 +137,7 @@ const scaleHandle = (
       shape.scale.value = { x: k, y: k };
     },
     Vec,
-  );
+  ) as unknown as Writable<Vec>;
   return handleFn(pos, { cursor: "ew-resize", ...opts });
 };
 
@@ -167,10 +167,10 @@ const tOnPath = (
   const pos = lens(
     () => p.pointAt(t.value).value,
     (target) => {
-      t.value = project(target);
+      (t as unknown as { value: number }).value = project(target);
     },
     Vec,
-  );
+  ) as unknown as Writable<Vec>;
   return handleFn(pos, opts);
 };
 

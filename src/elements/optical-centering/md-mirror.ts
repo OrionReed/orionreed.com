@@ -1,6 +1,6 @@
 import {
   Anchor, Diagram, Mount,
-  Vec, type Of, lens,
+  Vec, type Of, type Writable, lens,
   handle, label, line, vec,
 } from "../../minim";
 
@@ -26,14 +26,14 @@ export class MdMirror extends Diagram {
     const mB = vec(360, 330);
 
     // Reflection is an involution — same formula reads and writes.
-    const mirrorOf = (src: Vec): Vec =>
+    const mirrorOf = (src: Writable<Vec>): Writable<Vec> =>
       lens(
         () => reflect(src.value, mA.value, mB.value),
         (target) => {
           src.value = reflect(target, mA.value, mB.value);
         },
         Vec,
-      );
+      ) as unknown as Writable<Vec>;
 
     const stemTop = vec(200, 90);
     const stemBot = vec(200, 270);

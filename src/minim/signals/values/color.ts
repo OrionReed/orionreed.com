@@ -1,11 +1,15 @@
 // color.ts — reactive RGBA color.
 
-import { Signal, computed, type Computed, value, type Val, type SignalOptions } from "../signal";
+import {
+  Signal, computedCls, lensCls, computed, value,
+  type Val, type SignalOptions,
+} from "../signal";
 import { type Linear, type TraitDict } from "../traits";
-import { type Op, applyOp1, Chain } from "../ops";
+import { applyOp1, type Op } from "../ops";
+import { type Writable, invertibles } from "../writable";
+import { Num } from "./num";
 import { tween, type Tween } from "../anim";
 import { type Easing } from "../../core";
-import { Num } from "./num";
 
 type V = { r: number; g: number; b: number; a: number };
 
@@ -22,63 +26,65 @@ export const lerp = (a: V, b: V, t: number): V => ({
 export const equals = (a: V, b: V) =>
   a === b || (a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a);
 
-const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
-const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
-const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
-
 const linearImpl: Linear<V> = { add, sub, scale };
 
+const addOp:   Op<V, [V]>      = { fwd: add,   bwd: sub };
+const subOp:   Op<V, [V]>      = { fwd: sub,   bwd: add };
+const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
+
 export class Color extends Signal<V> {
+  // ── class-level config ─────────────────────────────────────────
   static traits: TraitDict<V> & { linear: Linear<V>; lerp: typeof lerp; equals: typeof equals } = {
     linear: linearImpl, lerp, equals,
   };
+  static invertibles = invertibles<Color>()("add", "sub", "scale");
 
-  constructor(v: V = { r: 0, g: 0, b: 0, a: 1 }, opts?: SignalOptions<V>) { super(v, opts); }
+  // ── class-level constructors ───────────────────────────────────
+  static derive(fn: () => V): Color { return computedCls(Color, fn) }
+  static lens(g: () => V, s: (v: V) => void): Writable<Color> {
+    return lensCls(Color, g, s) as unknown as Writable<Color>;
+  }
+  static is(v: unknown): v is Color { return v instanceof Color }
 
-  // ── Invertible ──
-  add(b: Val<V>): Color { return applyOp1(this, addOp, b, Color); }
-  sub(b: Val<V>): Color { return applyOp1(this, subOp, b, Color); }
-  scale(k: Val<number>): Color { return applyOp1(this, scaleOp, k, Color); }
+  // ── instance ───────────────────────────────────────────────────
+  constructor(v: V = { r: 0, g: 0, b: 0, a: 1 }, opts?: SignalOptions<V>) { super(v, opts) }
 
-  // ── Non-invertible ──
+  add(b: Val<V>): Color        { return applyOp1(this, addOp,   b, Color) }
+  sub(b: Val<V>): Color        { return applyOp1(this, subOp,   b, Color) }
+  scale(k: Val<number>): Color { return applyOp1(this, scaleOp, k, Color) }
   lerp(b: Val<V>, t: Val<number>): Color {
-    return computed(() => lerp(this.value, value(b), value(t)), Color);
+    return Color.derive(() => lerp(this.value, value(b), value(t)));
   }
 
+  get r(): Num { return this.field("r", Num) }
+  get g(): Num { return this.field("g", Num) }
+  get b(): Num { return this.field("b", Num) }
+  get a(): Num { return this.field("a", Num) }
   get luminance(): Num {
-    return this.memo("luminance", () => computed(() => {
+    return this.memo("luminance", () => Num.derive(() => {
       const c = this.value;
       return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-    }, Num));
+    }));
   }
-
-  get css(): Computed<string> {
+  get css(): Signal<string> {
     return this.memo("css", () => computed(() => {
       const c = this.value;
       const r = Math.round(c.r * 255);
       const g = Math.round(c.g * 255);
       const b = Math.round(c.b * 255);
       return `rgba(${r}, ${g}, ${b}, ${c.a})`;
-    })) as Computed<string>;
+    }));
   }
 
-  /** Tween-builder, implied by lerp trait. */
+  /** Tween-builder, implied by the lerp trait. */
   to(target: V, dur: Val<number>, ease?: Easing): Tween<V> {
-    return tween(this, target, dur, ease);
-  }
-
-  derive(fn: (c: ColorChain) => ColorChain): Color {
-    return fn(new ColorChain()).toLens(this, Color);
+    return tween(this as never, target, dur, ease);
   }
 }
-
-export interface Color { readonly constructor: typeof Color }
-
-export class ColorChain extends Chain<V> {
-  add(b: Val<V>): this { return this.push1(addOp, b); }
-  sub(b: Val<V>): this { return this.push1(subOp, b); }
-  scale(k: Val<number>): this { return this.push1(scaleOp, k); }
+export interface Color {
+  readonly constructor: typeof Color;
+  get value(): V;
 }
 
-export const rgb = (r: number, g: number, b: number) => new Color({ r, g, b, a: 1 });
-export const rgba = (r: number, g: number, b: number, a: number) => new Color({ r, g, b, a });
+export const rgb  = (r: number, g: number, b: number)            => new Color({ r, g, b, a: 1 }) as unknown as Writable<Color>;
+export const rgba = (r: number, g: number, b: number, a: number) => new Color({ r, g, b, a }) as unknown as Writable<Color>;

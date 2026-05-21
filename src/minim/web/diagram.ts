@@ -197,5 +197,5 @@ export class Diagram extends HTMLElement {
 
 // Helper: a fresh writable Box-valued signal seeded with the zero box.
 function signal0Box() {
-  return new Box({ x: 0, y: 0, w: 0, h: 0 });
+  return new Box({ x: 0, y: 0, w: 0, h: 0 }) as unknown as import("@minim/signals").Writable<Box>;
 }

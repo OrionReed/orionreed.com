@@ -1,13 +1,16 @@
 // vec.ts — reactive 2D point.
 
-import { Signal, computed, value, type Val, type SignalOptions } from "../signal";
+import {
+  Signal, computedCls, lensCls, computed, value, valFn,
+  type Val, type SignalOptions,
+} from "../signal";
 import { type Linear, type TraitDict } from "../traits";
-import { type Op, applyOp1, applyOp2, Chain } from "../ops";
+import { applyOp1, applyOp2, type Op } from "../ops";
+import { type Writable, invertibles } from "../writable";
+import { Num } from "./num";
 import { tween, type Tween } from "../anim";
 import { type Easing } from "../../core";
-import { Num } from "./num";
 
-// Module-local; consumers use `Of<Vec>`.
 type V = { x: number; y: number };
 
 export const add = (a: V, b: V): V => ({ x: a.x + b.x, y: a.y + b.y });
@@ -18,111 +21,93 @@ export const lerp = (a: V, b: V, t: number): V => ({
 });
 export const metric = (a: V, b: V) => Math.hypot(a.x - b.x, a.y - b.y);
 export const equals = (a: V, b: V) => a === b || (a.x === b.x && a.y === b.y);
-
-/** Unit vector along `v`; `(0, 0)` stays `(0, 0)`. */
 export const normalize = (v: V): V => {
   const m = Math.hypot(v.x, v.y);
   return m === 0 ? { x: 0, y: 0 } : { x: v.x / m, y: v.y / m };
 };
-
-/** 90° CCW rotation (y-down: rotates left): `(x, y) → (y, -x)`. */
 export const perp = (v: V): V => ({ x: v.y, y: -v.x });
 
-// ─── Invertible ops ────────────────────────────────────────────────
+const linearImpl: Linear<V> = { add, sub, scale };
 
-const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
-const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
-const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
+const addOp:    Op<V, [V]>              = { fwd: add, bwd: sub };
+const subOp:    Op<V, [V]>              = { fwd: sub, bwd: add };
+const scaleOp:  Op<V, [number]>         = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
 const offsetOp: Op<V, [number, number]> = {
   fwd: (v, dx, dy) => ({ x: v.x + dx, y: v.y + dy }),
   bwd: (n, dx, dy) => ({ x: n.x - dx, y: n.y - dy }),
 };
 
-const linearImpl: Linear<V> = { add, sub, scale };
-
 export class Vec extends Signal<V> {
+  // ── class-level config ─────────────────────────────────────────
   static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
+  static invertibles = invertibles<Vec>()("add", "sub", "scale", "offset");
 
-  constructor(v: V = { x: 0, y: 0 }, opts?: SignalOptions<V>) { super(v, opts); }
+  // ── class-level constructors ───────────────────────────────────
+  static derive(fn: () => V): Vec { return computedCls(Vec, fn) }
+  static lens(g: () => V, s: (v: V) => void): Writable<Vec> {
+    return lensCls(Vec, g, s) as unknown as Writable<Vec>;
+  }
+  static is(v: unknown): v is Vec { return v instanceof Vec }
 
-  // ── Invertible (Lens-returning) ──
-  add(b: Val<V>): Vec { return applyOp1(this, addOp, b, Vec); }
-  sub(b: Val<V>): Vec { return applyOp1(this, subOp, b, Vec); }
-  scale(k: Val<number>): Vec { return applyOp1(this, scaleOp, k, Vec); }
+  // ── instance ───────────────────────────────────────────────────
+  constructor(v: V = { x: 0, y: 0 }, opts?: SignalOptions<V>) { super(v, opts) }
+
+  add(b: Val<V>): Vec     { return applyOp1(this, addOp,    b, Vec) }
+  sub(b: Val<V>): Vec     { return applyOp1(this, subOp,    b, Vec) }
+  scale(k: Val<number>): Vec { return applyOp1(this, scaleOp, k, Vec) }
   offset(dx: Val<number>, dy: Val<number>): Vec {
     return applyOp2(this, offsetOp, dx, dy, Vec);
   }
-  // axis-aligned offset sugar — all invertible via offsetOp with negation
-  up(n: Val<number>): Vec    { return this.offset(0, computed(() => -value(n))); }
-  down(n: Val<number>): Vec  { return this.offset(0, n); }
-  left(n: Val<number>): Vec  { return this.offset(computed(() => -value(n)), 0); }
-  right(n: Val<number>): Vec { return this.offset(n, 0); }
+  // Axis-aligned offset sugar — all invertible via offsetOp.
+  up(n: Val<number>): Vec    { return this.offset(0, computed(() => -value(n))) }
+  down(n: Val<number>): Vec  { return this.offset(0, n) }
+  left(n: Val<number>): Vec  { return this.offset(computed(() => -value(n)), 0) }
+  right(n: Val<number>): Vec { return this.offset(n, 0) }
 
-  // ── Non-invertible (return typed class; .value= throws at runtime) ──
+  normalize(): Vec { return Vec.derive(() => normalize(this.value)) }
+  perp(): Vec      { return Vec.derive(() => perp(this.value)) }
   lerp(b: Val<V>, t: Val<number>): Vec {
-    return computed(() => lerp(this.value, value(b), value(t)), Vec);
+    return Vec.derive(() => lerp(this.value, value(b), value(t)));
   }
-  normalize(): Vec { return computed(() => normalize(this.value), Vec); }
-  perp(): Vec { return computed(() => perp(this.value), Vec); }
   distance(other: Val<V>): Num {
-    return computed(() => metric(this.value, value(other)), Num);
+    return Num.derive(() => metric(this.value, value(other)));
   }
 
-  // ── Field lenses (writable) ──
-  get x(): Num { return this.field("x", Num); }
-  get y(): Num { return this.field("y", Num); }
-
-  // ── Lazy derived (read-only at runtime) ──
+  get x(): Num { return this.field("x", Num) }
+  get y(): Num { return this.field("y", Num) }
   get magnitude(): Num {
     return this.memo("magnitude", () =>
-      computed(() => Math.hypot(this.value.x, this.value.y), Num));
+      Num.derive(() => Math.hypot(this.value.x, this.value.y)));
   }
 
-  /** Tween-builder, implied by lerp trait. */
+  /** Tween-builder, implied by the lerp trait. */
   to(target: V, dur: Val<number>, ease?: Easing): Tween<V> {
-    return tween(this, target, dur, ease);
-  }
-
-  derive(fn: (c: VecChain) => VecChain): Vec {
-    return fn(new VecChain()).toLens(this, Vec);
+    return tween(this as never, target, dur, ease);
   }
 }
-
-export interface Vec { readonly constructor: typeof Vec }
-
-export class VecChain extends Chain<V> {
-  add(b: Val<V>): this { return this.push1(addOp, b); }
-  sub(b: Val<V>): this { return this.push1(subOp, b); }
-  scale(k: Val<number>): this { return this.push1(scaleOp, k); }
-  offset(dx: Val<number>, dy: Val<number>): this {
-    return this.push2(offsetOp, dx, dy);
-  }
-  up(n: Val<number>): this    { return this.push2(offsetOp, 0, computed(() => -value(n))); }
-  down(n: Val<number>): this  { return this.push2(offsetOp, 0, n); }
-  left(n: Val<number>): this  { return this.push2(offsetOp, computed(() => -value(n)), 0); }
-  right(n: Val<number>): this { return this.push2(offsetOp, n, 0); }
+export interface Vec {
+  readonly constructor: typeof Vec;
+  get value(): V;
 }
 
-/** Construct a Vec; per-axis Val<number> args bind the corresponding lens. */
-export const vec = (x: Val<number> = 0, y: Val<number> = 0): Vec => {
-  const v = new Vec();
+export function vec(x: Val<number> = 0, y: Val<number> = 0): Writable<Vec> {
+  const v = new Vec() as unknown as Writable<Vec>;
   v.x.bind(x);
   v.y.bind(y);
   return v;
-};
+}
 
 /** Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`. */
-export const polar = (
-  center: Val<V>,
-  r: Val<number>,
-  a: Val<number>,
-): Vec => {
-  const out = new Vec();
+export function polar(
+  center: Val<V>, r: Val<number>, a: Val<number>,
+): Writable<Vec> {
+  const C = valFn(center);
+  const R = valFn(r);
+  const A = valFn(a);
+  const out = new Vec() as unknown as Writable<Vec>;
   out.bind(() => {
-    const c = value(center);
-    const rv = value(r);
-    const av = value(a);
+    const c = C(); const rv = R(); const av = A();
     return { x: c.x + rv * Math.cos(av), y: c.y + rv * Math.sin(av) };
   });
   return out;
-};
+}

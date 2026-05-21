@@ -4,12 +4,12 @@
 // because it bridges into the reactive layer.
 
 import { type Anim } from "../core";
-import { signal, type Signal } from "./signal";
+import { signal, type Signal, type WritableBrand } from "./signal";
 
 /** Returns a `Signal<number>` that mirrors `anim.clock`. Updates after
  *  every `step()`. Share one per `Anim`. */
-export function clockSignal(anim: Anim): Signal<number> {
+export function clockSignal(anim: Anim): Signal<number> & WritableBrand {
   const s = signal(anim.clock);
-  anim.onStep(() => { s.value = anim.clock; });
+  anim.onStep(() => { s.value = anim.clock });
   return s;
 }

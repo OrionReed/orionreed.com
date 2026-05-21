@@ -1,38 +1,27 @@
-// anim.ts — animator primitives over nominal trait constraints,
-// plus the broader signals↔generators bridge (Tween chainable, Play,
-// when, loop, every, etc.).
+// anim.ts — animator primitives over `WritableOf<T>` + nominal trait
+// constraints, plus the broader signals↔generators bridge.
 //
-// All trait-dispatched signatures inline `Traits<T, "linear" | …>` —
-// no per-consumer alias. Reads as a sentence: "spring takes a signal
-// that has linear + metric." Compile error on `spring(box, …)` (no
-// metric) or `spring(signal(0), …)` (no traits dict).
+// All animator signatures read as a sentence:
+//   "spring takes a writable carrying T that has linear+metric."
+// Compile errors:
+//   - `spring(box, …)` — Box doesn't declare `metric` trait.
+//   - `spring(roVec, …)` — bare RO Vec doesn't carry `WritableBrand`.
+//   - `spring(num(0), …)` — works (num() returns Writable<Num>).
 //
 // Math is verbatim from prod's lerp.ts.
 
 import {
-  Signal,
-  computed,
-  effect,
-  type Val,
-  type Read,
-  type Computed,
-  valFn,
+  Signal, computed, effect,
+  type Val, type Read, valFn,
 } from "./signal";
 import {
-  requireLinear,
-  requireLerp,
-  requireMetric,
+  requireLinear, requireLerp, requireMetric,
   type Traits,
 } from "./traits";
+import { type WritableOf } from "./writable";
 import {
-  drive,
-  isGenerator,
-  suspend,
-  race,
-  type Animator,
-  type Tick,
-  type Yieldable,
-  type Easing,
+  drive, isGenerator, suspend, race,
+  type Animator, type Tick, type Yieldable, type Easing,
   easeOut,
 } from "../core";
 
@@ -42,31 +31,23 @@ const defaultEase = easeOut;
 
 type Seg<T> =
   | { readonly kind: "pose"; readonly target: T }
-  | {
-      readonly kind: "to";
-      readonly target: T;
-      readonly dur: Val<number>;
-      readonly ease?: Easing;
-    };
+  | { readonly kind: "to"; readonly target: T; readonly dur: Val<number>; readonly ease?: Easing };
 
-/** Chainable Animator over a Signal: `.to(...).to(...).from(start)` reads
- *  naturally. `.to`/`.from` are pure data — segments accumulate at
+/** Chainable Animator over a writable signal: `.to(...).to(...).from(start)`
+ *  reads naturally. `.to`/`.from` are pure data — segments accumulate at
  *  construction; the executor generator runs them in order on iteration. */
 export class Tween<T> implements Animator<void> {
-  readonly #sig: Traits<T, "lerp">;
+  readonly #sig: WritableOf<T> & Traits<T, "lerp">;
   readonly #segs: readonly Seg<T>[];
   readonly #gen: Animator<void>;
 
   /** @internal — use `tween(...)` or `sig.to(...)` to construct. */
-  constructor(sig: Traits<T, "lerp">, segs: readonly Seg<T>[] = []) {
+  constructor(sig: WritableOf<T> & Traits<T, "lerp">, segs: readonly Seg<T>[] = []) {
     this.#sig = sig;
     this.#segs = segs;
     this.#gen = (function* () {
       for (const seg of segs) {
-        if (seg.kind === "pose") {
-          sig.value = seg.target;
-          continue;
-        }
+        if (seg.kind === "pose") { sig.value = seg.target; continue }
         yield* tweenStep(sig, seg.target, seg.dur, seg.ease);
       }
     })();
@@ -74,39 +55,25 @@ export class Tween<T> implements Animator<void> {
 
   /** Append a tween segment from current value to `target` over `dur`. */
   to(target: T, dur: Val<number>, ease?: Easing): Tween<T> {
-    return new Tween(this.#sig, [
-      ...this.#segs,
-      { kind: "to", target, dur, ease },
-    ]);
+    return new Tween(this.#sig, [...this.#segs, { kind: "to", target, dur, ease }]);
   }
 
   /** Pose `start` as the first step, then run the rest of the chain. */
   from(start: T): Tween<T> {
-    return new Tween(this.#sig, [
-      { kind: "pose", target: start },
-      ...this.#segs,
-    ]);
+    return new Tween(this.#sig, [{ kind: "pose", target: start }, ...this.#segs]);
   }
 
-  next(v?: Tick): IteratorResult<Yieldable, void> {
-    return this.#gen.next(v as Tick);
-  }
-  return(v?: void): IteratorResult<Yieldable, void> {
-    return this.#gen.return(v as void);
-  }
-  throw(e: unknown): IteratorResult<Yieldable, void> {
-    return this.#gen.throw(e);
-  }
-  [Symbol.iterator](): this {
-    return this;
-  }
+  next(v?: Tick): IteratorResult<Yieldable, void> { return this.#gen.next(v as Tick) }
+  return(v?: void): IteratorResult<Yieldable, void> { return this.#gen.return(v as void) }
+  throw(e: unknown): IteratorResult<Yieldable, void> { return this.#gen.throw(e) }
+  [Symbol.iterator](): this { return this }
 }
 
 // ─── tween ──────────────────────────────────────────────────────────
 
-/** Append-only tween segment over a reactive target. */
+/** Append-only tween segment over a writable reactive target. */
 export function* tweenStep<T>(
-  sig: Traits<T, "lerp">,
+  sig: WritableOf<T> & Traits<T, "lerp">,
   target: T,
   dur: Val<number>,
   ease: Easing = defaultEase,
@@ -126,7 +93,7 @@ export function* tweenStep<T>(
 
 /** Free-fn form of one-shot tween — returns a chainable `Tween<T>`. */
 export function tween<T>(
-  sig: Traits<T, "lerp">,
+  sig: WritableOf<T> & Traits<T, "lerp">,
   target: T,
   dur: Val<number>,
   ease?: Easing,
@@ -150,7 +117,7 @@ export interface SpringOpts {
 
 /** Second-order damped-spring pull. Math unchanged from prod's `spring`. */
 export function* spring<T>(
-  sig: Traits<T, "linear" | "metric">,
+  sig: WritableOf<T> & Traits<T, "linear" | "metric">,
   target: Val<T>,
   opts: SpringOpts = {},
 ): Animator<void> {
@@ -217,7 +184,7 @@ export function* spring<T>(
 
 /** Constant-speed approach (units-of-T per second). Needs linear+metric. */
 export function* toward<T>(
-  sig: Traits<T, "linear" | "metric">,
+  sig: WritableOf<T> & Traits<T, "linear" | "metric">,
   target: Val<T>,
   speed: Val<number>,
 ): Animator<void> {
@@ -241,7 +208,7 @@ export function* toward<T>(
 
 /** Exponential pull toward `target` at rate `k`/s (no overshoot). Needs linear. */
 export function* attract<T>(
-  sig: Traits<T, "linear">,
+  sig: WritableOf<T> & Traits<T, "linear">,
   target: Val<T>,
   k: Val<number> = 1,
 ): Animator<void> {
@@ -259,7 +226,7 @@ export function* attract<T>(
 
 /** Drive `sig` per frame with a pure function `f(t, initial)`. */
 export function* wave<T>(
-  sig: Signal<T>,
+  sig: WritableOf<T>,
   fn: (t: number, initial: T) => T,
 ): Animator<void> {
   const initial = sig.peek();
@@ -271,7 +238,7 @@ export function* wave<T>(
 /** Escape hatch: drive sig per frame with `step(dt, t, current)`.
  *  Return `false` to terminate. Use `wave` instead for pure `f(t)`. */
 export function* driven<T>(
-  sig: Signal<T>,
+  sig: WritableOf<T>,
   step: (dt: number, t: number, v: T) => T | false,
 ): Animator<void> {
   yield* drive((tick, t) => {
@@ -283,9 +250,9 @@ export function* driven<T>(
 
 // ─── Play / play / when / loop / every ───────────────────────────────
 
-// `Read<unknown>` (covariant) accepts any Signal<T> / Computed<T>;
-// `Signal<unknown>` doesn't (invariant in T) and `Signal<any>` is
-// bivariant noise. `playableGen` narrows back to Signal at runtime.
+// `Read<unknown>` (covariant) accepts any Signal<T> / value-class signal;
+// `Signal<unknown>` doesn't (invariant in T). `playableGen` narrows back
+// to Signal at runtime.
 export type PlayTrigger = Yieldable | Read<unknown>;
 
 export interface Play<R = void> extends Animator<R> {
@@ -297,28 +264,17 @@ export interface Play<R = void> extends Animator<R> {
 
 class PlayImpl<R> implements Play<R> {
   constructor(private g: Animator<R>) {}
-  next(v?: Tick) {
-    return this.g.next(v as Tick);
-  }
-  return(v?: R) {
-    return this.g.return(v as R);
-  }
-  throw(e: unknown) {
-    return this.g.throw(e);
-  }
-  [Symbol.iterator]() {
-    return this;
-  }
+  next(v?: Tick) { return this.g.next(v as Tick) }
+  return(v?: R) { return this.g.return(v as R) }
+  throw(e: unknown) { return this.g.throw(e) }
+  [Symbol.iterator]() { return this }
 
   until(p: PlayTrigger): Play<R> {
     const trigger = playableGen(p);
     const g = this.g;
     return new PlayImpl<R>(
       (function* () {
-        const result = yield* race(
-          g as Animator<unknown>,
-          trigger,
-        ) as Animator<unknown>;
+        const result = yield* race(g as Animator<unknown>, trigger) as Animator<unknown>;
         return result as R;
       })(),
     );
@@ -373,8 +329,8 @@ export function when(sig: Read<unknown>): Animator<void> {
   });
 }
 
-/** Reactive boolean negation as a `Computed<boolean>`. */
-export function not(sig: Read<unknown>): Computed<boolean> {
+/** Reactive boolean negation as a `Signal<boolean>` (RO). */
+export function not(sig: Read<unknown>): Signal<boolean> {
   return computed(() => !sig.value);
 }
 
@@ -394,9 +350,7 @@ export function untilChange<T>(sig: Signal<T>): Animator<T> {
   });
 }
 
-/** Repeat `factory()` forever; bound via `.until(sig)`. Factories
- *  returning a bare `Animator` delegate via `yield*` (no boundary frame);
- *  arrays / other Yieldables go through `yield` (parallel / spawn). */
+/** Repeat `factory()` forever; bound via `.until(sig)`. */
 export function loop(factory: () => Yieldable): Play {
   return play(
     (function* (): Animator {
@@ -409,8 +363,7 @@ export function loop(factory: () => Yieldable): Play {
   );
 }
 
-/** Run `fn` every `sec` seconds (drift-corrected, `sec` may be reactive).
- *  Schedules against `tick.elapsed` so there's no float accumulation. */
+/** Run `fn` every `sec` seconds (drift-corrected, `sec` may be reactive). */
 export function every(sec: Val<number>, fn: () => void): Play {
   const getSec = valFn(sec);
   return play(

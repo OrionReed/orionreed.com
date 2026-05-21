@@ -53,7 +53,7 @@ class Polygon extends Signal<PolygonValue> {
   };
   constructor(v: PolygonValue = { vertices: [] }) { super(v); }
   to(target: PolygonValue, dur: Val<number>, ease?: Easing): Tween<PolygonValue> {
-    return tween(this, target, dur, ease);
+    return tween(this as never, target, dur, ease);
   }
 }
 interface Polygon { readonly constructor: typeof Polygon }

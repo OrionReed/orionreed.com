@@ -60,7 +60,10 @@ export type TraitKey = keyof TraitDict<unknown>;
  *  trait constraint (`constructor.traits` contains each listed key).
  *  Replaces per-trait aliases (`HasLinear`, …) AND per-consumer
  *  aliases (`SpringTarget`, …) with a single, composable type. */
-export type Traits<T, K extends TraitKey = never> = Signal<T> & {
+/** "A reactive whose class declares the listed traits."
+ *  Pure constraint — does not require `Signal<T>` directly; consumers
+ *  intersect with `WritableOf<T>` / `Read<T>` / etc. for capability. */
+export type Traits<T, K extends TraitKey = never> = {
   readonly constructor: {
     readonly traits: { [P in K]-?: NonNullable<TraitDict<T>[P]> } & TraitDict<T>;
   };
@@ -82,14 +85,14 @@ const missing = (s: object, slot: string): Error =>
 // in the parameter type (`Traits<T, "linear">`) so TS infers T from
 // the argument and the trait presence is checked structurally.
 export function requireLinear<T>(s: Traits<T, "linear">): Linear<T> {
-  const v = dictOf<T>(s).linear; if (!v) throw missing(s, "Linear"); return v;
+  const v = dictOf<T>(s as unknown as Read<T>).linear; if (!v) throw missing(s, "Linear"); return v;
 }
 export function requireLerp<T>(s: Traits<T, "lerp">): Lerp<T> {
-  const v = dictOf<T>(s).lerp; if (!v) throw missing(s, "Lerp"); return v;
+  const v = dictOf<T>(s as unknown as Read<T>).lerp; if (!v) throw missing(s, "Lerp"); return v;
 }
 export function requireMetric<T>(s: Traits<T, "metric">): Metric<T> {
-  const v = dictOf<T>(s).metric; if (!v) throw missing(s, "Metric"); return v;
+  const v = dictOf<T>(s as unknown as Read<T>).metric; if (!v) throw missing(s, "Metric"); return v;
 }
 export function requireEquals<T>(s: Traits<T, "equals">): Equals<T> {
-  const v = dictOf<T>(s).equals; if (!v) throw missing(s, "Equals"); return v;
+  const v = dictOf<T>(s as unknown as Read<T>).equals; if (!v) throw missing(s, "Equals"); return v;
 }

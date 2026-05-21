@@ -1,76 +1,71 @@
-// num.ts — reactive scalar number.
-//
-// Eager methods on the class return either a `Num` (writable Lens) when
-// the op is invertible, or `RO<Num>` (read-only Computed) when it isn't.
-// Chain methods on `NumChain` only carry invertible ops — so
-// `n.derive(c => c.add(b).scale(k))` is always a Lens.
+// num.ts — reactive scalar.
 
-import { Signal, computed, value, type Val, type SignalOptions } from "../signal";
+import {
+  Signal, computedCls, lensCls,
+  type Val, type SignalOptions,
+} from "../signal";
 import { type Linear, type TraitDict } from "../traits";
-import { type Op, applyOp1, Chain } from "../ops";
+import { applyOp1, type Op } from "../ops";
+import { type Writable, invertibles } from "../writable";
 import { tween, type Tween } from "../anim";
 import { type Easing } from "../../core";
 
-// Module-local value alias; not exported. Consumers use `Of<Num>` = number.
 type V = number;
 
-export const add = (a: V, b: V) => a + b;
-export const sub = (a: V, b: V) => a - b;
-export const scale = (a: V, k: number) => a * k;
-export const lerp = (a: V, b: V, t: number) => a + (b - a) * t;
+export const add    = (a: V, b: V) => a + b;
+export const sub    = (a: V, b: V) => a - b;
+export const scale  = (a: V, k: number) => a * k;
+export const lerp   = (a: V, b: V, t: number) => a + (b - a) * t;
 export const metric = (a: V, b: V) => Math.abs(a - b);
 export const equals = (a: V, b: V) => a === b;
 
-// ─── Invertible ops (shared between eager methods and chain) ────────
-
-const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
-const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
-const scaleOp: Op<V, [number]> = {
-  fwd: scale,
-  bwd: (v, k) => scale(v, 1 / k),
-};
-
 const linearImpl: Linear<V> = { add, sub, scale };
 
+const addOp:   Op<V, [V]>      = { fwd: add,   bwd: sub };
+const subOp:   Op<V, [V]>      = { fwd: sub,   bwd: add };
+const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
+
 export class Num extends Signal<V> {
+  // ── class-level config ─────────────────────────────────────────
   static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
+  static invertibles = invertibles<Num>()("add", "sub", "scale");
 
-  constructor(v: V = 0, opts?: SignalOptions<V>) { super(v, opts); }
+  // ── class-level constructors ───────────────────────────────────
+  static derive(fn: () => V): Num { return computedCls(Num, fn) }
+  static lens(g: () => V, s: (v: V) => void): Writable<Num> {
+    return lensCls(Num, g, s) as unknown as Writable<Num>;
+  }
+  static is(v: unknown): v is Num { return v instanceof Num }
 
-  // ── Invertible (Lens-returning) ──
-  add(b: Val<V>): Num { return applyOp1(this, addOp, b, Num); }
-  sub(b: Val<V>): Num { return applyOp1(this, subOp, b, Num); }
-  scale(k: Val<number>): Num { return applyOp1(this, scaleOp, k, Num); }
+  // ── instance ───────────────────────────────────────────────────
+  constructor(v: V = 0, opts?: SignalOptions<V>) { super(v, opts) }
 
-  // ── Non-invertible (.value= throws at runtime) ──
+  add(b: Val<V>): Num        { return applyOp1(this, addOp,   b, Num) }
+  sub(b: Val<V>): Num        { return applyOp1(this, subOp,   b, Num) }
+  scale(k: Val<number>): Num { return applyOp1(this, scaleOp, k, Num) }
   clamp(lo: Val<V>, hi: Val<V>): Num {
-    return computed(() => {
-      const v = this.value, l = value(lo), h = value(hi);
+    return Num.derive(() => {
+      const v = this.value;
+      const l = lo instanceof Signal ? lo.value : typeof lo === "function" ? lo() : lo;
+      const h = hi instanceof Signal ? hi.value : typeof hi === "function" ? hi() : hi;
       return v < l ? l : v > h ? h : v;
-    }, Num);
+    });
   }
 
-  /** Tween-builder, implied by lerp trait. */
+  /** Tween-builder, implied by the lerp trait. The cast bypasses the
+   *  WritableBrand requirement; tweens only make sense on writable
+   *  Nums but the runtime tween will fail on a Computed Num anyway. */
   to(target: V, dur: Val<number>, ease?: Easing): Tween<V> {
-    return tween(this, target, dur, ease);
-  }
-
-  derive(fn: (c: NumChain) => NumChain): Num {
-    return fn(new NumChain()).toLens(this, Num);
+    return tween(this as never, target, dur, ease);
   }
 }
-
-export interface Num { readonly constructor: typeof Num }
-
-export class NumChain extends Chain<V> {
-  add(b: Val<V>): this { return this.push1(addOp, b); }
-  sub(b: Val<V>): this { return this.push1(subOp, b); }
-  scale(k: Val<number>): this { return this.push1(scaleOp, k); }
+export interface Num {
+  readonly constructor: typeof Num;
+  get value(): V;
 }
 
-/** Construct a Num; reactive source follows live via `.bind()`. */
-export const num = (v: Val<V> = 0): Num => {
-  const n = new Num();
+export function num(v: Val<V> = 0): Writable<Num> {
+  const n = new Num() as unknown as Writable<Num>;
   n.bind(v);
   return n;
-};
+}

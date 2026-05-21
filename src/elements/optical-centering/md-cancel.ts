@@ -1,7 +1,7 @@
-import {Diagram, Mount, Anchor, button, signal, play, circle, wave, fadeOut, label, loop, num, vec, type Animator, type Signal, type Content, type Has, Num} from "../../minim";
+import {Diagram, Mount, Anchor, button, signal, play, circle, wave, fadeOut, label, loop, num, vec, type Animator, type Signal, type Content, type Has, Num, type Writable} from "../../minim";
 
 /** Sine oscillation around `sig`'s start value. */
-const oscillate = (sig: Num, amp: number, freq: number) =>
+const oscillate = (sig: Writable<Num>, amp: number, freq: number) =>
   wave(sig, (t, base) => base + amp * Math.sin(2 * Math.PI * freq * t));
 
 const N_SLOTS = 12;
@@ -14,7 +14,7 @@ const BTN_GAP = 12;
 
 function* lifecycle(
   shape: Has<"opacity">,
-  y: Num,
+  y: Writable<Num>,
   amp: number,
   freq: number,
   stop: Signal<boolean>,
@@ -38,8 +38,8 @@ export class MdCancel extends Diagram {
 
     type Slot = {
       x: number;
-      // `Num` (not plain signal) — oscillate reads its `[ALGEBRA]` slot.
-      y: Num;
+      // `Writable<Num>` — oscillate writes through its value.
+      y: Writable<Num>;
       shape: Has<"opacity">;
     };
     const slots: Slot[] = [];

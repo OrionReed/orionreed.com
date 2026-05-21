@@ -8,9 +8,13 @@
 // Two clearly-invertible ops: `multiply(b)` (inverse is multiply by
 // `invert(b)`) and `invert()` (its own inverse).
 
-import { Signal, computed, value, type Val, type SignalOptions, type Of } from "../signal";
+import {
+  Signal, computedCls, lensCls,
+  type Val, type SignalOptions, type Of,
+} from "../signal";
 import { type TraitDict } from "../traits";
-import { type Op, applyOp0, applyOp1, Chain } from "../ops";
+import { applyOp0, applyOp1, type Op } from "../ops";
+import { type Writable, invertibles } from "../writable";
 import { Num } from "./num";
 import { Vec } from "./vec";
 
@@ -105,46 +109,46 @@ const multiplyOp: Op<V, [V]> = {
 const invertOp: Op<V, []> = { fwd: invert, bwd: invert };
 
 export class Matrix extends Signal<V> {
+  // ── class-level config ─────────────────────────────────────────
   static traits: TraitDict<V> & { equals: typeof equals } = { equals };
+  static invertibles = invertibles<Matrix>()("multiply", "invert");
 
-  constructor(v: V = identity(), opts?: SignalOptions<V>) { super(v, opts); }
+  // ── class-level constructors ───────────────────────────────────
+  static derive(fn: () => V): Matrix { return computedCls(Matrix, fn) }
+  static lens(g: () => V, s: (v: V) => void): Writable<Matrix> {
+    return lensCls(Matrix, g, s) as unknown as Writable<Matrix>;
+  }
+  static is(v: unknown): v is Matrix { return v instanceof Matrix }
 
-  // ── Invertible ──
-  multiply(b: Val<V>): Matrix { return applyOp1(this, multiplyOp, b, Matrix); }
-  invert(): Matrix { return applyOp0(this, invertOp, Matrix); }
+  // ── instance ───────────────────────────────────────────────────
+  constructor(v: V = identity(), opts?: SignalOptions<V>) { super(v, opts) }
 
-  get a(): Num { return this.field("a", Num); }
-  get b(): Num { return this.field("b", Num); }
-  get c(): Num { return this.field("c", Num); }
-  get d(): Num { return this.field("d", Num); }
-  get e(): Num { return this.field("e", Num); }
-  get f(): Num { return this.field("f", Num); }
+  multiply(b: Val<V>): Matrix { return applyOp1(this, multiplyOp, b, Matrix) }
+  invert(): Matrix             { return applyOp0(this, invertOp, Matrix) }
 
-  // ── Non-invertible ──
+  get a(): Num { return this.field("a", Num) }
+  get b(): Num { return this.field("b", Num) }
+  get c(): Num { return this.field("c", Num) }
+  get d(): Num { return this.field("d", Num) }
+  get e(): Num { return this.field("e", Num) }
+  get f(): Num { return this.field("f", Num) }
+
   get determinant(): Num {
-    return this.memo("determinant", () =>
-      computed(() => determinant(this.value), Num));
-  }
-
-  derive(fn: (c: MatrixChain) => MatrixChain): Matrix {
-    return fn(new MatrixChain()).toLens(this, Matrix);
+    return this.memo("determinant", () => Num.derive(() => determinant(this.value)));
   }
 }
-
-export interface Matrix { readonly constructor: typeof Matrix }
-
-export class MatrixChain extends Chain<V> {
-  multiply(b: Val<V>): this { return this.push1(multiplyOp, b); }
-  invert(): this { return this.push0(invertOp); }
+export interface Matrix {
+  readonly constructor: typeof Matrix;
+  get value(): V;
 }
 
-export const matrix = (
+export function matrix(
   a: Val<number> = 1, b: Val<number> = 0,
   c: Val<number> = 0, d: Val<number> = 1,
   e: Val<number> = 0, f: Val<number> = 0,
-): Matrix => {
-  const m = new Matrix();
+): Writable<Matrix> {
+  const m = new Matrix() as unknown as Writable<Matrix>;
   m.a.bind(a); m.b.bind(b); m.c.bind(c);
   m.d.bind(d); m.e.bind(e); m.f.bind(f);
   return m;
-};
+}

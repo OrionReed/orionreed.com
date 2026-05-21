@@ -26,7 +26,7 @@ const stringLerp: Lerp<string> = (a, b, t) => {
 class Text extends Signal<string> {
   static traits: TraitDict<string> & { lerp: Lerp<string> } = { lerp: stringLerp };
   to(target: string, dur: Val<number>, ease?: Easing): Tween<string> {
-    return tween(this, target, dur, ease);
+    return tween(this as never, target, dur, ease);
   }
 }
 interface Text { readonly constructor: typeof Text }
@@ -175,7 +175,7 @@ export class MdLerps extends Diagram {
           pos.to(f.v, DUR),
           box.to(f.b, DUR),
           col.to(f.c, DUR),
-          tween(txt, f.t, DUR),
+          tween(txt as never, f.t, DUR),
         ];
         yield DWELL;
       }

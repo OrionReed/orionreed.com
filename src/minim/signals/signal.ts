@@ -1,22 +1,20 @@
-// Signal<T> — merged engine: signal, computed, and lens in one class.
-//
-// Mode is determined by which fields are set:
+// Signal<T> — merged reactive engine: signal, computed, and lens modes
+// in one class. Mode is determined by which fields are set:
 //   - signal mode:   currentValue is truth, getter undefined
 //   - computed mode: getter set, cachedValue is truth, no setter
-//   - lens mode:     getter set, setter set, cachedValue is truth (read), setter handles writes
+//   - lens mode:     getter + setter set, cachedValue is truth on read
 //
-// This eliminates `viewClassFor` and `setPrototypeOf` from the engine:
-// `Vec extends Signal` is a natural prototype chain, `derived(Vec, fn)`
-// is `new Vec(); set getter; return`, and `instanceof Vec` uses the
-// native chain walk.
+// `Vec extends Signal` is a natural prototype chain; `computed(fn, Vec)`
+// and `lens(g, s, Vec)` install getter/setter on a fresh Vec instance
+// to put it in computed/lens mode. `instanceof Vec` uses the native
+// chain walk.
 //
-// Algorithm is alien-signals; trait dispatch via `./traits`.
+// Algorithm: alien-signals v2. Trait dispatch via `./traits`.
 //
-// Bug-fixes incorporated from production minim's signal.ts:
-//   - peek(): shallowPropagate on Dirty-clear (subscribers were marked
-//     Pending by the upstream write; without this they stay stranded)
-//   - flush(): re-entrancy guard (cascading bind-effects on field
-//     lenses can otherwise blow the call stack)
+// Writability is type-tracked via `WritableBrand` (declared below)
+// and the `Writable<R>` modifier in `./writable`. Factory returns
+// add the brand via cast; bare `Signal<T>` instances (created via
+// `new Signal(...)`) are RO at the type level.
 
 import { type Equals, type TraitDict } from "./traits";
 
@@ -315,25 +313,13 @@ export interface Read<out T> {
   peek(): T;
 }
 
-/** Type alias for a read-only Signal (computed). Both runtime-checked
- *  (writes throw) and TS-narrowed (Read interface). */
-export type Computed<T = unknown> = Omit<Signal<T>, "value"> & {
-  readonly value: T;
-};
-
-/** Type alias for a writable derived view (lens). Structurally a Signal
- *  with both getter AND setter set. Treated as writable in TS. */
-export type Lens<T = unknown> = Signal<T>;
-
-/** Read-only narrowing of a typed Signal subclass (Vec, Num, Box, …).
- *  Preserves all class methods but makes `.value` readonly and removes
- *  `.set` / `.bind` so writes are TS errors. Returned by non-invertible
- *  eager methods (`.normalize()`, `.luminance`, `.distance()`, …).
- *  No constraint on `R` because `Signal<T>` is invariant in T —
- *  subclasses parameterised by a concrete T (Signal<number>) aren't
- *  assignable to `Signal<unknown>`. */
-export type RO<R> = Omit<R, "value" | "set" | "bind">
-  & { readonly value: R extends Signal<infer T> ? T : never };
+/** Brand for writable receivers. Factories (`signal(v)`, `vec(...)`,
+ *  `Vec.lens(...)`, invertible methods, etc.) return values carrying
+ *  this brand. The brand gates calls to `Signal.set` / `Signal.bind`
+ *  and is used by `Writable<R>` / `WritableOf<T>` to surface the
+ *  writable API. */
+declare const WRITABLE: unique symbol;
+export interface WritableBrand { readonly [WRITABLE]: never }
 
 /** Extract the value type carried by a Signal (signal/computed/lens). */
 export type Of<R> = R extends Signal<infer T> ? T : never;
@@ -348,8 +334,9 @@ export function value<T>(v: Val<T>): T {
   return v as T;
 }
 
-/** Resolve a `Val<T>` to a zero-arg thunk that unwraps it (and tracks
- *  if reactive). Called once at setup; the thunk is reused on every read. */
+/** Resolve a `Val<T>` to a closure `() => T` that unwraps it on each
+ *  call. Hot-path helper for animators that read reactive args every
+ *  frame — set up once, invoke each tick. */
 export function valFn<T>(v: Val<T>): () => T {
   if (v instanceof Signal) return () => v.value;
   if (typeof v === "function") return v as () => T;
@@ -398,6 +385,8 @@ export interface SignalOptions<T = unknown> {
  *  Type predicates: `isSignal(x)`, `isComputed(x)`, `isLens(x)`.
  */
 export class Signal<T = unknown> implements ReactiveNode {
+  // Engine fields — module-level functions (link/propagate/etc) need
+  // to read these, so they stay public.
   subs: Link | undefined = undefined;
   subsTail: Link | undefined = undefined;
   deps: Link | undefined = undefined;
@@ -406,6 +395,12 @@ export class Signal<T = unknown> implements ReactiveNode {
   currentValue: T;
   pendingValue: T;
   cachedValue: T | undefined = undefined;
+  /** Set when this Signal is in computed/lens mode. Public for
+   *  engine/factory access (used by `Signal.install`, internal _update
+   *  flows, etc). Don't reassign from consumer code — corrupts mode
+   *  state. Naming convention `_getter`/`_setter` would signal intent
+   *  better but breaks back-compat with code that reads `.getter` as
+   *  a predicate. Treated as `@internal`. */
   getter: (() => T) | undefined = undefined;
   setter: ((v: T) => void) | undefined = undefined;
   /** Per-instance equality override (from `opts.equals`); falls back to
@@ -439,6 +434,31 @@ export class Signal<T = unknown> implements ReactiveNode {
     }
   }
 
+  /** @internal — friend factory used by `computed` / `lens` /
+   *  `computedCls` / `lensCls` to flip a fresh instance into computed
+   *  or lens mode. Static access from Signal lets us assign the
+   *  `private` getter/setter slots on any subclass instance.
+   *  `(...args: never[])` lets us pass any constructor regardless of
+   *  its declared arity (incl. `Signal` itself whose ctor takes T). */
+  static install<T, C extends Signal<T>>(
+    Cls: new (...args: never[]) => C,
+    getter: () => T,
+    setter?: (v: T) => void,
+  ): C {
+    const inst = new Cls();
+    inst.getter = getter;
+    if (setter !== undefined) inst.setter = setter;
+    inst.flags = 0;
+    return inst;
+  }
+
+  /** @internal — flag query for `isLens` / `isComputed` from outside.
+   *  Has private-field access from inside Signal's static context. */
+  static _mode(v: Signal<unknown>): "signal" | "computed" | "lens" {
+    if (v.getter === undefined) return "signal";
+    return v.setter === undefined ? "computed" : "lens";
+  }
+
   /** Per-instance cached derivation. `key` must be unique within the
    *  parent's class hierarchy. Factory runs once per (instance, key).
    *  Used by lazy domain getters (`.magnitude`) and by `.field()`. */
@@ -464,11 +484,11 @@ export class Signal<T = unknown> implements ReactiveNode {
     const k = key as string | symbol;
     let cached = cache[k as string];
     if (cached === undefined) {
-      cached = lens(
+      cached = lensCls(
+        Cls,
         () => (this.value as T)[key],
         // TODO: find a general robust approach to avoid the spread replace, as this is hot path.
         (v) => { this.value = { ...(this.peek() as object), [key]: v } as T; },
-        Cls,
       );
       cache[k as string] = cached;
     }
@@ -576,28 +596,24 @@ export class Signal<T = unknown> implements ReactiveNode {
     return this.currentValue;
   }
 
-  /** One-shot write of `value(v)`. Severs any prior `.bind(...)`. Chainable. */
-  set(v: Val<T>): this {
-    if (this._stopBinding) {
-      this._stopBinding();
-      this._stopBinding = undefined;
-    }
+  /** One-shot write of `value(v)`. Severs any prior `.bind(...)`. Chainable.
+   *  Type-gated: only callable on receivers that carry the `WritableBrand`
+   *  (factory-returned signals, value-class writable forms, etc.).
+   *  Bare `Vec`/`Num` instances are rejected at the call site. */
+  set(this: WritableBrand & { value: T }, v: Val<T>): unknown {
+    const s = this as unknown as Signal<T>;
+    if (s._stopBinding) { s._stopBinding(); s._stopBinding = undefined }
     this.value = value(v);
     return this;
   }
 
-  /** Bind to a `Val<T>`; replaces any prior binding. Returns disposer
-   *  (no-op for plain T). */
-  bind(source: Val<T>): () => void {
-    if (this._stopBinding) {
-      this._stopBinding();
-      this._stopBinding = undefined;
-    }
+  /** Bind to a `Val<T>`; replaces any prior binding. Type-gated like `set`. */
+  bind(this: WritableBrand & { value: T }, source: Val<T>): () => void {
+    const s = this as unknown as Signal<T>;
+    if (s._stopBinding) { s._stopBinding(); s._stopBinding = undefined }
     if (source instanceof Signal || typeof source === "function") {
-      const stop = effect(() => {
-        this.value = value(source);
-      });
-      this._stopBinding = stop;
+      const stop = effect(() => { this.value = value(source) });
+      s._stopBinding = stop;
       return stop;
     }
     this.value = source as T;
@@ -754,17 +770,16 @@ class Effect implements ReactiveNode {
 
 // ─── Public factories ────────────────────────────────────────────────
 
-/** Plain `Signal<T>` (writable). For typed signals use the class
- *  constructor directly: `new Vec({x:0, y:0}, opts?)`. We deliberately
- *  don't overload `signal(v, Cls)` — that path would need a runtime
- *  discriminator on `(opts | Cls)` and adds no power over `new Cls(v)`. */
-export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> {
-  return new Signal(initial, opts);
+/** Writable source. Returns a branded `Signal<T>` so `.value=`/`.set`/
+ *  `.bind` are callable. Use `new Vec(...)` for typed value-class
+ *  signals (and `vec(x, y)` / `num(v)` / etc. for the factory form). */
+export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> & WritableBrand {
+  return new Signal(initial, opts) as Signal<T> & WritableBrand;
 }
 
-// `computed` overloads — optional Cls is the *last* argument:
-//   computed(fn)              → Signal<T>            (untyped)
-//   computed(fn, Vec)         → Vec  (read-only view)  (typed)
+// `computed` — overload returns:
+//   computed(fn)         → Signal<T>             (untyped, RO)
+//   computed(fn, Vec)    → Vec  (typed, RO)
 export function computed<T>(getter: () => T): Signal<T>;
 export function computed<T, C extends Signal<T>>(
   getter: () => T,
@@ -774,22 +789,18 @@ export function computed<T, C extends Signal<T>>(
   getter: () => T,
   Cls?: new (...args: never[]) => C,
 ): C | Signal<T> {
-  if (Cls === undefined) {
-    const r = new Signal<T>(undefined as T);
-    r.getter = getter;
-    r.flags = 0;
-    return r;
-  }
-  const inst = new Cls();
-  inst.getter = getter;
-  inst.flags = 0;
-  return inst;
+  return Cls === undefined
+    ? Signal.install(Signal as new (...args: never[]) => Signal<T>, getter)
+    : Signal.install(Cls, getter);
 }
 
-// `lens` overloads — optional Cls is the *last* argument:
-//   lens(get, set)            → Signal<T>            (untyped)
-//   lens(get, set, Num)       → Num   (writable view)  (typed)
-export function lens<T>(getter: () => T, setter: (v: T) => void): Signal<T>;
+// `lens` — overload returns:
+//   lens(g, s)           → Signal<T> & WritableBrand   (untyped, RW derived)
+//   lens(g, s, Vec)      → Vec                          (typed)
+// The typed form gives back the value-class type; cast at consumer
+// boundary to `Writable<Vec>` if the brand needs to surface (the
+// per-class `Vec.lens` static does this).
+export function lens<T>(getter: () => T, setter: (v: T) => void): Signal<T> & WritableBrand;
 export function lens<T, C extends Signal<T>>(
   getter: () => T,
   setter: (v: T) => void,
@@ -799,19 +810,30 @@ export function lens<T, C extends Signal<T>>(
   getter: () => T,
   setter: (v: T) => void,
   Cls?: new (...args: never[]) => C,
-): C | Signal<T> {
-  if (Cls === undefined) {
-    const r = new Signal<T>(undefined as T);
-    r.getter = getter;
-    r.setter = setter;
-    r.flags = 0;
-    return r;
-  }
-  const inst = new Cls();
-  inst.getter = getter;
-  inst.setter = setter;
-  inst.flags = 0;
-  return inst;
+): C | (Signal<T> & WritableBrand) {
+  return Cls === undefined
+    ? Signal.install(Signal as new (...args: never[]) => Signal<T>, getter, setter) as Signal<T> & WritableBrand
+    : Signal.install(Cls, getter, setter);
+}
+
+/** @deprecated — use `computed(fn, Cls)` (the typed overload above)
+ *  or the per-class static `Vec.derive(fn)`. Kept as a thin alias for
+ *  cases that prefer the explicit-Cls-first shape. */
+export function computedCls<T, C extends Signal<T>>(
+  Cls: new (...args: never[]) => C,
+  getter: () => T,
+): C {
+  return Signal.install(Cls, getter);
+}
+
+/** @deprecated — use `lens(g, s, Cls)` (the typed overload above) or
+ *  the per-class static `Vec.lens(g, s)`. */
+export function lensCls<T, C extends Signal<T>>(
+  Cls: new (...args: never[]) => C,
+  getter: () => T,
+  setter: (v: T) => void,
+): C {
+  return Signal.install(Cls, getter, setter);
 }
 
 export function effect(fn: () => void | (() => void)): () => void {

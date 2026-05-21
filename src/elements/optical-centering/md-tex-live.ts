@@ -1,4 +1,4 @@
-import {Anchor, Diagram, Mount, Vec, signal, computed, lens, handle, label, line, vec, type Content} from "../../minim";
+import {Anchor, Diagram, Mount, Vec, type Writable, signal, computed, lens, handle, label, line, vec, type Content} from "../../minim";
 import {part, tex, tint} from "../../minim/tex";
 
 const W = 640;
@@ -57,7 +57,7 @@ export class MdTexLive extends Diagram {
         t.value = clamped;
       },
       Vec,
-    );
+    ) as unknown as Writable<Vec>;
     s(handle(knobPos));
 
     s(

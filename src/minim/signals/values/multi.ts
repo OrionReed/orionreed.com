@@ -1,30 +1,25 @@
 // multi.ts — N-to-1 writable derived views (combine, mean).
 //
-// These are the canonical "more-than-a-DAG" structures in the library:
-// one derived cell observes N parents and distributes writes back to
-// all of them. Each operation is bidirectional and the dependency
-// shape is a hypergraph edge, not a DAG edge.
-//
-// Ported from `signals/values/index.ts` to the r2 API:
-//   - `lens(get, set, Cls)` (was `derived(Cls, get, set)`)
-//   - nominal `HasLinear<T>` constraint on `mean` (was `requireLinear`
-//     with a runtime throw)
+// Canonical "more-than-a-DAG" structures: one derived cell observes
+// N parents and distributes writes back to all of them.
 
-import { Signal, lens, type Read, type Of } from "../signal";
+import { Signal, lensCls, type Read, type Of } from "../signal";
 import { requireLinear, type Traits } from "../traits";
+import { type Writable, type WritableOf } from "../writable";
 
-/** N-to-1 lens flavored as `parts[0]`'s class. The merge function reads
- *  all parts to produce the composite; `distribute` is the inverse —
+/** N-to-1 lens flavoured as `parts[0]`'s class. `merge` reads all
+ *  parts to produce the composite; `distribute` is the inverse —
  *  given a new composite value, returns the per-part values to write
  *  back. Each part's class must support construction with no args. */
 export function combine<T, S extends Read<T>>(
   parts: readonly S[],
   merge: (vs: readonly T[]) => T,
   distribute: (next: T, prev: readonly T[]) => readonly T[],
-): S {
+): Writable<S> {
   if (parts.length === 0) throw new Error("combine: need ≥1 signal");
   const Cls = (parts[0] as object).constructor as new (...args: never[]) => Signal<T>;
-  return lens<T, Signal<T>>(
+  const lensView = lensCls<T, Signal<T>>(
+    Cls,
     () => {
       const vs = new Array<T>(parts.length);
       for (let i = 0; i < parts.length; i++) vs[i] = parts[i].value;
@@ -39,27 +34,21 @@ export function combine<T, S extends Read<T>>(
         if (p instanceof Signal) (p as Signal<T>).value = updated[i];
       }
     },
-    Cls,
-  ) as unknown as S;
+  );
+  return lensView as unknown as Writable<S>;
 }
 
 /** Writable arithmetic mean. Writing distributes the delta evenly to
  *  all parts. All parts must be of the same value class and that class
- *  must declare a `linear` trait.
- *
- *  Inference shape:
- *    - `R extends Read<unknown>` anchors the class identity (Num/Vec/…)
- *      so the return type preserves the input class.
- *    - The trait constraint `& HasLinear<Of<R>>` is applied at the
- *      parameter site instead of in `R`'s bound; this avoids the
- *      variance trap (`Linear<T>` is invariant, so `HasLinear<number>`
- *      isn't assignable to `HasLinear<unknown>`). */
+ *  must declare a `linear` trait. Each part must be writable (factory-
+ *  returned, lens-form, etc.) — RO parts can't accept the distributed
+ *  write-back. */
 export function mean<R extends Read<unknown>>(
-  ...signals: (R & Traits<Of<R>, "linear">)[]
-): R {
+  ...signals: (R & WritableOf<Of<R>> & Traits<Of<R>, "linear">)[]
+): Writable<R> {
   type V = Of<R>;
   if (signals.length === 0) throw new Error("mean: need ≥1 signal");
-  const lin = requireLinear(signals[0] as Traits<V, "linear">);
+  const lin = requireLinear(signals[0] as unknown as Traits<V, "linear">);
   const invN = 1 / signals.length;
   return combine<V, Read<V>>(
     signals as ReadonlyArray<Read<V>>,
@@ -75,5 +64,5 @@ export function mean<R extends Read<unknown>>(
       const delta = lin.sub(next, cur);
       return prev.map((v) => lin.add(v, delta));
     },
-  ) as unknown as R;
+  ) as unknown as Writable<R>;
 }

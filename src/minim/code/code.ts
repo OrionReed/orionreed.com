@@ -24,7 +24,7 @@
 // and routes typed tokens to the part containing them. Independent of
 // part structure — adding cuts doesn't change the colours.
 
-import {effect, num, signal, vec, value, type Signal, type Num as NumSignal, type Vec, type Val} from "@minim/signals";
+import {effect, num, signal, vec, value, type Signal, type Num as NumSignal, type Vec, type Val, type Writable} from "@minim/signals";
 import {Shape, type ShapeOpts} from "@minim/shapes";
 import {type Animator, type Easing} from "@minim/core";
 import {morph} from "./morph";
@@ -51,11 +51,11 @@ export class Part {
   /** Current text content. Use `setText` to update (instant). */
   text: string;
   /** Top-left in user units. Animatable via `.to(targetVec, dur)`. */
-  readonly position: Vec;
+  readonly position: Writable<Vec>;
   /** [0..1]. Animatable. */
-  readonly opacity: NumSignal;
+  readonly opacity: Writable<NumSignal>;
   /** Radians around the part's centre. Animatable. */
-  readonly rotation: NumSignal;
+  readonly rotation: Writable<NumSignal>;
   /** Optional identity tag. Multiple parts can share a key (multi-line
    *  regions); `c.group(key)` returns the group. */
   key?: string;

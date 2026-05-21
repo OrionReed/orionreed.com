@@ -3,7 +3,7 @@ import {
   signal, computed, effect, lens, Signal,
   Vec, Num, Transform, Box, Matrix,
   compose, multiply, toMatrixString, transformBox, transformPoint,
-  type Of, type Val,
+  type Of, type Val, type Writable,
   mean, BoxMath, value,
 } from "@minim/signals";
 
@@ -48,7 +48,7 @@ export type AnimatableKey =
   | "opacity";
 
 type AnimatableField<K extends AnimatableKey> =
-  K extends "translate" | "scale" | "origin" ? Vec : Num;
+  K extends "translate" | "scale" | "origin" ? Writable<Vec> : Writable<Num>;
 
 /** Anything carrying the listed animatable axes. Combine via union. */
 export type Has<K extends AnimatableKey> = {
@@ -63,12 +63,12 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly el: SVGGElement;
   readonly intrinsic?: SVGElement;
 
-  readonly transform: Transform;
-  readonly translate: Vec;
-  readonly rotate: Num;
-  readonly scale: Vec;
-  readonly origin: Vec;
-  readonly opacity: Num;
+  readonly transform: Writable<Transform>;
+  readonly translate: Writable<Vec>;
+  readonly rotate: Writable<Num>;
+  readonly scale: Writable<Vec>;
+  readonly origin: Writable<Vec>;
+  readonly opacity: Writable<Num>;
 
   /** Composed local-frame matrix: `T(t) T(p) R(r) S(s) T(-p)`. */
   readonly localFrame: Signal<MatrixValue>;
@@ -80,12 +80,12 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly box: Box;
 
   /** Lens-backed parent-frame anchors; writes shift `translate`. */
-  get center(): Vec { return this.#anchor("center", 0.5, 0.5); }
-  get top(): Vec    { return this.#anchor("top",    0.5, 0); }
-  get bottom(): Vec { return this.#anchor("bottom", 0.5, 1); }
-  get left(): Vec   { return this.#anchor("left",   0,   0.5); }
-  get right(): Vec  { return this.#anchor("right",  1,   0.5); }
-  at(u: number, v: number): Vec { return this.#makeAnchor(u, v); }
+  get center(): Writable<Vec> { return this.#anchor("center", 0.5, 0.5); }
+  get top(): Writable<Vec>    { return this.#anchor("top",    0.5, 0); }
+  get bottom(): Writable<Vec> { return this.#anchor("bottom", 0.5, 1); }
+  get left(): Writable<Vec>   { return this.#anchor("left",   0,   0.5); }
+  get right(): Writable<Vec>  { return this.#anchor("right",  1,   0.5); }
+  at(u: number, v: number): Writable<Vec> { return this.#makeAnchor(u, v); }
 
   readonly aside: boolean;
 
@@ -116,9 +116,12 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
       this.el.appendChild(this.intrinsic);
     }
 
-    this.transform = new Transform();
+    this.transform = new Transform() as Writable<Transform>;
+    // Field-lens targets carry WritableBrand at runtime; the `as never`
+    // cast bypasses the `this:` constraint on `.bind` since TS can't
+    // see through the field-lens type to verify the brand.
     const setField = <T>(target: Signal<T>, src: Val<T> | undefined): void => {
-      if (src !== undefined) target.bind(src);
+      if (src !== undefined) (target as never as { bind(s: Val<T>): () => void }).bind(src);
     };
     setField(this.transform.translate, opts.translate ?? defaults.translate ?? { x: 0, y: 0 });
     setField(this.transform.rotate,    opts.rotate    ?? defaults.rotate    ?? 0);
@@ -187,7 +190,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     );
   }
 
-  #makeAnchor(u: number, v: number): Vec {
+  #makeAnchor(u: number, v: number): Writable<Vec> {
     const boxSig = this.box;
     const lf = this.localFrame;
     const tr = this.transform;
@@ -207,10 +210,10 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
         };
       },
       Vec,
-    );
+    ) as unknown as Writable<Vec>;
   }
 
-  #anchor(name: string, u: number, v: number): Vec {
+  #anchor(name: string, u: number, v: number): Writable<Vec> {
     const val = this.#makeAnchor(u, v);
     Object.defineProperty(this, name, {
       value: val, writable: false, configurable: false, enumerable: false,
@@ -329,16 +332,16 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 // Shape-specific sugar over generic `mean(...)`.
 
 /** Writable centroid of shapes' translates. */
-export function centroid(...shapes: { translate: Vec }[]): Vec {
+export function centroid(...shapes: { translate: Writable<Vec> }[]): Writable<Vec> {
   return mean(...shapes.map((s) => s.translate));
 }
 
 /** Writable mean rotation. */
-export function meanRotation(...shapes: { rotate: Num }[]): Num {
+export function meanRotation(...shapes: { rotate: Writable<Num> }[]): Writable<Num> {
   return mean(...shapes.map((s) => s.rotate));
 }
 
 /** Writable mean scale. */
-export function meanScale(...shapes: { scale: Vec }[]): Vec {
+export function meanScale(...shapes: { scale: Writable<Vec> }[]): Writable<Vec> {
   return mean(...shapes.map((s) => s.scale));
 }

@@ -1,12 +1,16 @@
 // box.ts — reactive axis-aligned rectangle.
 
-import { Signal, computed, value, type Val, type SignalOptions, type Of } from "../signal";
+import {
+  Signal, computed, computedCls, lensCls, value,
+  type Val, type SignalOptions, type Of,
+} from "../signal";
 import { type Linear, type TraitDict } from "../traits";
-import { type Op, applyOp1, Chain } from "../ops";
-import { tween, type Tween } from "../anim";
-import { type Easing } from "../../core";
+import { applyOp1, type Op } from "../ops";
+import { type Writable, invertibles } from "../writable";
 import { Num } from "./num";
 import { Vec } from "./vec";
+import { tween, type Tween } from "../anim";
+import { type Easing } from "../../core";
 
 type V = { x: number; y: number; w: number; h: number };
 
@@ -22,10 +26,12 @@ export const lerp = (a: V, b: V, t: number): V => ({
 });
 export const equals = (a: V, b: V) =>
   a === b || (a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h);
-
 export const expand = (b: V, n: number): V =>
   ({ x: b.x - n, y: b.y - n, w: b.w + 2 * n, h: b.h + 2 * n });
+export const contains = (b: V, p: Of<Vec>): boolean =>
+  p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 
+/** Bounding box around a set of boxes. */
 export function union(...bs: V[]): V {
   if (bs.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
   let xMin = bs[0].x, yMin = bs[0].y;
@@ -55,93 +61,82 @@ export function edgeFrom(b: V, toward: Of<Vec>): Of<Vec> {
   return { x: cx + dx * k, y: cy + dy * k };
 }
 
-export const contains = (b: V, p: Of<Vec>): boolean =>
-  p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
-
-// ─── Invertible ops ────────────────────────────────────────────────
-
-const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
-const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
-const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
-const expandOp: Op<V, [number]> = {
-  fwd: expand,
-  bwd: (v, n) => expand(v, -n),
-};
-
 const linearImpl: Linear<V> = { add, sub, scale };
 
+const addOp:    Op<V, [V]>      = { fwd: add, bwd: sub };
+const subOp:    Op<V, [V]>      = { fwd: sub, bwd: add };
+const scaleOp:  Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
+const expandOp: Op<V, [number]> = { fwd: expand, bwd: (v, n) => expand(v, -n) };
+
 export class Box extends Signal<V> {
+  // ── class-level config ─────────────────────────────────────────
   static traits: TraitDict<V> & { linear: Linear<V>; lerp: typeof lerp; equals: typeof equals } = {
     linear: linearImpl, lerp, equals,
   };
+  static invertibles = invertibles<Box>()("add", "sub", "scale", "expand");
 
-  constructor(v: V = { x: 0, y: 0, w: 0, h: 0 }, opts?: SignalOptions<V>) { super(v, opts); }
-
-  get x(): Num { return this.field("x", Num); }
-  get y(): Num { return this.field("y", Num); }
-  get w(): Num { return this.field("w", Num); }
-  get h(): Num { return this.field("h", Num); }
-
-  get area(): Num {
-    return this.memo("area", () => computed(() => this.value.w * this.value.h, Num));
+  // ── class-level constructors ───────────────────────────────────
+  static derive(fn: () => V): Box { return computedCls(Box, fn) }
+  static lens(g: () => V, s: (v: V) => void): Writable<Box> {
+    return lensCls(Box, g, s) as unknown as Writable<Box>;
   }
+  static is(v: unknown): v is Box { return v instanceof Box }
 
-  at(u: number, v: number): Vec {
-    return this.memo(`at:${u},${v}`, () => computed(() => {
-      const b = this.value;
-      return { x: b.x + u * b.w, y: b.y + v * b.h };
-    }, Vec));
-  }
-  get center(): Vec { return this.at(0.5, 0.5); }
-  get top(): Vec    { return this.at(0.5, 0); }
-  get bottom(): Vec { return this.at(0.5, 1); }
-  get left(): Vec   { return this.at(0,   0.5); }
-  get right(): Vec  { return this.at(1,   0.5); }
+  // ── instance ───────────────────────────────────────────────────
+  constructor(v: V = { x: 0, y: 0, w: 0, h: 0 }, opts?: SignalOptions<V>) { super(v, opts) }
 
-  // ── Invertible (Lens-returning) ──
-  add(b: Val<V>): Box { return applyOp1(this, addOp, b, Box); }
-  sub(b: Val<V>): Box { return applyOp1(this, subOp, b, Box); }
-  scale(k: Val<number>): Box { return applyOp1(this, scaleOp, k, Box); }
-  expand(n: Val<number>): Box { return applyOp1(this, expandOp, n, Box); }
+  add(b: Val<V>): Box         { return applyOp1(this, addOp,    b, Box) }
+  sub(b: Val<V>): Box         { return applyOp1(this, subOp,    b, Box) }
+  scale(k: Val<number>): Box  { return applyOp1(this, scaleOp,  k, Box) }
+  expand(n: Val<number>): Box { return applyOp1(this, expandOp, n, Box) }
 
-  // ── Non-invertible ──
   lerp(b: Val<V>, t: Val<number>): Box {
-    return computed(() => lerp(this.value, value(b), value(t)), Box);
+    return Box.derive(() => lerp(this.value, value(b), value(t)));
   }
-  contains(p: Val<Of<Vec>>) {
+  contains(p: Val<Of<Vec>>): Signal<boolean> {
     return computed(() => contains(this.value, value(p)));
   }
 
-  /** Tween-builder, implied by lerp trait. */
+  get x(): Num { return this.field("x", Num) }
+  get y(): Num { return this.field("y", Num) }
+  get w(): Num { return this.field("w", Num) }
+  get h(): Num { return this.field("h", Num) }
+  get area(): Num {
+    return this.memo("area", () => Num.derive(() => this.value.w * this.value.h));
+  }
+
+  /** Vec at parametric (u, v) within `[0,1]²`. Not memoised — arbitrary
+   *  (u, v) calls otherwise leak a cache entry per pair. Use the named
+   *  edge getters (`.center`, `.top`, …) when you want stable identity. */
+  at(u: number, v: number): Vec {
+    return Vec.derive(() => {
+      const b = this.value;
+      return { x: b.x + u * b.w, y: b.y + v * b.h };
+    });
+  }
+  // Named edges — memoised separately under stable keys for identity
+  // (effects subscribing to `b.center` should always see the same Vec).
+  get center(): Vec { return this.memo("center", () => this.at(0.5, 0.5)) }
+  get top(): Vec    { return this.memo("top",    () => this.at(0.5, 0)) }
+  get bottom(): Vec { return this.memo("bottom", () => this.at(0.5, 1)) }
+  get left(): Vec   { return this.memo("left",   () => this.at(0,   0.5)) }
+  get right(): Vec  { return this.memo("right",  () => this.at(1,   0.5)) }
+
+  /** Tween-builder, implied by the lerp trait. */
   to(target: V, dur: Val<number>, ease?: Easing): Tween<V> {
-    return tween(this, target, dur, ease);
-  }
-
-  derive(fn: (c: BoxChain) => BoxChain): Box {
-    return fn(new BoxChain()).toLens(this, Box);
+    return tween(this as never, target, dur, ease);
   }
 }
-
-export interface Box { readonly constructor: typeof Box }
-
-export class BoxChain extends Chain<V> {
-  add(b: Val<V>): this { return this.push1(addOp, b); }
-  sub(b: Val<V>): this { return this.push1(subOp, b); }
-  scale(k: Val<number>): this { return this.push1(scaleOp, k); }
-  expand(n: Val<number>): this { return this.push1(expandOp, n); }
+export interface Box {
+  readonly constructor: typeof Box;
+  get value(): V;
 }
 
-/** Construct a Box; reactive per-component args bind the field lens. */
-export const box = (
-  x: Val<number> = 0,
-  y: Val<number> = 0,
-  w: Val<number> = 0,
-  h: Val<number> = 0,
-): Box => {
-  const out = new Box();
-  out.x.bind(x);
-  out.y.bind(y);
-  out.w.bind(w);
-  out.h.bind(h);
-  return out;
-};
+export function box(
+  x: Val<number> = 0, y: Val<number> = 0,
+  w: Val<number> = 0, h: Val<number> = 0,
+): Writable<Box> {
+  const b = new Box() as unknown as Writable<Box>;
+  b.x.bind(x); b.y.bind(y); b.w.bind(w); b.h.bind(h);
+  return b;
+}
