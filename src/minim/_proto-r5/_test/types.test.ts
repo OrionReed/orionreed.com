@@ -65,9 +65,15 @@ function _probes(): void {
   void describe(new Vec());
 
   // ─── Generic accept-any reader ──────────────────────────────────
-  function readVec(p: Vec): { x: number; y: number } { return p.value }
-  void readVec(v);                // Writable<Vec> assignable to Vec? See note below
-  void readVec(ro);
+  // Use `Read<Of<Vec>>` for "any readable of vec-shape" parameters.
+  // This accepts bare Vec, Writable<Vec>, custom readers — anything
+  // with `{ readonly value: V; peek(): V }`. Stricter `(p: Vec)` only
+  // accepts bare Vec instances (Writable<Vec>'s lifted invertibles
+  // create structural mismatch under TS's recursive variance check).
+  function readVec(p: import("../signal").Read<{x:number;y:number}>) { return p.value }
+  void readVec(v);                // ✓ Writable<Vec> has readable value
+  void readVec(ro);               // ✓ bare Vec
+  void readVec({ value: { x: 0, y: 0 }, peek: () => ({ x: 0, y: 0 }) });
 
   // ─── Computed factory returns bare Signal — RO ─────────────────
   const c = computed(() => 1);

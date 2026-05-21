@@ -1,12 +1,12 @@
 // vec.ts — reactive 2D point.
 
 import {
-  Signal, computed, lens as lensFactory, value,
+  Signal, computedCls, lensCls, value,
   type Val, type SignalOptions,
 } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
 import { applyOp1, applyOp2, type Op } from "../ops";
-import { type Writable } from "../writable";
+import { type Writable, invertibles } from "../writable";
 import { Num } from "./num";
 
 type V = { x: number; y: number };
@@ -36,9 +36,18 @@ const offsetOp: Op<V, [number, number]> = {
 };
 
 export class Vec extends Signal<V> {
+  // ── class-level config ─────────────────────────────────────────
   static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
-  /** Methods whose return type lifts to `Writable<Vec>` on writable receivers. */
-  static invertibles = ["add", "sub", "scale", "offset"] as const;
+  static invertibles = invertibles<Vec>()("add", "sub", "scale", "offset");
+
+  // ── class-level constructors ───────────────────────────────────
+  static derive(fn: () => V): Vec { return computedCls(Vec, fn) }
+  static lens(g: () => V, s: (v: V) => void): Writable<Vec> {
+    return lensCls(Vec, g, s) as unknown as Writable<Vec>;
+  }
+  static is(v: unknown): v is Vec { return v instanceof Vec }
+
+  // ── instance ───────────────────────────────────────────────────
   constructor(v: V = { x: 0, y: 0 }, opts?: SignalOptions<V>) { super(v, opts) }
 
   add(b: Val<V>): Vec     { return applyOp1(this, addOp,    b, Vec) }
@@ -48,27 +57,21 @@ export class Vec extends Signal<V> {
     return applyOp2(this, offsetOp, dx, dy, Vec);
   }
 
-  normalize(): Vec { return computed(() => normalize(this.value), Vec) }
-  perp(): Vec      { return computed(() => perp(this.value), Vec) }
+  normalize(): Vec { return Vec.derive(() => normalize(this.value)) }
+  perp(): Vec      { return Vec.derive(() => perp(this.value)) }
   lerp(b: Val<V>, t: Val<number>): Vec {
-    return computed(() => lerp(this.value, value(b), value(t)), Vec);
+    return Vec.derive(() => lerp(this.value, value(b), value(t)));
   }
   distance(other: Val<V>): Num {
-    return computed(() => metric(this.value, value(other)), Num);
+    return Num.derive(() => metric(this.value, value(other)));
   }
 
   get x(): Num { return this.field("x", Num) }
   get y(): Num { return this.field("y", Num) }
   get magnitude(): Num {
     return this.memo("magnitude", () =>
-      computed(() => Math.hypot(this.value.x, this.value.y), Num));
+      Num.derive(() => Math.hypot(this.value.x, this.value.y)));
   }
-
-  static derive(fn: () => V): Vec { return computed(fn, Vec) }
-  static lens(get: () => V, set: (v: V) => void): Writable<Vec> {
-    return lensFactory(get, set, Vec) as unknown as Writable<Vec>;
-  }
-  static is(v: unknown): v is Vec { return v instanceof Vec }
 }
 export interface Vec {
   readonly constructor: typeof Vec;
@@ -76,8 +79,8 @@ export interface Vec {
 }
 
 export function vec(x: Val<number> = 0, y: Val<number> = 0): Writable<Vec> {
-  const v = new Vec() as Writable<Vec>;
-  v.x.bind(x);  // .x lifts to Writable<Num> on writable receivers
+  const v = new Vec() as unknown as Writable<Vec>;
+  v.x.bind(x);
   v.y.bind(y);
   return v;
 }

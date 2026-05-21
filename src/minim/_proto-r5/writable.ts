@@ -4,6 +4,11 @@
 // `get value(): V`). Factories return `Writable<R>` to expose the
 // writable surface AND brand the result so animator-style structural
 // constraints reject bare RO values.
+//
+// Extensibility: `Writable<R>` works for ANY value class that
+// declares `static invertibles = [...]` and field-lens getters typed
+// as `Read<unknown>`. No per-class registry — `LiftField<X>`
+// recursively applies `Writable<X>` to any Read-shaped field.
 
 import { type Read, type WritableBrand } from "./signal";
 
@@ -23,16 +28,14 @@ type LensFields<R> = Exclude<
   undefined
 >;
 
-/** Map a base value type to its writable form. Extend per value class.
- *  (The recursive imports here form a cycle with the value modules;
- *  TS resolves them lazily at type-check time, no runtime issue.) */
-type LiftField<X> =
-    X extends import("./values/num").Num       ? Writable<import("./values/num").Num>
-  : X extends import("./values/vec").Vec       ? Writable<import("./values/vec").Vec>
-  : X extends import("./values/box").Box       ? Writable<import("./values/box").Box>
-  : X extends import("./values/transform").Transform ? Writable<import("./values/transform").Transform>
-  : X extends Read<infer T>                    ? Read<T> & Writers<T>
-  : X;
+/** Lift any Read<unknown>-shaped field to its writable form.
+ *  Recursive: a Vec field gets fully lifted to Writable<Vec> (which
+ *  has its own LensFields lifted in turn). No per-class registry —
+ *  the same `Writable<X>` modifier handles any value class that
+ *  declares its invertibles + field-lens getters.
+ *
+ *  Non-Read fields pass through unchanged. */
+type LiftField<X> = X extends Read<unknown> ? Writable<X> : X;
 
 /** Extract invertible method names from `static invertibles = [...] as const`. */
 type InvOf<R> =
@@ -73,4 +76,23 @@ export interface WritableOf<T> extends WritableBrand {
   set(v: T | (() => T) | Read<T>): unknown;
   bind(s: T | (() => T) | Read<T>): () => void;
   peek(): T;
+}
+
+// ─── Author-side: declaring invertibles ──────────────────────────
+
+/** Helper for declaring `static invertibles` with literal narrowing
+ *  AND a compile-time check that each listed key is actually a method
+ *  on R whose return type is R (the invertible-chain shape).
+ *
+ *      class Vec extends Signal<V> {
+ *        static invertibles = invertibles<Vec>()("add", "sub", "scale", "offset");
+ *      }
+ *
+ *  Forgetting `as const` is no longer possible; typos / non-invertible
+ *  method names fail at the call site. The curried form lets us anchor
+ *  R first so the second-arg key check has full inference. */
+export function invertibles<R>(): <K extends ReadonlyArray<
+  { [P in keyof R]: R[P] extends (...args: never[]) => R ? P : never }[keyof R]
+>>(...keys: K) => K {
+  return ((...keys: readonly unknown[]) => keys) as never;
 }

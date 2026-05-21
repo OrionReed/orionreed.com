@@ -1,17 +1,12 @@
 // transform.ts — reactive 2D transform.
-//
-// Nested field lenses (`.translate` → `Vec`). The name-collision
-// pattern of r2 (`Transform.scale` is a Vec axis lens) becomes
-// straightforward here: `scale` field overrides the invertible
-// `scale(k)` method.
 
 import {
-  Signal, computed, lens as lensFactory, value,
+  Signal, computedCls, lensCls, value,
   type Val, type SignalOptions, type Of,
 } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
 import { applyOp1, type Op } from "../ops";
-import { type Writable } from "../writable";
+import { type Writable, invertibles } from "../writable";
 import { Num } from "./num";
 import {
   Vec,
@@ -79,18 +74,27 @@ const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
 const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
 
 export class Transform extends Signal<V> {
+  // ── class-level config ─────────────────────────────────────────
   static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
-  /** Only `add`/`sub` are invertible eager methods. Scalar `scale` lives
-   *  here as a Vec field lens (`.scale`), not a method — to scalar-multiply
-   *  a Transform, build a custom Lens via `Transform.lens` or compose via
-   *  field writes. */
-  static invertibles = ["add", "sub"] as const;
+  /** Scalar `scale` lives as a Vec field lens (`.scale`), not as an
+   *  invertible eager method — to scalar-multiply a Transform, use
+   *  `Transform.lens(...)` or compose via field writes. */
+  static invertibles = invertibles<Transform>()("add", "sub");
+
+  // ── class-level constructors ───────────────────────────────────
+  static derive(fn: () => V): Transform { return computedCls(Transform, fn) }
+  static lens(g: () => V, s: (v: V) => void): Writable<Transform> {
+    return lensCls(Transform, g, s) as unknown as Writable<Transform>;
+  }
+  static is(v: unknown): v is Transform { return v instanceof Transform }
+
+  // ── instance ───────────────────────────────────────────────────
   constructor(v: V = DEFAULT, opts?: SignalOptions<V>) { super(v, opts) }
 
   add(b: Val<V>): Transform { return applyOp1(this, addOp, b, Transform) }
   sub(b: Val<V>): Transform { return applyOp1(this, subOp, b, Transform) }
   lerp(b: Val<V>, t: Val<number>): Transform {
-    return computed(() => lerp(this.value, value(b), value(t)), Transform);
+    return Transform.derive(() => lerp(this.value, value(b), value(t)));
   }
 
   get translate(): Vec { return this.field("translate", Vec) }
@@ -98,12 +102,6 @@ export class Transform extends Signal<V> {
   get origin(): Vec    { return this.field("origin",    Vec) }
   get rotate(): Num    { return this.field("rotate",    Num) }
   get opacity(): Num   { return this.field("opacity",   Num) }
-
-  static derive(fn: () => V): Transform { return computed(fn, Transform) }
-  static lens(get: () => V, set: (v: V) => void): Writable<Transform> {
-    return lensFactory(get, set, Transform) as unknown as Writable<Transform>;
-  }
-  static is(v: unknown): v is Transform { return v instanceof Transform }
 }
 export interface Transform {
   readonly constructor: typeof Transform;
@@ -113,7 +111,7 @@ export interface Transform {
 export type TransformInit = { [K in keyof V]?: Val<V[K]> };
 
 export function transform(init?: TransformInit): Writable<Transform> {
-  const tr = new Transform() as Writable<Transform>;
+  const tr = new Transform() as unknown as Writable<Transform>;
   if (init) {
     if (init.translate !== undefined) tr.translate.bind(init.translate);
     if (init.scale     !== undefined) tr.scale.bind(init.scale);

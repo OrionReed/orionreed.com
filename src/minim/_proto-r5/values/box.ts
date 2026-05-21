@@ -1,12 +1,12 @@
 // box.ts — reactive axis-aligned rectangle.
 
 import {
-  Signal, computed, lens as lensFactory, value,
+  Signal, computed, computedCls, lensCls, value,
   type Val, type SignalOptions, type Of,
 } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
 import { applyOp1, type Op } from "../ops";
-import { type Writable } from "../writable";
+import { type Writable, invertibles } from "../writable";
 import { Num } from "./num";
 import { Vec } from "./vec";
 
@@ -37,19 +37,29 @@ const scaleOp:  Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) }
 const expandOp: Op<V, [number]> = { fwd: expand, bwd: (v, n) => expand(v, -n) };
 
 export class Box extends Signal<V> {
+  // ── class-level config ─────────────────────────────────────────
   static traits: TraitDict<V> & { linear: Linear<V>; lerp: typeof lerp; equals: typeof equals } = {
     linear: linearImpl, lerp, equals,
   };
-  static invertibles = ["add", "sub", "scale", "expand"] as const;
+  static invertibles = invertibles<Box>()("add", "sub", "scale", "expand");
+
+  // ── class-level constructors ───────────────────────────────────
+  static derive(fn: () => V): Box { return computedCls(Box, fn) }
+  static lens(g: () => V, s: (v: V) => void): Writable<Box> {
+    return lensCls(Box, g, s) as unknown as Writable<Box>;
+  }
+  static is(v: unknown): v is Box { return v instanceof Box }
+
+  // ── instance ───────────────────────────────────────────────────
   constructor(v: V = { x: 0, y: 0, w: 0, h: 0 }, opts?: SignalOptions<V>) { super(v, opts) }
 
-  add(b: Val<V>): Box        { return applyOp1(this, addOp,    b, Box) }
-  sub(b: Val<V>): Box        { return applyOp1(this, subOp,    b, Box) }
-  scale(k: Val<number>): Box { return applyOp1(this, scaleOp,  k, Box) }
+  add(b: Val<V>): Box         { return applyOp1(this, addOp,    b, Box) }
+  sub(b: Val<V>): Box         { return applyOp1(this, subOp,    b, Box) }
+  scale(k: Val<number>): Box  { return applyOp1(this, scaleOp,  k, Box) }
   expand(n: Val<number>): Box { return applyOp1(this, expandOp, n, Box) }
 
   lerp(b: Val<V>, t: Val<number>): Box {
-    return computed(() => lerp(this.value, value(b), value(t)), Box);
+    return Box.derive(() => lerp(this.value, value(b), value(t)));
   }
   contains(p: Val<Of<Vec>>): Signal<boolean> {
     return computed(() => contains(this.value, value(p)));
@@ -60,25 +70,25 @@ export class Box extends Signal<V> {
   get w(): Num { return this.field("w", Num) }
   get h(): Num { return this.field("h", Num) }
   get area(): Num {
-    return this.memo("area", () => computed(() => this.value.w * this.value.h, Num));
+    return this.memo("area", () => Num.derive(() => this.value.w * this.value.h));
   }
+
+  /** Vec at parametric (u, v) within `[0,1]²`. Not memoised — arbitrary
+   *  (u, v) calls otherwise leak a cache entry per pair. Use the named
+   *  edge getters (`.center`, `.top`, …) when you want stable identity. */
   at(u: number, v: number): Vec {
-    return this.memo(`at:${u},${v}`, () => computed(() => {
+    return Vec.derive(() => {
       const b = this.value;
       return { x: b.x + u * b.w, y: b.y + v * b.h };
-    }, Vec));
+    });
   }
-  get center(): Vec { return this.at(0.5, 0.5) }
-  get top(): Vec    { return this.at(0.5, 0) }
-  get bottom(): Vec { return this.at(0.5, 1) }
-  get left(): Vec   { return this.at(0,   0.5) }
-  get right(): Vec  { return this.at(1,   0.5) }
-
-  static derive(fn: () => V): Box { return computed(fn, Box) }
-  static lens(get: () => V, set: (v: V) => void): Writable<Box> {
-    return lensFactory(get, set, Box) as unknown as Writable<Box>;
-  }
-  static is(v: unknown): v is Box { return v instanceof Box }
+  // Named edges — memoised separately under stable keys for identity
+  // (effects subscribing to `b.center` should always see the same Vec).
+  get center(): Vec { return this.memo("center", () => this.at(0.5, 0.5)) }
+  get top(): Vec    { return this.memo("top",    () => this.at(0.5, 0)) }
+  get bottom(): Vec { return this.memo("bottom", () => this.at(0.5, 1)) }
+  get left(): Vec   { return this.memo("left",   () => this.at(0,   0.5)) }
+  get right(): Vec  { return this.memo("right",  () => this.at(1,   0.5)) }
 }
 export interface Box {
   readonly constructor: typeof Box;
@@ -89,7 +99,7 @@ export function box(
   x: Val<number> = 0, y: Val<number> = 0,
   w: Val<number> = 0, h: Val<number> = 0,
 ): Writable<Box> {
-  const b = new Box() as Writable<Box>;
+  const b = new Box() as unknown as Writable<Box>;
   b.x.bind(x); b.y.bind(y); b.w.bind(w); b.h.bind(h);
   return b;
 }
