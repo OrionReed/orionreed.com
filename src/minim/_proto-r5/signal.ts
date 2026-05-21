@@ -315,6 +315,14 @@ export interface Read<out T> {
   peek(): T;
 }
 
+/** Brand for writable receivers. Factories (`signal(v)`, `vec(...)`,
+ *  `Vec.lens(...)`, invertible methods, etc.) return values carrying
+ *  this brand. The brand gates calls to `Signal.set` / `Signal.bind`
+ *  and is used by `Writable<R>` / `WritableOf<T>` to surface the
+ *  writable API. */
+declare const WRITABLE: unique symbol;
+export interface WritableBrand { readonly [WRITABLE]: never }
+
 /** Type alias for a read-only Signal (computed). Both runtime-checked
  *  (writes throw) and TS-narrowed (Read interface). */
 export type Computed<T = unknown> = Omit<Signal<T>, "value"> & {
@@ -568,31 +576,33 @@ export class Signal<T = unknown> implements ReactiveNode {
     return this.currentValue;
   }
 
-  /** One-shot write of `value(v)`. Severs any prior `.bind(...)`. Chainable. */
-  set(v: Val<T>): this {
+  /** One-shot write of `value(v)`. Severs any prior `.bind(...)`. Chainable.
+   *  Type-gated: only callable on receivers that carry the `WritableBrand`
+   *  (factory-returned signals, value-class writable forms, etc.).
+   *  Bare `Vec`/`Num` instances are rejected at the call site. */
+  set(this: WritableBrand & Signal<T>, v: Val<T>): typeof this {
     if (this._stopBinding) {
       this._stopBinding();
       this._stopBinding = undefined;
     }
-    this.value = value(v);
+    (this as unknown as { value: T }).value = value(v);
     return this;
   }
 
-  /** Bind to a `Val<T>`; replaces any prior binding. Returns disposer
-   *  (no-op for plain T). */
-  bind(source: Val<T>): () => void {
+  /** Bind to a `Val<T>`; replaces any prior binding. Type-gated like `set`. */
+  bind(this: WritableBrand & Signal<T>, source: Val<T>): () => void {
     if (this._stopBinding) {
       this._stopBinding();
       this._stopBinding = undefined;
     }
     if (source instanceof Signal || typeof source === "function") {
       const stop = effect(() => {
-        this.value = value(source);
+        (this as unknown as { value: T }).value = value(source);
       });
       this._stopBinding = stop;
       return stop;
     }
-    this.value = source as T;
+    (this as unknown as { value: T }).value = source as T;
     return () => {};
   }
 
@@ -746,17 +756,19 @@ class Effect implements ReactiveNode {
 
 // ─── Public factories ────────────────────────────────────────────────
 
-/** Plain `Signal<T>` (writable). For typed signals use the class
- *  constructor directly: `new Vec({x:0, y:0}, opts?)`. We deliberately
- *  don't overload `signal(v, Cls)` — that path would need a runtime
- *  discriminator on `(opts | Cls)` and adds no power over `new Cls(v)`. */
-export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> {
-  return new Signal(initial, opts);
+/** Writable source. Use `new Vec(...)` for typed value-class signals. */
+export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> & WritableBrand {
+  // Surface-cast to add the brand at the type level. Note: we use the
+  // bare `Signal<T> & WritableBrand` form rather than `Writable<Signal<T>>`
+  // to avoid a circular import — `Writable<R>` is defined in writable.ts.
+  // For consumers, `Signal<T> & WritableBrand` is equivalent to (and
+  // assignable to) `Writable<Signal<T>>` and to `WritableOf<T>`.
+  return new Signal(initial, opts) as Signal<T> & WritableBrand;
 }
 
-// `computed` overloads — optional Cls is the *last* argument:
-//   computed(fn)              → Signal<T>            (untyped)
-//   computed(fn, Vec)         → Vec  (read-only view)  (typed)
+// `computed` overloads — optional Cls is the *last* argument.
+// Returns a read-only Signal at the type level (the value-class type
+// when Cls is provided).
 export function computed<T>(getter: () => T): Signal<T>;
 export function computed<T, C extends Signal<T>>(
   getter: () => T,
@@ -778,10 +790,9 @@ export function computed<T, C extends Signal<T>>(
   return inst;
 }
 
-// `lens` overloads — optional Cls is the *last* argument:
-//   lens(get, set)            → Signal<T>            (untyped)
-//   lens(get, set, Num)       → Num   (writable view)  (typed)
-export function lens<T>(getter: () => T, setter: (v: T) => void): Signal<T>;
+// `lens` overloads — returns a writable derived signal (carries the
+// WritableBrand so .value=/.set/.bind are callable at the type level).
+export function lens<T>(getter: () => T, setter: (v: T) => void): Signal<T> & WritableBrand;
 export function lens<T, C extends Signal<T>>(
   getter: () => T,
   setter: (v: T) => void,

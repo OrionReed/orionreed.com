@@ -50,12 +50,15 @@ export const value = <T>(v: Val<T>): T => {
 // ─── The Reactive class ─────────────────────────────────────────────
 
 export class Signal<T = unknown> implements Read<T> {
+  /** @internal */ subs = new Set<Subscriber>();
   private current: T;
-  private subs = new Set<Subscriber>();
   private getter?: () => T;
   private cached?: T;
+  private hasCache = false;
   private dirty = true;
-  private depsOfComputed = new Set<Signal<unknown>>();
+  /** Stable synth subscriber for tracking deps in computed mode.
+   *  Reused across recomputes so dep.subs.delete(this.synth) works. */
+  private synth?: Subscriber;
   private equals: Equals<T>;
 
   constructor(initial: T, opts?: SignalOptions<T>) {
@@ -66,16 +69,28 @@ export class Signal<T = unknown> implements Read<T> {
   /** @internal */ static makeComputed<T>(fn: () => T): Signal<T> {
     const s = new Signal<T>(undefined as T);
     s.getter = fn;
+    s.synth = {
+      fn: () => s.invalidate(),
+      deps: new Set(),
+      epoch: 0,
+      active: true,
+    };
     return s;
   }
 
   get value(): T {
     if (this.getter) {
       if (this.dirty) this.recompute();
-      if (activeSub) this.subs.add(activeSub), activeSub.deps.add(this as Signal<unknown>);
+      if (activeSub) {
+        this.subs.add(activeSub);
+        activeSub.deps.add(this as Signal<unknown>);
+      }
       return this.cached as T;
     }
-    if (activeSub) this.subs.add(activeSub), activeSub.deps.add(this as Signal<unknown>);
+    if (activeSub) {
+      this.subs.add(activeSub);
+      activeSub.deps.add(this as Signal<unknown>);
+    }
     return this.current;
   }
 
@@ -95,38 +110,35 @@ export class Signal<T = unknown> implements Read<T> {
   }
 
   private recompute(): void {
-    // Detach from old deps
-    for (const dep of this.depsOfComputed) dep.subs.delete(this as unknown as Subscriber);
-    this.depsOfComputed.clear();
+    const synth = this.synth!;
+    // Detach old deps using stable synth identity.
+    for (const dep of synth.deps) dep.subs.delete(synth);
+    synth.deps.clear();
 
-    // Track new deps via a synthetic subscriber pointing at our notify.
-    const synth: Subscriber = {
-      fn: () => this.invalidate(),
-      deps: this.depsOfComputed,
-      epoch: 0,
-      active: true,
-    };
     const prev = activeSub;
     activeSub = synth;
     try {
       const next = (this.getter as () => T)();
-      const same = this.cached !== undefined && this.equals(this.cached, next);
+      const wasCached = this.hasCache;
+      const prevCached = this.cached;
       this.cached = next;
+      this.hasCache = true;
       this.dirty = false;
-      if (!same) this.notifySubs();
+      // Only propagate if value actually changed (and we had a previous).
+      if (wasCached && !this.equals(prevCached as T, next)) this.notifySubs();
     } finally {
       activeSub = prev;
     }
   }
 
-  private invalidate(): void {
+  /** @internal */ invalidate(): void {
     if (!this.dirty) {
       this.dirty = true;
       this.notifySubs();
     }
   }
 
-  private notifySubs(): void {
+  /** @internal */ notifySubs(): void {
     for (const s of this.subs) {
       if (!s.active) continue;
       queued.add(s);
@@ -167,7 +179,7 @@ export const effect = (fn: () => void | (() => void)): (() => void) => {
       }
     }
     // Re-track from scratch.
-    for (const dep of sub.deps) dep["subs"].delete(sub);
+    for (const dep of sub.deps) dep.subs.delete(sub);
     sub.deps.clear();
     const prev = activeSub;
     activeSub = sub;
@@ -190,7 +202,7 @@ export const effect = (fn: () => void | (() => void)): (() => void) => {
       }
       sub.cleanup = undefined;
     }
-    for (const dep of sub.deps) dep["subs"].delete(sub);
+    for (const dep of sub.deps) dep.subs.delete(sub);
     sub.deps.clear();
   };
 };

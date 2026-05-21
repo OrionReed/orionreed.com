@@ -48,14 +48,13 @@ export class Num extends Signal<V> {
   }
   static is(v: unknown): v is Num { return v instanceof Num }
 }
-/** RO at the public type level. Writable form: `Writable<Num>`. */
 export interface Num {
   readonly constructor: typeof Num;
   get value(): V;
 }
 
 export function num(v: Val<V> = 0): Writable<Num> {
-  const n = new Num();
+  const n = new Num() as Writable<Num>;
   n.bind(v);
-  return n as unknown as Writable<Num>;
+  return n;
 }

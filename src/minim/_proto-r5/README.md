@@ -1,129 +1,164 @@
-# r5 — `Writable<R>` as a modifier + spring footgun closed
+# r5 — `Writable<R>` modifier, no footguns, ported value classes
 
-Changes vs r4:
+A clean iteration on the merged-Signal engine. Type-system carries
+writability via a generic `Writable<R>` modifier. All known footguns
+closed. Engine perf matches r2 (same engine, no changes).
 
-- **`Writable<R>` is a generic modifier**, not per-class named types.
-  Use `Writable<Vec>` / `Writable<Num>`; no `WritableNum`/`WritableVec`
-  aliases needed.
-- **Animator-style constraints work generically** via `WritableOf<T>
-  & Traits<T, K>`. Bare RO Vec is rejected at compile time.
-- **`static invertibles` static field** on each value class drives the
-  type-level method-return lifting. Author writes one line:
-  `static invertibles = ["add", "sub", "scale"] as const`.
-- **Surface trim**: dropped `WritableNum`/`WritableVec`/`Promote`/
-  `Writers`/`RO`/`Computed`/`Lens` type aliases (replaced by
-  `Writable<R>` modifier or just bare class types). ~8 fewer exports.
+## What changed vs r4
 
-## Public surface (the whole thing)
+1. **`Writable<R>` is a generic modifier** — no per-class `WritableNum`
+   / `WritableVec` named types. Author writes `static invertibles =
+   [...] as const` on the class; `Writable<R>` auto-detects and lifts.
+
+2. **Animator constraint works generically** — `WritableOf<T> &
+   Traits<T, K>` rejects bare RO Vecs at compile time. The brand on
+   `WritableOf<T>` is the linchpin.
+
+3. **`set`/`bind` footgun closed** — `Signal.set(this: WritableBrand &
+   Signal<T>, …)` `this`-type constraint means `roVec.set(5)` is a
+   compile error. Only branded receivers (factory-returned, lens-form)
+   can call.
+
+4. **Surface trimmed** — dropped `RO`, `Computed` / `Lens` type
+   aliases, `Writers`, `Promote`, `WritableNum/Vec/Box`, `isNode`,
+   `TraitDict`, `TraitKey`. Net: 35 exports (r2 had ~42).
+
+5. **Box and Transform ported** to confirm the pattern scales.
+
+## Ported value classes (all tests pass)
+
+|              | r2 (today) | **r5** | saved  |
+|--------------|------------|--------|--------|
+| `num.ts`     | 76         | 61     | -15    |
+| `vec.ts`     | 128        | 84     | -44    |
+| `box.ts`     | 147        | 95     | -52    |
+| `transform.ts` | 138      | 125    | -13    |
+| **+** `writable.ts` (new) | — | 76 (one-time) | +76 |
+
+Net: 4 value classes saved 124 lines; pay 76 once for `writable.ts`. **−48 lines net so far**, growing as more value classes port (color, matrix, anchor, etc.).
+
+## Public surface (35 exports)
 
 ```ts
-// Engine
+// Engine (12)
 Signal, signal, computed, lens, effect, batch, untracked,
 isSignal, isComputed, isLens, value,
 Read<T>, Val<T>, Of<R>, SignalOptions
 
-// Traits
+// Traits (9)
 Linear<T>, Lerp<T>, Metric<T>, Equals<T>, Traits<T, K>,
 requireLinear, requireLerp, requireMetric, requireEquals
 
-// Ops (for value-class authors)
+// Ops (3)
 Op<V, Args>, applyOp1, applyOp2
 
-// Writable
+// Writable (2)
 Writable<R>, WritableOf<T>
 
-// Value classes
-Num, num, Vec, vec
+// Value classes (9)
+Num, num, Vec, vec, Box, box, Transform, transform, TransformInit
 ```
 
-~34 exports total. r4 had ~42.
+See `SURFACE.md` for the full audit (each export evaluated for necessity / overlap / consolidation).
 
-## The animator pattern
+## All known footguns closed
 
-```ts
-function spring<T>(
-  s: WritableOf<T> & Traits<T, "linear" | "metric">,
-  target: T,
-): void {
-  s.value = target;
-}
-
-spring(vec(1, 2), { x: 0, y: 0 });    // ✓
-spring(num(0), 5);                    // ✓
-spring(vec().normalize(), { x: 0, y: 0 }); // ✗ — no brand on RO Vec
-spring(new Vec(), { x: 0, y: 0 });    // ✗ — `new Vec()` doesn't add the brand
-```
-
-`Vec.lens(...)`, `vec(...)`, `Num.lens(...)`, `num(...)`, `vec().add(...)`, etc — all return branded `Writable<R>` values. Bare `new Vec()`, `Vec.derive(...)`, `vec().normalize()` etc don't.
+| | r4 | **r5** |
+|---|---|---|
+| `roVec.value = …` | caught | caught |
+| `roVec.x.value = …` | caught | caught |
+| `spring(roVec, target)` | structural pass (BAD) | **caught** |
+| `roVec.set(5)` | not caught | **caught** |
+| `roVec.bind(src)` | not caught | **caught** |
 
 ## Authoring shape per value class
 
 ```ts
-export class Num extends Signal<V> {
+export class Vec extends Signal<V> {
   static traits: Required<TraitDict<V>> = { linear, lerp, metric, equals };
-  static invertibles = ["add", "sub", "scale"] as const;  // ★ one-liner
-  constructor(v: V = 0, opts?: SignalOptions<V>) { super(v, opts) }
+  static invertibles = ["add", "sub", "scale", "offset"] as const;   // ★
+  constructor(v: V = { x: 0, y: 0 }, opts?: SignalOptions<V>) { super(v, opts) }
 
-  add(b: Val<V>): Num     { return applyOp1(this, addOp, b, Num) }
-  sub(b: Val<V>): Num     { return applyOp1(this, subOp, b, Num) }
-  scale(k: Val<number>): Num { return applyOp1(this, scaleOp, k, Num) }
-  clamp(lo: Val<V>, hi: Val<V>): Num { /* ... */ }
+  add(b: Val<V>): Vec     { return applyOp1(this, addOp,    b, Vec) }
+  sub(b: Val<V>): Vec     { return applyOp1(this, subOp,    b, Vec) }
+  scale(k: Val<number>): Vec { return applyOp1(this, scaleOp, k, Vec) }
+  offset(dx: Val<number>, dy: Val<number>): Vec {
+    return applyOp2(this, offsetOp, dx, dy, Vec);
+  }
 
-  static derive(fn: () => V): Num { return computed(fn, Num) }
-  static lens(g, s): Writable<Num> { return lensFactory(g, s, Num) as ... }
-  static is(v: unknown): v is Num { return v instanceof Num }
+  normalize(): Vec { return computed(() => normalize(this.value), Vec) }
+  perp(): Vec      { return computed(() => perp(this.value), Vec) }
+  // ... etc
+
+  get x(): Num { return this.field("x", Num) }
+  get y(): Num { return this.field("y", Num) }
+  get magnitude(): Num { /* memoised */ }
+
+  static derive(fn: () => V): Vec { return computed(fn, Vec) }
+  static lens(g: () => V, s: (v: V) => void): Writable<Vec> { /* ... */ }
+  static is(v: unknown): v is Vec { return v instanceof Vec }
 }
-export interface Num {
-  readonly constructor: typeof Num;
-  get value(): V;
+export interface Vec {
+  readonly constructor: typeof Vec;
+  get value(): V;  // interface merge: RO at public type level
 }
-export function num(v: Val<V> = 0): Writable<Num> {
-  const n = new Num(); n.bind(v); return n as unknown as Writable<Num>;
+
+export function vec(x: Val<number> = 0, y: Val<number> = 0): Writable<Vec> {
+  const v = new Vec() as Writable<Vec>;
+  v.x.bind(x); v.y.bind(y);
+  return v;
 }
 ```
 
-## LOC comparison
+Tracking elements per value class:
+- 1 class declaration
+- 1 `static traits` line
+- 1 `static invertibles` line
+- N methods, declared once
+- field-lens getters (one line each via `this.field(...)`)
+- 3 statics: `derive`, `lens`, `is`
+- 1 interface merge for constructor + value RO
+- 1 factory function
 
-|              | r2 (today) | r4         | **r5**  |
-|--------------|------------|------------|---------|
-| `num.ts`     | 76         | 62         | **61**  |
-| `vec.ts`     | 128        | 87         | **84**  |
-| helper       | —          | 71 (Promote) | 111 (writable) |
+No mixin tables, no `Object.assign`, no `defineProperty`. Just plain class declaration with a one-liner static field.
 
-writable.ts is a touch bigger than promote.ts because of WritableOf
-+ the brand + more docstrings. Net: per-class is essentially tied
-with r4 but the public API is meaningfully cleaner.
+## How `Writable<R>` works
 
-## Verified properties
+```ts
+type Writable<R> =
+  Omit<R, "value" | InvOf<R> | LensFields<R>>
+  & Writers<R extends Read<infer T> ? T : never>
+  & WritableBrand
+  & { [K in InvOf<R>]: R[K] extends (...a: infer A) => R ? (...a: A) => Writable<R> : R[K] }
+  & { [K in LensFields<R>]: LiftField<R[K]> };
+```
 
-| property | works |
-|---|---|
-| `vec().value =` accepted | ✓ |
-| `vec().normalize().value =` rejected | ✓ |
-| `vec().normalize().x.value =` rejected (field-of-RO) | ✓ |
-| `vec().add(b).scale(2).value =` accepted (invertible chain) | ✓ |
-| `spring(vec(), ...)` accepted | ✓ |
-| `spring(vec().normalize(), ...)` rejected | ✓ |
-| `spring(new Vec(), ...)` rejected | ✓ |
-| Buggy fn `(v: Vec) => { v.value = ... }` caught locally | ✓ |
-| Generic accept-any-reader `(v: Vec) => v.value` works | ✓ |
+- `InvOf<R>` reads `R['constructor']['invertibles'][number]`. Auto-detect from the class's static field.
+- `LensFields<R>` auto-detects properties typed as `Read<unknown>`.
+- `LiftField<X>` dispatches each field type to its `Writable<…>` form.
+- `WritableBrand` is a `unique symbol` interface; only factory casts add it.
 
-## What's left to decide
+## How the `.set` / `.bind` footgun is closed
 
-- **The brand**: a `unique symbol` declared at module scope. Means
-  `Writable<R>` is nominally branded across module boundaries — if
-  someone re-implements `WritableOf<T>` themselves they need to
-  import our brand. Acceptable for an internal lib; could be exported
-  if external consumers need it.
-- **`static invertibles = [...] as const`**: easy to forget. If
-  someone omits `as const`, the type stays as `string[]` and
-  `Writable<R>` quietly stops lifting methods. Could enforce via
-  a static-assertion helper if it bites in practice.
-- **`set` / `bind` inherited from Signal class are still callable on
-  bare RO `Vec` at the type level** (they're class methods, not
-  accessors — interface merge can't subtract). Minor footgun; could
-  be fixed by moving them off the class to the `Writable<R>` mixin,
-  but that's a bigger refactor.
+```ts
+class Signal<T> {
+  set(this: WritableBrand & Signal<T>, v: Val<T>): typeof this { … }
+  bind(this: WritableBrand & Signal<T>, source: Val<T>): () => void { … }
+}
+```
 
-Want me to port Box + Transform to confirm the pattern scales, or
-look at moving `set`/`bind` off the Signal class?
+The `this` parameter requires the receiver to carry `WritableBrand`. Bare `Vec` / `Num` / `Signal` (without factory-cast brand) can't satisfy. Calling `.set` is a compile error. `Writable<R>` / `WritableOf<T>` carry the brand → callable.
+
+## Perf
+
+Same engine as r2. Bench-confirmed within ±5% on all paths (signal write, vec.x write-through, vec construction, chain depth 4). r5 ≈ r2 at the engine level.
+
+## Status
+
+- Tests: **23 passing** (engine basics, value classes, types, box, transform)
+- Typecheck: clean
+- Bench: parity with r2
+- Authoring: tighter per class, no mixin complexity
+- Footguns: all known holes closed
+
+Ready for further porting (Color, Matrix, Anchor) and then anim.ts.

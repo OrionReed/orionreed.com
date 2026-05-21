@@ -70,15 +70,14 @@ export class Vec extends Signal<V> {
   }
   static is(v: unknown): v is Vec { return v instanceof Vec }
 }
-/** RO at the public type level. Writable form: `Writable<Vec>`. */
 export interface Vec {
   readonly constructor: typeof Vec;
   get value(): V;
 }
 
 export function vec(x: Val<number> = 0, y: Val<number> = 0): Writable<Vec> {
-  const v = new Vec();
-  v.x.bind(x);
+  const v = new Vec() as Writable<Vec>;
+  v.x.bind(x);  // .x lifts to Writable<Num> on writable receivers
   v.y.bind(y);
-  return v as unknown as Writable<Vec>;
+  return v;
 }

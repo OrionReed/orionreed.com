@@ -31,3 +31,5 @@ export {
 // ─── Value classes ────────────────────────────────────────────────
 export { Num, num } from "./values/num";
 export { Vec, vec } from "./values/vec";
+export { Box, box } from "./values/box";
+export { Transform, transform, type TransformInit } from "./values/transform";

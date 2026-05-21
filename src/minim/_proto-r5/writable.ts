@@ -5,12 +5,7 @@
 // writable surface AND brand the result so animator-style structural
 // constraints reject bare RO values.
 
-import { type Read } from "./signal";
-
-// ─── Brand ────────────────────────────────────────────────────────
-
-declare const WRITABLE: unique symbol;
-interface WritableBrand { readonly [WRITABLE]: never }
+import { type Read, type WritableBrand } from "./signal";
 
 // ─── Writers surface (internal) ───────────────────────────────────
 
@@ -28,11 +23,15 @@ type LensFields<R> = Exclude<
   undefined
 >;
 
-/** Map a base value type to its writable form. Extend per value class. */
+/** Map a base value type to its writable form. Extend per value class.
+ *  (The recursive imports here form a cycle with the value modules;
+ *  TS resolves them lazily at type-check time, no runtime issue.) */
 type LiftField<X> =
-    X extends import("./values/num").Num ? Writable<import("./values/num").Num>
-  : X extends import("./values/vec").Vec ? Writable<import("./values/vec").Vec>
-  : X extends Read<infer T>              ? Read<T> & Writers<T>
+    X extends import("./values/num").Num       ? Writable<import("./values/num").Num>
+  : X extends import("./values/vec").Vec       ? Writable<import("./values/vec").Vec>
+  : X extends import("./values/box").Box       ? Writable<import("./values/box").Box>
+  : X extends import("./values/transform").Transform ? Writable<import("./values/transform").Transform>
+  : X extends Read<infer T>                    ? Read<T> & Writers<T>
   : X;
 
 /** Extract invertible method names from `static invertibles = [...] as const`. */
@@ -48,9 +47,15 @@ type InvOf<R> =
  *
  *  Lifts invertible methods so chains stay writable, lifts field
  *  lenses to their own writable forms, and adds the writable surface
- *  (`.value`/`.set`/`.bind`) plus a nominal brand. */
+ *  (`.value`/`.set`/`.bind`) plus a nominal brand.
+ *
+ *  Note: we INTERSECT rather than Omit-then-add for invertibles and
+ *  fields. The intersection of `(...) => Num` and `(...) => Writable<Num>`
+ *  is `(...) => Writable<Num>` (the writable form is a subtype). This
+ *  preserves R's full structural shape so `this: R & WritableBrand`
+ *  constraints on inherited methods still match. */
 export type Writable<R> =
-  Omit<R, InvOf<R> | LensFields<R>>
+  Omit<R, "value" | InvOf<R> | LensFields<R>>
   & Writers<R extends Read<infer T> ? T : never>
   & WritableBrand
   & { [K in InvOf<R>]: R[K] extends (...a: infer A) => R ? (...a: A) => Writable<R> : R[K] }

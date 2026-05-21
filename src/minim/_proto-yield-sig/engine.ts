@@ -19,7 +19,11 @@ export type Yieldable =
   | number
   | Animator<any>
   | readonly Yieldable[]
-  | Suspend<any>;
+  | Suspend<any>
+  // Any iterable whose iterator produces Yieldables — covers Signals
+  // (via the `[Symbol.iterator]` method) and any user-defined opt-in.
+  // Engine duck-types this via `isIterableYieldable` in dispatch.
+  | { readonly [Symbol.iterator]: () => Iterator<Yieldable, any, any> };
 
 export type Animator<R = void> = Generator<Yieldable, R, Tick>;
 
@@ -38,6 +42,16 @@ export const isGenerator = (v: unknown): v is Animator =>
   v !== null &&
   typeof v === "object" &&
   typeof (v as { next?: unknown }).next === "function";
+
+/** Anything that's `Symbol.iterator`-able — covers Signals (via the
+ *  iterator method added in `signal.ts`) and any future custom Yieldable
+ *  type that opts in. The engine treats these as if they were generators
+ *  (we get a generator from `[Symbol.iterator]()`). */
+export const isIterableYieldable = (v: unknown): boolean =>
+  v !== null &&
+  typeof v === "object" &&
+  Symbol.iterator in (v as object) &&
+  typeof (v as { [Symbol.iterator]?: unknown })[Symbol.iterator] === "function";
 
 const DEAD = -Infinity;
 const READY = 0;
@@ -187,6 +201,12 @@ export class Anim {
         if (typeof v === "function") return this.suspend(a, v as Suspend<any>);
         if (Array.isArray(v)) return this.concurrent(a, v);
         if (isGenerator(v)) return this.awaitChild(a, v);
+        if (isIterableYieldable(v)) {
+          return this.awaitChild(
+            a,
+            (v as Iterable<Yieldable>)[Symbol.iterator]() as Animator,
+          );
+        }
         throw new TypeError(`unsupported yield: ${typeof v}`);
       }
       this.settle(a, r.value, false, undefined);
@@ -278,7 +298,11 @@ export class Anim {
       if (aborted) return;
       const k = kids[j];
       const idx = j;
-      const kidGen = isGenerator(k) ? k : asGen(k);
+      const kidGen: Animator<any> = isGenerator(k)
+        ? k
+        : isIterableYieldable(k)
+          ? ((k as Iterable<Yieldable>)[Symbol.iterator]() as Animator)
+          : asGen(k);
       children.push(
         this.spawn(kidGen, a, (value, error) => {
           if (aborted) return;

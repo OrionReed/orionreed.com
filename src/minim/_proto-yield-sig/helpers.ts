@@ -18,8 +18,21 @@ import {
   type Tick,
   type Suspend,
   isGenerator,
+  isIterableYieldable,
 } from "./engine";
 import { Signal, type Read, computed, effect } from "./signal";
+
+const toAnimator = (arg: Yieldable): Animator<unknown> => {
+  if (isGenerator(arg)) return arg as Animator<unknown>;
+  if (isIterableYieldable(arg))
+    return (arg as Iterable<Yieldable>)[Symbol.iterator]() as Animator<unknown>;
+  // Primitive Yieldable (number/undefined): yield it, drop the engine's
+  // tick payload — the meaningful "winner value" for a timer is `undefined`.
+  return (function* () {
+    yield arg;
+    return undefined;
+  })() as Animator<unknown>;
+};
 
 // ─── Suspend wrapper — generator-shaped ─────────────────────────────
 
@@ -58,23 +71,22 @@ export function* race<T>(...args: Yieldable[]): Animator<T> {
 
 // Real `race` — uses the suspend protocol to settle on first.
 export function* raceFirst(...args: Yieldable[]): Animator<unknown> {
-  return yield ((wake, spawn) => {
+  const impl: Suspend<unknown> = (wake, spawn) => {
     const cancels: Array<() => void> = [];
     let settled = false;
     const finish = (v: unknown, asThrow: boolean): void => {
       if (settled) return;
       settled = true;
-      // Cancel siblings.
       for (const c of cancels) c();
       if (asThrow) wake.throw(v);
       else wake(v);
     };
     for (const arg of args) {
-      const gen = isGenerator(arg) ? arg : asYieldGen(arg);
+      const gen = toAnimator(arg);
       const dispose = spawn(
         (function* () {
           try {
-            const v = yield* gen as Animator<unknown>;
+            const v = yield* gen;
             finish(v, false);
           } catch (e) {
             finish(e, true);
@@ -83,7 +95,8 @@ export function* raceFirst(...args: Yieldable[]): Animator<unknown> {
       );
       cancels.push(dispose);
     }
-  }) as Yieldable;
+  };
+  return yield impl as Yieldable;
 }
 
 function* asYieldGen(y: Yieldable): Animator<unknown> {

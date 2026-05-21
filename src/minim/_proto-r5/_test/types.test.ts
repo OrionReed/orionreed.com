@@ -30,10 +30,14 @@ function _probes(): void {
 
   // ─── Buggy fn ───────────────────────────────────────────────────
   function _buggy(p: Vec) {
-    // @ts-expect-error
+    // @ts-expect-error — RO .value
     p.value = { x: 0, y: 0 };
-    // @ts-expect-error
+    // @ts-expect-error — RO field lens
     p.x.value = 5;
+    // @ts-expect-error — .set requires WritableBrand
+    p.set({ x: 0, y: 0 });
+    // @ts-expect-error — .bind requires WritableBrand
+    p.bind(() => ({ x: 0, y: 0 }));
   }
   void _buggy;
 
