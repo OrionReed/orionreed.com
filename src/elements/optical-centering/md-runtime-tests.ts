@@ -24,13 +24,17 @@ interface TestCase {
 
 type AssertFn = (cond: boolean, msg?: string) => void;
 
+/** Local helper so the runtime tests can keep their compact inline-factory
+ *  style. `Anim.start` itself now takes a Yieldable (no factory variant). */
+const startFn = (a: Anim, fn: () => Animator): (() => void) => a.start(fn());
+
 const TESTS: TestCase[] = [
   {
     name: "sleep accumulates across ticks",
     run: (assert) => {
       const a = new Anim();
       let done = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield 0.5;
         done = true;
       });
@@ -50,7 +54,7 @@ const TESTS: TestCase[] = [
       // user code calls `step`, the gen is already at its first yield.
       const a = new Anim();
       const dts: number[] = [];
-      a.start(function* () {
+      startFn(a, function* () {
         dts.push((yield).dt);
         dts.push((yield).dt);
       });
@@ -67,7 +71,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let n = 0;
-      a.start(function* () {
+      startFn(a, function* () {
         n = 1;
         yield 0;
         n = 2;
@@ -87,7 +91,7 @@ const TESTS: TestCase[] = [
         yield 0.1;
         n = 2;
       }
-      a.start(function* () {
+      startFn(a, function* () {
         yield* inner();
         n = 3;
       });
@@ -103,7 +107,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let done = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield (function* (): Animator {
           yield 0.3;
         })();
@@ -121,7 +125,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let done = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield [
           (function* (): Animator {
             yield 0.2;
@@ -144,7 +148,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let done = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield [
           (function* (): Animator {})(),
           (function* (): Animator {})(),
@@ -162,7 +166,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let done = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield [
           0.2,
           undefined,
@@ -185,7 +189,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       let aftermath = false;
       let finallyRan = false;
-      a.start(function* () {
+      startFn(a, function* () {
         try {
           a.stop();
           yield 1;
@@ -204,14 +208,14 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let runs = 0;
-      a.start(function* () {
+      startFn(a, function* () {
         runs++;
         yield 0.5;
         runs++;
       });
       a.step(0);
       a.stop();
-      a.start(function* () {
+      startFn(a, function* () {
         runs++;
         yield 0.5;
         runs++;
@@ -233,12 +237,12 @@ const TESTS: TestCase[] = [
         /* expected */
       };
       try {
-        a.start(function* () {
+        startFn(a, function* () {
           yield* (function* (): Animator {
             throw new Error("boom");
           })();
         });
-        a.start(function* () {
+        startFn(a, function* () {
           goodRan++;
           yield 0.1;
           goodRan++;
@@ -262,11 +266,11 @@ const TESTS: TestCase[] = [
         /* expected */
       };
       try {
-        a.start(function* () {
+        startFn(a, function* () {
           yield 0.05;
           throw new Error("boom");
         });
-        a.start(function* () {
+        startFn(a, function* () {
           goodRan++;
           yield 0.1;
           goodRan++;
@@ -293,7 +297,7 @@ const TESTS: TestCase[] = [
       let sibFin = 0;
       a.onError = () => { /* expected */ };
       try {
-        a.start(function* () {
+        startFn(a, function* () {
           try {
             yield [
               (function* (): Animator { yield; throw new Error("boom"); })(),
@@ -336,7 +340,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const bus = new EventBus();
       let woken = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield bus.until("go");
         woken = true;
       });
@@ -354,7 +358,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       let captured: (() => void) | undefined;
       let woken = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield (wake) => {
           captured = wake;
           return () => {};
@@ -375,7 +379,7 @@ const TESTS: TestCase[] = [
       // Subscribe calls wake before returning; gen advances re-entrantly.
       const a = new Anim();
       let phase = 0;
-      a.start(function* () {
+      startFn(a, function* () {
         phase = 1;
         yield (wake) => {
           wake();
@@ -393,7 +397,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let disposed = false;
-      const handle = a.start(function* () {
+      const handle = startFn(a, function* () {
         yield (_wake) => () => {
           disposed = true;
         };
@@ -409,7 +413,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let finallyRan = false;
-      const handle = a.start(function* () {
+      const handle = startFn(a, function* () {
         try {
           yield 5;
         } finally {
@@ -429,7 +433,7 @@ const TESTS: TestCase[] = [
       let aFinally = 0;
       let bFinally = 0;
       let parentDone = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield race(
           (function* (): Animator {
             try {
@@ -461,7 +465,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let childFinally = 0;
-      const handle = a.start(function* () {
+      const handle = startFn(a, function* () {
         yield [
           (function* (): Animator {
             try {
@@ -490,7 +494,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let parentDone = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield race(
           (function* (): Animator {
             yield* (function* (): Animator {
@@ -522,7 +526,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const bus = new EventBus();
       let winner = "";
-      a.start(function* () {
+      startFn(a, function* () {
         yield race(
           0.5,
           bus.until("go"),
@@ -543,7 +547,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       let resumed = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield race(
           0.1,
           (function* (): Animator {
@@ -564,7 +568,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const stop = signal(false);
       let phase = 0;
-      a.start(function* () {
+      startFn(a, function* () {
         yield* play(
           (function* (): Animator {
             phase = 1;
@@ -591,7 +595,7 @@ const TESTS: TestCase[] = [
       let log = "";
       let subTicks = 0;
       function* sub(): Animator { while (true) { yield; subTicks++; } }
-      const stop = a.start(function* () {
+      const stop = startFn(a, function* () {
         log += "before ";
         yield detach(sub());
         log += "after";
@@ -708,7 +712,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       const p = vec(0, 0);
-      a.start(function* () {
+      startFn(a, function* () {
         yield [p.x.to(10, 0.1), p.y.to(20, 0.1)];
       });
       a.step(0);
@@ -902,7 +906,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const sh1 = { translate: vec(0, 0) };
       const sh2 = { translate: vec(100, 50) };
-      a.start(function* () {
+      startFn(a, function* () {
         yield* swap(sh1, sh2, 0.1);
       });
       a.step(0);
@@ -925,7 +929,7 @@ const TESTS: TestCase[] = [
         { translate: vec(0, 0) },
         { translate: vec(0, 0) },
       ];
-      a.start(function* () {
+      startFn(a, function* () {
         yield* splay(centre, 50, shapes, 0.1);
       });
       a.step(0);
@@ -950,7 +954,7 @@ const TESTS: TestCase[] = [
         { x: 100, y: 0 },
         { x: 0, y: 100 },
       ];
-      a.start(function* () {
+      startFn(a, function* () {
         yield* assemble(shapes, targets, 0.1);
       });
       a.step(0);
@@ -979,7 +983,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const sig = num(0);
       let done = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield* spring(sig, 100, { precision: 0.01 });
         done = true;
       });
@@ -995,7 +999,7 @@ const TESTS: TestCase[] = [
     run: (assert) => {
       const a = new Anim();
       const sig = num(0);
-      a.start(() => attract(sig, 100, 1));
+      a.start(attract(sig, 100, 1));
       a.step(0);
       // After t=1 at rate=1, approaches 1 - e^-1 ≈ 0.632.
       for (let i = 0; i < 100; i++) a.step(0.01);
@@ -1012,7 +1016,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const sig = signal(0);
       let woke = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield untilChange(sig);
         woke = true;
       });
@@ -1029,7 +1033,7 @@ const TESTS: TestCase[] = [
       const a = new Anim();
       const sig = signal(42);
       let woke = false;
-      a.start(function* () {
+      startFn(a, function* () {
         yield untilChange(sig);
         woke = true;
       });
@@ -1049,7 +1053,7 @@ const TESTS: TestCase[] = [
         resolve = r;
       });
       let woke = false;
-      const dispose = a.start(function* () {
+      const dispose = startFn(a, function* () {
         yield untilPromise(p);
         woke = true;
       });

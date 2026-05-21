@@ -60,7 +60,7 @@ export class MdLayoutDemo extends Diagram {
 
     // `at(0)` freezes the spring while dragging; `at(1)` resumes on release.
     const dragging = handles[SPRING_IDX].dragging;
-    this.anim.start(function* () {
+    this.anim.start((function* () {
       yield* play(
         spring(widths[SPRING_IDX], SPRING_REST, {
           omega: 15,
@@ -68,7 +68,7 @@ export class MdLayoutDemo extends Diagram {
           precision: 0,
         }),
       ).at(() => (dragging.value ? 0 : 1));
-    });
+    })());
 
     s(
       label(

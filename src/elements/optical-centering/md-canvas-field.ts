@@ -251,22 +251,20 @@ export class MdCanvasField extends HTMLElement {
         self.fpsAccum += tick.dt;
         self.fpsFrames += 1;
       }),
+      loop(function* () {
+        self.statusText.value = `phase: ${PHASES[self.phaseIdx.peek()].name}`;
+        yield DWELL;
+        self.phaseIdx.value = (self.phaseIdx.peek() + 1) % PHASES.length;
+        yield* self.hueBase.to((self.hueBase.peek() + 70) % 360, 0.9);
+      }),
+      every(0.5, () => {
+        if (self.fpsFrames > 0) {
+          self.fpsSmoothed.value = self.fpsFrames / self.fpsAccum;
+        }
+        self.fpsAccum = 0;
+        self.fpsFrames = 0;
+      }),
     );
-
-    this.anim.start(loop(function* () {
-      self.statusText.value = `phase: ${PHASES[self.phaseIdx.peek()].name}`;
-      yield DWELL;
-      self.phaseIdx.value = (self.phaseIdx.peek() + 1) % PHASES.length;
-      yield* self.hueBase.to((self.hueBase.peek() + 70) % 360, 0.9);
-    }));
-
-    this.anim.start(every(0.5, () => {
-      if (self.fpsFrames > 0) {
-        self.fpsSmoothed.value = self.fpsFrames / self.fpsAccum;
-      }
-      self.fpsAccum = 0;
-      self.fpsFrames = 0;
-    }));
   }
 
   private integrate(dt: number, clock: number): void {

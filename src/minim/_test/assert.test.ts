@@ -42,7 +42,7 @@ describe("scope() — identity & lifecycle", () => {
     const fadeIn = scope(function* fadeIn(): Animator<void> {
       yield 0.05;
     });
-    anim.start(fadeIn);
+    anim.start(fadeIn());
     anim.step(0);
     expect(rec.spans.value.length).toBe(1);
     expect(rec.spans.value[0].fn.name).toBe("fadeIn");
@@ -56,7 +56,7 @@ describe("scope() — identity & lifecycle", () => {
     const work = scope(function* work(): Animator<void> {
       yield () => () => {};
     });
-    const dispose = anim.start(work);
+    const dispose = anim.start(work());
     anim.step(0);
     expect(rec.spans.value[0].status).toBe("open");
     dispose();
@@ -70,7 +70,7 @@ describe("scope() — identity & lifecycle", () => {
     const parent = scope(function* parent(): Animator<void> {
       yield child();
     });
-    anim.start(parent);
+    anim.start(parent());
     anim.step(0);
     const spans = rec.spans.value;
     expect(spans.length).toBe(2);
@@ -86,7 +86,7 @@ describe("scope() — identity & lifecycle", () => {
     const outer = scope(function* outer(): Animator<void> {
       yield* inner();
     });
-    anim.start(outer);
+    anim.start(outer());
     anim.step(0);
     const spans = rec.spans.value;
     expect(spans.length).toBe(2);
@@ -104,7 +104,7 @@ describe("scope() — identity & lifecycle", () => {
     const outer = scope(function* outer(): Animator<void> {
       yield child();
     });
-    anim.start(outer);
+    anim.start(outer());
     anim.step(0);
     anim.step(0.06);
     const c = rec.spans.value.find((s) => s.fn.name === "child")!;
@@ -119,7 +119,7 @@ describe("scope() — identity & lifecycle", () => {
     expect(fade.alive.value).toBe(false);
     expect(fade.last.value).toBeUndefined();
 
-    anim.start(fade);
+    anim.start(fade());
     anim.step(0);
     expect(fade.runs.value).toBe(1);
     expect(fade.alive.value).toBe(true);
@@ -151,7 +151,7 @@ describe("write attribution", () => {
       yield 0.01;
       sig.value = 2;
     });
-    anim.start(work);
+    anim.start(work());
     anim.step(0);
     anim.step(0.02);
     expect(work.last.value?.touched.size).toBe(1);
@@ -168,7 +168,7 @@ describe("write attribution", () => {
       yield 0.01;
     });
     expect(author.value).toBeUndefined();
-    anim.start(work);
+    anim.start(work());
     anim.step(0);
     expect(author.value?.fn.name).toBe("work");
   });
@@ -182,7 +182,7 @@ describe("write attribution", () => {
     const outer = scope(function* outer(): Animator<void> {
       yield inner();
     });
-    anim.start(outer);
+    anim.start(outer());
     anim.step(0);
     anim.step(0.02);
     expect(outer.touched.value.length).toBe(0);
@@ -294,7 +294,7 @@ describe("claim() — fluent builder", () => {
     const safe = claim(sig).stays.in([0, 1]).during(work);
     expect(safe.value).toBe(true);
 
-    anim.start(work);
+    anim.start(work());
     anim.step(0);
     expect(safe.value).toBe(true);
     anim.step(0.1);
@@ -319,7 +319,7 @@ describe("intervals & firstOf", () => {
     });
     const open = intervals(work);
     expect(open.value).toBe(false);
-    anim.start(work);
+    anim.start(work());
     anim.step(0);
     expect(open.value).toBe(true);
     anim.step(0.1);

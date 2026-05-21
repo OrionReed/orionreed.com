@@ -131,24 +131,26 @@ export class Anim {
     return this.#clock;
   }
 
-  start(
-    g:
-      | Animator<any>
-      | Transduced<any>
-      | (() => Animator<any> | Transduced<any>),
-  ): () => void {
-    const target = typeof g === "function" ? g() : g;
-    const a = isTransduced(target)
-      ? this.spawn(
-          target.gen,
-          null,
-          null,
-          target.ticks,
-          target.resumes,
-          target.yields,
-        )
-      : this.spawn(target, null, null, EMPTY, EMPTY, EMPTY);
-    return () => this.cancel(a);
+  /** Spawn one or more root-level actives. Each Yieldable becomes an
+   *  independent active; the returned handle cancels all of them. Pass
+   *  an array (`[a, b]`) as a single Yieldable to spawn a concurrent
+   *  group with cascading cancel + joined completion instead. */
+  start(...gs: Yieldable[]): () => void {
+    if (gs.length === 0) return () => {};
+    const actives = gs.map((g) => {
+      if (isGeneratorFunction(g)) {
+        throw new TypeError(
+          `anim.start: received a generator function; pass an instance instead — \`anim.start(${(g as Function).name || "g"}())\``,
+        );
+      }
+      if (isGenerator(g)) return this.spawn(g, null, null, EMPTY, EMPTY, EMPTY);
+      if (isTransduced(g))
+        return this.spawn(g.gen, null, null, g.ticks, g.resumes, g.yields);
+      return this.spawn(asGen(g), null, null, EMPTY, EMPTY, EMPTY);
+    });
+    return () => {
+      for (const a of actives) this.cancel(a);
+    };
   }
 
   /** Fire `cb(dt)` after every successful `step()` completes. */
@@ -512,6 +514,11 @@ const unwrapCut = (v: unknown): unknown =>
 
 const isTransduced = (v: unknown): v is Transduced<any> =>
   typeof v === "object" && v !== null && TRANSDUCE_KEY in (v as object);
+
+// Cached generator-function prototype for the runtime guard in `start`.
+const GENERATOR_FUNCTION_PROTO = Object.getPrototypeOf(function* () {});
+const isGeneratorFunction = (v: unknown): boolean =>
+  typeof v === "function" && Object.getPrototypeOf(v) === GENERATOR_FUNCTION_PROTO;
 
 const pushStack = <T>(t: T | undefined, stack: readonly T[]): readonly T[] =>
   t === undefined ? stack : [t, ...stack];

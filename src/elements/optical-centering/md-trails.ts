@@ -57,30 +57,32 @@ export class MdTrails extends Diagram {
     }));
     follower.transform.value = INITIAL_POSE;
 
-    this.anim.start(function* () {
-      yield* play(spring(follower.transform, target.transform, {
-        omega: 11,
-        zeta: 0.4,
-        precision: 0,
-      })).at(() => master.value);
-    });
-
-    // Engine root (no `.at()`) so it keeps stepping while master = 0.
-    this.anim.start(loop(function* () {
-      yield* tween(target.transform, randomPose(), 0.9, easeInOut);
-      yield 2.6;
-    }));
-
-    this.anim.start(loop(function* () {
-      yield* tween(master, 2, 1.2, easeInOut);
-      yield 0.7;
-      yield* tween(master, 1, 1.0, easeInOut);
-      yield 0.5;
-      yield* tween(master, 0, 1.4, easeInOut);
-      yield 3.2;
-      yield* tween(master, 1, 1.2, easeInOut);
-      yield 0.5;
-    }));
+    // Engine root (no `.at()`) for the master tweens so they keep stepping
+    // while master = 0; the follower spring is `.at(master)`-scaled so it
+    // freezes during the master-paused window.
+    this.anim.start(
+      (function* () {
+        yield* play(spring(follower.transform, target.transform, {
+          omega: 11,
+          zeta: 0.4,
+          precision: 0,
+        })).at(() => master.value);
+      })(),
+      loop(function* () {
+        yield* tween(target.transform, randomPose(), 0.9, easeInOut);
+        yield 2.6;
+      }),
+      loop(function* () {
+        yield* tween(master, 2, 1.2, easeInOut);
+        yield 0.7;
+        yield* tween(master, 1, 1.0, easeInOut);
+        yield 0.5;
+        yield* tween(master, 0, 1.4, easeInOut);
+        yield 3.2;
+        yield* tween(master, 1, 1.2, easeInOut);
+        yield 0.5;
+      }),
+    );
 
     const BAR_X0 = 110;
     const BAR_W  = VIEW_W - 220;
