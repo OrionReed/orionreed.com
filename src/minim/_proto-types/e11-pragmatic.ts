@@ -249,3 +249,30 @@ function _F() {
   moveLeft(ros, 5);
 }
 void _F;
+
+// PATTERN G: animators on chain results
+function _G() {
+  const a = vec();
+  const c1 = a.derive((c) => c.add({ x: 1, y: 1 }));   // Writable<Vec>
+  const c2 = a.derive((c) => c.normalize());           // Vec
+
+  spring(c1, { x: 0, y: 0 });   // OK — c1 is Writable<Vec> with traits
+  tween(c1, { x: 0, y: 0 }, 1); // OK
+  // @ts-expect-error — c2 is Vec (RO), no setter
+  spring(c2, { x: 0, y: 0 });
+  // @ts-expect-error
+  tween(c2, { x: 0, y: 0 }, 1);
+}
+void _G;
+
+// PATTERN H: nested generic + capability
+function setIfWritable<R extends Signal<unknown>>(s: R & Writable<R>, v: Of<R>): void {
+  s.value = v;
+}
+function _H() {
+  setIfWritable(vec(), { x: 0, y: 0 });
+  setIfWritable(num(), 5);
+  // @ts-expect-error — Vec lacks setter surface
+  setIfWritable(vec().normalize(), { x: 0, y: 0 });
+}
+void _H;
