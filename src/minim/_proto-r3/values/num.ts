@@ -12,8 +12,7 @@
 //   - `Num.derive(fn)`   — construct a read-only computed Num
 //   - `Num.lens(g, s)`   — construct a writable derived Num
 
-import { Node, type NodeOptions, type Val } from "../node";
-import { Signal, Computed, Lens } from "../signal";
+import { Node, type NodeOptions, type Val, Signal, Computed, Lens } from "../signal";
 import { type TraitDict, type Linear } from "../traits";
 import { applyOp1, type Op } from "../ops";
 
@@ -95,8 +94,21 @@ export interface NumLens { readonly constructor: typeof NumLens }
 Object.assign(NumLens.prototype, writable);
 
 // ─── Public types & factories ──────────────────────────────────────
+//
+// `Num` is the *readable* structural surface — value + peek + non-
+// invertible methods. All three concrete flavours satisfy it (they
+// have more). Writes via `Num` correctly type-error.
+//
+// `WritableNum` is the class union for write-needing code.
 
-export type Num = NumSignal | NumComputed | NumLens;
+export interface Num {
+  readonly value: V;
+  peek(): V;
+  clamp(lo: Val<V>, hi: Val<V>): NumComputed;
+  readonly constructor: {
+    readonly traits: TraitDict<V>;
+  };
+}
 export type WritableNum = NumSignal | NumLens;
 
 /** Construct a writable Num backed by a signal source. */

@@ -2,23 +2,13 @@ export {
   Anim,
   cut,
   isGenerator,
-  transduce,
-  TRANSDUCE_KEY,
   type Animator,
   type Cut,
   type Resume,
   type Suspend,
   type Tick,
-  type Transduced,
-  type Transducer,
   type Yieldable,
 } from "./anim";
-
-export {
-  scaled,
-  pauseWhen,
-  slowmoWhen,
-} from "./transducers";
 
 export {
   drive, suspend,

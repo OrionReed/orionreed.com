@@ -14,7 +14,7 @@
 // public `Traits<T, K>` name for the constraint, which is what
 // consumers see far more often.
 //
-// Lookup helpers (`requireLinear`, `linearOf`, …) read class-level
+// Lookup helper `requireLinear` (and siblings) read class-level
 // `s.constructor.traits.linear` once per animator setup; equality is
 // resolved to a per-instance `_equals` slot at construction so the
 // write hot path stays a single field read.
@@ -71,15 +71,6 @@ export type Traits<T, K extends TraitKey = never> = Signal<T> & {
 /** Class-level traits dictionary for any Signal subclass. */
 const dictOf = <T>(s: Read<T>): TraitDict<T> =>
   (((s as object).constructor as { traits?: TraitDict<T> }).traits) ?? {};
-
-export const linearOf = <R extends Read<unknown>>(s: R): Linear<Of<R>> | undefined =>
-  dictOf<Of<R>>(s as unknown as Read<Of<R>>).linear;
-export const lerpOf = <R extends Read<unknown>>(s: R): Lerp<Of<R>> | undefined =>
-  dictOf<Of<R>>(s as unknown as Read<Of<R>>).lerp;
-export const metricOf = <R extends Read<unknown>>(s: R): Metric<Of<R>> | undefined =>
-  dictOf<Of<R>>(s as unknown as Read<Of<R>>).metric;
-export const equalsOf = <R extends Read<unknown>>(s: R): Equals<Of<R>> | undefined =>
-  dictOf<Of<R>>(s as unknown as Read<Of<R>>).equals;
 
 const className = (s: object): string =>
   (s.constructor as { name?: string }).name ?? "?";

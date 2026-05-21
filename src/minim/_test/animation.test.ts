@@ -175,24 +175,6 @@ describe("animation", () => {
       check("phase done", phase.value === "done");
     }
 
-    section("play().at(scale) — time-scale child");
-    {
-      const anim = new Anim();
-      const x = num(0);
-      anim.start((function* () { yield* play(x.to(100, 0.5, linear)).at(2); })());
-      tick(anim, 15);
-      check(".at(2) accelerates tween: x === 100 at 0.25s", x.value === 100);
-    }
-    {
-      const anim = new Anim();
-      const x = num(0);
-      anim.start((function* () { yield* play(x.to(100, 0.5, linear)).at(0.5); })());
-      tick(anim, 30);
-      check(".at(0.5) at half-tween: x ≈ 50", approx(x.value, 50, 1));
-      tick(anim, 30);
-      check(".at(0.5) decelerates tween: x === 100 at 1.0s", x.value === 100);
-    }
-
     section("spring() — settle to target");
     {
       const anim = new Anim();
@@ -297,30 +279,32 @@ describe("animation", () => {
       check("play(not(sig)) wakes when sig flips false", woke);
     }
 
-    section("pause via play(spring).at(0|1) — universal time-scale primitive");
+    section("pause via spring({ rate: 0|1 }) — per-animator time-scale");
     {
-      // `play().at(reactive scale)` IS the pause primitive now. Sleep
-      // and per-frame yields both honor the scale; `at(0)` freezes
-      // motion AND timers. Replaces the old `unless` helper — instead
-      // of cancel/restart on guard flip, we time-scale the running
-      // animator continuously by the guard.
+      // Per-animator `rate` is the pause primitive. Sleep and per-frame
+      // yields inside the spring's drive callback both honor the scale;
+      // `rate: () => 0` freezes spring evolution. Replaces the old
+      // `unless` helper — instead of cancel/restart on guard flip, we
+      // time-scale the running animator continuously by the guard.
       const anim = new Anim();
       const x = num(0);
       const drag = signal(false);
-      anim.start((function* () {
-        yield* play(spring(x, 100, { omega: 14, zeta: 0.85 }))
-          .at(() => drag.value ? 0 : 1);
-      })());
+      anim.start(
+        spring(x, 100, {
+          omega: 14, zeta: 0.85,
+          rate: () => drag.value ? 0 : 1,
+        }),
+      );
       tick(anim, 60);
-      check("at(reactive): spring runs while drag=false → x → ~100", approx(x.value, 100, 1));
+      check("rate=1: spring runs while drag=false → x → ~100", approx(x.value, 100, 1));
       drag.value = true;
       const xPaused = x.value;
       tick(anim, 200);
-      check("at(0) freezes the spring: x unchanged across many frames", x.value === xPaused);
+      check("rate=0 freezes the spring: x unchanged across many frames", x.value === xPaused);
       drag.value = false;
       tick(anim, 1);
       // After resume, spring sees x at its frozen value and continues.
-      check("at(1) resumes the spring cleanly", approx(x.value, 100, 0.5));
+      check("rate=1 resumes the spring cleanly", approx(x.value, 100, 0.5));
     }
 
     section("Tween chain on Vec field lens");

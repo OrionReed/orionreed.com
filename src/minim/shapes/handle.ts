@@ -25,9 +25,7 @@ export interface HandleOpts {
  *  to coordinate animations with user interaction:
  *
  *      const h = s(handle(target));
- *      anim.start(function*() {
- *        yield* play(spring(target, REST)).at(() => h.dragging.value ? 0 : 1);
- *      });
+ *      anim.start(spring(target, REST, { rate: () => h.dragging.value ? 0 : 1 }));
  */
 export class Handle extends Circle {
   readonly dragging: Signal<boolean>;

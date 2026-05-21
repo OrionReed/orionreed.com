@@ -8,7 +8,6 @@ import {
   handle,
   label,
   num,
-  play,
   rect,
   spring,
 } from "../../minim";
@@ -58,17 +57,16 @@ export class MdLayoutDemo extends Diagram {
       return s(handle(pos, { cursor: "ew-resize", r: 5 }));
     });
 
-    // `at(0)` freezes the spring while dragging; `at(1)` resumes on release.
+    // `rate: 0` freezes the spring while dragging; `rate: 1` resumes on release.
     const dragging = handles[SPRING_IDX].dragging;
-    this.anim.start((function* () {
-      yield* play(
-        spring(widths[SPRING_IDX], SPRING_REST, {
-          omega: 15,
-          zeta: 0.4,
-          precision: 0,
-        }),
-      ).at(() => (dragging.value ? 0 : 1));
-    })());
+    this.anim.start(
+      spring(widths[SPRING_IDX], SPRING_REST, {
+        omega: 15,
+        zeta: 0.4,
+        precision: 0,
+        rate: () => (dragging.value ? 0 : 1),
+      }),
+    );
 
     s(
       label(

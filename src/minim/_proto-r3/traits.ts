@@ -5,7 +5,7 @@
 // Identical in spirit to the r2 design; only the `Read<T>` import
 // moves over to the new engine module.
 
-import { type Node, type Read, type Of } from "./node";
+import { type Node, type Read, type Of } from "./signal";
 
 // ─── Primitive trait shapes ──────────────────────────────────────────
 

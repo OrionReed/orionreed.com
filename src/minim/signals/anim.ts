@@ -19,7 +19,7 @@ import {
   type Traits,
 } from "./traits";
 import {
-  drive, isGenerator, suspend, race, scaled,
+  drive, isGenerator, suspend, race,
   type Animator, type Tick, type Yieldable, type Easing,
   easeOut,
 } from "../core";
@@ -109,6 +109,9 @@ export interface SpringOpts {
   zeta?: number;
   /** Settle threshold; snap+complete when both ‖e‖ < eps and ‖v‖ < eps·ω. */
   precision?: number;
+  /** Per-frame rate multiplier on `tick.dt`. 0 freezes evolution; 2× doubles
+   *  speed. Reactive — re-read each frame. Default 1. */
+  rate?: () => number;
 }
 
 /** Second-order damped-spring pull. Math unchanged from prod's `spring`. */
@@ -122,13 +125,14 @@ export function* spring<T>(
   const omega = opts.omega ?? 13;
   const zeta = opts.zeta ?? 1;
   const eps = opts.precision ?? 1e-4;
+  const rate = opts.rate;
   const T = valFn(target);
 
   const zero: T = lin.scale(sig.peek(), 0);
   let vel: T = zero;
 
   yield* drive((tick) => {
-    const dt = tick.dt;
+    const dt = rate ? tick.dt * rate() : tick.dt;
     const t = T();
     const cur = sig.peek();
     const e0 = lin.sub(cur, t);
@@ -260,8 +264,6 @@ export interface Play<R = void> extends Animator<R> {
   until(p: PlayTrigger): Play<R>;
   /** Sequence: this, then `next`. */
   then(next: PlayTrigger): Play<unknown>;
-  /** Time-scale this and its children. */
-  at(scale: Val<number>): Play<R>;
 }
 
 class PlayImpl<R> implements Play<R> {
@@ -291,16 +293,6 @@ class PlayImpl<R> implements Play<R> {
       (function* () {
         yield* g;
         yield* playableGen(next);
-      })(),
-    );
-  }
-
-  at(scale: Val<number>): Play<R> {
-    const get = valFn(scale);
-    const g = this.g;
-    return new PlayImpl(
-      (function* (): Animator<R> {
-        return (yield scaled(() => get(), g)) as R;
       })(),
     );
   }

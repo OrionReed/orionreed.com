@@ -6,12 +6,10 @@
 // auto-promote to writable when the receiver is writable; they
 // return the read-only NumComputed when the receiver is RO.
 
-import { Node, type NodeOptions, type Val } from "../node";
-import { Signal, Computed, Lens } from "../signal";
+import { Node, type NodeOptions, type Val, Signal, Computed, Lens } from "../signal";
 import { type TraitDict, type Linear } from "../traits";
 import { applyOp1, applyOp2, type Op } from "../ops";
-import { NumComputed, NumLens } from "./num";
-import type { Num } from "./num";
+import { NumComputed, NumLens, type Num } from "./num";
 
 // ─── Pure value-space functions ────────────────────────────────────
 
@@ -159,8 +157,25 @@ Object.defineProperties(VecLens.prototype, {
 });
 
 // ─── Public types & factories ──────────────────────────────────────
+//
+// `Vec` is the readable structural surface. All three concrete
+// flavours satisfy it (they have more). Writes via `Vec` correctly
+// type-error. Use `VecSignal` / `VecLens` / `WritableVec` for writes.
 
-export type Vec = VecSignal | VecComputed | VecLens;
+export interface Vec {
+  readonly value: V;
+  peek(): V;
+  normalize(): Vec;
+  perp(): Vec;
+  lerp(b: Val<V>, t: Val<number>): Vec;
+  distance(other: Val<V>): Num;
+  readonly x: Num;
+  readonly y: Num;
+  readonly magnitude: Num;
+  readonly constructor: {
+    readonly traits: TraitDict<V>;
+  };
+}
 export type WritableVec = VecSignal | VecLens;
 
 export function vec(x: Val<number> = 0, y: Val<number> = 0, opts?: NodeOptions<V>): VecSignal {

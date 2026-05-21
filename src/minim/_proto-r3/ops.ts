@@ -6,8 +6,7 @@
 // per-method `applyOp*` calls and treats fused chains as a future
 // perf upgrade.
 
-import { type Node, type Val, valueOf } from "./node";
-import { type Lens } from "./signal";
+import { type Node, type Val, value as valueOf, type Lens } from "./signal";
 
 export interface Op<V, A extends readonly unknown[]> {
   fwd: (v: V, ...a: A) => V;

@@ -454,13 +454,17 @@ describe("lifecycle", () => {
     expect(n).toBe(2);
   });
 
-  it("clock resets to 0 on stop", () => {
+  it("clock is monotonic across stop/restart", () => {
     function* g(): any { while (true) yield; }
     anim.start(g());
     anim.step(0.5); anim.step(0.5);
     expect(anim.clock).toBeCloseTo(1.0, 9);
     anim.stop();
-    expect(anim.clock).toBe(0);
+    // Clock survives stop — it's a wall-clock counter, not session state.
+    expect(anim.clock).toBeCloseTo(1.0, 9);
+    anim.start(g());
+    anim.step(0.5);
+    expect(anim.clock).toBeCloseTo(1.5, 9);
   });
 
   it("cancelling 1000 actives in a tight loop doesn't crash or leak", () => {
@@ -476,52 +480,6 @@ describe("lifecycle", () => {
 });
 
 describe("composability", () => {
-  it("scaled scales dt seen by the inner gen", async () => {
-    const { scaled } = await import("@minim/core");
-    const anim = new Anim();
-    let lastDt = 0;
-    function* g(): any { while (true) { lastDt = (yield).dt; } }
-    anim.start(scaled(() => 0.5, g()));
-    anim.step(1.0);
-    expect(lastDt).toBeCloseTo(0.5, 9);
-    anim.stop();
-  });
-
-  it("scaled(0, ...) freezes numeric `yield N` sleeps", async () => {
-    // `scaled(() => 0, …)` is the universal pause primitive: a scale=0
-    // subtree never has its gen.next called — wall-clock sleeps and
-    // per-frame drive callbacks alike are frozen.
-    const { scaled } = await import("@minim/core");
-    const anim = new Anim();
-    let done = false;
-    function* g(): any { yield 1.0; done = true; }
-    anim.start(scaled(() => 0, g()));
-    for (let i = 0; i < 200; i++) anim.step(0.016);
-    expect(done).toBe(false);
-    anim.stop();
-  });
-
-  it("scaled with a reactive scale pauses and resumes a sleep", async () => {
-    const { scaled } = await import("@minim/core");
-    const anim = new Anim();
-    let done = false;
-    let scale = 1;
-    function* g(): any { yield 1.0; done = true; }
-    anim.start(scaled(() => scale, g()));
-    // Run halfway under scale=1.
-    for (let i = 0; i < 30; i++) anim.step(1 / 60);
-    expect(done).toBe(false);
-    // Pause: 1000 frames pass, sleep doesn't progress.
-    scale = 0;
-    for (let i = 0; i < 1000; i++) anim.step(1 / 60);
-    expect(done).toBe(false);
-    // Resume: finishes after roughly the remaining half-second.
-    scale = 1;
-    for (let i = 0; i < 60; i++) anim.step(1 / 60);
-    expect(done).toBe(true);
-    anim.stop();
-  });
-
   it("race(gen, sleep) cancels inner after the time cap", async () => {
     // What used to be `withTimeout(0.1, slow())` is now just
     // `race(slow(), 0.1)` — a numeric sleep races against the work,
@@ -610,19 +568,6 @@ describe("onStep", () => {
 });
 
 describe("composition", () => {
-  it("drive composes with scaled for time-scaling", async () => {
-    const { scaled } = await import("@minim/core");
-    const anim = new Anim();
-    let total = 0;
-    anim.start((function* () {
-      yield scaled(() => 2, drive((tick) => { total += tick.dt; }));
-    })());
-    anim.step(0.05);
-    anim.step(0.05);
-    expect(total).toBeCloseTo(0.2, 9); // 2 * (0.05 + 0.05)
-    anim.stop();
-  });
-
   it("yield [number, gen] mixes sleeps and gens in parallel", () => {
     const anim = new Anim();
     let order = "";
@@ -634,218 +579,6 @@ describe("composition", () => {
     anim.step(0.001);
     expect(order).toBe("before gen-start gen-end after");
     anim.stop();
-  });
-});
-
-describe("scope-scale (scaled)", () => {
-  let anim: Anim;
-  beforeEach(() => { anim = new Anim(); });
-  afterEach(() => { anim.stop(); });
-
-  // ── Basic scaled semantics ───────────────────────────────────────────
-
-  it("scaled(0.5, g) halves dt seen by g", async () => {
-    const { scaled } = await import("@minim/core");
-    const dts: number[] = [];
-    function* g(): any { while (true) dts.push((yield).dt); }
-    anim.start(scaled(() => 0.5, g()));
-    anim.step(0.1);
-    anim.step(0.1);
-    expect(dts[0]).toBeCloseTo(0.05, 9);
-    expect(dts[1]).toBeCloseTo(0.05, 9);
-  });
-
-  it("scaled(0, g) pauses execution — gen body never runs after first yield", async () => {
-    const { scaled } = await import("@minim/core");
-    let ticks = 0;
-    function* g(): any { while (true) { yield; ticks++; } }
-    anim.start(scaled(() => 0, g()));
-    for (let i = 0; i < 20; i++) anim.step(0.016);
-    expect(ticks).toBe(0);
-  });
-
-  it("scaled(0, g) freezes numeric sleeps", async () => {
-    const { scaled } = await import("@minim/core");
-    let done = false;
-    function* g(): any { yield 1.0; done = true; }
-    anim.start(scaled(() => 0, g()));
-    for (let i = 0; i < 200; i++) anim.step(0.016);
-    expect(done).toBe(false);
-  });
-
-  it("scaled(2, g) doubles speed: 0.5s sleep finishes in ~0.25s real", async () => {
-    const { scaled } = await import("@minim/core");
-    let done = false;
-    function* g(): any { yield 0.5; done = true; }
-    anim.start(scaled(() => 2, g()));
-    for (let i = 0; i < 14; i++) anim.step(1 / 60); // ~0.23s real — not done yet
-    expect(done).toBe(false);
-    for (let i = 0; i < 3; i++) anim.step(1 / 60);  // ~0.28s real — past 0.25s
-    expect(done).toBe(true);
-  });
-
-  // ── Propagation through orchestration ────────────────────────────────
-
-  it("scaled(0, race(a, b)) pauses both children", async () => {
-    const { scaled, race } = await import("@minim/core");
-    let log = "";
-    function* a(): any { while (true) { yield; log += "a"; } }
-    function* b(): any { while (true) { yield; log += "b"; } }
-    anim.start(scaled(() => 0, race(a(), b())));
-    for (let i = 0; i < 10; i++) anim.step(0.016);
-    expect(log).toBe("");
-  });
-
-  it("scaled(0, race(a, b)) can be cancelled cleanly", async () => {
-    const { scaled, race } = await import("@minim/core");
-    let cleanedA = false, cleanedB = false;
-    function* a(): any {
-      try { while (true) yield; } finally { cleanedA = true; }
-    }
-    function* b(): any {
-      try { while (true) yield; } finally { cleanedB = true; }
-    }
-    const stop = anim.start(scaled(() => 0, race(a(), b())));
-    for (let i = 0; i < 5; i++) anim.step(0.016);
-    stop();
-    expect(cleanedA).toBe(true);
-    expect(cleanedB).toBe(true);
-  });
-
-  it("scaled(0.5, race(a, b)) slows both children's timers", async () => {
-    const { scaled, race } = await import("@minim/core");
-    let done = false;
-    function* a(): any { yield 0.2; done = true; }
-    function* b(): any { while (true) yield; }
-    anim.start(scaled(() => 0.5, race(a(), b())));
-    // 15 frames × 1/60 ≈ 0.25s real → 0.125s local: not done
-    for (let i = 0; i < 15; i++) anim.step(1 / 60);
-    expect(done).toBe(false);
-    // 25 more frames × 1/60 ≈ 0.67s total real → 0.33s local: past 0.2
-    for (let i = 0; i < 25; i++) anim.step(1 / 60);
-    expect(done).toBe(true);
-  });
-
-  it("scaled(0, yield [a, b]) pauses all parallel children", async () => {
-    const { scaled } = await import("@minim/core");
-    let ticks = 0;
-    function* child(): any { while (true) { yield; ticks++; } }
-    function* parent(): any { yield [child(), child()]; }
-    anim.start(scaled(() => 0, parent()));
-    for (let i = 0; i < 10; i++) anim.step(0.016);
-    expect(ticks).toBe(0);
-  });
-
-  // ── Reactive scale ───────────────────────────────────────────────────
-
-  it("reactive scale: pause then resume continues from where it stopped", async () => {
-    const { scaled } = await import("@minim/core");
-    let scale = 1;
-    let ticks = 0;
-    function* g(): any { while (true) { yield; ticks++; } }
-    anim.start(scaled(() => scale, g()));
-    anim.step(0.016); anim.step(0.016);
-    expect(ticks).toBe(2);
-    scale = 0;
-    for (let i = 0; i < 100; i++) anim.step(0.016);
-    expect(ticks).toBe(2);
-    scale = 1;
-    anim.step(0.016); anim.step(0.016);
-    expect(ticks).toBe(4);
-  });
-
-  it("reactive scale: sleep resumes after pause without drift", async () => {
-    const { scaled } = await import("@minim/core");
-    let done = false;
-    let scale = 1;
-    function* g(): any { yield 1.0; done = true; }
-    anim.start(scaled(() => scale, g()));
-    for (let i = 0; i < 30; i++) anim.step(1 / 60);     // ~0.5s local
-    expect(done).toBe(false);
-    scale = 0;
-    for (let i = 0; i < 1000; i++) anim.step(1 / 60);   // paused, no progress
-    expect(done).toBe(false);
-    scale = 1;
-    for (let i = 0; i < 40; i++) anim.step(1 / 60);     // ~0.67s more local
-    expect(done).toBe(true);
-  });
-
-  // ── Nesting ──────────────────────────────────────────────────────────
-
-  it("nested scaled(0.5, scaled(0.5, g)) compounds to 0.25x", async () => {
-    const { scaled } = await import("@minim/core");
-    const dts: number[] = [];
-    function* g(): any { while (true) dts.push((yield).dt); }
-    function* inner(): any { yield scaled(() => 0.5, g()); }
-    anim.start(scaled(() => 0.5, inner()));
-    anim.step(1.0);
-    expect(dts[0]).toBeCloseTo(0.25, 3);
-  });
-
-  it("scaled(1, race(slow, timer)) still resolves via timer", async () => {
-    const { scaled, race } = await import("@minim/core");
-    let cleaned = false;
-    function* slow(): any {
-      try { while (true) yield; } finally { cleaned = true; }
-    }
-    anim.start(scaled(() => 1, race(slow(), 0.1)));
-    for (let i = 0; i < 20; i++) anim.step(0.02);
-    expect(cleaned).toBe(true);
-  });
-});
-
-describe("transducer cadence", () => {
-  let anim: Anim;
-  beforeEach(() => { anim = new Anim(); });
-  afterEach(() => { anim.stop(); });
-
-  it("onTick fires on zero-dt steps (for observation transducers)", async () => {
-    const { transduce } = await import("@minim/core");
-    const ticks: number[] = [];
-    function* g(): any { while (true) yield; }
-    anim.start((function* () {
-      yield transduce({ onTick: (dt) => { ticks.push(dt); return dt; } }, g());
-    })());
-    anim.step(0);
-    anim.step(0);
-    anim.step(0.016);
-    expect(ticks.length).toBe(3);
-    expect(ticks[0]).toBe(0);
-    expect(ticks[1]).toBe(0);
-    expect(ticks[2]).toBeCloseTo(0.016, 9);
-  });
-
-  it("zero-dt step doesn't trigger transducer-freeze on parked actives", async () => {
-    const { scaled } = await import("@minim/core");
-    let n = 0;
-    function* g(): any { while (true) { yield; n++; } }
-    anim.start(scaled(() => 0, g()));
-    anim.step(0); anim.step(0); anim.step(0);
-    expect(n).toBe(3);
-  });
-
-  it("onYield + onResume fire on the right protocol edges", async () => {
-    const { transduce } = await import("@minim/core");
-    const events: string[] = [];
-    function* g(): any { yield; yield; }
-    anim.start((function* () {
-      yield transduce(
-        {
-          onYield: (v) => {
-            events.push(`y:${v === undefined ? "park" : v}`);
-            return undefined;
-          },
-          onResume: (t) => {
-            events.push(`r:${t.dt.toFixed(3)}`);
-            return undefined;
-          },
-        },
-        g(),
-      );
-    })());
-    expect(events).toEqual(["y:park"]);
-    anim.step(0.016);
-    expect(events).toEqual(["y:park", "r:0.016", "y:park"]);
   });
 });
 
@@ -868,30 +601,6 @@ describe("re-entry", () => {
     expect(childRan).toBe(true);
   });
 
-  it("anim.step() inside a transducer onTick does NOT cause double-tick", async () => {
-    const { transduce } = await import("@minim/core");
-    let yields = 0;
-    let didStep = false;
-    function* g(): any { while (true) { yield; yields++; } }
-    anim.start((function* () {
-      yield transduce(
-        {
-          onTick: (dt) => {
-            if (!didStep) {
-              didStep = true;
-              try { anim.step(0.016); } catch (_) { /* swallow */ }
-            }
-            return dt;
-          },
-        },
-        g(),
-      );
-    })());
-    anim.step(0.016);
-    // Without a guard, the outer step would wake the same active twice.
-    expect(yields).toBe(1);
-  });
-
   it("anim.step() during a step throws (re-entry guard)", () => {
     let innerError: unknown = null;
     function* outer(): any {
@@ -905,20 +614,4 @@ describe("re-entry", () => {
     expect(String(innerError)).toMatch(/re-?entrant|in.?progress|step/);
   });
 
-  it("cancel handle called from inside its own gen body works", () => {
-    let cleanedUp = false;
-    let dispose: (() => void) | undefined;
-    function* g(): any {
-      try {
-        yield;
-        dispose!();
-        yield;
-      } finally {
-        cleanedUp = true;
-      }
-    }
-    dispose = anim.start(g());
-    anim.step(0.016);
-    expect(cleanedUp).toBe(true);
-  });
 });

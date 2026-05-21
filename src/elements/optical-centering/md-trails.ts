@@ -1,6 +1,6 @@
 import {
   Anchor, Diagram, Mount, easeInOut,
-  label, loop, num, play, rect, spring, tween, vec,
+  label, loop, num, rect, spring, tween, vec,
 } from "../../minim";
 
 const VIEW_W = 680;
@@ -57,17 +57,16 @@ export class MdTrails extends Diagram {
     }));
     follower.transform.value = INITIAL_POSE;
 
-    // Engine root (no `.at()`) for the master tweens so they keep stepping
-    // while master = 0; the follower spring is `.at(master)`-scaled so it
-    // freezes during the master-paused window.
+    // Engine root for the master tweens so they keep stepping while
+    // master = 0; the follower spring takes `rate` directly so it freezes
+    // during the master-paused window.
     this.anim.start(
-      (function* () {
-        yield* play(spring(follower.transform, target.transform, {
-          omega: 11,
-          zeta: 0.4,
-          precision: 0,
-        })).at(() => master.value);
-      })(),
+      spring(follower.transform, target.transform, {
+        omega: 11,
+        zeta: 0.4,
+        precision: 0,
+        rate: () => master.value,
+      }),
       loop(function* () {
         yield* tween(target.transform, randomPose(), 0.9, easeInOut);
         yield 2.6;

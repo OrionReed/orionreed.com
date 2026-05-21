@@ -1,9 +1,8 @@
 //   Yield contract:
 //   undefined       park 1 frame
-//   number > 0      sleep N (subjective) seconds
+//   number > 0      sleep N seconds
 //   Animator        spawn child, await its return value
 //   Suspend         callback-wake `(wake, spawn) => dispose`
-//   Transduced      spawn `gen` with attached transducer stack
 //   Yieldable[]     run concurrently; resume with results[]
 //
 //   Resume values are either:
@@ -23,8 +22,7 @@ export type Yieldable =
   | number
   | Animator<any>
   | readonly Yieldable[]
-  | Suspend<any>
-  | Transduced<any>;
+  | Suspend<any>;
 
 export type Animator<R = void> = Generator<Yieldable, R, Tick>;
 
@@ -39,38 +37,9 @@ export type Resume<Y> =
     ? R
     : Y extends Suspend<infer R>
       ? R
-      : Y extends Transduced<infer R>
-        ? R
-        : void;
+      : void;
 
 export type Cut<T> = { readonly [CUT_KEY]: T };
-
-export interface Transducer {
-  /** gen → engine direction: transform an outgoing yield. */
-  onYield?(v: Yieldable): Yieldable | undefined;
-  /** engine → gen direction: transform an incoming resume payload (on wake). */
-  onResume?(tick: Tick): Tick | undefined;
-  /** engine internal: per-step time advancement. Return 0 to freeze the
-   *  active for this frame (no localClock advance, no wake check). */
-  onTick?(dt: number): number;
-}
-
-/** Generator + per-hook function stacks. Internally we keep three arrays
- *  instead of one Transducer[] so the per-step cost of unused hooks is
- *  literally zero (empty loop). `R` is the wrapped gen's return type —
- *  recoverable via `Resume<Transduced<R>>`. Stack order in each array
- *  is outermost-first; `onTick` walks the array in reverse (innermost
- *  first, so descendants see scaled dt first); `onYield` and `onResume`
- *  walk it forward (so the gen sees the outermost transform last). */
-export interface Transduced<R = unknown> {
-  readonly [TRANSDUCE_KEY]: true;
-  readonly gen: Animator<R>;
-  readonly ticks: readonly ((dt: number) => number)[];
-  readonly resumes: readonly ((tick: Tick) => Tick | undefined)[];
-  readonly yields: readonly ((v: Yieldable) => Yieldable | undefined)[];
-}
-
-export const TRANSDUCE_KEY = Symbol("transduce");
 
 // ─── Public helpers ──────────────────────────────────────────────────
 
@@ -78,31 +47,6 @@ export const TRANSDUCE_KEY = Symbol("transduce");
  *  enclosing group with `v` and cancel siblings. Outside a group, the
  *  sentinel is transparently unwrapped to `v`. */
 export const cut = <T>(value: T): Cut<T> => ({ [CUT_KEY]: value });
-
-/** Stack `t` on top of `target`. Splits `t`'s hooks into the three per-hook
- *  arrays — non-defined hooks reuse the target's array (no allocation).
- *  Preserves the wrapped gen's return type through composition. */
-export function transduce<R>(
-  t: Transducer,
-  target: Animator<R> | Transduced<R>,
-): Transduced<R> {
-  if (isTransduced(target)) {
-    return {
-      [TRANSDUCE_KEY]: true,
-      gen: target.gen as Animator<R>,
-      ticks: pushStack(t.onTick, target.ticks),
-      resumes: pushStack(t.onResume, target.resumes),
-      yields: pushStack(t.onYield, target.yields),
-    };
-  }
-  return {
-    [TRANSDUCE_KEY]: true,
-    gen: target,
-    ticks: t.onTick ? [t.onTick] : EMPTY,
-    resumes: t.onResume ? [t.onResume] : EMPTY,
-    yields: t.onYield ? [t.onYield] : EMPTY,
-  };
-}
 
 /** True if `v` is a Generator (duck-typed via `.next`). */
 export const isGenerator = (v: unknown): v is Animator =>
@@ -116,9 +60,9 @@ export class Anim {
   protected actives: Active[] = [];
   private deads = 0;
   /** Re-entry guard: true while `step()` is iterating. Calling `step()`
-   *  again from inside a transducer hook or a gen body throws. Other ops
-   *  (start, stop, cancel) remain legal from inside step — they only
-   *  mutate `actives`, which the loop handles via index + skip-checks. */
+   *  again from inside a gen body throws. Other ops (start, stop, cancel)
+   *  remain legal from inside step — they only mutate `actives`, which
+   *  the loop handles via index + skip-checks. */
   private stepping = false;
   private stepListeners: Set<(dt: number) => void> | null = null;
 
@@ -131,23 +75,13 @@ export class Anim {
     return this.#clock;
   }
 
-  /** Spawn one or more root-level actives. Each Yieldable becomes an
+  /** Spawn one or more root-level actives. Each Animator becomes an
    *  independent active; the returned handle cancels all of them. Pass
-   *  an array (`[a, b]`) as a single Yieldable to spawn a concurrent
-   *  group with cascading cancel + joined completion instead. */
-  start(...gs: Yieldable[]): () => void {
+   *  an array (`[a, b]`) inside a gen as a single Yieldable to spawn a
+   *  concurrent group with cascading cancel + joined completion. */
+  start(...gs: Animator<any>[]): () => void {
     if (gs.length === 0) return () => {};
-    const actives = gs.map((g) => {
-      if (isGeneratorFunction(g)) {
-        throw new TypeError(
-          `anim.start: received a generator function; pass an instance instead — \`anim.start(${(g as Function).name || "g"}())\``,
-        );
-      }
-      if (isGenerator(g)) return this.spawn(g, null, null, EMPTY, EMPTY, EMPTY);
-      if (isTransduced(g))
-        return this.spawn(g.gen, null, null, g.ticks, g.resumes, g.yields);
-      return this.spawn(asGen(g), null, null, EMPTY, EMPTY, EMPTY);
-    });
+    const actives = gs.map((g) => this.spawn(g, null, null));
     return () => {
       for (const a of actives) this.cancel(a);
     };
@@ -164,7 +98,6 @@ export class Anim {
   stop(): void {
     const snap = this.actives.slice();
     this.actives.length = 0;
-    this.#clock = 0;
     for (const a of snap) this.cancel(a);
   }
 
@@ -199,30 +132,14 @@ export class Anim {
       const a = as[i];
       if (!a || a.wakeAt === DEAD || a.wakeAt === PARKED) continue;
 
-      // Per-active time advance. Always walk the ticks stack (fires even
-      // at dt=0 so observation-style transducers see every step). Empty
-      // stack → loop never enters → zero cost for the common case.
-      const ticks = a.ticks;
-      let subjDt = dt;
-      for (let k = ticks.length - 1; k >= 0; k--) {
-        subjDt = ticks[k](subjDt);
-      }
-      // Freeze only when the engine actually had time and the chain ate it.
-      if (dt > 0 && subjDt === 0) continue;
-      if (subjDt > 0) a.localClock += subjDt;
+      if (dt > 0) a.localClock += dt;
 
       if (a.wakeAt <= a.localClock) {
         const saved = a.wakeAt;
         a.wakeAt = READY;
         // Sub-frame: only the time since the wake threshold is "owed".
-        const dtEff =
-          saved > 0 ? Math.min(subjDt, a.localClock - saved) : subjDt;
-        let tick: Tick = { dt: dtEff, elapsed: a.localClock };
-        // onResume: outer-to-inner. Empty stack → no work.
-        const resumes = a.resumes;
-        for (let k = 0; k < resumes.length; k++) {
-          tick = resumes[k](tick) ?? tick;
-        }
+        const dtEff = saved > 0 ? Math.min(dt, a.localClock - saved) : dt;
+        const tick: Tick = { dt: dtEff, elapsed: a.localClock };
         this.advance(a, tick, false);
       }
     }
@@ -233,15 +150,9 @@ export class Anim {
     gen: Animator<any>,
     parent: Active | null,
     onSettle: OnSettle | null,
-    ticks: readonly ((dt: number) => number)[],
-    resumes: readonly ((tick: Tick) => Tick | undefined)[],
-    yields: readonly ((v: Yieldable) => Yieldable | undefined)[],
   ): Active {
     const a = new Active(gen);
     a.onSettle = onSettle;
-    a.ticks = ticks;
-    a.resumes = resumes;
-    a.yields = yields;
     a.localClock = parent ? parent.localClock : 0;
     this.actives.push(a);
     this.advance(a, undefined, false);
@@ -256,10 +167,6 @@ export class Anim {
     a.cleanup = null;
     a.onSettle = null;
     this.safe(c);
-    if (a.busy) {
-      a.pendingReturn = true;
-      return;
-    }
     try {
       a.gen.return(undefined);
     } catch (e) {
@@ -301,20 +208,11 @@ export class Anim {
   }
 
   private advance(a: Active, payload: any, asThrow: boolean): void {
-    a.busy = true;
     try {
       let r = asThrow ? a.gen.throw(payload) : a.gen.next(payload);
       while (!r.done) {
         if (a.wakeAt === DEAD) return;
-        let v = r.value;
-
-        // onYield: outer-to-inner. Empty stack → no work.
-        const yields = a.yields;
-        for (let k = 0; k < yields.length; k++) {
-          const m = yields[k](v);
-          if (m !== undefined) v = m;
-        }
-
+        const v = r.value;
         if (v === undefined) return; // park 1 frame
         if (typeof v === "number") {
           // `yield N <= 0` parks (semantic alignment with `yield`).
@@ -323,32 +221,12 @@ export class Anim {
         }
         if (typeof v === "function") return this.suspend(a, v as Suspend<any>);
         if (Array.isArray(v)) return this.concurrent(a, v);
-        if (isGenerator(v))
-          return this.awaitChild(a, v, a.ticks, a.resumes, a.yields);
-        if (isTransduced(v)) {
-          return this.awaitChild(
-            a,
-            v.gen,
-            composeStack(a.ticks, v.ticks),
-            composeStack(a.resumes, v.resumes),
-            composeStack(a.yields, v.yields),
-          );
-        }
+        if (isGenerator(v)) return this.awaitChild(a, v);
         throw new TypeError(`anim: unsupported yield (${describe(v)})`);
       }
       this.settle(a, r.value, false, undefined);
     } catch (e) {
       this.settle(a, undefined, true, e);
-    } finally {
-      a.busy = false;
-      if (a.pendingReturn) {
-        a.pendingReturn = false;
-        try {
-          a.gen.return(undefined);
-        } catch (e) {
-          this.onError(e);
-        }
-      }
     }
   }
 
@@ -368,7 +246,7 @@ export class Anim {
     wake.throw = (e: unknown) => finish(() => this.advance(a, e, true));
 
     const spawn = (g: Animator): (() => void) => {
-      const child = this.spawn(g, null, null, EMPTY, EMPTY, EMPTY);
+      const child = this.spawn(g, null, null);
       return () => this.cancel(child);
     };
 
@@ -390,37 +268,24 @@ export class Anim {
     }
   }
 
-  /** Park `a` and spawn `gen` as its child with the given transducer stacks;
-   *  resume `a` with the child's return value (or error) on settle. */
-  private awaitChild(
-    a: Active,
-    gen: Animator,
-    ticks: readonly ((dt: number) => number)[],
-    resumes: readonly ((tick: Tick) => Tick | undefined)[],
-    yields: readonly ((v: Yieldable) => Yieldable | undefined)[],
-  ): void {
+  /** Park `a` and spawn `gen` as its child; resume `a` with the
+   *  child's return value (or error) on settle. */
+  private awaitChild(a: Active, gen: Animator): void {
     a.wakeAt = PARKED;
     let c: Active | null = null;
     a.cleanup = () => {
       if (c && c.wakeAt !== DEAD) this.cancel(c);
     };
-    c = this.spawn(
-      gen,
-      a,
-      (v, err) => {
-        if (a.wakeAt === DEAD || a.cleanup === null) return;
-        a.cleanup = null;
-        a.wakeAt = READY;
-        this.advance(
-          a,
-          err === undefined ? unwrapCut(v) : err,
-          err !== undefined,
-        );
-      },
-      ticks,
-      resumes,
-      yields,
-    );
+    c = this.spawn(gen, a, (v, err) => {
+      if (a.wakeAt === DEAD || a.cleanup === null) return;
+      a.cleanup = null;
+      a.wakeAt = READY;
+      this.advance(
+        a,
+        err === undefined ? unwrapCut(v) : err,
+        err !== undefined,
+      );
+    });
   }
 
   private concurrent(a: Active, kids: readonly Yieldable[]): void {
@@ -454,18 +319,7 @@ export class Anim {
       if (aborted) return;
       const k = kids[j];
       const idx = j;
-      let kidGen: Animator;
-      let kidTicks: readonly ((dt: number) => number)[] = a.ticks;
-      let kidResumes: readonly ((tick: Tick) => Tick | undefined)[] = a.resumes;
-      let kidYields: readonly ((v: Yieldable) => Yieldable | undefined)[] =
-        a.yields;
-      if (isGenerator(k)) kidGen = k;
-      else if (isTransduced(k)) {
-        kidGen = k.gen;
-        kidTicks = composeStack(a.ticks, k.ticks);
-        kidResumes = composeStack(a.resumes, k.resumes);
-        kidYields = composeStack(a.yields, k.yields);
-      } else kidGen = asGen(k);
+      const kidGen = isGenerator(k) ? k : asGen(k);
       children.push(
         this.spawn(
           kidGen,
@@ -478,9 +332,6 @@ export class Anim {
             results[idx] = value;
             if (--left === 0) settle(results, false, false);
           },
-          kidTicks,
-          kidResumes,
-          kidYields,
         ),
       );
     }
@@ -495,11 +346,6 @@ const PARKED = Infinity;
 
 const CUT_KEY = Symbol("cut");
 
-// One frozen empty array, shared by every non-using slot. `readonly never[]`
-// is assignable to `readonly T[]` for any T, so the same constant works for
-// all three stack types.
-const EMPTY: readonly never[] = Object.freeze([]);
-
 type Wake<T = void> = ([T] extends [void] ? () => void : (value: T) => void) & {
   throw(error: unknown): void;
 };
@@ -512,44 +358,14 @@ const isCut = (v: unknown): v is Cut<unknown> =>
 const unwrapCut = (v: unknown): unknown =>
   isCut(v) ? (v as Cut<unknown>)[CUT_KEY] : v;
 
-const isTransduced = (v: unknown): v is Transduced<any> =>
-  typeof v === "object" && v !== null && TRANSDUCE_KEY in (v as object);
-
-// Cached generator-function prototype for the runtime guard in `start`.
-const GENERATOR_FUNCTION_PROTO = Object.getPrototypeOf(function* () {});
-const isGeneratorFunction = (v: unknown): boolean =>
-  typeof v === "function" && Object.getPrototypeOf(v) === GENERATOR_FUNCTION_PROTO;
-
-const pushStack = <T>(t: T | undefined, stack: readonly T[]): readonly T[] =>
-  t === undefined ? stack : [t, ...stack];
-
-const composeStack = <T>(
-  parent: readonly T[],
-  child: readonly T[],
-): readonly T[] =>
-  parent.length === 0
-    ? child
-    : child.length === 0
-      ? parent
-      : [...parent, ...child];
-
 class Active {
-  /** READY (0) | PARKED (Inf) | DEAD (-Inf) | positive sleep target (in localClock units). */
+  /** READY (0) | PARKED (Inf) | DEAD (-Inf) | positive sleep target. */
   wakeAt = READY;
-  /** Subjective clock — advances by Σ ticks[i](dt) each step.
-   *  For non-transduced actives this equals engine clock. */
+  /** Per-active subjective clock — advances by engine dt each step.
+   *  Inherited from parent on spawn, then advances independently. */
   localClock = 0;
-  /** Per-hook stacks. Shared `EMPTY` for non-using slots → zero per-step
-   *  cost (loop never enters). Outermost-first storage; `onTick` walks
-   *  reverse, `onResume`/`onYield` walk forward. */
-  ticks: readonly ((dt: number) => number)[] = EMPTY;
-  resumes: readonly ((tick: Tick) => Tick | undefined)[] = EMPTY;
-  yields: readonly ((v: Yieldable) => Yieldable | undefined)[] = EMPTY;
   cleanup: (() => void) | null = null;
   onSettle: OnSettle | null = null;
-  /** Cancel-during-advance defers gen.return() to the finally. */
-  busy = false;
-  pendingReturn = false;
   constructor(readonly gen: Animator<any>) {}
 }
 

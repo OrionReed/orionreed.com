@@ -34,7 +34,7 @@ function* halfSpeed<R>(gen: Animator<R>): Animator<R> {
 
 Six lines, no engine work. The principle works just as well for slow-mo, reverse, pause, jitter, ease — whatever you can write as a function of `dt`.
 
-The runtime adds two things on top. One is efficiency (single tick loop, time-scaled subtrees that actually freeze instead of multiplying their dt by zero). The other is a way to wait on something that doesn't have a fixed duration. Yield a function `(wake) => dispose` and the runtime parks the generator and passes it the wake callback. Calling `wake(value)` resumes the generator with `value` as the result of the yield. This is synchronous — call `wake()` from inside a DOM event handler and the generator advances re-entrantly, before the handler returns:
+The runtime adds two things on top. One is efficiency (a single tick loop, sub-frame wake accounting). The other is a way to wait on something that doesn't have a fixed duration. Yield a function `(wake) => dispose` and the runtime parks the generator and passes it the wake callback. Calling `wake(value)` resumes the generator with `value` as the result of the yield. This is synchronous — call `wake()` from inside a DOM event handler and the generator advances re-entrantly, before the handler returns:
 
 ```ts
 const event = yield* untilEvent(button, "click");
@@ -66,10 +66,9 @@ For more structural needs, a few extra yield-shapes:
 | Yield              | Means                                       |
 | ------------------ | ------------------------------------------- |
 | yield detach(g)    | spawn at root; outlives the yielding parent |
-| yield scaled(r, g) | spawn child with time-scale r               |
 | yield cut(v)       | from inside a group: settle group with v    |
 
-`scaled` is the engine-native counterpart to the `halfSpeed` wrapper above — it installs the rate on a child active so it propagates through every orchestration boundary (kids spawned via `race`, `all`, `yield [...]`), which a hand-rolled wrapper can't reach. There's no global `timeScale`: any subtree can run slow, fast, paused, or reversed independently.
+Time-warping is a per-animator concern: each integrator (`spring`, `tween`, …) accepts a `rate` option that multiplies its `dt` each frame. `spring(sig, target, { rate: () => paused.value ? 0 : 1 })` freezes the spring while `paused` is true. There's no engine-level subtree scaling; each leaf opts in.
 
 <md-orbits></md-orbits>
 
@@ -133,11 +132,10 @@ spring(w, rest).until(dragging); // spring, until dragging
 play([lane0, lane1, lane2]).until(stop); // parallel lanes, until stop
 play(0.5).then(fadeIn(shape, 0.3)); // sleep, then fade in
 play(ready).then(work); // wait truthy, then work
-orbit(centre, shapes).at(playback); // orbit at playback rate
 loop(() => fadeInOut(c)).until(done); // repeat, until done
 ```
 
-`.until / .then / .at` are sugar — each composes with `race`, sequencing, and `scaled`. The runtime never sees the fluent surface; it sees the same `Yieldable` shapes it always has.
+`.until / .then` are sugar — each composes with `race` and sequencing. The runtime never sees the fluent surface; it sees the same `Yieldable` shapes it always has.
 
 <md-circuit></md-circuit>
 

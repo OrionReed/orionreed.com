@@ -24,7 +24,6 @@ export {
 } from "./signal";
 
 export {
-  linearOf, lerpOf, metricOf, equalsOf,
   requireLinear, requireLerp, requireMetric, requireEquals,
   type Linear, type Lerp, type Metric, type Equals,
   type Traits, type TraitDict, type TraitKey,

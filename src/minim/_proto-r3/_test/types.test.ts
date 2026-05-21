@@ -29,9 +29,12 @@ function _typeProbes(): void {
   // @ts-expect-error
   ck.value = 5;
 
+  // Num is the structural RO surface; writes rejected
   const b: Num = num(0);
-  // @ts-expect-error — Num union narrows value to RO (union of accessors)
+  // @ts-expect-error
   b.value = 5;
+  // @ts-expect-error
+  (b as Num).add?.(2);        // add not on Num structural type
 
   const c = num(3);
   const sum = c.add(2);       // NumLens
@@ -61,6 +64,13 @@ function _typeProbes(): void {
     p.x.value = 5;
   }
   void _buggy;
+
+  // ─── Generic accept-any-flavour signature ─────────────────────
+  function readVec(p: Vec): { x: number; y: number } { return p.value }
+  // All three concrete classes are assignable to the structural Vec
+  void readVec(v);                    // VecSignal ✓
+  void readVec(v.normalize());        // VecComputed ✓
+  void readVec(v.add({ x: 0, y: 0 })); // VecLens ✓
 
   // ─── Shape with writable Vec field ─────────────────────────────
   interface Draggable { readonly pos: WritableVec }
