@@ -30,21 +30,13 @@
 //     reactive args track correctly.
 
 import {
-  Signal, lens, type Val, value, type Lens,
+  Signal, lens, type Val, value, valFn, type Lens,
 } from "./signal";
 
 /** A bidirectional operation on V with extra args. */
 export interface Op<V, Args extends readonly unknown[]> {
   fwd: (v: V, ...args: Args) => V;
   bwd: (n: V, ...args: Args) => V;
-}
-
-/** Resolve a `Val<T>` to a zero-arg thunk that unwraps it (and tracks
- *  if reactive). Called once at apply / push; the thunk is reused. */
-function valFn<T>(v: Val<T>): () => T {
-  if (v instanceof Signal) return () => v.value;
-  if (typeof v === "function") return v as () => T;
-  return () => v as T;
 }
 
 /** Apply a unary Op as a typed Lens on `parent`. */

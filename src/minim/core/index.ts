@@ -16,7 +16,6 @@ export {
   commit, firstN, firstMatching, anySuccess, allSettled,
   detach,
   untilEvent, untilPromise,
-  attachRaf,
   type Settled,
 } from "./combinators";
 

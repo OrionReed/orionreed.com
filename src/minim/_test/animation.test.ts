@@ -10,9 +10,9 @@ import {
   signal,
   num, vec, transform,
   play, when, not, Tween,
-  spring, toward, driven, follow,
+  spring, toward, driven,
 } from "@minim/signals";
-import { Anim, detach, race, linear } from "@minim/core";
+import { Anim, detach, race, suspend, linear } from "@minim/core";
 
 function tick(anim: Anim, frames: number, dt = 1 / 60): void {
   for (let i = 0; i < frames; i++) anim.step(dt);
@@ -213,14 +213,19 @@ describe("animation", () => {
       check("toward final === target", x.value === 50);
     }
 
-    section("follow(source) — generator-scoped reactive bind");
+    section("suspend(sig.bind) — generator-scoped reactive bind");
     {
+      // The pattern `follow` used to wrap: park forever, install a bind,
+      // dispose on cancel. Inline via `suspend` for one-off cases.
       const anim = new Anim();
       const a = num(10);
       const b = num(0);
       const stop = signal(false);
       anim.start((function* () {
-        yield* race(follow(b, a), when(stop));
+        yield* race(
+          suspend((_wake) => b.bind(a)),
+          when(stop),
+        );
       })());
       tick(anim, 1);
       check("b initially follows a", b.value === 10);

@@ -2,13 +2,14 @@
 // the graph; signals drive updates. Owns the SVG element, the
 // viewBox (`view`/`fit`), and the host CSS sizing (`--d-w`/`--d-h`).
 
-import { Anim, attachRaf } from "@minim/core";
+import { Anim } from "@minim/core";
 import {
   num, computed, effect,
   Box, type Val,
 } from "@minim/signals";
 import { Shape, SVG_NS, mount, ensureArrowMarker, type Mount } from "@minim/shapes";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
+import { attachRaf } from "./raf";
 import { Marker } from "@minim/tex";
 
 export const css = String.raw;

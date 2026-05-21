@@ -1,6 +1,6 @@
 // anim.ts — animator primitives over nominal trait constraints,
 // plus the broader signals↔generators bridge (Tween chainable, Play,
-// when, loop, every, follow, etc.).
+// when, loop, every, etc.).
 //
 // All trait-dispatched signatures inline `Traits<T, "linear" | …>` —
 // no per-consumer alias. Reads as a sentence: "spring takes a signal
@@ -13,6 +13,7 @@ import {
   Signal, computed, effect,
   type Val, type Read, type Computed,
   value as readVal,
+  valFn,
 } from "./signal";
 import {
   requireLinear, requireLerp, requireMetric,
@@ -223,11 +224,6 @@ export function* attract<T>(
 
 // ─── generator-scoped reactive helpers ────────────────────────────
 
-/** Generator-scoped reactive bind; cleans up when the parent ends. */
-export function follow<T>(sig: Signal<T>, source: Val<T>): Animator<void> {
-  return suspend<void>((_wake) => sig.bind(source));
-}
-
 /** Drive `sig` per frame with a pure function `f(t, initial)`. */
 export function* wave<T>(
   sig: Signal<T>,
@@ -394,12 +390,6 @@ export function every(sec: Val<number>, fn: () => void): Play {
 }
 
 // ─── helpers ────────────────────────────────────────────────────────
-
-function valFn<T>(v: Val<T>): () => T {
-  if (v instanceof Signal) return () => v.value;
-  if (typeof v === "function") return v as () => T;
-  return () => v as T;
-}
 
 /** Re-export with the proto's `value()` so consumers don't reach into core. */
 export const value = readVal;

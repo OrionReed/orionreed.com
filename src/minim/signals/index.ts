@@ -9,6 +9,7 @@ export {
   batch,
   untracked,
   value,
+  valFn,
   isSignal,
   isLens,
   isComputed,
@@ -60,7 +61,7 @@ export { hyperLens, type InversePolicy } from "./values/hyper";
 export {
   tween, tweenStep, spring, toward, attract,
   Tween,
-  follow, wave, driven,
+  wave, driven,
   play, when, not, untilChange, loop, every,
   type Play, type PlayTrigger,
   type SpringOpts,

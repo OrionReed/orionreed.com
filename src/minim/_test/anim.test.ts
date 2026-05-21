@@ -555,8 +555,7 @@ describe("onStep", () => {
   });
 
   it("multiple subscribers fire in order; safe across throws", () => {
-    const anim = new Anim();
-    anim.onError = () => {};
+    const anim = new Anim({ onError: () => {} });
     const calls: string[] = [];
     anim.onStep(() => { calls.push("a"); });
     anim.onStep(() => { calls.push("b"); throw new Error("boom"); });

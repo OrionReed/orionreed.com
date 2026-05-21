@@ -348,14 +348,6 @@ export function value<T>(v: Val<T>): T {
   return v as T;
 }
 
-/** Resolve a `Val<T>` to a zero-arg thunk that unwraps it (and tracks
- *  if reactive). Called once at setup; the thunk is reused on every read. */
-export function valFn<T>(v: Val<T>): () => T {
-  if (v instanceof Signal) return () => v.value;
-  if (typeof v === "function") return v as () => T;
-  return () => v as T;
-}
-
 export const isSignal = (v: unknown): v is Signal<unknown> =>
   v instanceof Signal;
 

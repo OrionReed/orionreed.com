@@ -57,7 +57,7 @@ export const isGenerator = (v: unknown): v is Animator =>
 // ─── Runtime ─────────────────────────────────────────────────────────
 
 export class Anim {
-  protected actives: Active[] = [];
+  private actives: Active[] = [];
   private deads = 0;
   /** Re-entry guard: true while `step()` is iterating. Calling `step()`
    *  again from inside a gen body throws. Other ops (start, stop, cancel)
@@ -65,14 +65,15 @@ export class Anim {
    *  the loop handles via index + skip-checks. */
   private stepping = false;
   private stepListeners: Set<(dt: number) => void> | null = null;
-
-  onError: (e: unknown) => void = (e) => {
-    console.error("minim:", e);
-  };
+  private onError: (e: unknown) => void;
 
   #clock = 0;
   get clock(): number {
     return this.#clock;
+  }
+
+  constructor(opts: { onError?: (e: unknown) => void } = {}) {
+    this.onError = opts.onError ?? ((e) => console.error("minim:", e));
   }
 
   /** Spawn one or more root-level actives. Each Animator becomes an
@@ -146,7 +147,7 @@ export class Anim {
     if (this.deads !== d0) this.compact();
   }
 
-  protected spawn(
+  private spawn(
     gen: Animator<any>,
     parent: Active | null,
     onSettle: OnSettle | null,
@@ -159,7 +160,7 @@ export class Anim {
     return a;
   }
 
-  protected cancel(a: Active): void {
+  private cancel(a: Active): void {
     if (a.wakeAt === DEAD) return;
     a.wakeAt = DEAD;
     this.deads++;
@@ -174,7 +175,7 @@ export class Anim {
     }
   }
 
-  protected settle(
+  private settle(
     a: Active,
     value: unknown,
     errored: boolean,

@@ -298,13 +298,10 @@ const TESTS: TestCase[] = [
       // `bad` parks before throwing so both children are fully spawned
       // before the error path fires; on step the throw propagates,
       // siblings are cancelled (finally runs), parent catches.
-      const a = new Anim();
+      const a = new Anim({ onError: () => { /* expected */ } });
       let parentDone = false;
       let caught: unknown;
       let sibFin = 0;
-      a.onError = () => {
-        /* expected */
-      };
       try {
         startFn(a, function* () {
           try {
