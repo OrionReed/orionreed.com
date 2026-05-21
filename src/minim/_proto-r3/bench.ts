@@ -121,8 +121,8 @@ for (const depth of [2, 4, 8]) {
   group(`chain depth ${depth}: vec.add(b).scale(2)..., 10k source writes`, () => {
     bench("r2", () => {
       const v = r2vec(0, 0);
-      let chain = v as ReturnType<typeof v.add>;
-      for (let i = 0; i < depth; i++) chain = chain.add({ x: 1, y: 0 });
+      let chain = v.add({ x: 0, y: 0 });
+      for (let i = 0; i < depth - 1; i++) chain = chain.add({ x: 1, y: 0 });
       let acc = 0;
       R2.effect(() => { acc = chain.value.x });
       for (let i = 0; i < 10_000; i++) v.value = { x: i, y: 0 };
@@ -130,8 +130,8 @@ for (const depth of [2, 4, 8]) {
     });
     bench("r3", () => {
       const v = r3vec(0, 0);
-      let chain = v as ReturnType<typeof v.add>;
-      for (let i = 0; i < depth; i++) chain = chain.add({ x: 1, y: 0 });
+      let chain = v.add({ x: 0, y: 0 });
+      for (let i = 0; i < depth - 1; i++) chain = chain.add({ x: 1, y: 0 });
       let acc = 0;
       R3.effect(() => { acc = chain.value.x });
       for (let i = 0; i < 10_000; i++) v.value = { x: i, y: 0 };
