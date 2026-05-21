@@ -219,6 +219,30 @@ Anywhere a writable Point exists, a handle can sit on it.
 
 <md-layout-demo></md-layout-demo>
 
+The same idea generalises. `polar(c, r, a)` is `center + (r·cos a, r·sin a)` — and its inverse is one of four policies on which inputs absorb a write: `rotate` (c fixed, write r and a), `translate` (only c shifts), `radial` (only r), `circular` (only a). `handle.rotate` is one line of `polar(center, radius, angle, "circular")`.
+
+The bidirectional story compounds when you chain it. A solar system is deterministic in one scalar — `time` — with each body's angle derived as `time.scale(τ/period)`. Both `.scale` and `polar` (under `"circular"`) are invertible, so dragging *any* body writes back through its chain into `time`. Every other body re-derives from the new time. Drag winds and unwinds the whole system through a single degree of freedom.
+
+<md-solar-system></md-solar-system>
+
+The bidirectional story extends to `vec(num, num)` (writes propagate to both axes), `up`/`down`/`left`/`right` (sugar over the invertible `offset`), and `.scale` (gear ratios). A meshed drivetrain is `g[i+1] = g[i].scale(-1/ratio_i)` chained — every gear is writable both ways through the chain, and the drive integrator pauses while any gear is being dragged.
+
+<md-gears></md-gears>
+
+Constraints fall out of the same primitive. A pulley is `b = Num.lens(L − a, v ↦ a = L − v)` — three lines, bidirectional, no engine support. Symmetric `eq(a, b)` ties two existing writables. `freeze(s)` strips the writable brand so a lens factory's per-input policy skips it; `gated(s, when)` does the same dynamically.
+
+<md-pulley></md-pulley>
+
+When the inverse isn't a closed form, `argminVec` does one Newton step per write — damped least squares against a finite-difference Jacobian. Forward is whatever you can compute; the put redistributes the residual into inputs by weight. An N-link IK arm is the forward kinematics plus weights, plus a target-clamp into the reachable workspace (the principled fix for the rank-deficient Jacobian at full extension):
+
+```ts
+const tip = argminVec(angles, fwdKin, angles.map(() => 1), {
+  clampTarget: clampToDisc(root, N * L),
+});
+```
+
+<md-ik></md-ik>
+
 `debug.*` goes the other way — read-only derived shapes. `debug.box(thing)` reads a shape's transform and box, derives a parent-frame outline, and renders dashed magenta. Drop them in while developing, delete when done:
 
 ```ts

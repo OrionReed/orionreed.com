@@ -1,9 +1,9 @@
 // handle.* — writable derived shapes (draggable circles wired to a Vec).
 
-import { lens, signal, Signal, Vec, mean, type Writable } from "@minim/signals";
+import { lens, signal, polar as polarLens, Signal, Vec, mean, type Writable } from "@minim/signals";
 import { type AnyShape, type Has } from "./shape";
 import { Circle, type CircleOpts } from "./circle";
-import { draggable } from "./interaction";
+import { drag } from "./interaction";
 import type { Path } from "./path";
 
 const COLOR = "var(--minim-handle, #2563eb)";
@@ -40,28 +40,7 @@ export class Handle extends Circle {
     super(target, opts.r ?? 6, circleOpts);
     this.el.style.cursor = opts.cursor ?? "grab";
     this.dragging = signal(false);
-
-    // Capture the grab offset on pointerdown so the handle stays under
-    // the cursor at the grab point (otherwise the target snaps so its
-    // origin is exactly at the pointer, which feels jumpy).
-    let dx = 0;
-    let dy = 0;
-    this.on("pointerdown", (e) => {
-      const local = this.toLocal(e as PointerEvent);
-      const v = target.value;
-      dx = local.x - v.x;
-      dy = local.y - v.y;
-    });
-    const stopDrag = draggable(
-      this,
-      (local) => {
-        target.value = { x: local.x - dx, y: local.y - dy };
-      },
-      (active) => {
-        this.dragging.value = active;
-      },
-    );
-    this.disposers.push(stopDrag);
+    this.disposers.push(drag(this, target, this.dragging));
   }
 }
 
@@ -103,19 +82,12 @@ const rotate = (
   radius = 40,
   opts?: HandleOpts,
 ): Handle => {
-  const pos = lens(
-    () => {
-      const c = shape.center.value;
-      const a = shape.rotate.value;
-      return { x: c.x + radius * Math.cos(a), y: c.y + radius * Math.sin(a) };
-    },
-    (target) => {
-      const c = shape.center.value;
-      shape.rotate.value = Math.atan2(target.y - c.y, target.x - c.x);
-    },
-    Vec,
-  ) as unknown as Writable<Vec>;
-  return handleFn(pos, { cursor: "grab", ...opts });
+  // Built directly on `polar` with the `circular` policy — c and r
+  // are fixed; writes only update θ.
+  return handleFn(
+    polarLens(shape.center, radius, shape.rotate, "circular"),
+    { cursor: "grab", ...opts },
+  );
 };
 
 /** Uniform-scale knob — sits along +x from the shape's center at

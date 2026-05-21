@@ -39,7 +39,8 @@ export {
 
 // ─── Value classes ────────────────────────────────────────────────
 export { Num, num } from "./values/num";
-export { Vec, vec, polar } from "./values/vec";
+export { Vec, vec, axes, polar, type PolarPolicy } from "./values/vec";
+export { tangentPoint } from "./values/vec";
 export {
   Box, box,
   union as boxUnion,
@@ -59,6 +60,11 @@ export { Anchor, Dir } from "./values/anchor";
 // ─── Combinators ──────────────────────────────────────────────────
 export { combine, mean } from "./values/multi";
 export { hyperLens, type InversePolicy } from "./values/hyper";
+export { eq, freeze, gated } from "./lateral";
+export {
+  argminNum, argminVec, clampToDisc,
+  type ArgminOpts, type ArgminVecOpts,
+} from "./argmin";
 
 // ─── Animators ────────────────────────────────────────────────────
 export {

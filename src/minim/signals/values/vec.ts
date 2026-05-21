@@ -1,7 +1,7 @@
 // vec.ts — reactive 2D point.
 
 import {
-  Signal, computedCls, lensCls, computed, value, valFn,
+  Signal, computedCls, lensCls, computed, value, valFn, batch,
   type Val, type SignalOptions,
 } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
@@ -27,6 +27,36 @@ export const normalize = (v: V): V => {
 };
 export const perp = (v: V): V => ({ x: v.y, y: -v.x });
 
+/** Tangent point on a circle from an external point.
+ *
+ *  Given a point `p` outside the circle of radius `r` centred at `c`,
+ *  returns the point `T` on the circle where the line `pT` touches it.
+ *  Two tangents exist — `side: -1` picks the one CCW from `pc`,
+ *  `+1` the CW. (In screen coords with y-down, `-1` is the visually
+ *  CW side. Pass whichever makes the rope go the way you want.)
+ *
+ *  If `p` is inside or on the circle, returns `c` (degenerate). */
+export function tangentPoint(p: V, c: V, r: number, side: 1 | -1 = -1): V {
+  const dx = p.x - c.x;
+  const dy = p.y - c.y;
+  const d = Math.hypot(dx, dy);
+  if (d <= r) return c;
+  const baseAngle = Math.atan2(dy, dx);
+  const offset = Math.acos(r / d);
+  const a = baseAngle + side * offset;
+  return { x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) };
+}
+
+/** Wrap `x` to the half-open interval `(-π, π]`. */
+const wrapToPi = (x: number): number =>
+  x - 2 * Math.PI * Math.round(x / (2 * Math.PI));
+
+/** Return the representative of `target` (a cyclic angle in `(-π, π]`)
+ *  closest to `current`. Used as the shortest-arc inverse for cyclic
+ *  coordinates — see `polar`'s circular / rotate policies. */
+const nearestAngle = (target: number, current: number): number =>
+  current + wrapToPi(target - current);
+
 const linearImpl: Linear<V> = { add, sub, scale };
 
 const addOp:    Op<V, [V]>              = { fwd: add, bwd: sub };
@@ -40,7 +70,10 @@ const offsetOp: Op<V, [number, number]> = {
 export class Vec extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
   static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
-  static invertibles = invertibles<Vec>()("add", "sub", "scale", "offset");
+  static invertibles = invertibles<Vec>()(
+    "add", "sub", "scale", "offset",
+    "up", "down", "left", "right",
+  );
 
   // ── class-level constructors ───────────────────────────────────
   static derive(fn: () => V): Vec { return computedCls(Vec, fn) }
@@ -90,24 +123,117 @@ export interface Vec {
   get value(): V;
 }
 
+/** Vec from two writable axes. Writes propagate to both source Nums
+ *  in a single batch — the bidirectional sibling of `vec(num, num)`. */
+export function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
+  return lensCls(
+    Vec,
+    () => ({ x: x.value, y: y.value }),
+    (v) => {
+      batch(() => {
+        x.value = v.x;
+        y.value = v.y;
+      });
+    },
+  ) as unknown as Writable<Vec>;
+}
+
+/** Writable Vec at `(x, y)`. Smart-dispatches: when both axes are
+ *  `Num` instances, returns a bidirectional 2-input lens that writes
+ *  back through to the source axes. Literal / function / computed axes
+ *  fall back to the forward-only `.bind` path (writes stick locally
+ *  but don't propagate — there's nowhere to send them). */
 export function vec(x: Val<number> = 0, y: Val<number> = 0): Writable<Vec> {
+  if (x instanceof Num && y instanceof Num) {
+    return axes(x as Writable<Num>, y as Writable<Num>);
+  }
   const v = new Vec() as unknown as Writable<Vec>;
   v.x.bind(x);
   v.y.bind(y);
   return v;
 }
 
-/** Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`. */
+/** Policy for `polar`'s inverse:
+ *
+ *  - `rotate`   — c fixed, write r and a so the point lands at target.
+ *                 The natural "draggable point orbiting a center" mode.
+ *  - `translate` — r and a fixed, shift c by Δ. The "drag the orbit
+ *                  by its center" mode.
+ *  - `radial`   — c and a fixed, project the drag onto the ray.
+ *  - `circular` — c and r fixed, project the drag onto the circle. */
+export type PolarPolicy = "rotate" | "translate" | "radial" | "circular";
+
+/** Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`.
+ *
+ *  Bidirectional. Writes propagate back to the input(s) selected by
+ *  `policy` — but only when those inputs are themselves writable
+ *  signals (Num / Vec instances). Non-writable inputs (literals,
+ *  thunks, computed) are silently skipped on writes. */
 export function polar(
-  center: Val<V>, r: Val<number>, a: Val<number>,
+  center: Val<V>,
+  r: Val<number>,
+  a: Val<number>,
+  policy: PolarPolicy = "rotate",
 ): Writable<Vec> {
   const C = valFn(center);
   const R = valFn(r);
   const A = valFn(a);
-  const out = new Vec() as unknown as Writable<Vec>;
-  out.bind(() => {
+  const cSig = center instanceof Vec ? (center as Writable<Vec>) : undefined;
+  const rSig = r instanceof Num ? (r as Writable<Num>) : undefined;
+  const aSig = a instanceof Num ? (a as Writable<Num>) : undefined;
+
+  const fwd = (): V => {
     const c = C(); const rv = R(); const av = A();
     return { x: c.x + rv * Math.cos(av), y: c.y + rv * Math.sin(av) };
-  });
-  return out;
+  };
+
+  // Cyclic-coordinate inverse: pick the angle closest to current, not
+  // the (-π, π] representative from atan2. Without this, dragging a
+  // body whose angle has accumulated many revolutions produces large
+  // discontinuous jumps in the angle signal — visually correct
+  // (cos/sin are periodic) but breaks downstream lenses that read the
+  // angle directly (`time = angle * period / τ`).
+  let bwd: (p: V) => void;
+  switch (policy) {
+    case "rotate":
+      bwd = (p) => {
+        const cv = cSig ? cSig.peek() : C();
+        const dx = p.x - cv.x;
+        const dy = p.y - cv.y;
+        const targetA = Math.atan2(dy, dx);
+        const currentA = aSig ? aSig.peek() : A();
+        batch(() => {
+          if (rSig) rSig.value = Math.hypot(dx, dy);
+          if (aSig) aSig.value = nearestAngle(targetA, currentA);
+        });
+      };
+      break;
+    case "translate":
+      bwd = (p) => {
+        const f = fwd();
+        if (cSig) {
+          const cv = cSig.peek();
+          cSig.value = { x: cv.x + (p.x - f.x), y: cv.y + (p.y - f.y) };
+        }
+      };
+      break;
+    case "radial":
+      bwd = (p) => {
+        const cv = cSig ? cSig.peek() : C();
+        const av = aSig ? aSig.peek() : A();
+        const dx = p.x - cv.x;
+        const dy = p.y - cv.y;
+        if (rSig) rSig.value = dx * Math.cos(av) + dy * Math.sin(av);
+      };
+      break;
+    case "circular":
+      bwd = (p) => {
+        const cv = cSig ? cSig.peek() : C();
+        const targetA = Math.atan2(p.y - cv.y, p.x - cv.x);
+        const currentA = aSig ? aSig.peek() : A();
+        if (aSig) aSig.value = nearestAngle(targetA, currentA);
+      };
+      break;
+  }
+  return lensCls(Vec, fwd, bwd) as unknown as Writable<Vec>;
 }

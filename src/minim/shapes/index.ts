@@ -10,7 +10,7 @@ export {
   type Has,
   type Segment,
 } from "./shape";
-export { draggable, hoverSignal } from "./interaction";
+export { draggable, drag, dragWithState, hoverSignal } from "./interaction";
 export { mount, type Mount } from "./mount";
 
 export {

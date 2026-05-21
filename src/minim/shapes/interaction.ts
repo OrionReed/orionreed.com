@@ -1,6 +1,6 @@
 // DOM input → signal-world bridges that bind to scene-graph shapes.
 
-import {type Signal, Vec, type Of} from "@minim/signals";
+import {type Signal, signal, Vec, type Of, type Writable} from "@minim/signals";
 
 type VecValue = Of<Vec>;
 import type {AnyShape} from "./shape";
@@ -69,4 +69,48 @@ export function draggable(
   offs.push(handle.on("pointerup", stop));
   offs.push(handle.on("pointercancel", stop));
   return () => offs.forEach((d) => d());
+}
+
+/** Bind pointer drag on `shape` directly to a writable `Vec` — no
+ *  separate handle dot. Captures the grab offset on pointerdown so the
+ *  pointer stays at the grab point during the drag. The optional
+ *  `dragging` signal reports active/inactive (useful for `rate` on
+ *  animators that should freeze during drag).
+ *
+ *  Returns a disposer. */
+export function drag(
+  shape: AnyShape,
+  target: Writable<Vec>,
+  dragging?: Signal<boolean>,
+): () => void {
+  let dx = 0;
+  let dy = 0;
+  const offDown = shape.on("pointerdown", (e) => {
+    const local = shape.toLocal(e as PointerEvent);
+    const v = target.value;
+    dx = local.x - v.x;
+    dy = local.y - v.y;
+  });
+  const offDrag = draggable(
+    shape,
+    (local) => {
+      target.value = { x: local.x - dx, y: local.y - dy };
+    },
+    dragging
+      ? (active) => { dragging.value = active; }
+      : undefined,
+  );
+  return () => { offDown(); offDrag(); };
+}
+
+/** Wrap a `drag(shape, target)` call and return a local `dragging`
+ *  Signal<boolean>. Sugar for "give me a drag handle that exposes its
+ *  own state." */
+export function dragWithState(
+  shape: AnyShape,
+  target: Writable<Vec>,
+): { dragging: Signal<boolean>; dispose: () => void } {
+  const dragging = signal(false);
+  const dispose = drag(shape, target, dragging);
+  return { dragging, dispose };
 }

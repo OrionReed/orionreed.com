@@ -2,7 +2,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
-  Num, num, Vec, vec, effect, isLens, isComputed,
+  Num, num, Vec, vec, axes, polar, tangentPoint, effect, isLens, isComputed,
 } from "../index";
 
 describe("Num", () => {
@@ -79,5 +79,215 @@ describe("Vec", () => {
     expect(seen).toBe(3);
     v.x.value = 10;
     expect(seen).toBe(12);
+  });
+});
+
+describe("axes(x, y) — bidirectional Vec from two writable Nums", () => {
+  it("write to composite propagates to both source Nums", () => {
+    const x = num(0), y = num(0);
+    const v = axes(x, y);
+    v.value = { x: 10, y: 20 };
+    expect(x.value).toBe(10);
+    expect(y.value).toBe(20);
+  });
+
+  it("write to .x field-lens propagates to source x only", () => {
+    const x = num(0), y = num(0);
+    const v = axes(x, y);
+    v.x.value = 7;
+    expect(x.value).toBe(7);
+    expect(y.value).toBe(0);
+  });
+
+  it("source write is visible in composite", () => {
+    const x = num(0), y = num(0);
+    const v = axes(x, y);
+    x.value = 5;
+    expect(v.value).toEqual({ x: 5, y: 0 });
+  });
+});
+
+describe("vec() — smart-dispatches to bidirectional when both axes are Nums", () => {
+  it("vec(num, num) is bidirectional", () => {
+    const x = num(0), y = num(0);
+    const v = vec(x, y);
+    v.value = { x: 5, y: 7 };
+    expect(x.value).toBe(5);
+    expect(y.value).toBe(7);
+  });
+
+  it("vec(literal, literal) still works as a fresh source", () => {
+    const v = vec(1, 2);
+    v.value = { x: 5, y: 7 };
+    expect(v.value).toEqual({ x: 5, y: 7 });
+  });
+
+  it("vec(num, literal) — mixed, falls back to bind path", () => {
+    const x = num(3);
+    const v = vec(x, 5);
+    expect(v.value).toEqual({ x: 3, y: 5 });
+    x.value = 10;
+    expect(v.value.x).toBe(10);
+  });
+});
+
+describe("polar(c, r, a) — bidirectional with policies", () => {
+  it("forward read = c + r·(cos a, sin a)", () => {
+    const c = vec(100, 100);
+    const r = num(50);
+    const a = num(0);
+    const p = polar(c, r, a);
+    expect(p.value).toEqual({ x: 150, y: 100 });
+    a.value = Math.PI / 2;
+    expect(p.value.x).toBeCloseTo(100);
+    expect(p.value.y).toBeCloseTo(150);
+  });
+
+  it("rotate (default): write to point updates r and a; c untouched", () => {
+    const c = vec(0, 0);
+    const r = num(10);
+    const a = num(0);
+    const p = polar(c, r, a);
+    p.value = { x: 0, y: 5 };
+    expect(c.value).toEqual({ x: 0, y: 0 });
+    expect(r.value).toBeCloseTo(5);
+    expect(a.value).toBeCloseTo(Math.PI / 2);
+  });
+
+  it("translate: write shifts c; r and a unchanged", () => {
+    const c = vec(0, 0);
+    const r = num(10);
+    const a = num(0);
+    const p = polar(c, r, a, "translate");
+    p.value = { x: 100, y: 50 };
+    expect(c.value).toEqual({ x: 90, y: 50 });
+    expect(r.value).toBe(10);
+    expect(a.value).toBe(0);
+  });
+
+  it("radial: slides along the ray; only r changes", () => {
+    const c = vec(0, 0);
+    const r = num(10);
+    const a = num(0);
+    const p = polar(c, r, a, "radial");
+    p.value = { x: 5, y: 5 };
+    expect(r.value).toBeCloseTo(5);
+    expect(a.value).toBe(0);
+  });
+
+  it("circular: slides around; only a changes", () => {
+    const c = vec(0, 0);
+    const r = num(10);
+    const a = num(0);
+    const p = polar(c, r, a, "circular");
+    p.value = { x: 0, y: 100 };
+    expect(a.value).toBeCloseTo(Math.PI / 2);
+    expect(r.value).toBe(10);
+  });
+
+  it("nested polar — drag moon, moon's (r, a) update; planet/sun untouched", () => {
+    const sun = vec(0, 0);
+    const er = num(100), ea = num(0);
+    const earth = polar(sun, er, ea);
+    const mr = num(10), ma = num(0);
+    const moon = polar(earth, mr, ma);
+    moon.value = { x: 100, y: 5 };
+    expect(mr.value).toBeCloseTo(5);
+    expect(ma.value).toBeCloseTo(Math.PI / 2);
+    expect(er.value).toBe(100);
+    expect(ea.value).toBe(0);
+    expect(sun.value).toEqual({ x: 0, y: 0 });
+  });
+
+  it("non-writable inputs are silently skipped on write", () => {
+    // Const r, const a — write should be a no-op (nothing writable).
+    const c = vec(0, 0);
+    const p = polar(c, 10, 0); // r and a are literals
+    p.value = { x: 0, y: 5 };
+    // c is writable, but the default rotate policy writes only r and a.
+    // Neither is writable here, so nothing happens.
+    expect(c.value).toEqual({ x: 0, y: 0 });
+  });
+
+  it("circular: shortest-arc inverse — no jumps across revolutions", () => {
+    // Critical for chained inverses (e.g. solar system where angle =
+    // time.scale(2π/period)): a small visual drag must produce a
+    // small angle change, regardless of how many full revolutions
+    // the angle has accumulated.
+    const c = vec(0, 0);
+    const r = num(10);
+    const a = num(10 * Math.PI); // 5 full revolutions
+    const p = polar(c, r, a, "circular");
+    // Forward: angle 10π = effectively 0 → point at (10, 0).
+    expect(p.value.x).toBeCloseTo(10);
+    expect(p.value.y).toBeCloseTo(0);
+    // Drag the point slightly above: tiny CCW move from angle ≈ 0.
+    // atan2 would return ~+0.1; nearest-angle keeps us close to 10π.
+    p.value = { x: 10, y: 1 };
+    const da = a.value - 10 * Math.PI;
+    expect(Math.abs(da)).toBeLessThan(0.5); // small delta, not a jump
+    // And forward still tracks.
+    expect(p.value.y).toBeCloseTo(1, 0);
+  });
+
+  it("rotate: shortest-arc inverse — same shortest-arc semantics", () => {
+    const c = vec(0, 0);
+    const r = num(10);
+    const a = num(20 * Math.PI); // 10 full revolutions
+    const p = polar(c, r, a);
+    p.value = { x: 10, y: 1 };
+    const da = a.value - 20 * Math.PI;
+    expect(Math.abs(da)).toBeLessThan(0.5);
+  });
+});
+
+describe("tangentPoint(p, c, r, side)", () => {
+  it("point directly below pulley → tangent at the bottom of the wheel", () => {
+    // Box at (0, 100), pulley at (0, 0) with r=10. For a vertical
+    // rope, the tangent is at the bottom of the wheel.
+    const t = tangentPoint({ x: 0, y: 100 }, { x: 0, y: 0 }, 10);
+    // side -1 → tangent on the side CCW from box-to-pulley (right side
+    // for y-down screen coords).
+    expect(t.y).toBeCloseTo(1); // near r·sin(small angle)
+    expect(t.x).toBeGreaterThan(0); // right side of wheel
+  });
+
+  it("very-far point → tangent at the side of the wheel", () => {
+    // Box at (0, 1000), pulley at (0, 0). At infinity, tangent
+    // approaches the perpendicular side of the wheel.
+    const t = tangentPoint({ x: 0, y: 1000 }, { x: 0, y: 0 }, 10, -1);
+    expect(t.x).toBeCloseTo(10, 1); // right side of wheel
+    expect(t.y).toBeCloseTo(0, 0); // within 0.5 (≈ r²/d)
+  });
+
+  it("box inside circle returns the centre (degenerate)", () => {
+    const t = tangentPoint({ x: 0, y: 1 }, { x: 0, y: 0 }, 10);
+    expect(t).toEqual({ x: 0, y: 0 });
+  });
+
+  it("opposite side flag picks the other tangent", () => {
+    const tLeft = tangentPoint({ x: 0, y: 100 }, { x: 0, y: 0 }, 10, +1);
+    const tRight = tangentPoint({ x: 0, y: 100 }, { x: 0, y: 0 }, 10, -1);
+    expect(Math.sign(tLeft.x)).toBe(-Math.sign(tRight.x));
+  });
+});
+
+describe("up/down/left/right are invertible (chain stays writable)", () => {
+  it("v.up(n).down(m) writes back through to v", () => {
+    const v = vec(0, 0);
+    const moved = v.up(10).right(5);
+    moved.value = { x: 25, y: 30 };
+    // right(5) bwd: x -= 5 → x = 20
+    // up(10)   bwd: y += 10 → y = 40
+    expect(v.value).toEqual({ x: 20, y: 40 });
+  });
+
+  it("axes followed by up chain — writes propagate to source nums", () => {
+    const x = num(0), y = num(0);
+    const v = axes(x, y);
+    const moved = v.right(10);
+    moved.value = { x: 15, y: 3 };
+    expect(x.value).toBe(5);
+    expect(y.value).toBe(3);
   });
 });
