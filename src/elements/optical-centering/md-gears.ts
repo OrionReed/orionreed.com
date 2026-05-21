@@ -1,6 +1,6 @@
 import {
-  Anchor, Diagram, Mount, Shape, num, polar, signal, vec, type Vec,
-  circle, drag, drive, label, type Num, type Writable,
+  Anchor, Diagram, Mount, Shape, num, signal, vec, type Vec,
+  circle, dragRotate, drive, label, type Num, type Writable,
 } from "../../minim";
 
 const TAU = Math.PI * 2;
@@ -85,15 +85,15 @@ export class MdGears extends Diagram {
       const r = sizes[i];
       const a = angles[i];
 
-      s(gear(c, r, teeth[i], a));
+      const g = s(gear(c, r, teeth[i], a));
       s(circle(c, 3, { fill: true }));
 
-      // The knob lives on the rim; circular policy means dragging it
-      // writes only `a`, which writes back through the chain to drive0.
-      const rim = polar(c, r * 0.7, a, "circular");
-      const knob = s(circle(rim, 5, { fill: "#5b8def" }));
-      drag(knob, rim, dragging);
-      knob.el.style.cursor = "grab";
+      // Drag anywhere on the gear — the click point becomes the
+      // ephemeral handle, and `a` is written so that point follows
+      // the cursor. Writes propagate through the gear-ratio chain
+      // back to drive0 (so dragging any gear scrubs the whole chain).
+      dragRotate(g, a, dragging);
+      g.el.style.cursor = "grab";
     }
 
     s(

@@ -1,9 +1,12 @@
 // DOM input → signal-world bridges that bind to scene-graph shapes.
 
-import {type Signal, signal, Vec, type Of, type Writable} from "@minim/signals";
+import {type Signal, signal, Vec, Num, type Of, type Writable} from "@minim/signals";
 
 type VecValue = Of<Vec>;
 import type {AnyShape} from "./shape";
+
+const TAU = Math.PI * 2;
+const wrapToPi = (x: number) => x - TAU * Math.round(x / TAU);
 
 /** Wire `mouseenter`/`mouseleave` on a shape to a writable boolean signal.
  *  Lower-level than `hover(el, marker)` in `core/marker` — directly sets the
@@ -113,4 +116,40 @@ export function dragWithState(
   const dragging = signal(false);
   const dispose = drag(shape, target, dragging);
   return { dragging, dispose };
+}
+
+/** Drag-to-rotate: drag anywhere on `shape` and the writable `angle`
+ *  updates so the clicked point follows the cursor. The shape rotates
+ *  about its local origin (`transform.origin`, default `(0, 0)`).
+ *
+ *  How it works: `shape.toLocal(pointer)` gives the pointer in the
+ *  shape's intrinsic frame — the shape's rotation pivot is at `(0, 0)`
+ *  there. The angle of that vector to `(0, 0)` is the "intrinsic grab
+ *  angle." As the user drags, the same intrinsic point should stay
+ *  under the cursor — so the angle write equals (current intrinsic
+ *  cursor angle) − (grab intrinsic angle), wrapped to shortest arc.
+ *
+ *  Returns a disposer. */
+export function dragRotate(
+  shape: AnyShape,
+  angle: Writable<Num>,
+  dragging?: Signal<boolean>,
+): () => void {
+  let grabAngle = 0;
+  const offDown = shape.on("pointerdown", (e) => {
+    const local = shape.toLocal(e as PointerEvent);
+    grabAngle = Math.atan2(local.y, local.x);
+  });
+  const stop = draggable(
+    shape,
+    (local) => {
+      const currentAngle = Math.atan2(local.y, local.x);
+      const current = angle.peek();
+      angle.value = current + wrapToPi(currentAngle - grabAngle);
+    },
+    dragging
+      ? (active) => { dragging.value = active; }
+      : undefined,
+  );
+  return () => { offDown(); stop(); };
 }

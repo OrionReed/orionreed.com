@@ -225,9 +225,13 @@ The bidirectional story compounds when you chain it. A solar system is determini
 
 <md-solar-system></md-solar-system>
 
-The bidirectional story extends to `vec(num, num)` (writes propagate to both axes), `up`/`down`/`left`/`right` (sugar over the invertible `offset`), and `.scale` (gear ratios). A meshed drivetrain is `g[i+1] = g[i].scale(-1/ratio_i)` chained — every gear is writable both ways through the chain, and the drive integrator pauses while any gear is being dragged.
+The bidirectional story extends to `vec(num, num)` (writes propagate to both axes), `up`/`down`/`left`/`right` (sugar over the invertible `offset`), and `.scale` (gear ratios). A meshed drivetrain is `g[i+1] = g[i].scale(-teeth_i / teeth_{i+1})` chained — every gear is writable both ways. Drag *anywhere* on a gear and the click point becomes an ephemeral grab handle (`dragRotate` captures the click's intrinsic angle once; subsequent drags solve `angle` so the same point follows the cursor). The drive integrator pauses while any gear is being dragged.
 
 <md-gears></md-gears>
+
+The lenses don't care what the values *mean*. A colour has two natural coordinate systems — HSL and RGB — and the conversion between them is a bijection. Make HSL canonical, expose R/G/B as `Num.lens(hslToRgb, rgbToHsl)`, render the picker on a polar wheel and three RGB sliders, and you get five draggable inputs all manipulating the same state from different coordinate systems. Drag the wheel, the RGB sliders move. Drag a slider, the wheel picker moves. *Same colour, two views.*
+
+<md-color></md-color>
 
 Constraints fall out of the same primitive. A pulley is `b = Num.lens(L − a, v ↦ a = L − v)` — three lines, bidirectional, no engine support. Symmetric `eq(a, b)` ties two existing writables. `freeze(s)` strips the writable brand so a lens factory's per-input policy skips it; `gated(s, when)` does the same dynamically.
 

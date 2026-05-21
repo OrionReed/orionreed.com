@@ -40,6 +40,7 @@ import {MdSolarSystem} from "./optical-centering/md-solar-system";
 import {MdGears} from "./optical-centering/md-gears";
 import {MdPulley} from "./optical-centering/md-pulley";
 import {MdIk} from "./optical-centering/md-ik";
+import {MdColor} from "./optical-centering/md-color";
 import {MdTex, MdMarker} from "../minim/web";
 
 DarkModeToggle.define();
@@ -84,5 +85,6 @@ MdSolarSystem.define();
 MdGears.define();
 MdPulley.define();
 MdIk.define();
+MdColor.define();
 MdTex.define();
 MdMarker.define();
