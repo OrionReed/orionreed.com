@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!.research/**"]
+    "includes": ["**"]
   },
   "formatter": {
     "indentStyle": "space",
@@ -24,17 +24,5 @@
       }
     }
   },
-  "linter": { "enabled": false },
-  "overrides": [
-    {
-      "includes": [
-        "src/minim/signals/values/**",
-        "src/minim/signals/anim.ts",
-        "src/minim/signals/_test/extensibility.test.ts",
-        "src/minim/signals/_proto-*/**"
-      ],
-      "formatter": { "enabled": false },
-      "assist": { "actions": { "source": { "organizeImports": "off" } } }
-    }
-  ]
+  "linter": { "enabled": false }
 }

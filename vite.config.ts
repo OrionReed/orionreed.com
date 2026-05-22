@@ -1,6 +1,5 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
-import mkcert from "vite-plugin-mkcert";
 import { buildPosts } from "./scripts/build";
 
 const minimRoot = fileURLToPath(new URL("./src/minim", import.meta.url));
@@ -44,7 +43,6 @@ export default defineConfig({
     keepNames: true,
   },
   plugins: [
-    mkcert(),
     {
       name: "posts-watcher",
       configureServer(server) {
