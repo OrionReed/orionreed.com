@@ -1,4 +1,20 @@
-import {Diagram, Mount, arrow, attr, label, line, loop, vec, rect, signal, snapshot, split, t, when, type Signal} from "../minim";
+import {
+  arrow,
+  attr,
+  Diagram,
+  label,
+  line,
+  loop,
+  Mount,
+  rect,
+  type Signal,
+  signal,
+  snapshot,
+  split,
+  t,
+  vec,
+  when,
+} from "../minim";
 
 import * as R from "./rand";
 
@@ -47,7 +63,7 @@ export class MdQrtpHandshake extends Diagram {
           r.outline(4, {
             dashed: true,
             cap: "round",
-            opacity: () => (state[device].value[i].status === "current") ? 1 : 0,
+            opacity: () => (state[device].value[i].status === "current" ? 1 : 0),
             aside: true,
           }),
           label(data.center.up(5), () => {
@@ -68,20 +84,18 @@ export class MdQrtpHandshake extends Diagram {
 
     s(
       label(vec(PAD_X - 25, CHUNK_H / 2 + PAD_Y), t("A").bold(), { size: 18 }),
-      label(
-        vec(PAD_X - 25, CHUNK_H + DEVICE_GAP + CHUNK_H / 2 + PAD_Y),
-        t("B").bold(),
-        { size: 18 },
-      ),
+      label(vec(PAD_X - 25, CHUNK_H + DEVICE_GAP + CHUNK_H / 2 + PAD_Y), t("B").bold(), {
+        size: 18,
+      }),
     );
 
     for (let i = 0; i < N; i++) {
       s(
         arrow(slotsA[i].ack.bottom, slotsB[i].data.top, {
-          opacity: () => (state.A.value[i].ack !== "") ? 1 : 0,
+          opacity: () => (state.A.value[i].ack !== "" ? 1 : 0),
         }),
         arrow(slotsB[i].ack.top, slotsA[i].data.bottom, {
-          opacity: () => (state.B.value[i].ack !== "") ? 1 : 0,
+          opacity: () => (state.B.value[i].ack !== "" ? 1 : 0),
         }),
       );
     }
@@ -100,23 +114,25 @@ export class MdQrtpHandshake extends Diagram {
     };
 
     const reset = snapshot(state);
-    this.anim.start(loop(function* () {
-      reset();
-      for (let i = 0; i < N; i++) {
-        const [first, second] = R.shuffle(["A", "B"] as const);
+    this.anim.start(
+      loop(function* () {
+        reset();
+        for (let i = 0; i < N; i++) {
+          const [first, second] = R.shuffle(["A", "B"] as const);
 
-        yield R.float(0.5, 2.5);
-        addAck(first, i, R.hex(3));
+          yield R.float(0.5, 2.5);
+          addAck(first, i, R.hex(3));
 
-        yield R.float(0.3, 1.3);
-        addAck(second, i, R.hex(3));
-        advance(second, i);
+          yield R.float(0.3, 1.3);
+          addAck(second, i, R.hex(3));
+          advance(second, i);
 
-        yield R.float(0.2, 0.7);
-        advance(first, i);
-      }
+          yield R.float(0.2, 0.7);
+          advance(first, i);
+        }
 
-      yield 3;
-    }));
+        yield 3;
+      }),
+    );
   }
 }

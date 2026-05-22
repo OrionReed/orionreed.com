@@ -1,16 +1,13 @@
 // debug.* — read-only diagnostic shapes that visualize layout state.
 
-import {
-  computed,
-  Vec, Box, transformBox, transformPoint,
-} from "@minim/signals";
-import { Shape, type AnyShape } from "./shape";
+import { Box, computed, transformBox, transformPoint, Vec } from "@minim/signals";
 import { circle } from "./circle";
-import { line } from "./line";
-import { label } from "./label";
-import { rect } from "./rect";
 import { group } from "./group";
+import { label } from "./label";
+import { line } from "./line";
 import type { Path } from "./path";
+import { rect } from "./rect";
+import { type AnyShape, Shape } from "./shape";
 
 const COLOR = "var(--minim-debug, #c026d3)";
 
@@ -37,18 +34,13 @@ const boxOutline = (b: Shape | Box) => rect(parentBox(b), outlineOpts);
 
 /** Small filled dot at a point or a Box's / Shape's center. */
 const dot = (p: Vec | Shape | Box, r = 2.5) => {
-  const at =
-    p instanceof Vec ? p :
-    p instanceof Shape ? p.center :
-    p.center;
+  const at = p instanceof Vec ? p : p instanceof Shape ? p.center : p.center;
   return circle(at, r, { fill: COLOR, stroke: "none", ...baseOpts });
 };
 
 /** Crosshair at a Shape's rotate/scale pivot, in parent frame. */
 const origin = (s: Shape, size = 8) => {
-  const pivot = computed(() =>
-    transformPoint(s.localFrame.value, s.origin.value), Vec,
-  );
+  const pivot = computed(() => transformPoint(s.localFrame.value, s.origin.value), Vec);
   const half = size / 2;
   const g = group({ aside: true, opacity: 0.75 });
   g.add(
@@ -118,10 +110,13 @@ const path = (p: Path, ticks = 5) => {
     const t = ticks === 1 ? 0 : i / (ticks - 1);
     const head = p.pointAt(t);
     const tan = p.tangentAt(t);
-    const tip = computed(() => ({
-      x: head.value.x + tan.value.x * 6,
-      y: head.value.y + tan.value.y * 6,
-    }), Vec);
+    const tip = computed(
+      () => ({
+        x: head.value.x + tan.value.x * 6,
+        y: head.value.y + tan.value.y * 6,
+      }),
+      Vec,
+    );
     g.add(
       circle(head, 2.5, { fill: COLOR, stroke: "none" }),
       line(head, tip, { stroke: COLOR, thin: true }),

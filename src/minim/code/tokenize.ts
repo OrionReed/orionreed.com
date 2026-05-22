@@ -7,10 +7,10 @@
 // render the tokens however they like — typically as `<span class="token
 // $type">` spans inside a wrapper.
 
-import {Prism} from "prism-esm";
-import {loader as JsLoader} from "prism-esm/components/prism-javascript.js";
-import {loader as TsLoader} from "prism-esm/components/prism-typescript.js";
-import {loader as CssLoader} from "prism-esm/components/prism-css.js";
+import { Prism } from "prism-esm";
+import { loader as CssLoader } from "prism-esm/components/prism-css.js";
+import { loader as JsLoader } from "prism-esm/components/prism-javascript.js";
+import { loader as TsLoader } from "prism-esm/components/prism-typescript.js";
 
 const prism = new Prism();
 JsLoader(prism);
@@ -34,13 +34,13 @@ interface PrismToken {
  *  literal's quote characters are coloured the same as its body. */
 function flatten(t: PrismToken | string, inheritedType = ""): Token[] {
   if (typeof t === "string") {
-    return t === "" ? [] : [{type: inheritedType, text: t}];
+    return t === "" ? [] : [{ type: inheritedType, text: t }];
   }
   const type = t.type ?? inheritedType;
   if (typeof t.content === "string") {
-    return t.content === "" ? [] : [{type, text: t.content}];
+    return t.content === "" ? [] : [{ type, text: t.content }];
   }
-  return (t.content as (PrismToken | string)[]).flatMap((c) => flatten(c, type));
+  return (t.content as (PrismToken | string)[]).flatMap(c => flatten(c, type));
 }
 
 /** Split untyped runs (plain identifiers, whitespace, etc.) on word/
@@ -61,17 +61,20 @@ function splitUntyped(text: string): string[] {
  *  spanning the whole source. */
 export function tokenize(source: string, language = "typescript"): Token[] {
   const lang = prism.languages[language];
-  if (!lang) return source === "" ? [] : [{type: "", text: source}];
+  if (!lang) return source === "" ? [] : [{ type: "", text: source }];
   const raw = prism.tokenize(source, lang) as (PrismToken | string)[];
-  const flat = raw.flatMap((t) => flatten(t));
+  const flat = raw.flatMap(t => flatten(t));
   // Post-process: split each untyped token at word/whitespace
   // boundaries. Typed tokens stay intact (Prism never produces
   // typed tokens with internal whitespace runs).
   const out: Token[] = [];
   for (const tok of flat) {
-    if (tok.type !== "") { out.push(tok); continue; }
+    if (tok.type !== "") {
+      out.push(tok);
+      continue;
+    }
     for (const piece of splitUntyped(tok.text)) {
-      out.push({type: "", text: piece});
+      out.push({ type: "", text: piece });
     }
   }
   return out;

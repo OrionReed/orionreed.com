@@ -5,12 +5,9 @@
 //   4.2  vec(reactiveX, reactiveY) glitches without batching
 // Plus the Symbol.toPrimitive footgun guard.
 
+import { batch, computed, effect, num, type Of, signal, Vec, vec } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
-import {
-  signal, computed, effect, batch,
-  vec, num, Vec, type Of,
-} from "@minim/signals";
 
 type VecValue = Of<Vec>;
 
@@ -25,10 +22,18 @@ describe("correctness", () => {
         return a.value * 2;
       });
       let caught: unknown;
-      try { void c.value; } catch (e) { caught = e; }
+      try {
+        void c.value;
+      } catch (e) {
+        caught = e;
+      }
       check("first read rethrows", (caught as Error).message === "boom");
       let caught2: unknown;
-      try { void c.value; } catch (e) { caught2 = e; }
+      try {
+        void c.value;
+      } catch (e) {
+        caught2 = e;
+      }
       check("second read retries (rethrows again)", (caught2 as Error).message === "boom");
       shouldThrow = false;
       a.value = 5;
@@ -41,7 +46,10 @@ describe("correctness", () => {
       const doubled = v.scale(2);
       const tripled = doubled.scale(1);
       let runs = 0;
-      effect(() => { void tripled.value; runs++; });
+      effect(() => {
+        void tripled.value;
+        runs++;
+      });
       const initial = runs;
       check("initial run", initial === 1);
       v.value = { x: 1, y: 2 };
@@ -54,7 +62,10 @@ describe("correctness", () => {
     {
       const s = signal(0, { equals: (a, b) => Math.abs(a - b) < 0.01 });
       let runs = 0;
-      effect(() => { void s.value; runs++; });
+      effect(() => {
+        void s.value;
+        runs++;
+      });
       check("baseline run", runs === 1);
       s.value = 0.005;
       check("epsilon-equal write skipped", runs === 1);
@@ -67,7 +78,11 @@ describe("correctness", () => {
       let c: { value: number };
       c = computed(() => c.value + 1) as never;
       let threw: unknown;
-      try { void c.value; } catch (e) { threw = e; }
+      try {
+        void c.value;
+      } catch (e) {
+        threw = e;
+      }
       check("direct cycle throws", threw instanceof RangeError);
       check("error message mentions cycle", /[Cc]yclic/.test((threw as Error).message));
 
@@ -75,7 +90,11 @@ describe("correctness", () => {
       a = computed(() => b.value + 1) as never;
       b = computed(() => a.value + 1) as never;
       let threw2: unknown;
-      try { void a.value; } catch (e) { threw2 = e; }
+      try {
+        void a.value;
+      } catch (e) {
+        threw2 = e;
+      }
       check("transitive cycle throws", threw2 instanceof RangeError);
     }
 
@@ -85,7 +104,9 @@ describe("correctness", () => {
       const ry = signal(20);
       const v = vec(rx, ry);
       const seen: VecValue[] = [];
-      effect(() => { seen.push({ ...v.value }); });
+      effect(() => {
+        seen.push({ ...v.value });
+      });
       check("initial value", v.value.x === 10 && v.value.y === 20);
       seen.length = 0;
       batch(() => {
@@ -100,7 +121,12 @@ describe("correctness", () => {
     {
       const n = num(5);
       let threw: unknown;
-      try { const _ = `value is ${n}`; void _; } catch (e) { threw = e; }
+      try {
+        const _ = `value is ${n}`;
+        void _;
+      } catch (e) {
+        threw = e;
+      }
       check("template string throws", threw instanceof TypeError);
       check("error mentions .value", /\.value/.test((threw as Error).message));
       const m = num(5);

@@ -4,6 +4,7 @@ import {
   Signal, computed, computedCls, lensCls, value,
   type Val, type SignalOptions, type Of,
 } from "../signal";
+import { bind } from "../lateral";
 import { type Linear, type TraitDict } from "../traits";
 import { applyOp1, type Op } from "../ops";
 import { type Writable, invertibles } from "../writable";
@@ -73,7 +74,7 @@ export class Box extends Signal<V> {
   static traits: TraitDict<V> & { linear: Linear<V>; lerp: typeof lerp; equals: typeof equals } = {
     linear: linearImpl, lerp, equals,
   };
-  static invertibles = invertibles<Box>()("add", "sub", "scale", "expand");
+  static invertibles = invertibles<Box>()("add", "sub", "scale", "expand", "through");
 
   // ── class-level constructors ───────────────────────────────────
   static derive(fn: () => V): Box { return computedCls(Box, fn) }
@@ -137,6 +138,9 @@ export function box(
   w: Val<number> = 0, h: Val<number> = 0,
 ): Writable<Box> {
   const b = new Box() as unknown as Writable<Box>;
-  b.x.bind(x); b.y.bind(y); b.w.bind(w); b.h.bind(h);
+  bind(b.x as unknown as Writable<Num>, x);
+  bind(b.y as unknown as Writable<Num>, y);
+  bind(b.w as unknown as Writable<Num>, w);
+  bind(b.h as unknown as Writable<Num>, h);
   return b;
 }

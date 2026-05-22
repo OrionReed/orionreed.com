@@ -2,20 +2,18 @@
 // per-kid via `cut(v)` — no engine-side strategy abstraction.
 
 import {
-  cut,
   type Animator,
   type Cut,
+  cut,
+  type Resume,
   type Suspend,
   type Tick,
   type Yieldable,
-  type Resume,
 } from "./anim";
 
 /** Park each frame until `cb` returns `false`. `t` is elapsed since the
  *  first call (sampled from `tick.elapsed` — no float accumulation). */
-export function* drive(
-  cb: (tick: Tick, t: number) => boolean | void,
-): Animator<void> {
+export function* drive(cb: (tick: Tick, t: number) => boolean | void): Animator<void> {
   let startElapsed = NaN;
   while (true) {
     const tick = yield;
@@ -35,7 +33,7 @@ export function untilEvent<E extends Event = Event>(
   name: string,
   opts?: AddEventListenerOptions,
 ): Animator<E> {
-  return suspend<E>((wake) => {
+  return suspend<E>(wake => {
     const handler = (e: Event): void => wake(e as E);
     target.addEventListener(name, handler, opts);
     return () => target.removeEventListener(name, handler, opts);
@@ -44,13 +42,19 @@ export function untilEvent<E extends Event = Event>(
 
 /** Wait for a promise; resume with its value (rejection → `gen.throw`). */
 export function untilPromise<T>(p: PromiseLike<T>): Animator<T> {
-  return suspend<T>((wake) => {
+  return suspend<T>(wake => {
     let cancelled = false;
     p.then(
-      (v) => { if (!cancelled) wake(v); },
-      (e) => { if (!cancelled) wake.throw(e); },
+      v => {
+        if (!cancelled) wake(v);
+      },
+      e => {
+        if (!cancelled) wake.throw(e);
+      },
     );
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   });
 }
 
@@ -70,16 +74,13 @@ export function* all<Cs extends readonly Yieldable[]>(
 export function* race<Cs extends readonly Yieldable[]>(
   ...children: Cs
 ): Animator<Resume<Cs[number]>> {
-  return (yield children.map((c) => commit(c))) as Resume<Cs[number]>;
+  return (yield children.map(c => commit(c))) as Resume<Cs[number]>;
 }
 
 /** First N completions win; resume with their values in completion order. */
-export function* firstN<R>(
-  n: number,
-  kids: readonly Yieldable[],
-): Animator<R[]> {
+export function* firstN<R>(n: number, kids: readonly Yieldable[]): Animator<R[]> {
   const collected: R[] = [];
-  return (yield kids.map((k) =>
+  return (yield kids.map(k =>
     (function* (): Animator<R | Cut<R[]>> {
       const v = (yield k) as R;
       collected.push(v);
@@ -94,7 +95,7 @@ export function* firstMatching<R>(
   pred: (v: R) => boolean,
   kids: readonly Yieldable[],
 ): Animator<R | R[]> {
-  return (yield kids.map((k) =>
+  return (yield kids.map(k =>
     (function* (): Animator<R | Cut<R>> {
       const v = (yield k) as R;
       return pred(v) ? cut(v) : v;
@@ -105,7 +106,7 @@ export function* firstMatching<R>(
 /** First kid to resolve wins; all-throw → `AggregateError` (~ `Promise.any`). */
 export function* anySuccess<R>(...kids: readonly Yieldable[]): Animator<R> {
   const errors: unknown[] = [];
-  return (yield kids.map((k) =>
+  return (yield kids.map(k =>
     (function* (): Animator<Cut<R> | undefined> {
       try {
         return cut((yield k) as R);
@@ -125,10 +126,8 @@ export type Settled<R> =
   | { readonly ok: true; readonly value: R }
   | { readonly ok: false; readonly error: unknown };
 
-export function* allSettled<R>(
-  ...kids: readonly Yieldable[]
-): Animator<Settled<R>[]> {
-  return (yield kids.map((k) =>
+export function* allSettled<R>(...kids: readonly Yieldable[]): Animator<Settled<R>[]> {
+  return (yield kids.map(k =>
     (function* (): Animator<Settled<R>> {
       try {
         return { ok: true, value: (yield k) as R };

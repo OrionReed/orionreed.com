@@ -105,9 +105,6 @@ function _typeProbes(): void {
 
   // @ts-expect-error — bare Hsl's .h is RO Num
   (Hsl.derive(() => ({ h: 0, s: 0, l: 0 }))).h.value = 5;
-
-  // @ts-expect-error — .set requires brand
-  (Hsl.derive(() => ({ h: 0, s: 0, l: 0 }))).set({ h: 0, s: 0, l: 0 });
 }
 _typeProbes;
 if (Math.random() < -1) _typeProbes();

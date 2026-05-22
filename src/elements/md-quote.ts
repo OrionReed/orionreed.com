@@ -1,4 +1,4 @@
-import {BaseElement, attr, css} from "./base-element";
+import { attr, BaseElement, css } from "./base-element";
 
 export class MdQuote extends BaseElement {
   @attr() source?: string;

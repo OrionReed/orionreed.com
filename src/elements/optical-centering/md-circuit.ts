@@ -1,4 +1,25 @@
-import {Diagram, EventBus, Mount, type AnyShape, type Val, type Path, signal, circle, computed, label, linear, loop, num, path, play, vec, rect, tokens, value, Vec} from "../../minim";
+import {
+  type AnyShape,
+  circle,
+  computed,
+  Diagram,
+  EventBus,
+  label,
+  linear,
+  loop,
+  Mount,
+  num,
+  type Path,
+  path,
+  play,
+  rect,
+  signal,
+  tokens,
+  type Val,
+  Vec,
+  value,
+  vec,
+} from "../../minim";
 import * as R from "../rand";
 
 export class MdCircuit extends Diagram {
@@ -11,10 +32,12 @@ export class MdCircuit extends Diagram {
     const source = (x: number, y: number, lbl: string, ev: string) => {
       const c = circle(vec(x, y), 18);
       s(c, label(c.center, lbl, { size: 13, bold: true }));
-      anim.start(loop(function* () {
-        yield bus.until(ev);
-        yield* c.scale.to({ x: 1.4, y: 1.4 }, 0.08).to({ x: 1, y: 1 }, 0.3);
-      }));
+      anim.start(
+        loop(function* () {
+          yield bus.until(ev);
+          yield* c.scale.to({ x: 1.4, y: 1.4 }, 0.08).to({ x: 1, y: 1 }, 0.3);
+        }),
+      );
       return c;
     };
 
@@ -22,33 +45,31 @@ export class MdCircuit extends Diagram {
     const sink = (x: number, y: number, lbl: string, ev: string) => {
       const c = circle(vec(x, y), 18);
       const tick = signal(0);
-      bus.on(ev, () => { tick.value++; });
+      bus.on(ev, () => {
+        tick.value++;
+      });
       s(
         c,
-        label(c.center, computed(() => (String)(tick.value)), { size: 13, bold: true }),
+        label(
+          c.center,
+          computed(() => String(tick.value)),
+          { size: 13, bold: true },
+        ),
         label(c.center.up(30), lbl, { size: 11, opacity: 0.7 }),
       );
-      anim.start(loop(function* () {
-        yield bus.until(ev);
-        yield* c.scale.to({ x: 1.3, y: 1.3 }, 0.06).to({ x: 1, y: 1 }, 0.3);
-      }));
+      anim.start(
+        loop(function* () {
+          yield bus.until(ev);
+          yield* c.scale.to({ x: 1.3, y: 1.3 }, 0.06).to({ x: 1, y: 1 }, 0.3);
+        }),
+      );
       return c;
     };
 
     /** Boxed gate; `lblY` offsets the title (negative = up). */
-    const box = (
-      x: number,
-      y: number,
-      w: number,
-      h: number,
-      lbl: string,
-      lblY = 0,
-    ) => {
+    const box = (x: number, y: number, w: number, h: number, lbl: string, lblY = 0) => {
       const r = rect(vec(x, y), w, h);
-      s(
-        r,
-        label(r.center.offset(0, lblY), lbl, { size: 10, opacity: 0.7 }),
-      );
+      s(r, label(r.center.offset(0, lblY), lbl, { size: 10, opacity: 0.7 }));
       return r;
     };
 
@@ -66,11 +87,7 @@ export class MdCircuit extends Diagram {
       });
 
     /** Reactive auto-route src→tgt with a 45° staircase via the y-midline. */
-    const wire = (
-      a: AnyShape,
-      b: AnyShape,
-      opts: { from?: Vec; to?: Vec } = {},
-    ) => {
+    const wire = (a: AnyShape, b: AnyShape, opts: { from?: Vec; to?: Vec } = {}) => {
       const aRef = opts.from ?? a.center;
       const bRef = opts.to ?? b.center;
       const aRefV = aRef.value;
@@ -106,10 +123,7 @@ export class MdCircuit extends Diagram {
       const dot = circle(w.atDistance(dist), 5, { fill: true });
       s(dot);
       anim.start(
-        play([
-          dist.to(total, sec, linear),
-          w.opacity.to(0.75, sec * 0.3).to(0.25, sec * 0.7),
-        ]).then(
+        play([dist.to(total, sec, linear), w.opacity.to(0.75, sec * 0.3).to(0.25, sec * 0.7)]).then(
           (function* () {
             dot.dispose();
             onArrive?.();
@@ -168,13 +182,15 @@ export class MdCircuit extends Diagram {
     ) => {
       const holding = signal(false);
       gate.add(lit(gate.center.down(6), holding));
-      anim.start(loop(function* () {
-        yield bus.until(from);
-        holding.value = true;
-        yield R.float(holdRange[0], holdRange[1]);
-        holding.value = false;
-        pulse(w, () => bus.emit(out));
-      }));
+      anim.start(
+        loop(function* () {
+          yield bus.until(from);
+          holding.value = true;
+          yield R.float(holdRange[0], holdRange[1]);
+          holding.value = false;
+          pulse(w, () => bus.emit(out));
+        }),
+      );
     };
 
     /** Fan one input into N parallel pulses. */

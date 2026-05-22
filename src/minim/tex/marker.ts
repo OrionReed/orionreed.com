@@ -1,7 +1,7 @@
 // Named reactive identity linking diagram parts to prose. Prefer the
 // scoped registration on `Diagram` over the global registry below.
 
-import {computed, signal, type Signal} from "@minim/signals";
+import { computed, type Signal, signal } from "@minim/signals";
 
 const registry = new Map<string, Marker>();
 
@@ -64,8 +64,12 @@ export const highlightTint = (color: string): string =>
 export function hover(el: Element, m: Marker): () => void {
   const local = signal(false);
   const unbind = m.bind(local);
-  const on  = (): void => { local.value = true; };
-  const off = (): void => { local.value = false; };
+  const on = (): void => {
+    local.value = true;
+  };
+  const off = (): void => {
+    local.value = false;
+  };
   el.addEventListener("mouseenter", on);
   el.addEventListener("mouseleave", off);
   return (): void => {

@@ -1,5 +1,17 @@
-import {Anchor, Diagram, Mount, Vec, computed, handle, label, line, num, vec, type Content} from "../../minim";
-import {part, tex, tint} from "../../minim/tex";
+import {
+  Anchor,
+  type Content,
+  computed,
+  Diagram,
+  handle,
+  label,
+  line,
+  Mount,
+  num,
+  Vec,
+  vec,
+} from "../../minim";
+import { part, tex, tint } from "../../minim/tex";
 
 const W = 640;
 const H = 220;
@@ -24,21 +36,17 @@ export class MdTexLive extends Diagram {
         opacity: 0.55,
         align: Anchor.Center,
       }),
-      label(
-        view.bottom.up(14),
-        "drag the blue handle ↔ both sides re-render reactively",
-        { size: 10, opacity: 0.45, align: Anchor.Center },
-      ),
+      label(view.bottom.up(14), "drag the blue handle ↔ both sides re-render reactively", {
+        size: 10,
+        opacity: 0.45,
+        align: Anchor.Center,
+      }),
     );
 
     const t = num(0.4);
-    const n = computed(() =>
-      Math.round(N_MIN + t.value * (N_MAX - N_MIN)),
-    );
+    const n = computed(() => Math.round(N_MIN + t.value * (N_MAX - N_MIN)));
     const nStr = computed(() => String(n.value));
-    const sumStr = computed(() =>
-      String((n.value * (n.value + 1)) / 2),
-    );
+    const sumStr = computed(() => String((n.value * (n.value + 1)) / 2));
 
     const trackW = TRACK_X1 - TRACK_X0;
     s(
@@ -54,7 +62,9 @@ export class MdTexLive extends Diagram {
     const knobX = t.clamp(0, 1).affine(trackW, TRACK_X0);
     const knobPos = Vec.lens(
       () => ({ x: knobX.value, y: TRACK_Y }),
-      (p) => { knobX.value = p.x; },
+      p => {
+        knobX.value = p.x;
+      },
     );
     s(handle(knobPos));
 
@@ -76,7 +86,7 @@ export class MdTexLive extends Diagram {
     const nBound = part("n", nStr);
     const result = part("s", sumStr);
     const eq = s(big`${SUM_LOWER}^{${nBound}} i = ${result}`);
-    eq.center.set(vec(W / 2, 90));
+    eq.center.value = vec(W / 2, 90).peek();
 
     tint("#5b8def", nBound, result);
   }

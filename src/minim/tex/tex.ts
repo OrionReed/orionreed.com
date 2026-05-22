@@ -1,11 +1,12 @@
 // LaTeX → MathML shape, rendered via Temml.
 
+import { Box, type Of, type Signal, signal, type Writable } from "@minim/signals";
 import temml from "temml";
-import { signal, Box, type Signal, type Of, type Writable } from "@minim/signals";
 
 type BoxValue = Of<Box>;
+
 import { Shape, type ShapeOpts, tokens } from "@minim/shapes";
-import { Part, PartMarker, type PartList } from "./parts";
+import { Part, type PartList, PartMarker } from "./parts";
 
 /** Anything legal in a `tex\`…\`` interpolation slot. Strings splice
  *  through to the LaTeX source verbatim; PartMarkers wrap content in
@@ -30,9 +31,7 @@ export interface TexOpts extends ShapeOpts {
 /** Extract the union of part names from a tuple of interpolation
  *  values. Plain strings contribute nothing; `PartMarker<N>`s
  *  contribute their literal name `N`. */
-export type NamesOf<V extends readonly TexInterp[]> = V extends readonly (
-  | infer U
-)[]
+export type NamesOf<V extends readonly TexInterp[]> = V extends readonly (infer U)[]
   ? U extends PartMarker<infer N>
     ? N
     : never
@@ -75,10 +74,7 @@ const compileTemplate = (
 
 /** Render LaTeX → MathML via Temml. Wraps Temml's options with the
  *  defaults used across the codebase (trust on, lenient errors). */
-export const renderToMathML = (
-  source: string,
-  opts: { displayMode?: boolean } = {},
-): string => {
+export const renderToMathML = (source: string, opts: { displayMode?: boolean } = {}): string => {
   try {
     return temml.renderToString(source, {
       trust: true,
@@ -87,9 +83,7 @@ export const renderToMathML = (
       throwOnError: false,
     });
   } catch (e) {
-    return `<span style="color:#c33;font:13px monospace">${
-      (e as Error).message
-    }</span>`;
+    return `<span style="color:#c33;font:13px monospace">${(e as Error).message}</span>`;
   }
 };
 
@@ -114,11 +108,7 @@ const wrapperCss = (fontSize: number, fontFamily: string): string =>
  *  so the font has to live on `<math>` itself for surd and vinculum
  *  to be drawn correctly. Don't touch `display`: MathML Core only
  *  honors `inline math` / `block math`. */
-const styleMathRoot = (
-  mathEl: HTMLElement,
-  fontSize: number,
-  fontFamily: string,
-): void => {
+const styleMathRoot = (mathEl: HTMLElement, fontSize: number, fontFamily: string): void => {
   mathEl.style.fontFamily = fontFamily;
   mathEl.style.fontSize = `${fontSize}px`;
   mathEl.style.color = tokens.stroke;
@@ -147,21 +137,14 @@ interface Measurement {
   rects: Map<string, BoxValue>;
 }
 
-const measureMathML = (
-  mathml: string,
-  fontSize: number,
-  fontFamily: string,
-): Measurement => {
+const measureMathML = (mathml: string, fontSize: number, fontFamily: string): Measurement => {
   const div = document.createElement("div");
   div.style.cssText =
-    "position:absolute;left:-99999px;top:0;visibility:hidden;" +
-    wrapperCss(fontSize, fontFamily);
+    "position:absolute;left:-99999px;top:0;visibility:hidden;" + wrapperCss(fontSize, fontFamily);
   div.innerHTML = mathml;
   const mathEl = div.querySelector("math") as HTMLElement | null;
   if (mathEl) styleMathRoot(mathEl, fontSize, fontFamily);
-  div
-    .querySelectorAll<HTMLElement>("[class*='minim-part-']")
-    .forEach(stabilizePart);
+  div.querySelectorAll<HTMLElement>("[class*='minim-part-']").forEach(stabilizePart);
   document.body.appendChild(div);
   try {
     const root = mathEl ?? (div.firstElementChild as HTMLElement) ?? div;
@@ -171,10 +154,8 @@ const measureMathML = (
     // so math-relative bounds would be off by that overflow.
     const wrapperRect = div.getBoundingClientRect();
     const rects = new Map<string, BoxValue>();
-    div.querySelectorAll<HTMLElement>("[class*='minim-part-']").forEach((el) => {
-      const cls = Array.from(el.classList).find((c) =>
-        c.startsWith("minim-part-"),
-      );
+    div.querySelectorAll<HTMLElement>("[class*='minim-part-']").forEach(el => {
+      const cls = Array.from(el.classList).find(c => c.startsWith("minim-part-"));
       if (!cls) return;
       const r = el.getBoundingClientRect();
       rects.set(cls, {
@@ -216,12 +197,9 @@ export class TexShape<Names extends string = string> extends Shape {
     const w = signal(measured.width);
     const h = signal(measured.height);
 
-    super(
-      "foreignObject",
-      () => ({ x: 0, y: 0, w: w.value, h: h.value }),
-      opts,
-      { origin: () => ({ x: w.value / 2, y: h.value / 2 }) },
-    );
+    super("foreignObject", () => ({ x: 0, y: 0, w: w.value, h: h.value }), opts, {
+      origin: () => ({ x: w.value / 2, y: h.value / 2 }),
+    });
 
     this.width = w;
     this.height = h;
@@ -245,7 +223,9 @@ export class TexShape<Names extends string = string> extends Shape {
     const boxWriters = new Map<string, Writable<Box>>();
     for (const m of markers) {
       const cls = partClass(m.name);
-      const boxSig = new Box(measured.rects.get(cls) ?? { x: 0, y: 0, w: 0, h: 0 }) as unknown as Writable<Box>;
+      const boxSig = new Box(
+        measured.rects.get(cls) ?? { x: 0, y: 0, w: 0, h: 0 },
+      ) as unknown as Writable<Box>;
       boxWriters.set(cls, boxSig);
       list.push(new Part(m.name, m.content, boxSig, m, this as TexShape));
     }
@@ -257,9 +237,7 @@ export class TexShape<Names extends string = string> extends Shape {
       wrapper.innerHTML = mathml;
       const m = wrapper.querySelector("math") as HTMLElement | null;
       if (m) styleMathRoot(m, fontSize, fontFamily);
-      wrapper
-        .querySelectorAll<HTMLElement>("[class*='minim-part-']")
-        .forEach(stabilizePart);
+      wrapper.querySelectorAll<HTMLElement>("[class*='minim-part-']").forEach(stabilizePart);
 
       const fresh = bounds ?? measureMathML(mathml, fontSize, fontFamily);
       if (fresh.width !== w.peek()) w.value = fresh.width;
@@ -270,8 +248,7 @@ export class TexShape<Names extends string = string> extends Shape {
         const sig = boxWriters.get(cls);
         if (r && sig) {
           const cur = sig.peek();
-          if (r.x !== cur.x || r.y !== cur.y || r.w !== cur.w || r.h !== cur.h)
-            sig.value = r;
+          if (r.x !== cur.x || r.y !== cur.y || r.w !== cur.w || r.h !== cur.h) sig.value = r;
         }
         p.bind(wrapper.querySelector(`.${cls}`), highlightColor);
       }
@@ -308,8 +285,7 @@ export class TexShape<Names extends string = string> extends Shape {
           const r = fresh.rects.get(cls);
           if (!r) continue;
           const c = sig.peek();
-          if (r.x !== c.x || r.y !== c.y || r.w !== c.w || r.h !== c.h)
-            sig.value = r;
+          if (r.x !== c.x || r.y !== c.y || r.w !== c.w || r.h !== c.h) sig.value = r;
         }
       });
     }
@@ -328,9 +304,7 @@ export class TexShape<Names extends string = string> extends Shape {
 
 /** Positional array with named keys attached — iterates in template
  *  order, indexable by name. */
-const buildPartList = <Names extends string>(
-  list: readonly Part[],
-): PartList<Names> => {
+const buildPartList = <Names extends string>(list: readonly Part[]): PartList<Names> => {
   const out = list.slice() as Part[] & Record<string, Part>;
   for (const p of list) (out as Record<string, Part>)[p.name] = p;
   return out as unknown as PartList<Names>;
@@ -359,14 +333,10 @@ export function tex(
 ) => TexShape<NamesOf<V>>;
 export function tex(...args: unknown[]): unknown {
   if (isTemplateStrings(args[0])) {
-    const [strings, ...values] = args as [
-      TemplateStringsArray,
-      ...TexInterp[],
-    ];
+    const [strings, ...values] = args as [TemplateStringsArray, ...TexInterp[]];
     return new TexShape(strings, values);
   }
-  const opts: TexOpts =
-    typeof args[0] === "number" ? { size: args[0] } : (args[0] as TexOpts);
+  const opts: TexOpts = typeof args[0] === "number" ? { size: args[0] } : (args[0] as TexOpts);
   return (strings: TemplateStringsArray, ...values: TexInterp[]) =>
     new TexShape(strings, values, opts);
 }

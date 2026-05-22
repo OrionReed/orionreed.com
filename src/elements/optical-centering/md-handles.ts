@@ -1,4 +1,4 @@
-import {Anchor, Diagram, Mount, circle, debug, handle, label, line, rect} from "../../minim";
+import { Anchor, circle, Diagram, debug, handle, label, line, Mount, rect } from "../../minim";
 
 export class MdHandles extends Diagram {
   protected scene(s: Mount): void {
@@ -13,22 +13,18 @@ export class MdHandles extends Diagram {
     s(handle.move(a), handle.move(b), handle.move(c), handle.centroid(a, b, c));
 
     const r = s(rect(0, 0, 110, 76, { thin: true, corner: 4 }));
-    r.center.set(view.right.left(120));
+    r.center.value = view.right.left(120).peek();
 
     s(debug.box(r), debug.origin(r));
 
     s(handle.move(r), handle.rotate(r, 70));
 
     s(
-      label(
-        view.top.down(20),
-        "drag any blue handle — vertices, centroid, rotate",
-        {
-          size: 12,
-          align: Anchor.Center,
-          opacity: 0.7,
-        },
-      ),
+      label(view.top.down(20), "drag any blue handle — vertices, centroid, rotate", {
+        size: 12,
+        align: Anchor.Center,
+        opacity: 0.7,
+      }),
       label(
         view.bottom.up(16),
         "handle(point) is the atom · move / centroid / rotate are 1-line sugar",

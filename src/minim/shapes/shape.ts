@@ -1,10 +1,28 @@
-import {suspend, type Animator} from "@minim/core";
+import { type Animator, suspend } from "@minim/core";
 import {
-  signal, computed, effect, lens, Signal,
-  Vec, Num, Transform, Box, Matrix,
-  compose, multiply, toMatrixString, transformBox, transformPoint,
-  type Of, type Val, type Writable,
-  mean, BoxMath, value,
+  bind,
+  Box,
+  BoxMath,
+  compose,
+  computed,
+  effect,
+  lens,
+  Matrix,
+  mean,
+  multiply,
+  Num,
+  type Of,
+  Signal,
+  signal,
+  Transform,
+  toMatrixString,
+  transformBox,
+  transformPoint,
+  type Val,
+  Vec,
+  value,
+  type Writable,
+  type WritableOf,
 } from "@minim/signals";
 
 type VecValue = Of<Vec>;
@@ -40,15 +58,11 @@ export interface ShapeOpts {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyShape = Shape<any>;
 
-export type AnimatableKey =
-  | "translate"
-  | "rotate"
-  | "scale"
-  | "origin"
-  | "opacity";
+export type AnimatableKey = "translate" | "rotate" | "scale" | "origin" | "opacity";
 
-type AnimatableField<K extends AnimatableKey> =
-  K extends "translate" | "scale" | "origin" ? Writable<Vec> : Writable<Num>;
+type AnimatableField<K extends AnimatableKey> = K extends "translate" | "scale" | "origin"
+  ? Writable<Vec>
+  : Writable<Num>;
 
 /** Anything carrying the listed animatable axes. Combine via union. */
 export type Has<K extends AnimatableKey> = {
@@ -80,12 +94,24 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly box: Box;
 
   /** Lens-backed parent-frame anchors; writes shift `translate`. */
-  get center(): Writable<Vec> { return this.#anchor("center", 0.5, 0.5); }
-  get top(): Writable<Vec>    { return this.#anchor("top",    0.5, 0); }
-  get bottom(): Writable<Vec> { return this.#anchor("bottom", 0.5, 1); }
-  get left(): Writable<Vec>   { return this.#anchor("left",   0,   0.5); }
-  get right(): Writable<Vec>  { return this.#anchor("right",  1,   0.5); }
-  at(u: number, v: number): Writable<Vec> { return this.#makeAnchor(u, v); }
+  get center(): Writable<Vec> {
+    return this.#anchor("center", 0.5, 0.5);
+  }
+  get top(): Writable<Vec> {
+    return this.#anchor("top", 0.5, 0);
+  }
+  get bottom(): Writable<Vec> {
+    return this.#anchor("bottom", 0.5, 1);
+  }
+  get left(): Writable<Vec> {
+    return this.#anchor("left", 0, 0.5);
+  }
+  get right(): Writable<Vec> {
+    return this.#anchor("right", 1, 0.5);
+  }
+  at(u: number, v: number): Writable<Vec> {
+    return this.#makeAnchor(u, v);
+  }
 
   readonly aside: boolean;
 
@@ -98,7 +124,9 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   // derived from it) invalidates on reparent. Plain field would leave
   // `worldFrame` reading a stale matrix until something else dirtied it.
   readonly #parentSig = signal<AnyShape | null>(null);
-  get parent(): AnyShape | null { return this.#parentSig.peek(); }
+  get parent(): AnyShape | null {
+    return this.#parentSig.peek();
+  }
 
   constructor(
     intrinsicType?: string,
@@ -118,16 +146,16 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
     this.transform = new Transform() as Writable<Transform>;
     // Field-lens targets carry WritableBrand at runtime; the `as never`
-    // cast bypasses the `this:` constraint on `.bind` since TS can't
-    // see through the field-lens type to verify the brand.
+    // cast bypasses the brand constraint on `bind()` since TS can't
+    // see through the field-lens type to verify it.
     const setField = <T>(target: Signal<T>, src: Val<T> | undefined): void => {
-      if (src !== undefined) (target as never as { bind(s: Val<T>): () => void }).bind(src);
+      if (src !== undefined) bind(target as never as WritableOf<T>, src);
     };
     setField(this.transform.translate, opts.translate ?? defaults.translate ?? { x: 0, y: 0 });
-    setField(this.transform.rotate,    opts.rotate    ?? defaults.rotate    ?? 0);
-    setField(this.transform.scale,     opts.scale     ?? defaults.scale     ?? { x: 1, y: 1 });
-    setField(this.transform.origin,    opts.origin    ?? defaults.origin    ?? { x: 0, y: 0 });
-    setField(this.transform.opacity,   opts.opacity   ?? defaults.opacity   ?? 1);
+    setField(this.transform.rotate, opts.rotate ?? defaults.rotate ?? 0);
+    setField(this.transform.scale, opts.scale ?? defaults.scale ?? { x: 1, y: 1 });
+    setField(this.transform.origin, opts.origin ?? defaults.origin ?? { x: 0, y: 0 });
+    setField(this.transform.opacity, opts.opacity ?? defaults.opacity ?? 1);
 
     this.translate = this.transform.translate;
     this.rotate = this.transform.rotate;
@@ -142,8 +170,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
       boxFn ??
         (() => {
           const cs = this._children.value
-            .filter((c) => !c.aside)
-            .map((c) => transformBox(c.localFrame.value, c.box.value));
+            .filter(c => !c.aside)
+            .map(c => transformBox(c.localFrame.value, c.box.value));
           return cs.length ? BoxMath.union(...cs) : { x: 0, y: 0, w: 0, h: 0 };
         }),
       Box,
@@ -181,11 +209,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
   /** Parent-frame perimeter point toward `target`; tighter shapes override. */
   boundary(toward: Vec): Vec {
-    return computed(() =>
-      BoxMath.edgeFrom(
-        transformBox(this.localFrame.value, this.box.value),
-        toward.value,
-      ),
+    return computed(
+      () => BoxMath.edgeFrom(transformBox(this.localFrame.value, this.box.value), toward.value),
       Vec,
     );
   }
@@ -199,7 +224,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
         const b = boxSig.value;
         return transformPoint(lf.value, { x: b.x + u * b.w, y: b.y + v * b.h });
       },
-      (target) => {
+      target => {
         const b = boxSig.peek();
         const local = { x: b.x + u * b.w, y: b.y + v * b.h };
         const currentWorld = transformPoint(lf.peek(), local);
@@ -216,7 +241,10 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   #anchor(name: string, u: number, v: number): Writable<Vec> {
     const val = this.#makeAnchor(u, v);
     Object.defineProperty(this, name, {
-      value: val, writable: false, configurable: false, enumerable: false,
+      value: val,
+      writable: false,
+      configurable: false,
+      enumerable: false,
     });
     return val;
   }
@@ -240,25 +268,23 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   ): void {
     const el = target === "intrinsic" && this.intrinsic ? this.intrinsic : this.el;
     if (val instanceof Signal || typeof val === "function") {
-      this.disposers.push(
-        effect(() => el.setAttribute(name, String(value(val)))),
-      );
+      this.disposers.push(effect(() => el.setAttribute(name, String(value(val)))));
     } else {
       el.setAttribute(name, String(val));
     }
   }
 
   /** Register a disposer to run on `dispose()`. */
-  track(dispose: () => void): void { this.disposers.push(dispose); }
+  track(dispose: () => void): void {
+    this.disposers.push(dispose);
+  }
 
   /** Reactive effect torn down with the shape. */
-  effect(fn: () => void): void { this.disposers.push(effect(fn)); }
+  effect(fn: () => void): void {
+    this.disposers.push(effect(fn));
+  }
 
-  on(
-    name: string,
-    handler: (e: Event) => void,
-    opts?: AddEventListenerOptions,
-  ): () => void {
+  on(name: string, handler: (e: Event) => void, opts?: AddEventListenerOptions): () => void {
     const el = this.el;
     el.addEventListener(name, handler, opts);
     const dispose = () => el.removeEventListener(name, handler, opts);
@@ -268,7 +294,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
   /** Wake on the next `name` event; resume with the event. */
   until(name: string): Animator<Event> {
-    return suspend<Event>((wake) => {
+    return suspend<Event>(wake => {
       const handler = (e: Event) => wake(e);
       return this.on(name, handler, { once: true });
     });
@@ -315,14 +341,14 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   clear(): void {
     const cs = this._children.peek();
     if (cs.length === 0) return;
-    cs.forEach((c) => c.dispose());
+    cs.forEach(c => c.dispose());
     this._children.value = [];
   }
 
   dispose(): void {
-    this._children.peek().forEach((c) => c.dispose());
+    this._children.peek().forEach(c => c.dispose());
     this._children.value = [];
-    this.disposers.forEach((d) => d());
+    this.disposers.forEach(d => d());
     this.disposers = [];
     this.#parentSig.value = null;
     this.el.remove();
@@ -333,15 +359,15 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
 /** Writable centroid of shapes' translates. */
 export function centroid(...shapes: { translate: Writable<Vec> }[]): Writable<Vec> {
-  return mean(...shapes.map((s) => s.translate));
+  return mean(...shapes.map(s => s.translate));
 }
 
 /** Writable mean rotation. */
 export function meanRotation(...shapes: { rotate: Writable<Num> }[]): Writable<Num> {
-  return mean(...shapes.map((s) => s.rotate));
+  return mean(...shapes.map(s => s.rotate));
 }
 
 /** Writable mean scale. */
 export function meanScale(...shapes: { scale: Writable<Vec> }[]): Writable<Vec> {
-  return mean(...shapes.map((s) => s.scale));
+  return mean(...shapes.map(s => s.scale));
 }

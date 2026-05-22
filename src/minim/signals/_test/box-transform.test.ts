@@ -1,10 +1,18 @@
 // box-transform.test.ts — confirm Box + Transform work with the pattern.
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  Box, box, Transform, transform,
-  Vec, vec, Num, num,
-  isLens, isComputed, effect,
+  Box,
+  box,
+  effect,
+  isComputed,
+  isLens,
+  Num,
+  num,
+  Transform,
+  transform,
+  Vec,
+  vec,
 } from "../index";
 
 describe("Box", () => {
@@ -53,7 +61,12 @@ describe("Box", () => {
     expect(isComputed(half)).toBe(true);
     expect(half.value.w).toBe(5);
 
-    const lens = Box.lens(() => b.value, (v) => { b.value = v });
+    const lens = Box.lens(
+      () => b.value,
+      v => {
+        b.value = v;
+      },
+    );
     expect(isLens(lens)).toBe(true);
 
     expect(Box.is(b)).toBe(true);
@@ -93,13 +106,19 @@ describe("Transform", () => {
   it("invertible add returns writable Lens", () => {
     const tr = transform();
     const moved = tr.add({
-      translate: { x: 1, y: 1 }, scale: { x: 0, y: 0 },
-      origin: { x: 0, y: 0 }, rotate: 0, opacity: 0,
+      translate: { x: 1, y: 1 },
+      scale: { x: 0, y: 0 },
+      origin: { x: 0, y: 0 },
+      rotate: 0,
+      opacity: 0,
     });
     expect(isLens(moved)).toBe(true);
     moved.value = {
-      translate: { x: 5, y: 5 }, scale: { x: 1, y: 1 },
-      origin: { x: 0, y: 0 }, rotate: 0, opacity: 1,
+      translate: { x: 5, y: 5 },
+      scale: { x: 1, y: 1 },
+      origin: { x: 0, y: 0 },
+      rotate: 0,
+      opacity: 1,
     };
     expect(tr.value.translate).toEqual({ x: 4, y: 4 });
   });
@@ -107,7 +126,9 @@ describe("Transform", () => {
   it("effect across deep field access", () => {
     const tr = transform({ translate: { x: 0, y: 0 } });
     const xs: number[] = [];
-    effect(() => { xs.push(tr.translate.x.value) });
+    effect(() => {
+      xs.push(tr.translate.x.value);
+    });
     tr.translate.x.value = 10;
     tr.translate.x.value = 20;
     expect(xs).toEqual([0, 10, 20]);

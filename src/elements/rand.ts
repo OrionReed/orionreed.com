@@ -1,5 +1,7 @@
 /** Random float in [min, max). */
-export function float(min: number, max: number): number {return Math.random() * (max - min) + min;}
+export function float(min: number, max: number): number {
+  return Math.random() * (max - min) + min;
+}
 
 /** Random integer in [min, max] inclusive. */
 export function int(min: number, max: number): number {
@@ -37,10 +39,7 @@ export function hex(length: number): string {
 
 /** Random alphanumeric string. */
 export function alphanumeric(length: number): string {
-  return string(
-    length,
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-  );
+  return string(length, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
 }
 
 /** Random boolean with given probability of true (default 0.5). */

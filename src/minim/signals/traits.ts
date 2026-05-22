@@ -19,7 +19,7 @@
 // resolved to a per-instance `_equals` slot at construction so the
 // write hot path stays a single field read.
 
-import type { Signal, Read, Of } from "./signal";
+import type { Of, Read, Signal } from "./signal";
 
 // ─── Primitive trait shapes ──────────────────────────────────────────
 
@@ -28,7 +28,7 @@ export interface Linear<T> {
   sub(a: T, b: T): T;
   scale(a: T, k: number): T;
 }
-export type Lerp<T>   = (a: T, b: T, t: number) => T;
+export type Lerp<T> = (a: T, b: T, t: number) => T;
 export type Metric<T> = (a: T, b: T) => number;
 export type Equals<T> = (a: T, b: T) => boolean;
 
@@ -73,10 +73,9 @@ export type Traits<T, K extends TraitKey = never> = {
 
 /** Class-level traits dictionary for any Signal subclass. */
 const dictOf = <T>(s: Read<T>): TraitDict<T> =>
-  (((s as object).constructor as { traits?: TraitDict<T> }).traits) ?? {};
+  ((s as object).constructor as { traits?: TraitDict<T> }).traits ?? {};
 
-const className = (s: object): string =>
-  (s.constructor as { name?: string }).name ?? "?";
+const className = (s: object): string => (s.constructor as { name?: string }).name ?? "?";
 
 const missing = (s: object, slot: string): Error =>
   new Error(`require${slot}: ${className(s)} has no traits.${slot.toLowerCase()}`);
@@ -85,14 +84,22 @@ const missing = (s: object, slot: string): Error =>
 // in the parameter type (`Traits<T, "linear">`) so TS infers T from
 // the argument and the trait presence is checked structurally.
 export function requireLinear<T>(s: Traits<T, "linear">): Linear<T> {
-  const v = dictOf<T>(s as unknown as Read<T>).linear; if (!v) throw missing(s, "Linear"); return v;
+  const v = dictOf<T>(s as unknown as Read<T>).linear;
+  if (!v) throw missing(s, "Linear");
+  return v;
 }
 export function requireLerp<T>(s: Traits<T, "lerp">): Lerp<T> {
-  const v = dictOf<T>(s as unknown as Read<T>).lerp; if (!v) throw missing(s, "Lerp"); return v;
+  const v = dictOf<T>(s as unknown as Read<T>).lerp;
+  if (!v) throw missing(s, "Lerp");
+  return v;
 }
 export function requireMetric<T>(s: Traits<T, "metric">): Metric<T> {
-  const v = dictOf<T>(s as unknown as Read<T>).metric; if (!v) throw missing(s, "Metric"); return v;
+  const v = dictOf<T>(s as unknown as Read<T>).metric;
+  if (!v) throw missing(s, "Metric");
+  return v;
 }
 export function requireEquals<T>(s: Traits<T, "equals">): Equals<T> {
-  const v = dictOf<T>(s as unknown as Read<T>).equals; if (!v) throw missing(s, "Equals"); return v;
+  const v = dictOf<T>(s as unknown as Read<T>).equals;
+  if (!v) throw missing(s, "Equals");
+  return v;
 }

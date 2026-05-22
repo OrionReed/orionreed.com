@@ -10,13 +10,7 @@
 // engine itself is unaware of this package.
 
 import type { Anim } from "@minim/core";
-import {
-  computed,
-  setSignalWriteHook,
-  signal,
-  type Read,
-  type Signal,
-} from "@minim/signals";
+import { computed, type Read, type Signal, setSignalWriteHook, signal } from "@minim/signals";
 import { bumpTraceVersion } from "./scope";
 import { addSpanListener, currentSpan, type Span } from "./span";
 
@@ -58,13 +52,13 @@ export function record(anim: Anim): Recorder {
   const ver = signal(0);
 
   const removeListener = addSpanListener(
-    (s) => {
+    s => {
       s.start = anim.clock;
       list.push(s);
       ver.value++;
       bumpTraceVersion();
     },
-    (s) => {
+    s => {
       s.end = anim.clock;
       ver.value++;
       bumpTraceVersion();
@@ -73,7 +67,7 @@ export function record(anim: Anim): Recorder {
 
   // Install the write hook on first recorder; remove on last stop.
   if (recorders.size === 0) {
-    removeWriteHook = setSignalWriteHook((sig) => {
+    removeWriteHook = setSignalWriteHook(sig => {
       const s = currentSpan;
       if (s) s.touched.add(sig);
       const writer = writerOf.get(sig);

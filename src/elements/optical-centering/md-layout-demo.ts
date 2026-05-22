@@ -1,14 +1,14 @@
 import {
-  Diagram,
-  Mount,
   Anchor,
-  Vec,
   arrange,
+  Diagram,
   handle,
   label,
+  Mount,
   num,
   rect,
   spring,
+  Vec,
 } from "../../minim";
 
 const WIDTHS = [72, 68, 80, 60, 76];
@@ -24,7 +24,7 @@ export class MdLayoutDemo extends Diagram {
     const cy = view.h.value / 2;
 
     // `num` (not `signal`) so `spring` can read the `[ALGEBRA]` slot.
-    const widths = WIDTHS.map((w) => num(w));
+    const widths = WIDTHS.map(w => num(w));
     widths[SPRING_IDX].value = SPRING_REST;
 
     const cards = widths.map((w, i) =>
@@ -50,7 +50,9 @@ export class MdLayoutDemo extends Diagram {
       const handleX = w.clamp(MIN_W, Infinity).add(card.translate.x);
       const pos = Vec.lens(
         () => ({ x: handleX.value, y: card.translate.value.y + h / 2 }),
-        (p) => { handleX.value = p.x; },
+        p => {
+          handleX.value = p.x;
+        },
       );
       return s(handle(pos, { cursor: "ew-resize", r: 5 }));
     });
@@ -67,15 +69,11 @@ export class MdLayoutDemo extends Diagram {
     );
 
     s(
-      label(
-        view.bottom.up(14),
-        "drag handles to resize · red card springs back",
-        {
-          size: 10,
-          align: Anchor.Center,
-          opacity: 0.55,
-        },
-      ),
+      label(view.bottom.up(14), "drag handles to resize · red card springs back", {
+        size: 10,
+        align: Anchor.Center,
+        opacity: 0.55,
+      }),
     );
   }
 }

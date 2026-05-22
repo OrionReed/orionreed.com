@@ -1,10 +1,9 @@
 // lifecycle.test.ts — disposal, dispose-fn idempotence, equals-skip,
 // large-scale unwatch.
 
+import { bind, effect, signal, vec } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
-import { signal, effect } from "@minim/signals";
-import { vec } from "@minim/signals";
 
 describe("lifecycle", () => {
   it("all checks", () => {
@@ -12,7 +11,7 @@ describe("lifecycle", () => {
     {
       const src = signal(0);
       const t = signal(0);
-      const stop = t.bind(src);
+      const stop = bind(t, src);
       check("src has subs from bind", src.subs !== undefined);
       stop();
       check("src.subs cleared after dispose", src.subs === undefined);
@@ -22,9 +21,11 @@ describe("lifecycle", () => {
     {
       const src = signal(0);
       const t = signal(0);
-      const stop = t.bind(src);
+      const stop = bind(t, src);
       let observed = -1;
-      const stopE = effect(() => { observed = t.value; });
+      const stopE = effect(() => {
+        observed = t.value;
+      });
       src.value = 10;
       check("effect observes through binding", observed === 10);
       stop();
@@ -37,10 +38,14 @@ describe("lifecycle", () => {
     {
       const src = signal(0);
       const t = signal(0);
-      const stop = t.bind(src);
+      const stop = bind(t, src);
       stop();
       let threw = false;
-      try { stop(); } catch { threw = true; }
+      try {
+        stop();
+      } catch {
+        threw = true;
+      }
       check("safe to call stop twice", !threw);
     }
 
@@ -48,7 +53,10 @@ describe("lifecycle", () => {
     {
       const v = vec(1, 2);
       let fires = 0;
-      const stop = effect(() => { void v.value; fires++; });
+      const stop = effect(() => {
+        void v.value;
+        fires++;
+      });
       v.value = { x: 1, y: 2 };
       check("equals skips no-op write", fires === 1);
       v.value = { x: 1, y: 3 };
@@ -60,7 +68,7 @@ describe("lifecycle", () => {
     {
       const src = signal(0);
       const stops: Array<() => void> = [];
-      for (let i = 0; i < 100; i++) stops.push(signal(0).bind(src));
+      for (let i = 0; i < 100; i++) stops.push(bind(signal(0), src));
       let count = 0;
       for (let link = src.subs; link; link = link.nextSub) count++;
       check("src has 100 subs", count === 100);

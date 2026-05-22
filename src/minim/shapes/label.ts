@@ -1,12 +1,10 @@
-import {
-  Signal, signal, computed, num,
-  Vec, type Of, type Val,
-} from "@minim/signals";
+import { computed, num, type Of, Signal, signal, type Val, Vec } from "@minim/signals";
 
 type VecValue = Of<Vec>;
+
 import { Shape, type ShapeOpts } from "./shape";
+import { type Content, flattenText, renderContent } from "./text";
 import { tokens } from "./tokens";
-import { renderContent, flattenText, type Content } from "./text";
 
 export interface LabelOpts extends ShapeOpts {
   size?: Val<number>;
@@ -16,9 +14,8 @@ export interface LabelOpts extends ShapeOpts {
   bold?: boolean;
 }
 
-const xAttr = (x: number) => x <= 0.25 ? "start" : x >= 0.75 ? "end" : "middle";
-const yAttr = (y: number) =>
-  y <= 0.25 ? "hanging" : y >= 0.75 ? "alphabetic" : "central";
+const xAttr = (x: number) => (x <= 0.25 ? "start" : x >= 0.75 ? "end" : "middle");
+const yAttr = (y: number) => (y <= 0.25 ? "hanging" : y >= 0.75 ? "alphabetic" : "central");
 
 export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
   /** The user-supplied anchor point — the position the label is
@@ -26,16 +23,13 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
    *  Box `center` / `at(u, v)` which describe the bounding box. */
   readonly anchor: Vec;
 
-  constructor(
-    anchor: Vec,
-    content: Val<Content>,
-    opts: O = {} as O,
-  ) {
-    const contentSig: Signal<Content> = content instanceof Signal
-      ? content
-      : typeof content === "function"
-        ? computed(content)
-        : signal(content as Content);
+  constructor(anchor: Vec, content: Val<Content>, opts: O = {} as O) {
+    const contentSig: Signal<Content> =
+      content instanceof Signal
+        ? content
+        : typeof content === "function"
+          ? computed(content)
+          : signal(content as Content);
     const sizeSig = num(opts.size ?? tokens.fontSize);
     const a = opts.align ?? { x: 0.5, y: 0.5 };
     super(

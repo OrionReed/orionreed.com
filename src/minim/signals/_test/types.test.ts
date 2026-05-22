@@ -1,22 +1,28 @@
 // types.test.ts — compile-time guarantees for Writable<R>.
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  num, vec, Num, Vec,
   computed,
-  type Writable, type WritableOf,
+  Num,
+  num,
   type Traits,
+  Vec,
+  vec,
+  type Writable,
+  type WritableOf,
 } from "../index";
 
 describe("compile-time guarantees", () => {
-  it("placeholder — checks fire at tsc", () => { expect(true).toBe(true) });
+  it("placeholder — checks fire at tsc", () => {
+    expect(true).toBe(true);
+  });
 });
 
 function _probes(): void {
   // ─── Direct writes ──────────────────────────────────────────────
   const v: Writable<Vec> = vec(1, 2);
   v.value = { x: 0, y: 0 };
-  v.x.value = 5;                 // field lens lifted to Writable<Num>
+  v.x.value = 5; // field lens lifted to Writable<Num>
 
   const ro: Vec = v.normalize();
   // @ts-expect-error
@@ -34,23 +40,16 @@ function _probes(): void {
     p.value = { x: 0, y: 0 };
     // @ts-expect-error — RO field lens
     p.x.value = 5;
-    // @ts-expect-error — .set requires WritableBrand
-    p.set({ x: 0, y: 0 });
-    // @ts-expect-error — .bind requires WritableBrand
-    p.bind(() => ({ x: 0, y: 0 }));
   }
   void _buggy;
 
   // ─── Animator constraint ─────────────────────────────────────
   // Generic over T, requires writable surface (brand) + traits.
   // Uses `WritableOf<T>` (T-anchored) for the writable shape.
-  function spring<T>(
-    s: WritableOf<T> & Traits<T, "linear" | "metric">,
-    target: T,
-  ): void {
+  function spring<T>(s: WritableOf<T> & Traits<T, "linear" | "metric">, target: T): void {
     s.value = target;
   }
-  spring(v, { x: 0, y: 0 });        // Writable<Vec> ⊆ WritableOf<V>
+  spring(v, { x: 0, y: 0 }); // Writable<Vec> ⊆ WritableOf<V>
   spring(num(5), 10);
   // @ts-expect-error — bare Vec has no WritableBrand
   spring(ro, { x: 0, y: 0 });
@@ -58,7 +57,9 @@ function _probes(): void {
   spring(new Vec(), { x: 0, y: 0 });
 
   // Generic accept-any-trait reader: just reads .value, type-anchored to T.
-  function describe<T>(s: Traits<T, "linear"> & { readonly value: T }): T { return s.value }
+  function describe<T>(s: Traits<T, "linear"> & { readonly value: T }): T {
+    return s.value;
+  }
   // Both writable and bare value classes have the trait + readable value.
   void describe(v);
   void describe(ro);
@@ -70,9 +71,11 @@ function _probes(): void {
   // with `{ readonly value: V; peek(): V }`. Stricter `(p: Vec)` only
   // accepts bare Vec instances (Writable<Vec>'s lifted invertibles
   // create structural mismatch under TS's recursive variance check).
-  function readVec(p: import("../signal").Read<{x:number;y:number}>) { return p.value }
-  void readVec(v);                // ✓ Writable<Vec> has readable value
-  void readVec(ro);               // ✓ bare Vec
+  function readVec(p: import("../signal").Read<{ x: number; y: number }>) {
+    return p.value;
+  }
+  void readVec(v); // ✓ Writable<Vec> has readable value
+  void readVec(ro); // ✓ bare Vec
   void readVec({ value: { x: 0, y: 0 }, peek: () => ({ x: 0, y: 0 }) });
 
   // ─── Computed factory returns bare Signal — RO ─────────────────

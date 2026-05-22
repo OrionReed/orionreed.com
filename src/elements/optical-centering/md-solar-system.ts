@@ -1,16 +1,16 @@
 import {
   Anchor,
-  Diagram,
-  Mount,
-  polar,
-  num,
-  signal,
-  vec,
-  type Vec,
   circle,
+  Diagram,
   drag,
   drive,
   label,
+  Mount,
+  num,
+  polar,
+  signal,
+  type Vec,
+  vec,
   type Writable,
 } from "../../minim";
 
@@ -61,18 +61,18 @@ export class MdSolarSystem extends Diagram {
     // Run time forward. Pauses while any body is being dragged — the
     // drag IS the time-scrub.
     this.anim.start(
-      drive((tick) => {
+      drive(tick => {
         if (dragging.value) return;
         time.value = time.peek() + tick.dt;
       }),
     );
 
     s(
-      label(
-        view.top.down(20),
-        "drag any planet or moon — the whole system winds/unwinds in time",
-        { size: 12, align: Anchor.Center, opacity: 0.7 },
-      ),
+      label(view.top.down(20), "drag any planet or moon — the whole system winds/unwinds in time", {
+        size: 12,
+        align: Anchor.Center,
+        opacity: 0.7,
+      }),
       label(
         view.bottom.up(16),
         "one `time: Num` · every body angle = time.affine(τ/period, phase) · circular polar",

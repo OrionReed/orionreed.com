@@ -1,11 +1,10 @@
 // Motion combinators over tex shapes (`pluck`, `morph`, …).
 
-import {easeInOut, easeOut, type Animator, type Easing} from "@minim/core";
-import {effect, signal} from "@minim/signals";
-import {Shape} from "@minim/shapes";
-import {box, num} from "@minim/signals";
-import {Part, type PartMarker} from "./parts";
-import type {TexShape} from "./tex";
+import { type Animator, type Easing, easeInOut, easeOut } from "@minim/core";
+import { Shape } from "@minim/shapes";
+import { box, effect, num, signal } from "@minim/signals";
+import { Part, type PartMarker } from "./parts";
+import type { TexShape } from "./tex";
 
 /** Wildcard TexShape — accepts any `Names` union, so cross-cycle
  *  morphs (`TexShape<"a"|"b">` ↔ `TexShape<"f"|"x">`) typecheck. */
@@ -26,11 +25,7 @@ export function* highlight(part: Part, dt = 0.6): Animator {
  *  applied to the inner HTML wrapper, not the outer `<g>` —
  *  Chromium drops composite invalidation for foreignObject content
  *  under animated clip-path on `<g>`, causing tearing. */
-export function* write(
-  eq: AnyTex,
-  dt = 0.6,
-  ease: Easing = easeOut,
-): Animator {
+export function* write(eq: AnyTex, dt = 0.6, ease: Easing = easeOut): Animator {
   const target = clipTarget(eq);
   const progress = num(0);
   const stop = effect(() => {
@@ -46,11 +41,7 @@ export function* write(
 
 /** Reverse of `write`. After completion the eq is hidden
  *  (`opacity: 0`) and clip-path is cleared, ready for a future `write`. */
-export function* writeOut(
-  eq: AnyTex,
-  dt = 0.4,
-  ease: Easing = easeOut,
-): Animator {
+export function* writeOut(eq: AnyTex, dt = 0.4, ease: Easing = easeOut): Animator {
   const target = clipTarget(eq);
   const progress = num(1);
   const stop = effect(() => {
@@ -120,9 +111,7 @@ export function pluck(part: Part): Plucked {
   const liveEl = part.el;
   const host = part.host;
   if (!liveEl || !host.parent) {
-    throw new Error(
-      "pluck: TexShape isn't mounted yet — `s(eq)` it before plucking",
-    );
+    throw new Error("pluck: TexShape isn't mounted yet — `s(eq)` it before plucking");
   }
   const wrapper = findMathWrapper(liveEl);
   if (!wrapper) throw new Error("pluck: cannot find <math> wrapper");
@@ -135,9 +124,7 @@ export function pluck(part: Part): Plucked {
   // none`) preserves layout, so the mrow lands at exactly the same
   // intra-clone offset as in the source.
   const clonedWrapper = wrapper.cloneNode(true) as HTMLElement;
-  const matchedClone = clonedWrapper.querySelector<HTMLElement>(
-    `.minim-part-${part.name}`,
-  );
+  const matchedClone = clonedWrapper.querySelector<HTMLElement>(`.minim-part-${part.name}`);
   const mathClone = clonedWrapper.querySelector("math") as HTMLElement | null;
   if (!matchedClone || !mathClone) {
     throw new Error("pluck: cloned wrapper lost its matched mrow");
@@ -197,12 +184,7 @@ export function* unpluck(
  *
  *  Unmatched parts cross-fade with the parent. Assumes both shapes
  *  share a parent and have translate-only transforms. */
-export function* morph(
-  from: AnyTex,
-  to: AnyTex,
-  dt = 0.6,
-  ease: Easing = easeInOut,
-): Animator {
+export function* morph(from: AnyTex, to: AnyTex, dt = 0.6, ease: Easing = easeInOut): Animator {
   const parent = from.parent;
   if (!parent || from.parent !== to.parent) {
     if (to.opacity.peek() < 1) to.opacity.value = 0;
@@ -213,10 +195,7 @@ export function* morph(
   // Hide `to` so riders supply visible content during the flight.
   if (to.opacity.peek() !== 0) to.opacity.value = 0;
 
-  const animators: Animator[] = [
-    from.opacity.to(0, dt, ease),
-    to.opacity.to(1, dt, ease),
-  ];
+  const animators: Animator[] = [from.opacity.to(0, dt, ease), to.opacity.to(1, dt, ease)];
   const cleanups: Array<() => void> = [];
 
   const fromByRoot = groupByRoot(from.parts);

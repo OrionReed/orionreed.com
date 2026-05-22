@@ -1,17 +1,30 @@
-import {Diagram, Mount, Anchor, assemble, centroid, play, circle, easeInOut, label, loop, num, orbit, signal, vec, snapshot, splay, stagger, swap, type Content} from "../../minim";
+import {
+  Anchor,
+  assemble,
+  type Content,
+  centroid,
+  circle,
+  Diagram,
+  easeInOut,
+  label,
+  loop,
+  Mount,
+  num,
+  orbit,
+  play,
+  signal,
+  snapshot,
+  splay,
+  stagger,
+  swap,
+  vec,
+} from "../../minim";
 
 const W = 600;
 const H = 360;
 const ORBIT_CENTRE = { x: W * 0.28, y: H * 0.55 };
 
-const COLORS = [
-  "#5b8def",
-  "#f5a623",
-  "#e25c5c",
-  "#7ed321",
-  "#9b59b6",
-  "#1abc9c",
-];
+const COLORS = ["#5b8def", "#f5a623", "#e25c5c", "#7ed321", "#9b59b6", "#1abc9c"];
 
 const SCATTER = [
   { x: 110, y: 100 },
@@ -51,61 +64,67 @@ export class MdChoreography extends Diagram {
     const c = centroid(...shapes);
     s(
       label(view.top.down(24), phase, {
-        size: 14, bold: true, align: Anchor.Center, opacity: 0.85,
+        size: 14,
+        bold: true,
+        align: Anchor.Center,
+        opacity: 0.85,
       }),
       label(view.top.down(42), "snapshot · stagger · ramp · centroid · all composing", {
-        size: 10, align: Anchor.Center, opacity: 0.45,
+        size: 10,
+        align: Anchor.Center,
+        opacity: 0.45,
       }),
       circle(c, 3, { fill: "#1a1a1a", opacity: 0.7 }),
     );
 
     // Without this, orbit's frame-time integration drifts positions each cycle.
-    const reset = snapshot(...shapes.map((sh) => sh.translate));
+    const reset = snapshot(...shapes.map(sh => sh.translate));
 
     const orbitRate = num(0);
     const orbitCentre = vec(ORBIT_CENTRE.x, ORBIT_CENTRE.y);
 
-    this.anim.start(loop(function* () {
-      reset();
-      orbitRate.value = 0;
+    this.anim.start(
+      loop(function* () {
+        reset();
+        orbitRate.value = 0;
 
-      phase.value = "assemble (row)";
-      yield* assemble(shapes, ROW, 0.7, easeInOut);
-      yield 0.3;
+        phase.value = "assemble (row)";
+        yield* assemble(shapes, ROW, 0.7, easeInOut);
+        yield 0.3;
 
-      phase.value = "assemble (diamond)";
-      yield* assemble(shapes, DIAMOND, 0.7, easeInOut);
-      yield 0.3;
+        phase.value = "assemble (diamond)";
+        yield* assemble(shapes, DIAMOND, 0.7, easeInOut);
+        yield 0.3;
 
-      phase.value = "splay";
-      yield* splay(view.center, 110, shapes, 0.7, easeInOut);
-      yield 0.3;
+        phase.value = "splay";
+        yield* splay(view.center, 110, shapes, 0.7, easeInOut);
+        yield 0.3;
 
-      phase.value = "swap (staggered)";
-      yield* stagger(0.18, PAIRS, ([i, j]) =>
-        swap(shapes[i], shapes[j], 0.5, easeInOut),
-      );
-      yield 0.3;
+        phase.value = "swap (staggered)";
+        yield* stagger(0.18, PAIRS, ([i, j]) => swap(shapes[i], shapes[j], 0.5, easeInOut));
+        yield 0.3;
 
-      phase.value = "centroid → corner";
-      yield* c.to(ORBIT_CENTRE, 0.7, easeInOut);
-      yield 0.3;
+        phase.value = "centroid → corner";
+        yield* c.to(ORBIT_CENTRE, 0.7, easeInOut);
+        yield 0.3;
 
-      phase.value = "orbit (eased)";
-      const rampSequence = play(orbitRate.to(1, 0.5, easeInOut))
-        .then(1.4)
-        .then(orbitRate.to(0, 0.5, easeInOut));
-      yield* play(orbit(orbitCentre, shapes, { period: 2.5, rate: orbitRate }))
-        .until(rampSequence);
-      yield 0.2;
+        phase.value = "orbit (eased)";
+        const rampSequence = play(orbitRate.to(1, 0.5, easeInOut))
+          .then(1.4)
+          .then(orbitRate.to(0, 0.5, easeInOut));
+        yield* play(orbit(orbitCentre, shapes, { period: 2.5, rate: orbitRate })).until(
+          rampSequence,
+        );
+        yield 0.2;
 
-      phase.value = "centroid → centre";
-      yield* c.to(view.center.value, 0.7, easeInOut);
-      yield 0.4;
+        phase.value = "centroid → centre";
+        yield* c.to(view.center.value, 0.7, easeInOut);
+        yield 0.4;
 
-      phase.value = "assemble (scatter)";
-      yield* assemble(shapes, SCATTER, 0.7, easeInOut);
-      yield 0.5;
-    }));
+        phase.value = "assemble (scatter)";
+        yield* assemble(shapes, SCATTER, 0.7, easeInOut);
+        yield 0.5;
+      }),
+    );
   }
 }

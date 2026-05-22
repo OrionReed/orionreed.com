@@ -3,16 +3,13 @@
 // with no special types, so users can compose them with `and` / `or` /
 // `not` / hand-rolled `computed()` interchangeably.
 
-import { computed, type Read, type Of } from "@minim/signals";
 import type { Box, Vec } from "@minim/signals";
+import { computed, type Of, type Read } from "@minim/signals";
 
 type VecValue = Of<Vec>;
 
 /** `lo ≤ s ≤ hi`. */
-export function inRange(
-  s: Read<number>,
-  range: readonly [number, number],
-): Read<boolean> {
+export function inRange(s: Read<number>, range: readonly [number, number]): Read<boolean> {
   const [lo, hi] = range;
   return computed(() => {
     const v = s.value;
@@ -36,19 +33,12 @@ export function below(s: Read<number>, n: number): Read<boolean> {
 }
 
 /** `|s - n| ≤ tol`. */
-export function near(
-  s: Read<number>,
-  n: number,
-  tol = 1e-6,
-): Read<boolean> {
+export function near(s: Read<number>, n: number, tol = 1e-6): Read<boolean> {
   return computed(() => Math.abs(s.value - n) <= tol);
 }
 
 /** Point lies inside a Box (signal or shape's `.box`). */
-export function inside(
-  s: Read<VecValue>,
-  region: Box,
-): Read<boolean> {
+export function inside(s: Read<VecValue>, region: Box): Read<boolean> {
   return computed(() => {
     const v = s.value;
     const b = region.value;
@@ -57,11 +47,7 @@ export function inside(
 }
 
 /** `|a - b| ≤ tol`. */
-export function following(
-  a: Read<number>,
-  b: Read<number>,
-  tol = 1e-9,
-): Read<boolean> {
+export function following(a: Read<number>, b: Read<number>, tol = 1e-9): Read<boolean> {
   return computed(() => Math.abs(a.value - b.value) <= tol);
 }
 

@@ -1,6 +1,19 @@
 import {
-  Anchor, Diagram, Mount, Num, Vec, batch, computed, num, polar, vec,
-  circle, drag, label, line, type Writable,
+  Anchor,
+  batch,
+  circle,
+  computed,
+  Diagram,
+  drag,
+  label,
+  line,
+  Mount,
+  Num,
+  num,
+  polar,
+  Vec,
+  vec,
+  type Writable,
 } from "../../minim";
 
 const TAU = Math.PI * 2;
@@ -15,18 +28,24 @@ function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: n
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const x = c * (1 - Math.abs((hh % 2) - 1));
   const [r1, g1, b1] =
-    hh < 1 ? [c, x, 0] :
-    hh < 2 ? [x, c, 0] :
-    hh < 3 ? [0, c, x] :
-    hh < 4 ? [0, x, c] :
-    hh < 5 ? [x, 0, c] :
-            [c, 0, x];
+    hh < 1
+      ? [c, x, 0]
+      : hh < 2
+        ? [x, c, 0]
+        : hh < 3
+          ? [0, c, x]
+          : hh < 4
+            ? [0, x, c]
+            : hh < 5
+              ? [x, 0, c]
+              : [c, 0, x];
   const m = l - c / 2;
   return { r: r1 + m, g: g1 + m, b: b1 + m };
 }
 
 function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
-  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const max = Math.max(r, g, b),
+    min = Math.min(r, g, b);
   const l = (max + min) / 2;
   if (max === min) return { h: 0, s: 0, l };
   const d = max - min;
@@ -47,8 +66,9 @@ export class MdColor extends Diagram {
     const sat = num(0.85);
     const lit = num(0.55);
 
-    const cssColor = computed(() =>
-      `hsl(${hue.value.toFixed(0)}deg, ${(sat.value * 100).toFixed(0)}%, ${(lit.value * 100).toFixed(0)}%)`,
+    const cssColor = computed(
+      () =>
+        `hsl(${hue.value.toFixed(0)}deg, ${(sat.value * 100).toFixed(0)}%, ${(lit.value * 100).toFixed(0)}%)`,
     );
 
     // R, G, B are lenses through the bijection. Reading converts
@@ -58,7 +78,7 @@ export class MdColor extends Diagram {
     const rgbChannel = (idx: "r" | "g" | "b"): Writable<Num> =>
       Num.lens(
         () => hslToRgb(hue.value, sat.value, lit.value)[idx],
-        (v) => {
+        v => {
           const cur = hslToRgb(hue.peek(), sat.peek(), lit.peek());
           const next = { ...cur, [idx]: clamp01(v) };
           const out = rgbToHsl(next.r, next.g, next.b);
@@ -93,11 +113,13 @@ export class MdColor extends Diagram {
     const satPx = sat.clamp(0, 1).scale(WHEEL_R);
     const hueRad = hue.scale(TAU / 360);
     const picker = polar(vec(WHEEL_CX, WHEEL_CY), satPx, hueRad, "rotate");
-    const pickerDot = s(circle(picker, 8, {
-      fill: () => cssColor.value,
-      stroke: "var(--bg-color, white)",
-      strokeWidth: 2,
-    }));
+    const pickerDot = s(
+      circle(picker, 8, {
+        fill: () => cssColor.value,
+        stroke: "var(--bg-color, white)",
+        strokeWidth: 2,
+      }),
+    );
     drag(pickerDot, picker);
     pickerDot.el.style.cursor = "grab";
 
@@ -108,19 +130,25 @@ export class MdColor extends Diagram {
       s(
         line(vec(SLIDER_X0, y), vec(SLIDER_X1, y), { thin: true, opacity: 0.35 }),
         label(vec(SLIDER_X0 - 14, y), letter, {
-          size: 11, align: Anchor.Right, opacity: 0.55,
+          size: 11,
+          align: Anchor.Right,
+          opacity: 0.55,
         }),
       );
       const knobX = target.clamp(0, 1).affine(SLIDER_W, SLIDER_X0);
       const knob = Vec.lens(
         () => ({ x: knobX.value, y }),
-        (p) => { knobX.value = p.x; },
+        p => {
+          knobX.value = p.x;
+        },
       );
-      const dot = s(circle(knob, 6, {
-        fill: () => cssColor.value,
-        stroke: "var(--bg-color, white)",
-        strokeWidth: 2,
-      }));
+      const dot = s(
+        circle(knob, 6, {
+          fill: () => cssColor.value,
+          stroke: "var(--bg-color, white)",
+          strokeWidth: 2,
+        }),
+      );
       drag(dot, knob);
       dot.el.style.cursor = "ew-resize";
     };
@@ -132,12 +160,16 @@ export class MdColor extends Diagram {
 
     // ── Caption ────────────────────────────────────────────────────
     s(
-      label(view.top.down(20),
-        "five draggable inputs, two coordinate systems, one colour",
-        { size: 12, align: Anchor.Center, opacity: 0.7 }),
-      label(view.bottom.up(16),
+      label(view.top.down(20), "five draggable inputs, two coordinate systems, one colour", {
+        size: 12,
+        align: Anchor.Center,
+        opacity: 0.7,
+      }),
+      label(
+        view.bottom.up(16),
         "R/G/B = Num.lens(hslToRgb, rgbToHsl) · drag any view; every other view updates through the bijection",
-        { size: 10, align: Anchor.Center, opacity: 0.5 }),
+        { size: 10, align: Anchor.Center, opacity: 0.5 },
+      ),
     );
   }
 }

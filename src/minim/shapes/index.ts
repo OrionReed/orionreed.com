@@ -1,58 +1,55 @@
 export {
-  Shape,
-  SVG_NS,
-  centroid,
-  meanRotation,
-  meanScale,
-  type ShapeOpts,
-  type AnyShape,
-  type AnimatableKey,
-  type Has,
-  type Segment,
-} from "./shape";
-export { draggable, drag, dragWithState, dragRotate, hoverSignal } from "./interaction";
-export { mount, type Mount } from "./mount";
-
+  AnnularSector,
+  type AnnularSectorOpts,
+  annularSector,
+} from "./annular-sector";
+export { type ButtonOpts, button } from "./button";
+export { assemble, orbit, splay, stagger, swap } from "./choreographers";
+export { Circle, type CircleOpts, circle } from "./circle";
+export { clipPath } from "./clip";
 export {
   applyOpts,
-  setupDashed,
-  intrinsicType,
-  wireStroke,
   type CommonOpts,
+  intrinsicType,
+  setupDashed,
+  wireStroke,
 } from "./common";
-export { Line, line, type LineOpts } from "./line";
-export { Circle, circle, type CircleOpts } from "./circle";
-export { Rect, rect, type RectOpts } from "./rect";
-export { Label, label, type LabelOpts } from "./label";
-export { group } from "./group";
-export { button, type ButtonOpts } from "./button";
-export { Path, path, type PathOpts } from "./path";
-export {
-  AnnularSector,
-  annularSector,
-  type AnnularSectorOpts,
-} from "./annular-sector";
-export { connect, arrow, ensureArrowMarker, type ArrowOpts } from "./connect";
-export { clipPath } from "./clip";
-export { debug } from "./debug";
-export { handle, type HandleOpts } from "./handle";
-
+export { type ArrowOpts, arrow, connect, ensureArrowMarker } from "./connect";
 export { dashedPath } from "./dashed";
-export { tokens, type Tokens } from "./tokens";
-export { Text, t, type Content, type TextPart } from "./text";
-export { arrange, expand, grid, split, type ArrangeOpts } from "./layout";
-export { forEach, type ForEachOptions } from "./list";
-
+export { debug } from "./debug";
+export { group } from "./group";
+export { type HandleOpts, handle } from "./handle";
+export { drag, draggable, dragRotate, dragWithState, hoverSignal } from "./interaction";
+export { Label, type LabelOpts, label } from "./label";
+export { type ArrangeOpts, arrange, expand, grid, split } from "./layout";
+export { Line, type LineOpts, line } from "./line";
+export { type ForEachOptions, forEach } from "./list";
+export { type Mount, mount } from "./mount";
+export { Path, type PathOpts, path } from "./path";
+export { Rect, type RectOpts, rect } from "./rect";
 export {
+  type AnimatableKey,
+  type AnyShape,
+  centroid,
+  type Has,
+  meanRotation,
+  meanScale,
+  type Segment,
+  Shape,
+  type ShapeOpts,
+  SVG_NS,
+} from "./shape";
+export { type Content, Text, type TextPart, t } from "./text";
+export { type Tokens, tokens } from "./tokens";
+export {
+  bounceIn,
   fadeIn,
   fadeOut,
   fadeUp,
   fadeUpOut,
+  scaleIn,
   slideIn,
   slideOut,
-  scaleIn,
-  zoomOut,
-  bounceIn,
   spinIn,
+  zoomOut,
 } from "./transitions";
-export { swap, stagger, splay, assemble, orbit } from "./choreographers";

@@ -1,8 +1,27 @@
-import {Diagram, Mount, Anchor, bounceIn, signal, computed, circle, easeIn, easeInOut, easeOut, fadeOut, label, loop, vec, rand, snapshot, type Animator, type Content, type Has} from "../../minim";
+import {
+  Anchor,
+  type Animator,
+  bounceIn,
+  type Content,
+  circle,
+  computed,
+  Diagram,
+  easeIn,
+  easeInOut,
+  easeOut,
+  fadeOut,
+  type Has,
+  label,
+  loop,
+  Mount,
+  rand,
+  signal,
+  snapshot,
+  vec,
+} from "../../minim";
 
 const STAGE_X = 240;
 const STAGE_Y = 120;
-
 
 interface Pick {
   name: string;
@@ -44,10 +63,7 @@ const MOVES: Move[] = [
     name: "slide",
     color: "#7ed321",
     run: function* (s) {
-      yield* s.translate.x
-        .to(80, 0.35, easeInOut)
-        .to(-80, 0.55, easeInOut)
-        .to(0, 0.35, easeInOut);
+      yield* s.translate.x.to(80, 0.35, easeInOut).to(-80, 0.55, easeInOut).to(0, 0.35, easeInOut);
     },
   },
   {
@@ -84,16 +100,14 @@ export class MdRand extends Diagram {
         align: Anchor.Left,
         opacity: 0.85,
       }),
-      label(
-        vec(20, 42),
-        "yield* rand(...gens) — pick one branch each loop",
-        { size: 10, align: Anchor.Left, opacity: 0.5 },
-      ),
+      label(vec(20, 42), "yield* rand(...gens) — pick one branch each loop", {
+        size: 10,
+        align: Anchor.Left,
+        opacity: 0.5,
+      }),
     );
 
-    const subject = s(
-      circle(vec(STAGE_X, STAGE_Y), 22, { fill: currentColor }),
-    );
+    const subject = s(circle(vec(STAGE_X, STAGE_Y), 22, { fill: currentColor }));
     s(
       label(subject.center.up(60), currentName, {
         size: 18,
@@ -101,12 +115,7 @@ export class MdRand extends Diagram {
         align: Anchor.Center,
       }),
     );
-    const reset = snapshot(
-      subject.translate,
-      subject.rotate,
-      subject.scale,
-      subject.opacity,
-    );
+    const reset = snapshot(subject.translate, subject.rotate, subject.scale, subject.opacity);
 
     const MENU_X = 440;
     const MENU_Y = 70;
@@ -139,10 +148,12 @@ export class MdRand extends Diagram {
       yield* body;
     }
 
-    this.anim.start(loop(function* () {
-      reset();
-      yield* rand(...MOVES.map((m) => record(m, m.run(subject))));
-      yield 0.35;
-    }));
+    this.anim.start(
+      loop(function* () {
+        reset();
+        yield* rand(...MOVES.map(m => record(m, m.run(subject))));
+        yield 0.35;
+      }),
+    );
   }
 }

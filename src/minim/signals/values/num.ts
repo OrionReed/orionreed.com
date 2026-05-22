@@ -4,6 +4,7 @@ import {
   Signal, computedCls, lensCls, valFn,
   type Val, type SignalOptions,
 } from "../signal";
+import { bind } from "../lateral";
 // Inside the new lens-returning methods (`clamp`, `quantize`, `cyclic`)
 // we cast `this` to `Signal<V>` for writes — Num's merged interface
 // declares `value` as RO at the type level (so external callers respect
@@ -45,6 +46,7 @@ export class Num extends Signal<V> {
   static invertibles = invertibles<Num>()(
     "add", "sub", "scale", "affine",
     "clamp", "quantize", "cyclic",
+    "through",
   );
 
   // ── class-level constructors ───────────────────────────────────
@@ -73,25 +75,17 @@ export class Num extends Signal<V> {
    *  written one). Use for sliders, gauges, anywhere a value
    *  shouldn't escape its range. */
   clamp(lo: Val<V>, hi: Val<V>): Num {
-    const parent = this as unknown as Signal<V>;
     const lf = valFn(lo); const hf = valFn(hi);
     const c = (v: V) => { const l = lf(), h = hf(); return v < l ? l : v > h ? h : v; };
-    return Num.lens(
-      () => c(this.value),
-      (v) => { parent.value = c(v); },
-    ) as unknown as Num;
+    return this.through(c, c);
   }
 
   /** Lossy lens that snaps reads and writes to the nearest multiple
    *  of `step`. For knobs with discrete positions. */
   quantize(step: Val<number>): Num {
-    const parent = this as unknown as Signal<V>;
     const sf = valFn(step);
     const q = (v: V) => { const s = sf(); return Math.round(v / s) * s; };
-    return Num.lens(
-      () => q(this.value),
-      (v) => { parent.value = q(v); },
-    ) as unknown as Num;
+    return this.through(q, q);
   }
 
   /** Cyclic-coordinate lens. Reads pass through (the source's
@@ -100,17 +94,16 @@ export class Num extends Signal<V> {
    *  small visible amount without jumping a full revolution when the
    *  source has accumulated many. */
   cyclic(period: Val<number>): Num {
-    const parent = this as unknown as Signal<V>;
     const pf = valFn(period);
-    return Num.lens(
-      () => this.value,
+    return this.through(
+      (v) => v,
       (v) => {
         const cur = this.peek();
         const p = pf();
         const delta = v - cur;
-        parent.value = cur + delta - p * Math.round(delta / p);
+        return cur + delta - p * Math.round(delta / p);
       },
-    ) as unknown as Num;
+    );
   }
 
   /** Tween-builder, implied by the lerp trait. The cast bypasses the
@@ -127,6 +120,6 @@ export interface Num {
 
 export function num(v: Val<V> = 0): Writable<Num> {
   const n = new Num() as unknown as Writable<Num>;
-  n.bind(v);
+  bind(n, v);
   return n;
 }

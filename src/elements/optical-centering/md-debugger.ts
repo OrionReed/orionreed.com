@@ -22,33 +22,27 @@
 
 import {
   Anchor,
-  Diagram,
-  Mount,
-  Shape,
-  Vec,
+  type Animator,
+  type AnyShape,
   circle,
   computed,
+  Diagram,
   forEach,
   group,
   label,
   line,
   loop,
-  rect,
-  signal,
-  vec,
-  type AnyShape,
-  type Animator,
+  Mount,
   type Num,
   type Read,
+  rect,
+  Shape,
+  signal,
   type Val,
+  Vec,
+  vec,
 } from "../../minim";
-import {
-  authorOf,
-  claim,
-  record,
-  scope,
-  type Span,
-} from "../../minim/assert";
+import { authorOf, claim, record, type Span, scope } from "../../minim/assert";
 
 interface HasOpacity {
   opacity: Num;
@@ -56,25 +50,16 @@ interface HasOpacity {
 
 // ─── buggy scene ─────────────────────────────────────────────────
 
-const fadeIn = scope(function* fadeIn(
-  s: HasOpacity,
-  dur: number,
-): Animator<void> {
+const fadeIn = scope(function* fadeIn(s: HasOpacity, dur: number): Animator<void> {
   yield* s.opacity.to(1, dur);
 });
 
-const nudge = scope(function* nudge(
-  s: HasOpacity,
-  delta: number,
-): Animator<void> {
+const nudge = scope(function* nudge(s: HasOpacity, delta: number): Animator<void> {
   // BUG: doesn't clamp; pushes opacity above 1.0 → claim violates.
   yield* s.opacity.to(s.opacity.peek() + delta, 0.18);
 });
 
-const fadeOut = scope(function* fadeOut(
-  s: HasOpacity,
-  dur: number,
-): Animator<void> {
+const fadeOut = scope(function* fadeOut(s: HasOpacity, dur: number): Animator<void> {
   yield* s.opacity.to(0, dur);
 });
 
@@ -169,9 +154,7 @@ export class MdDebugger extends Diagram {
     // whether the engine actually advances. Cast through `unknown`
     // because we're patching a class instance method.
     const origStep = this.anim.step.bind(this.anim);
-    (this.anim as unknown as { step: (dt: number) => void }).step = (
-      dt: number,
-    ): void => {
+    (this.anim as unknown as { step: (dt: number) => void }).step = (dt: number): void => {
       if (playing.peek()) {
         origStep(Math.min(dt, 0.032) * speed.peek());
       } else if (stepBudget > 0) {
@@ -206,9 +189,7 @@ export class MdDebugger extends Diagram {
     this.anim.onStep(() => {
       const arr = samples.peek();
       const next: Sample[] =
-        arr.length >= SAMPLES
-          ? arr.slice(arr.length - SAMPLES + 1)
-          : arr.slice();
+        arr.length >= SAMPLES ? arr.slice(arr.length - SAMPLES + 1) : arr.slice();
       next.push({
         t: this.anim.clock,
         v: c.opacity.peek(),
@@ -228,11 +209,8 @@ export class MdDebugger extends Diagram {
       const tail = (last.end ?? now) + 0.2;
       return Math.max(tail, last.start + 1.6);
     });
-    const xScale = computed(
-      () => GANTT_W / Math.max(0.001, winEnd.value - winStart.value),
-    );
-    const xFor = (t: number): number =>
-      PAD_X + (t - winStart.value) * xScale.value;
+    const xScale = computed(() => GANTT_W / Math.max(0.001, winEnd.value - winStart.value));
+    const xFor = (t: number): number => PAD_X + (t - winStart.value) * xScale.value;
 
     // y-coord of α=v in the value plot. Range [-0.1, 1.4] so the
     // overshoot above 1.0 is visible.
@@ -336,7 +314,7 @@ export class MdDebugger extends Diagram {
     forEach(
       s.root,
       visibleSpans,
-      (span) => {
+      span => {
         const lane = TRACK_OF[span.fn.name] ?? 0;
         const y = TIMELINE_TOP + lane * (GANTT_TRACK_H + GANTT_TRACK_GAP);
         const x = computed(() => xFor(span.start));
@@ -368,7 +346,7 @@ export class MdDebugger extends Diagram {
         });
         return [bar, tagShape];
       },
-      { key: (span) => span },
+      { key: span => span },
     );
 
     // ─── value plot ──────────────────────────────────────────
@@ -384,24 +362,25 @@ export class MdDebugger extends Diagram {
         corner: 3,
       }),
       // y=1 (claim bound) — red, dashed.
-      line(
-        vec(PAD_X, plotYFor(1)),
-        vec(PAD_X + GANTT_W, plotYFor(1)),
-        { stroke: FAIL, opacity: 0.5, thin: true, dashed: true },
-      ),
+      line(vec(PAD_X, plotYFor(1)), vec(PAD_X + GANTT_W, plotYFor(1)), {
+        stroke: FAIL,
+        opacity: 0.5,
+        thin: true,
+        dashed: true,
+      }),
       // y=0 — neutral.
-      line(
-        vec(PAD_X, plotYFor(0)),
-        vec(PAD_X + GANTT_W, plotYFor(0)),
-        { stroke: NEUTRAL, opacity: 0.4, thin: true },
-      ),
+      line(vec(PAD_X, plotYFor(0)), vec(PAD_X + GANTT_W, plotYFor(0)), {
+        stroke: NEUTRAL,
+        opacity: 0.4,
+        thin: true,
+      }),
     );
 
     // Filtered samples: only those within the current window.
     const windowed = computed(() => {
       const arr = samples.value;
       const lo = winStart.value;
-      return arr.filter((sample) => sample.t >= lo);
+      return arr.filter(sample => sample.t >= lo);
     });
 
     // Render the value plot as ONE <path> per author color. Reactive
@@ -633,9 +612,7 @@ function runsPath(
       const xs = xFor(arr[runStart].t);
       const xe = xFor(arr[endIdx].t);
       const w = Math.max(1, xe - xs);
-      parts.push(
-        `M${xs.toFixed(2)} ${y} h${w.toFixed(2)} v${h} h${(-w).toFixed(2)} Z`,
-      );
+      parts.push(`M${xs.toFixed(2)} ${y} h${w.toFixed(2)} v${h} h${(-w).toFixed(2)} Z`);
       runStart = -1;
     }
   }

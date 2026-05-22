@@ -37,7 +37,7 @@ export class Color extends Signal<V> {
   static traits: TraitDict<V> & { linear: Linear<V>; lerp: typeof lerp; equals: typeof equals } = {
     linear: linearImpl, lerp, equals,
   };
-  static invertibles = invertibles<Color>()("add", "sub", "scale");
+  static invertibles = invertibles<Color>()("add", "sub", "scale", "through");
 
   // ── class-level constructors ───────────────────────────────────
   static derive(fn: () => V): Color { return computedCls(Color, fn) }

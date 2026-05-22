@@ -2,9 +2,8 @@
 // `[at, at + dur)` interval); `yield* tl` advances the clock to
 // `duration`. `sequential({...})` produces cumulative-start specs.
 
-import {type Animator} from "@minim/core";
-import { num,type Val} from "@minim/signals";
-import {signal, computed, type Signal} from "@minim/signals";
+import { type Animator } from "@minim/core";
+import { computed, num, type Signal, signal, type Val } from "@minim/signals";
 
 /** A clip on a timeline. `t` extends past the endpoints (0 before,
  *  1 after) so `computed(() => (ease)(clip.t.value))` works without conditional checks.
@@ -46,9 +45,7 @@ export interface Timeline {
 
 /** Type-preserving named-clip access. */
 export type TimelineOf<T extends Record<string, ClipSpec>> = Timeline & {
-  readonly [K in keyof T]: T[K] extends { at: infer A; dur: infer D }
-    ? Clip<A, D>
-    : Clip;
+  readonly [K in keyof T]: T[K] extends { at: infer A; dur: infer D } ? Clip<A, D> : Clip;
 };
 
 class TimelineImpl implements Timeline {
@@ -104,9 +101,7 @@ function makeClip(spec: ClipSpec, clock: Signal<number>): Clip {
 /** Build a timeline from a record of clip specs. `at` and `dur` accept
  *  numbers, signals, or thunks; clips can overlap or leave gaps. For
  *  cumulative-start sequential clips, see `sequential()`. */
-export function timeline<T extends Record<string, ClipSpec>>(
-  specs: T,
-): TimelineOf<T> {
+export function timeline<T extends Record<string, ClipSpec>>(specs: T): TimelineOf<T> {
   const clock = signal(0);
   const clips: Clip[] = [];
   const named: Record<string, Clip> = {};
@@ -115,8 +110,7 @@ export function timeline<T extends Record<string, ClipSpec>>(
     clips.push(clip);
     named[key] = clip;
   }
-  const tl = new TimelineImpl(clock, clips) as TimelineImpl &
-    Record<string, Clip>;
+  const tl = new TimelineImpl(clock, clips) as TimelineImpl & Record<string, Clip>;
   Object.assign(tl, named);
   return tl as TimelineOf<T>;
 }
@@ -133,13 +127,8 @@ export function sequential<T extends Durations>(
   durs: T,
 ): { [K in keyof T]: { at: Signal<number>; dur: ResolvedField<T[K]> } } {
   const keys = Object.keys(durs) as Array<keyof T>;
-  const durSigs: Signal<number>[] = keys.map((k) =>
-    num(durs[k] as Val<number>),
-  );
-  const out = {} as Record<
-    string,
-    { at: Signal<number>; dur: Signal<number> }
-  >;
+  const durSigs: Signal<number>[] = keys.map(k => num(durs[k] as Val<number>));
+  const out = {} as Record<string, { at: Signal<number>; dur: Signal<number> }>;
   keys.forEach((key, i) => {
     const idx = i;
     const at = computed(() => {

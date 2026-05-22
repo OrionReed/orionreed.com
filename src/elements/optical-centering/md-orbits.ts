@@ -1,4 +1,20 @@
-import {Diagram, polar, Mount, type AnyShape, bounceIn, signal, circle, drive, group, loop, vec, stagger, rect, type Signal, zoomOut} from "../../minim";
+import {
+  type AnyShape,
+  bounceIn,
+  circle,
+  Diagram,
+  drive,
+  group,
+  loop,
+  Mount,
+  polar,
+  rect,
+  type Signal,
+  signal,
+  stagger,
+  vec,
+  zoomOut,
+} from "../../minim";
 
 export class MdOrbits extends Diagram {
   protected scene(s: Mount): void {
@@ -11,7 +27,11 @@ export class MdOrbits extends Diagram {
     const angularMotion = (period: number, sig?: Signal<number>) => {
       const a = sig ?? signal(Math.random() * 2 * Math.PI);
       const omega = (2 * Math.PI) / period;
-      this.anim.start(drive((tick) => { a.value = (a.peek() + omega * tick.dt) % (2 * Math.PI); }));
+      this.anim.start(
+        drive(tick => {
+          a.value = (a.peek() + omega * tick.dt) % (2 * Math.PI);
+        }),
+      );
       return a;
     };
 
@@ -19,9 +39,7 @@ export class MdOrbits extends Diagram {
     angularMotion(8, sun.rotate);
 
     const orbitRing = (parent: AnyShape, r: number) => {
-      parent.add(
-        circle(vec(0, 0), r, { thin: true, dashed: true, opacity: 0.2 }),
-      );
+      parent.add(circle(vec(0, 0), r, { thin: true, dashed: true, opacity: 0.2 }));
     };
 
     const planet = (
@@ -62,11 +80,13 @@ export class MdOrbits extends Diagram {
     planet(outer, 11, 1.5, 4);
 
     const bodies = [sun, mercury, venus, earth, saturn, outer];
-    this.anim.start(loop(function* () {
-      yield* stagger(0.2, bodies, (b) => bounceIn(b, 0.9));
-      yield 6;
-      yield* stagger(0.1, [...bodies].reverse(), (b) => zoomOut(b, 0.6));
-      yield 1;
-    }));
+    this.anim.start(
+      loop(function* () {
+        yield* stagger(0.2, bodies, b => bounceIn(b, 0.9));
+        yield 6;
+        yield* stagger(0.1, [...bodies].reverse(), b => zoomOut(b, 0.6));
+        yield 1;
+      }),
+    );
   }
 }

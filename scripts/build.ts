@@ -1,22 +1,22 @@
 import {
-  readFileSync,
-  writeFileSync,
-  readdirSync,
-  mkdirSync,
-  existsSync,
   copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
   statSync,
+  writeFileSync,
 } from "fs";
-import { join, extname, basename } from "path";
 import matter from "gray-matter";
 import {
-  marked,
   type MarkedExtension,
-  type TokenizerExtension,
+  marked,
   type RendererExtension,
+  type TokenizerExtension,
 } from "marked";
-import temml from "temml";
 import markedFootnote from "marked-footnote";
+import { basename, extname, join } from "path";
+import temml from "temml";
 
 /** Marked extension that renders `$$...$$` (block) and `$...$` (inline)
  *  math via Temml → MathML. No runtime CSS dependency — the New CM Math
@@ -26,7 +26,7 @@ const markedTemml: MarkedExtension = {
     {
       name: "math_block",
       level: "block",
-      start: (src) => src.indexOf("$$"),
+      start: src => src.indexOf("$$"),
       tokenizer(src): ReturnType<TokenizerExtension["tokenizer"]> {
         const match = /^\$\$([\s\S]+?)\$\$/.exec(src);
         if (match) return { type: "math_block", raw: match[0], text: match[1].trim() };
@@ -41,7 +41,7 @@ const markedTemml: MarkedExtension = {
     {
       name: "math_inline",
       level: "inline",
-      start: (src) => src.indexOf("$"),
+      start: src => src.indexOf("$"),
       tokenizer(src): ReturnType<TokenizerExtension["tokenizer"]> {
         // Match $...$ but not $$...$$
         const match = /^\$(?!\$)([^$\n]+?)\$(?!\$)/.exec(src);
@@ -70,10 +70,7 @@ interface PostData {
 
 function calculateReadingTime(content: string): number {
   // First remove script tags and their content
-  const contentWithoutScripts = content.replace(
-    /<script(?:\s[^>]*)?>[\s\S]*?<\/script>/gi,
-    ""
-  );
+  const contentWithoutScripts = content.replace(/<script(?:\s[^>]*)?>[\s\S]*?<\/script>/gi, "");
   // Then strip remaining HTML tags and count words
   const textContent = contentWithoutScripts.replace(/<[^>]*>/g, "");
   const wordCount = textContent.trim().split(/\s+/).length;
@@ -88,12 +85,9 @@ function extractAndDeferScripts(htmlContent: string): {
   const scripts: string[] = [];
   const scriptRegex = /<script(?:\s[^>]*)?>[\s\S]*?<\/script>/gi;
 
-  const contentWithoutScripts = htmlContent.replace(scriptRegex, (match) => {
+  const contentWithoutScripts = htmlContent.replace(scriptRegex, match => {
     // Extract script content
-    const scriptContent = match.replace(
-      /<script(?:\s[^>]*)?>|<\/script>/gi,
-      ""
-    );
+    const scriptContent = match.replace(/<script(?:\s[^>]*)?>|<\/script>/gi, "");
     if (scriptContent.trim()) {
       scripts.push(scriptContent.trim());
     }
@@ -103,10 +97,7 @@ function extractAndDeferScripts(htmlContent: string): {
   return { content: contentWithoutScripts, scripts };
 }
 
-function generatePostHTML(
-  post: PostData,
-  isProduction: boolean = false
-): string {
+function generatePostHTML(post: PostData, isProduction: boolean = false): string {
   // Format date if available
   const dateStr = post.frontmatter.date
     ? new Date(post.frontmatter.date).toLocaleDateString("en-US", {
@@ -117,14 +108,10 @@ function generatePostHTML(
     : null;
 
   // Use different script paths for dev vs production
-  const elementsScript = isProduction
-    ? "/js/elements.js"
-    : "/src/elements/index.ts";
+  const elementsScript = isProduction ? "/js/elements.js" : "/src/elements/index.ts";
 
   // Extract inline scripts and defer them
-  const { content: contentWithoutScripts, scripts } = extractAndDeferScripts(
-    post.content
-  );
+  const { content: contentWithoutScripts, scripts } = extractAndDeferScripts(post.content);
 
   // Create deferred script execution
   const deferredScripts =
@@ -135,11 +122,11 @@ function generatePostHTML(
       // Execute extracted scripts
       ${scripts
         .map(
-          (script) => `
+          script => `
         (async () => {
           ${script}
         })();
-      `
+      `,
         )
         .join("\n")}
     </script>
@@ -188,9 +175,7 @@ function generatePostHTML(
       name="description"
       content="${post.frontmatter.description || post.title}"
     />
-    <meta property="og:url" content="https://orionreed.com/posts/${
-      post.slug
-    }/" />
+    <meta property="og:url" content="https://orionreed.com/posts/${post.slug}/" />
     <meta property="og:type" content="article" />
     <meta property="og:title" content="${post.title}" />
     <meta
@@ -200,9 +185,7 @@ function generatePostHTML(
     <meta property="og:image" content="https://orionreed.com/website-embed.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta property="twitter:domain" content="orionreed.com" />
-    <meta property="twitter:url" content="https://orionreed.com/posts/${
-      post.slug
-    }/" />
+    <meta property="twitter:url" content="https://orionreed.com/posts/${post.slug}/" />
     <meta name="twitter:title" content="${post.title}" />
     <meta
       name="twitter:description"
@@ -220,12 +203,15 @@ function generatePostHTML(
   <body>
     <dark-mode-toggle></dark-mode-toggle>
     <main class="post${post.frontmatter.style === "essay" ? " essay" : ""}">
-${post.frontmatter.style === "essay" ? `
+${
+  post.frontmatter.style === "essay"
+    ? `
       <div class="essay-header">
         <h1>${post.title}</h1>
         <p class="essay-byline"><a href="/">Orion Reed</a></p>
       </div>
-      <span class="essay-dateline">[${dateStr ? `${dateStr} &middot; ` : ""}${post.readingTime} min read]</span>` : `
+      <span class="essay-dateline">[${dateStr ? `${dateStr} &middot; ` : ""}${post.readingTime} min read]</span>`
+    : `
       <header>
         <a href="/" style="text-decoration: none;">Orion Reed</a>
       </header>
@@ -245,7 +231,8 @@ ${post.frontmatter.style === "essay" ? `
             margin-top: 0.5rem;
           }
         }
-      </style>`}
+      </style>`
+}
       ${contentWithoutScripts}
     </main>
     <script type="module" src="${elementsScript}"></script>
@@ -269,17 +256,12 @@ function processMarkdownFile(filePath: string): PostData {
         code(code: string, language?: string) {
           // md-syntax tokenizes innerText, so we must HTML-escape the
           // raw source before embedding (parse5 treats `<` as a tag start).
-          const escaped = code
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;");
+          const escaped = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
           const lang = language ? ` lang="${language}"` : "";
           return `<md-syntax${lang}>${escaped}</md-syntax>`;
         },
         image(href: string, title: string | null, text: string) {
-          const mediaPath = href.startsWith("/")
-            ? href
-            : `/posts/${slug}/${href}`;
+          const mediaPath = href.startsWith("/") ? href : `/posts/${slug}/${href}`;
 
           // For video files, use video tag
           if (mediaPath.match(/\.(mp4|mov)$/i)) {
@@ -289,9 +271,7 @@ function processMarkdownFile(filePath: string): PostData {
           }
 
           // For images, use img tag
-          return `<img src="${mediaPath}" alt="${text || ""}"${
-            title ? ` title="${title}"` : ""
-          }>`;
+          return `<img src="${mediaPath}" alt="${text || ""}"${title ? ` title="${title}"` : ""}>`;
         },
       },
     });
@@ -323,7 +303,7 @@ function copyMediaFiles(slug: string, outputDir: string) {
 
   // Copy all files from source media directory
   const files = readdirSync(sourceMediaDir);
-  files.forEach((file) => {
+  files.forEach(file => {
     const sourcePath = join(sourceMediaDir, file);
     const targetPath = join(targetMediaDir, file);
 
@@ -342,7 +322,7 @@ export function buildPosts() {
   }
 
   const files = readdirSync(POSTS_DIR);
-  const markdownFiles = files.filter((file) => extname(file) === ".md");
+  const markdownFiles = files.filter(file => extname(file) === ".md");
 
   if (markdownFiles.length === 0) {
     console.log("No markdown files found in posts directory");
@@ -352,7 +332,7 @@ export function buildPosts() {
   // For dev: build to root; for production: check if dist exists (after vite build)
   const outputDirs = existsSync(DIST_DIR) ? [ROOT_DIR, DIST_DIR] : [ROOT_DIR];
 
-  outputDirs.forEach((outputDir) => {
+  outputDirs.forEach(outputDir => {
     // Ensure posts directory exists
     if (!existsSync(outputDir)) {
       mkdirSync(outputDir, { recursive: true });
@@ -361,7 +341,7 @@ export function buildPosts() {
       mkdirSync(join(outputDir, "posts"), { recursive: true });
     }
 
-    markdownFiles.forEach((file) => {
+    markdownFiles.forEach(file => {
       const filePath = join(POSTS_DIR, file);
       const post = processMarkdownFile(filePath);
       const isProduction = outputDir === DIST_DIR;

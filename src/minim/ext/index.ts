@@ -1,22 +1,20 @@
+export { EventBus } from "./events";
+export { snapshot } from "./snapshot";
 export {
-  timeline,
-  sequential,
   type Clip,
+  sequential,
   type Timeline,
   type TimelineOf,
+  timeline,
 } from "./timeline";
 
-export { EventBus } from "./events";
-
-export { snapshot } from "./snapshot";
-
 export {
+  inView,
   native,
+  scrollProgress,
   untilAnimation,
   untilInView,
   untilOutOfView,
-  scrollProgress,
-  viewProgress,
-  inView,
   type ViewRange,
+  viewProgress,
 } from "./waapi";

@@ -1,7 +1,7 @@
 // argmin.test.ts — scalar + 2D argmin lens behaviour.
 
-import { describe, it, expect } from "vitest";
-import { num, argminNum, argminVec } from "../index";
+import { describe, expect, it } from "vitest";
+import { argminNum, argminVec, num } from "../index";
 
 describe("argminNum — pulley / weighted-sum constraints", () => {
   it("a + b conserved; write to sum redistributes evenly", () => {
@@ -108,8 +108,10 @@ describe("argminVec — IK arms", () => {
     const L = 30;
     const tip = argminVec(
       angles,
-      (ts) => {
-        let x = 0, y = 0, sum = 0;
+      ts => {
+        let x = 0,
+          y = 0,
+          sum = 0;
         for (const t of ts) {
           sum += t;
           x += L * Math.cos(sum);
@@ -121,10 +123,7 @@ describe("argminVec — IK arms", () => {
     );
     const target = { x: 100, y: 100 };
     let iters = 0;
-    while (
-      Math.hypot(tip.value.x - target.x, tip.value.y - target.y) > 1 &&
-      iters < 1000
-    ) {
+    while (Math.hypot(tip.value.x - target.x, tip.value.y - target.y) > 1 && iters < 1000) {
       tip.value = target;
       iters++;
     }

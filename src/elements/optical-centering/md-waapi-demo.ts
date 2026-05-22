@@ -1,5 +1,18 @@
-import {Anchor, Diagram, polar, Mount, circle, computed, label, vec, rect, loop, stagger, type Signal} from "../../minim";
-import {inView, native, scrollProgress, viewProgress} from "../../minim/ext";
+import {
+  Anchor,
+  circle,
+  computed,
+  Diagram,
+  label,
+  loop,
+  Mount,
+  polar,
+  rect,
+  type Signal,
+  stagger,
+  vec,
+} from "../../minim";
+import { inView, native, scrollProgress, viewProgress } from "../../minim/ext";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -11,16 +24,32 @@ export class MdWaapiDemo extends Diagram {
 
     const bar = (y: number, name: string, p: Signal<number>): void => {
       s(
-        label(view.at(0, 0).right(20).down(y + 4), name, {
-          size: 11,
-          align: Anchor.Left,
-          opacity: 0.6,
-        }),
-        rect(X, y, BW, 6, { fill: "rgba(127, 127, 127, 0.18)" }),
-        rect(X, y, computed(() => ((v) => BW * v)(p.value)), 6, { fill: true }),
         label(
-          view.at(1, 0).left(20).down(y + 4),
-          computed(() => ((v) => v.toFixed(2))(p.value)),
+          view
+            .at(0, 0)
+            .right(20)
+            .down(y + 4),
+          name,
+          {
+            size: 11,
+            align: Anchor.Left,
+            opacity: 0.6,
+          },
+        ),
+        rect(X, y, BW, 6, { fill: "rgba(127, 127, 127, 0.18)" }),
+        rect(
+          X,
+          y,
+          computed(() => (v => BW * v)(p.value)),
+          6,
+          { fill: true },
+        ),
+        label(
+          view
+            .at(1, 0)
+            .left(20)
+            .down(y + 4),
+          computed(() => (v => v.toFixed(2))(p.value)),
           {
             size: 11,
             align: Anchor.Right,
@@ -44,29 +73,28 @@ export class MdWaapiDemo extends Diagram {
 
     const LOOPS = 15;
     const R = 15;
-    const center = vec(computed(() => ((p) => X + BW * p)(vp.value)), 150);
+    const center = vec(
+      computed(() => (p => X + BW * p)(vp.value)),
+      150,
+    );
     const tracker = polar(
       center,
       R,
-      computed(() => ((p) => p * 2 * Math.PI * LOOPS)(vp.value)),
+      computed(() => (p => p * 2 * Math.PI * LOOPS)(vp.value)),
     );
 
     s(
       circle(tracker, 7, { fill: true }),
-      label(
-        view.top.down(195),
-        "↑ loops with view progress — scroll the page",
-        {
-          size: 10,
-          align: Anchor.Center,
-          opacity: 0.5,
-        },
-      ),
-      label(
-        view.top.down(217),
-        () => (inView(this).value ? "in view" : "offscreen"),
-        { size: 11, align: Anchor.Center, opacity: 0.6 },
-      ),
+      label(view.top.down(195), "↑ loops with view progress — scroll the page", {
+        size: 10,
+        align: Anchor.Center,
+        opacity: 0.5,
+      }),
+      label(view.top.down(217), () => (inView(this).value ? "in view" : "offscreen"), {
+        size: 11,
+        align: Anchor.Center,
+        opacity: 0.6,
+      }),
     );
 
     // Raw SVG nodes (not Shapes) so minim's per-frame effects don't fight WAAPI.
@@ -100,19 +128,28 @@ export class MdWaapiDemo extends Diagram {
     );
 
     const kfs: Keyframe[] = [
-      { transform: "translateY(0px) scale(1)",
+      {
+        transform: "translateY(0px) scale(1)",
         filter: "blur(0px) hue-rotate(0turn)",
-        opacity: 0.35, offset: 0 },
-      { transform: "translateY(-22px) scale(1.6)",
+        opacity: 0.35,
+        offset: 0,
+      },
+      {
+        transform: "translateY(-22px) scale(1.6)",
         filter: "blur(2px) hue-rotate(0.5turn)",
-        opacity: 1, offset: 0.5 },
-      { transform: "translateY(0px) scale(1)",
+        opacity: 1,
+        offset: 0.5,
+      },
+      {
+        transform: "translateY(0px) scale(1)",
         filter: "blur(0px) hue-rotate(1turn)",
-        opacity: 0.35, offset: 1 },
+        opacity: 0.35,
+        offset: 1,
+      },
     ];
     this.anim.start(
       loop(function* () {
-        yield* stagger(0.05, particles, (el) =>
+        yield* stagger(0.05, particles, el =>
           native(el, kfs, { duration: 1400, easing: "ease-in-out" }),
         );
         yield 0.4;

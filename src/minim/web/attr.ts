@@ -6,7 +6,7 @@
 //   @attr.num(4)     declare cells: Signal<number>;          // default 4
 //   @attr.bool()     declare flag:  Signal<boolean>;         // default false
 
-import {signal, type Signal} from "@minim/signals";
+import { type Signal, signal } from "@minim/signals";
 
 type AttrType = "string" | "number" | "boolean";
 
@@ -22,11 +22,7 @@ interface AttrCtor {
   _attrDefaults?: Record<string, unknown>;
 }
 
-function coerce(
-  raw: string | null,
-  type: AttrType,
-  default_: unknown,
-): unknown {
+function coerce(raw: string | null, type: AttrType, default_: unknown): unknown {
   if (type === "boolean") {
     if (raw !== null) return true;
     return default_ === undefined ? false : default_;
@@ -47,12 +43,7 @@ function bagOf(instance: object): Map<string, Signal<unknown>> {
   return bag;
 }
 
-function register(
-  target: object,
-  propertyKey: string,
-  type: AttrType,
-  default_: unknown,
-): void {
+function register(target: object, propertyKey: string, type: AttrType, default_: unknown): void {
   const ctor = target.constructor as AttrCtor;
   if (!ctor._attributes) ctor._attributes = [];
   if (!ctor._attributes.includes(propertyKey)) ctor._attributes.push(propertyKey);
@@ -115,11 +106,7 @@ export function observedAttributesOf(ctor: Function): string[] {
 /** Push a new HTML-attribute value into its signal, coerced by type.
  *  Lazy-creates the signal if not read yet. Called by
  *  `Diagram.attributeChangedCallback`. */
-export function syncAttrSignal(
-  instance: HTMLElement,
-  name: string,
-  raw: string | null,
-): void {
+export function syncAttrSignal(instance: HTMLElement, name: string, raw: string | null): void {
   const ctor = instance.constructor as AttrCtor;
   const type = ctor._attrTypes?.[name];
   if (!type) return;

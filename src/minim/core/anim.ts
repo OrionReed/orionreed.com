@@ -17,12 +17,7 @@ export interface Tick {
   readonly elapsed: number;
 }
 
-export type Yieldable =
-  | undefined
-  | number
-  | Animator<any>
-  | readonly Yieldable[]
-  | Suspend<any>;
+export type Yieldable = undefined | number | Animator<any> | readonly Yieldable[] | Suspend<any>;
 
 export type Animator<R = void> = Generator<Yieldable, R, Tick>;
 
@@ -32,12 +27,7 @@ export type Suspend<T = void> = (
   spawn: (g: Animator<any>) => () => void,
 ) => void | (() => void);
 
-export type Resume<Y> =
-  Y extends Animator<infer R>
-    ? R
-    : Y extends Suspend<infer R>
-      ? R
-      : void;
+export type Resume<Y> = Y extends Animator<infer R> ? R : Y extends Suspend<infer R> ? R : void;
 
 export type Cut<T> = { readonly [CUT_KEY]: T };
 
@@ -50,9 +40,7 @@ export const cut = <T>(value: T): Cut<T> => ({ [CUT_KEY]: value });
 
 /** True if `v` is a Generator (duck-typed via `.next`). */
 export const isGenerator = (v: unknown): v is Animator =>
-  v !== null &&
-  typeof v === "object" &&
-  typeof (v as { next?: unknown }).next === "function";
+  v !== null && typeof v === "object" && typeof (v as { next?: unknown }).next === "function";
 
 // ─── Runtime ─────────────────────────────────────────────────────────
 
@@ -73,7 +61,7 @@ export class Anim {
   }
 
   constructor(opts: { onError?: (e: unknown) => void } = {}) {
-    this.onError = opts.onError ?? ((e) => console.error("minim:", e));
+    this.onError = opts.onError ?? (e => console.error("minim:", e));
   }
 
   /** Spawn one or more root-level actives. Each Animator becomes an
@@ -82,7 +70,7 @@ export class Anim {
    *  concurrent group with cascading cancel + joined completion. */
   start(...gs: Animator<any>[]): () => void {
     if (gs.length === 0) return () => {};
-    const actives = gs.map((g) => this.spawn(g, null, null));
+    const actives = gs.map(g => this.spawn(g, null, null));
     return () => {
       for (const a of actives) this.cancel(a);
     };
@@ -147,11 +135,7 @@ export class Anim {
     if (this.deads !== d0) this.compact();
   }
 
-  private spawn(
-    gen: Animator<any>,
-    parent: Active | null,
-    onSettle: OnSettle | null,
-  ): Active {
+  private spawn(gen: Animator<any>, parent: Active | null, onSettle: OnSettle | null): Active {
     const a = new Active(gen);
     a.onSettle = onSettle;
     a.localClock = parent ? parent.localClock : 0;
@@ -175,12 +159,7 @@ export class Anim {
     }
   }
 
-  private settle(
-    a: Active,
-    value: unknown,
-    errored: boolean,
-    error: unknown,
-  ): void {
+  private settle(a: Active, value: unknown, errored: boolean, error: unknown): void {
     if (a.wakeAt === DEAD) return;
     a.wakeAt = DEAD;
     this.deads++;
@@ -202,8 +181,7 @@ export class Anim {
   private compact(): void {
     const as = this.actives;
     let w = 0;
-    for (let i = 0; i < as.length; i++)
-      if (as[i].wakeAt !== DEAD) as[w++] = as[i];
+    for (let i = 0; i < as.length; i++) if (as[i].wakeAt !== DEAD) as[w++] = as[i];
     as.length = w;
     this.deads = 0;
   }
@@ -242,8 +220,7 @@ export class Anim {
       this.safe(c);
       action();
     };
-    const wake = ((v?: unknown) =>
-      finish(() => this.advance(a, unwrapCut(v), false))) as Wake<any>;
+    const wake = ((v?: unknown) => finish(() => this.advance(a, unwrapCut(v), false))) as Wake<any>;
     wake.throw = (e: unknown) => finish(() => this.advance(a, e, true));
 
     const spawn = (g: Animator): (() => void) => {
@@ -281,11 +258,7 @@ export class Anim {
       if (a.wakeAt === DEAD || a.cleanup === null) return;
       a.cleanup = null;
       a.wakeAt = READY;
-      this.advance(
-        a,
-        err === undefined ? unwrapCut(v) : err,
-        err !== undefined,
-      );
+      this.advance(a, err === undefined ? unwrapCut(v) : err, err !== undefined);
     });
   }
 
@@ -302,17 +275,12 @@ export class Anim {
       for (const c of children) if (c.wakeAt !== DEAD) this.cancel(c);
     };
 
-    const settle = (
-      v: unknown,
-      asThrow: boolean,
-      cancelSibs: boolean,
-    ): void => {
+    const settle = (v: unknown, asThrow: boolean, cancelSibs: boolean): void => {
       if (aborted) return;
       aborted = true;
       a.cleanup = null;
       a.wakeAt = READY;
-      if (cancelSibs)
-        for (const c of children) if (c.wakeAt !== DEAD) this.cancel(c);
+      if (cancelSibs) for (const c of children) if (c.wakeAt !== DEAD) this.cancel(c);
       this.advance(a, v, asThrow);
     };
 
@@ -322,18 +290,13 @@ export class Anim {
       const idx = j;
       const kidGen = isGenerator(k) ? k : asGen(k);
       children.push(
-        this.spawn(
-          kidGen,
-          a,
-          (value, error) => {
-            if (aborted) return;
-            if (error !== undefined) return settle(error, true, true);
-            if (isCut(value))
-              return settle((value as Cut<unknown>)[CUT_KEY], false, true);
-            results[idx] = value;
-            if (--left === 0) settle(results, false, false);
-          },
-        ),
+        this.spawn(kidGen, a, (value, error) => {
+          if (aborted) return;
+          if (error !== undefined) return settle(error, true, true);
+          if (isCut(value)) return settle((value as Cut<unknown>)[CUT_KEY], false, true);
+          results[idx] = value;
+          if (--left === 0) settle(results, false, false);
+        }),
       );
     }
   }
@@ -356,8 +319,7 @@ type OnSettle = (value: unknown, error: unknown) => void;
 const isCut = (v: unknown): v is Cut<unknown> =>
   v !== null && typeof v === "object" && CUT_KEY in (v as object);
 
-const unwrapCut = (v: unknown): unknown =>
-  isCut(v) ? (v as Cut<unknown>)[CUT_KEY] : v;
+const unwrapCut = (v: unknown): unknown => (isCut(v) ? (v as Cut<unknown>)[CUT_KEY] : v);
 
 class Active {
   /** READY (0) | PARKED (Inf) | DEAD (-Inf) | positive sleep target. */
@@ -377,7 +339,5 @@ function* asGen(y: Yieldable): Animator<any> {
 function describe(v: unknown): string {
   if (v === null) return "null";
   if (typeof v !== "object") return String(v);
-  return (
-    (v as { constructor?: { name?: string } }).constructor?.name ?? "object"
-  );
+  return (v as { constructor?: { name?: string } }).constructor?.name ?? "object";
 }

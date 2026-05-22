@@ -13,8 +13,8 @@
 //      without an iteration budget. (Demonstrates the real failure
 //      mode our recent equality discussion was pointing at.)
 
-import { describe, it, expect } from "vitest";
-import { Num, num, eq, effect } from "../index";
+import { describe, expect, it } from "vitest";
+import { effect, eq, Num, num } from "../index";
 
 describe("cycle: single write is finite", () => {
   it("simple eq terminates", () => {
@@ -22,7 +22,10 @@ describe("cycle: single write is finite", () => {
     const b = num(0);
     eq(a, b);
     let runs = 0;
-    effect(() => { void a.value; runs++; });
+    effect(() => {
+      void a.value;
+      runs++;
+    });
     runs = 0;
     a.value = 1;
     expect(runs).toBe(1);
@@ -57,7 +60,7 @@ describe("cycle: drift-prone roundtrip — the actual failure mode", () => {
     let writes = 0;
     const drifty = Num.lens(
       () => a.value * DRIFT,
-      (v) => {
+      v => {
         writes++;
         if (writes > BUDGET) throw new Error("BUDGET");
         (a as unknown as { value: number }).value = v;
@@ -78,11 +81,16 @@ describe("cycle: drift-prone roundtrip — the actual failure mode", () => {
     let writes = 0;
     const clean = Num.lens(
       () => a.value,
-      (v) => { (a as unknown as { value: number }).value = v; },
+      v => {
+        (a as unknown as { value: number }).value = v;
+      },
     );
     eq(a, clean);
 
-    effect(() => { void a.value; writes++; });
+    effect(() => {
+      void a.value;
+      writes++;
+    });
     writes = 0;
 
     a.value = 5;

@@ -3,14 +3,14 @@
 // RFTS (conformance.test.ts) covers the algorithm-level correctness;
 // this file tests our additions:
 //   - peek() honors Dirty
-//   - Constructor takes plain T (binding is .bind())
-//   - sig.bind(source) — the binding API
+//   - Constructor takes plain T (binding via the `bind` free fn)
+//   - bind(target, source) — the binding API
 //   - isSignal brand: prototype-based, not structural
 //   - value() unwraps reactives without footgunning plain {value: …}
 
+import { bind, computed, effect, isSignal, lens, Signal, signal, value } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
-import { signal, computed, effect, lens, value, isSignal, Signal } from "@minim/signals";
 
 describe("engine", () => {
   it("all checks", () => {
@@ -18,7 +18,9 @@ describe("engine", () => {
     {
       const s = signal(0);
       let effectVal = -1;
-      const stop = effect(() => { effectVal = s.value; });
+      const stop = effect(() => {
+        effectVal = s.value;
+      });
       s.value = 42;
       check("peek after write returns new value", s.peek() === 42);
       check("effect saw new value", effectVal === 42);
@@ -31,11 +33,11 @@ describe("engine", () => {
       check("plain init", s.value === 7);
     }
 
-    section("target.bind(source) — the binding API");
+    section("bind(target, source) — the binding API");
     {
       const a = signal(2);
       const s = signal(0);
-      const stop = s.bind(() => a.value * 10);
+      const stop = bind(s, () => a.value * 10);
       check("initial computed via thunk", s.value === 20);
       a.value = 5;
       check("auto-updates on a change", s.value === 50);
@@ -48,7 +50,7 @@ describe("engine", () => {
     {
       const src = signal(100);
       const t = signal(0);
-      const stop = t.bind(src);
+      const stop = bind(t, src);
       check("initial sync", t.value === 100);
       src.value = 200;
       check("auto-updates", t.value === 200);
@@ -63,7 +65,15 @@ describe("engine", () => {
     {
       check("isSignal(signal)", isSignal(signal(0)));
       check("isSignal(computed)", isSignal(computed(() => 0)));
-      check("isSignal(lens)", isSignal(lens(() => 0, () => {})));
+      check(
+        "isSignal(lens)",
+        isSignal(
+          lens(
+            () => 0,
+            () => {},
+          ),
+        ),
+      );
       check("isSignal(plain {value: 5})", !isSignal({ value: 5 }));
       check("isSignal(plain {value: 5, name: 'a'})", !isSignal({ value: 5, name: "a" }));
       check("isSignal(number)", !isSignal(5));

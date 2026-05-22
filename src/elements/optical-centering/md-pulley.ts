@@ -1,6 +1,17 @@
 import {
-  Anchor, Diagram, Mount, Vec, num, vec,
-  circle, drag, label, line, rect, type Writable, type Num,
+  Anchor,
+  circle,
+  Diagram,
+  drag,
+  label,
+  line,
+  Mount,
+  type Num,
+  num,
+  rect,
+  Vec,
+  vec,
+  type Writable,
 } from "../../minim";
 
 const PULLEY_Y = 100;
@@ -25,7 +36,9 @@ export class MdPulley extends Diagram {
     const hang = (tangent: Vec, drop: Writable<Num>) =>
       Vec.lens(
         () => ({ x: tangent.value.x, y: tangent.value.y + drop.value }),
-        (p) => { drop.value = p.y - tangent.value.y; },
+        p => {
+          drop.value = p.y - tangent.value.y;
+        },
       );
     const aPos = hang(leftTan, aDrop);
     const bPos = hang(rightTan, bDrop);
@@ -45,12 +58,16 @@ export class MdPulley extends Diagram {
     bRect.el.style.cursor = "ns-resize";
 
     s(
-      label(view.top.down(20),
+      label(
+        view.top.down(20),
         "drag a weight — rope length is conserved, the other follows opposite",
-        { size: 12, align: Anchor.Center, opacity: 0.7 }),
-      label(view.bottom.up(16),
+        { size: 12, align: Anchor.Center, opacity: 0.7 },
+      ),
+      label(
+        view.bottom.up(16),
         "b = a.affine(−1, L) · the invertible chain IS the conservation law",
-        { size: 10, align: Anchor.Center, opacity: 0.5 }),
+        { size: 10, align: Anchor.Center, opacity: 0.5 },
+      ),
     );
   }
 }

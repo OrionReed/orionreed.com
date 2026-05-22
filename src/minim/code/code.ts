@@ -24,11 +24,22 @@
 // and routes typed tokens to the part containing them. Independent of
 // part structure — adding cuts doesn't change the colours.
 
-import {effect, num, signal, vec, value, type Signal, type Num as NumSignal, type Vec, type Val, type Writable} from "@minim/signals";
-import {Shape, type ShapeOpts} from "@minim/shapes";
-import {type Animator, type Easing} from "@minim/core";
-import {morph} from "./morph";
-import {tokenize} from "./tokenize";
+import { type Animator, type Easing } from "@minim/core";
+import { Shape, type ShapeOpts } from "@minim/shapes";
+import {
+  effect,
+  type Num as NumSignal,
+  num,
+  type Signal,
+  signal,
+  type Val,
+  type Vec,
+  value,
+  vec,
+  type Writable,
+} from "@minim/signals";
+import { morph } from "./morph";
+import { tokenize } from "./tokenize";
 
 export interface CodeOpts extends ShapeOpts {
   /** Font size in user units. Default 14. */
@@ -39,8 +50,7 @@ export interface CodeOpts extends ShapeOpts {
   language?: string;
 }
 
-const DEFAULT_FONT =
-  "ui-monospace, SFMono-Regular, Menlo, 'Cascadia Code', monospace";
+const DEFAULT_FONT = "ui-monospace, SFMono-Regular, Menlo, 'Cascadia Code', monospace";
 
 const partCss = "position:absolute;left:0;top:0;white-space:pre;will-change:transform";
 
@@ -76,9 +86,10 @@ export class Part {
       effect(() => {
         const p = this.position.value;
         const r = this.rotation.value;
-        this.el.style.transform = r === 0
-          ? `translate(${p.x}px, ${p.y}px)`
-          : `translate(${p.x}px, ${p.y}px) rotate(${r}rad)`;
+        this.el.style.transform =
+          r === 0
+            ? `translate(${p.x}px, ${p.y}px)`
+            : `translate(${p.x}px, ${p.y}px) rotate(${r}rad)`;
       }),
       effect(() => {
         this.el.style.opacity = String(this.opacity.value);
@@ -102,7 +113,7 @@ export class Part {
 }
 
 /** Measure monospace metrics for `(family, size)`. One-off per shape. */
-function measureFont(size: number, family: string): {w: number; h: number} {
+function measureFont(size: number, family: string): { w: number; h: number } {
   const div = document.createElement("div");
   div.style.cssText =
     `position:absolute;visibility:hidden;left:-9999px;top:0;` +
@@ -112,7 +123,7 @@ function measureFont(size: number, family: string): {w: number; h: number} {
   const w = div.offsetWidth;
   const h = div.offsetHeight;
   document.body.removeChild(div);
-  return {w, h};
+  return { w, h };
 }
 
 /** A Shape rendering monospace source code as a list of `Part`s. */
@@ -142,21 +153,18 @@ export class CodeShape extends Shape {
     const fontSize = opts.size ?? 14;
     const fontFamily = opts.font ?? DEFAULT_FONT;
     const language = opts.language ?? "typescript";
-    const {w: charW, h: lineH} = measureFont(fontSize, fontFamily);
+    const { w: charW, h: lineH } = measureFont(fontSize, fontFamily);
     const initialStr = value(initial);
 
     const lines = initialStr.split("\n");
-    const initW = (lines.reduce((a, l) => Math.max(a, l.length), 0)) * charW;
+    const initW = lines.reduce((a, l) => Math.max(a, l.length), 0) * charW;
     const initH = lines.length * lineH;
     const w = signal(initW);
     const h = signal(initH);
 
-    super(
-      "foreignObject",
-      () => ({x: 0, y: 0, w: w.value, h: h.value}),
-      opts,
-      {origin: () => ({x: w.value / 2, y: h.value / 2})},
-    );
+    super("foreignObject", () => ({ x: 0, y: 0, w: w.value, h: h.value }), opts, {
+      origin: () => ({ x: w.value / 2, y: h.value / 2 }),
+    });
 
     this.width = w;
     this.height = h;
@@ -194,7 +202,9 @@ export class CodeShape extends Shape {
         this.#render(src);
       }),
       () => this.#clearSyntaxRanges(),
-      () => { for (const p of this.parts) p.dispose(); },
+      () => {
+        for (const p of this.parts) p.dispose();
+      },
     );
   }
 
@@ -251,7 +261,7 @@ export class CodeShape extends Shape {
 
     for (const parts of byRow.values()) {
       parts.sort((a, b) => a.position.peek().x - b.position.peek().x);
-      const fullText = parts.map((p) => p.text).join("");
+      const fullText = parts.map(p => p.text).join("");
       const tokens = tokenize(fullText, this.language);
       const starts: number[] = [];
       let off = 0;
@@ -316,7 +326,7 @@ export class CodeShape extends Shape {
     if (idx < 0) throw new Error("cut: part not in this CodeShape");
     const sorted = [...new Set(offsets)]
       .sort((a, b) => a - b)
-      .filter((o) => o > 0 && o < part.text.length);
+      .filter(o => o > 0 && o < part.text.length);
     if (sorted.length === 0) return [part];
     const bounds = [0, ...sorted, part.text.length];
     const pos = part.position.peek();
@@ -346,10 +356,8 @@ export class CodeShape extends Shape {
   uncut(parts: readonly Part[]): Part {
     if (parts.length === 0) throw new Error("uncut: no parts");
     if (parts.length === 1) return parts[0];
-    const sorted = [...parts].sort(
-      (a, b) => a.position.peek().x - b.position.peek().x,
-    );
-    const text = sorted.map((p) => p.text).join("");
+    const sorted = [...parts].sort((a, b) => a.position.peek().x - b.position.peek().x);
+    const text = sorted.map(p => p.text).join("");
     const pos = sorted[0].position.peek();
     const merged = new Part(text, pos.x, pos.y, sorted[0].key);
     this.wrapper.appendChild(merged.el);
@@ -366,7 +374,7 @@ export class CodeShape extends Shape {
 
   /** All parts sharing `key`. Returns a fresh array. */
   group(key: string): Part[] {
-    return this.parts.filter((p) => p.key === key);
+    return this.parts.filter(p => p.key === key);
   }
 
   /** Animate from current source to `target`. See `morph.ts`. */

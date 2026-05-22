@@ -1,7 +1,7 @@
-import { defineConfig } from "vite";
-import { buildPosts } from "./scripts/build";
-import mkcert from "vite-plugin-mkcert";
 import { fileURLToPath } from "node:url";
+import { defineConfig } from "vite";
+import mkcert from "vite-plugin-mkcert";
+import { buildPosts } from "./scripts/build";
 
 const minimRoot = fileURLToPath(new URL("./src/minim", import.meta.url));
 
@@ -24,14 +24,14 @@ export default defineConfig({
       },
       output: {
         format: "es",
-        entryFileNames: (chunkInfo) => {
+        entryFileNames: chunkInfo => {
           if (chunkInfo.name === "elements") {
             return "js/elements.js";
           }
           return "js/[name]-[hash].js";
         },
         chunkFileNames: "js/[name]-[hash].js",
-        assetFileNames: (assetInfo) => {
+        assetFileNames: assetInfo => {
           if (assetInfo.name?.endsWith(".css")) {
             return "css/[name]-[hash][extname]";
           }
@@ -50,7 +50,7 @@ export default defineConfig({
       configureServer(server) {
         server.watcher.add("/src/posts/**/*");
         server.watcher.add("/src/elements/**/*");
-        server.watcher.on("change", (file) => {
+        server.watcher.on("change", file => {
           if (file.includes("src/posts/") || file.includes("src/elements/")) {
             buildPosts();
             server.ws.send({

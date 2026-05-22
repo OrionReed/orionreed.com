@@ -17,5 +17,5 @@
 //   codeStyles                          → ::highlight() colour rules
 //                                          to drop in `Diagram.styles`.
 
-export {CodeShape, code, codeStyles, Part, type CodeOpts} from "./code";
-export {tokenize, type Token} from "./tokenize";
+export { type CodeOpts, CodeShape, code, codeStyles, Part } from "./code";
+export { type Token, tokenize } from "./tokenize";

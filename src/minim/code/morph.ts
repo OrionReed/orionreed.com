@@ -22,15 +22,25 @@
 //   Gained             — fresh part created at its new row with
 //                        opacity 0, fades to 1.
 
-import {easeInOut, type Animator, type Easing, type Yieldable} from "@minim/core";
-import {vec} from "@minim/signals";
-import {Part, type CodeShape} from "./code";
+import { type Animator, type Easing, easeInOut, type Yieldable } from "@minim/core";
+import { vec } from "@minim/signals";
+import { type CodeShape, Part } from "./code";
 
 // ── Line-level LCS + classification ─────────────────────────────────
 
-interface RawMatch {kind: "match"; oldIdx: number; newIdx: number}
-interface RawDel {kind: "del"; oldIdx: number}
-interface RawIns {kind: "ins"; newIdx: number}
+interface RawMatch {
+  kind: "match";
+  oldIdx: number;
+  newIdx: number;
+}
+interface RawDel {
+  kind: "del";
+  oldIdx: number;
+}
+interface RawIns {
+  kind: "ins";
+  newIdx: number;
+}
 type RawOp = RawMatch | RawDel | RawIns;
 
 /** LCS over `trimStart`-equal lines. An indent-only change still
@@ -40,7 +50,7 @@ function lcsLines(oldLines: readonly string[], newLines: readonly string[]): Raw
   const eq = (a: string, b: string): boolean => a.trimStart() === b.trimStart();
   const m = oldLines.length;
   const n = newLines.length;
-  const dp: number[][] = Array.from({length: m + 1}, () => new Array<number>(n + 1).fill(0));
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
   for (let i = m - 1; i >= 0; i--) {
     for (let j = n - 1; j >= 0; j--) {
       dp[i][j] = eq(oldLines[i], newLines[j])
@@ -49,27 +59,39 @@ function lcsLines(oldLines: readonly string[], newLines: readonly string[]): Raw
     }
   }
   const ops: RawOp[] = [];
-  let i = 0, j = 0;
+  let i = 0,
+    j = 0;
   while (i < m && j < n) {
     if (eq(oldLines[i], newLines[j])) {
-      ops.push({kind: "match", oldIdx: i, newIdx: j});
-      i++; j++;
+      ops.push({ kind: "match", oldIdx: i, newIdx: j });
+      i++;
+      j++;
     } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      ops.push({kind: "del", oldIdx: i});
+      ops.push({ kind: "del", oldIdx: i });
       i++;
     } else {
-      ops.push({kind: "ins", newIdx: j});
+      ops.push({ kind: "ins", newIdx: j });
       j++;
     }
   }
-  while (i < m) ops.push({kind: "del", oldIdx: i++});
-  while (j < n) ops.push({kind: "ins", newIdx: j++});
+  while (i < m) ops.push({ kind: "del", oldIdx: i++ });
+  while (j < n) ops.push({ kind: "ins", newIdx: j++ });
   return ops;
 }
 
-interface Kept {kind: "kept"; oldIdx: number; newIdx: number}
-interface Lost {kind: "lost"; oldIdx: number}
-interface Gained {kind: "gained"; newIdx: number}
+interface Kept {
+  kind: "kept";
+  oldIdx: number;
+  newIdx: number;
+}
+interface Lost {
+  kind: "lost";
+  oldIdx: number;
+}
+interface Gained {
+  kind: "gained";
+  newIdx: number;
+}
 type LineOp = Kept | Lost | Gained;
 
 /** Classify raw LCS ops into Kept/Lost/Gained in one pass.
@@ -126,17 +148,17 @@ function classify(
   for (let k = 0; k < raw.length; k++) {
     const op = raw[k];
     if (op.kind === "match") {
-      out.push({kind: "kept", oldIdx: op.oldIdx, newIdx: op.newIdx});
+      out.push({ kind: "kept", oldIdx: op.oldIdx, newIdx: op.newIdx });
     } else if (op.kind === "del") {
       if (paired.has(k)) continue;
-      out.push({kind: "lost", oldIdx: op.oldIdx});
+      out.push({ kind: "lost", oldIdx: op.oldIdx });
     } else {
       const delIdx = insertPair.get(k);
       if (delIdx !== undefined) {
         const delOp = raw[delIdx] as RawDel;
-        out.push({kind: "kept", oldIdx: delOp.oldIdx, newIdx: op.newIdx});
+        out.push({ kind: "kept", oldIdx: delOp.oldIdx, newIdx: op.newIdx });
       } else {
-        out.push({kind: "gained", newIdx: op.newIdx});
+        out.push({ kind: "gained", newIdx: op.newIdx });
       }
     }
   }

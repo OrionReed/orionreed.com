@@ -1,4 +1,24 @@
-import {Diagram, Mount, Text, Anchor, circle, computed, easeInOut, easeOut, label, line, loop, vec, rect, snapshot, t, timeline, when, type LineOpts, Vec} from "../../minim";
+import {
+  Anchor,
+  circle,
+  computed,
+  Diagram,
+  easeInOut,
+  easeOut,
+  type LineOpts,
+  label,
+  line,
+  loop,
+  Mount,
+  rect,
+  snapshot,
+  Text,
+  t,
+  timeline,
+  Vec,
+  vec,
+  when,
+} from "../../minim";
 
 /** Italic letter with optional italic subscript. */
 function math(base: string, sub?: string): Text {
@@ -27,8 +47,8 @@ export class MdCentering extends Diagram {
       box: { at: 4.64, dur: 0.6 },
       centroid: { at: 5.64, dur: 0.5 },
     });
-    const lineT = computed(() => (easeOut)(tl.intro.t.value));
-    const morphT = computed(() => (easeInOut)(tl.morph.t.value));
+    const lineT = computed(() => easeOut(tl.intro.t.value));
+    const morphT = computed(() => easeInOut(tl.morph.t.value));
     const xLabelsT = tl.xLabels.t;
     const yLabelsT = tl.yLabels.t;
     const boxT = tl.box.t;
@@ -41,7 +61,7 @@ export class MdCentering extends Diagram {
     const subs = ["min", "c", "max"];
 
     const yTip = xEnd.lerp(yEnd, morphT);
-    const yShown = () => tl.morph.t.value ? 1 : 0;
+    const yShown = () => (tl.morph.t.value ? 1 : 0);
 
     s(line(O, O.lerp(xEnd, lineT)), line(O, yTip, { opacity: yShown }));
 
@@ -59,44 +79,46 @@ export class MdCentering extends Diagram {
         }),
         tick(O, yTip, f, 7, { opacity: yShown }),
         tick(O, xEnd, f, 7, {
-          opacity: computed(() => ((v) => clamp01((v - f) / 0.06))(lineT.value)),
+          opacity: computed(() => (v => clamp01((v - f) / 0.06))(lineT.value)),
         }),
       ),
     );
 
-    const [xMin, xMid, xMax] = F.map((f) => O.lerp(xEnd, f));
-    const [yMin, yMid, yMax] = F.map((f) => O.lerp(yEnd, f));
+    const [xMin, xMid, xMax] = F.map(f => O.lerp(xEnd, f));
+    const [yMin, yMid, yMax] = F.map(f => O.lerp(yEnd, f));
     const c = vec(xMid.x, yMid.y);
 
     s(
       rect(vec(xMin.x, yMax.y), vec(xMax.x, yMin.y), {
         thin: true,
         corner: 4,
-        opacity: computed(() => ((v) => v * 0.5)(boxT.value)),
+        opacity: computed(() => (v => v * 0.5)(boxT.value)),
       }),
       line(xMid, c, {
         thin: true,
         dashed: true,
-        opacity: computed(() => ((v) => v * 0.6)(boxT.value)),
+        opacity: computed(() => (v => v * 0.6)(boxT.value)),
       }),
       line(yMid, c, {
         thin: true,
         dashed: true,
-        opacity: computed(() => ((v) => v * 0.6)(boxT.value)),
+        opacity: computed(() => (v => v * 0.6)(boxT.value)),
       }),
       circle(c, 4, { fill: true, opacity: centroidT }),
-      label(
-        c.right(10).up(10),
-        t("(", math("x", "c"), ", ", math("y", "c"), ")"),
-        { size: 14, align: Anchor.BottomLeft, opacity: centroidT },
-      ),
+      label(c.right(10).up(10), t("(", math("x", "c"), ", ", math("y", "c"), ")"), {
+        size: 14,
+        align: Anchor.BottomLeft,
+        opacity: centroidT,
+      }),
     );
 
     const reset = snapshot(tl.clock);
-    this.anim.start(loop(function* () {
-      reset();
-      yield* tl;
-      yield 4.5;
-    }));
+    this.anim.start(
+      loop(function* () {
+        reset();
+        yield* tl;
+        yield 4.5;
+      }),
+    );
   }
 }

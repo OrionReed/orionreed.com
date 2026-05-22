@@ -1,4 +1,24 @@
-import {Diagram, Mount, Anchor, button, signal, play, circle, wave, fadeOut, label, loop, num, vec, type Animator, type Signal, type Content, type Has, Num, type Writable} from "../../minim";
+import {
+  Anchor,
+  type Animator,
+  button,
+  type Content,
+  circle,
+  Diagram,
+  fadeOut,
+  type Has,
+  label,
+  loop,
+  Mount,
+  Num,
+  num,
+  play,
+  type Signal,
+  signal,
+  vec,
+  type Writable,
+  wave,
+} from "../../minim";
 
 /** Sine oscillation around `sig`'s start value. */
 const oscillate = (sig: Writable<Num>, amp: number, freq: number) =>
@@ -88,9 +108,7 @@ export class MdCancel extends Diagram {
         status.value = "running";
 
         yield* play([
-          ...slots.map((slot, i) =>
-            lifecycle(slot.shape, slot.y, 14, 0.45 + i * 0.04, stop),
-          ),
+          ...slots.map((slot, i) => lifecycle(slot.shape, slot.y, 14, 0.45 + i * 0.04, stop)),
         ]).until(hardStop);
 
         yield hardStop.peek() ? 1.6 : 1.4;

@@ -2,8 +2,8 @@
 // signal's `watched`/`unwatched` hooks; one shared capture-phase
 // listener serves them all. Range names mirror CSS `view-timeline`.
 
-import {suspend, type Animator} from "@minim/core";
-import {signal, type Signal} from "@minim/signals";
+import { type Animator, suspend } from "@minim/core";
+import { type Signal, signal } from "@minim/signals";
 
 /** WAAPI animation as a minim Animator. Bare-number `opts` is seconds;
  *  object `opts` passes through to `Element.animate` (ms). */
@@ -12,13 +12,15 @@ export function* native(
   keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
   opts: number | KeyframeAnimationOptions = {},
 ): Animator<void> {
-  const native = typeof opts === "number"
-    ? { duration: opts * 1000 }
-    : opts;
+  const native = typeof opts === "number" ? { duration: opts * 1000 } : opts;
   const a = el.animate(keyframes, native);
   try {
     yield* untilAnimation(a);
-    try { a.commitStyles(); } catch { /* disconnected or non-committable */ }
+    try {
+      a.commitStyles();
+    } catch {
+      /* disconnected or non-committable */
+    }
   } finally {
     a.cancel();
   }
@@ -26,7 +28,7 @@ export function* native(
 
 /** Wake on the animation's `finish` event; resume with the event. */
 export function untilAnimation(a: Animation): Animator<AnimationPlaybackEvent> {
-  return suspend<AnimationPlaybackEvent>((wake) => {
+  return suspend<AnimationPlaybackEvent>(wake => {
     const handler = (e: Event): void => wake(e as AnimationPlaybackEvent);
     a.addEventListener("finish", handler, { once: true });
     return () => a.removeEventListener("finish", handler);
@@ -34,15 +36,12 @@ export function untilAnimation(a: Animation): Animator<AnimationPlaybackEvent> {
 }
 
 /** Wake when `el` enters the viewport. Wakes immediately if already in. */
-export function untilInView(
-  el: Element,
-  opts?: IntersectionObserverInit,
-): Animator<void> {
-  return suspend<void>((wake) => {
+export function untilInView(el: Element, opts?: IntersectionObserverInit): Animator<void> {
+  return suspend<void>(wake => {
     let woke = false;
-    const obs = new IntersectionObserver((entries) => {
+    const obs = new IntersectionObserver(entries => {
       if (woke) return;
-      if (entries.some((e) => e.isIntersecting)) {
+      if (entries.some(e => e.isIntersecting)) {
         woke = true;
         wake();
       }
@@ -53,15 +52,12 @@ export function untilInView(
 }
 
 /** Wake when `el` leaves the viewport. Wakes immediately if already out. */
-export function untilOutOfView(
-  el: Element,
-  opts?: IntersectionObserverInit,
-): Animator<void> {
-  return suspend<void>((wake) => {
+export function untilOutOfView(el: Element, opts?: IntersectionObserverInit): Animator<void> {
+  return suspend<void>(wake => {
     let woke = false;
-    const obs = new IntersectionObserver((entries) => {
+    const obs = new IntersectionObserver(entries => {
       if (woke) return;
-      if (entries.some((e) => !e.isIntersecting)) {
+      if (entries.some(e => !e.isIntersecting)) {
         woke = true;
         wake();
       }
@@ -149,10 +145,7 @@ function scrollSignal<T>(read: () => T, initial: T): Signal<T> {
 
 /** Global page scroll progress in `[0, 1]`; `0` if page doesn't scroll. */
 export function scrollProgress(): Signal<number> {
-  return scrollSignal(
-    () => (pageTotal > 0 ? clamp01(window.scrollY / pageTotal) : 0),
-    0,
-  );
+  return scrollSignal(() => (pageTotal > 0 ? clamp01(window.scrollY / pageTotal) : 0), 0);
 }
 
 /** Slice of an element's viewport traversal mapped to `[0, 1]`. Names
@@ -192,16 +185,10 @@ function rangeProgress(rect: DOMRect, vp: number, range: ViewRange): number {
 
 // Memoize `viewProgress` by (el, range) so N readers share one layout
 // read per tick. WeakMap GCs when el is dropped.
-const viewCache = new WeakMap<
-  Element,
-  Partial<Record<ViewRange, Signal<number>>>
->();
+const viewCache = new WeakMap<Element, Partial<Record<ViewRange, Signal<number>>>>();
 
 /** Element view-progress in `[0, 1]` over `range` (default `cover`). */
-export function viewProgress(
-  el: Element,
-  range: ViewRange = "cover",
-): Signal<number> {
+export function viewProgress(el: Element, range: ViewRange = "cover"): Signal<number> {
   let entry = viewCache.get(el);
   if (!entry) viewCache.set(el, (entry = {}));
   return (entry[range] ??= scrollSignal(
@@ -212,26 +199,18 @@ export function viewProgress(
 
 function elInViewport(el: Element): boolean {
   const r = el.getBoundingClientRect();
-  return (
-    r.bottom > 0 &&
-    r.top < window.innerHeight &&
-    r.right > 0 &&
-    r.left < window.innerWidth
-  );
+  return r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
 }
 
 /** Reactive boolean; `true` while `el` intersects the viewport. Seeded
  *  synchronously from rect, then maintained by IntersectionObserver. */
-export function inView(
-  el: Element,
-  opts?: IntersectionObserverInit,
-): Signal<boolean> {
+export function inView(el: Element, opts?: IntersectionObserverInit): Signal<boolean> {
   let observer: IntersectionObserver | undefined;
   const sig = signal<boolean>(false, {
     watched() {
       sig.value = elInViewport(el);
-      observer = new IntersectionObserver((entries) => {
-        sig.value = entries.some((e) => e.isIntersecting);
+      observer = new IntersectionObserver(entries => {
+        sig.value = entries.some(e => e.isIntersecting);
       }, opts);
       observer.observe(el);
     },

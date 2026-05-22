@@ -1,11 +1,7 @@
-import {
-  computed,
-  Vec, Num, num, Box,
-  type Val,
-} from "@minim/signals";
-import { Shape, type Segment } from "./shape";
+import { Box, computed, Num, num, type Val, Vec } from "@minim/signals";
+import { type CommonOpts, intrinsicType, wireStroke } from "./common";
+import { type Segment, Shape } from "./shape";
 import { tokens } from "./tokens";
-import { intrinsicType, wireStroke, type CommonOpts } from "./common";
 
 export interface RectOpts extends CommonOpts {
   corner?: Val<number>;
@@ -20,13 +16,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   readonly h: Num;
   readonly corner: Num;
 
-  constructor(
-    x: Val<number>,
-    y: Val<number>,
-    w: Val<number>,
-    h: Val<number>,
-    opts: O = {} as O,
-  ) {
+  constructor(x: Val<number>, y: Val<number>, w: Val<number>, h: Val<number>, opts: O = {} as O) {
     const xs = num(x);
     const ys = num(y);
     const ws = num(w);
@@ -108,13 +98,41 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     }
     return [
       { type: "line", from: p(x + r, y), to: p(x + w - r, y) },
-      { type: "arc", cx: () => x + w - r, cy: () => y + r, r: () => r, a0: () => -HALF_PI, a1: () => 0 },
+      {
+        type: "arc",
+        cx: () => x + w - r,
+        cy: () => y + r,
+        r: () => r,
+        a0: () => -HALF_PI,
+        a1: () => 0,
+      },
       { type: "line", from: p(x + w, y + r), to: p(x + w, y + h - r) },
-      { type: "arc", cx: () => x + w - r, cy: () => y + h - r, r: () => r, a0: () => 0, a1: () => HALF_PI },
+      {
+        type: "arc",
+        cx: () => x + w - r,
+        cy: () => y + h - r,
+        r: () => r,
+        a0: () => 0,
+        a1: () => HALF_PI,
+      },
       { type: "line", from: p(x + w - r, y + h), to: p(x + r, y + h) },
-      { type: "arc", cx: () => x + r, cy: () => y + h - r, r: () => r, a0: () => HALF_PI, a1: () => Math.PI },
+      {
+        type: "arc",
+        cx: () => x + r,
+        cy: () => y + h - r,
+        r: () => r,
+        a0: () => HALF_PI,
+        a1: () => Math.PI,
+      },
       { type: "line", from: p(x, y + h - r), to: p(x, y + r) },
-      { type: "arc", cx: () => x + r, cy: () => y + r, r: () => r, a0: () => Math.PI, a1: () => 3 * HALF_PI },
+      {
+        type: "arc",
+        cx: () => x + r,
+        cy: () => y + r,
+        r: () => r,
+        a0: () => Math.PI,
+        a1: () => 3 * HALF_PI,
+      },
     ];
   }
 }
@@ -127,11 +145,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
  *   rect(p1: Point, p2: Point, opts?)   — between two corner Points
  */
 export function rect<const O extends RectOpts>(b: Box, opts?: O): Rect<O>;
-export function rect<const O extends RectOpts>(
-  p1: Vec,
-  p2: Vec,
-  opts?: O,
-): Rect<O>;
+export function rect<const O extends RectOpts>(p1: Vec, p2: Vec, opts?: O): Rect<O>;
 export function rect<const O extends RectOpts>(
   center: Vec,
   w: Val<number>,
@@ -184,11 +198,5 @@ export function rect(
       d as RectOpts | undefined,
     );
   }
-  return new Rect(
-    a as Val<number>,
-    b as Val<number>,
-    c as Val<number>,
-    d as Val<number>,
-    e,
-  );
+  return new Rect(a as Val<number>, b as Val<number>, c as Val<number>, d as Val<number>, e);
 }

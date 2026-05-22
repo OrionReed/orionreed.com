@@ -1,7 +1,7 @@
-import {Prism} from "prism-esm";
-import {loader as JsLoader} from "prism-esm/components/prism-javascript.js";
-import {loader as TsLoader} from "prism-esm/components/prism-typescript.js";
-import {loader as CssLoader} from "prism-esm/components/prism-css.js";
+import { Prism } from "prism-esm";
+import { loader as CssLoader } from "prism-esm/components/prism-css.js";
+import { loader as JsLoader } from "prism-esm/components/prism-javascript.js";
+import { loader as TsLoader } from "prism-esm/components/prism-typescript.js";
 
 // Forked from https://github.com/andreruffert/syntax-highlight-element
 
@@ -76,9 +76,7 @@ function getFlatToken(token: any): PrismToken | PrismToken[] {
 
   if (Array.isArray(token.content)) {
     const insideTokens = token.content.flatMap((x: any) =>
-      typeof x === "string"
-        ? { type: token.type, content: x, length: x.length }
-        : x
+      typeof x === "string" ? { type: token.type, content: x, length: x.length } : x,
     );
     return insideTokens.flatMap(getFlatToken);
   }

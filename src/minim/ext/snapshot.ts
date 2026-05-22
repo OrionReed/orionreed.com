@@ -3,7 +3,7 @@
 // properties get flattened. Useful at the top of `loop(...)` bodies so
 // each iteration starts from a known baseline.
 
-import { Signal, type Read } from "@minim/signals";
+import { type Read, Signal } from "@minim/signals";
 
 /** Capture current values; return a reset function. Args are signals
  *  (any concrete `T`) or plain records whose signal-valued properties
@@ -19,12 +19,15 @@ export function snapshot(
 ): () => void {
   const sigs: Signal<unknown>[] = [];
   for (const arg of args) {
-    if (arg instanceof Signal) { sigs.push(arg); continue; }
+    if (arg instanceof Signal) {
+      sigs.push(arg);
+      continue;
+    }
     for (const v of Object.values(arg)) {
       if (v instanceof Signal) sigs.push(v);
     }
   }
-  const initials = sigs.map((s) => s.peek());
+  const initials = sigs.map(s => s.peek());
   return () => {
     for (let i = 0; i < sigs.length; i++) sigs[i].value = initials[i];
   };

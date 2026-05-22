@@ -1,7 +1,7 @@
 // Chainable rich text — nested styled spans, pure values (no DOM).
 // Rendered to `<tspan>` markup by `label()`.
 
-import {tokens} from "./tokens";
+import { tokens } from "./tokens";
 
 interface TextStyle {
   bold?: boolean;
@@ -14,7 +14,10 @@ interface TextStyle {
 export type TextPart = string | Text;
 
 export class Text {
-  constructor(public parts: TextPart[], public style: TextStyle = {}) {}
+  constructor(
+    public parts: TextPart[],
+    public style: TextStyle = {},
+  ) {}
 
   bold(): Text {
     return new Text(this.parts, { ...this.style, bold: true });
@@ -47,10 +50,8 @@ function renderTextNode(node: TextPart): string {
   if (node.style.bold) a.push('font-weight="700"');
   if (node.style.italic) a.push('font-style="italic"');
   if (node.style.muted) a.push(`opacity="${tokens.mutedOpacity}"`);
-  if (node.style.sub)
-    a.push(`baseline-shift="sub" font-size="${tokens.subFontSize}"`);
-  if (node.style.sup)
-    a.push(`baseline-shift="super" font-size="${tokens.subFontSize}"`);
+  if (node.style.sub) a.push(`baseline-shift="sub" font-size="${tokens.subFontSize}"`);
+  if (node.style.sup) a.push(`baseline-shift="super" font-size="${tokens.subFontSize}"`);
   return a.length ? `<tspan ${a.join(" ")}>${inner}</tspan>` : inner;
 }
 
@@ -60,7 +61,6 @@ export const renderContent = (c: Content): string =>
 /** Plain-text flatten — used to approximate label widths. */
 export function flattenText(c: Content): string {
   if (typeof c === "string") return c;
-  const walk = (n: TextPart): string =>
-    typeof n === "string" ? n : n.parts.map(walk).join("");
+  const walk = (n: TextPart): string => (typeof n === "string" ? n : n.parts.map(walk).join(""));
   return walk(c);
 }

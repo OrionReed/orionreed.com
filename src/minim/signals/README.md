@@ -10,13 +10,15 @@ registration needed.
 
 ```
 signal.ts          — Signal class + engine + factories (signal/computed/lens/computedCls/lensCls)
+                     Signal#through(fwd, bwd) — endo-lens with auto-fusion
 traits.ts          — Linear / Lerp / Metric / Equals + Traits<T, K> constraint
 ops.ts             — Op<V, Args> + applyOp0/1/2 (for value-class authors)
 writable.ts        — Writable<R> modifier, WritableOf<T>, invertibles<R>()
+lateral.ts         — bind / eq / freeze / gated (sibling-to-sibling lenses)
 anim.ts            — spring / tween / Tween / toward / attract / wave / driven / play / when / loop / every
 clock.ts           — Anim → Signal bridge
 values/
-  num.ts           Num + num + arithmetic ops
+  num.ts           Num + num + arithmetic ops + clamp/quantize/cyclic (all via .through)
   vec.ts           Vec + vec + polar + arithmetic
   box.ts           Box + box + union + edgeFrom + at(u,v) + named edges
   transform.ts     Transform + transform (nested Vec field lenses)
@@ -34,6 +36,7 @@ The shape that any value class follows:
 
 ```ts
 import { Signal, computedCls, lensCls, type Val, type SignalOptions } from "../signal";
+import { bind } from "../lateral";
 import { type Linear, type TraitDict } from "../traits";
 import { applyOp1, type Op } from "../ops";
 import { type Writable, invertibles } from "../writable";
@@ -73,7 +76,7 @@ export interface Num {
 }
 export function num(v: Val<V> = 0): Writable<Num> {
   const n = new Num() as unknown as Writable<Num>;
-  n.bind(v);
+  bind(n, v);
   return n;
 }
 ```

@@ -1,4 +1,21 @@
-import {Diagram, EventBus, Mount, Anchor, signal, circle, computed, draggable, label, line, loop, vec, rect, sequential, snapshot, timeline} from "../../minim";
+import {
+  Anchor,
+  circle,
+  computed,
+  Diagram,
+  draggable,
+  EventBus,
+  label,
+  line,
+  loop,
+  Mount,
+  rect,
+  sequential,
+  signal,
+  snapshot,
+  timeline,
+  vec,
+} from "../../minim";
 
 const PHASES = ["intro", "hold", "outro"] as const;
 const COLORS = ["#5b8def", "#f5a623", "#e25c5c"];
@@ -39,9 +56,9 @@ export class MdTimelineEditor extends Diagram {
       const c = tl[name];
       const body = s(
         rect(
-          computed(() => ((a) => STRIP_X + a * scale.value)(c.at.value)),
+          computed(() => (a => STRIP_X + a * scale.value)(c.at.value)),
           STRIP_Y,
-          computed(() => ((d) => d * scale.value)(c.dur.value)),
+          computed(() => (d => d * scale.value)(c.dur.value)),
           STRIP_H,
           { fill: COLORS[i] },
         ),
@@ -85,7 +102,7 @@ export class MdTimelineEditor extends Diagram {
           { fill: COLORS[i] },
         ),
       );
-      draggable(knob, (local) => {
+      draggable(knob, local => {
         const u = Math.min(Math.max((local.x - x0) / SLIDER_W, 0), 1);
         // Floor at 0.1s — zero-duration phase would freeze the loop.
         dur.value = Math.max(0.1, u * MAX_DUR);
@@ -96,7 +113,7 @@ export class MdTimelineEditor extends Diagram {
     const actors = PHASES.map((name, i) => {
       const c = circle(vec(120 + i * 180, STAGE_Y), 24, {
         fill: COLORS[i],
-        opacity: computed(() => ((t) => 0.1 + t * 0.9)(tl[name].t.value)),
+        opacity: computed(() => (t => 0.1 + t * 0.9)(tl[name].t.value)),
       });
       c.on("click", () => bus.emit("ping"));
       return c;
@@ -104,16 +121,18 @@ export class MdTimelineEditor extends Diagram {
     s(...actors);
 
     s(
-      label(
-        view.bottom.up(16),
-        "drag the knobs to retime · click any circle to ping",
-        { size: 11, opacity: 0.5, align: Anchor.Center },
-      ),
+      label(view.bottom.up(16), "drag the knobs to retime · click any circle to ping", {
+        size: 11,
+        opacity: 0.5,
+        align: Anchor.Center,
+      }),
     );
 
-    this.anim.start(loop(function* () {
-      reset();
-      yield* tl;
-    }));
+    this.anim.start(
+      loop(function* () {
+        reset();
+        yield* tl;
+      }),
+    );
   }
 }

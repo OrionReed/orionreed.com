@@ -1,6 +1,6 @@
-export { Diagram, css, type Padding } from "./diagram";
 export { attr, observedAttributesOf, syncAttrSignal } from "./attr";
-export { viewport } from "./viewport";
-export { attachRaf } from "./raf";
-export { MdTex } from "./md-tex";
+export { css, Diagram, type Padding } from "./diagram";
 export { MdMarker } from "./md-marker";
+export { MdTex } from "./md-tex";
+export { attachRaf } from "./raf";
+export { viewport } from "./viewport";

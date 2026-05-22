@@ -1,6 +1,6 @@
 // Shared viewport signal — one lazy resize listener, re-emits on resize.
 
-import {signal, type Signal} from "@minim/signals";
+import { type Signal, signal } from "@minim/signals";
 
 interface Viewport {
   w: number;

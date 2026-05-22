@@ -14,11 +14,7 @@ export interface MemoryRow {
 
 const rows: MemoryRow[] = [];
 
-export function memory(
-  name: string,
-  alloc: (i: number) => unknown,
-  count = 100_000,
-): void {
+export function memory(name: string, alloc: (i: number) => unknown, count = 100_000): void {
   // @ts-ignore
   const gc = (typeof global !== "undefined" && (global as any).gc) as (() => void) | undefined;
   if (gc) gc();
@@ -44,7 +40,7 @@ export function printMemoryRows(): void {
   if (rows.length === 0) return;
   console.log("\n── memory per instance (heap-delta, --expose-gc recommended) ───────");
   const baseline = rows[0];
-  const namePad = Math.max(...rows.map((r) => r.name.length), "name".length) + 2;
+  const namePad = Math.max(...rows.map(r => r.name.length), "name".length) + 2;
   console.log(
     "  " +
       "name".padEnd(namePad) +

@@ -1,9 +1,9 @@
 export {
   Anim,
-  cut,
-  isGenerator,
   type Animator,
   type Cut,
+  cut,
+  isGenerator,
   type Resume,
   type Suspend,
   type Tick,
@@ -11,12 +11,20 @@ export {
 } from "./anim";
 
 export {
-  drive, suspend,
-  all, race, rand,
-  commit, firstN, firstMatching, anySuccess, allSettled,
+  all,
+  allSettled,
+  anySuccess,
+  commit,
   detach,
-  untilEvent, untilPromise,
+  drive,
+  firstMatching,
+  firstN,
+  race,
+  rand,
   type Settled,
+  suspend,
+  untilEvent,
+  untilPromise,
 } from "./combinators";
 
-export { type Easing, linear, easeIn, easeOut, easeInOut } from "./easings";
+export { type Easing, easeIn, easeInOut, easeOut, linear } from "./easings";

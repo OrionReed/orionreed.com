@@ -65,10 +65,7 @@ const openListeners = new Set<(s: Span) => void>();
 const closeListeners = new Set<(s: Span) => void>();
 
 /** Register span-lifecycle listeners. Returns disposer. */
-export function addSpanListener(
-  open: (s: Span) => void,
-  close: (s: Span) => void,
-): () => void {
+export function addSpanListener(open: (s: Span) => void, close: (s: Span) => void): () => void {
   openListeners.add(open);
   closeListeners.add(close);
   return () => {
@@ -84,11 +81,7 @@ let nextId = 1;
  *  Does NOT notify listeners — the caller must finish bookkeeping
  *  (e.g. `recordFactorySpan`) first and then call `notifySpanOpen(s)`
  *  so downstream computeds see the new span when they re-evaluate. */
-export function openSpan(
-  fn: Function,
-  args: readonly unknown[],
-  parent: Span | undefined,
-): Span {
+export function openSpan(fn: Function, args: readonly unknown[], parent: Span | undefined): Span {
   return {
     id: nextId++,
     fn,

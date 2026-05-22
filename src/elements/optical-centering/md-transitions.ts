@@ -1,4 +1,26 @@
-import {Anchor, Diagram, Dir, Mount, Shape, bounceIn, circle, fadeOut, fadeUp, fadeUpOut, label, loop, vec, rect, scaleIn, slideIn, slideOut, spinIn, stagger, zoomOut, type Yieldable} from "../../minim";
+import {
+  Anchor,
+  bounceIn,
+  circle,
+  Diagram,
+  Dir,
+  fadeOut,
+  fadeUp,
+  fadeUpOut,
+  label,
+  loop,
+  Mount,
+  rect,
+  Shape,
+  scaleIn,
+  slideIn,
+  slideOut,
+  spinIn,
+  stagger,
+  vec,
+  type Yieldable,
+  zoomOut,
+} from "../../minim";
 
 const LANES = 5;
 const LANE_GAP = 50;
@@ -23,32 +45,32 @@ export class MdTransitions extends Diagram {
       {
         name: "fadeUp",
         shape: (sc, x, y) => sc(circle(vec(x, y), 10, { fill: true })),
-        intro: (sh) => fadeUp(sh),
-        outro: (sh) => fadeUpOut(sh),
+        intro: sh => fadeUp(sh),
+        outro: sh => fadeUpOut(sh),
       },
       {
         name: "scaleIn",
         shape: (sc, x, y) => sc(rect(vec(x, y), 18, 18, { fill: true })),
-        intro: (sh) => scaleIn(sh, 0.35),
-        outro: (sh) => zoomOut(sh, 0.25),
+        intro: sh => scaleIn(sh, 0.35),
+        outro: sh => zoomOut(sh, 0.25),
       },
       {
         name: "bounceIn",
         shape: (sc, x, y) => sc(circle(vec(x, y), 12, { fill: true })),
-        intro: (sh) => bounceIn(sh, 0.55),
-        outro: (sh) => zoomOut(sh, 0.25),
+        intro: sh => bounceIn(sh, 0.55),
+        outro: sh => zoomOut(sh, 0.25),
       },
       {
         name: "slideIn",
         shape: (sc, x, y) => sc(rect(vec(x, y), 22, 12, { fill: true })),
-        intro: (sh) => slideIn(sh, Dir.Left, 0.4, 40),
-        outro: (sh) => slideOut(sh, Dir.Right, 0.3, 40),
+        intro: sh => slideIn(sh, Dir.Left, 0.4, 40),
+        outro: sh => slideOut(sh, Dir.Right, 0.3, 40),
       },
       {
         name: "spinIn",
         shape: (sc, x, y) => sc(rect(vec(x, y), 18, 18, { fill: true })),
-        intro: (sh) => spinIn(sh, 0.6),
-        outro: (sh) => fadeOut(sh, 0.25),
+        intro: sh => spinIn(sh, 0.6),
+        outro: sh => fadeOut(sh, 0.25),
       },
     ];
 
@@ -62,12 +84,14 @@ export class MdTransitions extends Diagram {
         lane.shape(s, LEFT_PAD + i * stride, y),
       );
 
-      this.anim.start(loop(function* () {
-        yield* stagger(0.07, shapes, lane.intro);
-        yield 0.6;
-        yield* stagger(0.04, shapes, lane.outro);
-        yield 0.4;
-      }));
+      this.anim.start(
+        loop(function* () {
+          yield* stagger(0.07, shapes, lane.intro);
+          yield 0.6;
+          yield* stagger(0.04, shapes, lane.outro);
+          yield 0.4;
+        }),
+      );
     });
   }
 }

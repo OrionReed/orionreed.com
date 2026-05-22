@@ -1,23 +1,23 @@
-import { computed, Vec, Num, num, type Val } from "@minim/signals";
-import { Shape, type Segment } from "./shape";
+import { computed, Num, num, type Val, Vec } from "@minim/signals";
+import { type CommonOpts, intrinsicType, wireStroke } from "./common";
 import { TWO_PI } from "./dashed";
-import { intrinsicType, wireStroke, type CommonOpts } from "./common";
+import { type Segment, Shape } from "./shape";
 
 export interface CircleOpts extends CommonOpts {}
 
 export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   readonly radius: Num;
 
-  constructor(
-    center: Vec,
-    radius: Val<number>,
-    opts: O = {} as O,
-  ) {
+  constructor(center: Vec, radius: Val<number>, opts: O = {} as O) {
     const r = num(radius);
     super(
       intrinsicType(opts, "circle"),
-      () =>
-        ({ x: center.x.value - r.value, y: center.y.value - r.value, w: 2 * r.value, h: 2 * r.value }),
+      () => ({
+        x: center.x.value - r.value,
+        y: center.y.value - r.value,
+        w: 2 * r.value,
+        h: 2 * r.value,
+      }),
       opts,
       { origin: () => center.value },
     );
@@ -32,18 +32,24 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   /** Point on perimeter at angle θ (radians, y-down). */
   atAngle(angle: Val<number>): Vec {
     const a = num(angle);
-    return computed(() => ({
-      x: this.center.x.value + this.radius.value * Math.cos(a.value),
-      y: this.center.y.value + this.radius.value * Math.sin(a.value),
-    }), Vec);
+    return computed(
+      () => ({
+        x: this.center.x.value + this.radius.value * Math.cos(a.value),
+        y: this.center.y.value + this.radius.value * Math.sin(a.value),
+      }),
+      Vec,
+    );
   }
   /** Unit tangent at angle θ. */
   tangentAt(angle: Val<number>): Vec {
     const a = num(angle);
-    return computed(() => ({
-      x: -Math.sin(a.value),
-      y: Math.cos(a.value),
-    }), Vec);
+    return computed(
+      () => ({
+        x: -Math.sin(a.value),
+        y: Math.cos(a.value),
+      }),
+      Vec,
+    );
   }
 
   override boundary(toward: Vec): Vec {
@@ -77,8 +83,5 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   }
 }
 
-export const circle = <const O extends CircleOpts>(
-  at: Vec,
-  r: Val<number>,
-  opts?: O,
-): Circle<O> => new Circle<O>(at, r, opts);
+export const circle = <const O extends CircleOpts>(at: Vec, r: Val<number>, opts?: O): Circle<O> =>
+  new Circle<O>(at, r, opts);

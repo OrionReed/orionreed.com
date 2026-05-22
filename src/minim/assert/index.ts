@@ -12,53 +12,48 @@
 // only verbs. See `_test/assert.test.ts` for the full vocabulary.
 
 export {
+  always,
+  firstOf,
+  intervals,
+  latch,
+  type Scope,
+} from "./algebra";
+export {
+  type Claim,
+  claim,
+  type Predicates,
+  type SignalClaim,
+} from "./claim";
+export {
+  above,
+  below,
+  equal,
+  following,
+  inRange,
+  inside,
+  isEqual,
+  near,
+} from "./predicates";
+export { activeRecorder, authorOf, type Recorder, record } from "./record";
+export {
+  type Scoped,
+  scope,
+  scopeAll,
+} from "./scope";
+export {
+  addSpanListener,
+  closeSpan,
+  currentSpan,
+  notifySpanOpen,
+  openSpan,
   type Span,
   type SpanStatus,
-  currentSpan,
   withSpan,
-  openSpan,
-  closeSpan,
-  notifySpanOpen,
-  addSpanListener,
 } from "./span";
 
 export {
-  scope,
-  scopeAll,
-  type Scoped,
-} from "./scope";
-
-export { record, authorOf, activeRecorder, type Recorder } from "./record";
-
-export {
-  intervals,
-  latch,
-  firstOf,
-  always,
-  type Scope,
-} from "./algebra";
-
-export {
-  inRange,
-  equal,
-  above,
-  below,
-  near,
-  inside,
-  following,
-  isEqual,
-} from "./predicates";
-
-export {
-  claim,
-  type Claim,
-  type SignalClaim,
-  type Predicates,
-} from "./claim";
-
-export {
-  traceTree,
-  type TraceTree,
-  type TraceNode,
   type TraceBatch,
+  type TraceNode,
+  type TraceTree,
+  traceTree,
 } from "./tree";

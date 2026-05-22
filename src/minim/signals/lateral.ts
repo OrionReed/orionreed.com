@@ -1,19 +1,43 @@
 // lateral.ts — symmetric / sibling-to-sibling lenses.
 //
-// `eq(a, b)` ties two writable signals so writes propagate both ways.
-// `freeze(s)` strips the writable brand (type-only). `gated(s, when)`
-// is dynamic freezing — a Read<T> that drops writes while a predicate
-// is false.
+// `bind(target, source)` drives target from a Val<T> for the source's
+// lifetime, returning a stop fn. `eq(a, b)` ties two writable signals
+// so writes propagate both ways. `freeze(s)` strips the writable brand
+// (type-only). `gated(s, when)` is dynamic freezing — a Read<T> that
+// drops writes while a predicate is false.
 //
 // These complete the lens vocabulary on the "lateral" axis (between
 // existing siblings) to complement the "vertical" axis (parent ↔
 // derived) covered by the rest of the system.
 
-import { effect, lens, type Read, type WritableBrand } from "./signal";
+import {
+  Signal, effect, lens, value,
+  type Read, type Val, type WritableBrand,
+} from "./signal";
 
 interface RW<T> {
   value: T;
   peek(): T;
+}
+
+/** Drive `target` from `source` for its lifetime. Returns a stop fn.
+ *
+ *  - `source` literal: writes once, returns a no-op stop.
+ *  - `source` is a Signal or thunk: installs an effect that re-writes
+ *    target whenever source changes. Stop fn disposes the effect.
+ *
+ *  Brand-gated on `target` — bare RO value classes are rejected at
+ *  the call site. Multiple `bind(t, …)` calls on the same target
+ *  install independent effects; the caller owns each stop fn. */
+export function bind<T>(
+  target: RW<T> & WritableBrand,
+  source: Val<T>,
+): () => void {
+  if (source instanceof Signal || typeof source === "function") {
+    return effect(() => { target.value = value(source) });
+  }
+  target.value = source as T;
+  return () => {};
 }
 
 /** Bidirectional sync between two existing writable signals.
@@ -48,13 +72,10 @@ export function freeze<T>(s: Read<T>): Read<T> {
 /** Runtime-conditional writability. Reads from `s`; accepts writes
  *  only while `when.value` is true. Useful for "lock this axis while
  *  shift is held" interactions. */
-export function gated<T>(
-  s: RW<T> & WritableBrand,
-  when: Read<boolean>,
-): RW<T> & WritableBrand {
+export function gated<T>(s: RW<T> & WritableBrand, when: Read<boolean>): RW<T> & WritableBrand {
   return lens(
     () => s.value,
-    (v) => {
+    v => {
       if (when.value) s.value = v;
     },
   ) as unknown as RW<T> & WritableBrand;

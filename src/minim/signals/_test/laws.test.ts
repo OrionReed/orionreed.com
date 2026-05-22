@@ -6,13 +6,8 @@
 // view space they actually preserve.
 
 import { describe, it } from "vitest";
-import {
-  Num, num, Vec, vec, Box, box, Color, rgb,
-} from "../index";
-import {
-  verifyLensLaws, verifyLensLawsLossy,
-  approxNumber, approxVec,
-} from "../laws";
+import { Box, box, Color, Num, num, rgb, Vec, vec } from "../index";
+import { approxNumber, approxVec, verifyLensLaws, verifyLensLawsLossy } from "../laws";
 
 const EPS = 1e-9;
 const rng = (a: number, b: number) => a + Math.random() * (b - a);
@@ -105,11 +100,13 @@ describe("Num lens laws — lossy lenses (PutGet within range)", () => {
       () => rng(-100, 100),
       // After write, lens reads source, which equals what we wrote
       // up to nearest-period wrap.
-      { viewEq: (a, b) => {
-        const d = a - b;
-        const wrapped = d - 2 * Math.PI * Math.round(d / (2 * Math.PI));
-        return Math.abs(wrapped) < EPS;
-      } },
+      {
+        viewEq: (a, b) => {
+          const d = a - b;
+          const wrapped = d - 2 * Math.PI * Math.round(d / (2 * Math.PI));
+          return Math.abs(wrapped) < EPS;
+        },
+      },
     );
   });
 });
@@ -183,7 +180,10 @@ describe("Vec lens laws — field lenses (axis projections)", () => {
         // Field lens — read is x; write spreads {x: new, y: old}.
         // GetPut holds; PutGet holds; PutPut holds. Strict.
         return {
-          source: { value: v.peek(), peek: () => v.peek() } as { value: { x: number; y: number }; peek: () => { x: number; y: number } },
+          source: { value: v.peek(), peek: () => v.peek() } as {
+            value: { x: number; y: number };
+            peek: () => { x: number; y: number };
+          },
           lens: v.x,
         };
       },
@@ -199,13 +199,17 @@ describe("Vec lens laws — field lenses (axis projections)", () => {
 
 describe("Box lens laws — strict invertibles", () => {
   const bGen = () => ({
-    x: rng(-100, 100), y: rng(-100, 100),
-    w: rng(0, 200), h: rng(0, 200),
+    x: rng(-100, 100),
+    y: rng(-100, 100),
+    w: rng(0, 200),
+    h: rng(0, 200),
   });
-  const approxBox = (eps: number) =>
-    (a: { x: number; y: number; w: number; h: number }, b: typeof a) =>
-      Math.abs(a.x - b.x) <= eps && Math.abs(a.y - b.y) <= eps &&
-      Math.abs(a.w - b.w) <= eps && Math.abs(a.h - b.h) <= eps;
+  const approxBox =
+    (eps: number) => (a: { x: number; y: number; w: number; h: number }, b: typeof a) =>
+      Math.abs(a.x - b.x) <= eps &&
+      Math.abs(a.y - b.y) <= eps &&
+      Math.abs(a.w - b.w) <= eps &&
+      Math.abs(a.h - b.h) <= eps;
 
   it("add", () => {
     verifyLensLaws(
@@ -234,11 +238,16 @@ describe("Box lens laws — strict invertibles", () => {
 describe("Color lens laws — strict invertibles", () => {
   type C = { r: number; g: number; b: number; a: number };
   const cGen = (): C => ({
-    r: rng(0, 1), g: rng(0, 1), b: rng(0, 1), a: rng(0, 1),
+    r: rng(0, 1),
+    g: rng(0, 1),
+    b: rng(0, 1),
+    a: rng(0, 1),
   });
   const approxColor = (eps: number) => (a: C, b: C) =>
-    Math.abs(a.r - b.r) <= eps && Math.abs(a.g - b.g) <= eps &&
-    Math.abs(a.b - b.b) <= eps && Math.abs(a.a - b.a) <= eps;
+    Math.abs(a.r - b.r) <= eps &&
+    Math.abs(a.g - b.g) <= eps &&
+    Math.abs(a.b - b.b) <= eps &&
+    Math.abs(a.a - b.a) <= eps;
 
   it("add", () => {
     verifyLensLaws(
@@ -264,4 +273,5 @@ describe("Color lens laws — strict invertibles", () => {
 });
 
 // Voiding for un-used imports (Vec, Num used by other ops).
-void Vec; void Num;
+void Vec;
+void Num;

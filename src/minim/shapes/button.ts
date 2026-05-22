@@ -1,15 +1,13 @@
 // Labelled, clickable region — group + tinted-rect + label, with
 // hover/click handlers wired.
 
-import { num,type Val} from "@minim/signals";
-import {signal, computed, type Signal} from "@minim/signals";
-import {type AnyShape} from "./shape";
-import {Anchor, vec, Vec} from "@minim/signals";
-import {tokens} from "./tokens";
-import {group} from "./group";
-import {rect} from "./rect";
-import {label} from "./label";
-import type {Content} from "./text";
+import { Anchor, computed, num, type Signal, signal, type Val, Vec, vec } from "@minim/signals";
+import { group } from "./group";
+import { label } from "./label";
+import { rect } from "./rect";
+import { type AnyShape } from "./shape";
+import type { Content } from "./text";
+import { tokens } from "./tokens";
 
 export interface ButtonOpts {
   width?: number;

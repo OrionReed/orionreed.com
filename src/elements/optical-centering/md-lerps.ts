@@ -1,8 +1,25 @@
 import {
-  Anchor, Box, Color, Diagram, Mount, Vec,
-  circle, computed, label, loop, num, tween, vec, rect, rgb,
-  Signal, type TraitDict,
-  type Easing, type Lerp, type Tween, type Val,
+  Anchor,
+  Box,
+  Color,
+  circle,
+  computed,
+  Diagram,
+  type Easing,
+  type Lerp,
+  label,
+  loop,
+  Mount,
+  num,
+  rect,
+  rgb,
+  Signal,
+  type TraitDict,
+  type Tween,
+  tween,
+  type Val,
+  Vec,
+  vec,
 } from "../../minim";
 
 const W = 640;
@@ -29,16 +46,16 @@ class Text extends Signal<string> {
     return tween(this as never, target, dur, ease);
   }
 }
-interface Text { readonly constructor: typeof Text }
+interface Text {
+  readonly constructor: typeof Text;
+}
 
 const fmtNum = (n: number) => n.toFixed(2);
-const fmtVec = (v: { x: number; y: number }) =>
-  `(${Math.round(v.x)}, ${Math.round(v.y)})`;
-const fmtBox = (b: { w: number; h: number }) =>
-  `${Math.round(b.w)}×${Math.round(b.h)}`;
+const fmtVec = (v: { x: number; y: number }) => `(${Math.round(v.x)}, ${Math.round(v.y)})`;
+const fmtBox = (b: { w: number; h: number }) => `${Math.round(b.w)}×${Math.round(b.h)}`;
 const fmtColor = (c: { r: number; g: number; b: number }) =>
   `#${[c.r, c.g, c.b]
-    .map((x) =>
+    .map(x =>
       Math.round(x * 255)
         .toString(16)
         .padStart(2, "0"),
@@ -59,14 +76,14 @@ export class MdLerps extends Diagram {
       }),
       label(
         view.bottom.up(20),
-        "value classes register `lerp` in their `static traits` dict; `.to(target, dur)` finds it via `Traits<T, \"lerp\">`. Same call for Num, Vec, Box, Color, Transform, and arbitrary user types.",
+        'value classes register `lerp` in their `static traits` dict; `.to(target, dur)` finds it via `Traits<T, "lerp">`. Same call for Num, Vec, Box, Color, Transform, and arbitrary user types.',
         { size: 10, align: Anchor.Center, opacity: 0.45 },
       ),
     );
 
     const baseY = (i: number) => rowY(i) + 9;
     const n = num(0.15);
-    const pos = vec(VIS_X + 12, baseY(1) );
+    const pos = vec(VIS_X + 12, baseY(1));
     const box = new Box({ x: VIS_X + 4, y: rowY(2) - 6, w: 30, h: 20 });
     const col = rgb(0.4, 0.6, 0.9);
     const txt = new Text("hello");
@@ -83,13 +100,7 @@ export class MdLerps extends Diagram {
         align: Anchor.Left,
         opacity: 0.65,
       });
-    const track = (
-      x: number,
-      y: number,
-      w: number,
-      h: number,
-      alpha: number,
-    ) =>
+    const track = (x: number, y: number, w: number, h: number, alpha: number) =>
       rect(x, y, w, h, {
         stroke: "transparent",
         fill: `rgba(127,127,127,${alpha})`,
@@ -99,18 +110,30 @@ export class MdLerps extends Diagram {
     s(
       rowLabel(0, "number"),
       track(VIS_X, rowY(0) + 4, VIS_W, 10, 0.18),
-      rect(VIS_X, rowY(0) + 4, computed(() => ((v: number) => v * VIS_W)(n.value)), 10, {
-        stroke: "transparent",
-        fill: true,
-      }),
-      readout(0, computed(() => (fmtNum)(n.value))),
+      rect(
+        VIS_X,
+        rowY(0) + 4,
+        computed(() => ((v: number) => v * VIS_W)(n.value)),
+        10,
+        {
+          stroke: "transparent",
+          fill: true,
+        },
+      ),
+      readout(
+        0,
+        computed(() => fmtNum(n.value)),
+      ),
     );
 
     s(
       rowLabel(1, "Vec"),
       track(VIS_X, rowY(1) + 5, VIS_W, 8, 0.1),
       circle(pos, 5, { fill: true, stroke: "transparent" }),
-      readout(1, computed(() => (fmtVec)(pos.value))),
+      readout(
+        1,
+        computed(() => fmtVec(pos.value)),
+      ),
     );
 
     s(
@@ -121,7 +144,10 @@ export class MdLerps extends Diagram {
         fill: true,
         corner: 3,
       }),
-      readout(2, computed(() => (fmtBox)(box.value))),
+      readout(
+        2,
+        computed(() => fmtBox(box.value)),
+      ),
     );
 
     s(
@@ -131,7 +157,10 @@ export class MdLerps extends Diagram {
         fill: col.css,
         corner: 3,
       }),
-      readout(3, computed(() => (fmtColor)(col.value))),
+      readout(
+        3,
+        computed(() => fmtColor(col.value)),
+      ),
     );
 
     s(
@@ -141,7 +170,10 @@ export class MdLerps extends Diagram {
         size: 13,
         align: Anchor.Left,
       }),
-      readout(4, computed(() => ((str) => `len=${str.length}`)(txt.value))),
+      readout(
+        4,
+        computed(() => (str => `len=${str.length}`)(txt.value)),
+      ),
     );
 
     const FRAMES = [
@@ -168,17 +200,19 @@ export class MdLerps extends Diagram {
       },
     ];
 
-    this.anim.start(loop(function* () {
-      for (const f of FRAMES) {
-        yield [
-          n.to(f.n, DUR),
-          pos.to(f.v, DUR),
-          box.to(f.b, DUR),
-          col.to(f.c, DUR),
-          tween(txt as never, f.t, DUR),
-        ];
-        yield DWELL;
-      }
-    }));
+    this.anim.start(
+      loop(function* () {
+        for (const f of FRAMES) {
+          yield [
+            n.to(f.n, DUR),
+            pos.to(f.v, DUR),
+            box.to(f.b, DUR),
+            col.to(f.c, DUR),
+            tween(txt as never, f.t, DUR),
+          ];
+          yield DWELL;
+        }
+      }),
+    );
   }
 }

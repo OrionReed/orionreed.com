@@ -1,5 +1,5 @@
-import {Anchor, Diagram, Mount, signal, label, loop, snapshot, type Content} from "../../minim";
-import {highlight, morph, part, parts, tex, tint, write, writeOut} from "../../minim/tex";
+import { Anchor, type Content, Diagram, label, loop, Mount, signal, snapshot } from "../../minim";
+import { highlight, morph, part, parts, tex, tint, write, writeOut } from "../../minim/tex";
 
 const RED = "#e25c5c";
 const BLUE = "#5b8def";
@@ -45,7 +45,7 @@ export class MdTexMatrix extends Diagram {
 
     const eqs = [compact, evaluated];
     for (const eq of eqs) {
-      eq.center.set(view.center);
+      eq.center.value = view.center.peek();
       eq.opacity.value = 0;
     }
 
@@ -67,40 +67,42 @@ export class MdTexMatrix extends Diagram {
       status,
     );
 
-    this.anim.start(loop(function* () {
-      reset();
-      yield 0.3;
+    this.anim.start(
+      loop(function* () {
+        reset();
+        yield 0.3;
 
-      status.value = "write — compact form";
-      compact.opacity.value = 1;
-      yield* write(compact, 0.7);
-      yield 0.4;
+        status.value = "write — compact form";
+        compact.opacity.value = 1;
+        yield* write(compact, 0.7);
+        yield 0.4;
 
-      status.value = "highlight — top row, then bottom row";
-      yield* highlight(compact.parts.a, 0.3);
-      yield 0.05;
-      yield* highlight(compact.parts.b, 0.3);
-      yield 0.2;
-      yield* highlight(compact.parts.c, 0.3);
-      yield 0.05;
-      yield* highlight(compact.parts.d, 0.3);
-      yield 0.4;
+        status.value = "highlight — top row, then bottom row";
+        yield* highlight(compact.parts.a, 0.3);
+        yield 0.05;
+        yield* highlight(compact.parts.b, 0.3);
+        yield 0.2;
+        yield* highlight(compact.parts.c, 0.3);
+        yield 0.05;
+        yield* highlight(compact.parts.d, 0.3);
+        yield 0.4;
 
-      status.value = "color — rows red/blue, vector green (used in both rows)";
-      tagColors();
-      yield 0.6;
+        status.value = "color — rows red/blue, vector green (used in both rows)";
+        tagColors();
+        yield 0.6;
 
-      status.value = "morph — evaluate the product";
-      yield* morph(compact, evaluated, 1.0);
-      yield 1.0;
+        status.value = "morph — evaluate the product";
+        yield* morph(compact, evaluated, 1.0);
+        yield 1.0;
 
-      status.value = "morph — back to compact form";
-      yield* morph(evaluated, compact, 1.0);
-      yield 0.7;
+        status.value = "morph — back to compact form";
+        yield* morph(evaluated, compact, 1.0);
+        yield 0.7;
 
-      status.value = "writeOut";
-      yield* writeOut(compact, 0.5);
-      yield 0.4;
-    }));
+        status.value = "writeOut";
+        yield* writeOut(compact, 0.5);
+        yield 0.4;
+      }),
+    );
   }
 }

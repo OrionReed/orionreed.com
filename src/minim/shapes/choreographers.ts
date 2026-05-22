@@ -3,12 +3,11 @@
 // `drive` step over N translates). For rigid group translate, reach for
 // `centroid(...shapes).to(...)` instead.
 
-import { drive, type Animator, type Easing, type Yieldable } from "@minim/core";
-import {
-  play, num, Vec, type Val, type Of,
-} from "@minim/signals";
+import { type Animator, drive, type Easing, type Yieldable } from "@minim/core";
+import { num, type Of, play, type Val, Vec } from "@minim/signals";
 
 type VecValue = Of<Vec>;
+
 import type { Has } from "./shape";
 
 /** Swap two shapes' positions over `sec`. */
@@ -84,14 +83,14 @@ export function orbit(
   const omega = (2 * Math.PI) / period;
   const N = shapes.length;
   const c0 = center.value;
-  const init = shapes.map((sh) => {
+  const init = shapes.map(sh => {
     const v = sh.translate.peek();
     const dx = v.x - c0.x;
     const dy = v.y - c0.y;
     return { angle: Math.atan2(dy, dx), radius: Math.hypot(dx, dy) };
   });
   let t = 0;
-  return drive((tick) => {
+  return drive(tick => {
     t += tick.dt * rate.value;
     const c = center.value;
     for (let i = 0; i < N; i++) {

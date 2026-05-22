@@ -4,6 +4,7 @@ import {
   Signal, computedCls, lensCls, value,
   type Val, type SignalOptions, type Of,
 } from "../signal";
+import { bind } from "../lateral";
 import { type Linear, type TraitDict } from "../traits";
 import { applyOp1, type Op } from "../ops";
 import { type Writable, invertibles } from "../writable";
@@ -81,7 +82,7 @@ export class Transform extends Signal<V> {
   /** Scalar `scale` lives as a Vec field lens (`.scale`), not as an
    *  invertible eager method — to scalar-multiply a Transform, use
    *  `Transform.lens(...)` or compose via field writes. */
-  static invertibles = invertibles<Transform>()("add", "sub");
+  static invertibles = invertibles<Transform>()("add", "sub", "through");
 
   // ── class-level constructors ───────────────────────────────────
   static derive(fn: () => V): Transform { return computedCls(Transform, fn) }
@@ -120,11 +121,11 @@ export type TransformInit = { [K in keyof V]?: Val<V[K]> };
 export function transform(init?: TransformInit): Writable<Transform> {
   const tr = new Transform() as unknown as Writable<Transform>;
   if (init) {
-    if (init.translate !== undefined) tr.translate.bind(init.translate);
-    if (init.scale     !== undefined) tr.scale.bind(init.scale);
-    if (init.origin    !== undefined) tr.origin.bind(init.origin);
-    if (init.rotate    !== undefined) tr.rotate.bind(init.rotate);
-    if (init.opacity   !== undefined) tr.opacity.bind(init.opacity);
+    if (init.translate !== undefined) bind(tr.translate as unknown as Writable<Vec>, init.translate);
+    if (init.scale     !== undefined) bind(tr.scale     as unknown as Writable<Vec>, init.scale);
+    if (init.origin    !== undefined) bind(tr.origin    as unknown as Writable<Vec>, init.origin);
+    if (init.rotate    !== undefined) bind(tr.rotate    as unknown as Writable<Num>, init.rotate);
+    if (init.opacity   !== undefined) bind(tr.opacity   as unknown as Writable<Num>, init.opacity);
   }
   return tr;
 }

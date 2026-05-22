@@ -1,8 +1,9 @@
 // Derived shapes that decorate a tex Part (tracks `part.box` reactively).
 
-import { computed, Box, type Signal, type Of } from "@minim/signals";
+import { Box, computed, type Of, type Signal } from "@minim/signals";
 
 type BoxValue = Of<Box>;
+
 import { Shape, tokens } from "@minim/shapes";
 import type { Part } from "./parts";
 
@@ -107,10 +108,7 @@ export function brace(
 
 /** Surrounding rectangle around a part, inset by `gap`. (Named `frame`
  *  to avoid collision with the `box(x, y, w, h)` factory.) */
-export function frame(
-  part: Part,
-  opts: DecorationOpts & { corner?: number } = {},
-): Shape {
+export function frame(part: Part, opts: DecorationOpts & { corner?: number } = {}): Shape {
   const gap = opts.gap ?? tokens.decoration.gap;
   const corner = opts.corner ?? tokens.corner;
   const layout = computed(() => {

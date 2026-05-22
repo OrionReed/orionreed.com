@@ -1,4 +1,24 @@
-import {Diagram, Mount, Anchor, bounceIn, button, signal, circle, computed, fadeOut, label, loop, vec, race, rect, suspend, zoomOut, type Animator, type Content, type Has} from "../../minim";
+import {
+  Anchor,
+  type Animator,
+  bounceIn,
+  button,
+  type Content,
+  circle,
+  computed,
+  Diagram,
+  fadeOut,
+  type Has,
+  label,
+  loop,
+  Mount,
+  race,
+  rect,
+  signal,
+  suspend,
+  vec,
+  zoomOut,
+} from "../../minim";
 
 const W = 380;
 const TARGET_R = 14;
@@ -15,7 +35,7 @@ const BTN_GAP = 12;
 
 /** Wake on click with the `MouseEvent`; race timeout yields `undefined`. */
 function trackedClick(target: EventTarget): Animator<MouseEvent> {
-  return suspend<MouseEvent>((wake) => {
+  return suspend<MouseEvent>(wake => {
     const handler = (e: Event): void => wake(e as MouseEvent);
     target.addEventListener("click", handler, { once: true });
     return () => target.removeEventListener("click", handler);
@@ -38,13 +58,17 @@ export class MdReact extends Diagram {
     const status = signal<Content>("running");
 
     s(
-      label(vec(PAD, STATS_Y), computed(() => ((n) => `hits: ${n}`)(hits.value)), {
-        size: 12,
-        align: Anchor.Left,
-      }),
+      label(
+        vec(PAD, STATS_Y),
+        computed(() => (n => `hits: ${n}`)(hits.value)),
+        {
+          size: 12,
+          align: Anchor.Left,
+        },
+      ),
       label(
         vec(W - PAD, STATS_Y),
-        computed(() => ((n) => `misses: ${n}`)(misses.value)),
+        computed(() => (n => `misses: ${n}`)(misses.value)),
         { size: 12, align: Anchor.Right },
       ),
       label(
@@ -75,8 +99,7 @@ export class MdReact extends Diagram {
 
     const spawnTarget = (): Target => {
       const x = PAD + Math.random() * (W - 2 * PAD);
-      const y =
-        PAD + Math.random() * (PLAYFIELD_H - 2 * PAD);
+      const y = PAD + Math.random() * (PLAYFIELD_H - 2 * PAD);
       return s(circle(vec(x, y), TARGET_R, { fill: true, opacity: 0 }));
     };
 
@@ -100,12 +123,14 @@ export class MdReact extends Diagram {
       hits.value = 0;
       misses.value = 0;
       status.value = "running";
-      dispose = anim.start(loop(function* () {
-        const target = spawnTarget();
-        yield bounceIn(target, 0.3);
-        yield* round(target);
-        yield RESPAWN;
-      }));
+      dispose = anim.start(
+        loop(function* () {
+          const target = spawnTarget();
+          yield bounceIn(target, 0.3);
+          yield* round(target);
+          yield RESPAWN;
+        }),
+      );
     };
 
     const onStop = (): void => {

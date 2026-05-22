@@ -1,4 +1,4 @@
-import {BaseElement, css} from "./base-element.ts";
+import { BaseElement, css } from "./base-element.ts";
 
 export class DarkModeToggle extends BaseElement {
   static styles = css`
@@ -103,9 +103,7 @@ export class DarkModeToggle extends BaseElement {
       this.setTheme(savedTheme);
     } else {
       // Use system preference if no saved theme
-      const prefersDark = window.matchMedia(
-        "(prefers-color-scheme: dark)"
-      ).matches;
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       const theme = prefersDark ? "dark" : "light";
       this.setTheme(theme);
     }
@@ -120,8 +118,7 @@ export class DarkModeToggle extends BaseElement {
   private setTheme(theme: string): void {
     document.documentElement.setAttribute("data-theme", theme);
     // Set color-scheme for light-dark() CSS function to work
-    document.documentElement.style.colorScheme =
-      theme === "dark" ? "dark" : "light";
+    document.documentElement.style.colorScheme = theme === "dark" ? "dark" : "light";
     localStorage.setItem("theme", theme);
     this.setAttribute("data-theme", theme);
   }

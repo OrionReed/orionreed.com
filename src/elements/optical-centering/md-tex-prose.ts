@@ -1,5 +1,5 @@
-import {Diagram, Mount} from "../../minim";
-import {parts, tex, bindParts} from "../../minim/tex";
+import { Diagram, Mount } from "../../minim";
+import { bindParts, parts, tex } from "../../minim/tex";
 
 // Module-level so <md-marker> elements resolve before any element connects.
 const { m, v, h } = parts("m", "v", "h");
@@ -20,7 +20,7 @@ export class MdTexProse extends Diagram {
     const eq = s(
       tex`E = \dfrac{1}{2}${m.with("m")}${v.with("v^2")} + ${m2}\mathit{g}${h.with("h")}`,
     );
-    eq.center.set(view.center);
+    eq.center.value = view.center.peek();
 
     this.root.track(bindParts(eq, { m, v, m2, h }));
   }

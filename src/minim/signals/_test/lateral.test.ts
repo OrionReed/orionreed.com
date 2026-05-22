@@ -1,7 +1,7 @@
 // lateral.test.ts — eq / freeze / gated.
 
-import { describe, it, expect } from "vitest";
-import { num, signal, effect, eq, gated } from "../index";
+import { describe, expect, it } from "vitest";
+import { effect, eq, gated, num, signal } from "../index";
 
 describe("eq(a, b)", () => {
   it("initial sync: b := a", () => {
@@ -32,7 +32,10 @@ describe("eq(a, b)", () => {
     const b = num(0);
     eq(a, b);
     let aRuns = 0;
-    effect(() => { void a.value; aRuns++; });
+    effect(() => {
+      void a.value;
+      aRuns++;
+    });
     aRuns = 0;
     for (let i = 1; i <= 100; i++) a.value = i;
     expect(b.value).toBe(100);
@@ -56,7 +59,10 @@ describe("eq(a, b)", () => {
     eq(a, b);
     expect(b.value).toBeCloseTo(0.1);
     let aRuns = 0;
-    effect(() => { void a.value; aRuns++; });
+    effect(() => {
+      void a.value;
+      aRuns++;
+    });
     aRuns = 0;
     b.value = b.peek();
     expect(aRuns).toBe(0);

@@ -19,8 +19,7 @@ export const HUE = {
 
 export type HueName = keyof typeof HUE;
 
-const resolveHue = (h: number | HueName): number =>
-  typeof h === "number" ? h : HUE[h];
+const resolveHue = (h: number | HueName): number => (typeof h === "number" ? h : HUE[h]);
 
 export interface Ink {
   readonly H: number;
@@ -40,15 +39,13 @@ function makeInk(
   fillC: string,
   m: number = 0,
 ): Ink {
-  const L =
-    m === 0 ? baseL : `calc((1 - ${m}) * ${baseL} + ${m} * ${fillL})`;
-  const C =
-    m === 0 ? baseC : `calc((1 - ${m}) * ${baseC} + ${m} * ${fillC})`;
+  const L = m === 0 ? baseL : `calc((1 - ${m}) * ${baseL} + ${m} * ${fillL})`;
+  const C = m === 0 ? baseC : `calc((1 - ${m}) * ${baseC} + ${m} * ${fillC})`;
   return {
     L,
     C,
     H,
-    mod: (newM) => makeInk(baseL, baseC, H, fillL, fillC, newM),
+    mod: newM => makeInk(baseL, baseC, H, fillL, fillC, newM),
     toString: () => `oklch(${L} ${C} ${H})`,
   };
 }
@@ -63,31 +60,16 @@ export function ink(hue: number | HueName): Ink {
   );
 }
 
-export function inkRing(
-  n: number,
-  startHue: number | HueName = "red",
-): Ink[] {
+export function inkRing(n: number, startHue: number | HueName = "red"): Ink[] {
   const start = resolveHue(startHue);
   return Array.from({ length: n }, (_, i) => ink(start + (360 / n) * i));
 }
 
 /** Achromatic equivalent of `ink(hue)` — same anchors, no chroma. */
-export const grey: Ink = makeInk(
-  "var(--ink-l)",
-  "0",
-  0,
-  "var(--ink-fill-l)",
-  "0",
-);
+export const grey: Ink = makeInk("var(--ink-l)", "0", 0, "var(--ink-fill-l)", "0");
 
 /** Max-contrast structural ink. For axis lines, labels, scaffolding. */
-export const stroke: Ink = makeInk(
-  "var(--stroke-l)",
-  "0",
-  0,
-  "var(--ink-fill-l)",
-  "0",
-);
+export const stroke: Ink = makeInk("var(--stroke-l)", "0", 0, "var(--ink-fill-l)", "0");
 
 /** APCA-inverse: OKLCH-L for a given bg-L and target Lc. Re-derives anchors in color.css. */
 export function deriveAnchors(bgL: number, lcTarget: number): number {

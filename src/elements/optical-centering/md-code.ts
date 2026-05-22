@@ -13,8 +13,8 @@
 //     tween on Kept lines; opacity fades for Lost/Gained); there's no
 //     drive loop or DOM rebuild.
 
-import {Anchor, Diagram, Mount, css, label, loop, signal, vec, type Content} from "../../minim";
-import {code, codeStyles, Part, type CodeShape} from "../../minim/code";
+import { Anchor, bind, type Content, css, Diagram, label, loop, Mount, signal, vec } from "../../minim";
+import { type CodeShape, code, codeStyles, Part } from "../../minim/code";
 
 const STATES = [
   // 1. Inline original.
@@ -63,10 +63,10 @@ const UNDERLINE = "minim-code-underline";
 
 /** Find the first part containing `text`. Returns the part plus the
  *  start/end character offsets within its text, or null. */
-function findInCode(c: CodeShape, text: string): {part: Part; start: number; end: number} | null {
+function findInCode(c: CodeShape, text: string): { part: Part; start: number; end: number } | null {
   for (const p of c.parts) {
     const i = p.text.indexOf(text);
-    if (i >= 0) return {part: p, start: i, end: i + text.length};
+    if (i >= 0) return { part: p, start: i, end: i + text.length };
   }
   return null;
 }
@@ -125,11 +125,11 @@ export class MdCode extends Diagram {
       }),
     );
 
-    const c = s(code(STATES[0], {size: 13}));
+    const c = s(code(STATES[0], { size: 13 }));
     // Top-left anchored.
     const LEFT_X = 40;
     const TOP_Y = 48;
-    c.translate.bind(() => vec(LEFT_X, TOP_Y).value);
+    bind(c.translate, () => vec(LEFT_X, TOP_Y).value);
 
     this.anim.start(
       loop(function* () {
@@ -157,14 +157,11 @@ export class MdCode extends Diagram {
           const middle = yieldFound.start > 0 ? subs[1] : subs[0];
           const home = middle.position.peek();
           yield [
-            middle.position.to({x: home.x, y: home.y - 10}, 0.25),
+            middle.position.to({ x: home.x, y: home.y - 10 }, 0.25),
             middle.rotation.to(0.18, 0.25),
           ];
           yield 0.6;
-          yield [
-            middle.position.to(home, 0.25),
-            middle.rotation.to(0, 0.25),
-          ];
+          yield [middle.position.to(home, 0.25), middle.rotation.to(0, 0.25)];
           c.uncut(subs);
         }
         yield 0.5;
@@ -179,9 +176,7 @@ export class MdCode extends Diagram {
         yield 0.4;
         const callFound = findInCode(c, "yield* drive");
         if (callFound) {
-          const dispose = highlightRange(
-            callFound.part, callFound.start, callFound.end, UNDERLINE,
-          );
+          const dispose = highlightRange(callFound.part, callFound.start, callFound.end, UNDERLINE);
           yield 1.0;
           dispose();
         }

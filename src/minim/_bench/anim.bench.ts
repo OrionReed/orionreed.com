@@ -7,17 +7,26 @@
 //        src/minim/_bench/anim.bench.ts
 
 import "../_test/setup";
-import { bench, group, run, do_not_optimize } from "mitata";
-import { Anim, suspend, drive, type Animator } from "@minim/core";
+import { Anim, type Animator, drive, suspend } from "@minim/core";
+import { bench, do_not_optimize, group, run } from "mitata";
 
-function* sleeper(): Animator { yield 0.5; }
-function* driver(): Animator { while (true) yield; }
+function* sleeper(): Animator {
+  yield 0.5;
+}
+function* driver(): Animator {
+  while (true) yield;
+}
 
 function makeRawYieldLoop(N: number, frames: number) {
   return () => {
     const a = new Anim();
     let acc = 0;
-    function* w(): Animator { while (true) { const { dt } = yield; acc += dt; } }
+    function* w(): Animator {
+      while (true) {
+        const { dt } = yield;
+        acc += dt;
+      }
+    }
     for (let i = 0; i < N; i++) a.start(w());
     for (let f = 0; f < frames; f++) a.step(1 / 60);
     a.stop();
@@ -29,7 +38,12 @@ function makeDriveLoop(N: number, frames: number) {
   return () => {
     const a = new Anim();
     let acc = 0;
-    for (let i = 0; i < N; i++) a.start(drive((tick) => { acc += tick.dt; }));
+    for (let i = 0; i < N; i++)
+      a.start(
+        drive(tick => {
+          acc += tick.dt;
+        }),
+      );
     for (let f = 0; f < frames; f++) a.step(1 / 60);
     a.stop();
     return acc;
@@ -43,12 +57,14 @@ function makeSpringSim(N: number, frames: number) {
     const vs = new Float64Array(N);
     for (let i = 0; i < N; i++) {
       const idx = i;
-      a.start(drive((tick) => {
-        const force = (1 - xs[idx]) * 170;
-        const drag = -26 * vs[idx];
-        vs[idx] += (force + drag) * tick.dt;
-        xs[idx] += vs[idx] * tick.dt;
-      }));
+      a.start(
+        drive(tick => {
+          const force = (1 - xs[idx]) * 170;
+          const drag = -26 * vs[idx];
+          vs[idx] += (force + drag) * tick.dt;
+          xs[idx] += vs[idx] * tick.dt;
+        }),
+      );
     }
     for (let f = 0; f < frames; f++) a.step(1 / 60);
     a.stop();
@@ -62,10 +78,15 @@ function makeTween(N: number, frames: number) {
     const out = new Float64Array(N);
     for (let i = 0; i < N; i++) {
       const idx = i;
-      a.start(drive((_tick, t) => {
-        if (t >= 1) { out[idx] = 1; return false; }
-        out[idx] = t;
-      }));
+      a.start(
+        drive((_tick, t) => {
+          if (t >= 1) {
+            out[idx] = 1;
+            return false;
+          }
+          out[idx] = t;
+        }),
+      );
     }
     for (let f = 0; f < frames; f++) a.step(1 / 60);
     a.stop();
@@ -95,7 +116,9 @@ function makeSpawnComplete(N: number) {
 function makeSpawnCancel(N: number) {
   return () => {
     const a = new Anim();
-    function* w(): Animator { yield; }
+    function* w(): Animator {
+      yield;
+    }
     const ds: (() => void)[] = [];
     for (let i = 0; i < N; i++) ds.push(a.start(w()));
     for (const d of ds) d();
@@ -108,7 +131,10 @@ function makeSuspendWake(N: number) {
     const a = new Anim();
     const wakes: Array<() => void> = [];
     function* w(): Animator {
-      yield* suspend((wake) => { wakes.push(wake); return () => {}; });
+      yield* suspend(wake => {
+        wakes.push(wake);
+        return () => {};
+      });
     }
     for (let i = 0; i < N; i++) a.start(w());
     a.step(1 / 60);
@@ -121,13 +147,17 @@ function makeSuspendWake(N: number) {
 function makeParallel(N: number, K: number) {
   return () => {
     const a = new Anim();
-    function* child(): Animator { yield; }
+    function* child(): Animator {
+      yield;
+    }
     function* w(): Animator {
       const kids = Array.from({ length: K }, () => child());
       yield kids;
     }
     for (let i = 0; i < N; i++) a.start(w());
-    a.step(1 / 60); a.step(1 / 60); a.step(1 / 60);
+    a.step(1 / 60);
+    a.step(1 / 60);
+    a.step(1 / 60);
     a.stop();
   };
 }
@@ -135,18 +165,23 @@ function makeParallel(N: number, K: number) {
 function makeDeepYieldStar(N: number, depth: number) {
   return () => {
     const a = new Anim();
-    function* leaf(): Animator { yield; }
+    function* leaf(): Animator {
+      yield;
+    }
     function makeChain(d: number): () => Animator {
       let cur: () => Animator = leaf;
       for (let i = 0; i < d; i++) {
         const inner = cur;
-        cur = function* (): Animator { yield* inner(); };
+        cur = function* (): Animator {
+          yield* inner();
+        };
       }
       return cur;
     }
     const f = makeChain(depth);
     for (let i = 0; i < N; i++) a.start(f());
-    a.step(1 / 60); a.step(1 / 60);
+    a.step(1 / 60);
+    a.step(1 / 60);
     a.stop();
   };
 }
@@ -155,15 +190,29 @@ function makeMixed(_N: number, frames: number) {
   return () => {
     const a = new Anim();
     let dummy = 0;
-    const Ndrive = 150, Nsleep = 150, Nsuspend = 100, Nshort = 100;
-    for (let i = 0; i < Ndrive; i++) a.start(drive((tick) => { dummy += tick.dt; }));
+    const Ndrive = 150,
+      Nsleep = 150,
+      Nsuspend = 100,
+      Nshort = 100;
+    for (let i = 0; i < Ndrive; i++)
+      a.start(
+        drive(tick => {
+          dummy += tick.dt;
+        }),
+      );
     for (let i = 0; i < Nsleep; i++) a.start(sleeper());
     const wakes: Array<() => void> = [];
     function* susp(): Animator {
-      yield* suspend((w) => { wakes.push(w); return () => {}; });
+      yield* suspend(w => {
+        wakes.push(w);
+        return () => {};
+      });
     }
     for (let i = 0; i < Nsuspend; i++) a.start(susp());
-    function* shortLived(): Animator { yield; yield; }
+    function* shortLived(): Animator {
+      yield;
+      yield;
+    }
     for (let i = 0; i < Nshort; i++) a.start(shortLived());
     for (let f = 0; f < frames; f++) {
       a.step(1 / 60);
@@ -181,13 +230,22 @@ function makeUiButtons(N: number, frames: number) {
     let acc = 0;
     const wakes: Array<() => void> = [];
     function* clickWait(): Animator {
-      yield* suspend((w) => { wakes.push(w); return () => {}; });
+      yield* suspend(w => {
+        wakes.push(w);
+        return () => {};
+      });
     }
     function* button(): Animator {
       for (let i = 0; i < 5; i++) {
         yield* clickWait();
-        yield* drive((_tick, t) => { if (t >= 0.1) return false; acc += 1; });
-        yield* drive((_tick, t) => { if (t >= 0.2) return false; acc += 1; });
+        yield* drive((_tick, t) => {
+          if (t >= 0.1) return false;
+          acc += 1;
+        });
+        yield* drive((_tick, t) => {
+          if (t >= 0.2) return false;
+          acc += 1;
+        });
         yield 0.3;
       }
     }
@@ -208,18 +266,18 @@ function reg(name: string, fn: () => unknown) {
 }
 
 group("anim runtime", () => {
-  reg("raw-yield     N=1000 60f",  makeRawYieldLoop(1000, 60));
-  reg("drive-loop    N=1000 60f",  makeDriveLoop(1000, 60));
-  reg("spring-sim    N=1000 60f",  makeSpringSim(1000, 60));
-  reg("tween         N=500  60f",  makeTween(500, 60));
+  reg("raw-yield     N=1000 60f", makeRawYieldLoop(1000, 60));
+  reg("drive-loop    N=1000 60f", makeDriveLoop(1000, 60));
+  reg("spring-sim    N=1000 60f", makeSpringSim(1000, 60));
+  reg("tween         N=500  60f", makeTween(500, 60));
   reg("sleep-idle    500/100/30f", makeSleepIdle(500, 100, 30));
-  reg("spawn+complete N=1000",     makeSpawnComplete(1000));
-  reg("spawn+cancel  N=1000",      makeSpawnCancel(1000));
-  reg("suspend+wake  N=500",       makeSuspendWake(500));
-  reg("parallel      N=100 K=10",  makeParallel(100, 10));
-  reg("deep yield*   N=200 d=8",   makeDeepYieldStar(200, 8));
-  reg("mixed         N=500 120f",  makeMixed(500, 120));
-  reg("ui-buttons    N=100 200f",  makeUiButtons(100, 200));
+  reg("spawn+complete N=1000", makeSpawnComplete(1000));
+  reg("spawn+cancel  N=1000", makeSpawnCancel(1000));
+  reg("suspend+wake  N=500", makeSuspendWake(500));
+  reg("parallel      N=100 K=10", makeParallel(100, 10));
+  reg("deep yield*   N=200 d=8", makeDeepYieldStar(200, 8));
+  reg("mixed         N=500 120f", makeMixed(500, 120));
+  reg("ui-buttons    N=100 200f", makeUiButtons(100, 200));
 });
 
 await run({ format: "mitata" });

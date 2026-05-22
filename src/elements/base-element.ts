@@ -37,10 +37,7 @@ export class BaseElement extends HTMLElement {
       const chain: string[] = [];
       let proto: any = constructor;
       while (proto && proto !== HTMLElement && proto !== Object) {
-        if (
-          Object.prototype.hasOwnProperty.call(proto, "styles") &&
-          proto.styles
-        ) {
+        if (Object.prototype.hasOwnProperty.call(proto, "styles") && proto.styles) {
           chain.unshift(proto.styles);
         }
         proto = Object.getPrototypeOf(proto);
@@ -58,11 +55,7 @@ export class BaseElement extends HTMLElement {
     }
   }
 
-  attributeChangedCallback(
-    _name: string,
-    oldValue: string,
-    newValue: string,
-  ): void {
+  attributeChangedCallback(_name: string, oldValue: string, newValue: string): void {
     if (oldValue !== newValue) {
       this.render();
     }
@@ -73,10 +66,7 @@ export class BaseElement extends HTMLElement {
 
 /** Decorator: maps a class field to a typed HTML attribute. */
 export function attr(options: { type?: "string" | "number" | "boolean" } = {}) {
-  return function <T extends { constructor: any }>(
-    target: T,
-    propertyKey: string,
-  ) {
+  return function <T extends { constructor: any }>(target: T, propertyKey: string) {
     const constructor = target.constructor;
     if (!constructor._attributes) constructor._attributes = [];
     constructor._attributes.push(propertyKey);

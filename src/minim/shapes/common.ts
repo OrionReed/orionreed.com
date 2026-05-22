@@ -1,9 +1,9 @@
 // Shared style options + applier for stroked/filled shapes.
 
-import { computed, signal, value, type Val } from "@minim/signals";
-import type {AnyShape, ShapeOpts} from "./shape";
-import {tokens} from "./tokens";
-import {dashedPath} from "./dashed";
+import { computed, signal, type Val, value } from "@minim/signals";
+import { dashedPath } from "./dashed";
+import type { AnyShape, ShapeOpts } from "./shape";
+import { tokens } from "./tokens";
 
 const NSS = "non-scaling-stroke";
 
@@ -43,10 +43,7 @@ export function wireStroke<S extends AnyShape>(
 /** Apply stroke + fill + linecap/join. Dashing is `setupDashed`. */
 export function applyOpts<S extends AnyShape>(s: S, opts: CommonOpts): void {
   s.attr("stroke", opts.stroke ?? tokens.stroke);
-  s.attr(
-    "stroke-width",
-    opts.strokeWidth ?? (opts.thin ? tokens.thinWeight : tokens.weight),
-  );
+  s.attr("stroke-width", opts.strokeWidth ?? (opts.thin ? tokens.thinWeight : tokens.weight));
   s.attr("vector-effect", NSS);
   if (opts.cap) s.attr("stroke-linecap", opts.cap);
   if (opts.join) s.attr("stroke-linejoin", opts.join);
@@ -59,18 +56,16 @@ export function applyOpts<S extends AnyShape>(s: S, opts: CommonOpts): void {
 /** When `dashed`, bind a reactive `<path>` `d` from `s.segments()`.
  *  `capExtension` compensates for round caps so the visible dash/gap
  *  ratio stays consistent across stroke weights. */
-export function setupDashed<S extends AnyShape>(
-  s: S,
-  opts: CommonOpts,
-  closed: boolean,
-): void {
+export function setupDashed<S extends AnyShape>(s: S, opts: CommonOpts, closed: boolean): void {
   if (!opts.dashed) return;
   const cap = opts.cap ?? "round";
   s.attr("stroke-linecap", cap);
 
   const stroke =
     opts.strokeWidth === undefined
-      ? (opts.thin ? tokens.thinWeight : tokens.weight)
+      ? opts.thin
+        ? tokens.thinWeight
+        : tokens.weight
       : value(opts.strokeWidth);
   const capExt = cap === "round" ? stroke : 0;
 

@@ -10,12 +10,7 @@
 // All return `Read<boolean>` (or, for `firstOf`, `Read<{first,at}>`).
 // Composition with `and` / `or` / `not` is just signal algebra.
 
-import {
-  computed,
-  effect,
-  signal,
-  type Read,
-} from "@minim/signals";
+import { computed, effect, type Read, signal } from "@minim/signals";
 import { activeRecorder } from "./record";
 import { type Scoped } from "./scope";
 import { type Span } from "./span";
@@ -91,7 +86,7 @@ export function firstOf(
   ...events: Read<boolean>[]
 ): Read<{ first: number; at: number } | undefined> {
   const result = signal<{ first: number; at: number } | undefined>(undefined);
-  const prev = events.map((e) => e.peek());
+  const prev = events.map(e => e.peek());
 
   effect(() => {
     if (result.peek() !== undefined) {
@@ -116,11 +111,7 @@ export function firstOf(
 // ─── helpers ────────────────────────────────────────────────────
 
 function isScoped(v: unknown): v is Scoped<any> {
-  return (
-    typeof v === "function" &&
-    "alive" in (v as object) &&
-    "last" in (v as object)
-  );
+  return typeof v === "function" && "alive" in (v as object) && "last" in (v as object);
 }
 
 function isSpan(v: unknown): v is Span {

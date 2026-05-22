@@ -1,5 +1,21 @@
-import {Diagram, Mount, annularSector, attr, signal, circle, computed, label, line, loop, polar, snapshot, when, type Animator, type Signal} from "../minim";
-import {grey, ink, stroke} from "./color";
+import {
+  type Animator,
+  annularSector,
+  attr,
+  circle,
+  computed,
+  Diagram,
+  label,
+  line,
+  loop,
+  Mount,
+  polar,
+  type Signal,
+  signal,
+  snapshot,
+  when,
+} from "../minim";
+import { grey, ink, stroke } from "./color";
 import * as R from "./rand";
 
 type CellState = "received" | "retransmit" | "acknowledged";
@@ -63,16 +79,13 @@ export class MdQrtpProtocol extends Diagram {
       s(
         annularSector(center, rOut, rIn, a0, a1, {
           stroke: "none",
-          fill: computed(() => ((c) => c ?? "transparent")(colors[i].value)),
-          opacity: () => colors[i].value ? 1 : 0,
+          fill: computed(() => (c => c ?? "transparent")(colors[i].value)),
+          opacity: () => (colors[i].value ? 1 : 0),
         }),
       );
     }
 
-    s(
-      circle(center, rOut, { thin: true }),
-      circle(center, rIn, { thin: true }),
-    );
+    s(circle(center, rOut, { thin: true }), circle(center, rIn, { thin: true }));
     for (let i = 0; i < N; i++) {
       const a = start + (i * TAU) / N;
       s(
@@ -159,40 +172,41 @@ export class MdQrtpProtocol extends Diagram {
     }
 
     const startFloodFillLoop = () => {
-      floodDispose = this.anim.start(loop(function* () {
-        while (cellsWithState("retransmit").length === 0) yield;
-        yield T.beforeFlood;
-        yield* doFloodFill();
-        yield T.betweenCycles;
-      }));
+      floodDispose = this.anim.start(
+        loop(function* () {
+          while (cellsWithState("retransmit").length === 0) yield;
+          yield T.beforeFlood;
+          yield* doFloodFill();
+          yield T.betweenCycles;
+        }),
+      );
     };
 
     if (backchannel) startFloodFillLoop();
 
-    this.anim.start(loop(function* () {
-      if (
-        backchannel &&
-        state.cells.peek().get(state.broadcast.peek()) === "acknowledged"
-      ) {
+    this.anim.start(
+      loop(function* () {
+        if (backchannel && state.cells.peek().get(state.broadcast.peek()) === "acknowledged") {
+          state.broadcast.value = (state.broadcast.peek() + 1) % N;
+          return;
+        }
+
+        state.lastBroadcast.value = state.broadcast.peek();
+        handleReception(state.broadcast.peek());
         state.broadcast.value = (state.broadcast.peek() + 1) % N;
-        return;
-      }
 
-      state.lastBroadcast.value = state.broadcast.peek();
-      handleReception(state.broadcast.peek());
-      state.broadcast.value = (state.broadcast.peek() + 1) % N;
+        if (state.cells.peek().size === N) {
+          yield T.beforeReset;
+          floodDispose?.();
+          floodDispose = undefined;
+          reset();
+          yield T.betweenFullCycles;
+          if (backchannel) startFloodFillLoop();
+          return;
+        }
 
-      if (state.cells.peek().size === N) {
-        yield T.beforeReset;
-        floodDispose?.();
-        floodDispose = undefined;
-        reset();
-        yield T.betweenFullCycles;
-        if (backchannel) startFloodFillLoop();
-        return;
-      }
-
-      yield T.broadcastStep;
-    }));
+        yield T.broadcastStep;
+      }),
+    );
   }
 }

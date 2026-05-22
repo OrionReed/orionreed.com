@@ -1,4 +1,16 @@
-import {Diagram, Mount, Anchor, attr, label, line, path, rect, split, t, type Signal} from "../minim";
+import {
+  Anchor,
+  attr,
+  Diagram,
+  label,
+  line,
+  Mount,
+  path,
+  rect,
+  type Signal,
+  split,
+  t,
+} from "../minim";
 
 interface CodecPart {
   label: string;
@@ -17,7 +29,7 @@ const LEADER_ANGLE = -Math.PI / 4;
 function parseContent(text: string): CodecPart[] {
   const lines = text
     .split("\n")
-    .map((l) => l.trim())
+    .map(l => l.trim())
     .filter(Boolean);
   return lines.map((raw): CodecPart => {
     const colon = raw.indexOf(":");
@@ -25,9 +37,7 @@ function parseContent(text: string): CodecPart[] {
     const lbl = raw.slice(0, colon).trim();
     const rest = raw.slice(colon + 1).trim();
     if (!rest) return { label: lbl, unitSize: 1 };
-    const m = rest.match(
-      /^(?:(\d+)\s+([a-zA-Z])|([a-zA-Z])\s+(\d+)|(\d+)|([a-zA-Z]))$/,
-    );
+    const m = rest.match(/^(?:(\d+)\s+([a-zA-Z])|([a-zA-Z])\s+(\d+)|(\d+)|([a-zA-Z]))$/);
     if (!m) return { label: lbl, unitSize: 1 };
     const [, s1, g1, g2, s2, sOnly, gOnly] = m;
     const unitSize = parseInt(s1 || s2 || sOnly || "1", 10);
@@ -49,7 +59,11 @@ export class MdCodec extends Diagram {
     const charWidth = LABEL_SIZE * CHAR_FACTOR;
 
     const row = s(rect(0, 0, TOTAL_W, CELL_H));
-    const slots = split(row.box, "x", parts.map((p) => p.unitSize));
+    const slots = split(
+      row.box,
+      "x",
+      parts.map(p => p.unitSize),
+    );
 
     parts.forEach((part, i) => {
       if (i === parts.length - 1) return;
@@ -68,9 +82,7 @@ export class MdCodec extends Diagram {
         return;
       }
 
-      const leader = path(slot.top, { thin: true })
-        .u(VERT_H)
-        .along(LEADER_ANGLE, DIAG_D);
+      const leader = path(slot.top, { thin: true }).u(VERT_H).along(LEADER_ANGLE, DIAG_D);
       s(
         leader,
         label(leader.pointAt(1), t(part.label).bold(), {

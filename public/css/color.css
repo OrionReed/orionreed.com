@@ -11,11 +11,11 @@
   --table-header-bg: light-dark(#f4f4f4, #282e36);
   --table-stripe-bg: light-dark(#f9f9f9, #1f242c);
   --border-color: light-dark(#ddd, #363c45);
-  
+
   /* Ink color system — see src/elements/color.ts.
      L values derived via deriveAnchors() to hit APCA Lc ≈ 80 at the
      mark anchor and Lc ≈ 35 at the spread anchor, against --paper-l. */
-  --paper-l: 100%;       /* match --bg-color */
+  --paper-l: 100%; /* match --bg-color */
   --ink-l: 49%;
   --ink-c: 0.14;
   --stroke-l: 5%;
@@ -24,7 +24,7 @@
 }
 
 :root[data-theme="dark"] {
-  --paper-l: 16%;        /* match --bg-color #17191f */
+  --paper-l: 16%; /* match --bg-color #17191f */
   --ink-l: 85%;
   --ink-fill-l: 57%;
   --stroke-l: 95%;
@@ -35,6 +35,7 @@ html,
 body {
   background-color: var(--bg-color);
   color: var(--text-color);
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
-

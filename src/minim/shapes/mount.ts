@@ -1,6 +1,6 @@
 // Callable mount handle: `s(shape)` adds children under a root Shape and returns them.
 
-import type {AnyShape} from "./shape";
+import type { AnyShape } from "./shape";
 
 export interface Mount {
   <T extends AnyShape>(shape: T): T;

@@ -16,8 +16,6 @@ import { type Read, type WritableBrand } from "./signal";
 
 interface Writers<T> {
   value: T;
-  set(v: T | (() => T) | Read<T>): unknown;
-  bind(s: T | (() => T) | Read<T>): () => void;
 }
 
 // ─── Type-level dispatch ──────────────────────────────────────────
@@ -38,10 +36,11 @@ type LensFields<R> = Exclude<
 type LiftField<X> = X extends Read<unknown> ? Writable<X> : X;
 
 /** Extract invertible method names from `static invertibles = [...] as const`. */
-type InvOf<R> =
-    R extends { readonly constructor: { readonly invertibles: infer I } }
-      ? I extends readonly (keyof R)[] ? I[number] : never
-      : never;
+type InvOf<R> = R extends { readonly constructor: { readonly invertibles: infer I } }
+  ? I extends readonly (keyof R)[]
+    ? I[number]
+    : never
+  : never;
 
 // ─── Public surface ───────────────────────────────────────────────
 
@@ -49,20 +48,20 @@ type InvOf<R> =
  *  that declares `static invertibles = [...] as const`.
  *
  *  Lifts invertible methods so chains stay writable, lifts field
- *  lenses to their own writable forms, and adds the writable surface
- *  (`.value`/`.set`/`.bind`) plus a nominal brand.
+ *  lenses to their own writable forms, and adds a writable `.value`
+ *  plus a nominal brand. (Driving from a source uses the free
+ *  `bind(target, source)` helper in `lateral.ts`.)
  *
  *  Note: we INTERSECT rather than Omit-then-add for invertibles and
  *  fields. The intersection of `(...) => Num` and `(...) => Writable<Num>`
  *  is `(...) => Writable<Num>` (the writable form is a subtype). This
  *  preserves R's full structural shape so `this: R & WritableBrand`
  *  constraints on inherited methods still match. */
-export type Writable<R> =
-  Omit<R, "value" | InvOf<R> | LensFields<R>>
-  & Writers<R extends Read<infer T> ? T : never>
-  & WritableBrand
-  & { [K in InvOf<R>]: R[K] extends (...a: infer A) => R ? (...a: A) => Writable<R> : R[K] }
-  & { [K in LensFields<R>]: LiftField<R[K]> };
+export type Writable<R> = Omit<R, "value" | InvOf<R> | LensFields<R>> &
+  Writers<R extends Read<infer T> ? T : never> &
+  WritableBrand & {
+    [K in InvOf<R>]: R[K] extends (...a: infer A) => R ? (...a: A) => Writable<R> : R[K];
+  } & { [K in LensFields<R>]: LiftField<R[K]> };
 
 /** T-anchored constraint for animator-style parameters:
  *
@@ -73,8 +72,6 @@ export type Writable<R> =
  *  because they lack the brand. */
 export interface WritableOf<T> extends WritableBrand {
   value: T;
-  set(v: T | (() => T) | Read<T>): unknown;
-  bind(s: T | (() => T) | Read<T>): () => void;
   peek(): T;
 }
 
@@ -91,8 +88,12 @@ export interface WritableOf<T> extends WritableBrand {
  *  Forgetting `as const` is no longer possible; typos / non-invertible
  *  method names fail at the call site. The curried form lets us anchor
  *  R first so the second-arg key check has full inference. */
-export function invertibles<R>(): <K extends ReadonlyArray<
-  { [P in keyof R]: R[P] extends (...args: never[]) => R ? P : never }[keyof R]
->>(...keys: K) => K {
+export function invertibles<R>(): <
+  K extends ReadonlyArray<
+    { [P in keyof R]: R[P] extends (...args: never[]) => R ? P : never }[keyof R]
+  >,
+>(
+  ...keys: K
+) => K {
   return ((...keys: readonly unknown[]) => keys) as never;
 }

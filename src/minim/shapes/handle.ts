@@ -1,10 +1,10 @@
 // handle.* — writable derived shapes (draggable circles wired to a Vec).
 
-import { lens, signal, polar as polarLens, Signal, Vec, mean, type Writable } from "@minim/signals";
-import { type AnyShape, type Has } from "./shape";
+import { lens, mean, polar as polarLens, Signal, signal, Vec, type Writable } from "@minim/signals";
 import { Circle, type CircleOpts } from "./circle";
 import { drag } from "./interaction";
 import type { Path } from "./path";
+import { type AnyShape, type Has } from "./shape";
 
 const COLOR = "var(--minim-handle, #2563eb)";
 
@@ -67,7 +67,7 @@ const anchor = (
  *  give the actual centroid of the visible positions (not of translate
  *  deltas — see `centroid` in `shape.ts` for that variant). */
 const centroidHandle = (...shapes: (AnyShape & Has<"translate">)[]): Handle =>
-  handleFn(mean(...shapes.map((s) => s.center)));
+  handleFn(mean(...shapes.map(s => s.center)));
 
 /** Drag handle at the midpoint of two writable Points — drags both
  *  along with it. */
@@ -77,33 +77,25 @@ const midpoint = (a: Writable<Vec>, b: Writable<Vec>, opts?: HandleOpts): Handle
 /** Rotation knob orbiting the shape's center at `radius`. The knob
  *  position is `center + (r cos θ, r sin θ)` for `θ = shape.rotate`;
  *  drag the knob to write θ. */
-const rotate = (
-  shape: AnyShape & Has<"rotate">,
-  radius = 40,
-  opts?: HandleOpts,
-): Handle => {
+const rotate = (shape: AnyShape & Has<"rotate">, radius = 40, opts?: HandleOpts): Handle => {
   // Built directly on `polar` with the `circular` policy — c and r
   // are fixed; writes only update θ.
-  return handleFn(
-    polarLens(shape.center, radius, shape.rotate, "circular"),
-    { cursor: "grab", ...opts },
-  );
+  return handleFn(polarLens(shape.center, radius, shape.rotate, "circular"), {
+    cursor: "grab",
+    ...opts,
+  });
 };
 
 /** Uniform-scale knob — sits along +x from the shape's center at
  *  `radius * scale.x`. Drag x-distance writes both scale axes. */
-const scaleHandle = (
-  shape: AnyShape & Has<"scale">,
-  radius = 40,
-  opts?: HandleOpts,
-): Handle => {
+const scaleHandle = (shape: AnyShape & Has<"scale">, radius = 40, opts?: HandleOpts): Handle => {
   const pos = lens(
     () => {
       const c = shape.center.value;
       const s = shape.scale.value;
       return { x: c.x + radius * s.x, y: c.y };
     },
-    (target) => {
+    target => {
       const c = shape.center.value;
       const k = Math.max(0.05, Math.abs(target.x - c.x) / radius);
       shape.scale.value = { x: k, y: k };
@@ -116,11 +108,7 @@ const scaleHandle = (
 /** Handle constrained to slide along a Path. Drag the handle and the
  *  pointer is projected onto the path; `t` is set to the nearest
  *  parameter. Re-projects every drag step, so works on animated paths. */
-const tOnPath = (
-  p: Path,
-  t: Signal<number>,
-  opts?: HandleOpts & { samples?: number },
-): Handle => {
+const tOnPath = (p: Path, t: Signal<number>, opts?: HandleOpts & { samples?: number }): Handle => {
   const N = opts?.samples ?? 64;
   const project = (target: { x: number; y: number }) => {
     let bestT = 0;
@@ -138,7 +126,7 @@ const tOnPath = (
   };
   const pos = lens(
     () => p.pointAt(t.value).value,
-    (target) => {
+    target => {
       (t as unknown as { value: number }).value = project(target);
     },
     Vec,

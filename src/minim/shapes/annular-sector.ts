@@ -1,13 +1,11 @@
-import { num,computed, Vec, type Signal, type Val} from "@minim/signals";
-import {Shape, type Segment} from "./shape";
-import {wireStroke, type CommonOpts} from "./common";
+import { computed, num, type Signal, type Val, Vec } from "@minim/signals";
+import { type CommonOpts, wireStroke } from "./common";
+import { type Segment, Shape } from "./shape";
 
 export interface AnnularSectorOpts extends CommonOpts {}
 
 /** Pie wedge with a hole — between two radii swept across two angles. */
-export class AnnularSector<
-  O extends AnnularSectorOpts = AnnularSectorOpts,
-> extends Shape<O> {
+export class AnnularSector<O extends AnnularSectorOpts = AnnularSectorOpts> extends Shape<O> {
   readonly rOuter: Signal<number>;
   readonly rInner: Signal<number>;
   readonly a0: Signal<number>;
@@ -99,5 +97,4 @@ export const annularSector = <const O extends AnnularSectorOpts>(
   a0: Val<number>,
   a1: Val<number>,
   opts?: O,
-): AnnularSector<O> =>
-  new AnnularSector<O>(center, rOuter, rInner, a0, a1, opts);
+): AnnularSector<O> => new AnnularSector<O>(center, rOuter, rInner, a0, a1, opts);

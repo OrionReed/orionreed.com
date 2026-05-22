@@ -1,4 +1,26 @@
-import {Diagram, Mount, Anchor, attract, signal, circle, driven, drive, easeInOut, label, loop, num, play, vec, spring, value, wave, type Val, Num, Vec, type Writable} from "../../minim";
+import {
+  Anchor,
+  attract,
+  circle,
+  Diagram,
+  drive,
+  driven,
+  easeInOut,
+  label,
+  loop,
+  Mount,
+  Num,
+  num,
+  play,
+  signal,
+  spring,
+  type Val,
+  Vec,
+  value,
+  vec,
+  type Writable,
+  wave,
+} from "../../minim";
 
 const N_TRAIL = 14;
 const N_CHAIN = 10;
@@ -8,7 +30,7 @@ const LINK_LEN = 11;
 const drift = (sig: Writable<Num>, v: Val<number>) =>
   driven(sig, (dt, _t, cur) => cur + value(v) * dt);
 
-const sine     = (t: number, f: number) => Math.sin(2 * Math.PI * f * t);
+const sine = (t: number, f: number) => Math.sin(2 * Math.PI * f * t);
 const triangle = (t: number, f: number) => 1 - 4 * Math.abs(((t * f) % 1) - 0.5);
 const sawtooth = (t: number, f: number) => 2 * ((t * f) % 1) - 1;
 
@@ -81,10 +103,7 @@ export class MdBehaviors extends Diagram {
     this.anim.start(
       loop(function* () {
         yield 1.5;
-        yield* play([
-          bv.to(0, 0.4, easeInOut),
-          byAmp.to(0, 0.4, easeInOut),
-        ]);
+        yield* play([bv.to(0, 0.4, easeInOut), byAmp.to(0, 0.4, easeInOut)]);
         yield 0.7;
         byAmp.value = 32;
         bv.value = bx.value < cx ? 155 : -155;
@@ -133,11 +152,11 @@ export class MdBehaviors extends Diagram {
     }
 
     s(
-      label(
-        view.bottom.up(12),
-        "attract (smooth) · spring (elastic, pauses) · play(rigid-link)",
-        { size: 10, align: Anchor.Center, opacity: 0.55 },
-      ),
+      label(view.bottom.up(12), "attract (smooth) · spring (elastic, pauses) · play(rigid-link)", {
+        size: 10,
+        align: Anchor.Center,
+        opacity: 0.55,
+      }),
     );
   }
 }

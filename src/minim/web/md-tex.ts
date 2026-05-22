@@ -1,17 +1,16 @@
 // Inline math custom element with optional prose-linking via `for`/`sym`.
 
-import {effect} from "@minim/signals";
+import { effect } from "@minim/signals";
 import {
-  hover,
-  highlightTint,
-  renderToMathML,
   getMarker as getGlobalMarker,
+  highlightTint,
+  hover,
   type Marker,
+  renderToMathML,
 } from "@minim/tex";
 
 const SYM_RE = /\\sym\{([^}]+)\}\{([^}]*)\}/g;
-const symClass = (id: string): string =>
-  `minim-sym-${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+const symClass = (id: string): string => `minim-sym-${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
 type MarkerHost = { getMarker?: (id: string) => Marker | undefined };
 
@@ -51,8 +50,7 @@ export class MdTex extends HTMLElement {
     for (const [cls, id] of symIds) {
       const m = resolveMarker(id, forId);
       if (!m) continue;
-      for (const el of this.querySelectorAll<HTMLElement>(`.${cls}`))
-        this.#wire(el, m);
+      for (const el of this.querySelectorAll<HTMLElement>(`.${cls}`)) this.#wire(el, m);
     }
   }
 
@@ -62,11 +60,12 @@ export class MdTex extends HTMLElement {
     el.style.cursor = "default";
     this.#disposers.push(
       hover(el, m),
-      effect(() => { el.style.color = m.color.value ?? ""; }),
+      effect(() => {
+        el.style.color = m.color.value ?? "";
+      }),
       effect(() => {
         const color = m.color.value;
-        el.style.backgroundColor =
-          m.active.value && color ? highlightTint(color) : "";
+        el.style.backgroundColor = m.active.value && color ? highlightTint(color) : "";
       }),
     );
   }

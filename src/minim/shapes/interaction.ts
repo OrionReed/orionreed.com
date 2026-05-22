@@ -1,9 +1,10 @@
 // DOM input → signal-world bridges that bind to scene-graph shapes.
 
-import {type Signal, signal, Vec, Num, type Of, type Writable} from "@minim/signals";
+import { Num, type Of, type Signal, signal, Vec, type Writable } from "@minim/signals";
 
 type VecValue = Of<Vec>;
-import type {AnyShape} from "./shape";
+
+import type { AnyShape } from "./shape";
 
 const TAU = Math.PI * 2;
 const wrapToPi = (x: number) => x - TAU * Math.round(x / TAU);
@@ -23,9 +24,16 @@ const wrapToPi = (x: number) => x - TAU * Math.round(x / TAU);
  *
  *  Returns a disposer that removes the listeners. */
 export function hoverSignal(shape: AnyShape, sig: Signal<boolean>): () => void {
-  const off1 = shape.on("mouseenter", () => { sig.value = true; });
-  const off2 = shape.on("mouseleave", () => { sig.value = false; });
-  return () => { off1(); off2(); };
+  const off1 = shape.on("mouseenter", () => {
+    sig.value = true;
+  });
+  const off2 = shape.on("mouseleave", () => {
+    sig.value = false;
+  });
+  return () => {
+    off1();
+    off2();
+  };
 }
 
 /** Wire `handle` for pointer-drag. Each pointermove while pressed
@@ -42,7 +50,7 @@ export function draggable(
   let pointerId = -1;
   const offs: Array<() => void> = [];
   offs.push(
-    handle.on("pointerdown", (e) => {
+    handle.on("pointerdown", e => {
       const pe = e as PointerEvent;
       dragging = true;
       pointerId = pe.pointerId;
@@ -52,7 +60,7 @@ export function draggable(
     }),
   );
   offs.push(
-    handle.on("pointermove", (e) => {
+    handle.on("pointermove", e => {
       if (!dragging) return;
       onDrag(handle.toLocal(e as PointerEvent));
     }),
@@ -71,7 +79,7 @@ export function draggable(
   };
   offs.push(handle.on("pointerup", stop));
   offs.push(handle.on("pointercancel", stop));
-  return () => offs.forEach((d) => d());
+  return () => offs.forEach(d => d());
 }
 
 /** Bind pointer drag on `shape` directly to a writable `Vec` — no
@@ -88,7 +96,7 @@ export function drag(
 ): () => void {
   let dx = 0;
   let dy = 0;
-  const offDown = shape.on("pointerdown", (e) => {
+  const offDown = shape.on("pointerdown", e => {
     const local = shape.toLocal(e as PointerEvent);
     const v = target.value;
     dx = local.x - v.x;
@@ -96,14 +104,19 @@ export function drag(
   });
   const offDrag = draggable(
     shape,
-    (local) => {
+    local => {
       target.value = { x: local.x - dx, y: local.y - dy };
     },
     dragging
-      ? (active) => { dragging.value = active; }
+      ? active => {
+          dragging.value = active;
+        }
       : undefined,
   );
-  return () => { offDown(); offDrag(); };
+  return () => {
+    offDown();
+    offDrag();
+  };
 }
 
 /** Wrap a `drag(shape, target)` call and return a local `dragging`
@@ -136,20 +149,25 @@ export function dragRotate(
   dragging?: Signal<boolean>,
 ): () => void {
   let grabAngle = 0;
-  const offDown = shape.on("pointerdown", (e) => {
+  const offDown = shape.on("pointerdown", e => {
     const local = shape.toLocal(e as PointerEvent);
     grabAngle = Math.atan2(local.y, local.x);
   });
   const stop = draggable(
     shape,
-    (local) => {
+    local => {
       const currentAngle = Math.atan2(local.y, local.x);
       const current = angle.peek();
       angle.value = current + wrapToPi(currentAngle - grabAngle);
     },
     dragging
-      ? (active) => { dragging.value = active; }
+      ? active => {
+          dragging.value = active;
+        }
       : undefined,
   );
-  return () => { offDown(); stop(); };
+  return () => {
+    offDown();
+    stop();
+  };
 }

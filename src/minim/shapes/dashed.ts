@@ -1,6 +1,6 @@
 // Pixel-perfect dashing via explicit `<path>` commands (sidesteps `stroke-dasharray` corner artifacts).
 
-import type {Segment} from "./shape";
+import type { Segment } from "./shape";
 
 const TWO_PI = Math.PI * 2;
 
@@ -180,12 +180,7 @@ export function dashedPath(segments: Segment[], opts: DashOpts = {}): string {
   const gapTarget = (opts.gapSize ?? 3) + ext;
 
   const total = segs.reduce((sum, s) => sum + s.length, 0);
-  const { dashSize, gapSize, N } = computeDashGeom(
-    total,
-    closed,
-    dashTarget,
-    gapTarget,
-  );
+  const { dashSize, gapSize, N } = computeDashGeom(total, closed, dashTarget, gapTarget);
 
   if (N === 0) return "";
   if (N === 1) return pathFromTo(segs, 0, total);

@@ -1,5 +1,18 @@
+import {
+  Anchor,
+  centroid,
+  computed,
+  Diagram,
+  easeInOut,
+  label,
+  loop,
+  Mount,
+  meanRotation,
+  meanScale,
+  rect,
+  vec,
+} from "../../minim";
 import * as R from "../rand";
-import {Diagram, Mount, Anchor, centroid, computed, easeInOut, label, loop, meanRotation, meanScale, vec, rect} from "../../minim";
 
 const SHAPES = [
   { x: 130, y: 130, w: 38, h: 10, rot: -0.6, fill: "#5b8def" },
@@ -13,7 +26,7 @@ export class MdAggregates extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(600, 360);
 
-    const shapes = SHAPES.map((p) =>
+    const shapes = SHAPES.map(p =>
       s(
         rect(vec(-p.w / 2, -p.h / 2), p.w, p.h, {
           translate: { x: p.x, y: p.y },
@@ -41,22 +54,24 @@ export class MdAggregates extends Diagram {
       ),
     );
 
-    this.anim.start(loop(function* () {
-      const sec = R.float(1.4, 2.0);
-      const centre = view.center.value;
-      yield [
-        c.to(
-          {
-            x: centre.x + R.float(-90, 90),
-            y: centre.y + R.float(-50, 50),
-          },
-          sec,
-          easeInOut,
-        ),
-        r.to(R.float(-Math.PI, Math.PI), sec, easeInOut),
-        k.to({ x: R.float(0.7, 1.5), y: R.float(0.7, 1.5) }, sec, easeInOut),
-      ];
-      yield 0.3;
-    }));
+    this.anim.start(
+      loop(function* () {
+        const sec = R.float(1.4, 2.0);
+        const centre = view.center.value;
+        yield [
+          c.to(
+            {
+              x: centre.x + R.float(-90, 90),
+              y: centre.y + R.float(-50, 50),
+            },
+            sec,
+            easeInOut,
+          ),
+          r.to(R.float(-Math.PI, Math.PI), sec, easeInOut),
+          k.to({ x: R.float(0.7, 1.5), y: R.float(0.7, 1.5) }, sec, easeInOut),
+        ];
+        yield 0.3;
+      }),
+    );
   }
 }

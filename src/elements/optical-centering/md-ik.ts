@@ -1,7 +1,19 @@
 import {
-  Anchor, Diagram, Mount, argminVec, clampToDisc, computed, num, vec,
-  circle, drag, label, line, Vec,
-  type Num, type Writable,
+  Anchor,
+  argminVec,
+  circle,
+  clampToDisc,
+  computed,
+  Diagram,
+  drag,
+  label,
+  line,
+  Mount,
+  type Num,
+  num,
+  Vec,
+  vec,
+  type Writable,
 } from "../../minim";
 
 const N = 5;
@@ -39,7 +51,7 @@ export class MdIk extends Diagram {
     // full extension. The arm reaches the boundary cleanly and stops.
     const tip = argminVec(
       angles as unknown as readonly Writable<Num>[],
-      (ts) => {
+      ts => {
         let x = root.value.x;
         let y = root.value.y;
         let sumA = 0;
@@ -64,12 +76,16 @@ export class MdIk extends Diagram {
     tipDot.el.style.cursor = "grab";
 
     s(
-      label(view.top.down(20),
-        "drag the blue tip — workspace clamp keeps IK stable at max reach",
-        { size: 12, align: Anchor.Center, opacity: 0.7 }),
-      label(view.bottom.up(16),
+      label(view.top.down(20), "drag the blue tip — workspace clamp keeps IK stable at max reach", {
+        size: 12,
+        align: Anchor.Center,
+        opacity: 0.7,
+      }),
+      label(
+        view.bottom.up(16),
         "argminVec(angles, fwd, weights, { clampTarget: clampToDisc(root, N·L) })",
-        { size: 10, align: Anchor.Center, opacity: 0.5 }),
+        { size: 10, align: Anchor.Center, opacity: 0.5 },
+      ),
     );
   }
 }

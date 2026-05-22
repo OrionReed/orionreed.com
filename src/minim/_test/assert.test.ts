@@ -4,20 +4,20 @@
 // `yield*`, signal write attribution, latch (safety/liveness), the
 // fluent claim builder, intervals(), and firstOf event ordering.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Anim, type Animator } from "@minim/core";
-import { computed, num, signal, tween, spring } from "@minim/signals";
+import { computed, num, signal, spring, tween } from "@minim/signals";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   activeRecorder,
   authorOf,
   claim,
   firstOf,
-  intervals,
   inRange,
+  intervals,
   latch,
+  type Recorder,
   record,
   scope,
-  type Recorder,
 } from "../assert";
 
 // Defensive: if a test bails before its recorder is stopped, this
@@ -74,8 +74,8 @@ describe("scope() — identity & lifecycle", () => {
     anim.step(0);
     const spans = rec.spans.value;
     expect(spans.length).toBe(2);
-    const p = spans.find((s) => s.fn.name === "parent")!;
-    const c = spans.find((s) => s.fn.name === "child")!;
+    const p = spans.find(s => s.fn.name === "parent")!;
+    const c = spans.find(s => s.fn.name === "child")!;
     expect(c.parent).toBe(p);
   });
 
@@ -90,8 +90,8 @@ describe("scope() — identity & lifecycle", () => {
     anim.step(0);
     const spans = rec.spans.value;
     expect(spans.length).toBe(2);
-    const o = spans.find((s) => s.fn.name === "outer")!;
-    const i = spans.find((s) => s.fn.name === "inner")!;
+    const o = spans.find(s => s.fn.name === "outer")!;
+    const i = spans.find(s => s.fn.name === "inner")!;
     expect(i.parent).toBe(o);
   });
 
@@ -107,7 +107,7 @@ describe("scope() — identity & lifecycle", () => {
     anim.start(outer());
     anim.step(0);
     anim.step(0.06);
-    const c = rec.spans.value.find((s) => s.fn.name === "child")!;
+    const c = rec.spans.value.find(s => s.fn.name === "child")!;
     expect(c.parent?.fn.name).toBe("outer");
   });
 
@@ -155,9 +155,7 @@ describe("write attribution", () => {
     anim.step(0);
     anim.step(0.02);
     expect(work.last.value?.touched.size).toBe(1);
-    expect(Array.from(work.last.value!.touched)).toContain(
-      sig as unknown as object,
-    );
+    expect(Array.from(work.last.value!.touched)).toContain(sig as unknown as object);
   });
 
   it("authorOf reports the most recent writer", () => {
@@ -346,7 +344,7 @@ describe("intervals & firstOf", () => {
       aliveLog.push(t_spring.alive.value);
     }
     // At least once during the run, alive should be true.
-    expect(aliveLog.some((v) => v === true)).toBe(true);
+    expect(aliveLog.some(v => v === true)).toBe(true);
     rec.stop();
     anim.stop();
   });

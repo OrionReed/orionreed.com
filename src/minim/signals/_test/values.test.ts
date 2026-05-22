@@ -1,19 +1,26 @@
 // values.test.ts — Num/Vec runtime + Writable<R> behaviour.
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  Num, num, Vec, vec, axes, polar, tangentPoint, effect, isLens, isComputed,
+  axes,
+  effect,
+  isComputed,
+  isLens,
+  Num,
+  num,
+  polar,
+  tangentPoint,
+  Vec,
+  vec,
 } from "../index";
 
 describe("Num", () => {
-  it("num(v) writable, .value/.set/.bind work", () => {
+  it("num(v) writable, .value setter works", () => {
     const n = num(5);
     expect(n).toBeInstanceOf(Num);
     expect(n.value).toBe(5);
     n.value = 10;
     expect(n.value).toBe(10);
-    n.set(42);
-    expect(n.value).toBe(42);
   });
 
   it("Num.derive returns RO", () => {
@@ -27,7 +34,12 @@ describe("Num", () => {
 
   it("Num.lens returns writable", () => {
     const n = num(0);
-    const doubled = Num.lens(() => n.value * 2, (v) => { n.value = v / 2 });
+    const doubled = Num.lens(
+      () => n.value * 2,
+      v => {
+        n.value = v / 2;
+      },
+    );
     expect(isLens(doubled)).toBe(true);
     doubled.value = 10;
     expect(n.value).toBe(5);
@@ -127,7 +139,9 @@ describe("Vec", () => {
     const v = vec(1, 2);
     const sum = Num.derive(() => v.value.x + v.value.y);
     let seen = 0;
-    effect(() => { seen = sum.value });
+    effect(() => {
+      seen = sum.value;
+    });
     expect(seen).toBe(3);
     v.x.value = 10;
     expect(seen).toBe(12);
@@ -136,7 +150,8 @@ describe("Vec", () => {
 
 describe("axes(x, y) — bidirectional Vec from two writable Nums", () => {
   it("write to composite propagates to both source Nums", () => {
-    const x = num(0), y = num(0);
+    const x = num(0),
+      y = num(0);
     const v = axes(x, y);
     v.value = { x: 10, y: 20 };
     expect(x.value).toBe(10);
@@ -144,7 +159,8 @@ describe("axes(x, y) — bidirectional Vec from two writable Nums", () => {
   });
 
   it("write to .x field-lens propagates to source x only", () => {
-    const x = num(0), y = num(0);
+    const x = num(0),
+      y = num(0);
     const v = axes(x, y);
     v.x.value = 7;
     expect(x.value).toBe(7);
@@ -152,7 +168,8 @@ describe("axes(x, y) — bidirectional Vec from two writable Nums", () => {
   });
 
   it("source write is visible in composite", () => {
-    const x = num(0), y = num(0);
+    const x = num(0),
+      y = num(0);
     const v = axes(x, y);
     x.value = 5;
     expect(v.value).toEqual({ x: 5, y: 0 });
@@ -161,7 +178,8 @@ describe("axes(x, y) — bidirectional Vec from two writable Nums", () => {
 
 describe("vec() — smart-dispatches to bidirectional when both axes are Nums", () => {
   it("vec(num, num) is bidirectional", () => {
-    const x = num(0), y = num(0);
+    const x = num(0),
+      y = num(0);
     const v = vec(x, y);
     v.value = { x: 5, y: 7 };
     expect(x.value).toBe(5);
@@ -239,9 +257,11 @@ describe("polar(c, r, a) — bidirectional with policies", () => {
 
   it("nested polar — drag moon, moon's (r, a) update; planet/sun untouched", () => {
     const sun = vec(0, 0);
-    const er = num(100), ea = num(0);
+    const er = num(100),
+      ea = num(0);
     const earth = polar(sun, er, ea);
-    const mr = num(10), ma = num(0);
+    const mr = num(10),
+      ma = num(0);
     const moon = polar(earth, mr, ma);
     moon.value = { x: 100, y: 5 };
     expect(mr.value).toBeCloseTo(5);
@@ -335,7 +355,8 @@ describe("up/down/left/right are invertible (chain stays writable)", () => {
   });
 
   it("axes followed by up chain — writes propagate to source nums", () => {
-    const x = num(0), y = num(0);
+    const x = num(0),
+      y = num(0);
     const v = axes(x, y);
     const moved = v.right(10);
     moved.value = { x: 15, y: 3 };

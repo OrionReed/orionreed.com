@@ -141,10 +141,7 @@ export const approxNumber = (eps: number) => (a: number, b: number) =>
   Math.abs(a - b) <= eps * Math.max(1, Math.abs(a), Math.abs(b));
 
 /** L2-distance approx for {x, y} pairs. */
-export const approxVec = (eps: number) =>
-  (a: { x: number; y: number }, b: { x: number; y: number }) =>
-    Math.hypot(a.x - b.x, a.y - b.y) <= eps * Math.max(
-      1,
-      Math.hypot(a.x, a.y),
-      Math.hypot(b.x, b.y),
-    );
+export const approxVec =
+  (eps: number) => (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.hypot(a.x - b.x, a.y - b.y) <=
+    eps * Math.max(1, Math.hypot(a.x, a.y), Math.hypot(b.x, b.y));

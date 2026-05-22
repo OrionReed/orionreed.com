@@ -3,24 +3,18 @@
 // viewBox (`view`/`fit`), and the host CSS sizing (`--d-w`/`--d-h`).
 
 import { Anim } from "@minim/core";
-import {
-  num, computed, effect,
-  Box, type Val,
-} from "@minim/signals";
-import { Shape, SVG_NS, mount, ensureArrowMarker, type Mount } from "@minim/shapes";
+import { ensureArrowMarker, type Mount, mount, Shape, SVG_NS } from "@minim/shapes";
+import { Box, computed, effect, num, type Val } from "@minim/signals";
+import { Marker } from "@minim/tex";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
 import { attachRaf } from "./raf";
-import { Marker } from "@minim/tex";
 
 export const css = String.raw;
 
-export type Padding =
-  | number
-  | { top?: number; right?: number; bottom?: number; left?: number };
+export type Padding = number | { top?: number; right?: number; bottom?: number; left?: number };
 
 function resolvePadding(p?: Padding) {
-  if (p === undefined || p === 0)
-    return { top: 0, right: 0, bottom: 0, left: 0 };
+  if (p === undefined || p === 0) return { top: 0, right: 0, bottom: 0, left: 0 };
   if (typeof p === "number") return { top: p, right: p, bottom: p, left: p };
   return {
     top: p.top ?? 0,
@@ -35,11 +29,7 @@ export class Diagram extends HTMLElement {
     return observedAttributesOf(this);
   }
 
-  attributeChangedCallback(
-    name: string,
-    oldVal: string | null,
-    newVal: string | null,
-  ): void {
+  attributeChangedCallback(name: string, oldVal: string | null, newVal: string | null): void {
     if (oldVal === newVal) return;
     syncAttrSignal(this, name, newVal);
   }
@@ -142,12 +132,7 @@ export class Diagram extends HTMLElement {
     if (this.#viewSet) return this.#viewBox;
     const p = resolvePadding(padding);
     const b = this.root.box.value;
-    this.setViewBox(
-      b.x - p.left,
-      b.y - p.top,
-      b.w + p.left + p.right,
-      b.h + p.top + p.bottom,
-    );
+    this.setViewBox(b.x - p.left, b.y - p.top, b.w + p.left + p.right, b.h + p.top + p.bottom);
     this.#viewSet = true;
     return this.#viewBox;
   }

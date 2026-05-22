@@ -1,10 +1,7 @@
 // Spatial composition primitives. Reference points for growth:
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
-import {
-  num, computed, transformBox, Box, BoxMath,
-  type Val,
-} from "@minim/signals";
+import { Box, BoxMath, computed, num, transformBox, type Val } from "@minim/signals";
 import type { Shape } from "./shape";
 
 export interface ArrangeOpts {
@@ -75,9 +72,7 @@ export function split(
 ): Box[] {
   const ratios = typeof parts === "number" ? new Array(parts).fill(1) : parts;
   const total = ratios.reduce((a, b) => a + b, 0);
-  const cumBefore = ratios.map((_, i) =>
-    ratios.slice(0, i).reduce((a, b) => a + b, 0),
-  );
+  const cumBefore = ratios.map((_, i) => ratios.slice(0, i).reduce((a, b) => a + b, 0));
   const gapSig = num(opts.gap ?? 0);
   return ratios.map((r, i) =>
     computed(() => {
@@ -104,7 +99,5 @@ export function grid(
   cols: number,
   opts: { gap?: Val<number> } = {},
 ): Box[][] {
-  return split(source, "y", rows, opts).map((row) =>
-    split(row, "x", cols, opts),
-  );
+  return split(source, "y", rows, opts).map(row => split(row, "x", cols, opts));
 }

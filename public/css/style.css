@@ -4,43 +4,49 @@
 
 /* New Computer Modern Font Faces — served via jsDelivr (woff2) */
 @font-face {
-  font-family: 'New CM';
-  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20Regular.woff2') format('woff2');
+  font-family: "New CM";
+  src: url("https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20Regular.woff2")
+    format("woff2");
   font-weight: 400;
   font-style: normal;
 }
 
 @font-face {
-  font-family: 'New CM';
-  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20Bold.woff2') format('woff2');
+  font-family: "New CM";
+  src: url("https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20Bold.woff2")
+    format("woff2");
   font-weight: 700;
   font-style: normal;
 }
 
 @font-face {
-  font-family: 'New CM';
-  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20Book.woff2') format('woff2');
+  font-family: "New CM";
+  src: url("https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20Book.woff2")
+    format("woff2");
   font-weight: 300;
   font-style: normal;
 }
 
 @font-face {
-  font-family: 'New CM';
-  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20Italic.woff2') format('woff2');
+  font-family: "New CM";
+  src: url("https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20Italic.woff2")
+    format("woff2");
   font-weight: 400;
   font-style: italic;
 }
 
 @font-face {
-  font-family: 'New CM';
-  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20BoldOblique.woff2') format('woff2');
+  font-family: "New CM";
+  src: url("https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20BoldOblique.woff2")
+    format("woff2");
   font-weight: 700;
   font-style: italic;
 }
 
 @font-face {
-  font-family: 'New CM';
-  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20BookItalic.woff2') format('woff2');
+  font-family: "New CM";
+  src: url("https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Mono%2010%20BookItalic.woff2")
+    format("woff2");
   font-weight: 300;
   font-style: italic;
 }
@@ -48,8 +54,9 @@
 /* Math variant — has the OpenType MATH table the browser needs to size
    radicals, fractions, big operators with consistent stroke weight. */
 @font-face {
-  font-family: 'New CM Math';
-  src: url('https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Math%20Serif%20Regular.woff2') format('woff2');
+  font-family: "New CM Math";
+  src: url("https://cdn.jsdelivr.net/npm/web-computer-modern@1.1.0-new-cm-7-0-2/woff2/WebCM%20Math%20Serif%20Regular.woff2")
+    format("woff2");
   font-weight: 400;
   font-style: normal;
 }
@@ -108,7 +115,10 @@ header {
 
 i,
 em {
-  font-variation-settings: "slnt" -15, "CRSV" 1, "wght" 350;
+  font-variation-settings:
+    "slnt" -15,
+    "CRSV" 1,
+    "wght" 350;
   font-style: italic;
 }
 
@@ -124,14 +134,14 @@ code {
   background-color: light-dark(#f6f8fa, #151b23);
   width: 100%;
   color: var(--text-color);
-  
+
   padding: 0.1em 0.3em;
   border-radius: 4px;
   box-sizing: border-box;
   font-family: "Recursive";
   font-variation-settings: "MONO" 1;
   font-weight: 400;
-  border: 1px solid light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.1))
+  border: 1px solid light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.1));
 }
 
 b,
@@ -182,15 +192,17 @@ table {
 }
 
 a {
-  font-variation-settings: "CASL" 0, "wght" 400;
+  font-variation-settings:
+    "CASL" 0,
+    "wght" 400;
   transition: font-variation-settings 0.2s ease;
-  
+
   &:hover {
-    font-variation-settings: "CASL" 1, "wght" 600;
+    font-variation-settings:
+      "CASL" 1,
+      "wght" 600;
   }
 }
-
-
 
 .dinkus {
   display: block;
@@ -228,7 +240,8 @@ img {
   header {
     margin-bottom: 1em;
   }
-  ol, ul {
+  ol,
+  ul {
     list-style-position: inside;
     /* Add hanging indent for wrapped text */
     text-indent: -1.2em;
@@ -286,9 +299,9 @@ md-marker {
   text-decoration: none;
 }
 [data-footnote-ref]::before {
-  content: '[';
+  content: "[";
 }
 
 [data-footnote-ref]::after {
-  content: ']';
+  content: "]";
 }

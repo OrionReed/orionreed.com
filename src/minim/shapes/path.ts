@@ -1,6 +1,6 @@
-import { num, computed, signal, Vec, type Signal, type Val} from "@minim/signals";
-import {Shape, type Segment} from "./shape";
-import {wireStroke, type CommonOpts} from "./common";
+import { computed, num, type Signal, signal, type Val, Vec } from "@minim/signals";
+import { type CommonOpts, wireStroke } from "./common";
+import { type Segment, Shape } from "./shape";
 
 export interface PathOpts extends CommonOpts {
   closed?: boolean;
@@ -233,7 +233,5 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
 /** Start a fluent path at `start`. Chain `.to(p)` / `.u(n)` / `.d(n)`
  *  / `.l(n)` / `.r(n)` / `.offset(dx, dy)` / `.along(angle, dist)` and
  *  pass to `s(...)` to render. */
-export const path = <const O extends PathOpts>(
-  start: Vec,
-  opts?: O,
-): Path<O> => new Path<O>(start, opts);
+export const path = <const O extends PathOpts>(start: Vec, opts?: O): Path<O> =>
+  new Path<O>(start, opts);

@@ -1,7 +1,15 @@
 import {
-  Anchor, Diagram, Mount,
-  Vec, type Of, type Writable, lens,
-  handle, label, line, vec,
+  Anchor,
+  Diagram,
+  handle,
+  label,
+  lens,
+  line,
+  Mount,
+  type Of,
+  Vec,
+  vec,
+  type Writable,
 } from "../../minim";
 
 type VecValue = Of<Vec>;
@@ -29,7 +37,7 @@ export class MdMirror extends Diagram {
     const mirrorOf = (src: Writable<Vec>): Writable<Vec> =>
       lens(
         () => reflect(src.value, mA.value, mB.value),
-        (target) => {
+        target => {
           src.value = reflect(target, mA.value, mB.value);
         },
         Vec,
@@ -79,11 +87,11 @@ export class MdMirror extends Diagram {
     );
 
     s(
-      label(
-        view.top.down(20),
-        "drag any handle — original, reflected, or the mirror itself",
-        { size: 12, align: Anchor.Center, opacity: 0.7 },
-      ),
+      label(view.top.down(20), "drag any handle — original, reflected, or the mirror itself", {
+        size: 12,
+        align: Anchor.Center,
+        opacity: 0.7,
+      }),
       label(
         view.bottom.up(16),
         "lens(read = reflect,  write = reflect)  ·  one formula, both directions",

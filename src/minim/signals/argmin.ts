@@ -59,7 +59,7 @@ export function clampToDisc(
   c: { x: number; y: number },
   r: number,
 ): (p: { x: number; y: number }) => { x: number; y: number } {
-  return (p) => {
+  return p => {
     const dx = p.x - c.x;
     const dy = p.y - c.y;
     const d = Math.hypot(dx, dy);
@@ -86,9 +86,9 @@ export function argminNum(
   const damping = opts.damping ?? 1e-6;
   return lensCls(
     Num,
-    () => forward(inputs.map((i) => i.value)),
-    (target) => {
-      const xs = inputs.map((i) => i.peek());
+    () => forward(inputs.map(i => i.value)),
+    target => {
+      const xs = inputs.map(i => i.peek());
       const y0 = forward(xs);
       const dy = target - y0;
       // J[i] = ∂y/∂xᵢ (forward diff).
@@ -133,9 +133,9 @@ export function argminVec(
   const clamp = opts.clampTarget;
   return lensCls(
     Vec,
-    () => forward(inputs.map((i) => i.value)),
-    (rawTarget) => {
-      const xs = inputs.map((i) => i.peek());
+    () => forward(inputs.map(i => i.value)),
+    rawTarget => {
+      const xs = inputs.map(i => i.peek());
       const target = clamp ? clamp(rawTarget, xs) : rawTarget;
       const y0 = forward(xs);
       const dx = target.x - y0.x;

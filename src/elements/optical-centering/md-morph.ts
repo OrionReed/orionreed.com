@@ -1,8 +1,22 @@
 import {
-  Anchor, Diagram, Path, Vec, type Of,
-  Signal, signal, computed, tween, type TraitDict,
-  circle, label, loop,
-  type Content, type Easing, type Mount, type Tween, type Val,
+  Anchor,
+  type Content,
+  circle,
+  computed,
+  Diagram,
+  type Easing,
+  label,
+  loop,
+  type Mount,
+  type Of,
+  Path,
+  Signal,
+  signal,
+  type TraitDict,
+  type Tween,
+  tween,
+  type Val,
+  Vec,
 } from "../../minim";
 
 type VecValue = Of<Vec>;
@@ -19,7 +33,9 @@ const lerpV = (a: VecValue, b: VecValue, t: number): VecValue => ({
   y: a.y + (b.y - a.y) * t,
 });
 
-interface PolygonValue { vertices: VecValue[] }
+interface PolygonValue {
+  vertices: VecValue[];
+}
 
 const polygonEquals = (a: PolygonValue, b: PolygonValue): boolean => {
   if (a.vertices.length !== b.vertices.length) return false;
@@ -51,12 +67,16 @@ class Polygon extends Signal<PolygonValue> {
     lerp: polygonLerp,
     equals: polygonEquals,
   };
-  constructor(v: PolygonValue = { vertices: [] }) { super(v); }
+  constructor(v: PolygonValue = { vertices: [] }) {
+    super(v);
+  }
   to(target: PolygonValue, dur: Val<number>, ease?: Easing): Tween<PolygonValue> {
     return tween(this as never, target, dur, ease);
   }
 }
-interface Polygon { readonly constructor: typeof Polygon }
+interface Polygon {
+  readonly constructor: typeof Polygon;
+}
 
 // Each builder emits N vertices; coarse shapes repeat corners so the lerp splits them apart.
 
@@ -95,12 +115,12 @@ function smoothCircle(radius: number): VecValue[] {
 }
 
 const KEYFRAMES: Array<{ name: string; verts: VecValue[] }> = [
-  { name: "circle (24-gon)",        verts: smoothCircle(R) },
-  { name: "square (4-gon × 6)",     verts: ngon(4, R) },
-  { name: "triangle (3-gon × 8)",   verts: ngon(3, R) },
-  { name: "5-point star",           verts: star(5, R, R * 0.4) },
-  { name: "hexagon (6-gon × 4)",    verts: ngon(6, R) },
-  { name: "8-point star",           verts: star(8, R, R * 0.55) },
+  { name: "circle (24-gon)", verts: smoothCircle(R) },
+  { name: "square (4-gon × 6)", verts: ngon(4, R) },
+  { name: "triangle (3-gon × 8)", verts: ngon(3, R) },
+  { name: "5-point star", verts: star(5, R, R * 0.4) },
+  { name: "hexagon (6-gon × 4)", verts: ngon(6, R) },
+  { name: "8-point star", verts: star(8, R, R * 0.55) },
 ];
 
 const DUR = 0.8;
@@ -162,15 +182,16 @@ export class MdMorph extends Diagram {
       }),
     );
 
-    this.anim.start(loop(function* () {
-      for (let i = 0; i < KEYFRAMES.length; i++) {
-        const next = KEYFRAMES[(i + 1) % KEYFRAMES.length];
-        status.value = `→ ${next.name}`;
-        yield* poly.to({ vertices: next.verts }, DUR);
-        status.value = next.name;
-        yield DWELL;
-      }
-    }));
-
+    this.anim.start(
+      loop(function* () {
+        for (let i = 0; i < KEYFRAMES.length; i++) {
+          const next = KEYFRAMES[(i + 1) % KEYFRAMES.length];
+          status.value = `→ ${next.name}`;
+          yield* poly.to({ vertices: next.verts }, DUR);
+          status.value = next.name;
+          yield DWELL;
+        }
+      }),
+    );
   }
 }

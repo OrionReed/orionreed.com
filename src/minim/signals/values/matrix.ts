@@ -12,6 +12,7 @@ import {
   Signal, computedCls, lensCls,
   type Val, type SignalOptions, type Of,
 } from "../signal";
+import { bind } from "../lateral";
 import { type TraitDict } from "../traits";
 import { applyOp0, applyOp1, type Op } from "../ops";
 import { type Writable, invertibles } from "../writable";
@@ -111,7 +112,7 @@ const invertOp: Op<V, []> = { fwd: invert, bwd: invert };
 export class Matrix extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
   static traits: TraitDict<V> & { equals: typeof equals } = { equals };
-  static invertibles = invertibles<Matrix>()("multiply", "invert");
+  static invertibles = invertibles<Matrix>()("multiply", "invert", "through");
 
   // ── class-level constructors ───────────────────────────────────
   static derive(fn: () => V): Matrix { return computedCls(Matrix, fn) }
@@ -148,7 +149,11 @@ export function matrix(
   e: Val<number> = 0, f: Val<number> = 0,
 ): Writable<Matrix> {
   const m = new Matrix() as unknown as Writable<Matrix>;
-  m.a.bind(a); m.b.bind(b); m.c.bind(c);
-  m.d.bind(d); m.e.bind(e); m.f.bind(f);
+  bind(m.a as unknown as Writable<Num>, a);
+  bind(m.b as unknown as Writable<Num>, b);
+  bind(m.c as unknown as Writable<Num>, c);
+  bind(m.d as unknown as Writable<Num>, d);
+  bind(m.e as unknown as Writable<Num>, e);
+  bind(m.f as unknown as Writable<Num>, f);
   return m;
 }

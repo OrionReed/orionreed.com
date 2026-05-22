@@ -1,6 +1,18 @@
 import {
-  Anchor, Diagram, Mount, Shape, num, signal, vec, type Vec,
-  circle, dragRotate, drive, label, type Num, type Writable,
+  Anchor,
+  circle,
+  Diagram,
+  dragRotate,
+  drive,
+  label,
+  Mount,
+  type Num,
+  num,
+  Shape,
+  signal,
+  type Vec,
+  vec,
+  type Writable,
 } from "../../minim";
 
 const TAU = Math.PI * 2;
@@ -14,18 +26,15 @@ function gearPathD(r: number, teeth: number, toothDepth = 3.5): string {
   for (let i = 0; i < N; i++) {
     const a = (i * Math.PI) / teeth;
     const rad = i % 2 === 0 ? outer : inner;
-    parts.push(`${i === 0 ? "M" : "L"} ${(rad * Math.cos(a)).toFixed(2)} ${(rad * Math.sin(a)).toFixed(2)}`);
+    parts.push(
+      `${i === 0 ? "M" : "L"} ${(rad * Math.cos(a)).toFixed(2)} ${(rad * Math.sin(a)).toFixed(2)}`,
+    );
   }
   return parts.join(" ") + " Z";
 }
 
 /** Gear-shaped Shape — one SVG `<path>`, one rotate signal. */
-function gear(
-  center: Vec,
-  radius: number,
-  teeth: number,
-  rotate: Writable<Num>,
-): Shape {
+function gear(center: Vec, radius: number, teeth: number, rotate: Writable<Num>): Shape {
   const r = radius;
   const sh = new Shape("path", () => ({ x: -r, y: -r, w: 2 * r, h: 2 * r }), {
     translate: center,
@@ -50,7 +59,7 @@ export class MdGears extends Diagram {
     // their contact points automatically. No per-gear phase offset.
     const teeth = [15, 9, 17];
     const PITCH_K = 3.5; // r = PITCH_K · teeth → matched pitch (= 2π·K).
-    const sizes = teeth.map((n) => PITCH_K * n); // [52.5, 31.5, 59.5]
+    const sizes = teeth.map(n => PITCH_K * n); // [52.5, 31.5, 59.5]
     const cy = view.h.value / 2;
     let totalW = 0;
     for (let i = 0; i < sizes.length - 1; i++) totalW += sizes[i] + sizes[i + 1];
@@ -68,16 +77,18 @@ export class MdGears extends Diagram {
     const angles: Writable<Num>[] = [drive0];
     for (let i = 1; i < teeth.length; i++) {
       const sign = i % 2 === 1 ? -1 : 1;
-      angles.push(drive0.scale(sign * teeth[0] / teeth[i]) as unknown as Writable<Num>);
+      angles.push(drive0.scale((sign * teeth[0]) / teeth[i]) as unknown as Writable<Num>);
     }
 
     // Pause the drive while any gear is being dragged.
     const dragging = signal(false);
     const omega = TAU * 0.15;
-    this.anim.start(drive((tick) => {
-      if (dragging.value) return;
-      drive0.value = drive0.peek() + omega * tick.dt;
-    }));
+    this.anim.start(
+      drive(tick => {
+        if (dragging.value) return;
+        drive0.value = drive0.peek() + omega * tick.dt;
+      }),
+    );
 
     // Render gears, hub dot, and a knob you can drag on the rim.
     for (let i = 0; i < sizes.length; i++) {
@@ -97,12 +108,16 @@ export class MdGears extends Diagram {
     }
 
     s(
-      label(view.top.down(20),
-        "drag any blue knob — the meshed chain rotates everything",
-        { size: 12, align: Anchor.Center, opacity: 0.7 }),
-      label(view.bottom.up(16),
+      label(view.top.down(20), "drag any blue knob — the meshed chain rotates everything", {
+        size: 12,
+        align: Anchor.Center,
+        opacity: 0.7,
+      }),
+      label(
+        view.bottom.up(16),
         "g[i] = drive.scale(±1 / ratio_i) · invertible chain · drive pauses while dragging",
-        { size: 10, align: Anchor.Center, opacity: 0.5 }),
+        { size: 10, align: Anchor.Center, opacity: 0.5 },
+      ),
     );
   }
 }

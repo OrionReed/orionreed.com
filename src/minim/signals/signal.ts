@@ -71,9 +71,7 @@ let flushing = false;
 // ─── Write hook (for assert/record attribution) ──────────────────────
 
 let writeHook: ((sig: Signal<unknown>) => void) | undefined;
-export function setSignalWriteHook(
-  fn: ((sig: Signal<unknown>) => void) | undefined,
-): () => void {
+export function setSignalWriteHook(fn: ((sig: Signal<unknown>) => void) | undefined): () => void {
   const prev = writeHook;
   writeHook = fn;
   return () => {
@@ -93,12 +91,7 @@ function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
     return;
   }
   const prevSub = dep.subsTail;
-  if (
-    prevSub !== undefined &&
-    prevSub.version === version &&
-    prevSub.sub === sub
-  )
-    return;
+  if (prevSub !== undefined && prevSub.version === version && prevSub.sub === sub) return;
   const isFirstSub = dep.subs === undefined;
   const newLink: Link =
     (sub.depsTail =
@@ -245,8 +238,7 @@ function shallowPropagate(l: Link): void {
     const flags = sub.flags;
     if ((flags & (F.Pending | F.Dirty)) === F.Pending) {
       sub.flags = flags | F.Dirty;
-      if ((flags & (F.Watching | F.RecursedCheck)) === F.Watching)
-        sub._notify();
+      if ((flags & (F.Watching | F.RecursedCheck)) === F.Watching) sub._notify();
     }
   } while ((l = l.nextSub!) !== undefined);
 }
@@ -319,7 +311,9 @@ export interface Read<out T> {
  *  and is used by `Writable<R>` / `WritableOf<T>` to surface the
  *  writable API. */
 declare const WRITABLE: unique symbol;
-export interface WritableBrand { readonly [WRITABLE]: never }
+export interface WritableBrand {
+  readonly [WRITABLE]: never;
+}
 
 /** Extract the value type carried by a Signal (signal/computed/lens). */
 export type Of<R> = R extends Signal<infer T> ? T : never;
@@ -343,8 +337,7 @@ export function valFn<T>(v: Val<T>): () => T {
   return () => v as T;
 }
 
-export const isSignal = (v: unknown): v is Signal<unknown> =>
-  v instanceof Signal;
+export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signal;
 
 /** Runtime check: is this Signal in lens mode (both getter and setter)? */
 export const isLens = (v: unknown): v is Signal<unknown> =>
@@ -408,12 +401,15 @@ export class Signal<T = unknown> implements ReactiveNode {
   _equals: Equals<T> | undefined = undefined;
   _watched?: () => void;
   _unwatchedHook?: () => void;
-  protected _stopBinding?: () => void;
   /** Per-instance lazy derived-view cache; allocated on first `.memo()` hit. */
   protected _memoCache?: Record<string | symbol, unknown>;
   /** Per-instance lazy field-lens cache (separate from memo to avoid
    *  template-literal key allocation per `.x` access). */
   protected _fields?: Record<string | symbol, unknown>;
+  /** Fusion tag set by `.through(...)`. Lets a subsequent `.through()`
+   *  collapse `(this) → (parent) → (root)` into a single lens onto
+   *  `root`, composing fwd/bwd in value-space. Internal. */
+  _throughOf?: { parent: Signal<T>; fwd: (v: T) => T; bwd: (v: T) => T };
 
   constructor(initial: T, opts?: SignalOptions<T>) {
     this.currentValue = initial;
@@ -459,6 +455,27 @@ export class Signal<T = unknown> implements ReactiveNode {
     return v.setter === undefined ? "computed" : "lens";
   }
 
+  /** Endo-lens: wrap this cell with a `(fwd, bwd)` pair in value-space.
+   *  Returns a lens of the same class. Auto-fuses: `.through(F, B)`
+   *  after `.through(f, b)` collapses to one cell with composed fns,
+   *  avoiding per-chain allocation and dep-graph nodes. */
+  through(this: Signal<T>, fwd: (v: T) => T, bwd: (v: T) => T): this {
+    const Cls = this.constructor as new (...args: never[]) => Signal<T>;
+    const prior = this._throughOf;
+    const parent = prior ? prior.parent : this;
+    const composedFwd = prior ? (v: T) => fwd(prior.fwd(v)) : fwd;
+    const composedBwd = prior ? (v: T) => prior.bwd(bwd(v)) : bwd;
+    const inst = Signal.install(
+      Cls,
+      () => composedFwd(parent.value),
+      v => {
+        parent.value = composedBwd(v);
+      },
+    );
+    inst._throughOf = { parent, fwd: composedFwd, bwd: composedBwd };
+    return inst as this;
+  }
+
   /** Per-instance cached derivation. `key` must be unique within the
    *  parent's class hierarchy. Factory runs once per (instance, key).
    *  Used by lazy domain getters (`.magnitude`) and by `.field()`. */
@@ -488,7 +505,9 @@ export class Signal<T = unknown> implements ReactiveNode {
         Cls,
         () => (this.value as T)[key],
         // TODO: find a general robust approach to avoid the spread replace, as this is hot path.
-        (v) => { this.value = { ...(this.peek() as object), [key]: v } as T; },
+        v => {
+          this.value = { ...(this.peek() as object), [key]: v } as T;
+        },
       );
       cache[k as string] = cached;
     }
@@ -508,8 +527,7 @@ export class Signal<T = unknown> implements ReactiveNode {
       if (
         flags & F.Dirty ||
         (flags & F.Pending &&
-          (checkDirty(this.deps!, this) ||
-            ((this.flags = flags & ~F.Pending), false)))
+          (checkDirty(this.deps!, this) || ((this.flags = flags & ~F.Pending), false)))
       ) {
         if (this._update()) {
           const subs = this.subs;
@@ -526,9 +544,7 @@ export class Signal<T = unknown> implements ReactiveNode {
           threw = false;
         } finally {
           activeSub = prev;
-          this.flags = threw
-            ? F.Mutable | F.Dirty
-            : this.flags & ~F.RecursedCheck;
+          this.flags = threw ? F.Mutable | F.Dirty : this.flags & ~F.RecursedCheck;
         }
       }
       if (activeSub !== undefined) link(this, activeSub, cycle);
@@ -596,30 +612,6 @@ export class Signal<T = unknown> implements ReactiveNode {
     return this.currentValue;
   }
 
-  /** One-shot write of `value(v)`. Severs any prior `.bind(...)`. Chainable.
-   *  Type-gated: only callable on receivers that carry the `WritableBrand`
-   *  (factory-returned signals, value-class writable forms, etc.).
-   *  Bare `Vec`/`Num` instances are rejected at the call site. */
-  set(this: WritableBrand & { value: T }, v: Val<T>): unknown {
-    const s = this as unknown as Signal<T>;
-    if (s._stopBinding) { s._stopBinding(); s._stopBinding = undefined }
-    this.value = value(v);
-    return this;
-  }
-
-  /** Bind to a `Val<T>`; replaces any prior binding. Type-gated like `set`. */
-  bind(this: WritableBrand & { value: T }, source: Val<T>): () => void {
-    const s = this as unknown as Signal<T>;
-    if (s._stopBinding) { s._stopBinding(); s._stopBinding = undefined }
-    if (source instanceof Signal || typeof source === "function") {
-      const stop = effect(() => { this.value = value(source) });
-      s._stopBinding = stop;
-      return stop;
-    }
-    this.value = source as T;
-    return () => {};
-  }
-
   _update(): boolean {
     if (this.getter !== undefined) {
       // Computed mode: re-run getter
@@ -637,9 +629,7 @@ export class Signal<T = unknown> implements ReactiveNode {
         return eq ? !eq(old as T, next) : old !== next;
       } finally {
         activeSub = prev;
-        this.flags = threw
-          ? F.Mutable | F.Dirty
-          : this.flags & ~F.RecursedCheck;
+        this.flags = threw ? F.Mutable | F.Dirty : this.flags & ~F.RecursedCheck;
         purgeDeps(this);
       }
     }
@@ -727,10 +717,7 @@ class Effect implements ReactiveNode {
 
   _run(): void {
     const flags = this.flags;
-    if (
-      flags & F.Dirty ||
-      (flags & F.Pending && checkDirty(this.deps!, this))
-    ) {
+    if (flags & F.Dirty || (flags & F.Pending && checkDirty(this.deps!, this))) {
       if (this.cleanup) {
         this._runCleanup();
         if (!this.flags) return;
@@ -812,7 +799,8 @@ export function lens<T, C extends Signal<T>>(
   Cls?: new (...args: never[]) => C,
 ): C | (Signal<T> & WritableBrand) {
   return Cls === undefined
-    ? Signal.install(Signal as new (...args: never[]) => Signal<T>, getter, setter) as Signal<T> & WritableBrand
+    ? (Signal.install(Signal as new (...args: never[]) => Signal<T>, getter, setter) as Signal<T> &
+        WritableBrand)
     : Signal.install(Cls, getter, setter);
 }
 

@@ -18,15 +18,8 @@
 // getters. Allocate on first read; never if untouched.
 
 import type { Animator, Tick, Yieldable } from "@minim/core";
-import { computed, signal, type Read, type Signal } from "@minim/signals";
-import {
-  closeSpan,
-  currentSpan,
-  notifySpanOpen,
-  openSpan,
-  withSpan,
-  type Span,
-} from "./span";
+import { computed, type Read, type Signal, signal } from "@minim/signals";
+import { closeSpan, currentSpan, notifySpanOpen, openSpan, type Span, withSpan } from "./span";
 
 /** Factory function shape. */
 type AnyFactory = (...args: any[]) => Animator<any>;

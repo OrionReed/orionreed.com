@@ -2,13 +2,9 @@
 // is by marker reference; `with`/`expand` share the root's identity.
 // Color cascades up the `group` chain via `effectiveColor`.
 
-import {
-  signal, computed, effect,
-  Signal, num, Box,
-  type Val,
-} from "@minim/signals";
-import {marker, hover, highlightTint, registerMarker, type Marker} from "./marker";
-import type {TexShape} from "./tex";
+import { Box, computed, effect, num, Signal, signal, type Val } from "@minim/signals";
+import { highlightTint, hover, type Marker, marker, registerMarker } from "./marker";
+import type { TexShape } from "./tex";
 
 export type { Marker };
 
@@ -92,11 +88,12 @@ export class PartMarker<N extends string = string> {
     source: PartContent,
     readonly group: PartMarker | null = null,
   ) {
-    this.content = source instanceof Signal
-      ? source
-      : typeof source === "function"
-        ? computed(source)
-        : signal(source as string);
+    this.content =
+      source instanceof Signal
+        ? source
+        : typeof source === "function"
+          ? computed(source)
+          : signal(source as string);
     this.#m = group ? group.#m : marker();
   }
 
@@ -131,10 +128,7 @@ export class PartMarker<N extends string = string> {
   }
 }
 
-export function part<N extends string>(
-  name: N,
-  content: PartContent = name,
-): PartMarker<N> {
+export function part<N extends string>(name: N, content: PartContent = name): PartMarker<N> {
   return new PartMarker(name, content);
 }
 
@@ -155,11 +149,7 @@ export function parts<T extends readonly (string | Record<string, PartContent>)[
 type MarkersFromSpecs<T extends readonly (string | Record<string, PartContent>)[]> = {
   readonly [K in NameOf<T[number]>]: PartMarker<K>;
 };
-type NameOf<S> = S extends string
-  ? S
-  : S extends Record<infer K, PartContent>
-    ? K & string
-    : never;
+type NameOf<S> = S extends string ? S : S extends Record<infer K, PartContent> ? K & string : never;
 
 /** Set the same color on N markers at once. */
 export function tint(
@@ -180,12 +170,17 @@ export function bindParts(
     const m = markers[p.name];
     if (!m || !p.el) continue;
     ds.push(hover(p.el, m));
-    ds.push(effect(() => { p.highlighted.value = m.active.value; }));
+    ds.push(
+      effect(() => {
+        p.highlighted.value = m.active.value;
+      }),
+    );
   }
-  return () => { for (const d of ds) d(); };
+  return () => {
+    for (const d of ds) d();
+  };
 }
 
 export type PartList<Names extends string = string> = readonly Part[] & {
   readonly [K in Names]: Part<K>;
 };
-

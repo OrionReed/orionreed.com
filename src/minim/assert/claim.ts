@@ -11,21 +11,13 @@
 // underlying predicate, for users who want to pipe into a custom
 // `latch` shape).
 
-import { computed, type Read, type Of } from "@minim/signals";
 import type { Box, Vec } from "@minim/signals";
+import { computed, type Of, type Read } from "@minim/signals";
 
 type VecValue = Of<Vec>;
+
 import { intervals, latch, type Scope } from "./algebra";
-import {
-  above,
-  below,
-  equal,
-  following,
-  inRange,
-  inside,
-  isEqual,
-  near,
-} from "./predicates";
+import { above, below, equal, following, inRange, inside, isEqual, near } from "./predicates";
 
 /** Fluent claim — a labeled bool signal with the algebra. */
 export interface Claim extends Read<boolean> {
@@ -79,11 +71,7 @@ export interface Predicates<T> {
   above(this: Predicates<number>, n: number): Claim;
   below(this: Predicates<number>, n: number): Claim;
   near(this: Predicates<number>, n: number, tol?: number): Claim;
-  following(
-    this: Predicates<number>,
-    other: Read<number>,
-    tol?: number,
-  ): Claim;
+  following(this: Predicates<number>, other: Read<number>, tol?: number): Claim;
   inside(this: Predicates<VecValue>, region: Box): Claim;
 
   /** True/false predicates — for moods over already-bool signals. */
@@ -91,11 +79,7 @@ export interface Predicates<T> {
   false(this: Predicates<boolean>): Claim;
 }
 
-function predicates<T>(
-  sig: Read<T>,
-  mood: Mood,
-  lbl: string | undefined,
-): Predicates<T> {
+function predicates<T>(sig: Read<T>, mood: Mood, lbl: string | undefined): Predicates<T> {
   const build = (pred: Read<boolean>, what: string): Claim => {
     const label = `${lbl ?? "signal"} ${mood} ${what}`;
     // For "never", the operative predicate is `¬pred`. We carry the
@@ -118,13 +102,10 @@ function predicates<T>(
         computed(() => fn(sig.value)),
         what,
       ),
-    equal: (v) => build(equal(sig, v), `= ${fmt(v)}`),
-    isEqual: (other) => build(isEqual(sig, other), `= other`),
+    equal: v => build(equal(sig, v), `= ${fmt(v)}`),
+    isEqual: other => build(isEqual(sig, other), `= other`),
     in(range: readonly [number, number]) {
-      return build(
-        inRange(sig as unknown as Read<number>, range),
-        `∈ [${range[0]}, ${range[1]}]`,
-      );
+      return build(inRange(sig as unknown as Read<number>, range), `∈ [${range[0]}, ${range[1]}]`);
     },
     above(n: number) {
       return build(above(sig as unknown as Read<number>, n), `> ${n}`);
@@ -136,10 +117,7 @@ function predicates<T>(
       return build(near(sig as unknown as Read<number>, n, tol), `≈ ${n}`);
     },
     following(other: Read<number>, tol?: number) {
-      return build(
-        following(sig as unknown as Read<number>, other, tol),
-        `≈ other`,
-      );
+      return build(following(sig as unknown as Read<number>, other, tol), `≈ other`);
     },
     inside(region: Box) {
       return build(inside(sig as unknown as Read<VecValue>, region), `inside`);
@@ -167,12 +145,7 @@ function makeClaim(
   return wrapClaim(pred, latched, init, label);
 }
 
-function wrapClaim(
-  pred: Read<boolean>,
-  body: Read<boolean>,
-  init: boolean,
-  label: string,
-): Claim {
+function wrapClaim(pred: Read<boolean>, body: Read<boolean>, init: boolean, label: string): Claim {
   return {
     get value() {
       return body.value;
@@ -211,12 +184,7 @@ function wrapClaim(
         init === true
           ? computed(() => !sc.value || next.value)
           : computed(() => sc.value && next.value);
-      return wrapClaim(
-        pred,
-        gated,
-        init,
-        `(${label}) during ${scopeName(scope)}`,
-      );
+      return wrapClaim(pred, gated, init, `(${label}) during ${scopeName(scope)}`);
     },
     labelled(name) {
       return wrapClaim(pred, body, init, name);

@@ -1,6 +1,6 @@
-import {computed, Vec, type Signal, type Val} from "@minim/signals";
-import {Shape, type Segment} from "./shape";
-import {intrinsicType, wireStroke, type CommonOpts} from "./common";
+import { computed, type Signal, type Val, Vec } from "@minim/signals";
+import { type CommonOpts, intrinsicType, wireStroke } from "./common";
+import { type Segment, Shape } from "./shape";
 
 export interface LineOpts extends CommonOpts {}
 
@@ -68,9 +68,7 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
   angleAt(_t: Val<number> = 0): Signal<number> {
     if (this.#angle) return this.#angle;
     const tan = this.tangentAt();
-    return (this.#angle = computed(() =>
-      Math.atan2(tan.y.value, tan.x.value),
-    ));
+    return (this.#angle = computed(() => Math.atan2(tan.y.value, tan.x.value)));
   }
 
   length(): Signal<number> {
@@ -98,8 +96,5 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
   }
 }
 
-export const line = <const O extends LineOpts>(
-  from: Vec,
-  to: Vec,
-  opts?: O,
-): Line<O> => new Line<O>(from, to, opts);
+export const line = <const O extends LineOpts>(from: Vec, to: Vec, opts?: O): Line<O> =>
+  new Line<O>(from, to, opts);

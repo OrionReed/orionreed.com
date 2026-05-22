@@ -1,12 +1,10 @@
 // Connectors. Uses `shape.boundary` so analytic edges work without
 // per-kind dispatch.
 
-import { num,computed, type Val} from "@minim/signals";
-import {signal} from "@minim/signals";
-import {Shape, SVG_NS} from "./shape";
-import {Vec} from "@minim/signals";
-import {tokens} from "./tokens";
-import {Line, type LineOpts} from "./line";
+import { computed, num, signal, type Val, Vec } from "@minim/signals";
+import { Line, type LineOpts } from "./line";
+import { Shape, SVG_NS } from "./shape";
+import { tokens } from "./tokens";
 
 const ARROW_ID = "minim-arrow";
 const ARROW_W = 10;
@@ -14,11 +12,7 @@ const ARROW_GAP_DEFAULT = 4;
 
 /** Line between two shapes/points; shape endpoints meet the analytic
  *  boundary. */
-export function connect(
-  a: Shape | Vec,
-  b: Shape | Vec,
-  opts?: LineOpts,
-): Line {
+export function connect(a: Shape | Vec, b: Shape | Vec, opts?: LineOpts): Line {
   const aP = a instanceof Shape ? a.boundary(b instanceof Shape ? b.center : b) : a;
   const bP = b instanceof Shape ? b.boundary(a instanceof Shape ? a.center : a) : b;
   return new Line(aP, bP, opts);
@@ -32,15 +26,9 @@ export interface ArrowOpts extends LineOpts {
 /** Arrow from `a` to `b`. Endpoints are adjusted so the round cap lines
  *  up gap-ish past the source and the tip lands gap-ish before the
  *  target (the marker extends past the line end). */
-export function arrow(
-  a: Shape | Vec,
-  b: Shape | Vec,
-  opts: ArrowOpts = {},
-): Line {
-  const aBase =
-    a instanceof Shape ? a.boundary(b instanceof Shape ? b.center : b) : a;
-  const bBase =
-    b instanceof Shape ? b.boundary(a instanceof Shape ? a.center : a) : b;
+export function arrow(a: Shape | Vec, b: Shape | Vec, opts: ArrowOpts = {}): Line {
+  const aBase = a instanceof Shape ? a.boundary(b instanceof Shape ? b.center : b) : a;
+  const bBase = b instanceof Shape ? b.boundary(a instanceof Shape ? a.center : a) : b;
 
   const gapSig = num(opts.gap ?? ARROW_GAP_DEFAULT);
   const dir = bBase.sub(aBase).normalize();

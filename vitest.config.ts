@@ -1,5 +1,5 @@
-import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
+import { defineConfig } from "vitest/config";
 
 const minimRoot = fileURLToPath(new URL("./src/minim", import.meta.url));
 

@@ -4,6 +4,7 @@ import {
   Signal, computedCls, lensCls, computed, value, valFn, batch,
   type Val, type SignalOptions,
 } from "../signal";
+import { bind } from "../lateral";
 import { type Linear, type TraitDict } from "../traits";
 import { applyOp1, applyOp2, type Op } from "../ops";
 import { type Writable, invertibles } from "../writable";
@@ -73,6 +74,7 @@ export class Vec extends Signal<V> {
   static invertibles = invertibles<Vec>()(
     "add", "sub", "scale", "offset",
     "up", "down", "left", "right",
+    "through",
   );
 
   // ── class-level constructors ───────────────────────────────────
@@ -141,15 +143,15 @@ export function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
 /** Writable Vec at `(x, y)`. Smart-dispatches: when both axes are
  *  `Num` instances, returns a bidirectional 2-input lens that writes
  *  back through to the source axes. Literal / function / computed axes
- *  fall back to the forward-only `.bind` path (writes stick locally
- *  but don't propagate — there's nowhere to send them). */
+ *  fall back to a forward-only effect (writes stick locally but don't
+ *  propagate — there's nowhere to send them). */
 export function vec(x: Val<number> = 0, y: Val<number> = 0): Writable<Vec> {
   if (x instanceof Num && y instanceof Num) {
     return axes(x as Writable<Num>, y as Writable<Num>);
   }
   const v = new Vec() as unknown as Writable<Vec>;
-  v.x.bind(x);
-  v.y.bind(y);
+  bind(v.x as unknown as Writable<Num>, x);
+  bind(v.y as unknown as Writable<Num>, y);
   return v;
 }
 

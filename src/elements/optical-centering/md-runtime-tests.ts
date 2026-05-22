@@ -1,38 +1,39 @@
 // Runtime correctness tests; each runs on a fresh `Anim` driven by `step(dt)`.
 
 import {
-  Anim,
-  Diagram,
-  EventBus,
-  Vec,
-  Mount,
   Anchor,
+  Anim,
+  type Animator,
   assemble,
   attract,
+  bind,
   centroid,
   circle,
-  play,
+  Diagram,
   detach,
-  signal,
-  lens,
+  EventBus,
   effect,
   every,
   forEach,
   label,
+  lens,
   loop,
+  Mount,
   mean,
   meanRotation,
   meanScale,
   num,
-  vec,
+  play,
   race,
   rect,
+  signal,
   splay,
   spring,
   swap,
   untilChange,
   untilPromise,
-  type Animator,
+  Vec,
+  vec,
 } from "../../minim";
 
 type Status = "pending" | "running" | "pass" | "fail";
@@ -58,7 +59,7 @@ const startFn = (a: Anim, fn: () => Animator): (() => void) => a.start(fn());
 const TESTS: TestCase[] = [
   {
     name: "sleep accumulates across ticks",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let done = false;
       startFn(a, function* () {
@@ -76,7 +77,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "frame yield receives dt on resume",
-    run: (assert) => {
+    run: assert => {
       // The bootstrap `gen.next(0)` runs inside `spawn()`; by the time
       // user code calls `step`, the gen is already at its first yield.
       const a = new Anim();
@@ -95,7 +96,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "tail-call (yield 0) is synchronous",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let n = 0;
       startFn(a, function* () {
@@ -110,7 +111,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "yield* delegates",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let n = 0;
       function* inner(): Animator {
@@ -131,7 +132,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "yield gen waits for child",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let done = false;
       startFn(a, function* () {
@@ -149,7 +150,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "parallel waits for all children",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let done = false;
       startFn(a, function* () {
@@ -172,7 +173,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "synchronous child completion cascades",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let done = false;
       startFn(a, function* () {
@@ -190,7 +191,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "primitives in parallel arrays",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let done = false;
       startFn(a, function* () {
@@ -212,7 +213,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "Anim is reusable after stop()",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let runs = 0;
       startFn(a, function* () {
@@ -234,7 +235,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "throw at spawn time is isolated",
-    run: (assert) => {
+    run: assert => {
       // Bad gen throws on first `.next` — `advance`'s catch keeps
       // siblings alive.
       const a = new Anim();
@@ -264,7 +265,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "throw during step is isolated",
-    run: (assert) => {
+    run: assert => {
       // Bad gen throws on resume during a later step — in-loop path.
       const a = new Anim();
       let goodRan = 0;
@@ -293,12 +294,16 @@ const TESTS: TestCase[] = [
   },
   {
     name: "child throw propagates to parent (model-a)",
-    run: (assert) => {
+    run: assert => {
       // A thrown child raises at the parent's yield site (model-a).
       // `bad` parks before throwing so both children are fully spawned
       // before the error path fires; on step the throw propagates,
       // siblings are cancelled (finally runs), parent catches.
-      const a = new Anim({ onError: () => { /* expected */ } });
+      const a = new Anim({
+        onError: () => {
+          /* expected */
+        },
+      });
       let parentDone = false;
       let caught: unknown;
       let sibFin = 0;
@@ -324,10 +329,7 @@ const TESTS: TestCase[] = [
           parentDone = true;
         });
         a.step(0.016);
-        assert(
-          (caught as Error)?.message === "boom",
-          `parent caught the throw`,
-        );
+        assert((caught as Error)?.message === "boom", `parent caught the throw`);
         assert(sibFin === 1, `sibling cancelled (finally ran)`);
         assert(parentDone, `parent reached post-catch`);
       } finally {
@@ -337,11 +339,11 @@ const TESTS: TestCase[] = [
   },
   {
     name: "event bus: emit / on",
-    run: (assert) => {
+    run: assert => {
       const bus = new EventBus();
       let count = 0;
       let lastData: unknown = null;
-      const off = bus.on("hi", (d) => {
+      const off = bus.on("hi", d => {
         count++;
         lastData = d;
       });
@@ -356,7 +358,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "event bus: until wakes synchronously inside emit",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const bus = new EventBus();
       let woken = false;
@@ -374,12 +376,12 @@ const TESTS: TestCase[] = [
   },
   {
     name: "Awaitable: out-of-band wake advances the gen",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let captured: (() => void) | undefined;
       let woken = false;
       startFn(a, function* () {
-        yield (wake) => {
+        yield wake => {
           captured = wake;
           return () => {};
         };
@@ -395,13 +397,13 @@ const TESTS: TestCase[] = [
   },
   {
     name: "Awaitable: synchronous resolve advances immediately",
-    run: (assert) => {
+    run: assert => {
       // Subscribe calls wake before returning; gen advances re-entrantly.
       const a = new Anim();
       let phase = 0;
       startFn(a, function* () {
         phase = 1;
-        yield (wake) => {
+        yield wake => {
           wake();
           return () => {};
         };
@@ -414,11 +416,11 @@ const TESTS: TestCase[] = [
   },
   {
     name: "Awaitable: disposer fires when cancelled before wake",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let disposed = false;
       const handle = startFn(a, function* () {
-        yield (_wake) => () => {
+        yield _wake => () => {
           disposed = true;
         };
       });
@@ -430,7 +432,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "run() disposer cancels and runs finally",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let finallyRan = false;
       const handle = startFn(a, function* () {
@@ -448,7 +450,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "race: first child wins, others are cancelled",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let aFinally = 0;
       let bFinally = 0;
@@ -482,7 +484,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "cancel cascades to children",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let childFinally = 0;
       const handle = startFn(a, function* () {
@@ -505,16 +507,13 @@ const TESTS: TestCase[] = [
       });
       a.step(0);
       handle();
-      assert(
-        childFinally === 2,
-        `expected both children's finallys (got ${childFinally})`,
-      );
+      assert(childFinally === 2, `expected both children's finallys (got ${childFinally})`);
       a.stop();
     },
   },
   {
     name: "race: child yield protocol works (sub-gen, sleep, parallel)",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let parentDone = false;
       startFn(a, function* () {
@@ -545,7 +544,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "race: accepts mixed Yieldable args (number, awaitable, gen)",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const bus = new EventBus();
       let winner = "";
@@ -567,7 +566,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "race: number arg wins on time",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let resumed = false;
       startFn(a, function* () {
@@ -587,7 +586,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: ".until: cancels work on trigger, sequel runs",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const stop = signal(false);
       let phase = 0;
@@ -613,7 +612,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "detach: spawns at root, parent resumes immediately",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let log = "";
       let subTicks = 0;
@@ -629,18 +628,12 @@ const TESTS: TestCase[] = [
         log += "after";
         yield 999;
       });
-      assert(
-        log === "before after",
-        `parent should resume immediately past detach (got "${log}")`,
-      );
+      assert(log === "before after", `parent should resume immediately past detach (got "${log}")`);
       a.step(0.016);
       assert(subTicks === 1, `detached gen ticks (got ${subTicks})`);
       stop();
       a.step(0.016);
-      assert(
-        subTicks === 2,
-        `detached survives parent cancel (got ${subTicks})`,
-      );
+      assert(subTicks === 2, `detached survives parent cancel (got ${subTicks})`);
       a.stop();
       a.step(0.016);
       assert(subTicks === 2, `engine.stop cancels detached (got ${subTicks})`);
@@ -648,29 +641,23 @@ const TESTS: TestCase[] = [
   },
   {
     name: "anim.onStep: subscribes to step events, unsubs via disposer",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const dts: number[] = [];
-      const off = a.onStep((dt) => dts.push(dt));
+      const off = a.onStep(dt => dts.push(dt));
       a.step(0.016);
       a.step(0.02);
       off();
       a.step(0.03);
       assert(dts.length === 2, `expected 2 fires, got ${dts.length}`);
-      assert(
-        Math.abs(dts[0] - 0.016) < 1e-9 && Math.abs(dts[1] - 0.02) < 1e-9,
-        `dts=${dts}`,
-      );
+      assert(Math.abs(dts[0] - 0.016) < 1e-9 && Math.abs(dts[1] - 0.02) < 1e-9, `dts=${dts}`);
       a.stop();
     },
   },
   {
     name: "signal equals option suppresses no-op writes",
-    run: (assert) => {
-      const s = signal(
-        { x: 1, y: 2 },
-        { equals: (a, b) => a.x === b.x && a.y === b.y },
-      );
+    run: assert => {
+      const s = signal({ x: 1, y: 2 }, { equals: (a, b) => a.x === b.x && a.y === b.y });
       let fires = 0;
       effect(() => {
         void s.value;
@@ -685,35 +672,29 @@ const TESTS: TestCase[] = [
   },
   {
     name: "signal.lens reads through and writes back",
-    run: (assert) => {
+    run: assert => {
       const parent = signal({ a: 1, b: 2 });
       const lensA = lens(
         () => parent.value.a,
-        (n) => {
+        n => {
           parent.value = { ...parent.peek(), a: n };
         },
       );
       assert(lensA.value === 1, `read mismatch: ${lensA.value}`);
       lensA.value = 10;
-      assert(
-        parent.peek().a === 10,
-        `write didn't propagate: ${parent.peek().a}`,
-      );
-      assert(
-        parent.peek().b === 2,
-        `unrelated field changed: ${parent.peek().b}`,
-      );
+      assert(parent.peek().a === 10, `write didn't propagate: ${parent.peek().a}`);
+      assert(parent.peek().b === 2, `unrelated field changed: ${parent.peek().b}`);
       assert(lensA.value === 10, `lens didn't see its own write`);
     },
   },
   {
     name: "signal.lens aggregates multiple parents (centroid-style)",
-    run: (assert) => {
+    run: assert => {
       const a = signal(0);
       const b = signal(10);
       const avg = lens(
         () => (a.value + b.value) / 2,
-        (n) => {
+        n => {
           const delta = n - (a.peek() + b.peek()) / 2;
           a.value = a.peek() + delta;
           b.value = b.peek() + delta;
@@ -728,7 +709,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "lens: independent axes don't cross-fire",
-    run: (assert) => {
+    run: assert => {
       const p = vec(1, 2);
       let xFires = 0;
       let yFires = 0;
@@ -751,7 +732,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "point: parent write reaches lenses",
-    run: (assert) => {
+    run: assert => {
       const p = vec(1, 2);
       assert(p.x.value === 1 && p.y.value === 2, `read mismatch`);
       p.value = { x: 10, y: 20 };
@@ -761,7 +742,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "point: per-axis tween + parallel composition",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const p = vec(0, 0);
       startFn(a, function* () {
@@ -779,7 +760,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "vec(literal) and vec(signal) both produce Vec",
-    run: (assert) => {
+    run: assert => {
       const lit = vec(1, 2);
       assert(lit instanceof Vec, `vec(num,num) is Vec`);
       const s = signal(5);
@@ -787,15 +768,12 @@ const TESTS: TestCase[] = [
       assert(der instanceof Vec, `vec(sig,num) is Vec (derived flavor)`);
       assert(der.x.value === 5 && der.y.value === 10, `derived read off`);
       s.value = 99;
-      assert(
-        der.x.value === 99,
-        `derived didn't follow source: ${der.x.value}`,
-      );
+      assert(der.x.value === 99, `derived didn't follow source: ${der.x.value}`);
     },
   },
   {
     name: "point math returns reactive Vec",
-    run: (assert) => {
+    run: assert => {
       const a = vec(1, 2);
       const b = vec(3, 4);
       const sum = a.add(b);
@@ -807,48 +785,27 @@ const TESTS: TestCase[] = [
   },
   {
     name: "centroid: read averages, write distributes delta",
-    run: (assert) => {
+    run: assert => {
       const a = { translate: vec(0, 0) };
       const b = { translate: vec(100, 50) };
       const c = centroid(a, b);
       assert(c instanceof Vec, `centroid should be a writable Vec`);
       assert(c.value.x === 50 && c.value.y === 25, `initial avg off`);
       c.value = { x: 60, y: 35 };
-      assert(
-        a.translate.peek().x === 10,
-        `a.x after write: ${a.translate.peek().x}`,
-      );
-      assert(
-        b.translate.peek().x === 110,
-        `b.x after write: ${b.translate.peek().x}`,
-      );
-      assert(
-        a.translate.peek().y === 10,
-        `a.y after write: ${a.translate.peek().y}`,
-      );
-      assert(
-        b.translate.peek().y === 60,
-        `b.y after write: ${b.translate.peek().y}`,
-      );
+      assert(a.translate.peek().x === 10, `a.x after write: ${a.translate.peek().x}`);
+      assert(b.translate.peek().x === 110, `b.x after write: ${b.translate.peek().x}`);
+      assert(a.translate.peek().y === 10, `a.y after write: ${a.translate.peek().y}`);
+      assert(b.translate.peek().y === 60, `b.y after write: ${b.translate.peek().y}`);
       // Per-axis write — only x distributes (dx = 100 - 60 = 40).
       c.x.value = 100;
-      assert(
-        a.translate.peek().x === 50,
-        `a.x after axis: ${a.translate.peek().x}`,
-      );
-      assert(
-        b.translate.peek().x === 150,
-        `b.x after axis: ${b.translate.peek().x}`,
-      );
-      assert(
-        a.translate.peek().y === 10,
-        `a.y after axis (unchanged): ${a.translate.peek().y}`,
-      );
+      assert(a.translate.peek().x === 50, `a.x after axis: ${a.translate.peek().x}`);
+      assert(b.translate.peek().x === 150, `b.x after axis: ${b.translate.peek().x}`);
+      assert(a.translate.peek().y === 10, `a.y after axis (unchanged): ${a.translate.peek().y}`);
     },
   },
   {
     name: "mean (numbers): read avg, write distributes",
-    run: (assert) => {
+    run: assert => {
       const a = num(0);
       const b = num(10);
       const c = num(20);
@@ -863,52 +820,37 @@ const TESTS: TestCase[] = [
   },
   {
     name: "mean (Vecs): drop-in centroid for raw Vec signals",
-    run: (assert) => {
+    run: assert => {
       const a = vec(0, 0);
       const b = vec(100, 50);
       const m = mean(a, b);
       assert(m instanceof Vec, `mean of Vecs should return a writable Vec`);
       assert(m.value.x === 50 && m.value.y === 25, `initial mean off`);
       m.value = { x: 60, y: 35 }; // delta (10, 10)
-      assert(
-        a.peek().x === 10 && a.peek().y === 10,
-        `a not shifted: ${JSON.stringify(a.peek())}`,
-      );
-      assert(
-        b.peek().x === 110 && b.peek().y === 60,
-        `b not shifted: ${JSON.stringify(b.peek())}`,
-      );
+      assert(a.peek().x === 10 && a.peek().y === 10, `a not shifted: ${JSON.stringify(a.peek())}`);
+      assert(b.peek().x === 110 && b.peek().y === 60, `b not shifted: ${JSON.stringify(b.peek())}`);
     },
   },
   {
-    name: "Point.set: copies target's value",
-    run: (assert) => {
+    name: "Point: assign value from another signal copies once",
+    run: assert => {
       const a = vec(0, 0);
       const b = vec(10, 20);
-      a.set(b);
-      assert(
-        a.value.x === 10 && a.value.y === 20,
-        `a after set: ${JSON.stringify(a.value)}`,
-      );
+      a.value = b.peek();
+      assert(a.value.x === 10 && a.value.y === 20, `a after set: ${JSON.stringify(a.value)}`);
       b.value = { x: 30, y: 40 };
       assert(a.value.x === 10, `set is one-shot, must not track`);
     },
   },
   {
-    name: "Point.bind: reactive mirror with disposer",
-    run: (assert) => {
+    name: "bind(a, b): reactive mirror with disposer",
+    run: assert => {
       const a = vec(0, 0);
       const b = vec(10, 20);
-      const dispose = a.bind(b);
-      assert(
-        a.value.x === 10 && a.value.y === 20,
-        `a after bind: ${JSON.stringify(a.value)}`,
-      );
+      const dispose = bind(a, b);
+      assert(a.value.x === 10 && a.value.y === 20, `a after bind: ${JSON.stringify(a.value)}`);
       b.value = { x: 30, y: 40 };
-      assert(
-        a.value.x === 30 && a.value.y === 40,
-        `bind didn't track: ${JSON.stringify(a.value)}`,
-      );
+      assert(a.value.x === 30 && a.value.y === 40, `bind didn't track: ${JSON.stringify(a.value)}`);
       dispose();
       b.value = { x: 99, y: 99 };
       assert(a.value.x === 30, `disposer didn't stop bind`);
@@ -916,7 +858,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "shape.center: read post-transform, write delta-to-translate",
-    run: (assert) => {
+    run: assert => {
       // 100×60 rect at (50, 70). Identity transform → local center
       // == post-transform center == (100, 100).
       const r = rect(50, 70, 100, 60);
@@ -939,10 +881,10 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "shape.center.set: pure sugar over .value =",
-    run: (assert) => {
+    name: "shape.center: writing via .value = updates translate",
+    run: assert => {
       const r = rect(0, 0, 50, 50);
-      r.center.set(vec(100, 100));
+      r.center.value = vec(100, 100).peek();
       assert(
         r.translate.peek().x === 75 && r.translate.peek().y === 75,
         `translate: ${JSON.stringify(r.translate.peek())}`,
@@ -951,7 +893,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "shape anchor writes are exact under rotation",
-    run: (assert) => {
+    run: assert => {
       // 100×60 rect, origin at center (50, 30 local; box center).
       // Apply 90° rotation. The corner at(1, 0) — local (100, 0) —
       // rotates to (30, 50) in parent frame (relative to origin
@@ -960,8 +902,7 @@ const TESTS: TestCase[] = [
       r.rotate.value = Math.PI / 2;
       const cornerWorld = r.at(1, 0).value;
       assert(
-        Math.abs(cornerWorld.x - 80) < 1e-9 &&
-          Math.abs(cornerWorld.y - 80) < 1e-9,
+        Math.abs(cornerWorld.x - 80) < 1e-9 && Math.abs(cornerWorld.y - 80) < 1e-9,
         `rotated corner: ${JSON.stringify(cornerWorld)}`,
       );
       // Write target (200, 200) — translate += (target - currentWorld).
@@ -981,7 +922,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "shape anchor reads track scale around center",
-    run: (assert) => {
+    run: assert => {
       // 100×60 rect, default origin = box center (50, 30). Scale 2×
       // around center → local corner (100, 60) lands at center +
       // 2 × (corner - center) = (50, 30) + 2·(50, 30) = (150, 90).
@@ -994,15 +935,14 @@ const TESTS: TestCase[] = [
       );
       // Center is invariant under center-pivoted scale.
       assert(
-        Math.abs(r.center.value.x - 50) < 1e-9 &&
-          Math.abs(r.center.value.y - 30) < 1e-9,
+        Math.abs(r.center.value.x - 50) < 1e-9 && Math.abs(r.center.value.y - 30) < 1e-9,
         `center under scale: ${JSON.stringify(r.center.value)}`,
       );
     },
   },
   {
     name: "swap: tweens exchange translates",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const sh1 = { translate: vec(0, 0) };
       const sh2 = { translate: vec(100, 50) };
@@ -1011,10 +951,7 @@ const TESTS: TestCase[] = [
       });
       a.step(0);
       a.step(0.11);
-      assert(
-        sh1.translate.peek().x === 100,
-        `sh1.x: ${sh1.translate.peek().x}`,
-      );
+      assert(sh1.translate.peek().x === 100, `sh1.x: ${sh1.translate.peek().x}`);
       assert(sh1.translate.peek().y === 50, `sh1.y: ${sh1.translate.peek().y}`);
       assert(sh2.translate.peek().x === 0, `sh2.x: ${sh2.translate.peek().x}`);
       assert(sh2.translate.peek().y === 0, `sh2.y: ${sh2.translate.peek().y}`);
@@ -1023,7 +960,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "splay: distributes radially around centre",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const centre = vec(100, 100);
       const shapes = [
@@ -1047,7 +984,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "assemble: pairs each shape to its target",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const shapes = [{ translate: vec(0, 0) }, { translate: vec(0, 0) }];
       const targets = [
@@ -1059,20 +996,14 @@ const TESTS: TestCase[] = [
       });
       a.step(0);
       a.step(0.11);
-      assert(
-        shapes[0].translate.peek().x === 100,
-        `s0.x: ${shapes[0].translate.peek().x}`,
-      );
-      assert(
-        shapes[1].translate.peek().y === 100,
-        `s1.y: ${shapes[1].translate.peek().y}`,
-      );
+      assert(shapes[0].translate.peek().x === 100, `s0.x: ${shapes[0].translate.peek().x}`);
+      assert(shapes[1].translate.peek().y === 100, `s1.y: ${shapes[1].translate.peek().y}`);
       a.stop();
     },
   },
   {
     name: "every: fires at a fixed interval",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const p = num(0);
       a.start(
@@ -1089,7 +1020,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "spring: settles at target with precision",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const sig = num(0);
       let done = false;
@@ -1106,23 +1037,20 @@ const TESTS: TestCase[] = [
   },
   {
     name: "attract: exponential pull toward target",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const sig = num(0);
       a.start(attract(sig, 100, 1));
       a.step(0);
       // After t=1 at rate=1, approaches 1 - e^-1 ≈ 0.632.
       for (let i = 0; i < 100; i++) a.step(0.01);
-      assert(
-        Math.abs(sig.value - 63.2) < 1,
-        `after t=1: ${sig.value} (expected ~63.2)`,
-      );
+      assert(Math.abs(sig.value - 63.2) < 1, `after t=1: ${sig.value} (expected ~63.2)`);
       a.stop();
     },
   },
   {
     name: "untilChange: wakes on next signal change",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const sig = signal(0);
       let woke = false;
@@ -1139,7 +1067,7 @@ const TESTS: TestCase[] = [
   },
   {
     name: "untilChange: ignores baseline read",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       const sig = signal(42);
       let woke = false;
@@ -1156,10 +1084,10 @@ const TESTS: TestCase[] = [
   },
   {
     name: "untilPromise: disposer suppresses wake after cancel",
-    run: (assert) => {
+    run: assert => {
       const a = new Anim();
       let resolve!: () => void;
-      const p = new Promise<void>((r) => {
+      const p = new Promise<void>(r => {
         resolve = r;
       });
       let woke = false;
@@ -1180,25 +1108,19 @@ const TESTS: TestCase[] = [
   },
   {
     name: "meanRotation: distributes delta across shapes",
-    run: (assert) => {
+    run: assert => {
       const sh1 = { rotate: num(0) };
       const sh2 = { rotate: num(Math.PI / 2) };
       const m = meanRotation(sh1, sh2);
       assert(Math.abs(m.value - Math.PI / 4) < 1e-9, `mean: ${m.value}`);
       m.value = Math.PI / 2;
-      assert(
-        Math.abs(sh1.rotate.value - Math.PI / 4) < 1e-9,
-        `sh1: ${sh1.rotate.value}`,
-      );
-      assert(
-        Math.abs(sh2.rotate.value - (3 * Math.PI) / 4) < 1e-9,
-        `sh2: ${sh2.rotate.value}`,
-      );
+      assert(Math.abs(sh1.rotate.value - Math.PI / 4) < 1e-9, `sh1: ${sh1.rotate.value}`);
+      assert(Math.abs(sh2.rotate.value - (3 * Math.PI) / 4) < 1e-9, `sh2: ${sh2.rotate.value}`);
     },
   },
   {
     name: "meanScale: writable Point over scale fields",
-    run: (assert) => {
+    run: assert => {
       const sh1 = { scale: vec(1, 1) };
       const sh2 = { scale: vec(2, 2) };
       const m = meanScale(sh1, sh2);
@@ -1258,11 +1180,11 @@ export class MdRuntimeTests extends Diagram {
     });
 
     s(
-      label(
-        vec(W / 2, H - 12),
-        "all tests run on a fresh Anim driven by step(dt)",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
-      ),
+      label(vec(W / 2, H - 12), "all tests run on a fresh Anim driven by step(dt)", {
+        size: 10,
+        align: Anchor.Center,
+        opacity: 0.5,
+      }),
     );
 
     this.anim.start(

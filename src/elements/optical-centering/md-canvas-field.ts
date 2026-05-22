@@ -1,19 +1,26 @@
 // Canvas demo: minim's runtime + signals + generators driving a non-SVG renderer.
 
-import {Anim, signal, drive, effect, every, loop, num, vec, Num, Vec, type Writable} from "../../minim";
-import {attachRaf} from "@minim/web";
+import { attachRaf } from "@minim/web";
+import {
+  Anim,
+  drive,
+  effect,
+  every,
+  loop,
+  Num,
+  num,
+  signal,
+  Vec,
+  vec,
+  type Writable,
+} from "../../minim";
 
 const N = 1500;
 const W = 640;
 const H = 360;
 
 // Each phase returns target `(x, y)` for particle `i`; spring integration chases it.
-type Phase = (
-  i: number,
-  t: number,
-  px: number,
-  py: number,
-) => { x: number; y: number };
+type Phase = (i: number, t: number, px: number, py: number) => { x: number; y: number };
 
 const GRID_COLS = 60;
 const GRID_ROWS = Math.ceil(N / GRID_COLS);
@@ -22,14 +29,14 @@ const GRID_PAD_Y = 60;
 const GRID_DX = (W - GRID_PAD_X * 2) / (GRID_COLS - 1);
 const GRID_DY = (H - GRID_PAD_Y * 2) / (GRID_ROWS - 1);
 
-const grid: Phase = (i) => {
+const grid: Phase = i => {
   const col = i % GRID_COLS;
   const row = (i / GRID_COLS) | 0;
   return { x: GRID_PAD_X + col * GRID_DX, y: GRID_PAD_Y + row * GRID_DY };
 };
 
 const GOLDEN = Math.PI * (3 - Math.sqrt(5));
-const phyllo: Phase = (i) => {
+const phyllo: Phase = i => {
   const r = 5.2 * Math.sqrt(i + 1);
   const a = i * GOLDEN;
   return { x: W / 2 + r * Math.cos(a), y: H / 2 + r * Math.sin(a) };
@@ -39,16 +46,13 @@ const wave: Phase = (i, t) => {
   const u = i / N;
   return {
     x: 30 + u * (W - 60),
-    y:
-      H / 2 +
-      Math.sin(u * Math.PI * 6 + t * 1.7) * 90 +
-      Math.cos(u * Math.PI * 3 + t * 1.1) * 30,
+    y: H / 2 + Math.sin(u * Math.PI * 6 + t * 1.7) * 90 + Math.cos(u * Math.PI * 3 + t * 1.1) * 30,
   };
 };
 
 const swarm: Phase = (i, t, px, py) => {
   const angle = (i / N) * Math.PI * 6 + t * 0.6;
-  const r = 30 + 110 * (((i * 1.61803) % 1));
+  const r = 30 + 110 * ((i * 1.61803) % 1);
   return {
     x: px + r * Math.cos(angle + i * 0.01),
     y: py + r * Math.sin(angle + i * 0.01),
