@@ -206,6 +206,10 @@ yield* c.to({ x: 200, y: 100 }, 1);
 
 <md-aggregates></md-aggregates>
 
+`mix(Cls, merge)` is the same N-to-1 shape with *mutable* membership and a chosen merge function. Contributors come and go at runtime; merges are first-class values (`Merges.mean`, `Merges.sum`, `Merges.priority`, …) that compose through combinators like `top(n, base)` and `above(threshold, base)`. Two independent animation sequences sharing one position via `mix(Vec, Merges.mean)` — neither knows about the other, and the visible motion is the per-frame weighted mean:
+
+<md-mix></md-mix>
+
 The same lens is the read/write end of a UI primitive. `handle(point)` is a draggable circle that reads its position from the point and writes back on drag — a few lines of pointer events around a writable Point. Drop one on a centroid and you've got rigid group dragging:
 
 ```ts

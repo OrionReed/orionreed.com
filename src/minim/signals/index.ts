@@ -38,6 +38,16 @@ export {
 // ─── Clock bridge ─────────────────────────────────────────────────
 export { clockSignal } from "./clock";
 export { bind, gated } from "./lateral";
+// Merges live in their own namespace to avoid the `mean(...sigs)`
+// vs. `Merges.mean` (a Merge value passed to `mix`) name clash.
+export * as Merges from "./mix";
+export {
+  type Contribution,
+  type Merge,
+  type Mix,
+  type MixAddOpts,
+  mix,
+} from "./mix";
 // ─── Engine ───────────────────────────────────────────────────────
 export {
   batch,
