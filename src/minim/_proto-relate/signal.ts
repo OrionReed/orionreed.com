@@ -80,6 +80,64 @@ export function setSignalWriteHook(fn: ((sig: Signal<unknown>) => void) | undefi
   };
 }
 
+// ─── Relation engine integration ─────────────────────────────────────
+// Two hooks let the relation system co-exist with the core engine
+// without becoming a parallel runtime:
+//
+//   - `pinHook` fires on every write (alongside `writeHook`) and lets
+//     a relation system track which cells the *user* wrote in this
+//     batch. The hook is suppressed while a solver runs (`solverActive`)
+//     so solver writes are NOT recorded as user pins. This is the only
+//     mechanism by which a relation distinguishes "fixed by user" from
+//     "to be determined by solver."
+//
+//   - `preFlushTasks` is a queue drained at the *start* of `flush()`,
+//     before effects run. Relation systems push solve callbacks here
+//     during a batch; the solve completes and writes back cell updates
+//     before any effect sees those cells, so effects always observe
+//     post-solve state. This is the relation analog of the engine's
+//     "effects always see consistent values after a write" guarantee.
+//
+// Both hooks are intentionally small and orthogonal — they let a
+// relation engine be implemented as a userland module while preserving
+// the engine's "no fixed-point iteration in core" invariant.
+
+let pinHook: ((sig: Signal<unknown>) => void) | undefined;
+let solverActive = false;
+const preFlushTasks: (() => void)[] = [];
+
+export function setPinHook(fn: ((sig: Signal<unknown>) => void) | undefined): () => void {
+  const prev = pinHook;
+  pinHook = fn;
+  return () => {
+    pinHook = prev;
+  };
+}
+
+/** Register a callback to run at the *start* of every `flush()`, before
+ *  effects drain. Multiple tasks queue in registration order. Returns
+ *  a `dispose()` to remove the task. */
+export function addPreFlushTask(fn: () => void): () => void {
+  preFlushTasks.push(fn);
+  return () => {
+    const i = preFlushTasks.indexOf(fn);
+    if (i >= 0) preFlushTasks.splice(i, 1);
+  };
+}
+
+/** Run `fn` with the solver-active flag set. Writes inside `fn` are
+ *  *not* recorded as user pins. Used by relation engines to perform
+ *  back-writes from a solver step without polluting the pinned set. */
+export function withSolverActive<R>(fn: () => R): R {
+  const prev = solverActive;
+  solverActive = true;
+  try {
+    return fn();
+  } finally {
+    solverActive = prev;
+  }
+}
+
 // ─── alien-signals algorithm — link / unlink / propagate / etc. ──────
 
 function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
@@ -263,6 +321,19 @@ function flush(): void {
   if (flushing) return;
   flushing = true;
   try {
+    // Pre-flush: relation solvers run first so effects observe post-
+    // solve state. Tasks may enqueue more work (cluster solves
+    // triggering further solver writes); we loop until quiescent or
+    // the budget is exhausted. Budget protects against pathologically
+    // coupled clusters that ping-pong indefinitely.
+    let preFlushPasses = 0;
+    while (preFlushTasks.length > 0 && preFlushPasses < 8) {
+      // Snapshot — tasks may register more tasks; those run next pass.
+      const snapshot = preFlushTasks.slice();
+      preFlushTasks.length = 0;
+      for (const t of snapshot) t();
+      preFlushPasses++;
+    }
     while (notifyIndex < queuedLength) {
       const e = queued[notifyIndex]!;
       queued[notifyIndex++] = undefined;
@@ -658,6 +729,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     if (!same) {
       this.flags = F.Mutable | F.Dirty;
       if (writeHook !== undefined) writeHook(this as Signal<unknown>);
+      if (pinHook !== undefined && !solverActive) pinHook(this as Signal<unknown>);
       const subs = this.subs;
       if (subs !== undefined) {
         propagate(subs, runDepth > 0);

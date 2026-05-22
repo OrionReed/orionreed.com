@@ -199,7 +199,7 @@ const v = c.derive((c) => c.add(offset).scale(2).perp());
 //                  ^ one Computed; mutating Chain inside the closure
 ```
 
-`field(parent, key, Type)` is the underlying machinery. `vec.x` and `vec.y` are returned by `field(this, "x", Num)` / `field(this, "y", Num)` — so they're full `Num` signals, and `vec.x.to(50, 0.3)` is a one-axis tween. Per-axis writes don't fire neighbouring effects.
+`lensTo(Cls, get, set)` is the underlying machinery. `vec.x` and `vec.y` are lazy getters that build `this.lensTo(Num, s => s.x, (v, s) => ({ ...s, x: v }))` — so they're full `Num` signals, and `vec.x.to(50, 0.3)` is a one-axis tween. Per-axis writes don't fire neighbouring effects.
 
 Aggregates aren't a feature, they're lenses. `Cls.lens(getter, setter)` returns a writable computed view that's also an instance of `Cls` — `Vec.lens(get, set)` is a Vec. `mix(Cls, parts, merge, writeback)` is the N-ary form, parameterised by a *merge* (how reads aggregate) and a *writeback* (how writes distribute). `Mix.mean` + `Mix.deltaEven` gives you the rigid-body centroid: reading returns the mean, writing distributes the delta evenly. `centroid(a, b, c, d)` is one line of that pattern. Tweening it is a rigid group translate:
 
