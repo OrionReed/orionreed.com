@@ -1,11 +1,15 @@
 // num.ts — reactive scalar.
 
 import {
-  Signal, computedCls, lensCls,
+  Signal, computedCls, lensCls, valFn,
   type Val, type SignalOptions,
 } from "../signal";
+// Inside the new lens-returning methods (`clamp`, `quantize`, `cyclic`)
+// we cast `this` to `Signal<V>` for writes — Num's merged interface
+// declares `value` as RO at the type level (so external callers respect
+// the brand) but Signal's underlying class has a writable setter.
 import { type Linear, type TraitDict } from "../traits";
-import { applyOp1, type Op } from "../ops";
+import { applyOp1, applyOp2, type Op } from "../ops";
 import { type Writable, invertibles } from "../writable";
 import { tween, type Tween } from "../anim";
 import { type Easing } from "../../core";
@@ -21,14 +25,27 @@ export const equals = (a: V, b: V) => a === b;
 
 const linearImpl: Linear<V> = { add, sub, scale };
 
-const addOp:   Op<V, [V]>      = { fwd: add,   bwd: sub };
-const subOp:   Op<V, [V]>      = { fwd: sub,   bwd: add };
-const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
+const addOp:    Op<V, [V]>              = { fwd: add,   bwd: sub };
+const subOp:    Op<V, [V]>              = { fwd: sub,   bwd: add };
+const scaleOp:  Op<V, [number]>         = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
+// Affine: v ↦ v·k + off. Invertible iff k ≠ 0 (caller's responsibility).
+const affineOp: Op<V, [number, number]> = {
+  fwd: (v, k, off) => v * k + off,
+  bwd: (n, k, off) => (n - off) / k,
+};
 
 export class Num extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
   static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
-  static invertibles = invertibles<Num>()("add", "sub", "scale");
+  // Methods that return a writable lens (whether strict or lossy).
+  // `Writable<R>` lifts these to `(...) => Writable<Num>` so chains
+  // stay writable. Strict-vs-lossy compliance is a separate concern
+  // (eventually tracked in docstrings + types); for now this list is
+  // simply "methods you can write back through."
+  static invertibles = invertibles<Num>()(
+    "add", "sub", "scale", "affine",
+    "clamp", "quantize", "cyclic",
+  );
 
   // ── class-level constructors ───────────────────────────────────
   static derive(fn: () => V): Num { return computedCls(Num, fn) }
@@ -43,13 +60,57 @@ export class Num extends Signal<V> {
   add(b: Val<V>): Num        { return applyOp1(this, addOp,   b, Num) }
   sub(b: Val<V>): Num        { return applyOp1(this, subOp,   b, Num) }
   scale(k: Val<number>): Num { return applyOp1(this, scaleOp, k, Num) }
+  /** Affine: `v ↦ k·v + off`. Invertible (a single allocation; cheaper
+   *  than `.scale(k).add(off)`). Sliders: `t.affine(width, x0)` maps
+   *  `t ∈ [0,1]` to screen coords. */
+  affine(k: Val<number>, off: Val<number>): Num {
+    return applyOp2(this, affineOp, k, off, Num);
+  }
+
+  /** Lossy lens that clamps reads to `[lo, hi]` and clamps writes
+   *  before propagating to source. Compliance: PutGet only (read of a
+   *  write outside `[lo, hi]` returns the clamped value, not the
+   *  written one). Use for sliders, gauges, anywhere a value
+   *  shouldn't escape its range. */
   clamp(lo: Val<V>, hi: Val<V>): Num {
-    return Num.derive(() => {
-      const v = this.value;
-      const l = lo instanceof Signal ? lo.value : typeof lo === "function" ? lo() : lo;
-      const h = hi instanceof Signal ? hi.value : typeof hi === "function" ? hi() : hi;
-      return v < l ? l : v > h ? h : v;
-    });
+    const parent = this as unknown as Signal<V>;
+    const lf = valFn(lo); const hf = valFn(hi);
+    const c = (v: V) => { const l = lf(), h = hf(); return v < l ? l : v > h ? h : v; };
+    return Num.lens(
+      () => c(this.value),
+      (v) => { parent.value = c(v); },
+    ) as unknown as Num;
+  }
+
+  /** Lossy lens that snaps reads and writes to the nearest multiple
+   *  of `step`. For knobs with discrete positions. */
+  quantize(step: Val<number>): Num {
+    const parent = this as unknown as Signal<V>;
+    const sf = valFn(step);
+    const q = (v: V) => { const s = sf(); return Math.round(v / s) * s; };
+    return Num.lens(
+      () => q(this.value),
+      (v) => { parent.value = q(v); },
+    ) as unknown as Num;
+  }
+
+  /** Cyclic-coordinate lens. Reads pass through (the source's
+   *  accumulated value); writes pick the representative closest to
+   *  the current value modulo `period`. Lets you drag an angle a
+   *  small visible amount without jumping a full revolution when the
+   *  source has accumulated many. */
+  cyclic(period: Val<number>): Num {
+    const parent = this as unknown as Signal<V>;
+    const pf = valFn(period);
+    return Num.lens(
+      () => this.value,
+      (v) => {
+        const cur = this.peek();
+        const p = pf();
+        const delta = v - cur;
+        parent.value = cur + delta - p * Math.round(delta / p);
+      },
+    ) as unknown as Num;
   }
 
   /** Tween-builder, implied by the lerp trait. The cast bypasses the

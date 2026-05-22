@@ -41,6 +41,58 @@ describe("Num", () => {
     plus.value = 10;
     expect(n.value).toBe(8);
   });
+
+  it("affine: forward and inverse", () => {
+    const t = num(0.5);
+    const x = t.affine(200, 30); // x ↦ 0.5 · 200 + 30 = 130
+    expect(x.value).toBe(130);
+    x.value = 230; // (230 − 30) / 200 = 1
+    expect(t.value).toBe(1);
+  });
+
+  it("clamp lens: lossy on writes outside range", () => {
+    const n = num(0.5);
+    const c = n.clamp(0, 1);
+    c.value = 1.5;
+    expect(n.value).toBe(1); // clamped
+    c.value = -0.3;
+    expect(n.value).toBe(0);
+    c.value = 0.7;
+    expect(n.value).toBe(0.7);
+  });
+
+  it("clamp lens: reads also clamp", () => {
+    const n = num(5);
+    const c = n.clamp(0, 1);
+    expect(c.value).toBe(1); // 5 clamped to 1 on read
+  });
+
+  it("quantize lens: snaps writes to nearest step", () => {
+    const n = num(0);
+    const q = n.quantize(0.25);
+    q.value = 0.6;
+    expect(n.value).toBe(0.5);
+    q.value = 0.62;
+    expect(n.value).toBe(0.5);
+    q.value = 0.88;
+    expect(n.value).toBe(1);
+  });
+
+  it("cyclic lens: shortest-arc on write", () => {
+    const a = num(10 * Math.PI); // 5 revolutions
+    const c = a.cyclic(2 * Math.PI);
+    // Read passes through.
+    expect(c.value).toBe(10 * Math.PI);
+    // Write atan2-style: small drag from current effective angle.
+    // current effective = 10π mod 2π = 0. Write 0.1 → small forward.
+    c.value = 0.1;
+    expect(Math.abs(a.value - (10 * Math.PI + 0.1))).toBeLessThan(0.5);
+    // Reset; write the angle on the "other side of zero" — should pick
+    // -0.1 (the nearest representative), not (10π + ~6.18).
+    a.value = 10 * Math.PI;
+    c.value = -0.1;
+    expect(Math.abs(a.value - (10 * Math.PI - 0.1))).toBeLessThan(0.5);
+  });
 });
 
 describe("Vec", () => {
