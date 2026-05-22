@@ -1,6 +1,17 @@
 import {
-  Anchor, Diagram, Mount, polar, num, signal, vec, type Vec,
-  circle, drag, drive, label, type Writable,
+  Anchor,
+  Diagram,
+  Mount,
+  polar,
+  num,
+  signal,
+  vec,
+  type Vec,
+  circle,
+  drag,
+  drive,
+  label,
+  type Writable,
 } from "../../minim";
 
 const TAU = Math.PI * 2;
@@ -42,25 +53,31 @@ export class MdSolarSystem extends Diagram {
     // Sun stays put (no drag target — it's the world origin).
     s(circle(sun, 14, { fill: true }));
 
-    /* mercury */ orbit(sun, 50,  5,  0.0, "#f5a623", 4);
-    /* venus   */ orbit(sun, 90,  9,  1.4, "#e25c5c", 6);
+    /* mercury */ orbit(sun, 50, 5, 0.0, "#f5a623", 4);
+    /* venus   */ orbit(sun, 90, 9, 1.4, "#e25c5c", 6);
     const earth = orbit(sun, 140, 14, 2.7, "#5b8def", 7);
-    /* moon    */ orbit(earth, 22, 3, 0.0, "#bbb",   3);
+    /* moon    */ orbit(earth, 22, 3, 0.0, "#bbb", 3);
 
     // Run time forward. Pauses while any body is being dragged — the
     // drag IS the time-scrub.
-    this.anim.start(drive((tick) => {
-      if (dragging.value) return;
-      time.value = time.peek() + tick.dt;
-    }));
+    this.anim.start(
+      drive((tick) => {
+        if (dragging.value) return;
+        time.value = time.peek() + tick.dt;
+      }),
+    );
 
     s(
-      label(view.top.down(20),
+      label(
+        view.top.down(20),
         "drag any planet or moon — the whole system winds/unwinds in time",
-        { size: 12, align: Anchor.Center, opacity: 0.7 }),
-      label(view.bottom.up(16),
+        { size: 12, align: Anchor.Center, opacity: 0.7 },
+      ),
+      label(
+        view.bottom.up(16),
         "one `time: Num` · every body angle = time.affine(τ/period, phase) · circular polar",
-        { size: 10, align: Anchor.Center, opacity: 0.5 }),
+        { size: 10, align: Anchor.Center, opacity: 0.5 },
+      ),
     );
   }
 }
