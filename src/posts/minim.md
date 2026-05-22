@@ -105,6 +105,10 @@ Every animatable property of every shape is a signal. Animations don't touch the
 
 <md-mirror></md-mirror>
 
+The reflection lens generalises past flat geometry. In the Poincaré disc model, geodesics are circles perpendicular to the boundary and reflection across a geodesic is inversion in that same circle — still an involution, still one formula reading and writing. Three vertices, three sides, three sister triangles obtained by reflecting one vertex across the opposite side. Drag any vertex; sides curve, sisters reposition, the angle sum and area (= π − sum, Gauss–Bonnet on constant curvature) update live.
+
+<md-conformal-disc></md-conformal-disc>
+
 <md-anchors></md-anchors>
 
 Signals and generators meet through a small set of generator-producing helpers. Some _write_ to a signal over time. Every value-typed signal carries `.to(target, dur, ease?)`, which returns a chainable `Tween<T>` that's also an `Animator<void>` — so it composes with sequencing, racing, and the rest of the generator vocabulary:
@@ -251,6 +255,23 @@ const tip = argminVec(angles, fwdKin, angles.map(() => 1), {
 
 <md-ik></md-ik>
 
+Closed kinematic loops are a different beast. A 4-bar mechanism's joints are repeated 2-circle intersections — `dyad(c1, r1, c2, r2)` is `polar`'s sibling, the "two distances" form to its "one distance, one angle." Hoeken's linkage (1926) is one dyad over a polar crank, with the tracer at twice the coupler length. Drag the crank → polar writes back through θ. Drag the tracer → `argminVec` over θ, clamped onto the precomputed coupler curve so the rank-1 Jacobian doesn't overshoot:
+
+```ts
+const A = polar(O, crank, theta, "circular");
+const B = dyad(A, coupler, P, rocker, { branch: +1 });
+```
+
+<md-linkage></md-linkage>
+
+The dyad cascade works for mechanisms that don't cross tangent-of-circles configurations during their cycle. When they do, two paradigms sidestep the branch decision entirely. _Position-based dynamics:_ every joint a writable Vec, every bar a length residual, Gauss–Seidel relaxation projects the graph onto its constraint manifold each frame. Same primitive does forward and inverse — drag any joint, residual propagates to the rest. No branches, because relaxation never computes positions from circle intersection.
+
+<md-truss></md-truss>
+
+_Vector-loop:_ parameterise each bar by its angle; the closure equation `Σ rᵢ · u(θᵢ) = 0` is two scalar equations in the unknown angles. Newton-Raphson seeded with last frame's solution stays in angle-space, where continuity is invariant — angles are unique up to 2π — so even mechanisms whose position-form cascades go singular evolve smoothly here.
+
+<md-loop></md-loop>
+
 Curves matter too. `Path` is a reactive polyline — cheap, fast, plenty for line plots and node-to-node connectors. When ellipses or arcs are needed, the sibling `Curve` carries the same reactive plumbing but with `ellipseArc` segments rendered via SVG's native `A` command. The standalone `ellipse(center, a, b, rotation?)` factory accepts `Val<>` on every parameter, so a family of confocal conics — five ellipses through fixed eccentricities, four hyperbola pairs sampled as polylines — comes from a couple of loops driven by two draggable foci. Drag a focus; the whole grid re-rescales. Drag the probe; the unique ellipse and hyperbola through it track in real time:
 
 ```ts
@@ -344,7 +365,3 @@ The `code` package is a sibling of `tex` — same architecture (a reactive `sour
 <md-runtime-tests></md-runtime-tests>
 
 <md-trails></md-trails>
-
-<md-linkage></md-linkage>
-
-<md-conformal-disc></md-conformal-disc>

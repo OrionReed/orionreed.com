@@ -1,0 +1,197 @@
+// md-loop.ts — vector-loop Newton solver for a 4-bar linkage.
+//
+// Each bar is parameterised by its angle. The mechanism is the
+// *loop-closure equation* — the sum of bar vectors around the closed
+// loop must equal zero. Given the input crank angle, two scalar
+// equations (x, y) in two unknown angles (θ_AB, θ_BP) are solved
+// each frame by Newton-Raphson seeded with last frame's solution,
+// so the output angles evolve continuously through the cycle without
+// branch decisions.
+//
+// Contrast with md-linkage (forward dyad cascade): there the unknowns
+// were *positions* found by closed-form circle-circle intersection
+// with discrete branch picks, vulnerable to flips at tangent
+// configurations. Here the unknowns are *angles*, evolved smoothly
+// from one frame to the next; even mechanisms whose position-form
+// cascades go singular are well-posed in angle-space because angle
+// continuity is invariant.
+
+import {
+  Anchor,
+  circle,
+  computed,
+  type CurveSegment,
+  curve,
+  Diagram,
+  drive,
+  handle,
+  label,
+  line,
+  Mount,
+  num,
+  type Of,
+  polar,
+  Vec,
+} from "../../minim";
+
+type V = Of<Vec>;
+
+const TAU = Math.PI * 2;
+
+interface FourBarSolution {
+  thetaAB: number;
+  thetaBP: number;
+  A: V;
+  B: V;
+}
+
+/** Solve a 4-bar linkage (one closed loop) by Newton-Raphson on
+ *  (θ_AB, θ_BP). The seed angles must match the previous frame's
+ *  solution to keep the angles continuous through tangent
+ *  configurations. */
+function solveFourBar(
+  O: V,
+  P: V,
+  r1: number,
+  r2: number,
+  r3: number,
+  thetaOA: number,
+  seedAB: number,
+  seedBP: number,
+): FourBarSolution {
+  const Ax = O.x + r1 * Math.cos(thetaOA);
+  const Ay = O.y + r1 * Math.sin(thetaOA);
+  let tAB = seedAB;
+  let tBP = seedBP;
+  for (let iter = 0; iter < 12; iter++) {
+    const fx = Ax + r2 * Math.cos(tAB) - P.x - r3 * Math.cos(tBP);
+    const fy = Ay + r2 * Math.sin(tAB) - P.y - r3 * Math.sin(tBP);
+    if (fx * fx + fy * fy < 1e-14) break;
+    const Jxx = -r2 * Math.sin(tAB);
+    const Jxy = r3 * Math.sin(tBP);
+    const Jyx = r2 * Math.cos(tAB);
+    const Jyy = -r3 * Math.cos(tBP);
+    const det = Jxx * Jyy - Jxy * Jyx;
+    if (Math.abs(det) < 1e-9) break;
+    tAB += (Jxy * fy - Jyy * fx) / det;
+    tBP += (Jyx * fx - Jxx * fy) / det;
+  }
+  return {
+    thetaAB: tAB,
+    thetaBP: tBP,
+    A: { x: Ax, y: Ay },
+    B: { x: Ax + r2 * Math.cos(tAB), y: Ay + r2 * Math.sin(tAB) },
+  };
+}
+
+// Crank-rocker proportions (Grashof: 50 + 100 ≤ 90 + 80, so the crank
+// rotates fully and the rocker oscillates).
+const r1 = 50;
+const r2 = 90;
+const r3 = 80;
+const frame = 100;
+
+export class MdLoop extends Diagram {
+  protected scene(s: Mount): void {
+    const view = this.view(560, 380);
+
+    const O = view.center.left(frame / 2).down(20);
+    const P = O.right(frame);
+
+    const thetaOA = num(0.6).cyclic(TAU);
+    const A = polar(O, r1, thetaOA, "circular");
+
+    // Stateful solver instance for the live animation. Each call
+    // updates seedAB/seedBP to last frame's solution — the only piece
+    // of mutable state in the demo, and the reason angles stay
+    // continuous through the cycle.
+    let liveAB = 0.5;
+    let liveBP = Math.PI - 0.5;
+    const sol = computed(() => {
+      const r = solveFourBar(O.value, P.value, r1, r2, r3, thetaOA.value, liveAB, liveBP);
+      liveAB = r.thetaAB;
+      liveBP = r.thetaBP;
+      return r;
+    });
+
+    const B = computed(() => sol.value.B, Vec);
+    const M = computed(
+      () => {
+        const v = sol.value;
+        return { x: (v.A.x + v.B.x) / 2, y: (v.A.y + v.B.y) / 2 };
+      },
+      Vec,
+    );
+    const thetaAB = computed(() => sol.value.thetaAB);
+    const thetaBP = computed(() => sol.value.thetaBP);
+
+    // Pre-compute the coupler curve with its own seed pair, so this
+    // sweep doesn't perturb the live solver's continuity state.
+    const N = 240;
+    let traceAB = 0.5;
+    let traceBP = Math.PI - 0.5;
+    const tracePoints: V[] = [];
+    for (let n = 0; n <= N; n++) {
+      const t = (n / N) * TAU;
+      const r = solveFourBar(O.value, P.value, r1, r2, r3, t, traceAB, traceBP);
+      traceAB = r.thetaAB;
+      traceBP = r.thetaBP;
+      tracePoints.push({ x: (r.A.x + r.B.x) / 2, y: (r.A.y + r.B.y) / 2 });
+    }
+    const traceSegs: CurveSegment[] = [];
+    for (let n = 1; n <= N; n++) {
+      traceSegs.push({ kind: "line", from: tracePoints[n - 1], to: tracePoints[n] });
+    }
+    s(curve(traceSegs, { thin: true, opacity: 0.5, stroke: "#e25c5c" }));
+
+    // Crank circle.
+    s(circle(O, r1, { thin: true, dashed: true, opacity: 0.25 }));
+
+    s(
+      line(O, A, { thin: true, opacity: 0.5 }),
+      line(A, B, { thin: true }),
+      line(B, P, { thin: true }),
+    );
+
+    s(circle(O, 4, { fill: true }), circle(P, 4, { fill: true }));
+    s(circle(B, 3, { fill: "var(--bg-color, white)", thin: true }));
+    s(circle(M, 5, { fill: "#e25c5c" }));
+
+    const aH = s(handle(A, { fill: "#5b8def", r: 7 }));
+
+    const omega = TAU * 0.18;
+    this.anim.start(
+      drive(tick => {
+        if (aH.dragging.value) return;
+        thetaOA.value = thetaOA.peek() + omega * tick.dt;
+      }),
+    );
+
+    // Live angle readouts so the angle-space story is visible. Wrap
+    // to (-π, π] just for legibility.
+    const wrap = (x: number) => x - TAU * Math.round(x / TAU);
+    const fmt = (sig: { value: number }) =>
+      `${((wrap(sig.value) * 180) / Math.PI).toFixed(0)}°`;
+    const corner = view.at(0, 1).right(18);
+    const labelAt = (yOffset: number, text: () => string) =>
+      label(corner.up(yOffset), text, { size: 11, align: Anchor.Left, opacity: 0.7 });
+    s(
+      labelAt(64, () => `θ_OA (input)   = ${fmt(thetaOA)}`),
+      labelAt(46, () => `θ_AB (coupler) = ${fmt(thetaAB)}`),
+      labelAt(28, () => `θ_BP (rocker)  = ${fmt(thetaBP)}`),
+    );
+
+    s(
+      label(
+        view.top.down(20),
+        "drag the blue crank — angles propagate via Newton-Raphson on loop closure",
+        { size: 12, align: Anchor.Center, opacity: 0.7 },
+      ),
+      label(
+        view.bottom.up(10),
+        "4-bar · 1 loop · 2 unknown angles solved each frame · seed = last frame's solution",
+        { size: 10, align: Anchor.Center, opacity: 0.5 },
+      ),
+    );
+  }
+}

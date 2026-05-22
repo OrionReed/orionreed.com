@@ -1,8 +1,9 @@
-// md-linkage.ts — Theo Jansen leg.
+// md-linkage.ts — Hoeken's straight-line linkage (1926).
 //
-// 1 crank + 11 bars → walking gait. Forward kinematics is 5 cascaded
-// 2-circle intersections (`dyad`); no global solver needed. Drag the
-// blue crank or the red foot — argminVec inverts the chain through θ.
+// 4 bars + 1 crank. The tracer T is collinear with the coupler at
+// twice its length from A; over ~half the cycle T moves along a
+// nearly-straight horizontal line. Single `dyad` in the cascade,
+// no singular configurations through the revolution.
 
 import {
   Anchor,
@@ -55,57 +56,40 @@ function dyad(c1: V, r1: number, c2: V, r2: number, opts: DyadOpts): V {
   return { x: mx + opts.branch * ox, y: my - opts.branch * oy };
 }
 
-// Theo Jansen's "holy numbers" — 13 ratios that produce the gait.
-// Treated as pixels via SC.
-const HN = {
-  a: 38, b: 41.5, c: 39.3, d: 40.1, e: 55.8, f: 39.4,
-  g: 36.7, h: 65.7, i: 49, j: 50, k: 61.9, l: 7.8, m: 15,
-};
-const SC = 2.4;
+// Hoeken's canonical proportions: |OA| : |OP| : |AB| : |BP| = 1 : 2 : 2.5 : 2.5.
+// Tracer T is collinear with A→B at twice the AB length from A.
+const HK = { crank: 1, frame: 2, coupler: 2.5, rocker: 2.5 };
+const SC = 50;
 
 export class MdLinkage extends Diagram {
   protected scene(s: Mount): void {
-    const view = this.view(640, 480);
-    const { a, b, c, d, e, f, g, h, i, j, k, l, m } = HN;
+    const view = this.view(640, 380);
+    const { crank, frame, coupler, rocker } = HK;
 
-    const O = view.center.up(70);
-    const P = O.left(a * SC).up(l * SC);
+    const O = view.center.up(40).left((frame * SC) / 2);
+    const P = O.right(frame * SC);
 
     const theta = num(0).cyclic(TAU);
-    const A = polar(O, m * SC, theta, "circular");
+    const A = polar(O, crank * SC, theta, "circular");
 
-    // The whole leg in one declaration. Same function provides both
-    // the reactive scene-graph nodes and the pure forward map for
-    // argminVec to invert at the foot.
-    const leg = (Av: V, Pv: V) => {
-      const B = dyad(Pv, b * SC, Av, j * SC, { branch: +1 });
-      const C = dyad(Pv, c * SC, Av, k * SC, { branch: -1 });
-      const D = dyad(B, d * SC, C, e * SC, { away: Pv });
-      const E = dyad(C, h * SC, D, i * SC, { away: B });
-      const F = dyad(D, g * SC, E, f * SC, { away: C });
-      return { B, C, D, E, F };
+    const B = computed(
+      () => dyad(A.value, coupler * SC, P.value, rocker * SC, { branch: +1 }),
+      Vec,
+    );
+
+    // Forward map θ → T. Reused for the reactive scene-graph node, the
+    // gait pre-render, and the argminVec inverse.
+    const tFwd = (t: number): V => {
+      const Av = {
+        x: O.value.x + crank * SC * Math.cos(t),
+        y: O.value.y + crank * SC * Math.sin(t),
+      };
+      const Bv = dyad(Av, coupler * SC, P.value, rocker * SC, { branch: +1 });
+      return { x: 2 * Bv.x - Av.x, y: 2 * Bv.y - Av.y };
     };
 
-    const aFwd = (t: number): V => ({
-      x: O.value.x + m * SC * Math.cos(t),
-      y: O.value.y + m * SC * Math.sin(t),
-    });
-
-    const sol = computed(() => leg(A.value, P.value));
-    const B = computed(() => sol.value.B, Vec);
-    const C = computed(() => sol.value.C, Vec);
-    const D = computed(() => sol.value.D, Vec);
-    const E = computed(() => sol.value.E, Vec);
-
-    // Pre-computed gait — used both for the trace render *and* as
-    // argminVec's workspace clamp. Same idiom as md-ik's clampToDisc
-    // (rank-deficient inverse → project the drag target into the
-    // reachable workspace before the Newton step). Here the workspace
-    // is a 1D closed curve rather than a 2D disc.
     const N = 120;
-    const gait: V[] = Array.from({ length: N + 1 }, (_, n) =>
-      leg(aFwd((n / N) * TAU), P.value).F,
-    );
+    const gait: V[] = Array.from({ length: N + 1 }, (_, n) => tFwd((n / N) * TAU));
     const projectOntoGait = (target: V): V => {
       let best = gait[0];
       let bestD2 = Infinity;
@@ -119,12 +103,9 @@ export class MdLinkage extends Diagram {
       return best;
     };
 
-    const F = argminVec(
-      [theta as unknown as Writable<Num>],
-      ([t]) => leg(aFwd(t), P.value).F,
-      [1],
-      { clampTarget: projectOntoGait },
-    );
+    const T = argminVec([theta as unknown as Writable<Num>], ([t]) => tFwd(t), [1], {
+      clampTarget: projectOntoGait,
+    });
 
     const traceSegs: CurveSegment[] = [];
     for (let n = 1; n <= N; n++) {
@@ -132,47 +113,38 @@ export class MdLinkage extends Diagram {
     }
     s(curve(traceSegs, { thin: true, opacity: 0.6, stroke: "#e25c5c" }));
 
-    s(circle(O, m * SC, { thin: true, dashed: true, opacity: 0.25 }));
+    s(circle(O, crank * SC, { thin: true, dashed: true, opacity: 0.25 }));
 
     s(
-      line(P, B, { thin: true }),
-      line(A, B, { thin: true }),
-      line(P, C, { thin: true }),
-      line(A, C, { thin: true }),
-      line(B, D, { thin: true }),
-      line(C, D, { thin: true }),
-      line(C, E, { thin: true }),
-      line(D, E, { thin: true }),
-      line(D, F, { thin: true }),
-      line(E, F, { thin: true }),
       line(O, A, { thin: true, opacity: 0.5 }),
+      line(A, B, { thin: true }),
+      line(B, T, { thin: true }),
+      line(P, B, { thin: true }),
     );
 
     s(circle(O, 4, { fill: true }), circle(P, 4, { fill: true }));
-    for (const joint of [B, C, D, E]) {
-      s(circle(joint, 3, { fill: "var(--bg-color, white)", thin: true }));
-    }
+    s(circle(B, 3, { fill: "var(--bg-color, white)", thin: true }));
 
     const aH = s(handle(A, { fill: "#5b8def", r: 7 }));
-    const fH = s(handle(F, { fill: "#e25c5c", r: 7 }));
+    const tH = s(handle(T, { fill: "#e25c5c", r: 7 }));
 
     const omega = TAU * 0.18;
     this.anim.start(
       drive(tick => {
-        if (aH.dragging.value || fH.dragging.value) return;
+        if (aH.dragging.value || tH.dragging.value) return;
         theta.value = theta.peek() + omega * tick.dt;
       }),
     );
 
     s(
-      label(view.top.down(20), "drag the blue crank or the red foot — Theo Jansen's leg", {
+      label(view.top.down(20), "drag the blue crank or the red tracer — Hoeken's linkage", {
         size: 12,
         align: Anchor.Center,
         opacity: 0.7,
       }),
       label(
         view.bottom.up(16),
-        "5 cascaded `dyad`s · 11 bar-length constraints · the foot trace IS the gait curve",
+        "1 dyad · 4 bars convert circular to near-straight-line motion (1926)",
         { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );
