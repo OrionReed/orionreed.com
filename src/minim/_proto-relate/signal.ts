@@ -729,11 +729,21 @@ export class Signal<T = unknown> implements ReactiveNode {
     if (!same) {
       this.flags = F.Mutable | F.Dirty;
       if (writeHook !== undefined) writeHook(this as Signal<unknown>);
-      if (pinHook !== undefined && !solverActive) pinHook(this as Signal<unknown>);
+      let pinned = false;
+      if (pinHook !== undefined && !solverActive) {
+        pinHook(this as Signal<unknown>);
+        pinned = true;
+      }
       const subs = this.subs;
       if (subs !== undefined) {
         propagate(subs, runDepth > 0);
         if (batchDepth === 0) flush();
+      } else if (pinned && batchDepth === 0) {
+        // Pinned write with no engine subs (e.g. a relation cell that
+        // nothing has effected on). Still flush so the relation
+        // solver fires; otherwise the constraint would never be
+        // re-satisfied after a write.
+        flush();
       }
     }
   }

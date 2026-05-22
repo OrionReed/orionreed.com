@@ -108,6 +108,11 @@ export interface NewtonResult {
   residual: number;
   /** Iterations consumed (≤ maxIters). */
   iters: number;
+  /** Final Levenberg-Marquardt damping. Caller passes this back as
+   *  `opts.damping` on the next call to warm-start the trust region.
+   *  Persisting `lambda` between calls is the key to single-Newton-
+   *  step steady-state convergence under continuous drag. */
+  lambda: number;
 }
 
 /** Damped Newton-Raphson on `R(x) = 0` with pinned-index masking.
@@ -156,8 +161,8 @@ export function dampedNewton(
   R(x, r);
   let rn = residualNorm(r);
 
-  if (nf === 0) return { converged: rn <= tol, residual: rn, iters: 0 };
-  if (rn <= tol) return { converged: true, residual: rn, iters: 0 };
+  if (nf === 0) return { converged: rn <= tol, residual: rn, iters: 0, lambda };
+  if (rn <= tol) return { converged: true, residual: rn, iters: 0, lambda };
 
   let iters = 0;
   for (; iters < maxIters; iters++) {
@@ -191,7 +196,7 @@ export function dampedNewton(
       tinyLU(N, rhs, nf, step);
     } catch {
       // Should not happen with λ > 0, but bail safely.
-      return { converged: false, residual: rn, iters };
+      return { converged: false, residual: rn, iters, lambda };
     }
 
     // Trial step.
@@ -207,7 +212,7 @@ export function dampedNewton(
       rn = rn2;
       lambda *= 0.5;
       if (lambda < 1e-12) lambda = 1e-12;
-      if (rn <= tol) return { converged: true, residual: rn, iters: iters + 1 };
+      if (rn <= tol) return { converged: true, residual: rn, iters: iters + 1, lambda };
     } else {
       // No improvement — reject, increase damping, retry.
       for (let j = 0; j < nf; j++) {
@@ -215,9 +220,9 @@ export function dampedNewton(
       }
       lambda *= 8;
       if (lambda > 1e8) {
-        return { converged: false, residual: rn, iters: iters + 1 };
+        return { converged: false, residual: rn, iters: iters + 1, lambda };
       }
     }
   }
-  return { converged: rn <= tol, residual: rn, iters };
+  return { converged: rn <= tol, residual: rn, iters, lambda };
 }

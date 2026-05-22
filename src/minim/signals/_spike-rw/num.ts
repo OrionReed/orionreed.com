@@ -1,27 +1,26 @@
-// num.ts (spike) — RoNum + Num authoring story.
+// num.ts (spike) — Num authoring story.
 //
 // The pattern, end-to-end:
 //   1. Pure value-space functions
-//   2. `class Num extends Signal<V>` — the runtime + RO type surface
+//   2. `class Num extends Signal<V>` — runtime + RO type surface
 //   3. `static traits = traits<V>()({ … })` — same as today
-//   4. Methods type as `: this` (invertible, propagates writability)
-//      or as `: Num` / `: Foo` (non-invertible — always RO)
-//   5. `interface Num { get value(): V }` — RO at type level
-//   6. `interface Num_W extends Num, WritableBrand { value: V }` —
-//      writable counterpart, registered on the class via:
-//   7. `class Num { declare readonly _writable: Num_W }`
-//   8. `function num(v): Writable<Num>` — factory uses `Writable<R>`,
-//      which resolves to `Num_W` via the phantom registry brand
+//   4. `declare readonly _writable: Wr<Num>` — registry brand
+//   5. Methods type as `: this` (invertible, propagates writability)
+//      or as `: Foo` (non-invertible — always RO)
+//   6. `interface Num { get value(): V }` — RO at type level
+//   7. `function num(v): Writable<Num>` — factory; Writable<Num>
+//      resolves to `Wr<Num>` = `Num & WritableBrand & { value: V }`
 //
-// Compared to today: no `static invertibles` list, no `Tween.to`
-// `as never` cast, and `Writable<R>` is single-hop.
+// Compared to today: no `static invertibles` list, no per-class
+// writable interface, no `Tween.to` `as never` cast, single-hop
+// `Writable<R>`.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { Signal, type SignalOptions, type Val, valFn, type WritableBrand } from "../signal";
+import { Signal, type SignalOptions, type Val, valFn } from "../signal";
 import { type Linear, traits } from "../traits";
 import { bind } from "./bind";
-import type { Writable } from "./writable";
+import type { Wr, Writable } from "./writable";
 
 type V = number;
 
@@ -37,8 +36,8 @@ const linearImpl: Linear<V> = { add, sub, scale };
 export class Num extends Signal<V> {
   static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
 
-  /** Phantom registry brand — `Writable<Num>` resolves to `Num_W`. */
-  declare readonly _writable: Num_W;
+  /** Phantom registry brand — `Writable<Num>` resolves to `Wr<Num>`. */
+  declare readonly _writable: Wr<Num>;
 
   constructor(v: V = 0, opts?: SignalOptions<V>) {
     super(v, opts);
@@ -111,12 +110,6 @@ export class Num extends Signal<V> {
 export interface Num {
   readonly constructor: typeof Num;
   get value(): V;
-}
-
-/** Writable counterpart — the value of `Writable<Num>`. Hand-declared
- *  per class (the trade-off vs today's recursive lift). */
-export interface Num_W extends Num, WritableBrand {
-  value: V;
 }
 
 export function num(v: Val<V> = 0): Writable<Num> {

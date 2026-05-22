@@ -18,6 +18,7 @@ import {
   vec,
   type Writable,
   type WritableOf,
+  type Wr,
 } from "../index";
 
 describe("spike type probes", () => {
@@ -146,13 +147,13 @@ function _probes(): void {
 
   // ─── 14b. Inherits<this, T>-conditional getters: bare → RO, writable → RW ─
   // Bare Vec.x is Num (RO Num)
-  const xRO: import("../num").Num = ro.x;
+  const xRO: Num = ro.x;
   void xRO;
-  // Writable Vec.x is Num_W (RW)
-  const xRW: import("../num").Num_W = v.x;
+  // Writable Vec.x is Wr<Num>
+  const xRW: Wr<Num> = v.x;
   void xRW;
-  // @ts-expect-error — bare .x is not Num_W
-  const _xMis: import("../num").Num_W = ro.x;
+  // @ts-expect-error — bare .x is not Wr<Num>
+  const _xMis: Wr<Num> = ro.x;
   void _xMis;
 
   // ─── 14c. Derived RO views stay RO on writable receivers ────────

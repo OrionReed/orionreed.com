@@ -138,6 +138,16 @@ const dirtyClusters = new Set<Cluster>();
 let scheduled = false;
 let pinHookInstalled = false;
 
+/** Hard pin: a cell whose value is *overridden* by the runtime to a
+ *  fixed (or reactive) target on every solve, regardless of user
+ *  writes. Distinct from user pin (per-batch automatic), distinct
+ *  from a soft pin relation (residual minimised among others). Hard
+ *  pins are the right primitive for "this is scaffolding": canvas
+ *  origin, fixed corner, anchor — the user should not be able to
+ *  drag these. */
+type HardPinValue = number | (() => number);
+const hardPinned = new WeakMap<NumCell, HardPinValue>();
+
 const tol = 1e-9;
 const maxIters = 16;
 
@@ -251,8 +261,19 @@ function solveCluster(c: Cluster): void {
   resizeScratch(c);
   const n = c.cells.length;
   const xs = c.xScratch;
-  for (let i = 0; i < n; i++) xs[i] = c.cells[i]!.peek();
-  for (let i = 0; i < n; i++) c.pinMask[i] = c.pinned.has(c.cells[i]!);
+  for (let i = 0; i < n; i++) {
+    const cell = c.cells[i]!;
+    const hp = hardPinned.get(cell);
+    if (hp !== undefined) {
+      // Hard-pinned: solver enforces this value, overriding any user
+      // write. Reactive targets (function form) re-read each solve.
+      xs[i] = typeof hp === "function" ? hp() : hp;
+      c.pinMask[i] = true;
+    } else {
+      xs[i] = cell.peek();
+      c.pinMask[i] = c.pinned.has(cell);
+    }
+  }
 
   const R = buildResidual(c);
   const result: NewtonResult = dampedNewton(xs, R, c.m, c.pinMask, {
@@ -411,6 +432,49 @@ export function relate(opts: RelateOpts): Relation {
 export function clusterHealth(cell: NumCell): Read<ClusterHealth> | undefined {
   const c = cellToCluster.get(cell);
   return c?.health;
+}
+
+// ─── Hard pins ───────────────────────────────────────────────────────
+
+/** Mark `cell` as hard-pinned at `value` (literal or thunk). The
+ *  cluster solver overrides this cell on every solve, regardless of
+ *  whether the user wrote it. Returns a `dispose()` that removes the
+ *  hard pin (the cell becomes writable again).
+ *
+ *  This is the right primitive for "scaffolding" cells (anchors,
+ *  fixed origins, immobile corners). User writes to hard-pinned cells
+ *  are silently overridden on the next solve.
+ *
+ *  Distinct from `pin` in `constraints.ts`, which is a soft relation
+ *  added to the residual stack (least-squares minimisation). Use
+ *  `hardPin` when you need true immobility. */
+export function hardPin(cell: NumCell, value: HardPinValue): () => void {
+  ensureSetup();
+  hardPinned.set(cell, value);
+  // Schedule a solve so the cell snaps to its pinned value.
+  const cluster = cellToCluster.get(cell);
+  if (cluster !== undefined) {
+    dirtyClusters.add(cluster);
+    if (!scheduled) {
+      scheduled = true;
+      addPreFlushTask(drainSolves);
+    }
+  } else {
+    // Not in a cluster yet — write directly via withSolverActive so
+    // the value sticks without firing pin hook.
+    withSolverActive(() => {
+      const v = typeof value === "function" ? value() : value;
+      cell.value = v;
+    });
+  }
+  return () => {
+    hardPinned.delete(cell);
+  };
+}
+
+/** Predicate: is `cell` hard-pinned? */
+export function isHardPinned(cell: NumCell): boolean {
+  return hardPinned.has(cell);
 }
 
 /** Number of cells in the cluster containing `cell`. Useful for
