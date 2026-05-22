@@ -24,6 +24,8 @@ import {
   type Writable,
   type WritableOf,
 } from "@minim/signals";
+import { dashedPath } from "./dashed";
+import { tokens } from "./tokens";
 
 type VecValue = Of<Vec>;
 type BoxValue = Of<Box>;
@@ -52,6 +54,18 @@ export interface ShapeOpts {
   origin?: Val<VecValue>;
   opacity?: Val<number>;
   aside?: boolean;
+}
+
+/** Stroked-shape opts. `fill: true` → stroke color; string → that
+ *  color; omitted → no fill. */
+export interface CommonOpts extends ShapeOpts {
+  stroke?: Val<string>;
+  strokeWidth?: Val<number>;
+  thin?: boolean;
+  dashed?: boolean;
+  cap?: "butt" | "round" | "square";
+  join?: "miter" | "round" | "bevel";
+  fill?: Val<string> | true;
 }
 
 /** Wide-form escape hatch for heterogeneous shape collections. */
@@ -259,6 +273,50 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     } else {
       el.setAttribute(name, String(val));
     }
+  }
+
+  /** Bind several attributes at once — `this.attrs({ cx, cy, r })`. */
+  attrs(
+    map: Record<string, Val<string | number>>,
+    target: "intrinsic" | "wrapper" = "intrinsic",
+  ): void {
+    for (const k in map) this.attr(k, map[k], target);
+  }
+
+  /** Wire stroke / fill / dashed for a stroked shape. `nativeAttrs`
+   *  binds the shape's native geometry (e.g. `{cx, cy, r}` for circle);
+   *  it's skipped when `opts.dashed` since the intrinsic is then a
+   *  `<path>` whose `d` is driven by `segments()`. */
+  stroke(opts: CommonOpts, closed: boolean, nativeAttrs?: Record<string, Val<string | number>>): void {
+    if (opts.dashed) {
+      const cap = opts.cap ?? "round";
+      this.attr("stroke-linecap", cap);
+      // Resolve strokeWidth at construction; dash geometry assumes
+      // a static weight (capExtension is baked into the path string).
+      const w =
+        opts.strokeWidth === undefined
+          ? opts.thin
+            ? tokens.thinWeight
+            : tokens.weight
+          : value(opts.strokeWidth);
+      const capExt = cap === "round" ? w : 0;
+      this.attr(
+        "d",
+        computed(() => dashedPath(this.segments(), { closed, capExtension: capExt })),
+      );
+    } else if (nativeAttrs) {
+      this.attrs(nativeAttrs);
+    }
+
+    this.attr("stroke", opts.stroke ?? tokens.stroke);
+    this.attr("stroke-width", opts.strokeWidth ?? (opts.thin ? tokens.thinWeight : tokens.weight));
+    this.attr("vector-effect", "non-scaling-stroke");
+    if (opts.cap) this.attr("stroke-linecap", opts.cap);
+    if (opts.join) this.attr("stroke-linejoin", opts.join);
+
+    if (opts.fill === undefined) this.attr("fill", "none");
+    else if (opts.fill === true) this.attr("fill", tokens.stroke);
+    else this.attr("fill", opts.fill);
   }
 
   /** Register a disposer to run on `dispose()`. */

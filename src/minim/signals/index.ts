@@ -36,7 +36,6 @@ export {
   clampToDisc,
 } from "./argmin";
 // ─── Clock bridge ─────────────────────────────────────────────────
-export { clockSignal } from "./clock";
 export { bind } from "./lateral";
 export * as Mix from "./mix";
 // Merges, writebacks, and the `Part`/`Contribution` types live in

@@ -88,7 +88,7 @@ export class MdColor extends Diagram {
             lit.value = out.l;
           });
         },
-      ) as unknown as Writable<Num>;
+      );
     const r = rgbChannel("r");
     const g = rgbChannel("g");
     const b = rgbChannel("b");

@@ -1,7 +1,6 @@
 import { computed, Num, num, type Val, Vec } from "@minim/signals";
-import { type CommonOpts, intrinsicType, wireStroke } from "./common";
 import { TWO_PI } from "./dashed";
-import { type Segment, Shape } from "./shape";
+import { type CommonOpts, type Segment, Shape } from "./shape";
 
 export interface CircleOpts extends CommonOpts {}
 
@@ -11,7 +10,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   constructor(center: Vec, radius: Val<number>, opts: O = {} as O) {
     const r = num(radius);
     super(
-      intrinsicType(opts, "circle"),
+      opts.dashed ? "path" : "circle",
       () => ({
         x: center.x.value - r.value,
         y: center.y.value - r.value,
@@ -22,11 +21,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
       { origin: () => center.value },
     );
     this.radius = r;
-    wireStroke(this, opts, true, () => {
-      this.attr("cx", center.x);
-      this.attr("cy", center.y);
-      this.attr("r", r);
-    });
+    this.stroke(opts, true, { cx: center.x, cy: center.y, r });
   }
 
   /** Point on perimeter at angle θ (radians, y-down). */

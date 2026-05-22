@@ -178,8 +178,7 @@ export class CodeShape extends Shape {
     fo.setAttribute("y", "0");
     fo.setAttribute("overflow", "visible");
     fo.style.overflow = "visible";
-    this.attr("width", w);
-    this.attr("height", h);
+    this.attrs({ width: w, height: h });
 
     this.wrapper = document.createElement("div");
     this.wrapper.style.cssText = [

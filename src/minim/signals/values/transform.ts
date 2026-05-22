@@ -141,14 +141,13 @@ export interface Transform {
 export type TransformInit = { [K in keyof V]?: Val<V[K]> };
 
 export function transform(init?: TransformInit): Writable<Transform> {
-  const tr = new Transform() as unknown as Writable<Transform>;
+  const tr = new Transform() as Writable<Transform>;
   if (init) {
-    if (init.translate !== undefined)
-      bind(tr.translate as unknown as Writable<Vec>, init.translate);
-    if (init.scale !== undefined) bind(tr.scale as unknown as Writable<Vec>, init.scale);
-    if (init.origin !== undefined) bind(tr.origin as unknown as Writable<Vec>, init.origin);
-    if (init.rotate !== undefined) bind(tr.rotate as unknown as Writable<Num>, init.rotate);
-    if (init.opacity !== undefined) bind(tr.opacity as unknown as Writable<Num>, init.opacity);
+    if (init.translate !== undefined) bind(tr.translate, init.translate);
+    if (init.scale !== undefined) bind(tr.scale, init.scale);
+    if (init.origin !== undefined) bind(tr.origin, init.origin);
+    if (init.rotate !== undefined) bind(tr.rotate, init.rotate);
+    if (init.opacity !== undefined) bind(tr.opacity, init.opacity);
   }
   return tr;
 }

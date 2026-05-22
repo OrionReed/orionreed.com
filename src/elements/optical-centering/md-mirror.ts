@@ -41,7 +41,7 @@ export class MdMirror extends Diagram {
           src.value = reflect(target, mA.value, mB.value);
         },
         Vec,
-      ) as unknown as Writable<Vec>;
+      );
 
     const stemTop = vec(200, 90);
     const stemBot = vec(200, 270);

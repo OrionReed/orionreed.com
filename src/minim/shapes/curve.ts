@@ -15,8 +15,7 @@
 // so all four parameters accept `Val<>`.
 
 import { computed, num, type Of, type Signal, signal, type Val, Vec, value } from "@minim/signals";
-import { type CommonOpts, wireStroke } from "./common";
-import { Shape } from "./shape";
+import { type CommonOpts, Shape } from "./shape";
 
 type V = Of<Vec>;
 type VecValue = V;
@@ -197,19 +196,16 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
     this.closed = closed;
     this.length = total;
 
-    wireStroke(this, opts, closed, () => {
-      this.attr(
-        "d",
-        computed(() => {
-          const arr = segs.value;
-          if (arr.length === 0) return "";
-          const start = segmentStart(arr[0]);
-          const parts: string[] = [`M ${start.x} ${start.y}`];
-          for (const seg of arr) parts.push(segmentD(seg));
-          if (closed) parts.push("Z");
-          return parts.join(" ");
-        }),
-      );
+    this.stroke(opts, closed, {
+      d: computed(() => {
+        const arr = segs.value;
+        if (arr.length === 0) return "";
+        const start = segmentStart(arr[0]);
+        const parts: string[] = [`M ${start.x} ${start.y}`];
+        for (const seg of arr) parts.push(segmentD(seg));
+        if (closed) parts.push("Z");
+        return parts.join(" ");
+      }),
     });
   }
 

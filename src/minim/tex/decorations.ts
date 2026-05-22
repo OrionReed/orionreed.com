@@ -18,20 +18,24 @@ export interface DecorationOpts {
 }
 
 const applyStroke = (s: Shape, opts: DecorationOpts) => {
-  s.attr("stroke", opts.stroke ?? tokens.stroke);
-  s.attr("stroke-width", opts.weight ?? tokens.thinWeight);
-  s.attr("vector-effect", "non-scaling-stroke");
-  s.attr("fill", "none");
+  s.attrs({
+    stroke: opts.stroke ?? tokens.stroke,
+    "stroke-width": opts.weight ?? tokens.thinWeight,
+    "vector-effect": "non-scaling-stroke",
+    fill: "none",
+  });
 };
 
 /** A `<rect>` whose x/y/w/h and Box all computed from the same layout
  *  signal — single source of truth, one re-render per change. */
 function rectFromBox(layout: Signal<BoxValue>): Shape {
   const s = new Shape("rect", () => layout.value);
-  s.attr("x", () => layout.value.x);
-  s.attr("y", () => layout.value.y);
-  s.attr("width", () => layout.value.w);
-  s.attr("height", () => layout.value.h);
+  s.attrs({
+    x: () => layout.value.x,
+    y: () => layout.value.y,
+    width: () => layout.value.w,
+    height: () => layout.value.h,
+  });
   return s;
 }
 
@@ -51,10 +55,12 @@ function lineFromEnds(layout: Signal<LineEnds>): Shape {
     const y = Math.min(e.y1, e.y2);
     return { x, y, w: Math.abs(e.x2 - e.x1), h: Math.abs(e.y2 - e.y1) };
   });
-  s.attr("x1", () => layout.value.x1);
-  s.attr("y1", () => layout.value.y1);
-  s.attr("x2", () => layout.value.x2);
-  s.attr("y2", () => layout.value.y2);
+  s.attrs({
+    x1: () => layout.value.x1,
+    y1: () => layout.value.y1,
+    x2: () => layout.value.x2,
+    y2: () => layout.value.y2,
+  });
   return s;
 }
 
@@ -99,9 +105,7 @@ export function brace(
     const tip = baseY + (placement === "below" ? height : -height);
     return { x: b.x, y: Math.min(baseY, tip), w: b.w, h: Math.abs(tip - baseY) };
   });
-  s.attr("d", d);
-  s.attr("stroke-linecap", "round");
-  s.attr("stroke-linejoin", "round");
+  s.attrs({ d, "stroke-linecap": "round", "stroke-linejoin": "round" });
   applyStroke(s, opts);
   return s;
 }
@@ -116,8 +120,7 @@ export function frame(part: Part, opts: DecorationOpts & { corner?: number } = {
     return { x: b.x - gap, y: b.y - gap, w: b.w + 2 * gap, h: b.h + 2 * gap };
   });
   const s = rectFromBox(layout);
-  s.attr("rx", corner);
-  s.attr("ry", corner);
+  s.attrs({ rx: corner, ry: corner });
   applyStroke(s, opts);
   return s;
 }

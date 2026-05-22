@@ -171,10 +171,10 @@ export function box(
   w: Val<number> = 0,
   h: Val<number> = 0,
 ): Writable<Box> {
-  const b = new Box() as unknown as Writable<Box>;
-  bind(b.x as unknown as Writable<Num>, x);
-  bind(b.y as unknown as Writable<Num>, y);
-  bind(b.w as unknown as Writable<Num>, w);
-  bind(b.h as unknown as Writable<Num>, h);
+  const b = new Box() as Writable<Box>;
+  bind(b.x, x);
+  bind(b.y, y);
+  bind(b.w, w);
+  bind(b.h, h);
   return b;
 }

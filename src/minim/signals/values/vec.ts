@@ -214,9 +214,9 @@ export function vec(x: Val<number> = 0, y: Val<number> = 0): Writable<Vec> {
   if (x instanceof Num && y instanceof Num) {
     return axes(x as Writable<Num>, y as Writable<Num>);
   }
-  const v = new Vec() as unknown as Writable<Vec>;
-  bind(v.x as unknown as Writable<Num>, x);
-  bind(v.y as unknown as Writable<Num>, y);
+  const v = new Vec() as Writable<Vec>;
+  bind(v.x, x);
+  bind(v.y, y);
   return v;
 }
 

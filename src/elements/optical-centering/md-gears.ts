@@ -77,7 +77,7 @@ export class MdGears extends Diagram {
     const angles: Writable<Num>[] = [drive0];
     for (let i = 1; i < teeth.length; i++) {
       const sign = i % 2 === 1 ? -1 : 1;
-      angles.push(drive0.scale((sign * teeth[0]) / teeth[i]) as unknown as Writable<Num>);
+      angles.push(drive0.scale((sign * teeth[0]) / teeth[i]));
     }
 
     // Pause the drive while any gear is being dragged.

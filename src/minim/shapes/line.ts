@@ -1,6 +1,5 @@
 import { computed, type Signal, type Val, Vec } from "@minim/signals";
-import { type CommonOpts, intrinsicType, wireStroke } from "./common";
-import { type Segment, Shape } from "./shape";
+import { type CommonOpts, type Segment, Shape } from "./shape";
 
 export interface LineOpts extends CommonOpts {}
 
@@ -11,7 +10,7 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
     opts: O = {} as O,
   ) {
     super(
-      intrinsicType(opts, "line"),
+      opts.dashed ? "path" : "line",
       () => {
         const a = from.value;
         const b = to.value;
@@ -32,12 +31,7 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
       },
     );
     this.attr("stroke-linecap", opts.cap ?? "round");
-    wireStroke(this, opts, false, () => {
-      this.attr("x1", from.x);
-      this.attr("y1", from.y);
-      this.attr("x2", to.x);
-      this.attr("y2", to.y);
-    });
+    this.stroke(opts, false, { x1: from.x, y1: from.y, x2: to.x, y2: to.y });
   }
 
   // Tangent/normal/angle are constant along a Line; `t` is accepted

@@ -1,6 +1,5 @@
 import { Box, computed, Num, num, type Val, Vec } from "@minim/signals";
-import { type CommonOpts, intrinsicType, wireStroke } from "./common";
-import { type Segment, Shape } from "./shape";
+import { type CommonOpts, type Segment, Shape } from "./shape";
 import { tokens } from "./tokens";
 
 export interface RectOpts extends CommonOpts {
@@ -22,7 +21,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     const ws = num(w);
     const hs = num(h);
     super(
-      intrinsicType(opts, "rect"),
+      opts.dashed ? "path" : "rect",
       () => ({ x: xs.value, y: ys.value, w: ws.value, h: hs.value }),
       opts,
       {
@@ -37,13 +36,13 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     this.w = ws;
     this.h = hs;
     this.corner = num(opts.corner ?? tokens.corner);
-    wireStroke(this, opts, true, () => {
-      this.attr("x", xs);
-      this.attr("y", ys);
-      this.attr("width", ws);
-      this.attr("height", hs);
-      this.attr("rx", this.corner);
-      this.attr("ry", this.corner);
+    this.stroke(opts, true, {
+      x: xs,
+      y: ys,
+      width: ws,
+      height: hs,
+      rx: this.corner,
+      ry: this.corner,
     });
   }
 

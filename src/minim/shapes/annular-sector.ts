@@ -1,6 +1,5 @@
 import { computed, num, type Signal, type Val, Vec } from "@minim/signals";
-import { type CommonOpts, wireStroke } from "./common";
-import { type Segment, Shape } from "./shape";
+import { type CommonOpts, type Segment, Shape } from "./shape";
 
 export interface AnnularSectorOpts extends CommonOpts {}
 
@@ -39,31 +38,28 @@ export class AnnularSector<O extends AnnularSectorOpts = AnnularSectorOpts> exte
     this.a0 = a0s;
     this.a1 = a1s;
 
-    wireStroke(this, opts, true, () => {
-      this.attr(
-        "d",
-        computed(() => {
-          const cx = center.x.value;
-          const cy = center.y.value;
-          const _ro = ro.value;
-          const _ri = ri.value;
-          const _a0 = a0s.value;
-          const _a1 = a1s.value;
-          const span = Math.abs(_a1 - _a0);
-          const largeArc = span > Math.PI ? 1 : 0;
-          const sweep = _a1 > _a0 ? 1 : 0;
-          const back = sweep ? 0 : 1;
-          const o0x = cx + _ro * Math.cos(_a0),
-            o0y = cy + _ro * Math.sin(_a0);
-          const o1x = cx + _ro * Math.cos(_a1),
-            o1y = cy + _ro * Math.sin(_a1);
-          const i1x = cx + _ri * Math.cos(_a1),
-            i1y = cy + _ri * Math.sin(_a1);
-          const i0x = cx + _ri * Math.cos(_a0),
-            i0y = cy + _ri * Math.sin(_a0);
-          return `M ${o0x},${o0y} A ${_ro},${_ro} 0 ${largeArc} ${sweep} ${o1x},${o1y} L ${i1x},${i1y} A ${_ri},${_ri} 0 ${largeArc} ${back} ${i0x},${i0y} Z`;
-        }),
-      );
+    this.stroke(opts, true, {
+      d: computed(() => {
+        const cx = center.x.value;
+        const cy = center.y.value;
+        const _ro = ro.value;
+        const _ri = ri.value;
+        const _a0 = a0s.value;
+        const _a1 = a1s.value;
+        const span = Math.abs(_a1 - _a0);
+        const largeArc = span > Math.PI ? 1 : 0;
+        const sweep = _a1 > _a0 ? 1 : 0;
+        const back = sweep ? 0 : 1;
+        const o0x = cx + _ro * Math.cos(_a0),
+          o0y = cy + _ro * Math.sin(_a0);
+        const o1x = cx + _ro * Math.cos(_a1),
+          o1y = cy + _ro * Math.sin(_a1);
+        const i1x = cx + _ri * Math.cos(_a1),
+          i1y = cy + _ri * Math.sin(_a1);
+        const i0x = cx + _ri * Math.cos(_a0),
+          i0y = cy + _ri * Math.sin(_a0);
+        return `M ${o0x},${o0y} A ${_ro},${_ro} 0 ${largeArc} ${sweep} ${o1x},${o1y} L ${i1x},${i1y} A ${_ri},${_ri} 0 ${largeArc} ${back} ${i0x},${i0y} Z`;
+      }),
     });
   }
 

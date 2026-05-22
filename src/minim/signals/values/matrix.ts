@@ -162,12 +162,12 @@ export function matrix(
   e: Val<number> = 0,
   f: Val<number> = 0,
 ): Writable<Matrix> {
-  const m = new Matrix() as unknown as Writable<Matrix>;
-  bind(m.a as unknown as Writable<Num>, a);
-  bind(m.b as unknown as Writable<Num>, b);
-  bind(m.c as unknown as Writable<Num>, c);
-  bind(m.d as unknown as Writable<Num>, d);
-  bind(m.e as unknown as Writable<Num>, e);
-  bind(m.f as unknown as Writable<Num>, f);
+  const m = new Matrix() as Writable<Matrix>;
+  bind(m.a, a);
+  bind(m.b, b);
+  bind(m.c, c);
+  bind(m.d, d);
+  bind(m.e, e);
+  bind(m.f, f);
   return m;
 }

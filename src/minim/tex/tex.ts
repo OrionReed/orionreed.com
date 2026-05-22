@@ -208,8 +208,7 @@ export class TexShape<Names extends string = string> extends Shape {
     fo.setAttribute("x", "0");
     fo.setAttribute("y", "0");
     fo.style.overflow = "visible";
-    this.attr("width", w);
-    this.attr("height", h);
+    this.attrs({ width: w, height: h });
 
     // Inline-block wrapper, same CSS as the measurement div.
     const wrapper = document.createElement("div");

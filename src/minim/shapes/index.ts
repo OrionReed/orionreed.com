@@ -7,13 +7,6 @@ export { type ButtonOpts, button } from "./button";
 export { assemble, orbit, splay, stagger, swap } from "./choreographers";
 export { Circle, type CircleOpts, circle } from "./circle";
 export { clipPath } from "./clip";
-export {
-  applyOpts,
-  type CommonOpts,
-  intrinsicType,
-  setupDashed,
-  wireStroke,
-} from "./common";
 export { type ArrowOpts, arrow, connect, ensureArrowMarker } from "./connect";
 export { Curve, type CurveOpts, type CurveSegment, curve, ellipse } from "./curve";
 export { dashedPath } from "./dashed";
@@ -32,6 +25,7 @@ export {
   type AnimatableKey,
   type AnyShape,
   centroid,
+  type CommonOpts,
   type Has,
   meanRotation,
   meanScale,

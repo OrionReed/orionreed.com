@@ -117,7 +117,7 @@ const scaleHandle = (shape: AnyShape & Has<"scale">, radius = 40, opts?: HandleO
       shape.scale.value = { x: k, y: k };
     },
     Vec,
-  ) as unknown as Writable<Vec>;
+  );
   return handleFn(pos, { cursor: "ew-resize", ...opts });
 };
 
@@ -146,7 +146,7 @@ const tOnPath = (p: Path, t: Signal<number>, opts?: HandleOpts & { samples?: num
       (t as unknown as { value: number }).value = project(target);
     },
     Vec,
-  ) as unknown as Writable<Vec>;
+  );
   return handleFn(pos, opts);
 };
 

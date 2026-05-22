@@ -1,6 +1,5 @@
 import { computed, num, type Signal, signal, type Val, Vec } from "@minim/signals";
-import { type CommonOpts, wireStroke } from "./common";
-import { type Segment, Shape } from "./shape";
+import { type CommonOpts, type Segment, Shape } from "./shape";
 
 export interface PathOpts extends CommonOpts {
   closed?: boolean;
@@ -151,20 +150,17 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
     this.normalAt = s.normalAt;
     this.angleAt = s.angleAt;
 
-    wireStroke(this, opts, closed, () => {
-      this.attr(
-        "d",
-        computed(() => {
-          const ps = points.value;
-          if (ps.length === 0) return "";
-          const parts: string[] = [`M ${ps[0].x.value} ${ps[0].y.value}`];
-          for (let i = 1; i < ps.length; i++) {
-            parts.push(`L ${ps[i].x.value} ${ps[i].y.value}`);
-          }
-          if (closed) parts.push("Z");
-          return parts.join(" ");
-        }),
-      );
+    this.stroke(opts, closed, {
+      d: computed(() => {
+        const ps = points.value;
+        if (ps.length === 0) return "";
+        const parts: string[] = [`M ${ps[0].x.value} ${ps[0].y.value}`];
+        for (let i = 1; i < ps.length; i++) {
+          parts.push(`L ${ps[i].x.value} ${ps[i].y.value}`);
+        }
+        if (closed) parts.push("Z");
+        return parts.join(" ");
+      }),
     });
   }
 
