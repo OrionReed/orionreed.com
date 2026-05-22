@@ -48,58 +48,75 @@ export interface Contribution<T> {
   readonly weight: number;
 }
 
-/** A merge: pure fn from current contributions + class traits to one
- *  output. Trait-needing merges (`mean`, `sum`) read from `traits`;
- *  trait-free merges (`priority`, `latest`) ignore it.
+/** A merge: two-stage. `Merge<T>` is a *factory* — given the value
+ *  class's traits, it returns a `(parts) => T` ready to run on every
+ *  evaluation. Trait-needing merges (`mean`, `sum`) resolve their
+ *  trait dependency in the outer stage and capture the impl in the
+ *  closure; trait-free merges (`priority`, `latest`) ignore traits
+ *  and just `return (parts) => …`.
+ *
+ *  Two-stage so `mix` calls `merge(traits)` ONCE at construction.
+ *  Per-evaluation calls hit only the inner closure with `lin` (or
+ *  similar) already captured — no `traits.linear` lookup, no
+ *  `needLinear` check. In practice V8 inlines the legacy form so
+ *  well that the runtime delta is in the noise; the win is in
+ *  intent and composability (combinators thread traits through, not
+ *  shuttle them through every call).
  *
  *  Default `T = any` so built-in merge values are assignable to
  *  `Merge<V>` for any concrete `V`, sidestepping `TraitDict<T>`'s
  *  invariance. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape for built-ins
-export type Merge<T = any> = (parts: readonly Contribution<T>[], traits: TraitDict<T>) => T;
+export type Merge<T = any> = (
+  traits: TraitDict<T>,
+) => (parts: readonly Contribution<T>[]) => T;
 
-/** A writeback: pure fn from a new composite value + current
- *  contributions to per-contributor new values. Parallel to `parts`;
- *  length-mismatch throws at write time. Same `T = any` default and
- *  rationale as `Merge<T>`. */
+/** A writeback: two-stage, dual to `Merge`. `Writeback<T>` is a
+ *  factory — given the class's traits, returns a
+ *  `(next, parts) => T[]` ready to run on every write. Length-
+ *  mismatch on the returned array throws at write time.
+ *
+ *  Same `T = any` default and two-stage rationale as `Merge<T>`. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape for built-ins
 export type Writeback<T = any> = (
-  next: T,
-  parts: readonly Contribution<T>[],
   traits: TraitDict<T>,
-) => readonly T[];
+) => (next: T, parts: readonly Contribution<T>[]) => readonly T[];
 
 // ─── Built-in merges ────────────────────────────────────────────────
 
 /** Weighted mean, normalised by total weight. Equal-weight mean is
  *  the special case where every contributor was added without a
  *  weight (defaulting to 1). Requires the `linear` trait. */
-export const mean: Merge = (parts, traits) => {
+export const mean: Merge = (traits) => {
   const lin = needLinear(traits as TraitDict<unknown>, "mean");
-  if (parts.length === 0) throw new Error("mix(mean): no contributors");
-  let acc = lin.scale(parts[0]!.value, parts[0]!.weight);
-  let total = parts[0]!.weight;
-  for (let i = 1; i < parts.length; i++) {
-    acc = lin.add(acc, lin.scale(parts[i]!.value, parts[i]!.weight));
-    total += parts[i]!.weight;
-  }
-  return total === 0 ? parts[0]!.value : lin.scale(acc, 1 / total);
+  return (parts) => {
+    if (parts.length === 0) throw new Error("mix(mean): no contributors");
+    let acc = lin.scale(parts[0]!.value, parts[0]!.weight);
+    let total = parts[0]!.weight;
+    for (let i = 1; i < parts.length; i++) {
+      acc = lin.add(acc, lin.scale(parts[i]!.value, parts[i]!.weight));
+      total += parts[i]!.weight;
+    }
+    return total === 0 ? parts[0]!.value : lin.scale(acc, 1 / total);
+  };
 };
 
 /** Weighted sum (no normalisation). Requires the `linear` trait. */
-export const sum: Merge = (parts, traits) => {
+export const sum: Merge = (traits) => {
   const lin = needLinear(traits as TraitDict<unknown>, "sum");
-  if (parts.length === 0) throw new Error("mix(sum): no contributors");
-  let acc = lin.scale(parts[0]!.value, parts[0]!.weight);
-  for (let i = 1; i < parts.length; i++) {
-    acc = lin.add(acc, lin.scale(parts[i]!.value, parts[i]!.weight));
-  }
-  return acc;
+  return (parts) => {
+    if (parts.length === 0) throw new Error("mix(sum): no contributors");
+    let acc = lin.scale(parts[0]!.value, parts[0]!.weight);
+    for (let i = 1; i < parts.length; i++) {
+      acc = lin.add(acc, lin.scale(parts[i]!.value, parts[i]!.weight));
+    }
+    return acc;
+  };
 };
 
 /** Highest-weight contributor wins. Ties resolved by index order.
  *  Trait-free. */
-export const priority: Merge = parts => {
+export const priority: Merge = () => (parts) => {
   if (parts.length === 0) throw new Error("mix(priority): no contributors");
   let best = parts[0]!;
   for (let i = 1; i < parts.length; i++) {
@@ -109,20 +126,20 @@ export const priority: Merge = parts => {
 };
 
 /** Last contributor (in index order) wins. Trait-free. */
-export const latest: Merge = parts => {
+export const latest: Merge = () => (parts) => {
   if (parts.length === 0) throw new Error("mix(latest): no contributors");
   return parts[parts.length - 1]!.value;
 };
 
 /** First non-null contribution wins. Useful for default/fallback chains. */
-export const firstNonNull: Merge = parts => {
+export const firstNonNull: Merge = () => (parts) => {
   for (const p of parts) if (p.value != null) return p.value;
   if (parts.length === 0) throw new Error("mix(firstNonNull): no contributors");
   return parts[0]!.value;
 };
 
 /** Numeric minimum across contributors. Trait-free. */
-export const min: Merge<number> = parts => {
+export const min: Merge<number> = () => (parts) => {
   if (parts.length === 0) throw new Error("mix(min): no contributors");
   let m = parts[0]!.value;
   for (let i = 1; i < parts.length; i++) if (parts[i]!.value < m) m = parts[i]!.value;
@@ -130,7 +147,7 @@ export const min: Merge<number> = parts => {
 };
 
 /** Numeric maximum across contributors. Trait-free. */
-export const max: Merge<number> = parts => {
+export const max: Merge<number> = () => (parts) => {
   if (parts.length === 0) throw new Error("mix(max): no contributors");
   let m = parts[0]!.value;
   for (let i = 1; i < parts.length; i++) if (parts[i]!.value > m) m = parts[i]!.value;
@@ -141,22 +158,24 @@ export const max: Merge<number> = parts => {
 
 /** Distribute the `next - current` delta equally to every contributor.
  *  Dual to `mean` on the merge side. Requires the `linear` trait. */
-export const deltaEven: Writeback = (next, parts, traits) => {
+export const deltaEven: Writeback = (traits) => {
   const lin = needLinear(traits as TraitDict<unknown>, "deltaEven");
-  if (parts.length === 0) return [];
-  let cur = parts[0]!.value;
-  for (let i = 1; i < parts.length; i++) cur = lin.add(cur, parts[i]!.value);
-  cur = lin.scale(cur, 1 / parts.length);
-  const delta = lin.sub(next, cur);
-  const out: unknown[] = new Array(parts.length);
-  for (let i = 0; i < parts.length; i++) out[i] = lin.add(parts[i]!.value, delta);
-  return out;
+  return (next, parts) => {
+    if (parts.length === 0) return [];
+    let cur = parts[0]!.value;
+    for (let i = 1; i < parts.length; i++) cur = lin.add(cur, parts[i]!.value);
+    cur = lin.scale(cur, 1 / parts.length);
+    const delta = lin.sub(next, cur);
+    const out: unknown[] = new Array(parts.length);
+    for (let i = 0; i < parts.length; i++) out[i] = lin.add(parts[i]!.value, delta);
+    return out;
+  };
 };
 
 /** Write to the first contributor only; leave the rest untouched.
  *  Trait-free. Useful when one contributor is the "primary" source
  *  and the others are read-only constraints / projections. */
-export const replaceFirst: Writeback = (next, parts) => {
+export const replaceFirst: Writeback = () => (next, parts) => {
   if (parts.length === 0) return [];
   const out: unknown[] = new Array(parts.length);
   out[0] = next;
@@ -167,61 +186,85 @@ export const replaceFirst: Writeback = (next, parts) => {
 /** Distribute the delta proportionally to each contributor's weight.
  *  High-weight contributors absorb more of the residual. Requires
  *  Linear. Falls back to `deltaEven` when total weight is 0. */
-export const proportional: Writeback = (next, parts, traits) => {
+export const proportional: Writeback = (traits) => {
   const lin = needLinear(traits as TraitDict<unknown>, "proportional");
-  if (parts.length === 0) return [];
-  let cur = lin.scale(parts[0]!.value, parts[0]!.weight);
-  let total = parts[0]!.weight;
-  for (let i = 1; i < parts.length; i++) {
-    cur = lin.add(cur, lin.scale(parts[i]!.value, parts[i]!.weight));
-    total += parts[i]!.weight;
-  }
-  if (total === 0) return deltaEven(next, parts, traits);
-  cur = lin.scale(cur, 1 / total);
-  const delta = lin.sub(next, cur);
-  const out: unknown[] = new Array(parts.length);
-  for (let i = 0; i < parts.length; i++) {
-    const share = parts[i]!.weight / total;
-    out[i] = lin.add(parts[i]!.value, lin.scale(delta, share));
-  }
-  return out;
+  // Pre-resolve `deltaEven`'s fallback path too, so the zero-weight
+  // branch doesn't pay the trait lookup either.
+  const fallback = deltaEven(traits);
+  return (next, parts) => {
+    if (parts.length === 0) return [];
+    let cur = lin.scale(parts[0]!.value, parts[0]!.weight);
+    let total = parts[0]!.weight;
+    for (let i = 1; i < parts.length; i++) {
+      cur = lin.add(cur, lin.scale(parts[i]!.value, parts[i]!.weight));
+      total += parts[i]!.weight;
+    }
+    if (total === 0) return fallback(next, parts);
+    cur = lin.scale(cur, 1 / total);
+    const delta = lin.sub(next, cur);
+    const out: unknown[] = new Array(parts.length);
+    for (let i = 0; i < parts.length; i++) {
+      const share = parts[i]!.weight / total;
+      out[i] = lin.add(parts[i]!.value, lin.scale(delta, share));
+    }
+    return out;
+  };
 };
 
 // ─── Merge combinators ──────────────────────────────────────────────
+//
+// Each combinator pre-resolves `base(traits)` ONCE at construction so
+// inner per-eval calls hit only the prepared closure. Layered
+// combinators (e.g. `above(0.1, top(3, mean))`) compose cleanly — the
+// trait dependency propagates outward.
 
 /** Take only the top `n` contributors by weight before applying `base`. */
 export const top =
   <T>(n: number, base: Merge<T>): Merge<T> =>
-  (parts, traits) =>
-    base([...parts].sort((a, b) => b.weight - a.weight).slice(0, Math.max(0, n)), traits);
+  (traits) => {
+    const prepared = base(traits);
+    return (parts) =>
+      prepared([...parts].sort((a, b) => b.weight - a.weight).slice(0, Math.max(0, n)));
+  };
 
 /** Drop contributors whose weight is `≤ threshold`, then apply `base`. */
 export const above =
   <T>(threshold: number, base: Merge<T>): Merge<T> =>
-  (parts, traits) =>
-    base(
-      parts.filter(p => p.weight > threshold),
-      traits,
-    );
+  (traits) => {
+    const prepared = base(traits);
+    return (parts) => prepared(parts.filter(p => p.weight > threshold));
+  };
 
 /** Re-map each contributor's weight via `fn` before applying `base`.
  *  Useful for non-linear weighting (exp, softmax, …). */
 export const reweight =
   <T>(fn: (p: Contribution<T>) => number, base: Merge<T>): Merge<T> =>
-  (parts, traits) =>
-    base(
-      parts.map(p => ({ value: p.value, weight: fn(p) })),
-      traits,
-    );
+  (traits) => {
+    const prepared = base(traits);
+    return (parts) => prepared(parts.map(p => ({ value: p.value, weight: fn(p) })));
+  };
 
-// ─── Internals ──────────────────────────────────────────────────────
+// ─── Trait-lookup helpers (public) ──────────────────────────────────
+//
+// Authors of custom trait-needing merges/writebacks should call these
+// in the OUTER stage so the impl is captured in the inner closure —
+// avoiding per-eval lookups. Example:
+//
+//   const myMerge: Merge = (traits) => {
+//     const lin = needLinear(traits, "myMerge");
+//     return (parts) => …;          // hot path: no trait lookup
+//   };
 
-function needLinear<T>(traits: TraitDict<T>, name: string): Linear<T> {
+/** Look up the `linear` trait on a class's `TraitDict`. Throws with a
+ *  named error if absent. */
+export function needLinear<T>(traits: TraitDict<T>, name: string): Linear<T> {
   if (!traits.linear) {
     throw new Error(`mix(${name}): value class has no 'linear' trait`);
   }
   return traits.linear;
 }
+
+// ─── Internals ──────────────────────────────────────────────────────
 
 interface InternalPart<T> {
   readonly src: Read<T>;
@@ -303,14 +346,21 @@ export function mix<C extends Signal<any>>(
     }
   }
 
+  // Trait pre-resolution: call each merge/writeback's outer stage
+  // ONCE here so trait lookups + `needLinear` checks happen at
+  // construction. The hot getter/setter close over the prepared inner
+  // functions and never touch the traits dict.
+  const prepMerge = merge(traits);
+  const prepWriteback = writeback !== undefined ? writeback(traits) : undefined;
+
   const getter = (): T => {
     fillScratch(true);
-    return merge(scratch, traits);
+    return prepMerge(scratch);
   };
 
   // Dispatch on writeback presence — `Signal.install` is overloaded
   // on arity (2-arg → RO, 3-arg → RW) so we can't pass `undefined`.
-  if (writeback === undefined) {
+  if (prepWriteback === undefined) {
     return Signal.install(
       Cls as unknown as new (
         ...args: never[]
@@ -320,7 +370,7 @@ export function mix<C extends Signal<any>>(
   }
   const setter = (next: T): void => {
     fillScratch(false);
-    const newVals = writeback(next, scratch, traits);
+    const newVals = prepWriteback(next, scratch);
     if (newVals.length !== n) {
       throw new Error(`mix writeback: returned ${newVals.length} values for ${n} parts`);
     }

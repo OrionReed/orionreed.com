@@ -86,7 +86,7 @@ describe("mix: with writeback (RW)", () => {
     const a = num(0);
     const b = num(0);
     const c = num(0);
-    const m = mix(Num, [a, b, c], Mix.mean, (next, parts) => {
+    const m = mix(Num, [a, b, c], Mix.mean, () => (next, parts) => {
       const N = parts.length;
       const cur = (parts[0]!.value + parts[1]!.value + parts[2]!.value) / N;
       // Change in total = (next - cur) * N. We split that change
