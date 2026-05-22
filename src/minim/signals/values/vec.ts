@@ -1,16 +1,23 @@
 // vec.ts — reactive 2D point.
 
-import {
-  Signal, computedCls, lensCls, computed, value, valFn, batch,
-  type Val, type SignalOptions,
-} from "../signal";
-import { bind } from "../lateral";
-import { type Linear, type TraitDict } from "../traits";
-import { applyOp1, applyOp2, type Op } from "../ops";
-import { type Writable, invertibles } from "../writable";
-import { Num } from "./num";
-import { tween, type Tween } from "../anim";
 import { type Easing } from "../../core";
+import { type Tween, tween } from "../anim";
+import { bind } from "../lateral";
+import { applyOp1, applyOp2, type Op } from "../ops";
+import {
+  batch,
+  computed,
+  computedCls,
+  lensCls,
+  Signal,
+  type SignalOptions,
+  type Val,
+  valFn,
+  value,
+} from "../signal";
+import { type Linear, type TraitDict } from "../traits";
+import { invertibles, type Writable } from "../writable";
+import { Num } from "./num";
 
 type V = { x: number; y: number };
 
@@ -18,7 +25,8 @@ export const add = (a: V, b: V): V => ({ x: a.x + b.x, y: a.y + b.y });
 export const sub = (a: V, b: V): V => ({ x: a.x - b.x, y: a.y - b.y });
 export const scale = (a: V, k: number): V => ({ x: a.x * k, y: a.y * k });
 export const lerp = (a: V, b: V, t: number): V => ({
-  x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t,
+  x: a.x + (b.x - a.x) * t,
+  y: a.y + (b.y - a.y) * t,
 });
 export const metric = (a: V, b: V) => Math.hypot(a.x - b.x, a.y - b.y);
 export const equals = (a: V, b: V) => a === b || (a.x === b.x && a.y === b.y);
@@ -49,8 +57,7 @@ export function tangentPoint(p: V, c: V, r: number, side: 1 | -1 = -1): V {
 }
 
 /** Wrap `x` to the half-open interval `(-π, π]`. */
-const wrapToPi = (x: number): number =>
-  x - 2 * Math.PI * Math.round(x / (2 * Math.PI));
+const wrapToPi = (x: number): number => x - 2 * Math.PI * Math.round(x / (2 * Math.PI));
 
 /** Return the representative of `target` (a cyclic angle in `(-π, π]`)
  *  closest to `current`. Used as the shortest-arc inverse for cyclic
@@ -60,9 +67,9 @@ const nearestAngle = (target: number, current: number): number =>
 
 const linearImpl: Linear<V> = { add, sub, scale };
 
-const addOp:    Op<V, [V]>              = { fwd: add, bwd: sub };
-const subOp:    Op<V, [V]>              = { fwd: sub, bwd: add };
-const scaleOp:  Op<V, [number]>         = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
+const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
+const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
+const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
 const offsetOp: Op<V, [number, number]> = {
   fwd: (v, dx, dy) => ({ x: v.x + dx, y: v.y + dy }),
   bwd: (n, dx, dy) => ({ x: n.x - dx, y: n.y - dy }),
@@ -72,35 +79,71 @@ export class Vec extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
   static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
   static invertibles = invertibles<Vec>()(
-    "add", "sub", "scale", "offset",
-    "up", "down", "left", "right",
+    "add",
+    "sub",
+    "scale",
+    "offset",
+    "up",
+    "down",
+    "left",
+    "right",
     "through",
   );
 
   // ── class-level constructors ───────────────────────────────────
-  static derive(fn: () => V): Vec { return computedCls(Vec, fn) }
+  static derive(fn: () => V): Vec {
+    return computedCls(Vec, fn);
+  }
   static lens(g: () => V, s: (v: V) => void): Writable<Vec> {
     return lensCls(Vec, g, s) as unknown as Writable<Vec>;
   }
-  static is(v: unknown): v is Vec { return v instanceof Vec }
+  static is(v: unknown): v is Vec {
+    return v instanceof Vec;
+  }
 
   // ── instance ───────────────────────────────────────────────────
-  constructor(v: V = { x: 0, y: 0 }, opts?: SignalOptions<V>) { super(v, opts) }
+  constructor(v: V = { x: 0, y: 0 }, opts?: SignalOptions<V>) {
+    super(v, opts);
+  }
 
-  add(b: Val<V>): Vec     { return applyOp1(this, addOp,    b, Vec) }
-  sub(b: Val<V>): Vec     { return applyOp1(this, subOp,    b, Vec) }
-  scale(k: Val<number>): Vec { return applyOp1(this, scaleOp, k, Vec) }
+  add(b: Val<V>): Vec {
+    return applyOp1(this, addOp, b, Vec);
+  }
+  sub(b: Val<V>): Vec {
+    return applyOp1(this, subOp, b, Vec);
+  }
+  scale(k: Val<number>): Vec {
+    return applyOp1(this, scaleOp, k, Vec);
+  }
   offset(dx: Val<number>, dy: Val<number>): Vec {
     return applyOp2(this, offsetOp, dx, dy, Vec);
   }
   // Axis-aligned offset sugar — all invertible via offsetOp.
-  up(n: Val<number>): Vec    { return this.offset(0, computed(() => -value(n))) }
-  down(n: Val<number>): Vec  { return this.offset(0, n) }
-  left(n: Val<number>): Vec  { return this.offset(computed(() => -value(n)), 0) }
-  right(n: Val<number>): Vec { return this.offset(n, 0) }
+  up(n: Val<number>): Vec {
+    return this.offset(
+      0,
+      computed(() => -value(n)),
+    );
+  }
+  down(n: Val<number>): Vec {
+    return this.offset(0, n);
+  }
+  left(n: Val<number>): Vec {
+    return this.offset(
+      computed(() => -value(n)),
+      0,
+    );
+  }
+  right(n: Val<number>): Vec {
+    return this.offset(n, 0);
+  }
 
-  normalize(): Vec { return Vec.derive(() => normalize(this.value)) }
-  perp(): Vec      { return Vec.derive(() => perp(this.value)) }
+  normalize(): Vec {
+    return Vec.derive(() => normalize(this.value));
+  }
+  perp(): Vec {
+    return Vec.derive(() => perp(this.value));
+  }
   lerp(b: Val<V>, t: Val<number>): Vec {
     return Vec.derive(() => lerp(this.value, value(b), value(t)));
   }
@@ -108,11 +151,14 @@ export class Vec extends Signal<V> {
     return Num.derive(() => metric(this.value, value(other)));
   }
 
-  get x(): Num { return this.field("x", Num) }
-  get y(): Num { return this.field("y", Num) }
+  get x(): Num {
+    return this.field("x", Num);
+  }
+  get y(): Num {
+    return this.field("y", Num);
+  }
   get magnitude(): Num {
-    return this.memo("magnitude", () =>
-      Num.derive(() => Math.hypot(this.value.x, this.value.y)));
+    return this.memo("magnitude", () => Num.derive(() => Math.hypot(this.value.x, this.value.y)));
   }
 
   /** Tween-builder, implied by the lerp trait. */
@@ -131,7 +177,7 @@ export function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
   return lensCls(
     Vec,
     () => ({ x: x.value, y: y.value }),
-    (v) => {
+    v => {
       batch(() => {
         x.value = v.x;
         y.value = v.y;
@@ -185,7 +231,9 @@ export function polar(
   const aSig = a instanceof Num ? (a as Writable<Num>) : undefined;
 
   const fwd = (): V => {
-    const c = C(); const rv = R(); const av = A();
+    const c = C();
+    const rv = R();
+    const av = A();
     return { x: c.x + rv * Math.cos(av), y: c.y + rv * Math.sin(av) };
   };
 
@@ -198,7 +246,7 @@ export function polar(
   let bwd: (p: V) => void;
   switch (policy) {
     case "rotate":
-      bwd = (p) => {
+      bwd = p => {
         const cv = cSig ? cSig.peek() : C();
         const dx = p.x - cv.x;
         const dy = p.y - cv.y;
@@ -211,7 +259,7 @@ export function polar(
       };
       break;
     case "translate":
-      bwd = (p) => {
+      bwd = p => {
         const f = fwd();
         if (cSig) {
           const cv = cSig.peek();
@@ -220,7 +268,7 @@ export function polar(
       };
       break;
     case "radial":
-      bwd = (p) => {
+      bwd = p => {
         const cv = cSig ? cSig.peek() : C();
         const av = aSig ? aSig.peek() : A();
         const dx = p.x - cv.x;
@@ -229,7 +277,7 @@ export function polar(
       };
       break;
     case "circular":
-      bwd = (p) => {
+      bwd = p => {
         const cv = cSig ? cSig.peek() : C();
         const targetA = Math.atan2(p.y - cv.y, p.x - cv.x);
         const currentA = aSig ? aSig.peek() : A();

@@ -10,10 +10,7 @@
 // existing siblings) to complement the "vertical" axis (parent ↔
 // derived) covered by the rest of the system.
 
-import {
-  Signal, effect, lens, value,
-  type Read, type Val, type WritableBrand,
-} from "./signal";
+import { effect, lens, type Read, Signal, type Val, value, type WritableBrand } from "./signal";
 
 interface RW<T> {
   value: T;
@@ -29,12 +26,11 @@ interface RW<T> {
  *  Brand-gated on `target` — bare RO value classes are rejected at
  *  the call site. Multiple `bind(t, …)` calls on the same target
  *  install independent effects; the caller owns each stop fn. */
-export function bind<T>(
-  target: RW<T> & WritableBrand,
-  source: Val<T>,
-): () => void {
+export function bind<T>(target: RW<T> & WritableBrand, source: Val<T>): () => void {
   if (source instanceof Signal || typeof source === "function") {
-    return effect(() => { target.value = value(source) });
+    return effect(() => {
+      target.value = value(source);
+    });
   }
   target.value = source as T;
   return () => {};

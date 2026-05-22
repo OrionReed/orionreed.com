@@ -1,9 +1,9 @@
 // Tests for observe() and signalGen() — process state as signals.
 
-import { describe, it, expect } from "vitest";
-import { effect } from "../signal";
-import { observe, signalGen, allAlive, anyProducing, sleep } from "./process";
+import { describe, expect, it } from "vitest";
 import type { Animator, Tick } from "../../core";
+import { effect } from "../signal";
+import { allAlive, anyProducing, observe, signalGen, sleep } from "./process";
 
 const T = (dt: number, elapsed = dt): Tick => ({ dt, elapsed });
 
@@ -37,7 +37,9 @@ describe("observe()", () => {
 
   it("composes with effects — react to a process ending", () => {
     function* gen(): Animator<void> {
-      yield; yield; yield;
+      yield;
+      yield;
+      yield;
     }
     const p = observe(gen());
 
@@ -51,8 +53,16 @@ describe("observe()", () => {
   });
 
   it("allAlive / anyProducing — compose process signals", () => {
-    function* a(): Animator<void> { yield; yield; }
-    function* b(): Animator<void> { yield; yield; yield; yield; }
+    function* a(): Animator<void> {
+      yield;
+      yield;
+    }
+    function* b(): Animator<void> {
+      yield;
+      yield;
+      yield;
+      yield;
+    }
     const pa = observe(a());
     const pb = observe(b());
 
@@ -86,7 +96,9 @@ describe("signalGen()", () => {
     }, false);
 
     const observed: boolean[] = [];
-    effect(() => { observed.push(blink.signal.value); });
+    effect(() => {
+      observed.push(blink.signal.value);
+    });
     expect(observed).toEqual([false]);
 
     blink.step(T(0.01));
@@ -104,7 +116,7 @@ describe("signalGen()", () => {
   it("terminates cleanly when gen returns; numeric T values don't collide with sleep", () => {
     const counter = signalGen<number>(function* () {
       for (let i = 1; i <= 3; i++) {
-        yield i;        // emit number (not sleep)
+        yield i; // emit number (not sleep)
         yield sleep(0.1);
       }
     }, 0);
@@ -114,8 +126,10 @@ describe("signalGen()", () => {
     counter.step(T(0.01));
     expect(counter.signal.peek()).toBe(1);
 
-    counter.step(T(0.2)); expect(counter.signal.peek()).toBe(2);
-    counter.step(T(0.2)); expect(counter.signal.peek()).toBe(3);
+    counter.step(T(0.2));
+    expect(counter.signal.peek()).toBe(2);
+    counter.step(T(0.2));
+    expect(counter.signal.peek()).toBe(3);
     expect(counter.step(T(0.2))).toBe(false);
   });
 
@@ -129,11 +143,13 @@ describe("signalGen()", () => {
     }, 0);
 
     const log: number[] = [];
-    effect(() => { log.push(beat.signal.value); });
+    effect(() => {
+      log.push(beat.signal.value);
+    });
 
-    beat.step(T(0.01));   // emits 1
-    beat.step(T(0.15));   // emits 2
-    beat.step(T(0.15));   // emits 3
+    beat.step(T(0.01)); // emits 1
+    beat.step(T(0.15)); // emits 2
+    beat.step(T(0.15)); // emits 3
     expect(log).toEqual([0, 1, 2, 3]);
   });
 });

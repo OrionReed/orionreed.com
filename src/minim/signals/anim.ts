@@ -11,19 +11,19 @@
 // Math is verbatim from prod's lerp.ts.
 
 import {
-  Signal, computed, effect,
-  type Val, type Read, valFn,
-} from "./signal";
-import {
-  requireLinear, requireLerp, requireMetric,
-  type Traits,
-} from "./traits";
-import { type WritableOf } from "./writable";
-import {
-  drive, isGenerator, suspend, race,
-  type Animator, type Tick, type Yieldable, type Easing,
+  type Animator,
+  drive,
+  type Easing,
   easeOut,
+  isGenerator,
+  race,
+  suspend,
+  type Tick,
+  type Yieldable,
 } from "../core";
+import { computed, effect, type Read, Signal, type Val, valFn } from "./signal";
+import { requireLerp, requireLinear, requireMetric, type Traits } from "./traits";
+import { type WritableOf } from "./writable";
 
 const defaultEase = easeOut;
 
@@ -47,7 +47,10 @@ export class Tween<T> implements Animator<void> {
     this.#segs = segs;
     this.#gen = (function* () {
       for (const seg of segs) {
-        if (seg.kind === "pose") { sig.value = seg.target; continue }
+        if (seg.kind === "pose") {
+          sig.value = seg.target;
+          continue;
+        }
         yield* tweenStep(sig, seg.target, seg.dur, seg.ease);
       }
     })();
@@ -63,10 +66,18 @@ export class Tween<T> implements Animator<void> {
     return new Tween(this.#sig, [{ kind: "pose", target: start }, ...this.#segs]);
   }
 
-  next(v?: Tick): IteratorResult<Yieldable, void> { return this.#gen.next(v as Tick) }
-  return(v?: void): IteratorResult<Yieldable, void> { return this.#gen.return(v as void) }
-  throw(e: unknown): IteratorResult<Yieldable, void> { return this.#gen.throw(e) }
-  [Symbol.iterator](): this { return this }
+  next(v?: Tick): IteratorResult<Yieldable, void> {
+    return this.#gen.next(v as Tick);
+  }
+  return(v?: void): IteratorResult<Yieldable, void> {
+    return this.#gen.return(v as void);
+  }
+  throw(e: unknown): IteratorResult<Yieldable, void> {
+    return this.#gen.throw(e);
+  }
+  [Symbol.iterator](): this {
+    return this;
+  }
 }
 
 // ─── tween ──────────────────────────────────────────────────────────
@@ -132,7 +143,7 @@ export function* spring<T>(
   const zero: T = lin.scale(sig.peek(), 0);
   let vel: T = zero;
 
-  yield* drive((tick) => {
+  yield* drive(tick => {
     const dt = rate ? tick.dt * rate() : tick.dt;
     const t = T();
     const cur = sig.peek();
@@ -192,7 +203,7 @@ export function* toward<T>(
   const met = requireMetric(sig);
   const T = valFn(target);
   const S = valFn(speed);
-  yield* drive((tick) => {
+  yield* drive(tick => {
     const t = T();
     const cur = sig.peek();
     const dist = met(cur, t);
@@ -215,7 +226,7 @@ export function* attract<T>(
   const lin = requireLinear(sig);
   const T = valFn(target);
   const K = valFn(k);
-  yield* drive((tick) => {
+  yield* drive(tick => {
     const cur = sig.peek();
     const delta = lin.scale(lin.sub(T(), cur), K() * tick.dt);
     sig.value = lin.add(cur, delta);
@@ -225,10 +236,7 @@ export function* attract<T>(
 // ─── generator-scoped reactive helpers ────────────────────────────
 
 /** Drive `sig` per frame with a pure function `f(t, initial)`. */
-export function* wave<T>(
-  sig: WritableOf<T>,
-  fn: (t: number, initial: T) => T,
-): Animator<void> {
+export function* wave<T>(sig: WritableOf<T>, fn: (t: number, initial: T) => T): Animator<void> {
   const initial = sig.peek();
   yield* drive((_tick, t) => {
     sig.value = fn(t, initial);
@@ -264,10 +272,18 @@ export interface Play<R = void> extends Animator<R> {
 
 class PlayImpl<R> implements Play<R> {
   constructor(private g: Animator<R>) {}
-  next(v?: Tick) { return this.g.next(v as Tick) }
-  return(v?: R) { return this.g.return(v as R) }
-  throw(e: unknown) { return this.g.throw(e) }
-  [Symbol.iterator]() { return this }
+  next(v?: Tick) {
+    return this.g.next(v as Tick);
+  }
+  return(v?: R) {
+    return this.g.return(v as R);
+  }
+  throw(e: unknown) {
+    return this.g.throw(e);
+  }
+  [Symbol.iterator]() {
+    return this;
+  }
 
   until(p: PlayTrigger): Play<R> {
     const trigger = playableGen(p);
@@ -317,7 +333,7 @@ function* playableGen(p: PlayTrigger): Animator<unknown> {
 
 /** Wait until `sig.value` is truthy. Wakes immediately if already true. */
 export function when(sig: Read<unknown>): Animator<void> {
-  return suspend<void>((wake) => {
+  return suspend<void>(wake => {
     let resolved = false;
     return effect(() => {
       if (resolved) return;
@@ -336,7 +352,7 @@ export function not(sig: Read<unknown>): Signal<boolean> {
 
 /** Wait until `sig` changes; resumes with the new value. */
 export function untilChange<T>(sig: Signal<T>): Animator<T> {
-  return suspend<T>((wake) => {
+  return suspend<T>(wake => {
     const initial = sig.peek();
     let resolved = false;
     return effect(() => {

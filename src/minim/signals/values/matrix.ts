@@ -8,14 +8,11 @@
 // Two clearly-invertible ops: `multiply(b)` (inverse is multiply by
 // `invert(b)`) and `invert()` (its own inverse).
 
-import {
-  Signal, computedCls, lensCls,
-  type Val, type SignalOptions, type Of,
-} from "../signal";
 import { bind } from "../lateral";
-import { type TraitDict } from "../traits";
 import { applyOp0, applyOp1, type Op } from "../ops";
-import { type Writable, invertibles } from "../writable";
+import { computedCls, lensCls, type Of, Signal, type SignalOptions, type Val } from "../signal";
+import { type TraitDict } from "../traits";
+import { invertibles, type Writable } from "../writable";
 import { Num } from "./num";
 import { Vec } from "./vec";
 
@@ -26,7 +23,8 @@ export const identity = (): V => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
 export const fromTranslate = (x: number, y: number): V => ({ a: 1, b: 0, c: 0, d: 1, e: x, f: y });
 export const fromScale = (x: number, y: number): V => ({ a: x, b: 0, c: 0, d: y, e: 0, f: 0 });
 export const fromRotate = (angle: number): V => {
-  const s = Math.sin(angle); const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const c = Math.cos(angle);
   return { a: c, b: s, c: -s, d: c, e: 0, f: 0 };
 };
 
@@ -34,7 +32,8 @@ export const isIdentity = (m: V): boolean =>
   m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.e === 0 && m.f === 0;
 
 export const equals = (m: V, n: V): boolean =>
-  m === n || (m.a === n.a && m.b === n.b && m.c === n.c && m.d === n.d && m.e === n.e && m.f === n.f);
+  m === n ||
+  (m.a === n.a && m.b === n.b && m.c === n.c && m.d === n.d && m.e === n.e && m.f === n.f);
 
 export function multiply(a: V, b: V): V {
   return {
@@ -52,10 +51,10 @@ export function invert(m: V): V {
   if (det === 0) throw new Error("Matrix not invertible");
   const inv = 1 / det;
   return {
-    a:  m.d * inv,
+    a: m.d * inv,
     b: -m.b * inv,
     c: -m.c * inv,
-    d:  m.a * inv,
+    d: m.a * inv,
     e: (m.c * m.f - m.d * m.e) * inv,
     f: (m.b * m.e - m.a * m.f) * inv,
   };
@@ -63,12 +62,17 @@ export function invert(m: V): V {
 
 export const determinant = (m: V): number => m.a * m.d - m.b * m.c;
 
-export const transformPoint = (m: V, p: Of<Vec>): Of<Vec> =>
-  ({ x: m.a * p.x + m.c * p.y + m.e, y: m.b * p.x + m.d * p.y + m.f });
+export const transformPoint = (m: V, p: Of<Vec>): Of<Vec> => ({
+  x: m.a * p.x + m.c * p.y + m.e,
+  y: m.b * p.x + m.d * p.y + m.f,
+});
 
 export function transformBox(m: V, b: BoxV): BoxV {
   if (isIdentity(m)) return b;
-  const x0 = b.x, y0 = b.y, x1 = b.x + b.w, y1 = b.y + b.h;
+  const x0 = b.x,
+    y0 = b.y,
+    x1 = b.x + b.w,
+    y1 = b.y + b.h;
   const ax = m.a * x0 + m.c * y0 + m.e;
   const ay = m.b * x0 + m.d * y0 + m.f;
   const bx = m.a * x1 + m.c * y0 + m.e;
@@ -98,8 +102,7 @@ export function compose(t: Of<Vec>, r: number, s: Of<Vec>, pivot: Of<Vec>): V {
   return m;
 }
 
-export const toMatrixString = (m: V): string =>
-  `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
+export const toMatrixString = (m: V): string => `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
 
 // ─── Invertible ops ────────────────────────────────────────────────
 
@@ -115,24 +118,46 @@ export class Matrix extends Signal<V> {
   static invertibles = invertibles<Matrix>()("multiply", "invert", "through");
 
   // ── class-level constructors ───────────────────────────────────
-  static derive(fn: () => V): Matrix { return computedCls(Matrix, fn) }
+  static derive(fn: () => V): Matrix {
+    return computedCls(Matrix, fn);
+  }
   static lens(g: () => V, s: (v: V) => void): Writable<Matrix> {
     return lensCls(Matrix, g, s) as unknown as Writable<Matrix>;
   }
-  static is(v: unknown): v is Matrix { return v instanceof Matrix }
+  static is(v: unknown): v is Matrix {
+    return v instanceof Matrix;
+  }
 
   // ── instance ───────────────────────────────────────────────────
-  constructor(v: V = identity(), opts?: SignalOptions<V>) { super(v, opts) }
+  constructor(v: V = identity(), opts?: SignalOptions<V>) {
+    super(v, opts);
+  }
 
-  multiply(b: Val<V>): Matrix { return applyOp1(this, multiplyOp, b, Matrix) }
-  invert(): Matrix             { return applyOp0(this, invertOp, Matrix) }
+  multiply(b: Val<V>): Matrix {
+    return applyOp1(this, multiplyOp, b, Matrix);
+  }
+  invert(): Matrix {
+    return applyOp0(this, invertOp, Matrix);
+  }
 
-  get a(): Num { return this.field("a", Num) }
-  get b(): Num { return this.field("b", Num) }
-  get c(): Num { return this.field("c", Num) }
-  get d(): Num { return this.field("d", Num) }
-  get e(): Num { return this.field("e", Num) }
-  get f(): Num { return this.field("f", Num) }
+  get a(): Num {
+    return this.field("a", Num);
+  }
+  get b(): Num {
+    return this.field("b", Num);
+  }
+  get c(): Num {
+    return this.field("c", Num);
+  }
+  get d(): Num {
+    return this.field("d", Num);
+  }
+  get e(): Num {
+    return this.field("e", Num);
+  }
+  get f(): Num {
+    return this.field("f", Num);
+  }
 
   get determinant(): Num {
     return this.memo("determinant", () => Num.derive(() => determinant(this.value)));
@@ -144,9 +169,12 @@ export interface Matrix {
 }
 
 export function matrix(
-  a: Val<number> = 1, b: Val<number> = 0,
-  c: Val<number> = 0, d: Val<number> = 1,
-  e: Val<number> = 0, f: Val<number> = 0,
+  a: Val<number> = 1,
+  b: Val<number> = 0,
+  c: Val<number> = 0,
+  d: Val<number> = 1,
+  e: Val<number> = 0,
+  f: Val<number> = 0,
 ): Writable<Matrix> {
   const m = new Matrix() as unknown as Writable<Matrix>;
   bind(m.a as unknown as Writable<Num>, a);

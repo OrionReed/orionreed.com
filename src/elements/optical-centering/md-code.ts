@@ -13,7 +13,18 @@
 //     tween on Kept lines; opacity fades for Lost/Gained); there's no
 //     drive loop or DOM rebuild.
 
-import { Anchor, bind, type Content, css, Diagram, label, loop, Mount, signal, vec } from "../../minim";
+import {
+  Anchor,
+  bind,
+  type Content,
+  css,
+  Diagram,
+  label,
+  loop,
+  Mount,
+  signal,
+  vec,
+} from "../../minim";
 import { type CodeShape, code, codeStyles, Part } from "../../minim/code";
 
 const STATES = [

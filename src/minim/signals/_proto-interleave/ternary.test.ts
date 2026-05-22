@@ -2,9 +2,9 @@
 // model actually composes nicely, and figuring out whether this is
 // pulling weight vs Signal<T | undefined>.
 
-import { describe, it, expect } from "vitest";
-import { effect, signal, computed } from "../signal";
-import { Ternary, Variant, present, collapse } from "./ternary";
+import { describe, expect, it } from "vitest";
+import { computed, effect, signal } from "../signal";
+import { collapse, present, Ternary, Variant } from "./ternary";
 
 describe("Ternary<T>", () => {
   it("three states are reactively distinguishable", () => {
@@ -42,7 +42,7 @@ describe("Ternary<T>", () => {
 
   it("map preserves state through value-case only", () => {
     const t = Ternary.empty<number>();
-    const doubled = t.map((n) => n * 2);
+    const doubled = t.map(n => n * 2);
     expect(doubled.value.tag).toBe("empty");
     t.set(3);
     expect(doubled.value).toEqual({ tag: "value", value: 6 });
@@ -58,9 +58,9 @@ describe("Variant<Cases>", () => {
 
     const display = v.match({
       idle: () => "idle",
-      loading: (n) => `loading… ${n}%`,
-      done: (s) => `done: ${s}`,
-      error: (e) => `error: ${e.message}`,
+      loading: n => `loading… ${n}%`,
+      done: s => `done: ${s}`,
+      error: e => `error: ${e.message}`,
     });
 
     expect(display.value).toBe("idle");
@@ -76,8 +76,8 @@ describe("Variant<Cases>", () => {
     type Conn = { off: void; connecting: void; on: number };
     const v = new Variant<Conn>({ tag: "off", value: undefined });
 
-    const showSpinner = computed(() =>
-      v.is("connecting").value || (v.value.tag === "on" && v.value.value < 0),
+    const showSpinner = computed(
+      () => v.is("connecting").value || (v.value.tag === "on" && v.value.value < 0),
     );
 
     expect(showSpinner.value).toBe(false);

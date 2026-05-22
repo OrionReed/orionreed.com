@@ -1,34 +1,31 @@
 // num.ts — reactive scalar.
 
-import {
-  Signal, computedCls, lensCls, valFn,
-  type Val, type SignalOptions,
-} from "../signal";
+import { type Easing } from "../../core";
+import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
+import { applyOp1, applyOp2, type Op } from "../ops";
+import { computedCls, lensCls, Signal, type SignalOptions, type Val, valFn } from "../signal";
 // Inside the new lens-returning methods (`clamp`, `quantize`, `cyclic`)
 // we cast `this` to `Signal<V>` for writes — Num's merged interface
 // declares `value` as RO at the type level (so external callers respect
 // the brand) but Signal's underlying class has a writable setter.
 import { type Linear, type TraitDict } from "../traits";
-import { applyOp1, applyOp2, type Op } from "../ops";
-import { type Writable, invertibles } from "../writable";
-import { tween, type Tween } from "../anim";
-import { type Easing } from "../../core";
+import { invertibles, type Writable } from "../writable";
 
 type V = number;
 
-export const add    = (a: V, b: V) => a + b;
-export const sub    = (a: V, b: V) => a - b;
-export const scale  = (a: V, k: number) => a * k;
-export const lerp   = (a: V, b: V, t: number) => a + (b - a) * t;
+export const add = (a: V, b: V) => a + b;
+export const sub = (a: V, b: V) => a - b;
+export const scale = (a: V, k: number) => a * k;
+export const lerp = (a: V, b: V, t: number) => a + (b - a) * t;
 export const metric = (a: V, b: V) => Math.abs(a - b);
 export const equals = (a: V, b: V) => a === b;
 
 const linearImpl: Linear<V> = { add, sub, scale };
 
-const addOp:    Op<V, [V]>              = { fwd: add,   bwd: sub };
-const subOp:    Op<V, [V]>              = { fwd: sub,   bwd: add };
-const scaleOp:  Op<V, [number]>         = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
+const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
+const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
+const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
 // Affine: v ↦ v·k + off. Invertible iff k ≠ 0 (caller's responsibility).
 const affineOp: Op<V, [number, number]> = {
   fwd: (v, k, off) => v * k + off,
@@ -44,24 +41,41 @@ export class Num extends Signal<V> {
   // (eventually tracked in docstrings + types); for now this list is
   // simply "methods you can write back through."
   static invertibles = invertibles<Num>()(
-    "add", "sub", "scale", "affine",
-    "clamp", "quantize", "cyclic",
+    "add",
+    "sub",
+    "scale",
+    "affine",
+    "clamp",
+    "quantize",
+    "cyclic",
     "through",
   );
 
   // ── class-level constructors ───────────────────────────────────
-  static derive(fn: () => V): Num { return computedCls(Num, fn) }
+  static derive(fn: () => V): Num {
+    return computedCls(Num, fn);
+  }
   static lens(g: () => V, s: (v: V) => void): Writable<Num> {
     return lensCls(Num, g, s) as unknown as Writable<Num>;
   }
-  static is(v: unknown): v is Num { return v instanceof Num }
+  static is(v: unknown): v is Num {
+    return v instanceof Num;
+  }
 
   // ── instance ───────────────────────────────────────────────────
-  constructor(v: V = 0, opts?: SignalOptions<V>) { super(v, opts) }
+  constructor(v: V = 0, opts?: SignalOptions<V>) {
+    super(v, opts);
+  }
 
-  add(b: Val<V>): Num        { return applyOp1(this, addOp,   b, Num) }
-  sub(b: Val<V>): Num        { return applyOp1(this, subOp,   b, Num) }
-  scale(k: Val<number>): Num { return applyOp1(this, scaleOp, k, Num) }
+  add(b: Val<V>): Num {
+    return applyOp1(this, addOp, b, Num);
+  }
+  sub(b: Val<V>): Num {
+    return applyOp1(this, subOp, b, Num);
+  }
+  scale(k: Val<number>): Num {
+    return applyOp1(this, scaleOp, k, Num);
+  }
   /** Affine: `v ↦ k·v + off`. Invertible (a single allocation; cheaper
    *  than `.scale(k).add(off)`). Sliders: `t.affine(width, x0)` maps
    *  `t ∈ [0,1]` to screen coords. */
@@ -75,8 +89,13 @@ export class Num extends Signal<V> {
    *  written one). Use for sliders, gauges, anywhere a value
    *  shouldn't escape its range. */
   clamp(lo: Val<V>, hi: Val<V>): Num {
-    const lf = valFn(lo); const hf = valFn(hi);
-    const c = (v: V) => { const l = lf(), h = hf(); return v < l ? l : v > h ? h : v; };
+    const lf = valFn(lo);
+    const hf = valFn(hi);
+    const c = (v: V) => {
+      const l = lf(),
+        h = hf();
+      return v < l ? l : v > h ? h : v;
+    };
     return this.through(c, c);
   }
 
@@ -84,7 +103,10 @@ export class Num extends Signal<V> {
    *  of `step`. For knobs with discrete positions. */
   quantize(step: Val<number>): Num {
     const sf = valFn(step);
-    const q = (v: V) => { const s = sf(); return Math.round(v / s) * s; };
+    const q = (v: V) => {
+      const s = sf();
+      return Math.round(v / s) * s;
+    };
     return this.through(q, q);
   }
 
@@ -96,8 +118,8 @@ export class Num extends Signal<V> {
   cyclic(period: Val<number>): Num {
     const pf = valFn(period);
     return this.through(
-      (v) => v,
-      (v) => {
+      v => v,
+      v => {
         const cur = this.peek();
         const p = pf();
         const delta = v - cur;

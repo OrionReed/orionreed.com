@@ -1,21 +1,30 @@
 // transform.ts — reactive 2D transform.
 
-import {
-  Signal, computedCls, lensCls, value,
-  type Val, type SignalOptions, type Of,
-} from "../signal";
+import { type Easing } from "../../core";
+import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { type Linear, type TraitDict } from "../traits";
 import { applyOp1, type Op } from "../ops";
-import { type Writable, invertibles } from "../writable";
+import {
+  computedCls,
+  lensCls,
+  type Of,
+  Signal,
+  type SignalOptions,
+  type Val,
+  value,
+} from "../signal";
+import { type Linear, type TraitDict } from "../traits";
+import { invertibles, type Writable } from "../writable";
 import { Num } from "./num";
 import {
   Vec,
-  add as vAdd, sub as vSub, scale as vScale, lerp as vLerp,
-  metric as vMetric, equals as vEquals,
+  add as vAdd,
+  equals as vEquals,
+  lerp as vLerp,
+  metric as vMetric,
+  scale as vScale,
+  sub as vSub,
 } from "./vec";
-import { tween, type Tween } from "../anim";
-import { type Easing } from "../../core";
 
 type V = {
   translate: Of<Vec>;
@@ -35,40 +44,44 @@ export const DEFAULT: V = {
 
 export const add = (a: V, b: V): V => ({
   translate: vAdd(a.translate, b.translate),
-  scale:     vAdd(a.scale,     b.scale),
-  origin:    vAdd(a.origin,    b.origin),
-  rotate:    a.rotate + b.rotate,
-  opacity:   a.opacity + b.opacity,
+  scale: vAdd(a.scale, b.scale),
+  origin: vAdd(a.origin, b.origin),
+  rotate: a.rotate + b.rotate,
+  opacity: a.opacity + b.opacity,
 });
 export const sub = (a: V, b: V): V => ({
   translate: vSub(a.translate, b.translate),
-  scale:     vSub(a.scale,     b.scale),
-  origin:    vSub(a.origin,    b.origin),
-  rotate:    a.rotate - b.rotate,
-  opacity:   a.opacity - b.opacity,
+  scale: vSub(a.scale, b.scale),
+  origin: vSub(a.origin, b.origin),
+  rotate: a.rotate - b.rotate,
+  opacity: a.opacity - b.opacity,
 });
 export const scale = (a: V, k: number): V => ({
   translate: vScale(a.translate, k),
-  scale:     vScale(a.scale,     k),
-  origin:    vScale(a.origin,    k),
-  rotate:    a.rotate * k,
-  opacity:   a.opacity * k,
+  scale: vScale(a.scale, k),
+  origin: vScale(a.origin, k),
+  rotate: a.rotate * k,
+  opacity: a.opacity * k,
 });
 export const lerp = (a: V, b: V, t: number): V => ({
   translate: vLerp(a.translate, b.translate, t),
-  scale:     vLerp(a.scale,     b.scale,     t),
-  origin:    vLerp(a.origin,    b.origin,    t),
-  rotate:    a.rotate + (b.rotate - a.rotate) * t,
-  opacity:   a.opacity + (b.opacity - a.opacity) * t,
+  scale: vLerp(a.scale, b.scale, t),
+  origin: vLerp(a.origin, b.origin, t),
+  rotate: a.rotate + (b.rotate - a.rotate) * t,
+  opacity: a.opacity + (b.opacity - a.opacity) * t,
 });
 export const equals = (a: V, b: V) =>
-  a === b || (
-    vEquals(a.translate, b.translate) && vEquals(a.scale, b.scale) &&
-    vEquals(a.origin, b.origin) && a.rotate === b.rotate && a.opacity === b.opacity
-  );
+  a === b ||
+  (vEquals(a.translate, b.translate) &&
+    vEquals(a.scale, b.scale) &&
+    vEquals(a.origin, b.origin) &&
+    a.rotate === b.rotate &&
+    a.opacity === b.opacity);
 export const metric = (a: V, b: V) =>
-  vMetric(a.translate, b.translate) + vMetric(a.scale, b.scale) +
-  vMetric(a.origin,    b.origin)    + Math.abs(a.rotate  - b.rotate) +
+  vMetric(a.translate, b.translate) +
+  vMetric(a.scale, b.scale) +
+  vMetric(a.origin, b.origin) +
+  Math.abs(a.rotate - b.rotate) +
   Math.abs(a.opacity - b.opacity);
 
 const linearImpl: Linear<V> = { add, sub, scale };
@@ -85,26 +98,46 @@ export class Transform extends Signal<V> {
   static invertibles = invertibles<Transform>()("add", "sub", "through");
 
   // ── class-level constructors ───────────────────────────────────
-  static derive(fn: () => V): Transform { return computedCls(Transform, fn) }
+  static derive(fn: () => V): Transform {
+    return computedCls(Transform, fn);
+  }
   static lens(g: () => V, s: (v: V) => void): Writable<Transform> {
     return lensCls(Transform, g, s) as unknown as Writable<Transform>;
   }
-  static is(v: unknown): v is Transform { return v instanceof Transform }
+  static is(v: unknown): v is Transform {
+    return v instanceof Transform;
+  }
 
   // ── instance ───────────────────────────────────────────────────
-  constructor(v: V = DEFAULT, opts?: SignalOptions<V>) { super(v, opts) }
+  constructor(v: V = DEFAULT, opts?: SignalOptions<V>) {
+    super(v, opts);
+  }
 
-  add(b: Val<V>): Transform { return applyOp1(this, addOp, b, Transform) }
-  sub(b: Val<V>): Transform { return applyOp1(this, subOp, b, Transform) }
+  add(b: Val<V>): Transform {
+    return applyOp1(this, addOp, b, Transform);
+  }
+  sub(b: Val<V>): Transform {
+    return applyOp1(this, subOp, b, Transform);
+  }
   lerp(b: Val<V>, t: Val<number>): Transform {
     return Transform.derive(() => lerp(this.value, value(b), value(t)));
   }
 
-  get translate(): Vec { return this.field("translate", Vec) }
-  get scale(): Vec     { return this.field("scale",     Vec) }
-  get origin(): Vec    { return this.field("origin",    Vec) }
-  get rotate(): Num    { return this.field("rotate",    Num) }
-  get opacity(): Num   { return this.field("opacity",   Num) }
+  get translate(): Vec {
+    return this.field("translate", Vec);
+  }
+  get scale(): Vec {
+    return this.field("scale", Vec);
+  }
+  get origin(): Vec {
+    return this.field("origin", Vec);
+  }
+  get rotate(): Num {
+    return this.field("rotate", Num);
+  }
+  get opacity(): Num {
+    return this.field("opacity", Num);
+  }
 
   /** Tween-builder, implied by the lerp trait. */
   to(target: V, dur: Val<number>, ease?: Easing): Tween<V> {
@@ -121,11 +154,12 @@ export type TransformInit = { [K in keyof V]?: Val<V[K]> };
 export function transform(init?: TransformInit): Writable<Transform> {
   const tr = new Transform() as unknown as Writable<Transform>;
   if (init) {
-    if (init.translate !== undefined) bind(tr.translate as unknown as Writable<Vec>, init.translate);
-    if (init.scale     !== undefined) bind(tr.scale     as unknown as Writable<Vec>, init.scale);
-    if (init.origin    !== undefined) bind(tr.origin    as unknown as Writable<Vec>, init.origin);
-    if (init.rotate    !== undefined) bind(tr.rotate    as unknown as Writable<Num>, init.rotate);
-    if (init.opacity   !== undefined) bind(tr.opacity   as unknown as Writable<Num>, init.opacity);
+    if (init.translate !== undefined)
+      bind(tr.translate as unknown as Writable<Vec>, init.translate);
+    if (init.scale !== undefined) bind(tr.scale as unknown as Writable<Vec>, init.scale);
+    if (init.origin !== undefined) bind(tr.origin as unknown as Writable<Vec>, init.origin);
+    if (init.rotate !== undefined) bind(tr.rotate as unknown as Writable<Num>, init.rotate);
+    if (init.opacity !== undefined) bind(tr.opacity as unknown as Writable<Num>, init.opacity);
   }
   return tr;
 }

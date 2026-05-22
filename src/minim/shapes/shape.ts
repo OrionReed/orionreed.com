@@ -1,8 +1,8 @@
 import { type Animator, suspend } from "@minim/core";
 import {
-  bind,
   Box,
   BoxMath,
+  bind,
   compose,
   computed,
   effect,

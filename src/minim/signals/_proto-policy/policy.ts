@@ -18,9 +18,9 @@
 // numerical argmin doesn't.
 
 import { batch, lensCls } from "../signal";
-import { type Writable } from "../writable";
 import { Num } from "../values/num";
 import { Vec } from "../values/vec";
+import { type Writable } from "../writable";
 
 export interface PolicyLensVecOpts {
   /** Finite-difference epsilon for the Jacobian (numerical fallback). */
@@ -60,9 +60,9 @@ export function policyLensVec(
 
   return lensCls(
     Vec,
-    () => forward(inputs.map((i) => i.value)),
-    (rawTarget) => {
-      const xs = inputs.map((i) => i.peek());
+    () => forward(inputs.map(i => i.value)),
+    rawTarget => {
+      const xs = inputs.map(i => i.peek());
       const target = clamp ? clamp(rawTarget, xs) : rawTarget;
 
       // Closed-form path: ask the user for the new inputs.
@@ -91,7 +91,9 @@ export function policyLensVec(
         Jx[i] = (ye.x - y0.x) / eps;
         Jy[i] = (ye.y - y0.y) / eps;
       }
-      let a = damping, b = 0, c = damping;
+      let a = damping,
+        b = 0,
+        c = damping;
       for (let i = 0; i < xs.length; i++) {
         const w = weights[i];
         a += w * Jx[i] * Jx[i];
@@ -100,7 +102,9 @@ export function policyLensVec(
       }
       const det = a * c - b * b;
       if (Math.abs(det) < 1e-14) return;
-      const invA = c / det, invB = -b / det, invC = a / det;
+      const invA = c / det,
+        invB = -b / det,
+        invC = a / det;
       const kx = invA * dx + invB * dy;
       const ky = invB * dx + invC * dy;
       batch(() => {
@@ -118,23 +122,27 @@ export function policyLensVec(
 
 const TAU = 2 * Math.PI;
 const wrapToPi = (x: number) => x - TAU * Math.round(x / TAU);
-const nearestAngle = (target: number, current: number) =>
-  current + wrapToPi(target - current);
+const nearestAngle = (target: number, current: number) => current + wrapToPi(target - current);
 
 export type PolarPolicy = "rotate" | "translate" | "radial" | "circular";
 
 /** Polar lens via policyLens. Closed-form inverse for performance and
  *  for the nearest-angle (shortest-arc) semantics on cyclic writes. */
 export function polarViaPolicy(
-  cx: Writable<Num>, cy: Writable<Num>,
-  r: Writable<Num>, a: Writable<Num>,
+  cx: Writable<Num>,
+  cy: Writable<Num>,
+  r: Writable<Num>,
+  a: Writable<Num>,
   policy: PolarPolicy = "rotate",
 ): Writable<Vec> {
   const w =
-    policy === "rotate"    ? [0, 0, 1, 1] :
-    policy === "translate" ? [1, 1, 0, 0] :
-    policy === "radial"    ? [0, 0, 1, 0] :
-                             [0, 0, 0, 1];
+    policy === "rotate"
+      ? [0, 0, 1, 1]
+      : policy === "translate"
+        ? [1, 1, 0, 0]
+        : policy === "radial"
+          ? [0, 0, 1, 0]
+          : [0, 0, 0, 1];
   return policyLensVec(
     [cx, cy, r, a],
     ([Cx, Cy, R, A]) => ({ x: Cx + R * Math.cos(A), y: Cy + R * Math.sin(A) }),
@@ -143,7 +151,8 @@ export function polarViaPolicy(
       inverse: (p, [Cx, Cy, R, A], ww) => {
         const fx = Cx + R * Math.cos(A);
         const fy = Cy + R * Math.sin(A);
-        const dxw = p.x - Cx, dyw = p.y - Cy;
+        const dxw = p.x - Cx,
+          dyw = p.y - Cy;
         return [
           ww[0] > 0 ? Cx + (p.x - fx) : Cx,
           ww[1] > 0 ? Cy + (p.y - fy) : Cy,

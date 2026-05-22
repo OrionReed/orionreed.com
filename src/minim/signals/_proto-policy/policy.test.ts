@@ -2,16 +2,20 @@
 // the production polar + argminVec semantics. If they match, the
 // consolidation is real (same behaviour, one underlying primitive).
 
-import { describe, it, expect } from "vitest";
-import { num, vec, polar, argminVec } from "../index";
-import { polarViaPolicy, argminVecViaPolicy } from "./policy";
+import { describe, expect, it } from "vitest";
+import { argminVec, num, polar, vec } from "../index";
+import { argminVecViaPolicy, polarViaPolicy } from "./policy";
 
 describe("polarViaPolicy parity with polar", () => {
   it("rotate policy: write updates r and a, same as polar", () => {
-    const c = vec(0, 0); const r = num(10); const a = num(0);
+    const c = vec(0, 0);
+    const r = num(10);
+    const a = num(0);
     const p = polar(c, r, a, "rotate");
 
-    const c2 = vec(0, 0); const r2 = num(10); const a2 = num(0);
+    const c2 = vec(0, 0);
+    const r2 = num(10);
+    const a2 = num(0);
     const p2 = polarViaPolicy(c2.x, c2.y, r2, a2, "rotate");
 
     p.value = { x: 5, y: 8 };
@@ -23,10 +27,14 @@ describe("polarViaPolicy parity with polar", () => {
   });
 
   it("circular policy: nearest-angle shortest-arc on accumulated angle", () => {
-    const c = vec(0, 0); const r = num(10); const a = num(10 * Math.PI);
+    const c = vec(0, 0);
+    const r = num(10);
+    const a = num(10 * Math.PI);
     const p = polar(c, r, a, "circular");
 
-    const c2 = vec(0, 0); const r2 = num(10); const a2 = num(10 * Math.PI);
+    const c2 = vec(0, 0);
+    const r2 = num(10);
+    const a2 = num(10 * Math.PI);
     const p2 = polarViaPolicy(c2.x, c2.y, r2, a2, "circular");
 
     p.value = { x: 10, y: 1 };
@@ -37,10 +45,14 @@ describe("polarViaPolicy parity with polar", () => {
   });
 
   it("translate policy: write shifts center, leaves r/a", () => {
-    const c = vec(0, 0); const r = num(10); const a = num(0);
+    const c = vec(0, 0);
+    const r = num(10);
+    const a = num(0);
     const p = polar(c, r, a, "translate");
 
-    const c2 = vec(0, 0); const r2 = num(10); const a2 = num(0);
+    const c2 = vec(0, 0);
+    const r2 = num(10);
+    const a2 = num(0);
     const p2 = polarViaPolicy(c2.x, c2.y, r2, a2, "translate");
 
     p.value = { x: 100, y: 50 };
@@ -55,9 +67,11 @@ describe("polarViaPolicy parity with polar", () => {
 describe("argminVecViaPolicy parity with argminVec", () => {
   it("2-link arm converges identically", () => {
     const mkArm = () => {
-      const a1 = num(0.1), a2 = num(0.1);
+      const a1 = num(0.1),
+        a2 = num(0.1);
       return {
-        a1, a2,
+        a1,
+        a2,
         tip: argminVec(
           [a1, a2],
           ([t1, t2]) => ({
@@ -69,9 +83,11 @@ describe("argminVecViaPolicy parity with argminVec", () => {
       };
     };
     const mkArmPolicy = () => {
-      const a1 = num(0.1), a2 = num(0.1);
+      const a1 = num(0.1),
+        a2 = num(0.1);
       return {
-        a1, a2,
+        a1,
+        a2,
         tip: argminVecViaPolicy(
           [a1, a2],
           ([t1, t2]) => ({

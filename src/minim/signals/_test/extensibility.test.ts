@@ -2,14 +2,20 @@
 // value classes with ZERO library changes. This is the property the
 // hand-maintained `LiftField` registry was blocking.
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  Signal, computedCls, lensCls,
-  type Val, type SignalOptions,
-  type Writable, invertibles,
-  type Linear, type TraitDict,
-  applyOp1, type Op,
+  applyOp1,
+  computedCls,
+  invertibles,
+  type Linear,
+  lensCls,
   Num,
+  type Op,
+  Signal,
+  type SignalOptions,
+  type TraitDict,
+  type Val,
+  type Writable,
 } from "../index";
 
 // ─── A user-defined value class ──────────────────────────────────
@@ -25,11 +31,13 @@ const hslAdd = (a: V, b: V): V => ({ h: a.h + b.h, s: a.s + b.s, l: a.l + b.l })
 const hslSub = (a: V, b: V): V => ({ h: a.h - b.h, s: a.s - b.s, l: a.l - b.l });
 const hslScale = (a: V, k: number): V => ({ h: a.h * k, s: a.s * k, l: a.l * k });
 const hslLerp = (a: V, b: V, t: number): V => ({
-  h: a.h + (b.h - a.h) * t, s: a.s + (b.s - a.s) * t, l: a.l + (b.l - a.l) * t,
+  h: a.h + (b.h - a.h) * t,
+  s: a.s + (b.s - a.s) * t,
+  l: a.l + (b.l - a.l) * t,
 });
 
 const linearImpl: Linear<V> = { add: hslAdd, sub: hslSub, scale: hslScale };
-const addOp:   Op<V, [V]>      = { fwd: hslAdd, bwd: hslSub };
+const addOp: Op<V, [V]> = { fwd: hslAdd, bwd: hslSub };
 const scaleOp: Op<V, [number]> = { fwd: hslScale, bwd: (v, k) => hslScale(v, 1 / k) };
 
 class Hsl extends Signal<V> {
@@ -41,20 +49,36 @@ class Hsl extends Signal<V> {
   };
   static invertibles = invertibles<Hsl>()("add", "scale");
 
-  static derive(fn: () => V): Hsl { return computedCls(Hsl, fn) }
+  static derive(fn: () => V): Hsl {
+    return computedCls(Hsl, fn);
+  }
   static lens(g: () => V, s: (v: V) => void): Writable<Hsl> {
     return lensCls(Hsl, g, s) as unknown as Writable<Hsl>;
   }
-  static is(v: unknown): v is Hsl { return v instanceof Hsl }
+  static is(v: unknown): v is Hsl {
+    return v instanceof Hsl;
+  }
 
-  constructor(v: V = { h: 0, s: 0, l: 0 }, opts?: SignalOptions<V>) { super(v, opts) }
+  constructor(v: V = { h: 0, s: 0, l: 0 }, opts?: SignalOptions<V>) {
+    super(v, opts);
+  }
 
-  add(b: Val<V>): Hsl     { return applyOp1(this, addOp,   b, Hsl) }
-  scale(k: Val<number>): Hsl { return applyOp1(this, scaleOp, k, Hsl) }
+  add(b: Val<V>): Hsl {
+    return applyOp1(this, addOp, b, Hsl);
+  }
+  scale(k: Val<number>): Hsl {
+    return applyOp1(this, scaleOp, k, Hsl);
+  }
 
-  get h(): Num { return this.field("h", Num) }
-  get s(): Num { return this.field("s", Num) }
-  get l(): Num { return this.field("l", Num) }
+  get h(): Num {
+    return this.field("h", Num);
+  }
+  get s(): Num {
+    return this.field("s", Num);
+  }
+  get l(): Num {
+    return this.field("l", Num);
+  }
 }
 interface Hsl {
   readonly constructor: typeof Hsl;
@@ -94,17 +118,19 @@ describe("Extensibility — Writable<UserClass> works without library changes", 
     const c = hsl(0, 0, 0);
     const d = Hsl.derive(() => ({ h: c.value.h * 2, s: 0, l: 0 }));
     expect(Hsl.is(d)).toBe(true);
-    expect(() => { (d as unknown as { value: V }).value = { h: 0, s: 0, l: 0 } }).toThrow();
+    expect(() => {
+      (d as unknown as { value: V }).value = { h: 0, s: 0, l: 0 };
+    }).toThrow();
   });
 });
 
 // Compile-time probes — gated to never run.
 function _typeProbes(): void {
   // @ts-expect-error — bare Hsl is RO at the public type level
-  (Hsl.derive(() => ({ h: 0, s: 0, l: 0 }))).value = { h: 1, s: 1, l: 1 };
+  Hsl.derive(() => ({ h: 0, s: 0, l: 0 })).value = { h: 1, s: 1, l: 1 };
 
   // @ts-expect-error — bare Hsl's .h is RO Num
-  (Hsl.derive(() => ({ h: 0, s: 0, l: 0 }))).h.value = 5;
+  Hsl.derive(() => ({ h: 0, s: 0, l: 0 })).h.value = 5;
 }
 _typeProbes;
 if (Math.random() < -1) _typeProbes();

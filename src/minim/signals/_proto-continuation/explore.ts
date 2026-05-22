@@ -35,22 +35,19 @@ export interface SmoothOpts {
 
 /** Continuation lens: writes start a tween toward the new target.
  *  Reads return the current tween-interpolated value. */
-export function smoothLens(
-  target: Writable<Num>,
-  opts: SmoothOpts,
-): Writable<Num> {
+export function smoothLens(target: Writable<Num>, opts: SmoothOpts): Writable<Num> {
   const dur = opts.duration ?? 0.3;
   let cancelCurrent: (() => void) | undefined;
 
   return Num.lens(
     () => target.value,
-    (newTarget) => {
+    newTarget => {
       // Cancel prior tween, start fresh from the *current* value
       // toward the new target.
       cancelCurrent?.();
       const start = target.peek();
       let t = 0;
-      cancelCurrent = opts.schedule((dt) => {
+      cancelCurrent = opts.schedule(dt => {
         t += dt;
         if (t >= dur) {
           target.value = newTarget;
@@ -92,7 +89,7 @@ export function goalChaser(
 
   // Continuously chase `goal`. Frame-by-frame the source moves toward
   // the goal at exponential rate. Equivalent to `toward(state, goal, k)`.
-  const stop = opts.schedule((dt) => {
+  const stop = opts.schedule(dt => {
     const cur = state.peek();
     const g = goal.peek();
     const decay = Math.exp(-k * dt);

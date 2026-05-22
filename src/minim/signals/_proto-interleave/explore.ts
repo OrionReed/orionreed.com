@@ -17,8 +17,8 @@
 //   E. coroutine pipe — children call back to a coordinator via yields.
 //      Closer to CSP / actors.
 
-import type { Read } from "../signal";
 import type { Animator, Tick } from "../../core";
+import type { Read } from "../signal";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -53,7 +53,11 @@ export function* frozenInterleave<R>(
     } else {
       // 'when' just flipped false; tear down any running interrupter.
       if (inter) {
-        try { inter.return(undefined); } catch { /* ignore */ }
+        try {
+          inter.return(undefined);
+        } catch {
+          /* ignore */
+        }
         inter = null;
       }
       const r = base.next(tick);
@@ -108,7 +112,11 @@ export function* stack<R>(
     // tear down layers we *had* but no longer want active).
     for (let i = 0; i < layers.length; i++) {
       if (i !== activeIdx && built[i]) {
-        try { built[i]!.return(undefined); } catch { /* ignore */ }
+        try {
+          built[i]!.return(undefined);
+        } catch {
+          /* ignore */
+        }
         built[i] = null;
       }
     }
@@ -140,7 +148,11 @@ export function* select<K extends string>(
     const tick: Tick = yield;
     const k = selector();
     if (k !== prev && prev !== null && built[prev]) {
-      try { built[prev]!.return(undefined); } catch { /* ignore */ }
+      try {
+        built[prev]!.return(undefined);
+      } catch {
+        /* ignore */
+      }
       built[prev] = null;
     }
     prev = k;

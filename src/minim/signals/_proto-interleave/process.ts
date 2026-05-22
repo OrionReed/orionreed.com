@@ -15,8 +15,8 @@
 //   A. observe() — wrap a regular Animator; manually call .step(tick).
 //   B. signalGen() — a generator whose yields ARE the value of a Signal<T>.
 
-import { Signal, type Read, computed } from "../signal";
 import type { Animator, Tick } from "../../core";
+import { computed, type Read, Signal } from "../signal";
 
 // ── A. observe() — process-as-signals wrapper ────────────────────
 
@@ -138,9 +138,9 @@ export function signalGen<T>(
 //     several processes (alive, producing, etc.) ──────────────────
 
 export function allAlive(procs: Process<unknown>[]): Read<boolean> {
-  return computed(() => procs.every((p) => p.alive.value));
+  return computed(() => procs.every(p => p.alive.value));
 }
 
 export function anyProducing(procs: Process<unknown>[]): Read<boolean> {
-  return computed(() => procs.some((p) => p.producing.value));
+  return computed(() => procs.some(p => p.producing.value));
 }

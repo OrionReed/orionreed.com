@@ -11,7 +11,7 @@
 // the semantics of "no emission" (signal: keeps previous value;
 // stream: subscribers don't fire).
 
-import { Signal, effect, type Read } from "../signal";
+import { effect, type Read, Signal } from "../signal";
 
 // ── Variant 1: Stream<T> as its own primitive ────────────────────
 //
@@ -40,26 +40,30 @@ export class Stream<T> {
   subscribe(fn: (v: T) => void): () => void {
     if (this.#closed) return () => {};
     this.#subs.add(fn);
-    return () => { this.#subs.delete(fn); };
+    return () => {
+      this.#subs.delete(fn);
+    };
   }
 
   // Composers — value-preserving transformations.
   map<U>(fn: (v: T) => U): Stream<U> {
     const out = new Stream<U>();
-    this.subscribe((v) => out.push(fn(v)));
+    this.subscribe(v => out.push(fn(v)));
     return out;
   }
 
   filter(pred: (v: T) => boolean): Stream<T> {
     const out = new Stream<T>();
-    this.subscribe((v) => { if (pred(v)) out.push(v); });
+    this.subscribe(v => {
+      if (pred(v)) out.push(v);
+    });
     return out;
   }
 
   /** Fold: each new emission produces a Signal<S> of the running state. */
   scan<S>(init: S, fn: (acc: S, v: T) => S): Signal<S> {
     const sig = new Signal<S>(init);
-    this.subscribe((v) => {
+    this.subscribe(v => {
       sig.value = fn(sig.peek(), v);
     });
     return sig;
@@ -69,7 +73,9 @@ export class Stream<T> {
    *  Default before-first-push is `initial`. */
   latest(initial: T): Signal<T> {
     const sig = new Signal<T>(initial);
-    this.subscribe((v) => { sig.value = v; });
+    this.subscribe(v => {
+      sig.value = v;
+    });
     return sig;
   }
 }
@@ -113,8 +119,12 @@ export function pushSignal<T>(): {
 
 export class Trigger {
   #count = new Signal<number>(0);
-  fire(): void { this.#count.value = this.#count.peek() + 1; }
-  get count(): Read<number> { return this.#count as Read<number>; }
+  fire(): void {
+    this.#count.value = this.#count.peek() + 1;
+  }
+  get count(): Read<number> {
+    return this.#count as Read<number>;
+  }
 
   /** Run `fn` each time this fires. */
   on(fn: () => void): () => void {

@@ -1,15 +1,15 @@
 // Tests for stream primitive sketches — exercising what works and
 // what doesn't when streams are a distinct primitive vs signal-shaped.
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { effect } from "../signal";
-import { stream, pushSignal, trigger, Stream } from "./streams";
+import { pushSignal, Stream, stream, trigger } from "./streams";
 
 describe("Stream<T>", () => {
   it("subscribers see every push (no dedup of equal values)", () => {
     const s = stream<number>();
     const seen: number[] = [];
-    s.subscribe((v) => seen.push(v));
+    s.subscribe(v => seen.push(v));
     s.push(1);
     s.push(1); // duplicate — stream emits anyway
     s.push(2);
@@ -21,7 +21,7 @@ describe("Stream<T>", () => {
     s.push(1);
     s.push(2);
     const seen: number[] = [];
-    s.subscribe((v) => seen.push(v));
+    s.subscribe(v => seen.push(v));
     expect(seen).toEqual([]);
     s.push(3);
     expect(seen).toEqual([3]);
@@ -29,20 +29,22 @@ describe("Stream<T>", () => {
 
   it("map/filter chain", () => {
     const s = stream<number>();
-    const evens = s.filter((n) => n % 2 === 0).map((n) => n * 10);
+    const evens = s.filter(n => n % 2 === 0).map(n => n * 10);
     const seen: number[] = [];
-    evens.subscribe((v) => seen.push(v));
-    [1, 2, 3, 4, 5].forEach((n) => s.push(n));
+    evens.subscribe(v => seen.push(v));
+    [1, 2, 3, 4, 5].forEach(n => s.push(n));
     expect(seen).toEqual([20, 40]);
   });
 
   it("scan folds the stream into a signal", () => {
     const clicks = stream<void>();
-    const count = clicks.scan(0, (acc) => acc + 1);
+    const count = clicks.scan(0, acc => acc + 1);
     expect(count.peek()).toBe(0);
 
     let observed = -1;
-    effect(() => { observed = count.value; });
+    effect(() => {
+      observed = count.value;
+    });
     clicks.push();
     clicks.push();
     clicks.push();
@@ -62,7 +64,7 @@ describe("Stream<T>", () => {
   it("close unsubscribes everyone", () => {
     const s = stream<number>();
     const seen: number[] = [];
-    s.subscribe((v) => seen.push(v));
+    s.subscribe(v => seen.push(v));
     s.push(1);
     s.close();
     s.push(2); // no-op
@@ -89,7 +91,9 @@ describe("Trigger (variant 3)", () => {
   it("counts emissions; subscribers re-fire each count change", () => {
     const t = trigger();
     let n = 0;
-    t.on(() => { n++; });
+    t.on(() => {
+      n++;
+    });
     t.fire();
     t.fire();
     t.fire();

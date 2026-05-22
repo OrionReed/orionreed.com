@@ -5,7 +5,7 @@
 // policy registered for K runs; this lets each output have its own
 // "which inputs do I redistribute to" semantics.
 
-import { Signal, lens, type Read, type Of, batch, type WritableBrand } from "../signal";
+import { batch, lens, type Of, type Read, Signal, type WritableBrand } from "../signal";
 
 type ValuesOf<Ins extends readonly Read<unknown>[]> = {
   readonly [K in keyof Ins]: Of<Ins[K]>;
@@ -30,7 +30,9 @@ export function hyperLens<
   backward: Back,
 ): {
   [K in keyof Outs]: K extends keyof Back
-    ? (Back[K] extends undefined ? Signal<Outs[K]> : Signal<Outs[K]> & WritableBrand)
+    ? Back[K] extends undefined
+      ? Signal<Outs[K]>
+      : Signal<Outs[K]> & WritableBrand
     : Signal<Outs[K]>;
 } {
   const readAll = (): ValuesOf<Ins> => {
@@ -54,12 +56,14 @@ export function hyperLens<
     if (policy === undefined) {
       result[k as string] = lens<Outs[typeof k]>(
         () => forward(readAll())[k],
-        () => { throw new TypeError(`hyperLens: output "${String(k)}" is read-only (no inverse policy)`) },
+        () => {
+          throw new TypeError(`hyperLens: output "${String(k)}" is read-only (no inverse policy)`);
+        },
       );
     } else {
       result[k as string] = lens<Outs[typeof k]>(
         () => forward(readAll())[k],
-        (next) => {
+        next => {
           const prev = peekAll();
           const updated = (policy as InversePolicy<Outs, Ins>[keyof Outs])(next, prev);
           batch(() => {

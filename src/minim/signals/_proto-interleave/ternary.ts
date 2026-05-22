@@ -13,7 +13,7 @@
 //   3. PresenceLens — derive presence from a regular Signal<T> via
 //      predicate; lift map to preserve presence.
 
-import { Signal, computed, effect, type Read } from "../signal";
+import { computed, effect, type Read, Signal } from "../signal";
 
 // ── Variant 1: Ternary<T> ────────────────────────────────────────
 
@@ -31,20 +31,40 @@ export class Ternary<T> extends Signal<TernaryState<T>> {
   }
 
   // Convenience constructors.
-  static off<T>(): Ternary<T> { return new Ternary<T>(OFF); }
-  static empty<T>(): Ternary<T> { return new Ternary<T>(EMPTY); }
-  static of<T>(v: T): Ternary<T> { return new Ternary<T>({ tag: "value", value: v }); }
+  static off<T>(): Ternary<T> {
+    return new Ternary<T>(OFF);
+  }
+  static empty<T>(): Ternary<T> {
+    return new Ternary<T>(EMPTY);
+  }
+  static of<T>(v: T): Ternary<T> {
+    return new Ternary<T>({ tag: "value", value: v });
+  }
 
   // Mutators.
-  off(): void { this.value = OFF; }
-  empty(): void { this.value = EMPTY; }
-  set(v: T): void { this.value = { tag: "value", value: v }; }
+  off(): void {
+    this.value = OFF;
+  }
+  empty(): void {
+    this.value = EMPTY;
+  }
+  set(v: T): void {
+    this.value = { tag: "value", value: v };
+  }
 
   // Predicates as derived signals.
-  get isOff(): Read<boolean> { return computed(() => this.value.tag === "off"); }
-  get isEmpty(): Read<boolean> { return computed(() => this.value.tag === "empty"); }
-  get hasValue(): Read<boolean> { return computed(() => this.value.tag === "value"); }
-  get isActive(): Read<boolean> { return computed(() => this.value.tag !== "off"); }
+  get isOff(): Read<boolean> {
+    return computed(() => this.value.tag === "off");
+  }
+  get isEmpty(): Read<boolean> {
+    return computed(() => this.value.tag === "empty");
+  }
+  get hasValue(): Read<boolean> {
+    return computed(() => this.value.tag === "value");
+  }
+  get isActive(): Read<boolean> {
+    return computed(() => this.value.tag !== "off");
+  }
 
   /** Value-or-default — for sites that just want the T. */
   valueOr(fallback: T): Read<T> {
@@ -73,10 +93,14 @@ export class Ternary<T> extends Signal<TernaryState<T>> {
 // per-case predicates as signals, and "switch on the value state"
 // reactivity.
 
-export type VariantCase<C> = { readonly [K in keyof C]: { readonly tag: K; readonly value: C[K] } }[keyof C];
+export type VariantCase<C> = {
+  readonly [K in keyof C]: { readonly tag: K; readonly value: C[K] };
+}[keyof C];
 
 export class Variant<Cases extends Record<string, unknown>> extends Signal<VariantCase<Cases>> {
-  constructor(initial: VariantCase<Cases>) { super(initial); }
+  constructor(initial: VariantCase<Cases>) {
+    super(initial);
+  }
 
   set<K extends keyof Cases>(tag: K, value: Cases[K]): void {
     this.value = { tag, value } as VariantCase<Cases>;
@@ -107,7 +131,7 @@ export class Variant<Cases extends Record<string, unknown>> extends Signal<Varia
 
 export interface Present<T> {
   active: Read<boolean>;
-  value: Read<T>;  // undefined behaviour when active is false; consumer must check.
+  value: Read<T>; // undefined behaviour when active is false; consumer must check.
 }
 
 export const present = <T>(s: Read<T>, isOn: Read<boolean>): Present<T> => ({

@@ -4,10 +4,10 @@
 // "drag writes pos directly" interrupter. Demonstrates state-
 // preservation across preemption cycles.
 
-import { describe, it, expect } from "vitest";
-import { num, signal } from "../index";
+import { describe, expect, it } from "vitest";
 import { Anim, type Animator, type Tick } from "../../core";
-import { frozenInterleave, stack, select } from "./explore";
+import { num, signal } from "../index";
+import { frozenInterleave, select, stack } from "./explore";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -52,14 +52,10 @@ describe("frozenInterleave", () => {
 
     let interrupterCalls = 0;
     anim.start(
-      frozenInterleave(
-        dragging,
-        miniSpring(pos, target),
-        function* (): Animator<void> {
-          interrupterCalls++;
-          while (true) yield;
-        },
-      ),
+      frozenInterleave(dragging, miniSpring(pos, target), function* (): Animator<void> {
+        interrupterCalls++;
+        while (true) yield;
+      }),
     );
 
     stepN(anim, 1 / 60, 600); // 10s @ 60fps — should converge
@@ -75,16 +71,12 @@ describe("frozenInterleave", () => {
 
     let pointer = 0;
     anim.start(
-      frozenInterleave(
-        dragging,
-        miniSpring(pos, target),
-        function* (): Animator<void> {
-          while (true) {
-            yield;
-            pos.value = pointer; // drag writes pos directly
-          }
-        },
-      ),
+      frozenInterleave(dragging, miniSpring(pos, target), function* (): Animator<void> {
+        while (true) {
+          yield;
+          pos.value = pointer; // drag writes pos directly
+        }
+      }),
     );
 
     // Phase 1: spring runs for 5 frames; pos moves toward 10.
@@ -121,7 +113,10 @@ describe("frozenInterleave", () => {
         dragging,
         miniSpring(pos, target, 8, /* finite= */ false),
         function* (): Animator<void> {
-          while (true) { yield; pos.value = pointer; }
+          while (true) {
+            yield;
+            pos.value = pointer;
+          }
         },
       ),
     );
@@ -148,11 +143,9 @@ describe("frozenInterleave", () => {
     const dragging = signal(false);
 
     anim.start(
-      frozenInterleave(
-        dragging,
-        miniSpring(pos, target, 4),
-        function* (): Animator<void> { while (true) yield; },
-      ),
+      frozenInterleave(dragging, miniSpring(pos, target, 4), function* (): Animator<void> {
+        while (true) yield;
+      }),
     );
 
     // Run a bit; sample pos.
@@ -184,7 +177,10 @@ describe("stack", () => {
 
     const tag = (name: string): Animator<void> =>
       (function* (): Animator<void> {
-        while (true) { yield; log.push(name); }
+        while (true) {
+          yield;
+          log.push(name);
+        }
       })();
 
     anim.start(
@@ -232,20 +228,26 @@ describe("select", () => {
     const counts = { idle: 0, drag: 0, fly: 0 };
 
     anim.start(
-      select(
-        () => mode.value,
-        {
-          idle: function* (): Animator<void> {
-            while (true) { yield; counts.idle++; }
-          },
-          drag: function* (): Animator<void> {
-            while (true) { yield; counts.drag++; }
-          },
-          fly: function* (): Animator<void> {
-            while (true) { yield; counts.fly++; }
-          },
+      select(() => mode.value, {
+        idle: function* (): Animator<void> {
+          while (true) {
+            yield;
+            counts.idle++;
+          }
         },
-      ),
+        drag: function* (): Animator<void> {
+          while (true) {
+            yield;
+            counts.drag++;
+          }
+        },
+        fly: function* (): Animator<void> {
+          while (true) {
+            yield;
+            counts.fly++;
+          }
+        },
+      }),
     );
 
     // Each "first .next()" runs to the inner yield without logging,
@@ -257,19 +259,19 @@ describe("select", () => {
 
     mode.value = "drag";
     stepN(anim, 1 / 60, 5);
-    expect(counts.idle).toBe(idle0);            // idle frozen
+    expect(counts.idle).toBe(idle0); // idle frozen
     expect(counts.drag).toBeGreaterThan(0);
 
     mode.value = "fly";
     const drag0 = counts.drag;
     stepN(anim, 1 / 60, 5);
-    expect(counts.drag).toBe(drag0);            // drag frozen
+    expect(counts.drag).toBe(drag0); // drag frozen
     expect(counts.fly).toBeGreaterThan(0);
 
     mode.value = "idle";
     const fly0 = counts.fly;
     stepN(anim, 1 / 60, 5);
-    expect(counts.fly).toBe(fly0);              // fly frozen
+    expect(counts.fly).toBe(fly0); // fly frozen
     expect(counts.idle).toBeGreaterThan(idle0); // idle re-built and ran
   });
 
@@ -279,19 +281,16 @@ describe("select", () => {
     const log: string[] = [];
 
     anim.start(
-      select(
-        () => mode.value,
-        {
-          a: function* (): Animator<void> {
-            log.push("a:start");
-            while (true) yield;
-          },
-          b: function* (): Animator<void> {
-            log.push("b:start");
-            while (true) yield;
-          },
+      select(() => mode.value, {
+        a: function* (): Animator<void> {
+          log.push("a:start");
+          while (true) yield;
         },
-      ),
+        b: function* (): Animator<void> {
+          log.push("b:start");
+          while (true) yield;
+        },
+      }),
     );
 
     stepN(anim, 1 / 60, 2);
@@ -324,7 +323,10 @@ describe("suspend in interleave (limitation)", () => {
       frozenInterleave(
         on,
         (function* (): Animator<void> {
-          while (true) { yield; log.push("base"); }
+          while (true) {
+            yield;
+            log.push("base");
+          }
         })(),
         function* (): Animator<void> {
           // This `yield (wake)=>{}` would normally park the gen. In our
@@ -332,9 +334,9 @@ describe("suspend in interleave (limitation)", () => {
           // immediately with the tick — so the body runs without
           // ever truly parking.
           log.push("inter:before");
-          yield (() => {});
+          yield () => {};
           log.push("inter:after"); // would never run with real runtime;
-                                   // runs immediately with hand-drive.
+          // runs immediately with hand-drive.
         },
       ),
     );

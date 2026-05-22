@@ -3,7 +3,7 @@
 // Canonical "more-than-a-DAG" structures: one derived cell observes
 // N parents and distributes writes back to all of them.
 
-import { Signal, lensCls, type Read, type Of } from "../signal";
+import { lensCls, type Of, type Read, Signal } from "../signal";
 import { requireLinear, type Traits } from "../traits";
 import { type Writable, type WritableOf } from "../writable";
 
@@ -25,7 +25,7 @@ export function combine<T, S extends Read<T>>(
       for (let i = 0; i < parts.length; i++) vs[i] = parts[i].value;
       return merge(vs);
     },
-    (next) => {
+    next => {
       const prev = new Array<T>(parts.length);
       for (let i = 0; i < parts.length; i++) prev[i] = parts[i].peek();
       const updated = distribute(next, prev);
@@ -52,7 +52,7 @@ export function mean<R extends Read<unknown>>(
   const invN = 1 / signals.length;
   return combine<V, Read<V>>(
     signals as ReadonlyArray<Read<V>>,
-    (vs) => {
+    vs => {
       let acc = vs[0];
       for (let i = 1; i < vs.length; i++) acc = lin.add(acc, vs[i]);
       return lin.scale(acc, invN);
@@ -62,7 +62,7 @@ export function mean<R extends Read<unknown>>(
       for (let i = 1; i < prev.length; i++) acc = lin.add(acc, prev[i]);
       const cur = lin.scale(acc, invN);
       const delta = lin.sub(next, cur);
-      return prev.map((v) => lin.add(v, delta));
+      return prev.map(v => lin.add(v, delta));
     },
   ) as unknown as Writable<R>;
 }

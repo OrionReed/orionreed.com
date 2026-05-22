@@ -1,7 +1,7 @@
 // Writer-claim tests — checking that "claim-based scheduling" handles
 // the drag-vs-spring scenario cleanly without process-level control flow.
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { num } from "../index";
 import { claim, priorityClaim } from "./claims";
 
@@ -70,9 +70,7 @@ describe("PriorityClaim<T>", () => {
     expect(log).toEqual(["low:resume", "low:preempt", "high:resume"]);
 
     high.release();
-    expect(log).toEqual([
-      "low:resume", "low:preempt", "high:resume", "low:resume",
-    ]);
+    expect(log).toEqual(["low:resume", "low:preempt", "high:resume", "low:resume"]);
 
     low.release();
     expect(pc.activePriority.value).toBeNull();
@@ -90,8 +88,10 @@ describe("PriorityClaim<T>", () => {
       spring.write(cur + (target - cur) * 0.5);
     };
 
-    tick(10); expect(pos.peek()).toBe(5);
-    tick(10); expect(pos.peek()).toBe(7.5);
+    tick(10);
+    expect(pos.peek()).toBe(5);
+    tick(10);
+    expect(pos.peek()).toBe(7.5);
 
     // Drag takes over — high priority.
     const drag = pc.acquire(10);
@@ -102,7 +102,9 @@ describe("PriorityClaim<T>", () => {
 
     // Release drag; spring takes over and pulls from 100 toward 10.
     drag.release();
-    tick(10); expect(pos.peek()).toBe(55);
-    tick(10); expect(pos.peek()).toBe(32.5);
+    tick(10);
+    expect(pos.peek()).toBe(55);
+    tick(10);
+    expect(pos.peek()).toBe(32.5);
   });
 });

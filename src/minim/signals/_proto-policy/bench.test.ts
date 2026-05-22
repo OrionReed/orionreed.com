@@ -2,19 +2,22 @@
 // consolidation. Run via vitest; numbers print to console.
 
 import { describe, it } from "vitest";
-import { num, vec, polar, argminVec } from "../index";
-import { polarViaPolicy, argminVecViaPolicy } from "./policy";
+import { argminVec, num, polar, vec } from "../index";
+import { argminVecViaPolicy, polarViaPolicy } from "./policy";
 
 const N = 10_000;
 
 function timed(label: string, fn: () => void): number {
-  fn(); fn(); // warmup
+  fn();
+  fn(); // warmup
   const t0 = performance.now();
   fn();
   const t1 = performance.now();
   const ms = t1 - t0;
   // eslint-disable-next-line no-console
-  console.info(`  ${label.padEnd(56)}  ${ms.toFixed(2).padStart(7)}ms  (${((ms * 1000) / N).toFixed(2)}µs/op)`);
+  console.info(
+    `  ${label.padEnd(56)}  ${ms.toFixed(2).padStart(7)}ms  (${((ms * 1000) / N).toFixed(2)}µs/op)`,
+  );
   return ms;
 }
 
@@ -24,7 +27,10 @@ describe("bench: Num primitives", () => {
     const aff = a.affine(200, 30);
     timed("Num.affine read", () => {
       let s = 0;
-      for (let i = 0; i < N; i++) { a.value = i / N; s += aff.value; }
+      for (let i = 0; i < N; i++) {
+        a.value = i / N;
+        s += aff.value;
+      }
       if (s < -1e30) throw new Error("");
     });
     a.value = 0.5;
@@ -38,7 +44,10 @@ describe("bench: Num primitives", () => {
     const chained = a.scale(200).add(30);
     timed(".scale(200).add(30) read (2 allocs)", () => {
       let s = 0;
-      for (let i = 0; i < N; i++) { a.value = i / N; s += chained.value; }
+      for (let i = 0; i < N; i++) {
+        a.value = i / N;
+        s += chained.value;
+      }
       if (s < -1e30) throw new Error("");
     });
     a.value = 0.5;
@@ -52,7 +61,10 @@ describe("bench: Num primitives", () => {
     const c = a.clamp(0, 1);
     timed("Num.clamp read", () => {
       let s = 0;
-      for (let i = 0; i < N; i++) { a.value = (i / N) * 2 - 0.5; s += c.value; }
+      for (let i = 0; i < N; i++) {
+        a.value = (i / N) * 2 - 0.5;
+        s += c.value;
+      }
       if (s < -1e30) throw new Error("");
     });
     a.value = 0.5;
@@ -81,29 +93,43 @@ describe("bench: Num primitives", () => {
 
 describe("bench: polar — stock vs policyLens-derived", () => {
   it("read", () => {
-    const c = vec(100, 100), r = num(50), a = num(0.5);
+    const c = vec(100, 100),
+      r = num(50),
+      a = num(0.5);
     const p = polar(c, r, a);
 
-    const c2 = vec(100, 100), r2 = num(50), a2 = num(0.5);
+    const c2 = vec(100, 100),
+      r2 = num(50),
+      a2 = num(0.5);
     const p2 = polarViaPolicy(c2.x, c2.y, r2, a2);
 
     timed("polar (stock) read", () => {
       let s = 0;
-      for (let i = 0; i < N; i++) { a.value = i / N; s += p.value.x; }
+      for (let i = 0; i < N; i++) {
+        a.value = i / N;
+        s += p.value.x;
+      }
       if (s < -1e30) throw new Error("");
     });
     timed("polar (via policyLens) read", () => {
       let s = 0;
-      for (let i = 0; i < N; i++) { a2.value = i / N; s += p2.value.x; }
+      for (let i = 0; i < N; i++) {
+        a2.value = i / N;
+        s += p2.value.x;
+      }
       if (s < -1e30) throw new Error("");
     });
   });
 
   it("write (circular policy)", () => {
-    const c = vec(0, 0), r = num(50), a = num(0);
+    const c = vec(0, 0),
+      r = num(50),
+      a = num(0);
     const p = polar(c, r, a, "circular");
 
-    const c2 = vec(0, 0), r2 = num(50), a2 = num(0);
+    const c2 = vec(0, 0),
+      r2 = num(50),
+      a2 = num(0);
     const p2 = polarViaPolicy(c2.x, c2.y, r2, a2, "circular");
 
     timed("polar (stock) write — circular", () => {
@@ -123,15 +149,25 @@ describe("bench: argminVec — stock vs policyLens-derived", () => {
   it("3-link IK write", () => {
     const fwd = (ts: readonly number[]) => {
       const L = 80;
-      let x = 0, y = 0, s = 0;
-      for (const t of ts) { s += t; x += L * Math.cos(s); y += L * Math.sin(s); }
+      let x = 0,
+        y = 0,
+        s = 0;
+      for (const t of ts) {
+        s += t;
+        x += L * Math.cos(s);
+        y += L * Math.sin(s);
+      }
       return { x, y };
     };
 
-    const a1 = num(0.1), a2 = num(0.1), a3 = num(0.1);
+    const a1 = num(0.1),
+      a2 = num(0.1),
+      a3 = num(0.1);
     const tip = argminVec([a1, a2, a3], fwd, [1, 1, 1]);
 
-    const b1 = num(0.1), b2 = num(0.1), b3 = num(0.1);
+    const b1 = num(0.1),
+      b2 = num(0.1),
+      b3 = num(0.1);
     const tip2 = argminVecViaPolicy([b1, b2, b3], fwd, [1, 1, 1]);
 
     const target = { x: 120, y: 80 };
@@ -139,8 +175,12 @@ describe("bench: argminVec — stock vs policyLens-derived", () => {
       for (let i = 0; i < N; i++) tip.value = target;
     });
     // Reset
-    a1.value = 0.1; a2.value = 0.1; a3.value = 0.1;
-    b1.value = 0.1; b2.value = 0.1; b3.value = 0.1;
+    a1.value = 0.1;
+    a2.value = 0.1;
+    a3.value = 0.1;
+    b1.value = 0.1;
+    b2.value = 0.1;
+    b3.value = 0.1;
     timed("argminVec (via policyLens) write", () => {
       for (let i = 0; i < N; i++) tip2.value = target;
     });

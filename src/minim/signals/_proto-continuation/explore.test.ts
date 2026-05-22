@@ -6,10 +6,8 @@
 // (b) the drag-vs-spring multi-writer scenario,
 // (c) the cleanest expression of stateful interaction.
 
-import { describe, it, expect } from "vitest";
-import {
-  num, signal, effect, type Writable, type Num as NumT,
-} from "../index";
+import { describe, expect, it } from "vitest";
+import { effect, type Num as NumT, num, signal, type Writable } from "../index";
 
 // A tiny scheduler stand-in: a list of frame callbacks, manually
 // stepped with `tick(dt)`. Replaces `this.anim.start(drive(...))` so
@@ -31,6 +29,7 @@ class FakeAnim {
 // ── Framing 1: smoothLens (the "continuation lens") ──────────────
 
 import { smoothLens } from "./explore";
+
 // (we'll need to adjust the import shape; the explore.ts module
 // exports `smoothLens(target, { duration, schedule })`).
 
@@ -38,7 +37,7 @@ describe("Framing 1: smoothLens as a continuation lens", () => {
   it("writes start a tween; reads return intermediate values", () => {
     const anim = new FakeAnim();
     const t = num(0);
-    const animated = smoothLens(t, { duration: 1, schedule: (f) => anim.schedule(f) });
+    const animated = smoothLens(t, { duration: 1, schedule: f => anim.schedule(f) });
 
     animated.value = 10;
     // Right after the write, no time has passed; source unchanged.
@@ -54,14 +53,14 @@ describe("Framing 1: smoothLens as a continuation lens", () => {
   it("PutPut: second write cancels the first", () => {
     const anim = new FakeAnim();
     const t = num(0);
-    const animated = smoothLens(t, { duration: 1, schedule: (f) => anim.schedule(f) });
+    const animated = smoothLens(t, { duration: 1, schedule: f => anim.schedule(f) });
 
     animated.value = 10;
-    anim.tick(0.3);          // partway through first tween
-    const mid = t.peek();    // somewhere around 3
-    animated.value = 20;     // cancel; start new tween from `mid` to 20
+    anim.tick(0.3); // partway through first tween
+    const mid = t.peek(); // somewhere around 3
+    animated.value = 20; // cancel; start new tween from `mid` to 20
 
-    anim.tick(1);            // run new tween to completion
+    anim.tick(1); // run new tween to completion
     expect(t.peek()).toBe(20);
     // The PutPut "last-write-wins" semantic holds at the limit.
     void mid;
@@ -70,7 +69,7 @@ describe("Framing 1: smoothLens as a continuation lens", () => {
   it("PutGet FAILS: immediately after write, the read is NOT the target", () => {
     const anim = new FakeAnim();
     const t = num(0);
-    const animated = smoothLens(t, { duration: 1, schedule: (f) => anim.schedule(f) });
+    const animated = smoothLens(t, { duration: 1, schedule: f => anim.schedule(f) });
 
     animated.value = 10;
     // PutGet at t=0: get returns... 0 (the current state, unchanged).
@@ -83,7 +82,7 @@ describe("Framing 1: smoothLens as a continuation lens", () => {
   it("GetPut: writing the current value still spawns a (zero-distance) tween", () => {
     const anim = new FakeAnim();
     const t = num(5);
-    const animated = smoothLens(t, { duration: 1, schedule: (f) => anim.schedule(f) });
+    const animated = smoothLens(t, { duration: 1, schedule: f => anim.schedule(f) });
 
     animated.value = animated.peek(); // writes 5 → tweens 5 to 5
     anim.tick(0.5);
@@ -105,7 +104,7 @@ describe("Framing 2: goalChaser — drag writes goal, animator chases", () => {
     const anim = new FakeAnim();
     const { state, goal, stop } = goalChaser(0, 0, {
       k: 8,
-      schedule: (f) => anim.schedule(f),
+      schedule: f => anim.schedule(f),
     });
 
     // Simulate drag: user moves pointer to 10.
@@ -140,7 +139,7 @@ describe("Framing 2: goalChaser — drag writes goal, animator chases", () => {
     const anim = new FakeAnim();
     const { state, goal, stop } = goalChaser(0, 0, {
       k: 8,
-      schedule: (f) => anim.schedule(f),
+      schedule: f => anim.schedule(f),
     });
 
     // User drags to 5, then pauses (no more goal writes).
@@ -165,7 +164,7 @@ describe("Framing 3: lens chains compose with goal/state", () => {
     const anim = new FakeAnim();
     const { state, goal, stop } = goalChaser(0, 0, {
       k: 8,
-      schedule: (f) => anim.schedule(f),
+      schedule: f => anim.schedule(f),
     });
 
     // Wrap goal in an affine lens: external "pointer" maps via x =
