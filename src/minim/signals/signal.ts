@@ -4,8 +4,8 @@
 //   - computed mode: getter set, cachedValue is truth, no setter
 //   - lens mode:     getter + setter set, cachedValue is truth on read
 //
-// `Vec extends Signal` is a natural prototype chain; `computed(fn, Vec)`
-// and `lens(g, s, Vec)` install getter/setter on a fresh Vec instance
+// `Vec extends Signal` is a natural prototype chain; `Vec.derive(fn)`
+// and `Vec.lens(g, s)` install getter/setter on a fresh Vec instance
 // to put it in computed/lens mode. `instanceof Vec` uses the native
 // chain walk.
 //
@@ -338,6 +338,24 @@ export function valFn<T>(v: Val<T>): () => T {
   return () => v as T;
 }
 
+/** Self-rewriting lazy getter. First call computes `make()`, installs
+ *  it as an own non-enumerable, non-configurable property under `key`,
+ *  and returns it. Subsequent `self[key]` reads skip the surrounding
+ *  getter entirely (own-property shadows prototype getter), so the
+ *  steady-state cost is one property access.
+ *
+ *  Convention: `key` should match the surrounding getter's name. */
+export function lazy<R>(self: object, key: string | symbol, make: () => R): R {
+  const v = make();
+  Object.defineProperty(self, key, {
+    value: v,
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
+  return v;
+}
+
 export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signal;
 
 /** Runtime check: is this Signal in lens mode (both getter and setter)? */
@@ -371,9 +389,9 @@ export interface SignalOptions<T = unknown> {
  *    - `new Signal(initial)` — signal mode
  *    - `signal(initial)` — same as `new Signal(initial)`
  *    - `computed(fn)` — computed mode (untyped)
- *    - `computed(fn, Vec)` — computed mode (typed as Cls instance)
+ *    - `Vec.derive(fn)` — computed mode (typed as Cls instance)
  *    - `lens(get, set)` — lens mode (untyped)
- *    - `lens(get, set, Num)` — lens mode (typed)
+ *    - `Vec.lens(get, set)` — lens mode (typed)
  *    - `new Vec(initial)` where Vec extends Signal — typed signal mode
  *
  *  Type predicates: `isSignal(x)`, `isComputed(x)`, `isLens(x)`.
@@ -402,11 +420,6 @@ export class Signal<T = unknown> implements ReactiveNode {
   _equals: Equals<T> | undefined = undefined;
   _watched?: () => void;
   _unwatchedHook?: () => void;
-  /** Per-instance lazy derived-view cache; allocated on first `.memo()` hit. */
-  protected _memoCache?: Record<string | symbol, unknown>;
-  /** Per-instance lazy field-lens cache (separate from memo to avoid
-   *  template-literal key allocation per `.x` access). */
-  protected _fields?: Record<string | symbol, unknown>;
   /** Fusion tag set by `.through(...)`. Lets a subsequent `.through()`
    *  collapse `(this) → (parent) → (root)` into a single lens onto
    *  `root`, composing fwd/bwd in value-space. Internal. */
@@ -578,41 +591,31 @@ export class Signal<T = unknown> implements ReactiveNode {
     return inst as this;
   }
 
-  /** Per-instance cached derivation. `key` must be unique within the
-   *  parent's class hierarchy. Factory runs once per (instance, key).
-   *  Used by lazy domain getters (`.magnitude`) and by `.field()`. */
+  /** Per-instance cached derivation; first call computes `make()` and
+   *  installs it as an own non-enumerable, non-configurable property
+   *  under `key` so subsequent `this[key]` reads skip the getter
+   *  entirely (own-property shadows prototype getter). `key` must
+   *  match the surrounding getter's name. */
   memo<R>(key: string | symbol, make: () => R): R {
-    const cache = (this._memoCache ??= {});
-    const k = key as string;
-    return (cache[k] ?? (cache[k] = make())) as R;
+    return lazy(this, key, make);
   }
 
-  /** Typed lens onto `this.value[key]`. Cached per (instance, key).
-   *  Read returns the field; write spread-replaces the composite.
-   *  Only meaningful when `T` is an object (TS narrows accordingly).
-   *
-   *  Now a thin specialisation of `lensTo` — same shape, just cached.
-   *  Uses a dedicated `_fields` cache (not `memo`) so the lookup key is
-   *  the raw field name — avoiding the per-access string allocation
-   *  that a template-literal memo key (`"field:x"`) would force on the
-   *  hot path. */
+  /** Typed lens onto `this.value[key]`. Read returns the field; write
+   *  spread-replaces the composite. Only meaningful when `T` is an
+   *  object (TS narrows accordingly). Cached via `lazy` — second and
+   *  later reads of `this[key]` are direct property access. */
   field<K extends keyof T, C extends new (...args: never[]) => Signal<T[K]>>(
     key: K,
     Cls: C,
   ): InstanceType<C> {
-    const cache = (this._fields ??= {});
-    const k = key as string | symbol;
-    let cached = cache[k as string];
-    if (cached === undefined) {
+    return lazy(this, key as string | symbol, () =>
       // TODO: find a general robust approach to avoid the spread replace, as this is hot path.
-      cached = (this as Signal<T>).lensTo(
+      (this as Signal<T>).lensTo(
         Cls,
         s => s[key] as Of<InstanceType<C>>,
         (v, s) => ({ ...(s as object), [key]: v }) as T,
-      );
-      cache[k as string] = cached;
-    }
-    return cached as InstanceType<C>;
+      ),
+    ) as InstanceType<C>;
   }
 
   /** Read with tracking. Branches on signal vs computed mode. */
@@ -866,43 +869,16 @@ export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> & Writ
   return new Signal(initial, opts) as Signal<T> & WritableBrand;
 }
 
-// `computed` — overload returns:
-//   computed(fn)         → Signal<T>             (untyped, RO)
-//   computed(fn, Vec)    → Vec  (typed, RO)
-export function computed<T>(getter: () => T): Signal<T>;
-export function computed<T, C extends Signal<T>>(
-  getter: () => T,
-  Cls: new (...args: never[]) => C,
-): C;
-export function computed<T, C extends Signal<T>>(
-  getter: () => T,
-  Cls?: new (...args: never[]) => C,
-): C | Signal<T> {
-  return Cls === undefined
-    ? Signal.install(Signal as new (...args: never[]) => Signal<T>, getter)
-    : Signal.install(Cls, getter);
+/** Untyped read-only derived view. For typed views, prefer the
+ *  per-class static `Cls.derive(fn)` (e.g. `Vec.derive(...)`). */
+export function computed<T>(getter: () => T): Signal<T> {
+  return Signal.install(Signal as new (...args: never[]) => Signal<T>, getter);
 }
 
-// `lens` — overload returns:
-//   lens(g, s)           → Writable<Signal<T>>           (untyped, RW derived)
-//   lens(g, s, Vec)      → Writable<Vec>                  (typed)
-// Both forms surface the full writable shape (brand + writable .value
-// + lifted invertibles + lifted field lenses) so consumers no longer
-// cast at the boundary.
-export function lens<T>(getter: () => T, setter: (v: T) => void): Writable<Signal<T>>;
-export function lens<T, C extends Signal<T>>(
-  getter: () => T,
-  setter: (v: T) => void,
-  Cls: new (...args: never[]) => C,
-): Writable<C>;
-export function lens<T, C extends Signal<T>>(
-  getter: () => T,
-  setter: (v: T) => void,
-  Cls?: new (...args: never[]) => C,
-): Writable<C> | Writable<Signal<T>> {
-  return Cls === undefined
-    ? Signal.install(Signal as new (...args: never[]) => Signal<T>, getter, setter)
-    : Signal.install(Cls, getter, setter);
+/** Untyped read-write derived view. For typed lenses, prefer the
+ *  per-class static `Cls.lens(get, set)` (e.g. `Vec.lens(...)`). */
+export function lens<T>(getter: () => T, setter: (v: T) => void): Writable<Signal<T>> {
+  return Signal.install(Signal as new (...args: never[]) => Signal<T>, getter, setter);
 }
 
 export function effect(fn: () => void | (() => void)): () => void {

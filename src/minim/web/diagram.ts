@@ -14,7 +14,7 @@
 
 import { Anim } from "@minim/core";
 import { ensureArrowMarker, type Mount, mount, Shape, SVG_NS } from "@minim/shapes";
-import { Box, computed, effect, num, type Val } from "@minim/signals";
+import { Box, effect, num, type Val } from "@minim/signals";
 import { Marker } from "@minim/tex";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
 import { attachRaf } from "./raf";
@@ -73,7 +73,7 @@ export class Diagram extends HTMLElement {
   // call; `connectedCallback` auto-fits if it's still false.
   #viewSet = false;
   #viewSig = signal0Box();
-  #viewBox = computed(() => this.#viewSig.value, Box);
+  #viewBox = Box.derive(() => this.#viewSig.value);
 
   private static styleSheets = new Map<string, CSSStyleSheet>();
   static styles = css`

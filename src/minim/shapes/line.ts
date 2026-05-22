@@ -75,14 +75,14 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
 
   /** Closer endpoint to `toward`. */
   override boundary(toward: Vec): Vec {
-    return computed(() => {
+    return Vec.derive(() => {
       const t = toward.value;
       const a = this.from.value;
       const b = this.to.value;
       const da = (t.x - a.x) ** 2 + (t.y - a.y) ** 2;
       const db = (t.x - b.x) ** 2 + (t.y - b.y) ** 2;
       return da <= db ? a : b;
-    }, Vec);
+    });
   }
 
   override segments(): Segment[] {

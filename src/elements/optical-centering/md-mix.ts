@@ -41,13 +41,10 @@ export class MdMix extends Diagram {
     // ── Sequence A: continuous orbit ─────────────────────────────
     const t = num(0);
     this.anim.start(driven(t, (dt, _, cur) => cur + dt));
-    const seqA = computed(
-      () => ({
-        x: cx + 95 * Math.cos(t.value * 1.4),
-        y: cy + 70 * Math.sin(t.value * 1.4),
-      }),
-      Vec,
-    );
+    const seqA = Vec.derive(() => ({
+      x: cx + 95 * Math.cos(t.value * 1.4),
+      y: cy + 70 * Math.sin(t.value * 1.4),
+    }));
 
     // ── Sequence B: tween-driven star path ───────────────────────
     const STAR_R = 95;

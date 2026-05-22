@@ -6,7 +6,7 @@ import {
   compose,
   computed,
   effect,
-  lens,
+  lazy,
   Matrix,
   Mix,
   mix,
@@ -106,19 +106,19 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
   /** Lens-backed parent-frame anchors; writes shift `translate`. */
   get center(): Writable<Vec> {
-    return this.#anchor("center", 0.5, 0.5);
+    return lazy(this, "center", () => this.#makeAnchor(0.5, 0.5));
   }
   get top(): Writable<Vec> {
-    return this.#anchor("top", 0.5, 0);
+    return lazy(this, "top", () => this.#makeAnchor(0.5, 0));
   }
   get bottom(): Writable<Vec> {
-    return this.#anchor("bottom", 0.5, 1);
+    return lazy(this, "bottom", () => this.#makeAnchor(0.5, 1));
   }
   get left(): Writable<Vec> {
-    return this.#anchor("left", 0, 0.5);
+    return lazy(this, "left", () => this.#makeAnchor(0, 0.5));
   }
   get right(): Writable<Vec> {
-    return this.#anchor("right", 1, 0.5);
+    return lazy(this, "right", () => this.#makeAnchor(1, 0.5));
   }
   at(u: number, v: number): Writable<Vec> {
     return this.#makeAnchor(u, v);
@@ -138,13 +138,13 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   parent: AnyShape | null = null;
 
   constructor(
-    intrinsicType?: string,
+    intrinsicType?: keyof SVGElementTagNameMap,
     boxFn?: () => BoxValue,
     opts: O = {} as O,
     /** Subclass per-prop defaults (kept off `O`). */
     defaults: ShapeOpts = {},
   ) {
-    this.el = document.createElementNS(SVG_NS, "g") as SVGGElement;
+    this.el = document.createElementNS(SVG_NS, "g");
     // CSS `transform` (vs SVG `transform`) hits the GPU composite path.
     // Pin origin to userspace 0,0 so composed pivot math is correct.
     this.el.style.transformOrigin = "0 0";
@@ -175,7 +175,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
     // Group default: union of non-aside children's boxes composed
     // through their localFrame.
-    const boxSig = computed(
+    const boxSig = Box.derive(
       boxFn ??
         (() => {
           const cs = this._children.value
@@ -183,7 +183,6 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
             .map(c => transformBox(c.localFrame.value, c.box.value));
           return cs.length ? BoxMath.union(...cs) : { x: 0, y: 0, w: 0, h: 0 };
         }),
-      Box,
     );
 
     this.box = boxSig;
@@ -210,9 +209,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
   /** Parent-frame perimeter point toward `target`; tighter shapes override. */
   boundary(toward: Vec): Vec {
-    return computed(
-      () => BoxMath.edgeFrom(transformBox(this.localFrame.value, this.box.value), toward.value),
-      Vec,
+    return Vec.derive(() =>
+      BoxMath.edgeFrom(transformBox(this.localFrame.value, this.box.value), toward.value),
     );
   }
 
@@ -220,7 +218,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     const boxSig = this.box;
     const lf = this.localFrame;
     const tr = this.transform;
-    return lens(
+    return Vec.lens(
       () => {
         const b = boxSig.value;
         return transformPoint(lf.value, { x: b.x + u * b.w, y: b.y + v * b.h });
@@ -235,19 +233,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
           y: tNow.y + (target.y - currentWorld.y),
         };
       },
-      Vec,
-    ) as unknown as Writable<Vec>;
-  }
-
-  #anchor(name: string, u: number, v: number): Writable<Vec> {
-    const val = this.#makeAnchor(u, v);
-    Object.defineProperty(this, name, {
-      value: val,
-      writable: false,
-      configurable: false,
-      enumerable: false,
-    });
-    return val;
+    );
   }
 
   /** Stroke segments for the dashed renderer; default = bounding rect. */

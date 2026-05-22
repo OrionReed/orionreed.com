@@ -163,13 +163,12 @@ export class MdConformalDisc extends Diagram {
     // Screen-space lens onto a world-space vertex. Drag in screen
     // coords; the inverse maps back to world and clamps into the disc.
     const screenLens = (worldVec: Writable<Vec>): Writable<Vec> =>
-      lens(
+      Vec.lens(
         () => toScreen(worldVec.value),
         target => {
           worldVec.value = clampOpen(fromScreen(target));
         },
-        Vec,
-      ) as unknown as Writable<Vec>;
+      )
 
     // Curve segment for the geodesic arc from Pw to Qw (world coords),
     // rendered in screen coords. Diameter case falls back to a line.
@@ -211,7 +210,7 @@ export class MdConformalDisc extends Diagram {
     // of reflection only — the eye reads the partial pattern as
     // hinting at the infinite tessellation.
     const sister = (kept1: () => V, kept2: () => V, opposite: () => V, color: string) => {
-      const refl = computed(() => reflectAcrossGeodesic(opposite(), kept1(), kept2()), Vec);
+      const refl = Vec.derive(() => reflectAcrossGeodesic(opposite(), kept1(), kept2()));
       s(
         curve(() => [geoArc(refl.value, kept1())], {
           strokeWidth: 1.5,
@@ -224,7 +223,7 @@ export class MdConformalDisc extends Diagram {
           opacity: 0.65,
         }),
         circle(
-          computed(() => toScreen(refl.value), Vec),
+          Vec.derive(() => toScreen(refl.value)),
           3,
           { fill: color, opacity: 0.75 },
         ),

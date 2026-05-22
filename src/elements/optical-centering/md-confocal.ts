@@ -46,13 +46,10 @@ export class MdConfocal extends Diagram {
 
     // Frame: centre, half-focal-distance c, rotation θ (so the
     // canonical ellipse equation lives in the rotated frame).
-    const center = computed(
-      () => ({
-        x: (f1.value.x + f2.value.x) / 2,
-        y: (f1.value.y + f2.value.y) / 2,
-      }),
-      Vec,
-    );
+    const center = Vec.derive(() => ({
+      x: (f1.value.x + f2.value.x) / 2,
+      y: (f1.value.y + f2.value.y) / 2,
+    }));
     const cDist = computed(() => Math.hypot(f2.value.x - f1.value.x, f2.value.y - f1.value.y) / 2);
     const rot = computed(() => Math.atan2(f2.value.y - f1.value.y, f2.value.x - f1.value.x));
 

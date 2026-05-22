@@ -116,7 +116,7 @@ export class MdLoop extends Diagram {
       return r;
     });
 
-    const B = computed(() => sol.value.B, Vec);
+    const B = Vec.derive(() => sol.value.B);
     const thetaAB = computed(() => sol.value.thetaAB);
     const thetaBP = computed(() => sol.value.thetaBP);
 

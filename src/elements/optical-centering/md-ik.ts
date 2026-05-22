@@ -34,14 +34,14 @@ export class MdIk extends Diagram {
       const segIdx = i;
       const prev = joints[i];
       joints.push(
-        computed(() => {
+        Vec.derive(() => {
           let sumA = 0;
           for (let k = 0; k <= segIdx; k++) sumA += angles[k].value;
           return {
             x: prev.value.x + L * Math.cos(sumA),
             y: prev.value.y + L * Math.sin(sumA),
           };
-        }, Vec),
+        }),
       );
     }
 

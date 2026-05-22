@@ -217,7 +217,7 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
   /** Sample at `t ∈ [0, 1]` along arc length. */
   pointAt(t: Val<number>): Vec {
     const ts = num(t);
-    return computed(() => {
+    return Vec.derive(() => {
       const arr = this._segments.value;
       if (arr.length === 0) return { x: 0, y: 0 };
       const target = clamp01(ts.value) * this.length.value;
@@ -231,13 +231,13 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
         acc += segLen;
       }
       return sampleSegment(arr[arr.length - 1], 1);
-    }, Vec);
+    });
   }
 
   /** Unit tangent at `t ∈ [0, 1]`. */
   tangentAt(t: Val<number>): Vec {
     const ts = num(t);
-    return computed(() => {
+    return Vec.derive(() => {
       const arr = this._segments.value;
       if (arr.length === 0) return { x: 1, y: 0 };
       const target = clamp01(ts.value) * this.length.value;
@@ -251,7 +251,7 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
         acc += segLen;
       }
       return tangentSegment(arr[arr.length - 1], 1);
-    }, Vec);
+    });
   }
 
   // ── Fluent extension (static init only) ──────────────────────────

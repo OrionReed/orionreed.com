@@ -47,7 +47,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   }
 
   override boundary(toward: Vec): Vec {
-    return computed(() => {
+    return Vec.derive(() => {
       const c = this.center.value;
       const b = this.box.value;
       const sc = this.scale.value;
@@ -62,7 +62,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
         dy === 0 ? Infinity : halfH / Math.abs(dy),
       );
       return { x: c.x + dx * k, y: c.y + dy * k };
-    }, Vec);
+    });
   }
 
   /** Concentric outline — a new unmounted Rect inflated by `by` per

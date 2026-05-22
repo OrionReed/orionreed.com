@@ -148,10 +148,10 @@ export class MdMorph extends Diagram {
     const poly = new Polygon({ vertices: KEYFRAMES[0].verts });
 
     const points = Array.from({ length: N }, (_, i) =>
-      computed(() => {
+      Vec.derive(() => {
         const v = poly.value.vertices[i] ?? { x: 0, y: 0 };
         return { x: cx + v.x, y: cy + v.y };
-      }, Vec),
+      }),
     );
 
     s(

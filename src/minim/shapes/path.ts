@@ -40,7 +40,7 @@ function sampler(pts: Signal<readonly Vec[]>) {
   };
 
   const sampleAt = (ds: Signal<number>): Vec =>
-    computed(() => {
+    Vec.derive(() => {
       const points = pts.value;
       if (points.length === 0) return { x: 0, y: 0 };
       if (points.length === 1) return points[0].value;
@@ -48,7 +48,7 @@ function sampler(pts: Signal<readonly Vec[]>) {
       const a = points[i].value;
       const b = points[i + 1].value;
       return { x: a.x + (b.x - a.x) * segT, y: a.y + (b.y - a.y) * segT };
-    }, Vec);
+    });
 
   const at = (t: Val<number>): Vec => {
     const ts = num(t);
@@ -60,7 +60,7 @@ function sampler(pts: Signal<readonly Vec[]>) {
 
   const tangentAt = (t: Val<number>): Vec => {
     const ts = num(t);
-    return computed(() => {
+    return Vec.derive(() => {
       const points = pts.value;
       if (points.length < 2) return { x: 1, y: 0 };
       const total = length.value;
@@ -71,7 +71,7 @@ function sampler(pts: Signal<readonly Vec[]>) {
       const dy = b.y - a.y;
       const len = Math.hypot(dx, dy) || 1;
       return { x: dx / len, y: dy / len };
-    }, Vec);
+    });
   };
 
   const normalAt = (t: Val<number>): Vec => tangentAt(t).perp();

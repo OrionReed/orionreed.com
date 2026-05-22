@@ -52,6 +52,7 @@ export {
   isComputed,
   isLens,
   isSignal,
+  lazy,
   lens,
   type Of,
   type Read,

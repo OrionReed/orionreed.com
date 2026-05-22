@@ -1,4 +1,4 @@
-import { computed, Num, num, type Val, Vec } from "@minim/signals";
+import { Num, num, type Val, Vec } from "@minim/signals";
 import { TWO_PI } from "./dashed";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 
@@ -27,28 +27,22 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   /** Point on perimeter at angle θ (radians, y-down). */
   atAngle(angle: Val<number>): Vec {
     const a = num(angle);
-    return computed(
-      () => ({
-        x: this.center.x.value + this.radius.value * Math.cos(a.value),
-        y: this.center.y.value + this.radius.value * Math.sin(a.value),
-      }),
-      Vec,
-    );
+    return Vec.derive(() => ({
+      x: this.center.x.value + this.radius.value * Math.cos(a.value),
+      y: this.center.y.value + this.radius.value * Math.sin(a.value),
+    }));
   }
   /** Unit tangent at angle θ. */
   tangentAt(angle: Val<number>): Vec {
     const a = num(angle);
-    return computed(
-      () => ({
-        x: -Math.sin(a.value),
-        y: Math.cos(a.value),
-      }),
-      Vec,
-    );
+    return Vec.derive(() => ({
+      x: -Math.sin(a.value),
+      y: Math.cos(a.value),
+    }));
   }
 
   override boundary(toward: Vec): Vec {
-    return computed(() => {
+    return Vec.derive(() => {
       const t = toward.value;
       const c = this.center.value;
       const sc = this.scale.value;
@@ -60,7 +54,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
         x: c.x + ((t.x - c.x) / len) * r,
         y: c.y + ((t.y - c.y) / len) * r,
       };
-    }, Vec);
+    });
   }
 
   /** Two half-arcs so each span stays ≤ π (keeps `largeArc` unambiguous).

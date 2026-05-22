@@ -35,12 +35,11 @@ export class MdMirror extends Diagram {
 
     // Reflection is an involution — same formula reads and writes.
     const mirrorOf = (src: Writable<Vec>): Writable<Vec> =>
-      lens(
+      Vec.lens(
         () => reflect(src.value, mA.value, mB.value),
         target => {
           src.value = reflect(target, mA.value, mB.value);
         },
-        Vec,
       );
 
     const stemTop = vec(200, 90);
