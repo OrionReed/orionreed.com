@@ -340,3 +340,7 @@ The `code` package is a sibling of `tex` — same architecture (a reactive `sour
 <md-runtime-tests></md-runtime-tests>
 
 <md-trails></md-trails>
+
+<md-linkage></md-linkage>
+
+<md-conformal-disc></md-conformal-disc>

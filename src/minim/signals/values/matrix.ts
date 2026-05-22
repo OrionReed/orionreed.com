@@ -162,7 +162,7 @@ export class Matrix extends Signal<V> {
   }
 
   get determinant(): Num {
-    return this.memo("determinant", () => Num.derive(() => determinant(this.value)));
+    return this.memo("determinant", () => this.deriveTo(Num, determinant));
   }
 }
 export interface Matrix {

@@ -34,13 +34,7 @@ describe("Num", () => {
 
   it("parent.deriveTo(Cls, fwd) — cross-type RO lens", () => {
     const v = vec(3, 4);
-    // The explicit type args ride past Vec's interface-merged variance
-    // (same dance field() does internally — see signal.ts).
-    type VV = { x: number; y: number };
-    const m = (v as unknown as { deriveTo<U, C>(Cls: new (...a: never[]) => C, fwd: (s: VV) => U): C }).deriveTo(
-      Num,
-      (p: VV) => Math.hypot(p.x, p.y),
-    ) as Num;
+    const m = v.deriveTo(Num, (p) => Math.hypot(p.x, p.y));
     expect(m).toBeInstanceOf(Num);
     expect(isComputed(m)).toBe(true);
     expect(m.value).toBe(5);
@@ -51,25 +45,20 @@ describe("Num", () => {
 
   it("parent.lensTo(Cls, fwd, bwd) — cross-type RW lens, write propagates", () => {
     const v = vec(1, 2);
-    type VV = { x: number; y: number };
-    const sum = (v as unknown as {
-      lensTo<U, C>(
-        Cls: new (...a: never[]) => C,
-        fwd: (s: VV) => U,
-        bwd: (u: U, s: VV) => VV,
-      ): C;
-    }).lensTo(
+    const sum = v.lensTo(
       Num,
-      (p: VV) => p.x + p.y,
-      (s: number, p: VV) => {
+      (p) => p.x + p.y,
+      (s, p) => {
         const cur = p.x + p.y;
         if (cur === 0) return { x: s / 2, y: s / 2 };
         const k = s / cur;
         return { x: p.x * k, y: p.y * k };
       },
-    ) as Num;
+    );
     expect(isLens(sum)).toBe(true);
     expect(sum.value).toBe(3);
+    // sum is a bare Num at the type level (RO interface merge). Cast to
+    // write — at runtime the lens IS writable because we supplied bwd.
     (sum as unknown as { value: number }).value = 30;
     expect(v.value).toEqual({ x: 10, y: 20 });
   });

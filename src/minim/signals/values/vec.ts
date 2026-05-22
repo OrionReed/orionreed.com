@@ -184,7 +184,7 @@ export class Vec extends Signal<V> {
     return Vec.derive(() => lerp(this.value, value(b), value(t)));
   }
   distance(other: Val<V>): Num {
-    return Num.derive(() => metric(this.value, value(other)));
+    return this.deriveTo(Num, (v) => metric(v, value(other)));
   }
 
   get x(): Num {
@@ -194,7 +194,7 @@ export class Vec extends Signal<V> {
     return this.field("y", Num);
   }
   get magnitude(): Num {
-    return this.memo("magnitude", () => Num.derive(() => Math.hypot(this.value.x, this.value.y)));
+    return this.memo("magnitude", () => this.deriveTo(Num, (v) => Math.hypot(v.x, v.y)));
   }
 
   /** Tween-builder, implied by the lerp trait. */

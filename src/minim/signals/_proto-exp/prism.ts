@@ -26,8 +26,10 @@ export function presentOr<T>(
   Wrap: unknown,
   fallback: T,
 ): Signal<T> {
-  return source.lensTo<T, Signal<T>>(
-    Wrap as new (...args: never[]) => Signal<T>,
+  return (source as unknown as {
+    lensTo(C: unknown, f: (s: T | undefined) => T, b: (v: T, s: T | undefined) => T | undefined): Signal<T>;
+  }).lensTo(
+    Wrap,
     (s) => (s === undefined ? fallback : s),
     (v, s) => (s === undefined ? s : v),
   );
@@ -39,8 +41,10 @@ export function present<T>(
   source: Signal<T | undefined>,
   Wrap: unknown,
 ): Signal<T> {
-  return source.lensTo<T, Signal<T>>(
-    Wrap as new (...args: never[]) => Signal<T>,
+  return (source as unknown as {
+    lensTo(C: unknown, f: (s: T | undefined) => T, b: (v: T, s: T | undefined) => T | undefined): Signal<T>;
+  }).lensTo(
+    Wrap,
     (s) => {
       if (s === undefined) throw new TypeError("present: source is undefined");
       return s;
@@ -58,15 +62,17 @@ export function present<T>(
  *  case (use `presentOr` on top if you want a fallback). */
 export function caseOf<S, T>(
   source: Signal<S>,
-  // Wrap typed loosely (`new () => unknown`) — variance constraints on
-  // Signal<T> defeat strict typing here. Cast at consumer boundary.
+  // Wrap typed loosely — variance constraints on Signal<T> defeat
+  // strict typing here. Cast at consumer boundary.
   Wrap: unknown,
   matches: (s: S) => boolean,
   extract: (s: S) => T,
   embed: (t: T, s: S) => S,
 ): Signal<T | undefined> {
-  return source.lensTo<T | undefined, Signal<T | undefined>>(
-    Wrap as new (...args: never[]) => Signal<T | undefined>,
+  return (source as unknown as {
+    lensTo(C: unknown, f: (s: S) => T | undefined, b: (v: T | undefined, s: S) => S): Signal<T | undefined>;
+  }).lensTo(
+    Wrap,
     (s) => (matches(s) ? extract(s) : undefined),
     (t, s) => (t === undefined || !matches(s) ? s : embed(t, s)),
   );

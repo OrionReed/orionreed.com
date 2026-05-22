@@ -97,10 +97,7 @@ export class Color extends Signal<V> {
   }
   get luminance(): Num {
     return this.memo("luminance", () =>
-      Num.derive(() => {
-        const c = this.value;
-        return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-      }),
+      this.deriveTo(Num, (c) => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b),
     );
   }
   get css(): Signal<string> {

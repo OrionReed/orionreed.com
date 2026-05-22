@@ -464,28 +464,37 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  Subsumes `field()` and most ad-hoc `lensCls(Cls, g, s)` use cases
    *  where the lens has a single parent signal. For arbitrary-shape
    *  typed lenses without a parent, use `Signal.install(Cls, g, s)`
-   *  directly. */
-  lensTo<U, C extends Signal<U>>(
+   *  directly.
+   *
+   *  Signature note: `Cls` is typed as a constructor returning
+   *  `Signal<any>` (so subclasses with invariant setters fit) and `U`
+   *  is recovered from `InstanceType<C>` via `ValueOf<>`. The fwd/bwd
+   *  closures are typed against the recovered U — this dodges the
+   *  contravariant-setter incompatibility you'd hit with the naive
+   *  `C extends Signal<U>` formulation. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape hatch
+  lensTo<C extends new (...args: never[]) => Signal<any>>(
     this: Signal<T>,
-    Cls: new (...args: never[]) => C,
-    fwd: (s: T) => U,
-    bwd: (u: U, s: T) => T,
-  ): C {
+    Cls: C,
+    fwd: (s: T) => Of<InstanceType<C>>,
+    bwd: (u: Of<InstanceType<C>>, s: T) => T,
+  ): InstanceType<C> {
     return Signal.install(
       Cls,
       () => fwd(this.value),
       (u) => { this.value = bwd(u, this.peek()) },
-    );
+    ) as InstanceType<C>;
   }
 
   /** Cross-type computed: read-only `Cls`-instance derived from
    *  `fwd(this.value)`. The one-way analog of `lensTo`. */
-  deriveTo<U, C extends Signal<U>>(
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape hatch
+  deriveTo<C extends new (...args: never[]) => Signal<any>>(
     this: Signal<T>,
-    Cls: new (...args: never[]) => C,
-    fwd: (s: T) => U,
-  ): C {
-    return Signal.install(Cls, () => fwd(this.value));
+    Cls: C,
+    fwd: (s: T) => Of<InstanceType<C>>,
+  ): InstanceType<C> {
+    return Signal.install(Cls, () => fwd(this.value)) as InstanceType<C>;
   }
 
   /** Endo-lens: wrap this cell with a `(fwd, bwd)` pair in value-space.
@@ -536,9 +545,9 @@ export class Signal<T = unknown> implements ReactiveNode {
     let cached = cache[k as string];
     if (cached === undefined) {
       // TODO: find a general robust approach to avoid the spread replace, as this is hot path.
-      cached = (this as Signal<T>).lensTo<T[K], Signal<T[K]>>(
-        Cls as unknown as new (...args: never[]) => Signal<T[K]>,
-        (s) => s[key],
+      cached = (this as Signal<T>).lensTo(
+        Cls,
+        (s) => s[key] as Of<InstanceType<C>>,
         (v, s) => ({ ...(s as object), [key]: v } as T),
       );
       cache[k as string] = cached;

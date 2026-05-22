@@ -150,17 +150,14 @@ export class Box extends Signal<V> {
     return this.field("h", Num);
   }
   get area(): Num {
-    return this.memo("area", () => Num.derive(() => this.value.w * this.value.h));
+    return this.memo("area", () => this.deriveTo(Num, (b) => b.w * b.h));
   }
 
   /** Vec at parametric (u, v) within `[0,1]²`. Not memoised — arbitrary
    *  (u, v) calls otherwise leak a cache entry per pair. Use the named
    *  edge getters (`.center`, `.top`, …) when you want stable identity. */
   at(u: number, v: number): Vec {
-    return Vec.derive(() => {
-      const b = this.value;
-      return { x: b.x + u * b.w, y: b.y + v * b.h };
-    });
+    return this.deriveTo(Vec, (b) => ({ x: b.x + u * b.w, y: b.y + v * b.h }));
   }
   // Named edges — memoised separately under stable keys for identity
   // (effects subscribing to `b.center` should always see the same Vec).
