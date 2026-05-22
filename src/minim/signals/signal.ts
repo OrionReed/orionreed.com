@@ -757,9 +757,10 @@ class Effect implements ReactiveNode {
 
 // ─── Public factories ────────────────────────────────────────────────
 
-/** Writable source. Returns a branded `Signal<T>` so `.value=`/`.set`/
- *  `.bind` are callable. Use `new Vec(...)` for typed value-class
- *  signals (and `vec(x, y)` / `num(v)` / etc. for the factory form). */
+/** Writable source. Returns a branded `Signal<T>` so `.value =` is
+ *  callable on it. Use `new Vec(...)` for typed value-class signals
+ *  (and `vec(x, y)` / `num(v)` / etc. for the factory form). For
+ *  reactive driving see the free `bind(target, source)` helper. */
 export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> & WritableBrand {
   return new Signal(initial, opts) as Signal<T> & WritableBrand;
 }

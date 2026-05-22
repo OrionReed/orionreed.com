@@ -1,12 +1,13 @@
 // vec.ts — reactive 2D point.
+//
+// Invertibles (`add`, `sub`, `scale`, `offset`, `up`, `down`, `left`,
+// `right`) ride on `Signal#through(fwd, bwd)`. Chained calls auto-fuse.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { applyOp1, applyOp2, type Op } from "../ops";
 import {
   batch,
-  computed,
   computedCls,
   lensCls,
   Signal,
@@ -67,14 +68,6 @@ const nearestAngle = (target: number, current: number): number =>
 
 const linearImpl: Linear<V> = { add, sub, scale };
 
-const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
-const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
-const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
-const offsetOp: Op<V, [number, number]> = {
-  fwd: (v, dx, dy) => ({ x: v.x + dx, y: v.y + dy }),
-  bwd: (n, dx, dy) => ({ x: n.x - dx, y: n.y - dy }),
-};
-
 export class Vec extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
   static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
@@ -107,35 +100,80 @@ export class Vec extends Signal<V> {
   }
 
   add(b: Val<V>): Vec {
-    return applyOp1(this, addOp, b, Vec);
+    const bf = valFn(b);
+    return this.through(
+      v => {
+        const o = bf();
+        return { x: v.x + o.x, y: v.y + o.y };
+      },
+      n => {
+        const o = bf();
+        return { x: n.x - o.x, y: n.y - o.y };
+      },
+    );
   }
   sub(b: Val<V>): Vec {
-    return applyOp1(this, subOp, b, Vec);
+    const bf = valFn(b);
+    return this.through(
+      v => {
+        const o = bf();
+        return { x: v.x - o.x, y: v.y - o.y };
+      },
+      n => {
+        const o = bf();
+        return { x: n.x + o.x, y: n.y + o.y };
+      },
+    );
   }
   scale(k: Val<number>): Vec {
-    return applyOp1(this, scaleOp, k, Vec);
+    const kf = valFn(k);
+    return this.through(
+      v => {
+        const k = kf();
+        return { x: v.x * k, y: v.y * k };
+      },
+      n => {
+        const k = kf();
+        return { x: n.x / k, y: n.y / k };
+      },
+    );
   }
   offset(dx: Val<number>, dy: Val<number>): Vec {
-    return applyOp2(this, offsetOp, dx, dy, Vec);
+    const xf = valFn(dx);
+    const yf = valFn(dy);
+    return this.through(
+      v => ({ x: v.x + xf(), y: v.y + yf() }),
+      n => ({ x: n.x - xf(), y: n.y - yf() }),
+    );
   }
-  // Axis-aligned offset sugar — all invertible via offsetOp.
+  // Axis-aligned offset sugar — same fwd/bwd shape as offset.
   up(n: Val<number>): Vec {
-    return this.offset(
-      0,
-      computed(() => -value(n)),
+    const f = valFn(n);
+    return this.through(
+      v => ({ x: v.x, y: v.y - f() }),
+      o => ({ x: o.x, y: o.y + f() }),
     );
   }
   down(n: Val<number>): Vec {
-    return this.offset(0, n);
+    const f = valFn(n);
+    return this.through(
+      v => ({ x: v.x, y: v.y + f() }),
+      o => ({ x: o.x, y: o.y - f() }),
+    );
   }
   left(n: Val<number>): Vec {
-    return this.offset(
-      computed(() => -value(n)),
-      0,
+    const f = valFn(n);
+    return this.through(
+      v => ({ x: v.x - f(), y: v.y }),
+      o => ({ x: o.x + f(), y: o.y }),
     );
   }
   right(n: Val<number>): Vec {
-    return this.offset(n, 0);
+    const f = valFn(n);
+    return this.through(
+      v => ({ x: v.x + f(), y: v.y }),
+      o => ({ x: o.x - f(), y: o.y }),
+    );
   }
 
   normalize(): Vec {

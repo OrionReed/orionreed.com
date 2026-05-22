@@ -1,9 +1,11 @@
 // box.ts — reactive axis-aligned rectangle.
+//
+// Invertibles (`add`, `sub`, `scale`, `expand`) ride on
+// `Signal#through(fwd, bwd)`. Chained calls auto-fuse.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { applyOp1, type Op } from "../ops";
 import {
   computed,
   computedCls,
@@ -12,6 +14,7 @@ import {
   Signal,
   type SignalOptions,
   type Val,
+  valFn,
   value,
 } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
@@ -75,11 +78,6 @@ export function edgeFrom(b: V, toward: Of<Vec>): Of<Vec> {
 
 const linearImpl: Linear<V> = { add, sub, scale };
 
-const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
-const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
-const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
-const expandOp: Op<V, [number]> = { fwd: expand, bwd: (v, n) => expand(v, -n) };
-
 export class Box extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
   static traits: TraitDict<V> & { linear: Linear<V>; lerp: typeof lerp; equals: typeof equals } = {
@@ -106,16 +104,32 @@ export class Box extends Signal<V> {
   }
 
   add(b: Val<V>): Box {
-    return applyOp1(this, addOp, b, Box);
+    const bf = valFn(b);
+    return this.through(
+      v => add(v, bf()),
+      n => sub(n, bf()),
+    );
   }
   sub(b: Val<V>): Box {
-    return applyOp1(this, subOp, b, Box);
+    const bf = valFn(b);
+    return this.through(
+      v => sub(v, bf()),
+      n => add(n, bf()),
+    );
   }
   scale(k: Val<number>): Box {
-    return applyOp1(this, scaleOp, k, Box);
+    const kf = valFn(k);
+    return this.through(
+      v => scale(v, kf()),
+      n => scale(n, 1 / kf()),
+    );
   }
   expand(n: Val<number>): Box {
-    return applyOp1(this, expandOp, n, Box);
+    const nf = valFn(n);
+    return this.through(
+      v => expand(v, nf()),
+      o => expand(o, -nf()),
+    );
   }
 
   lerp(b: Val<V>, t: Val<number>): Box {

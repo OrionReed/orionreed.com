@@ -1,14 +1,15 @@
 // num.ts — reactive scalar.
+//
+// All invertible methods (`add`, `sub`, `scale`, `affine`, `clamp`,
+// `quantize`, `cyclic`) ride on the base `Signal#through(fwd, bwd)`
+// primitive. Chained calls auto-fuse to a single lens cell, so
+// `.scale(k).add(off).clamp(lo, hi)` is one allocation, one dep-graph
+// node.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { applyOp1, applyOp2, type Op } from "../ops";
 import { computedCls, lensCls, Signal, type SignalOptions, type Val, valFn } from "../signal";
-// Inside the new lens-returning methods (`clamp`, `quantize`, `cyclic`)
-// we cast `this` to `Signal<V>` for writes — Num's merged interface
-// declares `value` as RO at the type level (so external callers respect
-// the brand) but Signal's underlying class has a writable setter.
 import { type Linear, type TraitDict } from "../traits";
 import { invertibles, type Writable } from "../writable";
 
@@ -22,15 +23,6 @@ export const metric = (a: V, b: V) => Math.abs(a - b);
 export const equals = (a: V, b: V) => a === b;
 
 const linearImpl: Linear<V> = { add, sub, scale };
-
-const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
-const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
-const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
-// Affine: v ↦ v·k + off. Invertible iff k ≠ 0 (caller's responsibility).
-const affineOp: Op<V, [number, number]> = {
-  fwd: (v, k, off) => v * k + off,
-  bwd: (n, k, off) => (n - off) / k,
-};
 
 export class Num extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
@@ -68,19 +60,37 @@ export class Num extends Signal<V> {
   }
 
   add(b: Val<V>): Num {
-    return applyOp1(this, addOp, b, Num);
+    const bf = valFn(b);
+    return this.through(
+      v => v + bf(),
+      n => n - bf(),
+    );
   }
   sub(b: Val<V>): Num {
-    return applyOp1(this, subOp, b, Num);
+    const bf = valFn(b);
+    return this.through(
+      v => v - bf(),
+      n => n + bf(),
+    );
   }
   scale(k: Val<number>): Num {
-    return applyOp1(this, scaleOp, k, Num);
+    const kf = valFn(k);
+    return this.through(
+      v => v * kf(),
+      n => n / kf(),
+    );
   }
-  /** Affine: `v ↦ k·v + off`. Invertible (a single allocation; cheaper
-   *  than `.scale(k).add(off)`). Sliders: `t.affine(width, x0)` maps
-   *  `t ∈ [0,1]` to screen coords. */
+  /** Affine: `v ↦ k·v + off`. Invertible iff k ≠ 0. Equivalent to
+   *  `.scale(k).add(off)` — the chain auto-fuses to one cell, so this
+   *  is purely a readability alias. Sliders: `t.affine(width, x0)`
+   *  maps `t ∈ [0,1]` to screen coords. */
   affine(k: Val<number>, off: Val<number>): Num {
-    return applyOp2(this, affineOp, k, off, Num);
+    const kf = valFn(k);
+    const of = valFn(off);
+    return this.through(
+      v => v * kf() + of(),
+      n => (n - of()) / kf(),
+    );
   }
 
   /** Lossy lens that clamps reads to `[lo, hi]` and clamps writes

@@ -1,9 +1,11 @@
 // transform.ts — reactive 2D transform.
+//
+// Invertibles (`add`, `sub`) ride on `Signal#through(fwd, bwd)`.
+// Chained calls auto-fuse.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { applyOp1, type Op } from "../ops";
 import {
   computedCls,
   lensCls,
@@ -11,6 +13,7 @@ import {
   Signal,
   type SignalOptions,
   type Val,
+  valFn,
   value,
 } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
@@ -86,9 +89,6 @@ export const metric = (a: V, b: V) =>
 
 const linearImpl: Linear<V> = { add, sub, scale };
 
-const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
-const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
-
 export class Transform extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
   static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
@@ -114,10 +114,18 @@ export class Transform extends Signal<V> {
   }
 
   add(b: Val<V>): Transform {
-    return applyOp1(this, addOp, b, Transform);
+    const bf = valFn(b);
+    return this.through(
+      v => add(v, bf()),
+      n => sub(n, bf()),
+    );
   }
   sub(b: Val<V>): Transform {
-    return applyOp1(this, subOp, b, Transform);
+    const bf = valFn(b);
+    return this.through(
+      v => sub(v, bf()),
+      n => add(n, bf()),
+    );
   }
   lerp(b: Val<V>, t: Val<number>): Transform {
     return Transform.derive(() => lerp(this.value, value(b), value(t)));

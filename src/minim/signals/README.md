@@ -11,15 +11,15 @@ registration needed.
 ```
 signal.ts          — Signal class + engine + factories (signal/computed/lens/computedCls/lensCls)
                      Signal#through(fwd, bwd) — endo-lens with auto-fusion
+                     (every value-class invertible rides on this)
 traits.ts          — Linear / Lerp / Metric / Equals + Traits<T, K> constraint
-ops.ts             — Op<V, Args> + applyOp0/1/2 (for value-class authors)
 writable.ts        — Writable<R> modifier, WritableOf<T>, invertibles<R>()
 lateral.ts         — bind / eq / freeze / gated (sibling-to-sibling lenses)
 anim.ts            — spring / tween / Tween / toward / attract / wave / driven / play / when / loop / every
 clock.ts           — Anim → Signal bridge
 values/
-  num.ts           Num + num + arithmetic ops + clamp/quantize/cyclic (all via .through)
-  vec.ts           Vec + vec + polar + arithmetic
+  num.ts           Num + num + add/sub/scale/affine + clamp/quantize/cyclic (all via .through)
+  vec.ts           Vec + vec + polar + add/sub/scale/offset/up/down/left/right
   box.ts           Box + box + union + edgeFrom + at(u,v) + named edges
   transform.ts     Transform + transform (nested Vec field lenses)
   color.ts         Color + rgb/rgba + luminance + css
@@ -35,10 +35,9 @@ _test/             vitest tests
 The shape that any value class follows:
 
 ```ts
-import { Signal, computedCls, lensCls, type Val, type SignalOptions } from "../signal";
+import { Signal, computedCls, lensCls, valFn, type Val, type SignalOptions } from "../signal";
 import { bind } from "../lateral";
 import { type Linear, type TraitDict } from "../traits";
-import { applyOp1, type Op } from "../ops";
 import { type Writable, invertibles } from "../writable";
 
 type V = number;
@@ -48,14 +47,11 @@ export const add = (a: V, b: V) => a + b;
 // ... sub, scale, lerp, metric, equals
 
 const linearImpl: Linear<V> = { add, sub, scale };
-const addOp:   Op<V, [V]>      = { fwd: add,   bwd: sub };
-const subOp:   Op<V, [V]>      = { fwd: sub,   bwd: add };
-const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
 
 export class Num extends Signal<V> {
   // class-level config
   static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
-  static invertibles = invertibles<Num>()("add", "sub", "scale");
+  static invertibles = invertibles<Num>()("add", "sub", "scale", "through");
 
   // class-level constructors
   static derive(fn: () => V): Num { return computedCls(Num, fn) }
@@ -66,8 +62,15 @@ export class Num extends Signal<V> {
 
   // instance
   constructor(v: V = 0, opts?: SignalOptions<V>) { super(v, opts) }
-  add(b: Val<V>): Num        { return applyOp1(this, addOp,   b, Num) }
-  // ... methods
+
+  // Invertibles ride on Signal#through. Each chained call auto-fuses
+  // to one lens cell, so .add(b).scale(k).clamp(lo,hi) is one
+  // allocation, one dep-graph node.
+  add(b: Val<V>): Num {
+    const bf = valFn(b);
+    return this.through(v => v + bf(), n => n - bf());
+  }
+  // ... sub, scale, etc. follow the same shape
 }
 // interface merge: RO at the public type level; Writable<Num> surfaces the writes
 export interface Num {
@@ -83,6 +86,13 @@ export function num(v: Val<V> = 0): Writable<Num> {
 
 That's the entire mechanical pattern. Field lenses (when relevant)
 go after methods as `get x(): Num { return this.field("x", Num) }`.
+
+`.through(fwd, bwd)` is the one primitive every invertible method
+should reach for. It's an endo-lens (T → T) with two arms in
+value-space; consecutive `.through()` calls auto-fuse so chains stay
+flat. For non-trivial cases (lossy projections, cyclic reps,
+parameterised inverses) the same shape applies — see `Num.clamp` /
+`Num.quantize` / `Num.cyclic` for examples.
 
 ## Writability tracking
 

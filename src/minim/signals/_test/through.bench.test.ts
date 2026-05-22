@@ -1,12 +1,12 @@
 // through.bench.test.ts — perf comparisons for `.through()`.
 //
 // Three axes:
-//   1. Parity:   .through(f, g) vs hand-rolled Num.lens(...)  — should match.
-//   2. Fusion:   N consecutive .through()s vs N nested Num.lens(...)
-//                — fused should win on read & write.
-//   3. Vs ops:   .scale(k).add(off) (today's eager invertibles, 2 lenses)
-//                vs the equivalent .through chain (fused to 1 lens)
-//                vs .affine(k, off) (1 specialized lens).
+//   1. Parity:    .through(f, g) vs hand-rolled Num.lens(...).
+//   2. Fusion:    N consecutive .through()s vs N nested Num.lens(...).
+//                 Fused should win on read & write.
+//   3. Equivalence: .scale(k).add(off) (now uses .through internally),
+//                 vs hand-written `.through ∘ .through`, vs .affine —
+//                 should all converge since they share the path.
 
 import { describe, it } from "vitest";
 import { lens, Num, num } from "../index";
@@ -286,8 +286,13 @@ describe("bench: .through() fusion vs nested lenses", () => {
   });
 });
 
-describe("bench: .through() vs current eager ops", () => {
-  it("scale.add vs through-fused vs affine — read", () => {
+describe("bench: eager-op equivalence (all ride on .through)", () => {
+  // After the rewrite, .add/.scale/.affine all call .through() internally,
+  // so .scale(k).add(off) auto-fuses to one lens cell — same path as a
+  // hand-written `.through ∘ .through`. These should produce ~identical
+  // numbers; if they diverge we've regressed.
+
+  it("scale.add chain == manual through.through == affine — read", () => {
     const a = num(0.5);
     const opsChain = a.scale(200).add(30);
 
@@ -305,7 +310,7 @@ describe("bench: .through() vs current eager ops", () => {
     const a3 = num(0.5);
     const affine = a3.affine(200, 30);
 
-    timed(".scale(200).add(30) read (2 op-lenses)", () => {
+    timed(".scale(200).add(30) read (auto-fused)", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         a.value = i / N;
@@ -313,7 +318,7 @@ describe("bench: .through() vs current eager ops", () => {
       }
       if (s < -1e30) throw new Error("");
     });
-    timed(".through ∘ .through fused read", () => {
+    timed(".through ∘ .through manual fused read", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         a2.value = i / N;
@@ -321,7 +326,7 @@ describe("bench: .through() vs current eager ops", () => {
       }
       if (s < -1e30) throw new Error("");
     });
-    timed(".affine(200, 30) read (1 specialised lens)", () => {
+    timed(".affine(200, 30) read (single .through)", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         a3.value = i / N;
@@ -331,7 +336,7 @@ describe("bench: .through() vs current eager ops", () => {
     });
   });
 
-  it("scale.add vs through-fused vs affine — write", () => {
+  it("scale.add chain == manual through.through == affine — write", () => {
     const a = num(0.5);
     const opsChain = a.scale(200).add(30);
 
@@ -349,13 +354,13 @@ describe("bench: .through() vs current eager ops", () => {
     const a3 = num(0.5);
     const affine = a3.affine(200, 30);
 
-    timed(".scale(200).add(30) write (2 op-lenses)", () => {
+    timed(".scale(200).add(30) write (auto-fused)", () => {
       for (let i = 0; i < N; i++) opsChain.value = 30 + i * 0.02;
     });
-    timed(".through ∘ .through fused write", () => {
+    timed(".through ∘ .through manual fused write", () => {
       for (let i = 0; i < N; i++) fused.value = 30 + i * 0.02;
     });
-    timed(".affine(200, 30) write (1 specialised lens)", () => {
+    timed(".affine(200, 30) write (single .through)", () => {
       for (let i = 0; i < N; i++) affine.value = 30 + i * 0.02;
     });
   });

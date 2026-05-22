@@ -2,10 +2,11 @@
 //
 // Design: writability is a generic modifier (`Writable<R>`) on top of
 // RO-by-default value classes. The brand on factory returns gates
-// `.value =`, `.set`, `.bind` so untyped consumers can't accidentally
-// mutate a derived (read-only) signal. Animator-style constraints use
+// `.value =` so untyped consumers can't accidentally mutate a derived
+// (read-only) signal. Animator-style constraints use
 // `WritableOf<T> & Traits<T, K>` and reject bare RO values at compile
-// time.
+// time. Lateral binding lives in the free `bind(target, source)`
+// function rather than as a method.
 
 // ─── Animators ────────────────────────────────────────────────────
 export {
@@ -37,8 +38,6 @@ export {
 // ─── Clock bridge ─────────────────────────────────────────────────
 export { clockSignal } from "./clock";
 export { bind, eq, freeze, gated } from "./lateral";
-// ─── Ops (for value-class authors) ────────────────────────────────
-export { applyOp0, applyOp1, applyOp2, type Op } from "./ops";
 // ─── Engine ───────────────────────────────────────────────────────
 export {
   batch,

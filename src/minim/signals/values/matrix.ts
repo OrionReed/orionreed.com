@@ -5,12 +5,20 @@
 // doesn't decompose, so `spring`/`tween`/`mean` etc. reject Matrix at
 // compile time (no linear/lerp/metric).
 //
-// Two clearly-invertible ops: `multiply(b)` (inverse is multiply by
-// `invert(b)`) and `invert()` (its own inverse).
+// Two clearly-invertible ops, both via `Signal#through`:
+//   - `multiply(b)` — inverse is multiply by `invert(b)`
+//   - `invert()`    — its own inverse
 
 import { bind } from "../lateral";
-import { applyOp0, applyOp1, type Op } from "../ops";
-import { computedCls, lensCls, type Of, Signal, type SignalOptions, type Val } from "../signal";
+import {
+  computedCls,
+  lensCls,
+  type Of,
+  Signal,
+  type SignalOptions,
+  type Val,
+  valFn,
+} from "../signal";
 import { type TraitDict } from "../traits";
 import { invertibles, type Writable } from "../writable";
 import { Num } from "./num";
@@ -104,14 +112,6 @@ export function compose(t: Of<Vec>, r: number, s: Of<Vec>, pivot: Of<Vec>): V {
 
 export const toMatrixString = (m: V): string => `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
 
-// ─── Invertible ops ────────────────────────────────────────────────
-
-const multiplyOp: Op<V, [V]> = {
-  fwd: multiply,
-  bwd: (n, b) => multiply(n, invert(b)),
-};
-const invertOp: Op<V, []> = { fwd: invert, bwd: invert };
-
 export class Matrix extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
   static traits: TraitDict<V> & { equals: typeof equals } = { equals };
@@ -134,10 +134,14 @@ export class Matrix extends Signal<V> {
   }
 
   multiply(b: Val<V>): Matrix {
-    return applyOp1(this, multiplyOp, b, Matrix);
+    const bf = valFn(b);
+    return this.through(
+      v => multiply(v, bf()),
+      n => multiply(n, invert(bf())),
+    );
   }
   invert(): Matrix {
-    return applyOp0(this, invertOp, Matrix);
+    return this.through(invert, invert);
   }
 
   get a(): Num {

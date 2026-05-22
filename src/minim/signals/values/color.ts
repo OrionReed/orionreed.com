@@ -1,8 +1,10 @@
 // color.ts — reactive RGBA color.
+//
+// Invertibles (`add`, `sub`, `scale`) ride on
+// `Signal#through(fwd, bwd)`. Chained calls auto-fuse.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { applyOp1, type Op } from "../ops";
 import {
   computed,
   computedCls,
@@ -10,6 +12,7 @@ import {
   Signal,
   type SignalOptions,
   type Val,
+  valFn,
   value,
 } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
@@ -31,10 +34,6 @@ export const equals = (a: V, b: V) =>
   a === b || (a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a);
 
 const linearImpl: Linear<V> = { add, sub, scale };
-
-const addOp: Op<V, [V]> = { fwd: add, bwd: sub };
-const subOp: Op<V, [V]> = { fwd: sub, bwd: add };
-const scaleOp: Op<V, [number]> = { fwd: scale, bwd: (v, k) => scale(v, 1 / k) };
 
 export class Color extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
@@ -62,13 +61,25 @@ export class Color extends Signal<V> {
   }
 
   add(b: Val<V>): Color {
-    return applyOp1(this, addOp, b, Color);
+    const bf = valFn(b);
+    return this.through(
+      v => add(v, bf()),
+      n => sub(n, bf()),
+    );
   }
   sub(b: Val<V>): Color {
-    return applyOp1(this, subOp, b, Color);
+    const bf = valFn(b);
+    return this.through(
+      v => sub(v, bf()),
+      n => add(n, bf()),
+    );
   }
   scale(k: Val<number>): Color {
-    return applyOp1(this, scaleOp, k, Color);
+    const kf = valFn(k);
+    return this.through(
+      v => scale(v, kf()),
+      n => scale(n, 1 / kf()),
+    );
   }
   lerp(b: Val<V>, t: Val<number>): Color {
     return Color.derive(() => lerp(this.value, value(b), value(t)));

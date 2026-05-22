@@ -4,17 +4,16 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  applyOp1,
   computedCls,
   invertibles,
   type Linear,
   lensCls,
   Num,
-  type Op,
   Signal,
   type SignalOptions,
   type TraitDict,
   type Val,
+  valFn,
   type Writable,
 } from "../index";
 
@@ -37,8 +36,6 @@ const hslLerp = (a: V, b: V, t: number): V => ({
 });
 
 const linearImpl: Linear<V> = { add: hslAdd, sub: hslSub, scale: hslScale };
-const addOp: Op<V, [V]> = { fwd: hslAdd, bwd: hslSub };
-const scaleOp: Op<V, [number]> = { fwd: hslScale, bwd: (v, k) => hslScale(v, 1 / k) };
 
 class Hsl extends Signal<V> {
   static traits: Required<TraitDict<V>> = {
@@ -64,10 +61,18 @@ class Hsl extends Signal<V> {
   }
 
   add(b: Val<V>): Hsl {
-    return applyOp1(this, addOp, b, Hsl);
+    const bf = valFn(b);
+    return this.through(
+      v => hslAdd(v, bf()),
+      n => hslSub(n, bf()),
+    );
   }
   scale(k: Val<number>): Hsl {
-    return applyOp1(this, scaleOp, k, Hsl);
+    const kf = valFn(k);
+    return this.through(
+      v => hslScale(v, kf()),
+      n => hslScale(n, 1 / kf()),
+    );
   }
 
   get h(): Num {
