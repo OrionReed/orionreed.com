@@ -117,7 +117,6 @@ export * as VecMath from "./values/vec";
 export { axes, type PolarPolicy, polar, tangentPoint, Vec, vec } from "./values/vec";
 // ─── Writable modifier ────────────────────────────────────────────
 export {
-  freeze,
   invertibles,
   type Writable,
   type WritableOf,
