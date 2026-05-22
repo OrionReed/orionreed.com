@@ -37,7 +37,7 @@ export {
 } from "./argmin";
 // ─── Clock bridge ─────────────────────────────────────────────────
 export { clockSignal } from "./clock";
-export { bind, eq, freeze, gated } from "./lateral";
+export { bind, gated } from "./lateral";
 // ─── Engine ───────────────────────────────────────────────────────
 export {
   batch,
@@ -117,6 +117,7 @@ export * as VecMath from "./values/vec";
 export { axes, type PolarPolicy, polar, tangentPoint, Vec, vec } from "./values/vec";
 // ─── Writable modifier ────────────────────────────────────────────
 export {
+  freeze,
   invertibles,
   type Writable,
   type WritableOf,

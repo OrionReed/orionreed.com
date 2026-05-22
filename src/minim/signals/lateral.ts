@@ -1,14 +1,13 @@
-// lateral.ts — symmetric / sibling-to-sibling lenses.
+// lateral.ts — transitional home for `bind` and `gated`.
 //
-// `bind(target, source)` drives target from a Val<T> for the source's
-// lifetime, returning a stop fn. `eq(a, b)` ties two writable signals
-// so writes propagate both ways. `freeze(s)` strips the writable brand
-// (type-only). `gated(s, when)` is dynamic freezing — a Read<T> that
-// drops writes while a predicate is false.
+// `bind(target, source)` drives target from a `Val<T>` for the
+// source's lifetime, returning a stop fn. `gated(s, when)` wraps a
+// writable signal with runtime-conditional writability.
 //
-// These complete the lens vocabulary on the "lateral" axis (between
-// existing siblings) to complement the "vertical" axis (parent ↔
-// derived) covered by the rest of the system.
+// Both are slated for absorption once the Signal-is-Lens engine
+// collapse lands: `bind` becomes "construct a lens onto source"
+// (subsumed by the unified construction story), and `gated` becomes a
+// `.through()` method on Signal. Until then they live here.
 
 import { effect, lens, type Read, Signal, type Val, value, type WritableBrand } from "./signal";
 
@@ -34,35 +33,6 @@ export function bind<T>(target: RW<T> & WritableBrand, source: Val<T>): () => vo
   }
   target.value = source as T;
   return () => {};
-}
-
-/** Bidirectional sync between two existing writable signals.
- *
- *  Initial state: writes flow from each into the other immediately.
- *  Stable: equality-skip in the engine prevents the round trip from
- *  oscillating once the values agree. Returns a disposer. */
-export function eq<T>(a: RW<T>, b: RW<T>): () => void {
-  const stop1 = effect(() => {
-    const v = a.value;
-    if (b.peek() !== v) b.value = v;
-  });
-  const stop2 = effect(() => {
-    const v = b.value;
-    if (a.peek() !== v) a.value = v;
-  });
-  return () => {
-    stop1();
-    stop2();
-  };
-}
-
-/** Type-only no-op: strips the `WritableBrand`.
- *
- *  Pass a frozen signal into a lens factory and the factory's per-input
- *  policy will skip it on writes (because it's not writable). For
- *  runtime gating, see `gated()`. */
-export function freeze<T>(s: Read<T>): Read<T> {
-  return s;
 }
 
 /** Runtime-conditional writability. Reads from `s`; accepts writes

@@ -8,19 +8,40 @@
 // the effect body (`if (a !== b) ...`).
 //
 // What we test:
-//  (1) Simple eq cycles terminate (engine's strict === already handles).
-//  (2) Eq-with-drifty-roundtrip can be made to oscillate forever
-//      without an iteration budget. (Demonstrates the real failure
-//      mode our recent equality discussion was pointing at.)
+//  (1) Simple bidirectional-sync cycles terminate (engine's strict
+//      === already handles).
+//  (2) Sync-with-drifty-roundtrip oscillates forever without an
+//      iteration budget. (Demonstrates the real failure mode our
+//      recent equality discussion was pointing at.)
+//
+// Two-cell bidirectional sync is set up inline (a tiny effect pair)
+// rather than reaching for a `eq` helper — keeps the test
+// self-contained and the failure mode crystal clear.
 
 import { describe, expect, it } from "vitest";
-import { effect, eq, Num, num } from "../index";
+import { effect, Num, num } from "../index";
+
+/** Inline bidirectional sync via two guarded effects. */
+function sync<T>(a: { value: T; peek(): T }, b: { value: T; peek(): T }): () => void {
+  const s1 = effect(() => {
+    const v = a.value;
+    if (b.peek() !== v) b.value = v;
+  });
+  const s2 = effect(() => {
+    const v = b.value;
+    if (a.peek() !== v) a.value = v;
+  });
+  return () => {
+    s1();
+    s2();
+  };
+}
 
 describe("cycle: single write is finite", () => {
-  it("simple eq terminates", () => {
+  it("simple bidirectional sync terminates", () => {
     const a = num(0);
     const b = num(0);
-    eq(a, b);
+    sync(a, b);
     let runs = 0;
     effect(() => {
       void a.value;
@@ -32,7 +53,7 @@ describe("cycle: single write is finite", () => {
     expect(b.value).toBe(1);
   });
 
-  it("eq + exactly-invertible lens chain terminates", () => {
+  it("sync + exactly-invertible lens chain terminates", () => {
     // .add(2).sub(2) is exact in IEEE 754 for integers near 0 — fwd
     // and bwd both lossless. Engine === catches the no-op.
     const a = num(0);
@@ -44,8 +65,8 @@ describe("cycle: single write is finite", () => {
 });
 
 describe("cycle: drift-prone roundtrip — the actual failure mode", () => {
-  it("THIS IS THE BUG: eq(a, drifty) loops indefinitely under multiplicative drift", () => {
-    // The lens reads `a * (1+ε)` and writes through identity. eq()
+  it("THIS IS THE BUG: sync(a, drifty) loops indefinitely under multiplicative drift", () => {
+    // The lens reads `a * (1+ε)` and writes through identity. sync()
     // ties the two together. effect1 sees a≠drifty (fwd drifted ε)
     // and writes drifty:=a; effect2 then re-reads drifty (recomputes
     // fwd from the just-written a, drifting again) and sees b≠a,
@@ -68,7 +89,7 @@ describe("cycle: drift-prone roundtrip — the actual failure mode", () => {
     );
 
     expect(() => {
-      eq(a, drifty);
+      sync(a, drifty);
       a.value = 2;
     }).toThrow(/BUDGET/);
 
@@ -85,7 +106,7 @@ describe("cycle: drift-prone roundtrip — the actual failure mode", () => {
         (a as unknown as { value: number }).value = v;
       },
     );
-    eq(a, clean);
+    sync(a, clean);
 
     effect(() => {
       void a.value;
