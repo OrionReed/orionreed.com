@@ -4,5 +4,4 @@
 //
 //   node --expose-gc node_modules/.bin/vite-node src/minim/_bench/index.ts
 
-import "./signals.bench";
 import "./anim.bench";

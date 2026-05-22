@@ -71,13 +71,27 @@ export interface Scoped<F extends AnyFactory> {
   readonly touchedDeep: Read<readonly Signal<unknown>[]>;
 }
 
-/** Wrap `fn` so its invocations open Spans with identity = fn. */
-export function scope<F extends AnyFactory>(fn: F, name?: string): Scoped<F> {
+/** Wrap `fn` so its invocations open Spans with identity = fn.
+ *
+ *  Two forms:
+ *
+ *      const fadeIn = scope("fadeIn", function* () { … });
+ *      const fadeIn = scope(function* () { … });
+ *
+ *  Prefer the name-first form. Without an explicit name, identity is
+ *  derived from `fn.name`, which esbuild renames when an inner
+ *  `function* fadeIn` collides with an outer `const fadeIn` (rewritten
+ *  to `fadeIn2`). The explicit tag survives any bundler transform. */
+export function scope<F extends AnyFactory>(fn: F): Scoped<F>;
+export function scope<F extends AnyFactory>(name: string, fn: F): Scoped<F>;
+export function scope<F extends AnyFactory>(...args: [F] | [string, F]): Scoped<F> {
+  const [name, fn] =
+    typeof args[0] === "string" ? (args as [string, F]) : [undefined, args[0] as F];
   const tagged = name ?? fn.name ?? "anon";
   const factory = ((...args: Parameters<F>): ReturnType<F> => {
     const parent = currentSpan;
     const inner = fn(...args) as Animator<any>;
-    return makeWrapper(fn, args, parent, inner) as ReturnType<F>;
+    return makeWrapper(fn, tagged, args, parent, inner) as ReturnType<F>;
   }) as Scoped<F>;
 
   Object.defineProperty(factory, "name", {
@@ -214,6 +228,7 @@ function* allFactoryLists(): IterableIterator<readonly Span[]> {
  *  span on every gen entry; observe lifecycle from inside. */
 function makeWrapper(
   fn: Function,
+  name: string,
   args: readonly unknown[],
   parent: Span | undefined,
   inner: Animator<any>,
@@ -223,7 +238,7 @@ function makeWrapper(
   const ensureOpen = (): Span => {
     if (!span) {
       rememberFactory(fn);
-      span = openSpan(fn, args, parent);
+      span = openSpan(fn, name, args, parent);
       // Add to per-factory list BEFORE notifying recorders so downstream
       // computeds (`alive`, `last`, etc.) see the span when they
       // re-evaluate inside the listener-driven flush.
@@ -289,7 +304,7 @@ export function scopeAll<R extends Record<string, AnyFactory>>(
 ): { [K in keyof R]: Scoped<R[K]> } {
   const out = {} as { [K in keyof R]: Scoped<R[K]> };
   for (const k of Object.keys(o) as Array<keyof R & string>) {
-    out[k] = scope(o[k]) as Scoped<R[typeof k]>;
+    out[k] = scope(k, o[k]) as Scoped<R[typeof k]>;
   }
   return out;
 }

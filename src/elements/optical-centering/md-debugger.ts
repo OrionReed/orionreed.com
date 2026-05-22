@@ -50,20 +50,20 @@ interface HasOpacity {
 
 // ─── buggy scene ─────────────────────────────────────────────────
 
-const fadeIn = scope(function* fadeIn(s: HasOpacity, dur: number): Animator<void> {
+const fadeIn = scope("fadeIn", function* (s: HasOpacity, dur: number): Animator<void> {
   yield* s.opacity.to(1, dur);
 });
 
-const nudge = scope(function* nudge(s: HasOpacity, delta: number): Animator<void> {
+const nudge = scope("nudge", function* (s: HasOpacity, delta: number): Animator<void> {
   // BUG: doesn't clamp; pushes opacity above 1.0 → claim violates.
   yield* s.opacity.to(s.opacity.peek() + delta, 0.18);
 });
 
-const fadeOut = scope(function* fadeOut(s: HasOpacity, dur: number): Animator<void> {
+const fadeOut = scope("fadeOut", function* (s: HasOpacity, dur: number): Animator<void> {
   yield* s.opacity.to(0, dur);
 });
 
-const intro = scope(function* intro(s: HasOpacity): Animator<void> {
+const intro = scope("intro", function* (s: HasOpacity): Animator<void> {
   yield* fadeIn(s, 0.4);
   yield 0.2;
   yield* nudge(s, 0.4);
@@ -193,7 +193,7 @@ export class MdDebugger extends Diagram {
       next.push({
         t: this.anim.clock,
         v: c.opacity.peek(),
-        fn: author.peek()?.fn.name,
+        fn: author.peek()?.name,
         safe: safe.peek(),
         reaches: reaches.peek(),
       });
@@ -315,14 +315,14 @@ export class MdDebugger extends Diagram {
       s.root,
       visibleSpans,
       span => {
-        const lane = TRACK_OF[span.fn.name] ?? 0;
+        const lane = TRACK_OF[span.name] ?? 0;
         const y = TIMELINE_TOP + lane * (GANTT_TRACK_H + GANTT_TRACK_GAP);
         const x = computed(() => xFor(span.start));
         const w = computed(() => {
           const end = span.end ?? this.anim.clock;
           return Math.max(2, (end - span.start) * xScale.value);
         });
-        const fill = FN_COLOR[span.fn.name] ?? "#888";
+        const fill = FN_COLOR[span.name] ?? "#888";
         const bar = rect(x, y, w, GANTT_TRACK_H, {
           fill,
           opacity: computed(() => (span.end === undefined ? 0.7 : 0.92)),
@@ -338,7 +338,7 @@ export class MdDebugger extends Diagram {
           computed(() => xFor(span.start) + 5),
           y + GANTT_TRACK_H / 2 + 0.5,
         );
-        const tagShape = label(labelPos, span.fn.name, {
+        const tagShape = label(labelPos, span.name, {
           size: 9,
           align: Anchor.Left,
           fill: "white",

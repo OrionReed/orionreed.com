@@ -39,13 +39,13 @@ describe("scope() — identity & lifecycle", () => {
   });
 
   it("opens a span on first .next() and closes on completion", () => {
-    const fadeIn = scope(function* fadeIn(): Animator<void> {
+    const fadeIn = scope("fadeIn", function* (): Animator<void> {
       yield 0.05;
     });
     anim.start(fadeIn());
     anim.step(0);
     expect(rec.spans.value.length).toBe(1);
-    expect(rec.spans.value[0].fn.name).toBe("fadeIn");
+    expect(rec.spans.value[0].name).toBe("fadeIn");
     expect(rec.spans.value[0].status).toBe("open");
     anim.step(0.1);
     expect(rec.spans.value[0].status).toBe("settled");
@@ -64,51 +64,51 @@ describe("scope() — identity & lifecycle", () => {
   });
 
   it("records parent across yield (engine spawn)", () => {
-    const child = scope(function* child(): Animator<void> {
+    const child = scope("child", function* (): Animator<void> {
       yield 0.05;
     });
-    const parent = scope(function* parent(): Animator<void> {
+    const parent = scope("parent", function* (): Animator<void> {
       yield child();
     });
     anim.start(parent());
     anim.step(0);
     const spans = rec.spans.value;
     expect(spans.length).toBe(2);
-    const p = spans.find(s => s.fn.name === "parent")!;
-    const c = spans.find(s => s.fn.name === "child")!;
+    const p = spans.find(s => s.name === "parent")!;
+    const c = spans.find(s => s.name === "child")!;
     expect(c.parent).toBe(p);
   });
 
   it("records parent across yield* (no engine spawn)", () => {
-    const inner = scope(function* inner(): Animator<void> {
+    const inner = scope("inner", function* (): Animator<void> {
       yield 0.05;
     });
-    const outer = scope(function* outer(): Animator<void> {
+    const outer = scope("outer", function* (): Animator<void> {
       yield* inner();
     });
     anim.start(outer());
     anim.step(0);
     const spans = rec.spans.value;
     expect(spans.length).toBe(2);
-    const o = spans.find(s => s.fn.name === "outer")!;
-    const i = spans.find(s => s.fn.name === "inner")!;
+    const o = spans.find(s => s.name === "outer")!;
+    const i = spans.find(s => s.name === "inner")!;
     expect(i.parent).toBe(o);
   });
 
   it("captures parent at construction time, not first .next()", () => {
     // Constructed inside outer.body (currentSpan=outer); engine resumes
     // child later. Parent must still be `outer`.
-    const child = scope(function* child(): Animator<void> {
+    const child = scope("child", function* (): Animator<void> {
       yield 0.05;
     });
-    const outer = scope(function* outer(): Animator<void> {
+    const outer = scope("outer", function* (): Animator<void> {
       yield child();
     });
     anim.start(outer());
     anim.step(0);
     anim.step(0.06);
-    const c = rec.spans.value.find(s => s.fn.name === "child")!;
-    expect(c.parent?.fn.name).toBe("outer");
+    const c = rec.spans.value.find(s => s.name === "child")!;
+    expect(c.parent?.name).toBe("outer");
   });
 
   it("scope properties report alive/runs/last/duration", () => {
@@ -161,14 +161,14 @@ describe("write attribution", () => {
   it("authorOf reports the most recent writer", () => {
     const sig = signal(0);
     const author = authorOf(sig);
-    const work = scope(function* work(): Animator<void> {
+    const work = scope("work", function* (): Animator<void> {
       sig.value = 1;
       yield 0.01;
     });
     expect(author.value).toBeUndefined();
     anim.start(work());
     anim.step(0);
-    expect(author.value?.fn.name).toBe("work");
+    expect(author.value?.name).toBe("work");
   });
 
   it("touchedDeep includes descendant writes", () => {
@@ -333,7 +333,7 @@ describe("intervals & firstOf", () => {
     // sees args typed as Traits<unknown, …>. Cast via `as any` is the
     // simplest workaround for this generic-erasure edge.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const t_spring = scope(spring as any, "spring");
+    const t_spring = scope("spring", spring as any);
     const op = num(0);
     const aliveLog: boolean[] = [];
     expect(t_spring.alive.value).toBe(false);
@@ -356,9 +356,9 @@ describe("intervals & firstOf", () => {
     const rec = record(anim);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const t_tween = scope(tween as any, "tween");
+    const t_tween = scope("tween", tween as any);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const t_spring = scope(spring as any, "spring");
+    const t_spring = scope("spring", spring as any);
 
     const op = num(0);
 

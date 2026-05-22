@@ -26,6 +26,11 @@ export interface Span {
   readonly id: number;
   /** Factory reference; the canonical identity. */
   readonly fn: Function;
+  /** Display name; resolved by `scope()` from its explicit arg or
+   *  `fn.name`. Independent of `fn.name` so bundlers that rename
+   *  named function expressions (`function* fadeIn` next to
+   *  `const fadeIn`) don't bleed into observable identity. */
+  readonly name: string;
   readonly args: readonly unknown[];
   readonly parent?: Span;
   /** Set by the recorder on open. `0` outside a `record()` session. */
@@ -81,10 +86,16 @@ let nextId = 1;
  *  Does NOT notify listeners — the caller must finish bookkeeping
  *  (e.g. `recordFactorySpan`) first and then call `notifySpanOpen(s)`
  *  so downstream computeds see the new span when they re-evaluate. */
-export function openSpan(fn: Function, args: readonly unknown[], parent: Span | undefined): Span {
+export function openSpan(
+  fn: Function,
+  name: string,
+  args: readonly unknown[],
+  parent: Span | undefined,
+): Span {
   return {
     id: nextId++,
     fn,
+    name,
     args,
     parent,
     start: 0,

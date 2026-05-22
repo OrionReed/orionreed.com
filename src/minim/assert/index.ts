@@ -3,7 +3,7 @@
 // One nominal data type (`Span`); everything else is a function over
 // spans and signals. Three entry points:
 //
-//   scope(fn)       — give a factory identity (becomes traceable).
+//   scope(name, fn) — give a factory identity (becomes traceable).
 //   record(anim)    — start recording; spans flow into a Read<Span[]>.
 //   claim(sig).…    — fluent builder over `latch` + predicates.
 //

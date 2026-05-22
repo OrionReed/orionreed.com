@@ -3,9 +3,9 @@
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
+    "types": ["node"],
     "skipLibCheck": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
 
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -16,9 +16,8 @@
 
     /* Sub-package aliases — `@minim/values` etc. resolve to
      * `src/minim/values/index.ts`, etc. Mirrored in vite.config.ts. */
-    "baseUrl": ".",
     "paths": {
-      "@minim/*": ["src/minim/*"]
+      "@minim/*": ["./src/minim/*"]
     },
 
     /* Linting */

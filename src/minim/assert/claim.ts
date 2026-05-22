@@ -194,8 +194,8 @@ function wrapClaim(pred: Read<boolean>, body: Read<boolean>, init: boolean, labe
 
 function scopeName(s: Scope): string {
   if (typeof s === "function") return s.name || "fn";
-  if (typeof s === "object" && s !== null && "fn" in (s as object)) {
-    return (s as { fn: { name?: string } }).fn.name ?? "span";
+  if (typeof s === "object" && s !== null && "name" in (s as object)) {
+    return (s as { name?: string }).name ?? "span";
   }
   return "scope";
 }

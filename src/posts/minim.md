@@ -166,7 +166,7 @@ An event bus is one signal per name plus `bus.until(name)`, which is a single su
 A `claim` is a labeled `Signal<boolean>` over a predicate: `true` while it holds, `false` on violation. Claims compose with `.and`, `.or`, `.not`, `.during(scope)`, `.before(other)` — because they _are_ signals. Wrap a factory with `scope(fn)` and you can attach a claim to its lifetime via `.during(fn)` — each invocation re-arms it. The factory carries lazy `alive` / `last` / `runs` / `duration` / `touched` signals; `authorOf(sig)` reports which span most recently wrote to a signal:
 
 ```ts
-const fadeIn = scope(function* fadeIn(s, dur) { /* ... */ });
+const fadeIn = scope("fadeIn", function* (s, dur) { /* ... */ });
 
 const bounded  = claim(c.opacity).stays.in([0, 1]).during(fadeIn);
 const reaches1 = claim(c.opacity).becomes.equal(1).during(fadeIn);
