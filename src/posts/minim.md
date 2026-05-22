@@ -247,6 +247,16 @@ const tip = argminVec(angles, fwdKin, angles.map(() => 1), {
 
 <md-ik></md-ik>
 
+Curves matter too. `Path` is a reactive polyline — cheap, fast, plenty for line plots and node-to-node connectors. When ellipses or arcs are needed, the sibling `Curve` carries the same reactive plumbing but with `ellipseArc` segments rendered via SVG's native `A` command. The standalone `ellipse(center, a, b, rotation?)` factory accepts `Val<>` on every parameter, so a family of confocal conics — five ellipses through fixed eccentricities, four hyperbola pairs sampled as polylines — comes from a couple of loops driven by two draggable foci. Drag a focus; the whole grid re-rescales. Drag the probe; the unique ellipse and hyperbola through it track in real time:
+
+```ts
+const aE = computed(() => (r1.value + r2.value) / 2);   // 2a_e = r₁ + r₂
+const bE = computed(() => Math.sqrt(aE.value ** 2 - cDist.value ** 2));
+s(ellipse(center, aE, bE, rot, { stroke: ACCENT }));
+```
+
+<md-confocal></md-confocal>
+
 `debug.*` goes the other way — read-only derived shapes. `debug.box(thing)` reads a shape's transform and box, derives a parent-frame outline, and renders dashed magenta. Drop them in while developing, delete when done:
 
 ```ts

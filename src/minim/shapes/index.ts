@@ -15,6 +15,7 @@ export {
   wireStroke,
 } from "./common";
 export { type ArrowOpts, arrow, connect, ensureArrowMarker } from "./connect";
+export { Curve, type CurveOpts, type CurveSegment, curve, ellipse } from "./curve";
 export { dashedPath } from "./dashed";
 export { debug } from "./debug";
 export { group } from "./group";
