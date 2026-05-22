@@ -5,14 +5,7 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import {
-  computed,
-  Signal,
-  type SignalOptions,
-  type Val,
-  valFn,
-  value,
-} from "../signal";
+import { computed, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
 import { type Linear, traits } from "../traits";
 import { invertibles, type Writable } from "../writable";
 import { Num } from "./num";
@@ -83,7 +76,7 @@ export class Color extends Signal<V> {
   }
   get luminance(): Num {
     return this.memo("luminance", () =>
-      this.deriveTo(Num, (c) => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b),
+      this.deriveTo(Num, c => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b),
     );
   }
   get css(): Signal<string> {

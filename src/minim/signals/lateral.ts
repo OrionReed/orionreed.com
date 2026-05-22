@@ -1,15 +1,9 @@
-// lateral.ts — transitional home for `bind` and `gated`.
-//
-// `bind(target, source)` drives target from a `Val<T>` for the
-// source's lifetime, returning a stop fn. `gated(s, when)` wraps a
-// writable signal with runtime-conditional writability.
-//
-// Both are slated for absorption once the Signal-is-Lens engine
-// collapse lands: `bind` becomes "construct a lens onto source"
-// (subsumed by the unified construction story), and `gated` becomes a
-// `.through()` method on Signal. Until then they live here.
+// lateral.ts — `bind(target, source)` drives target from a `Val<T>`
+// for the source's lifetime. Slated for absorption into the unified
+// construction story once the Signal-is-Lens engine collapse lands;
+// until then it lives here.
 
-import { effect, lens, type Read, Signal, type Val, value, type WritableBrand } from "./signal";
+import { effect, Signal, type Val, value, type WritableBrand } from "./signal";
 
 interface RW<T> {
   value: T;
@@ -33,16 +27,4 @@ export function bind<T>(target: RW<T> & WritableBrand, source: Val<T>): () => vo
   }
   target.value = source as T;
   return () => {};
-}
-
-/** Runtime-conditional writability. Reads from `s`; accepts writes
- *  only while `when.value` is true. Useful for "lock this axis while
- *  shift is held" interactions. */
-export function gated<T>(s: RW<T> & WritableBrand, when: Read<boolean>): RW<T> & WritableBrand {
-  return lens(
-    () => s.value,
-    v => {
-      if (when.value) s.value = v;
-    },
-  ) as unknown as RW<T> & WritableBrand;
 }

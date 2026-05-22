@@ -14,7 +14,7 @@ Validates:
   axis writers 1/2/4/6) actually beat the generic fallbacks?
 - Lazy getter cost (first access vs cached own-property)
 - Tween throughput (60-frame `.to(target, dur)` end-to-end)
-- Tree fan-out: reactive worldFrame chain vs on-demand parent walk
+- Tree fan-out: on-demand parent walk for cumulative transforms
 - `delegate(host, key, struct)`: passthrough getters vs hand-rolled
   forwarder fields (`Part`-style)
 

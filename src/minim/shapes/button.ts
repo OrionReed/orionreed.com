@@ -31,18 +31,17 @@ export function button(
   const size = num(opts.size ?? 11);
   const hovered = opts.hovered ?? signal(false);
 
-  const g = group({ translate: pos });
-
   // Hover tint behind the border so outline weight stays constant.
-  g.add(
+  const g = group(
+    { translate: pos },
     rect(0, 0, w, h, {
       fill: tokens.stroke,
       opacity: () => (hovered.value ? 0.08 : 0),
       stroke: "none",
     }),
+    rect(0, 0, w, h, { thin: true }),
+    label(vec(w / 2, h / 2), content, { size, align: Anchor.Center }),
   );
-  g.add(rect(0, 0, w, h, { thin: true }));
-  g.add(label(vec(w / 2, h / 2), content, { size, align: Anchor.Center }));
 
   g.on("pointerover", () => {
     hovered.value = true;

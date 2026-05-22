@@ -20,7 +20,9 @@ signal.ts          — Signal class + engine + factories (signal/computed/lens)
 traits.ts          — Linear / Lerp / Metric / Equals + Traits<T, K> constraint
                      traits<V>()({…})                — literal-preserving dict helper
 writable.ts        — Writable<R> modifier, WritableOf<T>, invertibles<R>()
-lateral.ts         — bind / eq / freeze / gated (sibling-to-sibling lenses)
+lateral.ts         — bind (drive target from a Val<T>)
+mix.ts             — mix(Cls, parts, merge, writeback?) + Mix.{mean,sum,…,deltaEven,…}
+argmin.ts          — argminNum / argminVec (N-input weighted-LS lenses)
 anim.ts            — spring / tween / Tween / toward / attract / wave / driven / play / when / loop / every
 clock.ts           — Anim → Signal bridge
 values/
@@ -31,8 +33,6 @@ values/
   color.ts         Color + rgb/rgba + luminance + css
   matrix.ts        Matrix + matrix + multiply/invert/transformBox/...
   anchor.ts        Anchor + Dir constants
-  multi.ts         combine, mean
-  hyper.ts         hyperLens (N→M bidirectional)
 _test/             vitest tests
 ```
 

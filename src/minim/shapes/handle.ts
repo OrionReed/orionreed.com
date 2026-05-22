@@ -1,6 +1,15 @@
 // handle.* — writable derived shapes (draggable circles wired to a Vec).
 
-import { lens, Mix, mix, polar as polarLens, Signal, signal, Vec, type Writable } from "@minim/signals";
+import {
+  lens,
+  Mix,
+  mix,
+  polar as polarLens,
+  Signal,
+  signal,
+  Vec,
+  type Writable,
+} from "@minim/signals";
 import { Circle, type CircleOpts } from "./circle";
 import { drag } from "./interaction";
 import type { Path } from "./path";
@@ -67,7 +76,14 @@ const anchor = (
  *  give the actual centroid of the visible positions (not of translate
  *  deltas — see `centroid` in `shape.ts` for that variant). */
 const centroidHandle = (...shapes: (AnyShape & Has<"translate">)[]): Handle =>
-  handleFn(mix(Vec, shapes.map(s => s.center), Mix.mean, Mix.deltaEven));
+  handleFn(
+    mix(
+      Vec,
+      shapes.map(s => s.center),
+      Mix.mean,
+      Mix.deltaEven,
+    ),
+  );
 
 /** Drag handle at the midpoint of two writable Points — drags both
  *  along with it. */

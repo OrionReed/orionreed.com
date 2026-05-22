@@ -23,10 +23,10 @@
 
 import {
   Anchor,
+  type CurveSegment,
   circle,
   computed,
   curve,
-  type CurveSegment,
   Diagram,
   handle,
   label,
@@ -210,12 +210,7 @@ export class MdConformalDisc extends Diagram {
     // new vertex (the reflection of the opposite vertex). One level
     // of reflection only — the eye reads the partial pattern as
     // hinting at the infinite tessellation.
-    const sister = (
-      kept1: () => V,
-      kept2: () => V,
-      opposite: () => V,
-      color: string,
-    ) => {
+    const sister = (kept1: () => V, kept2: () => V, opposite: () => V, color: string) => {
       const refl = computed(() => reflectAcrossGeodesic(opposite(), kept1(), kept2()), Vec);
       s(
         curve(() => [geoArc(refl.value, kept1())], {

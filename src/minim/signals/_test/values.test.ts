@@ -34,20 +34,22 @@ describe("Num", () => {
 
   it("parent.deriveTo(Cls, fwd) — cross-type RO lens", () => {
     const v = vec(3, 4);
-    const m = v.deriveTo(Num, (p) => Math.hypot(p.x, p.y));
+    const m = v.deriveTo(Num, p => Math.hypot(p.x, p.y));
     expect(m).toBeInstanceOf(Num);
     expect(isComputed(m)).toBe(true);
     expect(m.value).toBe(5);
     v.value = { x: 5, y: 12 };
     expect(m.value).toBe(13);
-    expect(() => { (m as unknown as { value: number }).value = 0 }).toThrow();
+    expect(() => {
+      (m as unknown as { value: number }).value = 0;
+    }).toThrow();
   });
 
   it("parent.lensTo(Cls, fwd, bwd) — cross-type RW lens, write propagates", () => {
     const v = vec(1, 2);
     const sum = v.lensTo(
       Num,
-      (p) => p.x + p.y,
+      p => p.x + p.y,
       (s, p) => {
         const cur = p.x + p.y;
         if (cur === 0) return { x: s / 2, y: s / 2 };

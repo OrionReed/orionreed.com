@@ -201,7 +201,7 @@ const v = c.derive((c) => c.add(offset).scale(2).perp());
 
 `field(parent, key, Type)` is the underlying machinery. `vec.x` and `vec.y` are returned by `field(this, "x", Num)` / `field(this, "y", Num)` — so they're full `Num` signals, and `vec.x.to(50, 0.3)` is a one-axis tween. Per-axis writes don't fire neighbouring effects.
 
-Aggregates aren't a feature, they're lenses. `lens(getter, setter, Cls)` returns a writable computed view that's also an instance of `Cls` — `lens(get, set, Vec)` is a Vec. `combine(parts, merge, distribute)` is the N-ary form; `mean(...sigs)` is five lines over `combine`; `centroid(a, b, c, d)` is `mean(a.translate, …)`. Reading returns the mean; writing distributes the delta. Tweening it is a rigid group translate:
+Aggregates aren't a feature, they're lenses. `lens(getter, setter, Cls)` returns a writable computed view that's also an instance of `Cls` — `lens(get, set, Vec)` is a Vec. `mix(Cls, parts, merge, writeback)` is the N-ary form, parameterised by a *merge* (how reads aggregate) and a *writeback* (how writes distribute). `Mix.mean` + `Mix.deltaEven` gives you the rigid-body centroid: reading returns the mean, writing distributes the delta evenly. `centroid(a, b, c, d)` is one line of that pattern. Tweening it is a rigid group translate:
 
 ```ts
 const c = centroid(a, b, c, d);
@@ -210,7 +210,7 @@ yield* c.to({ x: 200, y: 100 }, 1);
 
 <md-aggregates></md-aggregates>
 
-`mix(Cls, merge)` is the same N-to-1 shape with *mutable* membership and a chosen merge function. Contributors come and go at runtime; merges are first-class values (`Merges.mean`, `Merges.sum`, `Merges.priority`, …) that compose through combinators like `top(n, base)` and `above(threshold, base)`. Two independent animation sequences sharing one position via `mix(Vec, Merges.mean)` — neither knows about the other, and the visible motion is the per-frame weighted mean:
+Merges and writebacks are first-class composable values. `Mix.mean`, `Mix.sum`, `Mix.priority`, `Mix.latest`, `Mix.firstNonNull` compose through combinators like `top(n, base)` and `above(threshold, base)`; `Mix.deltaEven`, `Mix.replaceFirst`, `Mix.proportional` do the dual job for writebacks. Two independent animation sequences sharing one position via `mix(Vec, [seqA, seqB], Mix.mean)` — neither knows about the other, and the visible motion is the per-frame weighted mean:
 
 <md-mix></md-mix>
 
@@ -241,7 +241,7 @@ The lenses don't care what the values *mean*. A colour has two natural coordinat
 
 <md-color></md-color>
 
-Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. The escape hatch for relations that don't fit a chain is the explicit `Num.lens(get, set)` form. Symmetric `eq(a, b)` ties two existing writables. `freeze(s)` strips the writable brand so a lens factory's per-input policy skips it; `gated(s, when)` does the same dynamically.
+Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. The escape hatch for relations that don't fit a chain is the explicit `Num.lens(get, set)` form: write the forward computation and the inverse, get the same bidirectional semantics.
 
 <md-pulley></md-pulley>
 
@@ -255,20 +255,11 @@ const tip = argminVec(angles, fwdKin, angles.map(() => 1), {
 
 <md-ik></md-ik>
 
-Closed kinematic loops are a different beast. A 4-bar mechanism's joints are repeated 2-circle intersections — `dyad(c1, r1, c2, r2)` is `polar`'s sibling, the "two distances" form to its "one distance, one angle." Hoeken's linkage (1926) is one dyad over a polar crank, with the tracer at twice the coupler length. Drag the crank → polar writes back through θ. Drag the tracer → `argminVec` over θ, clamped onto the precomputed coupler curve so the rank-1 Jacobian doesn't overshoot:
-
-```ts
-const A = polar(O, crank, theta, "circular");
-const B = dyad(A, coupler, P, rocker, { branch: +1 });
-```
-
-<md-linkage></md-linkage>
-
-The dyad cascade works for mechanisms that don't cross tangent-of-circles configurations during their cycle. When they do, two paradigms sidestep the branch decision entirely. _Position-based dynamics:_ every joint a writable Vec, every bar a length residual, Gauss–Seidel relaxation projects the graph onto its constraint manifold each frame. Same primitive does forward and inverse — drag any joint, residual propagates to the rest. No branches, because relaxation never computes positions from circle intersection.
+Closed kinematic loops are a different beast from the open IK chain — there's no "tip" you can solve forward, just a system of length constraints that all need to satisfy simultaneously. _Position-based dynamics_ takes the simplest line: every joint a writable Vec, every bar a length residual, Gauss–Seidel relaxation projects the graph onto its constraint manifold each frame. Forward and inverse become the same operation — drag any joint, residual propagates through the rest of the rig.
 
 <md-truss></md-truss>
 
-_Vector-loop:_ parameterise each bar by its angle; the closure equation `Σ rᵢ · u(θᵢ) = 0` is two scalar equations in the unknown angles. Newton-Raphson seeded with last frame's solution stays in angle-space, where continuity is invariant — angles are unique up to 2π — so even mechanisms whose position-form cascades go singular evolve smoothly here.
+When the mechanism is a single closed loop, _vector-loop_ is the textbook angle-space approach. Parameterise each bar by its angle; the closure equation `Σ rᵢ · u(θᵢ) = 0` is two scalar equations in the unknown angles, solved by Newton-Raphson seeded with last frame's solution. Continuity is invariant in angle space (angles are unique up to 2π), so output angles evolve smoothly through the cycle without any branch-tracking machinery.
 
 <md-loop></md-loop>
 

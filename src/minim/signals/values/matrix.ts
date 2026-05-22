@@ -10,13 +10,7 @@
 //   - `invert()`    — its own inverse
 
 import { bind } from "../lateral";
-import {
-  type Of,
-  Signal,
-  type SignalOptions,
-  type Val,
-  valFn,
-} from "../signal";
+import { type Of, Signal, type SignalOptions, type Val, valFn } from "../signal";
 import { traits } from "../traits";
 import { invertibles, type Writable } from "../writable";
 import { Num } from "./num";

@@ -37,14 +37,14 @@ export {
 } from "./argmin";
 // ─── Clock bridge ─────────────────────────────────────────────────
 export { clockSignal } from "./clock";
-export { bind, gated } from "./lateral";
+export { bind } from "./lateral";
+export * as Mix from "./mix";
 // Merges, writebacks, and the `Part`/`Contribution` types live in
 // the `Mix` namespace to avoid flat-export clashes (e.g. `above` is
 // also a predicate in `./assert`; `Part` is also a class in
 // `./tex/parts` and `./code/code`). The factory `mix(...)` is exported
 // flat as the canonical entry point.
 export { type Merge, mix, type Writeback } from "./mix";
-export * as Mix from "./mix";
 // ─── Engine ───────────────────────────────────────────────────────
 export {
   batch,
@@ -78,8 +78,8 @@ export {
   requireMetric,
   type TraitDict,
   type TraitKey,
-  traits,
   type Traits,
+  traits,
 } from "./traits";
 export { Anchor, Dir } from "./values/anchor";
 export * as BoxMath from "./values/box";
@@ -91,7 +91,6 @@ export {
 } from "./values/box";
 export * as ColorMath from "./values/color";
 export { Color, rgb, rgba } from "./values/color";
-export { hyperLens, type InversePolicy } from "./values/hyper";
 export * as MatrixMath from "./values/matrix";
 export {
   compose,

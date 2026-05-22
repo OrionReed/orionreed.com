@@ -6,14 +6,7 @@
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import {
-  batch,
-  Signal,
-  type SignalOptions,
-  type Val,
-  valFn,
-  value,
-} from "../signal";
+import { batch, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
 import { type Linear, traits } from "../traits";
 import { invertibles, type Writable } from "../writable";
 import { Num } from "./num";
@@ -174,7 +167,7 @@ export class Vec extends Signal<V> {
     return Vec.derive(() => lerp(this.value, value(b), value(t)));
   }
   distance(other: Val<V>): Num {
-    return this.deriveTo(Num, (v) => metric(v, value(other)));
+    return this.deriveTo(Num, v => metric(v, value(other)));
   }
 
   get x(): Num {
@@ -184,7 +177,7 @@ export class Vec extends Signal<V> {
     return this.field("y", Num);
   }
   get magnitude(): Num {
-    return this.memo("magnitude", () => this.deriveTo(Num, (v) => Math.hypot(v.x, v.y)));
+    return this.memo("magnitude", () => this.deriveTo(Num, v => Math.hypot(v.x, v.y)));
   }
 
   /** Tween-builder, implied by the lerp trait. */

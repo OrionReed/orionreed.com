@@ -20,8 +20,7 @@ export class MdOrbits extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(400, 320);
 
-    const sun = s(group({ translate: view.center }));
-    sun.add(circle(vec(0, 0), 12, { fill: true }));
+    const sun = s(group({ translate: view.center }, circle(vec(0, 0), 12, { fill: true })));
 
     /** Integrate ω = 2π/period; returns the angle signal (wraps mod 2π). */
     const angularMotion = (period: number, sig?: Signal<number>) => {

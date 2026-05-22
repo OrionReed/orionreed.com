@@ -6,15 +6,7 @@
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import {
-  computed,
-  type Of,
-  Signal,
-  type SignalOptions,
-  type Val,
-  valFn,
-  value,
-} from "../signal";
+import { computed, type Of, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
 import { type Linear, traits } from "../traits";
 import { invertibles, type Writable } from "../writable";
 import { Num } from "./num";
@@ -136,14 +128,14 @@ export class Box extends Signal<V> {
     return this.field("h", Num);
   }
   get area(): Num {
-    return this.memo("area", () => this.deriveTo(Num, (b) => b.w * b.h));
+    return this.memo("area", () => this.deriveTo(Num, b => b.w * b.h));
   }
 
   /** Vec at parametric (u, v) within `[0,1]²`. Not memoised — arbitrary
    *  (u, v) calls otherwise leak a cache entry per pair. Use the named
    *  edge getters (`.center`, `.top`, …) when you want stable identity. */
   at(u: number, v: number): Vec {
-    return this.deriveTo(Vec, (b) => ({ x: b.x + u * b.w, y: b.y + v * b.h }));
+    return this.deriveTo(Vec, b => ({ x: b.x + u * b.w, y: b.y + v * b.h }));
   }
   // Named edges — memoised separately under stable keys for identity
   // (effects subscribing to `b.center` should always see the same Vec).

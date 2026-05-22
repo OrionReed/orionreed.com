@@ -2,7 +2,7 @@
 // and the first-class merge/writeback values + combinators.
 
 import { describe, expect, it } from "vitest";
-import { effect, Mix, mix, num, Num, signal, vec, Vec } from "../index";
+import { effect, Mix, mix, Num, num, signal, Vec, vec } from "../index";
 
 describe("mix: read-only mode (no writeback)", () => {
   it("Num + mean: read tracks contributors", () => {
@@ -202,7 +202,9 @@ describe("mix: other built-in merges", () => {
     const b = signal<number | null>(null);
     const c = signal<number | null>(42);
     const m = mix(
-      Num as unknown as new (...a: never[]) => Num,
+      Num as unknown as new (
+        ...a: never[]
+      ) => Num,
       [a as unknown as () => number, b as unknown as () => number, c as unknown as () => number],
       Mix.firstNonNull,
     );
@@ -272,7 +274,7 @@ describe("mix: combinators", () => {
         { src: a, weight: 1 },
         { src: b, weight: 2 },
       ],
-      Mix.reweight((p) => p.weight * p.weight, Mix.mean),
+      Mix.reweight(p => p.weight * p.weight, Mix.mean),
     );
     expect(m.value).toBe(80);
   });

@@ -8,10 +8,11 @@
 // the same primitive does forward and inverse, no branch decisions
 // anywhere.
 //
-// Mechanism: planar 5-bar parallel manipulator. Two ground pivots
-// (O1, O2), two crank-arm joints (A, B), one end-effector E meeting
-// both forearms. Two DOF — drag E and both arms reconfigure
-// simultaneously, or drag A or B and watch the closed-loop redistribute.
+// Mechanism: 3-armed planar Stewart platform. Three ground pivots
+// (fixed) drive three elbow joints; three forearm bars meet a rigid
+// triangular platform held together by three internal bars. Nine
+// length constraints, three platform DOF. Drag any platform corner
+// or elbow and the closed-loop redistributes through the whole rig.
 
 import {
   Anchor,
@@ -23,6 +24,7 @@ import {
   line,
   Mount,
   type Of,
+  Path,
   signal,
   Vec,
   vec,
@@ -30,6 +32,8 @@ import {
 } from "../../minim";
 
 type V = Of<Vec>;
+
+const TAU = Math.PI * 2;
 
 interface TrussSpec<K extends string> {
   joints: Record<K, V>;
@@ -81,82 +85,156 @@ function truss<K extends string>(spec: TrussSpec<K>): Truss<K> {
   return { joints, step };
 }
 
+const R_GROUND = 130;
+const R_PLAT = 55;
 const ARM = 90;
-const FORE = 110;
-const SPAN = 200;
+const FORE = 85;
+const BASE = -Math.PI / 2; // first ground / platform vertex points up
+
+type Key = "O1" | "O2" | "O3" | "A1" | "A2" | "A3" | "P1" | "P2" | "P3";
 
 export class MdTruss extends Diagram {
   protected scene(s: Mount): void {
-    const view = this.view(560, 380);
-
+    const view = this.view(560, 460);
     const cx = view.center.value.x;
-    const baseY = view.center.value.y + 90;
+    const cy = view.center.value.y;
+
+    const triPoint = (r: number, i: number): V => {
+      const a = BASE + (i * TAU) / 3;
+      return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+    };
+
+    const Os = [0, 1, 2].map(i => triPoint(R_GROUND, i));
+    const Ps = [0, 1, 2].map(i => triPoint(R_PLAT, i));
+
+    // Initial elbows offset perpendicular-CCW from the leg midpoint
+    // so the rig starts on a consistent branch.
+    const As = [0, 1, 2].map(i => {
+      const O = Os[i];
+      const P = Ps[i];
+      const dx = P.x - O.x;
+      const dy = P.y - O.y;
+      const len = Math.hypot(dx, dy);
+      return {
+        x: (O.x + P.x) / 2 - 25 * (dy / len),
+        y: (O.y + P.y) / 2 + 25 * (dx / len),
+      };
+    });
+
+    const platSide = Math.hypot(Ps[1].x - Ps[0].x, Ps[1].y - Ps[0].y);
 
     const t = truss({
       joints: {
-        O1: { x: cx - SPAN / 2, y: baseY },
-        O2: { x: cx + SPAN / 2, y: baseY },
-        A: { x: cx - SPAN / 2, y: baseY - ARM },
-        B: { x: cx + SPAN / 2, y: baseY - ARM },
-        E: { x: cx, y: baseY - ARM - 30 },
+        O1: Os[0],
+        O2: Os[1],
+        O3: Os[2],
+        A1: As[0],
+        A2: As[1],
+        A3: As[2],
+        P1: Ps[0],
+        P2: Ps[1],
+        P3: Ps[2],
       },
       bars: [
-        { from: "O1", to: "A", length: ARM },
-        { from: "O2", to: "B", length: ARM },
-        { from: "A", to: "E", length: FORE },
-        { from: "B", to: "E", length: FORE },
+        { from: "O1", to: "A1", length: ARM },
+        { from: "O2", to: "A2", length: ARM },
+        { from: "O3", to: "A3", length: ARM },
+        { from: "A1", to: "P1", length: FORE },
+        { from: "A2", to: "P2", length: FORE },
+        { from: "A3", to: "P3", length: FORE },
+        { from: "P1", to: "P2", length: platSide },
+        { from: "P2", to: "P3", length: platSide },
+        { from: "P3", to: "P1", length: platSide },
       ],
-      fixed: ["O1", "O2"],
-      iterations: 10,
+      fixed: ["O1", "O2", "O3"],
+      iterations: 16,
     });
 
-    const { O1, O2, A, B, E } = t.joints;
+    const { O1, O2, O3, A1, A2, A3, P1, P2, P3 } = t.joints;
 
+    // Faint base triangle joining the three ground pivots — purely
+    // visual, not a constraint.
     s(
-      line(O1, A, { thin: true }),
-      line(O2, B, { thin: true }),
-      line(A, E, { thin: true }),
-      line(B, E, { thin: true }),
+      line(O1, O2, { thin: true, opacity: 0.18 }),
+      line(O2, O3, { thin: true, opacity: 0.18 }),
+      line(O3, O1, { thin: true, opacity: 0.18 }),
     );
 
-    s(circle(O1, 4, { fill: true }), circle(O2, 4, { fill: true }));
+    // Six leg bars (3 upper + 3 forearm).
+    s(
+      line(O1, A1, { thin: true }),
+      line(O2, A2, { thin: true }),
+      line(O3, A3, { thin: true }),
+      line(A1, P1, { thin: true }),
+      line(A2, P2, { thin: true }),
+      line(A3, P3, { thin: true }),
+    );
 
-    const aH = s(handle(A, { fill: "#5b8def", r: 7 }));
-    const bH = s(handle(B, { fill: "#5b8def", r: 7 }));
-    const eH = s(handle(E, { fill: "#e25c5c", r: 8 }));
+    // Rigid platform triangle as a closed filled Path.
+    s(
+      new Path([P1, P2, P3], {
+        closed: true,
+        fill: "rgba(226, 92, 92, 0.22)",
+        stroke: "#e25c5c",
+        strokeWidth: 1.6,
+      }),
+    );
 
-    // Drift target for the auto-animation when no handle is dragged —
-    // a slowly orbiting point inside the workspace; PBD propagates
-    // its writes through to A and B each frame.
+    s(circle(O1, 4, { fill: true }), circle(O2, 4, { fill: true }), circle(O3, 4, { fill: true }));
+
+    const a1H = s(handle(A1, { fill: "#5b8def", r: 6 }));
+    const a2H = s(handle(A2, { fill: "#5b8def", r: 6 }));
+    const a3H = s(handle(A3, { fill: "#5b8def", r: 6 }));
+    const p1H = s(handle(P1, { fill: "#e25c5c", r: 7 }));
+    const p2H = s(handle(P2, { fill: "#e25c5c", r: 7 }));
+    const p3H = s(handle(P3, { fill: "#e25c5c", r: 7 }));
+
+    // Auto-orbit of the platform pose when no handle is dragged. All
+    // three platform corners get written each frame to a Lissajous
+    // centre + slowly oscillating rotation, then pinned during the
+    // step so PBD only relaxes the elbows.
     const phase = signal(0);
 
     this.anim.start(
       drive(tick => {
-        const pin = new Set<"O1" | "O2" | "A" | "B" | "E">();
-        if (aH.dragging.value) pin.add("A");
-        if (bH.dragging.value) pin.add("B");
-        if (eH.dragging.value) pin.add("E");
+        const pin = new Set<Key>();
+        if (a1H.dragging.value) pin.add("A1");
+        if (a2H.dragging.value) pin.add("A2");
+        if (a3H.dragging.value) pin.add("A3");
+        if (p1H.dragging.value) pin.add("P1");
+        if (p2H.dragging.value) pin.add("P2");
+        if (p3H.dragging.value) pin.add("P3");
         if (pin.size === 0) {
           phase.value = phase.peek() + tick.dt * 0.55;
-          E.value = {
-            x: cx + 70 * Math.cos(phase.value),
-            y: baseY - ARM - 40 + 35 * Math.sin(phase.value * 1.3),
-          };
-          pin.add("E");
+          const ph = phase.value;
+          const cxP = cx + 32 * Math.cos(ph);
+          const cyP = cy + 22 * Math.sin(ph * 1.3);
+          const rot = 0.32 * Math.sin(ph * 0.6);
+          for (let i = 0; i < 3; i++) {
+            const a = BASE + (i * TAU) / 3 + rot;
+            const key = `P${i + 1}` as "P1" | "P2" | "P3";
+            t.joints[key].value = {
+              x: cxP + R_PLAT * Math.cos(a),
+              y: cyP + R_PLAT * Math.sin(a),
+            };
+          }
+          pin.add("P1");
+          pin.add("P2");
+          pin.add("P3");
         }
         t.step(pin);
       }),
     );
 
     s(
-      label(view.top.down(20), "drag any joint — every bar length stays preserved", {
+      label(view.top.down(20), "drag any platform corner or elbow — all three arms reconfigure", {
         size: 12,
         align: Anchor.Center,
         opacity: 0.7,
       }),
       label(
         view.bottom.up(16),
-        "5-bar parallel manipulator · 4 length constraints · solver = position-based-dynamics relaxation",
+        "3-armed planar Stewart platform · 9 length constraints · solver = position-based dynamics",
         { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );

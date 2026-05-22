@@ -629,16 +629,14 @@ function chunkButton(
   onClick: () => void,
   width: number = BTN_W,
 ): AnyShape {
-  const g = group({ translate: pos });
-  g.add(
+  const g = group(
+    { translate: pos },
     rect(0, 0, width, BTN_H, {
       fill: computed(() => (active.value ? "#dceaff" : "#ffffff")),
       stroke: "#222",
       thin: true,
       corner: 4,
     }),
-  );
-  g.add(
     label(vec(width / 2, BTN_H / 2 + 1), content, {
       size: 11,
       align: Anchor.Center,

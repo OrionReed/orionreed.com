@@ -56,10 +56,7 @@ export interface Contribution<T> {
  *  `Merge<V>` for any concrete `V`, sidestepping `TraitDict<T>`'s
  *  invariance. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape for built-ins
-export type Merge<T = any> = (
-  parts: readonly Contribution<T>[],
-  traits: TraitDict<T>,
-) => T;
+export type Merge<T = any> = (parts: readonly Contribution<T>[], traits: TraitDict<T>) => T;
 
 /** A writeback: pure fn from a new composite value + current
  *  contributions to per-contributor new values. Parallel to `parts`;
@@ -102,7 +99,7 @@ export const sum: Merge = (parts, traits) => {
 
 /** Highest-weight contributor wins. Ties resolved by index order.
  *  Trait-free. */
-export const priority: Merge = (parts) => {
+export const priority: Merge = parts => {
   if (parts.length === 0) throw new Error("mix(priority): no contributors");
   let best = parts[0]!;
   for (let i = 1; i < parts.length; i++) {
@@ -112,20 +109,20 @@ export const priority: Merge = (parts) => {
 };
 
 /** Last contributor (in index order) wins. Trait-free. */
-export const latest: Merge = (parts) => {
+export const latest: Merge = parts => {
   if (parts.length === 0) throw new Error("mix(latest): no contributors");
   return parts[parts.length - 1]!.value;
 };
 
 /** First non-null contribution wins. Useful for default/fallback chains. */
-export const firstNonNull: Merge = (parts) => {
+export const firstNonNull: Merge = parts => {
   for (const p of parts) if (p.value != null) return p.value;
   if (parts.length === 0) throw new Error("mix(firstNonNull): no contributors");
   return parts[0]!.value;
 };
 
 /** Numeric minimum across contributors. Trait-free. */
-export const min: Merge<number> = (parts) => {
+export const min: Merge<number> = parts => {
   if (parts.length === 0) throw new Error("mix(min): no contributors");
   let m = parts[0]!.value;
   for (let i = 1; i < parts.length; i++) if (parts[i]!.value < m) m = parts[i]!.value;
@@ -133,7 +130,7 @@ export const min: Merge<number> = (parts) => {
 };
 
 /** Numeric maximum across contributors. Trait-free. */
-export const max: Merge<number> = (parts) => {
+export const max: Merge<number> = parts => {
   if (parts.length === 0) throw new Error("mix(max): no contributors");
   let m = parts[0]!.value;
   for (let i = 1; i < parts.length; i++) if (parts[i]!.value > m) m = parts[i]!.value;
@@ -203,7 +200,7 @@ export const above =
   <T>(threshold: number, base: Merge<T>): Merge<T> =>
   (parts, traits) =>
     base(
-      parts.filter((p) => p.weight > threshold),
+      parts.filter(p => p.weight > threshold),
       traits,
     );
 
@@ -213,7 +210,7 @@ export const reweight =
   <T>(fn: (p: Contribution<T>) => number, base: Merge<T>): Merge<T> =>
   (parts, traits) =>
     base(
-      parts.map((p) => ({ value: p.value, weight: fn(p) })),
+      parts.map(p => ({ value: p.value, weight: fn(p) })),
       traits,
     );
 
@@ -315,7 +312,9 @@ export function mix<C extends Signal<any>>(
   // on arity (2-arg → RO, 3-arg → RW) so we can't pass `undefined`.
   if (writeback === undefined) {
     return Signal.install(
-      Cls as unknown as new (...args: never[]) => Signal<T>,
+      Cls as unknown as new (
+        ...args: never[]
+      ) => Signal<T>,
       getter,
     ) as unknown as C;
   }
@@ -331,7 +330,9 @@ export function mix<C extends Signal<any>>(
     }
   };
   return Signal.install(
-    Cls as unknown as new (...args: never[]) => Signal<T>,
+    Cls as unknown as new (
+      ...args: never[]
+    ) => Signal<T>,
     getter,
     setter,
   ) as unknown as Writable<C>;

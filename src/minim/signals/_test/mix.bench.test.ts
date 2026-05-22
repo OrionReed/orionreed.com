@@ -17,7 +17,7 @@
 //   - write of mean+deltaEven over 8 contributors
 
 import { describe, it } from "vitest";
-import { lens, Mix, mix, num, Num } from "../index";
+import { lens, Mix, mix, Num, num } from "../index";
 
 const N = 50_000;
 const RUNS = 5;
@@ -40,14 +40,18 @@ function timed(label: string, fn: () => void): void {
 
 describe("perf: mix(Num, mean) read vs hand-rolled lens", () => {
   it("3-contributor read", () => {
-    const a = num(1), b = num(2), c = num(3);
+    const a = num(1),
+      b = num(2),
+      c = num(3);
     const m = mix(Num, [a, b, c], Mix.mean, Mix.deltaEven);
 
     // Hand-rolled: same semantics, no merge dispatch
-    const a2 = num(1), b2 = num(2), c2 = num(3);
+    const a2 = num(1),
+      b2 = num(2),
+      c2 = num(3);
     const hand = lens<number>(
       () => (a2.value + b2.value + c2.value) / 3,
-      (next) => {
+      next => {
         const cur = (a2.peek() + b2.peek() + c2.peek()) / 3;
         const d = next - cur;
         a2.value = a2.peek() + d;
@@ -69,13 +73,17 @@ describe("perf: mix(Num, mean) read vs hand-rolled lens", () => {
   });
 
   it("3-contributor write (delta-even)", () => {
-    const a = num(1), b = num(2), c = num(3);
+    const a = num(1),
+      b = num(2),
+      c = num(3);
     const m = mix(Num, [a, b, c], Mix.mean, Mix.deltaEven);
 
-    const a2 = num(1), b2 = num(2), c2 = num(3);
+    const a2 = num(1),
+      b2 = num(2),
+      c2 = num(3);
     const hand = lens<number>(
       () => (a2.value + b2.value + c2.value) / 3,
-      (next) => {
+      next => {
         const cur = (a2.peek() + b2.peek() + c2.peek()) / 3;
         const d = next - cur;
         a2.value = a2.peek() + d;

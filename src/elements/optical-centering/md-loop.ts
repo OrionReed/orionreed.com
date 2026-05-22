@@ -18,9 +18,10 @@
 
 import {
   Anchor,
+  argminVec,
+  type CurveSegment,
   circle,
   computed,
-  type CurveSegment,
   curve,
   Diagram,
   drive,
@@ -28,10 +29,12 @@ import {
   label,
   line,
   Mount,
+  type Num,
   num,
   type Of,
   polar,
   Vec,
+  type Writable,
 } from "../../minim";
 
 type V = Of<Vec>;
@@ -101,10 +104,9 @@ export class MdLoop extends Diagram {
     const thetaOA = num(0.6).cyclic(TAU);
     const A = polar(O, r1, thetaOA, "circular");
 
-    // Stateful solver instance for the live animation. Each call
-    // updates seedAB/seedBP to last frame's solution — the only piece
-    // of mutable state in the demo, and the reason angles stay
-    // continuous through the cycle.
+    // Live solver instance — its closure-captured seeds get refreshed
+    // to last frame's solution each time `sol` evaluates. The live
+    // seeds are also used (read-only) by the inverse forward below.
     let liveAB = 0.5;
     let liveBP = Math.PI - 0.5;
     const sol = computed(() => {
@@ -115,37 +117,80 @@ export class MdLoop extends Diagram {
     });
 
     const B = computed(() => sol.value.B, Vec);
-    const M = computed(
-      () => {
-        const v = sol.value;
-        return { x: (v.A.x + v.B.x) / 2, y: (v.A.y + v.B.y) / 2 };
-      },
-      Vec,
-    );
     const thetaAB = computed(() => sol.value.thetaAB);
     const thetaBP = computed(() => sol.value.thetaBP);
 
-    // Pre-compute the coupler curve with its own seed pair, so this
-    // sweep doesn't perturb the live solver's continuity state.
+    // Pre-compute the coupler curve with its own private seeds so the
+    // sweep doesn't perturb the live solver's continuity state. The
+    // result is reused as both the visible trace and the workspace
+    // clamp for the inverse.
     const N = 240;
-    let traceAB = 0.5;
-    let traceBP = Math.PI - 0.5;
-    const tracePoints: V[] = [];
+    let gAB = 0.5;
+    let gBP = Math.PI - 0.5;
+    const gait: V[] = [];
     for (let n = 0; n <= N; n++) {
       const t = (n / N) * TAU;
-      const r = solveFourBar(O.value, P.value, r1, r2, r3, t, traceAB, traceBP);
-      traceAB = r.thetaAB;
-      traceBP = r.thetaBP;
-      tracePoints.push({ x: (r.A.x + r.B.x) / 2, y: (r.A.y + r.B.y) / 2 });
+      const r = solveFourBar(O.value, P.value, r1, r2, r3, t, gAB, gBP);
+      gAB = r.thetaAB;
+      gBP = r.thetaBP;
+      gait.push({ x: (r.A.x + r.B.x) / 2, y: (r.A.y + r.B.y) / 2 });
     }
+    const projectOntoGait = (target: V): V => {
+      let best = gait[0];
+      let bestD2 = Infinity;
+      for (const p of gait) {
+        const d2 = (p.x - target.x) ** 2 + (p.y - target.y) ** 2;
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          best = p;
+        }
+      }
+      return best;
+    };
+
+    // M (coupler midpoint) as a writable Vec lensed back through θ_OA.
+    // The forward reads live seeds without mutating them — `sol` owns
+    // that mutation; here we only need the seeds to make Newton's
+    // finite-difference Jacobian well-conditioned.
+    const M = argminVec(
+      [thetaOA as unknown as Writable<Num>],
+      ([t]) => {
+        const r = solveFourBar(O.value, P.value, r1, r2, r3, t, liveAB, liveBP);
+        return { x: (r.A.x + r.B.x) / 2, y: (r.A.y + r.B.y) / 2 };
+      },
+      [1],
+      { clampTarget: projectOntoGait },
+    );
+
     const traceSegs: CurveSegment[] = [];
     for (let n = 1; n <= N; n++) {
-      traceSegs.push({ kind: "line", from: tracePoints[n - 1], to: tracePoints[n] });
+      traceSegs.push({ kind: "line", from: gait[n - 1], to: gait[n] });
     }
     s(curve(traceSegs, { thin: true, opacity: 0.5, stroke: "#e25c5c" }));
 
-    // Crank circle.
     s(circle(O, r1, { thin: true, dashed: true, opacity: 0.25 }));
+
+    // Angle arc at O — visualises θ_OA growing from horizontal as the
+    // crank rotates. Modular wrap so the sweep stays within (0, 2π].
+    s(
+      curve(
+        () => {
+          const t = ((thetaOA.value % TAU) + TAU) % TAU;
+          return [
+            {
+              kind: "ellipseArc" as const,
+              center: O.value,
+              a: 18,
+              b: 18,
+              rotation: 0,
+              a0: 0,
+              a1: t,
+            },
+          ];
+        },
+        { thin: true, stroke: "#5b8def", opacity: 0.55 },
+      ),
+    );
 
     s(
       line(O, A, { thin: true, opacity: 0.5 }),
@@ -155,14 +200,14 @@ export class MdLoop extends Diagram {
 
     s(circle(O, 4, { fill: true }), circle(P, 4, { fill: true }));
     s(circle(B, 3, { fill: "var(--bg-color, white)", thin: true }));
-    s(circle(M, 5, { fill: "#e25c5c" }));
 
     const aH = s(handle(A, { fill: "#5b8def", r: 7 }));
+    const mH = s(handle(M, { fill: "#e25c5c", r: 7 }));
 
     const omega = TAU * 0.18;
     this.anim.start(
       drive(tick => {
-        if (aH.dragging.value) return;
+        if (aH.dragging.value || mH.dragging.value) return;
         thetaOA.value = thetaOA.peek() + omega * tick.dt;
       }),
     );
@@ -170,8 +215,7 @@ export class MdLoop extends Diagram {
     // Live angle readouts so the angle-space story is visible. Wrap
     // to (-π, π] just for legibility.
     const wrap = (x: number) => x - TAU * Math.round(x / TAU);
-    const fmt = (sig: { value: number }) =>
-      `${((wrap(sig.value) * 180) / Math.PI).toFixed(0)}°`;
+    const fmt = (sig: { value: number }) => `${((wrap(sig.value) * 180) / Math.PI).toFixed(0)}°`;
     const corner = view.at(0, 1).right(18);
     const labelAt = (yOffset: number, text: () => string) =>
       label(corner.up(yOffset), text, { size: 11, align: Anchor.Left, opacity: 0.7 });
@@ -184,7 +228,7 @@ export class MdLoop extends Diagram {
     s(
       label(
         view.top.down(20),
-        "drag the blue crank — angles propagate via Newton-Raphson on loop closure",
+        "drag the blue crank or the red tracer — angles propagate via Newton-Raphson on loop closure",
         { size: 12, align: Anchor.Center, opacity: 0.7 },
       ),
       label(

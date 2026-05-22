@@ -10,7 +10,6 @@ import {
   Matrix,
   Mix,
   mix,
-  multiply,
   Num,
   type Of,
   Signal,
@@ -88,9 +87,6 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   /** Composed local-frame matrix: `T(t) T(p) R(r) S(s) T(-p)`. */
   readonly localFrame: Signal<MatrixValue>;
 
-  /** Cumulative scene-root frame: `parent.worldFrame × localFrame`. */
-  readonly worldFrame: Signal<MatrixValue>;
-
   /** Local-frame box; reach into `.x`, `.center`, `.at(u,v)`, etc. */
   readonly box: Box;
 
@@ -118,16 +114,14 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
   protected disposers: (() => void)[] = [];
 
+  // Signal (vs plain array) so the default group `boxFn` re-unions on
+  // add/remove. Kept private — no external consumer reads `children`
+  // reactively today; if one appears, expose a read-only Signal then.
   private readonly _children = signal<readonly AnyShape[]>([]);
-  readonly children: Signal<readonly AnyShape[]> = this._children;
 
-  // Reactive parent ref so descendants' `worldFrame` (and anything
-  // derived from it) invalidates on reparent. Plain field would leave
-  // `worldFrame` reading a stale matrix until something else dirtied it.
-  readonly #parentSig = signal<AnyShape | null>(null);
-  get parent(): AnyShape | null {
-    return this.#parentSig.peek();
-  }
+  /** Back-link set by `add()`; cleared by `dispose()`. Non-reactive —
+   *  reparenting is rare and no consumer needs invalidation today. */
+  parent: AnyShape | null = null;
 
   constructor(
     intrinsicType?: string,
@@ -192,17 +186,9 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
       return compose(t, r, sc, tr.origin.value);
     });
 
-    this.worldFrame = computed(() => {
-      const local = this.localFrame.value;
-      const p = this.#parentSig.value;
-      return p ? multiply(p.worldFrame.value, local) : local;
-    });
-
     this.disposers.push(
       effect(() => {
         this.el.style.transform = toMatrixString(this.localFrame.value);
-      }),
-      effect(() => {
         this.el.style.opacity = String(this.opacity.value);
       }),
     );
@@ -318,7 +304,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   add(...children: AnyShape[]): AnyShape | AnyShape[] {
     for (const child of children) {
       this.el.appendChild(child.el);
-      child.#parentSig.value = this;
+      child.parent = this;
     }
     if (children.length > 0) {
       this._children.value = [...this._children.peek(), ...children];
@@ -351,7 +337,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     this._children.value = [];
     this.disposers.forEach(d => d());
     this.disposers = [];
-    this.#parentSig.value = null;
+    this.parent = null;
     this.el.remove();
   }
 }
@@ -360,15 +346,30 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
 /** Writable centroid of shapes' translates. */
 export function centroid(...shapes: { translate: Writable<Vec> }[]): Writable<Vec> {
-  return mix(Vec, shapes.map(s => s.translate), Mix.mean, Mix.deltaEven);
+  return mix(
+    Vec,
+    shapes.map(s => s.translate),
+    Mix.mean,
+    Mix.deltaEven,
+  );
 }
 
 /** Writable mean rotation. */
 export function meanRotation(...shapes: { rotate: Writable<Num> }[]): Writable<Num> {
-  return mix(Num, shapes.map(s => s.rotate), Mix.mean, Mix.deltaEven);
+  return mix(
+    Num,
+    shapes.map(s => s.rotate),
+    Mix.mean,
+    Mix.deltaEven,
+  );
 }
 
 /** Writable mean scale. */
 export function meanScale(...shapes: { scale: Writable<Vec> }[]): Writable<Vec> {
-  return mix(Vec, shapes.map(s => s.scale), Mix.mean, Mix.deltaEven);
+  return mix(
+    Vec,
+    shapes.map(s => s.scale),
+    Mix.mean,
+    Mix.deltaEven,
+  );
 }

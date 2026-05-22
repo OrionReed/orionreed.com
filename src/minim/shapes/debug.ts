@@ -42,19 +42,12 @@ const dot = (p: Vec | Shape | Box, r = 2.5) => {
 const origin = (s: Shape, size = 8) => {
   const pivot = computed(() => transformPoint(s.localFrame.value, s.origin.value), Vec);
   const half = size / 2;
-  const g = group({ aside: true, opacity: 0.75 });
-  g.add(
-    line(pivot.left(half), pivot.right(half), {
-      stroke: COLOR,
-      thin: true,
-    }),
-    line(pivot.up(half), pivot.down(half), {
-      stroke: COLOR,
-      thin: true,
-    }),
+  return group(
+    { aside: true, opacity: 0.75 },
+    line(pivot.left(half), pivot.right(half), { stroke: COLOR, thin: true }),
+    line(pivot.up(half), pivot.down(half), { stroke: COLOR, thin: true }),
     circle(pivot, 1.5, { fill: COLOR, stroke: "none" }),
   );
-  return g;
 };
 
 /** Dots at the 9 standard anchor positions: corners, edge midpoints,
@@ -92,15 +85,11 @@ const distance = (a: AnyShape | Vec, b: AnyShape | Vec) => {
   const bP: Vec = b instanceof Shape ? b.center : b;
   const mid = aP.lerp(bP, 0.5);
   const d = aP.distance(bP);
-  const g = group({ aside: true });
-  g.add(
+  return group(
+    { aside: true },
     connect(aP, bP),
-    label(mid.up(6), () => d.value.toFixed(0), {
-      size: 10,
-      opacity: 0.85,
-    }),
+    label(mid.up(6), () => d.value.toFixed(0), { size: 10, opacity: 0.85 }),
   );
-  return g;
 };
 
 /** Markers + tiny tangent ticks at evenly-spaced t along a Path. */

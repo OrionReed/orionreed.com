@@ -446,10 +446,7 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  level). The setter form removes the per-callsite
    *  `as unknown as Writable<X>` casts that used to ride on every
    *  `static lens` and factory function. */
-  static install<T, C extends Signal<T>>(
-    Cls: new (...args: never[]) => C,
-    getter: () => T,
-  ): C;
+  static install<T, C extends Signal<T>>(Cls: new (...args: never[]) => C, getter: () => T): C;
   static install<T, C extends Signal<T>>(
     Cls: new (...args: never[]) => C,
     getter: () => T,
@@ -539,7 +536,9 @@ export class Signal<T = unknown> implements ReactiveNode {
     return Signal.install(
       Cls,
       () => fwd(this.value),
-      (u) => { this.value = bwd(u, this.peek()) },
+      u => {
+        this.value = bwd(u, this.peek());
+      },
     ) as InstanceType<C>;
   }
 
@@ -608,8 +607,8 @@ export class Signal<T = unknown> implements ReactiveNode {
       // TODO: find a general robust approach to avoid the spread replace, as this is hot path.
       cached = (this as Signal<T>).lensTo(
         Cls,
-        (s) => s[key] as Of<InstanceType<C>>,
-        (v, s) => ({ ...(s as object), [key]: v } as T),
+        s => s[key] as Of<InstanceType<C>>,
+        (v, s) => ({ ...(s as object), [key]: v }) as T,
       );
       cache[k as string] = cached;
     }
