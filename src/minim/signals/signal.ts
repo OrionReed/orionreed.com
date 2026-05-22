@@ -430,12 +430,15 @@ export class Signal<T = unknown> implements ReactiveNode {
     }
   }
 
-  /** @internal — friend factory used by `computed` / `lens` /
-   *  `computedCls` / `lensCls` to flip a fresh instance into computed
-   *  or lens mode. Static access from Signal lets us assign the
-   *  `private` getter/setter slots on any subclass instance.
+  /** Friend factory used by `computed` / `lens` and the per-class
+   *  statics (`Vec.lens`, `Vec.derive`, …) to flip a fresh instance
+   *  into computed or lens mode. Static access from Signal lets us
+   *  assign the getter/setter slots on any subclass instance.
    *  `(...args: never[])` lets us pass any constructor regardless of
-   *  its declared arity (incl. `Signal` itself whose ctor takes T). */
+   *  its declared arity (incl. `Signal` itself whose ctor takes T).
+   *
+   *  This is the lower-level typed factory: for parent-based lenses,
+   *  prefer `parent.lensTo(Cls, fwd, bwd)` / `parent.deriveTo(Cls, fwd)`. */
   static install<T, C extends Signal<T>>(
     Cls: new (...args: never[]) => C,
     getter: () => T,
@@ -453,6 +456,36 @@ export class Signal<T = unknown> implements ReactiveNode {
   static _mode(v: Signal<unknown>): "signal" | "computed" | "lens" {
     if (v.getter === undefined) return "signal";
     return v.setter === undefined ? "computed" : "lens";
+  }
+
+  /** Cross-type lens: produce a typed `Cls`-instance lens that reads
+   *  `fwd(this.value)` and writes via `this.value = bwd(u, this.peek())`.
+   *
+   *  Subsumes `field()` and most ad-hoc `lensCls(Cls, g, s)` use cases
+   *  where the lens has a single parent signal. For arbitrary-shape
+   *  typed lenses without a parent, use `Signal.install(Cls, g, s)`
+   *  directly. */
+  lensTo<U, C extends Signal<U>>(
+    this: Signal<T>,
+    Cls: new (...args: never[]) => C,
+    fwd: (s: T) => U,
+    bwd: (u: U, s: T) => T,
+  ): C {
+    return Signal.install(
+      Cls,
+      () => fwd(this.value),
+      (u) => { this.value = bwd(u, this.peek()) },
+    );
+  }
+
+  /** Cross-type computed: read-only `Cls`-instance derived from
+   *  `fwd(this.value)`. The one-way analog of `lensTo`. */
+  deriveTo<U, C extends Signal<U>>(
+    this: Signal<T>,
+    Cls: new (...args: never[]) => C,
+    fwd: (s: T) => U,
+  ): C {
+    return Signal.install(Cls, () => fwd(this.value));
   }
 
   /** Endo-lens: wrap this cell with a `(fwd, bwd)` pair in value-space.
@@ -489,6 +522,7 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  Read returns the field; write spread-replaces the composite.
    *  Only meaningful when `T` is an object (TS narrows accordingly).
    *
+   *  Now a thin specialisation of `lensTo` — same shape, just cached.
    *  Uses a dedicated `_fields` cache (not `memo`) so the lookup key is
    *  the raw field name — avoiding the per-access string allocation
    *  that a template-literal memo key (`"field:x"`) would force on the
@@ -501,13 +535,11 @@ export class Signal<T = unknown> implements ReactiveNode {
     const k = key as string | symbol;
     let cached = cache[k as string];
     if (cached === undefined) {
-      cached = lensCls(
-        Cls,
-        () => (this.value as T)[key],
-        // TODO: find a general robust approach to avoid the spread replace, as this is hot path.
-        v => {
-          this.value = { ...(this.peek() as object), [key]: v } as T;
-        },
+      // TODO: find a general robust approach to avoid the spread replace, as this is hot path.
+      cached = (this as Signal<T>).lensTo<T[K], Signal<T[K]>>(
+        Cls as unknown as new (...args: never[]) => Signal<T[K]>,
+        (s) => s[key],
+        (v, s) => ({ ...(s as object), [key]: v } as T),
       );
       cache[k as string] = cached;
     }
@@ -803,26 +835,6 @@ export function lens<T, C extends Signal<T>>(
     ? (Signal.install(Signal as new (...args: never[]) => Signal<T>, getter, setter) as Signal<T> &
         WritableBrand)
     : Signal.install(Cls, getter, setter);
-}
-
-/** @deprecated — use `computed(fn, Cls)` (the typed overload above)
- *  or the per-class static `Vec.derive(fn)`. Kept as a thin alias for
- *  cases that prefer the explicit-Cls-first shape. */
-export function computedCls<T, C extends Signal<T>>(
-  Cls: new (...args: never[]) => C,
-  getter: () => T,
-): C {
-  return Signal.install(Cls, getter);
-}
-
-/** @deprecated — use `lens(g, s, Cls)` (the typed overload above) or
- *  the per-class static `Vec.lens(g, s)`. */
-export function lensCls<T, C extends Signal<T>>(
-  Cls: new (...args: never[]) => C,
-  getter: () => T,
-  setter: (v: T) => void,
-): C {
-  return Signal.install(Cls, getter, setter);
 }
 
 export function effect(fn: () => void | (() => void)): () => void {

@@ -18,7 +18,7 @@
 // per-write cost is N+1 forward evaluations. Damping (Levenberg-
 // Marquardt) avoids blow-up near rank-deficient configurations.
 
-import { batch, lensCls } from "./signal";
+import { batch, Signal } from "./signal";
 import { Num } from "./values/num";
 import { Vec } from "./values/vec";
 import { type Writable } from "./writable";
@@ -84,7 +84,7 @@ export function argminNum(
   }
   const eps = opts.eps ?? 1e-4;
   const damping = opts.damping ?? 1e-6;
-  return lensCls(
+  return Signal.install(
     Num,
     () => forward(inputs.map(i => i.value)),
     target => {
@@ -131,7 +131,7 @@ export function argminVec(
   const eps = opts.eps ?? 1e-4;
   const damping = opts.damping ?? 1e-3;
   const clamp = opts.clampTarget;
-  return lensCls(
+  return Signal.install(
     Vec,
     () => forward(inputs.map(i => i.value)),
     rawTarget => {

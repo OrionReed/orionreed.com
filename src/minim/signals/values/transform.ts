@@ -7,8 +7,6 @@ import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
 import {
-  computedCls,
-  lensCls,
   type Of,
   Signal,
   type SignalOptions,
@@ -99,10 +97,10 @@ export class Transform extends Signal<V> {
 
   // ── class-level constructors ───────────────────────────────────
   static derive(fn: () => V): Transform {
-    return computedCls(Transform, fn);
+    return Signal.install(Transform, fn);
   }
   static lens(g: () => V, s: (v: V) => void): Writable<Transform> {
-    return lensCls(Transform, g, s) as unknown as Writable<Transform>;
+    return Signal.install(Transform, g, s) as unknown as Writable<Transform>;
   }
   static is(v: unknown): v is Transform {
     return v instanceof Transform;

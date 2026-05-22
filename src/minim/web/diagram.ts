@@ -1,6 +1,16 @@
 // Custom-element scaffold. Subclasses override `scene(s)` to build
 // the graph; signals drive updates. Owns the SVG element, the
 // viewBox (`view`/`fit`), and the host CSS sizing (`--d-w`/`--d-h`).
+//
+// Visibility-gated rAF: the per-instance Anim only ticks while the
+// element is on (or near) the viewport, via IntersectionObserver. Pure
+// signal-driven updates (drag, attribute writes, scroll-progress
+// signals from `ext/waapi`) keep working regardless — only the
+// animator clock pauses. Spring/tween/loop state freezes and resumes
+// on re-entry; `anim.clock` therefore reflects on-screen time, not
+// wall-clock time. Opt out with the `always-animate` boolean
+// attribute; fallback to eager-attach in environments without
+// IntersectionObserver (SSR/tests).
 
 import { Anim } from "@minim/core";
 import { ensureArrowMarker, type Mount, mount, Shape, SVG_NS } from "@minim/shapes";
@@ -37,6 +47,7 @@ export class Diagram extends HTMLElement {
   protected shadow: ShadowRoot;
   protected anim = new Anim();
   #detachRaf: (() => void) | null = null;
+  #io: IntersectionObserver | null = null;
   protected svg!: SVGSVGElement;
   /** Scene-graph root. All user-mounted shapes are children of this. */
   protected root!: Shape;
@@ -93,6 +104,8 @@ export class Diagram extends HTMLElement {
   connectedCallback(): void {
     if (!this.svg) this.mountSvg();
     this.#detachRaf?.();
+    this.#io?.disconnect();
+    this.#io = null;
     this.anim.stop();
     this.root?.dispose();
     this.#viewSet = false;
@@ -103,14 +116,39 @@ export class Diagram extends HTMLElement {
     this.s = mount(this.root);
     this.scene(this.s);
     if (!this.#viewSet) this.fit();
-    this.#detachRaf = attachRaf(this.anim);
+    this.#startRaf();
   }
 
   disconnectedCallback(): void {
     this.#detachRaf?.();
     this.#detachRaf = null;
+    this.#io?.disconnect();
+    this.#io = null;
     this.anim.stop();
     this.root?.dispose();
+  }
+
+  // Gate rAF on viewport intersection. `rootMargin: "200px 0px"` warms
+  // the loop before the diagram is actually visible so the first
+  // animated frame isn't a cold start. `always-animate` and missing
+  // IntersectionObserver both fall through to eager attach.
+  #startRaf(): void {
+    if (this.hasAttribute("always-animate") || typeof IntersectionObserver === "undefined") {
+      this.#detachRaf = attachRaf(this.anim);
+      return;
+    }
+    this.#io = new IntersectionObserver(
+      entries => {
+        const inView = entries[entries.length - 1].isIntersecting;
+        if (inView && !this.#detachRaf) this.#detachRaf = attachRaf(this.anim);
+        else if (!inView && this.#detachRaf) {
+          this.#detachRaf();
+          this.#detachRaf = null;
+        }
+      },
+      { rootMargin: "200px 0px" },
+    );
+    this.#io.observe(this);
   }
 
   /** Set the SVG viewBox to `(0, 0, w, h)` (reactive in either input).

@@ -42,13 +42,11 @@ export { bind, gated } from "./lateral";
 export {
   batch,
   computed,
-  computedCls,
   effect,
   isComputed,
   isLens,
   isSignal,
   lens,
-  lensCls,
   type Of,
   type Read,
   Signal,

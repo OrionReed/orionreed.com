@@ -17,7 +17,7 @@
 // over this primitive — the closed-form polar provides `inverse`; the
 // numerical argmin doesn't.
 
-import { batch, lensCls } from "../signal";
+import { batch, Signal } from "../signal";
 import { Num } from "../values/num";
 import { Vec } from "../values/vec";
 import { type Writable } from "../writable";
@@ -58,7 +58,7 @@ export function policyLensVec(
   const clamp = opts.clampTarget;
   const userInverse = opts.inverse;
 
-  return lensCls(
+  return Signal.install(
     Vec,
     () => forward(inputs.map(i => i.value)),
     rawTarget => {

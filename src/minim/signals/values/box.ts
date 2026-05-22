@@ -8,8 +8,6 @@ import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
 import {
   computed,
-  computedCls,
-  lensCls,
   type Of,
   Signal,
   type SignalOptions,
@@ -89,10 +87,10 @@ export class Box extends Signal<V> {
 
   // ── class-level constructors ───────────────────────────────────
   static derive(fn: () => V): Box {
-    return computedCls(Box, fn);
+    return Signal.install(Box, fn);
   }
   static lens(g: () => V, s: (v: V) => void): Writable<Box> {
-    return lensCls(Box, g, s) as unknown as Writable<Box>;
+    return Signal.install(Box, g, s) as unknown as Writable<Box>;
   }
   static is(v: unknown): v is Box {
     return v instanceof Box;

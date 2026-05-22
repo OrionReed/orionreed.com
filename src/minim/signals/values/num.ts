@@ -9,7 +9,7 @@
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { computedCls, lensCls, Signal, type SignalOptions, type Val, valFn } from "../signal";
+import { Signal, type SignalOptions, type Val, valFn } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
 import { invertibles, type Writable } from "../writable";
 
@@ -45,10 +45,10 @@ export class Num extends Signal<V> {
 
   // ── class-level constructors ───────────────────────────────────
   static derive(fn: () => V): Num {
-    return computedCls(Num, fn);
+    return Signal.install(Num, fn);
   }
   static lens(g: () => V, s: (v: V) => void): Writable<Num> {
-    return lensCls(Num, g, s) as unknown as Writable<Num>;
+    return Signal.install(Num, g, s) as unknown as Writable<Num>;
   }
   static is(v: unknown): v is Num {
     return v instanceof Num;

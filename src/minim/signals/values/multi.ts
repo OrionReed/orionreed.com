@@ -3,7 +3,7 @@
 // Canonical "more-than-a-DAG" structures: one derived cell observes
 // N parents and distributes writes back to all of them.
 
-import { lensCls, type Of, type Read, Signal } from "../signal";
+import { type Of, type Read, Signal } from "../signal";
 import { requireLinear, type Traits } from "../traits";
 import { type Writable, type WritableOf } from "../writable";
 
@@ -18,7 +18,7 @@ export function combine<T, S extends Read<T>>(
 ): Writable<S> {
   if (parts.length === 0) throw new Error("combine: need ≥1 signal");
   const Cls = (parts[0] as object).constructor as new (...args: never[]) => Signal<T>;
-  const lensView = lensCls<T, Signal<T>>(
+  const lensView = Signal.install<T, Signal<T>>(
     Cls,
     () => {
       const vs = new Array<T>(parts.length);

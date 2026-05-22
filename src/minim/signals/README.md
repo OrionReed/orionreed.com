@@ -9,9 +9,13 @@ registration needed.
 ## Layout
 
 ```
-signal.ts          — Signal class + engine + factories (signal/computed/lens/computedCls/lensCls)
-                     Signal#through(fwd, bwd) — endo-lens with auto-fusion
-                     (every value-class invertible rides on this)
+signal.ts          — Signal class + engine + factories (signal/computed/lens)
+                     Signal#through(fwd, bwd)        — endo-lens with auto-fusion
+                     Signal#lensTo(Cls, fwd, bwd)    — cross-type RW lens
+                     Signal#deriveTo(Cls, fwd)       — cross-type RO lens
+                     Signal#field(key, Cls)          — special case of lensTo (object prop)
+                     Signal.install(Cls, g, s?)      — typed-construction primitive
+                                                       (per-class statics build on this)
 traits.ts          — Linear / Lerp / Metric / Equals + Traits<T, K> constraint
 writable.ts        — Writable<R> modifier, WritableOf<T>, invertibles<R>()
 lateral.ts         — bind / eq / freeze / gated (sibling-to-sibling lenses)
@@ -35,7 +39,7 @@ _test/             vitest tests
 The shape that any value class follows:
 
 ```ts
-import { Signal, computedCls, lensCls, valFn, type Val, type SignalOptions } from "../signal";
+import { Signal, valFn, type Val, type SignalOptions } from "../signal";
 import { bind } from "../lateral";
 import { type Linear, type TraitDict } from "../traits";
 import { type Writable, invertibles } from "../writable";
@@ -54,9 +58,9 @@ export class Num extends Signal<V> {
   static invertibles = invertibles<Num>()("add", "sub", "scale", "through");
 
   // class-level constructors
-  static derive(fn: () => V): Num { return computedCls(Num, fn) }
+  static derive(fn: () => V): Num { return Signal.install(Num, fn) }
   static lens(g: () => V, s: (v: V) => void): Writable<Num> {
-    return lensCls(Num, g, s) as unknown as Writable<Num>;
+    return Signal.install(Num, g, s) as unknown as Writable<Num>;
   }
   static is(v: unknown): v is Num { return v instanceof Num }
 

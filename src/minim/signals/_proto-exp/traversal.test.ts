@@ -77,7 +77,7 @@ describe("ListSignal: .each — per-pass reactive iteration", () => {
 
   it("effect using each re-fires on structural changes", () => {
     const l = list([1, 2, 3]);
-    let observed: number[] = [];
+    let observed: readonly number[] = [];
     const stop = effect(() => { observed = l.each((x) => x * 2) });
     expect(observed).toEqual([2, 4, 6]);
     l.push(4);

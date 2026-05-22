@@ -4,10 +4,8 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  computedCls,
   invertibles,
   type Linear,
-  lensCls,
   Num,
   Signal,
   type SignalOptions,
@@ -47,10 +45,10 @@ class Hsl extends Signal<V> {
   static invertibles = invertibles<Hsl>()("add", "scale");
 
   static derive(fn: () => V): Hsl {
-    return computedCls(Hsl, fn);
+    return Signal.install(Hsl, fn);
   }
   static lens(g: () => V, s: (v: V) => void): Writable<Hsl> {
-    return lensCls(Hsl, g, s) as unknown as Writable<Hsl>;
+    return Signal.install(Hsl, g, s) as unknown as Writable<Hsl>;
   }
   static is(v: unknown): v is Hsl {
     return v instanceof Hsl;

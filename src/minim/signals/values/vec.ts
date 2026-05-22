@@ -8,8 +8,6 @@ import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
 import {
   batch,
-  computedCls,
-  lensCls,
   Signal,
   type SignalOptions,
   type Val,
@@ -85,10 +83,10 @@ export class Vec extends Signal<V> {
 
   // ── class-level constructors ───────────────────────────────────
   static derive(fn: () => V): Vec {
-    return computedCls(Vec, fn);
+    return Signal.install(Vec, fn);
   }
   static lens(g: () => V, s: (v: V) => void): Writable<Vec> {
-    return lensCls(Vec, g, s) as unknown as Writable<Vec>;
+    return Signal.install(Vec, g, s) as unknown as Writable<Vec>;
   }
   static is(v: unknown): v is Vec {
     return v instanceof Vec;
@@ -212,7 +210,7 @@ export interface Vec {
 /** Vec from two writable axes. Writes propagate to both source Nums
  *  in a single batch — the bidirectional sibling of `vec(num, num)`. */
 export function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
-  return lensCls(
+  return Signal.install(
     Vec,
     () => ({ x: x.value, y: y.value }),
     v => {
@@ -323,5 +321,5 @@ export function polar(
       };
       break;
   }
-  return lensCls(Vec, fwd, bwd) as unknown as Writable<Vec>;
+  return Signal.install(Vec, fwd, bwd) as unknown as Writable<Vec>;
 }

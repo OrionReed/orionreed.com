@@ -11,8 +11,6 @@
 
 import { bind } from "../lateral";
 import {
-  computedCls,
-  lensCls,
   type Of,
   Signal,
   type SignalOptions,
@@ -119,10 +117,10 @@ export class Matrix extends Signal<V> {
 
   // ── class-level constructors ───────────────────────────────────
   static derive(fn: () => V): Matrix {
-    return computedCls(Matrix, fn);
+    return Signal.install(Matrix, fn);
   }
   static lens(g: () => V, s: (v: V) => void): Writable<Matrix> {
-    return lensCls(Matrix, g, s) as unknown as Writable<Matrix>;
+    return Signal.install(Matrix, g, s) as unknown as Writable<Matrix>;
   }
   static is(v: unknown): v is Matrix {
     return v instanceof Matrix;
