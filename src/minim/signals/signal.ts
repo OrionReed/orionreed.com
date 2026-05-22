@@ -17,6 +17,7 @@
 // `new Signal(...)`) are RO at the type level.
 
 import { type Equals, type TraitDict } from "./traits";
+import { type Writable } from "./writable";
 
 // ─── Internal types ──────────────────────────────────────────────────
 
@@ -438,12 +439,27 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  its declared arity (incl. `Signal` itself whose ctor takes T).
    *
    *  This is the lower-level typed factory: for parent-based lenses,
-   *  prefer `parent.lensTo(Cls, fwd, bwd)` / `parent.deriveTo(Cls, fwd)`. */
+   *  prefer `parent.lensTo(Cls, fwd, bwd)` / `parent.deriveTo(Cls, fwd)`.
+   *
+   *  Overload: with a setter, returns `Writable<C>` (full lifted shape,
+   *  brand included). Without, returns plain `C` (read-only at the type
+   *  level). The setter form removes the per-callsite
+   *  `as unknown as Writable<X>` casts that used to ride on every
+   *  `static lens` and factory function. */
+  static install<T, C extends Signal<T>>(
+    Cls: new (...args: never[]) => C,
+    getter: () => T,
+  ): C;
+  static install<T, C extends Signal<T>>(
+    Cls: new (...args: never[]) => C,
+    getter: () => T,
+    setter: (v: T) => void,
+  ): Writable<C>;
   static install<T, C extends Signal<T>>(
     Cls: new (...args: never[]) => C,
     getter: () => T,
     setter?: (v: T) => void,
-  ): C {
+  ): C | Writable<C> {
     const inst = new Cls();
     inst.getter = getter;
     if (setter !== undefined) inst.setter = setter;
@@ -456,6 +472,47 @@ export class Signal<T = unknown> implements ReactiveNode {
   static _mode(v: Signal<unknown>): "signal" | "computed" | "lens" {
     if (v.getter === undefined) return "signal";
     return v.setter === undefined ? "computed" : "lens";
+  }
+
+  /** Read-only derived view of the same class. Polymorphic-`this`
+   *  static: `Vec.derive(fn)` → `Vec`, `Box.derive(fn)` → `Box`, etc.
+   *  Inherited by every `Signal` subclass — user value classes get it
+   *  for free without redeclaring it.
+   *
+   *  Signature follows the `lensTo`/`deriveTo` shape (`Signal<any>`
+   *  upper bound, `InstanceType<C>` for the value type) — same
+   *  variance-escape pattern. The inner cast bridges the gap between
+   *  `Signal.install`'s `Signal<T>`-anchored return and the recovered
+   *  instance type; runtime is correct because `this` is a Signal
+   *  subclass constructor. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo
+  static derive<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    fn: () => Of<InstanceType<C>>,
+  ): InstanceType<C> {
+    return Signal.install(this, fn) as InstanceType<C>;
+  }
+
+  /** Writable lens of the same class. Polymorphic-`this` static:
+   *  `Vec.lens(g, s)` → `Writable<Vec>`. Inherited by every subclass. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo
+  static lens<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    g: () => Of<InstanceType<C>>,
+    s: (v: Of<InstanceType<C>>) => void,
+  ): Writable<InstanceType<C>> {
+    return Signal.install(this, g, s) as unknown as Writable<InstanceType<C>>;
+  }
+
+  /** Type predicate against this class. `Vec.is(x)` narrows `x` to
+   *  `Vec`. Inherited static; works for any subclass via the
+   *  polymorphic `this` constructor type. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors derive
+  static is<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    v: unknown,
+  ): v is InstanceType<C> {
+    return v instanceof this;
   }
 
   /** Cross-type lens: produce a typed `Cls`-instance lens that reads
@@ -507,13 +564,17 @@ export class Signal<T = unknown> implements ReactiveNode {
     const parent = prior ? prior.parent : this;
     const composedFwd = prior ? (v: T) => fwd(prior.fwd(v)) : fwd;
     const composedBwd = prior ? (v: T) => prior.bwd(bwd(v)) : bwd;
+    // `as unknown as Signal<T>` — TS can't see through `Writable<Signal<T>>`
+    // when T is a free generic (LensFields/InvOf conditionals bail to "could
+    // be anything"). Runtime is a fresh Signal subclass, so accessing
+    // `_throughOf` and re-casting to `this` is safe.
     const inst = Signal.install(
       Cls,
       () => composedFwd(parent.value),
       v => {
         parent.value = composedBwd(v);
       },
-    );
+    ) as unknown as Signal<T>;
     inst._throughOf = { parent, fwd: composedFwd, bwd: composedBwd };
     return inst as this;
   }
@@ -824,25 +885,24 @@ export function computed<T, C extends Signal<T>>(
 }
 
 // `lens` — overload returns:
-//   lens(g, s)           → Signal<T> & WritableBrand   (untyped, RW derived)
-//   lens(g, s, Vec)      → Vec                          (typed)
-// The typed form gives back the value-class type; cast at consumer
-// boundary to `Writable<Vec>` if the brand needs to surface (the
-// per-class `Vec.lens` static does this).
-export function lens<T>(getter: () => T, setter: (v: T) => void): Signal<T> & WritableBrand;
+//   lens(g, s)           → Writable<Signal<T>>           (untyped, RW derived)
+//   lens(g, s, Vec)      → Writable<Vec>                  (typed)
+// Both forms surface the full writable shape (brand + writable .value
+// + lifted invertibles + lifted field lenses) so consumers no longer
+// cast at the boundary.
+export function lens<T>(getter: () => T, setter: (v: T) => void): Writable<Signal<T>>;
 export function lens<T, C extends Signal<T>>(
   getter: () => T,
   setter: (v: T) => void,
   Cls: new (...args: never[]) => C,
-): C;
+): Writable<C>;
 export function lens<T, C extends Signal<T>>(
   getter: () => T,
   setter: (v: T) => void,
   Cls?: new (...args: never[]) => C,
-): C | (Signal<T> & WritableBrand) {
+): Writable<C> | Writable<Signal<T>> {
   return Cls === undefined
-    ? (Signal.install(Signal as new (...args: never[]) => Signal<T>, getter, setter) as Signal<T> &
-        WritableBrand)
+    ? Signal.install(Signal as new (...args: never[]) => Signal<T>, getter, setter)
     : Signal.install(Cls, getter, setter);
 }
 

@@ -8,7 +8,8 @@ import {
   effect,
   lens,
   Matrix,
-  mean,
+  Mix,
+  mix,
   multiply,
   Num,
   type Of,
@@ -355,19 +356,19 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   }
 }
 
-// Shape-specific sugar over generic `mean(...)`.
+// Shape-specific sugar over `mix(Cls, parts, mean, deltaEven)`.
 
 /** Writable centroid of shapes' translates. */
 export function centroid(...shapes: { translate: Writable<Vec> }[]): Writable<Vec> {
-  return mean(...shapes.map(s => s.translate));
+  return mix(Vec, shapes.map(s => s.translate), Mix.mean, Mix.deltaEven);
 }
 
 /** Writable mean rotation. */
 export function meanRotation(...shapes: { rotate: Writable<Num> }[]): Writable<Num> {
-  return mean(...shapes.map(s => s.rotate));
+  return mix(Num, shapes.map(s => s.rotate), Mix.mean, Mix.deltaEven);
 }
 
 /** Writable mean scale. */
 export function meanScale(...shapes: { scale: Writable<Vec> }[]): Writable<Vec> {
-  return mean(...shapes.map(s => s.scale));
+  return mix(Vec, shapes.map(s => s.scale), Mix.mean, Mix.deltaEven);
 }

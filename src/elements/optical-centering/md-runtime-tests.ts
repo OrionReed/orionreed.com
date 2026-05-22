@@ -18,10 +18,12 @@ import {
   label,
   lens,
   loop,
-  Mount,
-  mean,
   meanRotation,
   meanScale,
+  Mix,
+  mix,
+  Mount,
+  Num,
   num,
   play,
   race,
@@ -804,14 +806,14 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "mean (numbers): read avg, write distributes",
+    name: "mix(Num, mean, deltaEven): read avg, write distributes",
     run: assert => {
       const a = num(0);
       const b = num(10);
       const c = num(20);
-      const m = mean(a, b, c);
+      const m = mix(Num, [a, b, c], Mix.mean, Mix.deltaEven);
       assert(m.value === 10, `initial mean: ${m.value}`);
-      m.value = 13; // delta = 3 → each += 3
+      (m as unknown as { value: number }).value = 13; // delta = 3 → each += 3
       assert(a.peek() === 3, `a after: ${a.peek()}`);
       assert(b.peek() === 13, `b after: ${b.peek()}`);
       assert(c.peek() === 23, `c after: ${c.peek()}`);
@@ -819,14 +821,14 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "mean (Vecs): drop-in centroid for raw Vec signals",
+    name: "mix(Vec, mean, deltaEven): drop-in centroid for raw Vec signals",
     run: assert => {
       const a = vec(0, 0);
       const b = vec(100, 50);
-      const m = mean(a, b);
-      assert(m instanceof Vec, `mean of Vecs should return a writable Vec`);
+      const m = mix(Vec, [a, b], Mix.mean, Mix.deltaEven);
+      assert(m instanceof Vec, `mix of Vecs should return a writable Vec`);
       assert(m.value.x === 50 && m.value.y === 25, `initial mean off`);
-      m.value = { x: 60, y: 35 }; // delta (10, 10)
+      (m as unknown as { value: { x: number; y: number } }).value = { x: 60, y: 35 }; // delta (10, 10)
       assert(a.peek().x === 10 && a.peek().y === 10, `a not shifted: ${JSON.stringify(a.peek())}`);
       assert(b.peek().x === 110 && b.peek().y === 60, `b not shifted: ${JSON.stringify(b.peek())}`);
     },

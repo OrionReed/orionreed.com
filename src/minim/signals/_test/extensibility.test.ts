@@ -9,7 +9,7 @@ import {
   Num,
   Signal,
   type SignalOptions,
-  type TraitDict,
+  traits,
   type Val,
   valFn,
   type Writable,
@@ -36,23 +36,17 @@ const hslLerp = (a: V, b: V, t: number): V => ({
 const linearImpl: Linear<V> = { add: hslAdd, sub: hslSub, scale: hslScale };
 
 class Hsl extends Signal<V> {
-  static traits: Required<TraitDict<V>> = {
+  static traits = traits<V>()({
     linear: linearImpl,
     lerp: hslLerp,
     metric: (a: V, b: V) => Math.abs(a.h - b.h) + Math.abs(a.s - b.s) + Math.abs(a.l - b.l),
     equals: (a: V, b: V) => a.h === b.h && a.s === b.s && a.l === b.l,
-  };
+  });
   static invertibles = invertibles<Hsl>()("add", "scale");
 
-  static derive(fn: () => V): Hsl {
-    return Signal.install(Hsl, fn);
-  }
-  static lens(g: () => V, s: (v: V) => void): Writable<Hsl> {
-    return Signal.install(Hsl, g, s) as unknown as Writable<Hsl>;
-  }
-  static is(v: unknown): v is Hsl {
-    return v instanceof Hsl;
-  }
+  // (derive / lens / is inherited from Signal — the whole point of
+  // this test is to demonstrate user value classes get the static
+  // surface for free, no per-class boilerplate.)
 
   constructor(v: V = { h: 0, s: 0, l: 0 }, opts?: SignalOptions<V>) {
     super(v, opts);

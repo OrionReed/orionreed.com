@@ -46,6 +46,29 @@ export interface TraitDict<T> {
 /** Valid keys of `TraitDict`. The set of declarable traits. */
 export type TraitKey = keyof TraitDict<unknown>;
 
+/** Helper for declaring `static traits = …` with the literal trait
+ *  subset preserved. `Traits<T, "linear">` then sees the listed slots
+ *  as present (non-nullable). Subclasses pick whichever subset they
+ *  implement — no `Required<TraitDict<V>>` vs intersection-form
+ *  asymmetry needed at the declaration site.
+ *
+ *  Curried so `T` is explicit at the outer call (anchoring the trait
+ *  function signatures to the right value type) while `D` is inferred
+ *  from the dict literal at the inner call (preserving the literal
+ *  subset). TS doesn't allow partial type-argument application, hence
+ *  the two-step shape.
+ *
+ *      class Vec extends Signal<V> {
+ *        static traits = traits<V>()({ linear, lerp, metric, equals });
+ *      }
+ *      class Matrix extends Signal<V> {
+ *        static traits = traits<V>()({ equals });   // sparse — fine
+ *      }
+ */
+export function traits<T>(): <D extends TraitDict<T>>(d: D) => D & TraitDict<T> {
+  return d => d;
+}
+
 // ─── The one nominal constraint type ─────────────────────────────────
 
 /** "A `Signal<T>` whose class declares the listed traits."

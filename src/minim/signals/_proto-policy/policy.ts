@@ -115,7 +115,7 @@ export function policyLensVec(
         }
       });
     },
-  ) as unknown as Writable<Vec>;
+  );
 }
 
 // ── Derived wrappers ─────────────────────────────────────────────

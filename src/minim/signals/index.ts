@@ -38,16 +38,13 @@ export {
 // ─── Clock bridge ─────────────────────────────────────────────────
 export { clockSignal } from "./clock";
 export { bind, gated } from "./lateral";
-// Merges live in their own namespace to avoid the `mean(...sigs)`
-// vs. `Merges.mean` (a Merge value passed to `mix`) name clash.
-export * as Merges from "./mix";
-export {
-  type Contribution,
-  type Merge,
-  type Mix,
-  type MixAddOpts,
-  mix,
-} from "./mix";
+// Merges, writebacks, and the `Part`/`Contribution` types live in
+// the `Mix` namespace to avoid flat-export clashes (e.g. `above` is
+// also a predicate in `./assert`; `Part` is also a class in
+// `./tex/parts` and `./code/code`). The factory `mix(...)` is exported
+// flat as the canonical entry point.
+export { type Merge, mix, type Writeback } from "./mix";
+export * as Mix from "./mix";
 // ─── Engine ───────────────────────────────────────────────────────
 export {
   batch,
@@ -81,6 +78,7 @@ export {
   requireMetric,
   type TraitDict,
   type TraitKey,
+  traits,
   type Traits,
 } from "./traits";
 export { Anchor, Dir } from "./values/anchor";
@@ -111,8 +109,6 @@ export {
   transformBox,
   transformPoint,
 } from "./values/matrix";
-// ─── Combinators ──────────────────────────────────────────────────
-export { combine, mean } from "./values/multi";
 // ─── Math-helper namespaces ───────────────────────────────────────
 // Mirrors prod's `VecMath`/`BoxMath`/… pattern. Lets consumers do
 // `BoxMath.union(...)` etc. without importing each math fn separately.

@@ -14,7 +14,7 @@ import {
   valFn,
   value,
 } from "../signal";
-import { type Linear, type TraitDict } from "../traits";
+import { type Linear, traits } from "../traits";
 import { invertibles, type Writable } from "../writable";
 import { Num } from "./num";
 
@@ -68,7 +68,7 @@ const linearImpl: Linear<V> = { add, sub, scale };
 
 export class Vec extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
-  static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
+  static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
   static invertibles = invertibles<Vec>()(
     "add",
     "sub",
@@ -81,18 +81,8 @@ export class Vec extends Signal<V> {
     "through",
   );
 
-  // ── class-level constructors ───────────────────────────────────
-  static derive(fn: () => V): Vec {
-    return Signal.install(Vec, fn);
-  }
-  static lens(g: () => V, s: (v: V) => void): Writable<Vec> {
-    return Signal.install(Vec, g, s) as unknown as Writable<Vec>;
-  }
-  static is(v: unknown): v is Vec {
-    return v instanceof Vec;
-  }
-
   // ── instance ───────────────────────────────────────────────────
+  // (derive / lens / is inherited from Signal)
   constructor(v: V = { x: 0, y: 0 }, opts?: SignalOptions<V>) {
     super(v, opts);
   }
@@ -219,7 +209,7 @@ export function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
         y.value = v.y;
       });
     },
-  ) as unknown as Writable<Vec>;
+  );
 }
 
 /** Writable Vec at `(x, y)`. Smart-dispatches: when both axes are
@@ -321,5 +311,5 @@ export function polar(
       };
       break;
   }
-  return Signal.install(Vec, fwd, bwd) as unknown as Writable<Vec>;
+  return Signal.install(Vec, fwd, bwd);
 }

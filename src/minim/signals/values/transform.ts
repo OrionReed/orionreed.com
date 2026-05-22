@@ -14,7 +14,7 @@ import {
   valFn,
   value,
 } from "../signal";
-import { type Linear, type TraitDict } from "../traits";
+import { type Linear, traits } from "../traits";
 import { invertibles, type Writable } from "../writable";
 import { Num } from "./num";
 import {
@@ -89,24 +89,14 @@ const linearImpl: Linear<V> = { add, sub, scale };
 
 export class Transform extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
-  static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
+  static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
   /** Scalar `scale` lives as a Vec field lens (`.scale`), not as an
    *  invertible eager method — to scalar-multiply a Transform, use
    *  `Transform.lens(...)` or compose via field writes. */
   static invertibles = invertibles<Transform>()("add", "sub", "through");
 
-  // ── class-level constructors ───────────────────────────────────
-  static derive(fn: () => V): Transform {
-    return Signal.install(Transform, fn);
-  }
-  static lens(g: () => V, s: (v: V) => void): Writable<Transform> {
-    return Signal.install(Transform, g, s) as unknown as Writable<Transform>;
-  }
-  static is(v: unknown): v is Transform {
-    return v instanceof Transform;
-  }
-
   // ── instance ───────────────────────────────────────────────────
+  // (derive / lens / is inherited from Signal)
   constructor(v: V = DEFAULT, opts?: SignalOptions<V>) {
     super(v, opts);
   }

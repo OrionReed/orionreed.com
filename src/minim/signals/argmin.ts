@@ -110,7 +110,7 @@ export function argminNum(
         }
       });
     },
-  ) as unknown as Writable<Num>;
+  );
 }
 
 /** 2D-output argmin lens.
@@ -176,5 +176,5 @@ export function argminVec(
         }
       });
     },
-  ) as unknown as Writable<Vec>;
+  );
 }

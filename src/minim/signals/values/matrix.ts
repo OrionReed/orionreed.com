@@ -17,7 +17,7 @@ import {
   type Val,
   valFn,
 } from "../signal";
-import { type TraitDict } from "../traits";
+import { traits } from "../traits";
 import { invertibles, type Writable } from "../writable";
 import { Num } from "./num";
 import { Vec } from "./vec";
@@ -112,21 +112,11 @@ export const toMatrixString = (m: V): string => `matrix(${m.a},${m.b},${m.c},${m
 
 export class Matrix extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
-  static traits: TraitDict<V> & { equals: typeof equals } = { equals };
+  static traits = traits<V>()({ equals });
   static invertibles = invertibles<Matrix>()("multiply", "invert", "through");
 
-  // ── class-level constructors ───────────────────────────────────
-  static derive(fn: () => V): Matrix {
-    return Signal.install(Matrix, fn);
-  }
-  static lens(g: () => V, s: (v: V) => void): Writable<Matrix> {
-    return Signal.install(Matrix, g, s) as unknown as Writable<Matrix>;
-  }
-  static is(v: unknown): v is Matrix {
-    return v instanceof Matrix;
-  }
-
   // ── instance ───────────────────────────────────────────────────
+  // (derive / lens / is inherited from Signal)
   constructor(v: V = identity(), opts?: SignalOptions<V>) {
     super(v, opts);
   }

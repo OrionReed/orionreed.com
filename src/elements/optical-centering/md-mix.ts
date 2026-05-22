@@ -7,9 +7,9 @@ import {
   easeInOut,
   label,
   loop,
-  Merges,
-  Mount,
+  Mix,
   mix,
+  Mount,
   num,
   rect,
   tween,
@@ -17,7 +17,7 @@ import {
   vec,
 } from "../../minim";
 
-/** Two independent animation sequences blended via `mix(Vec, Merges.mean)`.
+/** Two independent animation sequences blended via `mix(Vec, parts, Mix.mean)`.
  *
  *  Sequence A is a continuous orbit (signal-driven). Sequence B is a
  *  discrete pose-pose-pose tween loop visiting four star-points
@@ -79,11 +79,17 @@ export class MdMix extends Diagram {
     );
 
     // ── The mix ──────────────────────────────────────────────────
-    // `Merges.mean` is the weighted-mean merge value. Compose it with
-    // combinators if needed (e.g. `Merges.top(2, Merges.mean)`).
-    const blend = mix(Vec, Merges.mean);
-    blend.add(seqA, { weight: computed(() => 1 - w.value) });
-    blend.add(seqB, { weight: w });
+    // `Mix.mean` is the weighted-mean merge value; the parts list
+    // pairs each contributor with a reactive weight. Compose with
+    // combinators if needed (e.g. `Mix.top(2, Mix.mean)`).
+    const blend = mix(
+      Vec,
+      [
+        { src: seqA, weight: computed(() => 1 - w.value) },
+        { src: seqB, weight: w },
+      ],
+      Mix.mean,
+    );
 
     // ── Render ───────────────────────────────────────────────────
     // Each contributor's current position, opacity tracking weight.
@@ -131,7 +137,7 @@ export class MdMix extends Diagram {
     s(
       label(
         view.top.down(20),
-        "two looping sequences (orbit · star-tween) blended via mix(Vec, Merges.mean)",
+        "two looping sequences (orbit · star-tween) blended via mix(Vec, parts, Mix.mean)",
         { size: 12, align: Anchor.Center, opacity: 0.7 },
       ),
       label(

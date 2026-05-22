@@ -15,8 +15,10 @@ signal.ts          — Signal class + engine + factories (signal/computed/lens)
                      Signal#deriveTo(Cls, fwd)       — cross-type RO lens
                      Signal#field(key, Cls)          — special case of lensTo (object prop)
                      Signal.install(Cls, g, s?)      — typed-construction primitive
-                                                       (per-class statics build on this)
+                     Signal.derive / .lens / .is     — polymorphic-`this` statics inherited
+                                                       by every subclass; no per-class redecl
 traits.ts          — Linear / Lerp / Metric / Equals + Traits<T, K> constraint
+                     traits<V>()({…})                — literal-preserving dict helper
 writable.ts        — Writable<R> modifier, WritableOf<T>, invertibles<R>()
 lateral.ts         — bind / eq / freeze / gated (sibling-to-sibling lenses)
 anim.ts            — spring / tween / Tween / toward / attract / wave / driven / play / when / loop / every
@@ -41,7 +43,7 @@ The shape that any value class follows:
 ```ts
 import { Signal, valFn, type Val, type SignalOptions } from "../signal";
 import { bind } from "../lateral";
-import { type Linear, type TraitDict } from "../traits";
+import { type Linear, traits } from "../traits";
 import { type Writable, invertibles } from "../writable";
 
 type V = number;
@@ -53,18 +55,15 @@ export const add = (a: V, b: V) => a + b;
 const linearImpl: Linear<V> = { add, sub, scale };
 
 export class Num extends Signal<V> {
-  // class-level config
-  static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
+  // class-level config — `traits<V>()({…})` preserves the literal
+  // trait subset so `Traits<V, "linear">` sees `linear` as present.
+  static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
   static invertibles = invertibles<Num>()("add", "sub", "scale", "through");
 
-  // class-level constructors
-  static derive(fn: () => V): Num { return Signal.install(Num, fn) }
-  static lens(g: () => V, s: (v: V) => void): Writable<Num> {
-    return Signal.install(Num, g, s) as unknown as Writable<Num>;
-  }
-  static is(v: unknown): v is Num { return v instanceof Num }
+  // (derive / lens / is inherited from Signal — polymorphic-`this`
+  // statics give `Num.derive(fn)` → Num, `Num.lens(g, s)` → Writable<Num>,
+  // `Num.is(x)` → x is Num for free.)
 
-  // instance
   constructor(v: V = 0, opts?: SignalOptions<V>) { super(v, opts) }
 
   // Invertibles ride on Signal#through. Each chained call auto-fuses

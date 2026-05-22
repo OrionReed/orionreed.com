@@ -10,7 +10,7 @@ import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
 import { Signal, type SignalOptions, type Val, valFn } from "../signal";
-import { type Linear, type TraitDict } from "../traits";
+import { type Linear, traits } from "../traits";
 import { invertibles, type Writable } from "../writable";
 
 type V = number;
@@ -26,7 +26,7 @@ const linearImpl: Linear<V> = { add, sub, scale };
 
 export class Num extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
-  static traits: Required<TraitDict<V>> = { linear: linearImpl, lerp, metric, equals };
+  static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
   // Methods that return a writable lens (whether strict or lossy).
   // `Writable<R>` lifts these to `(...) => Writable<Num>` so chains
   // stay writable. Strict-vs-lossy compliance is a separate concern
@@ -43,18 +43,8 @@ export class Num extends Signal<V> {
     "through",
   );
 
-  // ── class-level constructors ───────────────────────────────────
-  static derive(fn: () => V): Num {
-    return Signal.install(Num, fn);
-  }
-  static lens(g: () => V, s: (v: V) => void): Writable<Num> {
-    return Signal.install(Num, g, s) as unknown as Writable<Num>;
-  }
-  static is(v: unknown): v is Num {
-    return v instanceof Num;
-  }
-
   // ── instance ───────────────────────────────────────────────────
+  // (derive / lens / is inherited from Signal)
   constructor(v: V = 0, opts?: SignalOptions<V>) {
     super(v, opts);
   }

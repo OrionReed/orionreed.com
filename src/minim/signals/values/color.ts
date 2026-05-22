@@ -13,7 +13,7 @@ import {
   valFn,
   value,
 } from "../signal";
-import { type Linear, type TraitDict } from "../traits";
+import { type Linear, traits } from "../traits";
 import { invertibles, type Writable } from "../writable";
 import { Num } from "./num";
 
@@ -35,25 +35,11 @@ const linearImpl: Linear<V> = { add, sub, scale };
 
 export class Color extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
-  static traits: TraitDict<V> & { linear: Linear<V>; lerp: typeof lerp; equals: typeof equals } = {
-    linear: linearImpl,
-    lerp,
-    equals,
-  };
+  static traits = traits<V>()({ linear: linearImpl, lerp, equals });
   static invertibles = invertibles<Color>()("add", "sub", "scale", "through");
 
-  // ── class-level constructors ───────────────────────────────────
-  static derive(fn: () => V): Color {
-    return Signal.install(Color, fn);
-  }
-  static lens(g: () => V, s: (v: V) => void): Writable<Color> {
-    return Signal.install(Color, g, s) as unknown as Writable<Color>;
-  }
-  static is(v: unknown): v is Color {
-    return v instanceof Color;
-  }
-
   // ── instance ───────────────────────────────────────────────────
+  // (derive / lens / is inherited from Signal)
   constructor(v: V = { r: 0, g: 0, b: 0, a: 1 }, opts?: SignalOptions<V>) {
     super(v, opts);
   }
