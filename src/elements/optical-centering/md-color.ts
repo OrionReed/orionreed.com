@@ -1,5 +1,5 @@
 import {
-  Anchor, Diagram, Mount, Num, Vec, batch, computed, lens, num, polar, vec,
+  Anchor, Diagram, Mount, Num, Vec, batch, computed, num, polar, vec,
   circle, drag, label, line, type Writable,
 } from "../../minim";
 
@@ -87,17 +87,12 @@ export class MdColor extends Diagram {
       circle(vec(WHEEL_CX, WHEEL_CY), WHEEL_R, { thin: true, opacity: 0.4 }),
       circle(vec(WHEEL_CX, WHEEL_CY), 1.5, { fill: true, opacity: 0.3 }),
     );
-    // Clamp sat to [0, 1] on write so the picker can't escape the wheel.
-    const satPx = Num.lens(
-      () => sat.value * WHEEL_R,
-      (v) => { sat.value = clamp01(v / WHEEL_R); },
-    ) as unknown as Writable<Num>;
-    const picker = polar(
-      vec(WHEEL_CX, WHEEL_CY),
-      satPx,
-      hue.scale(TAU / 360) as unknown as Writable<Num>,
-      "rotate",
-    );
+    // sat (in [0,1]) scaled to pixels, with clamp keeping the picker
+    // inside the wheel. hue (degrees) scaled to radians. Both are
+    // invertible chains; writes propagate back to sat and hue.
+    const satPx = sat.clamp(0, 1).scale(WHEEL_R);
+    const hueRad = hue.scale(TAU / 360);
+    const picker = polar(vec(WHEEL_CX, WHEEL_CY), satPx, hueRad, "rotate");
     const pickerDot = s(circle(picker, 8, {
       fill: () => cssColor.value,
       stroke: "var(--bg-color, white)",
@@ -107,6 +102,8 @@ export class MdColor extends Diagram {
     pickerDot.el.style.cursor = "grab";
 
     // ── Sliders ────────────────────────────────────────────────────
+    // Each slider's x = target.clamp(0,1).affine(SLIDER_W, SLIDER_X0).
+    // Bidirectional via the invertible chain; the Vec.lens just locks y.
     const slider = (target: Writable<Num>, y: number, letter: string): void => {
       s(
         line(vec(SLIDER_X0, y), vec(SLIDER_X1, y), { thin: true, opacity: 0.35 }),
@@ -114,11 +111,11 @@ export class MdColor extends Diagram {
           size: 11, align: Anchor.Right, opacity: 0.55,
         }),
       );
-      const knob = lens(
-        () => ({ x: SLIDER_X0 + target.value * SLIDER_W, y }),
-        (p) => { target.value = clamp01((p.x - SLIDER_X0) / SLIDER_W); },
-        Vec,
-      ) as unknown as Writable<Vec>;
+      const knobX = target.clamp(0, 1).affine(SLIDER_W, SLIDER_X0);
+      const knob = Vec.lens(
+        () => ({ x: knobX.value, y }),
+        (p) => { knobX.value = p.x; },
+      );
       const dot = s(circle(knob, 6, {
         fill: () => cssColor.value,
         stroke: "var(--bg-color, white)",

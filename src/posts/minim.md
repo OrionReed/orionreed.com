@@ -233,7 +233,7 @@ The lenses don't care what the values *mean*. A colour has two natural coordinat
 
 <md-color></md-color>
 
-Constraints fall out of the same primitive. A pulley is `b = Num.lens(L − a, v ↦ a = L − v)` — three lines, bidirectional, no engine support. Symmetric `eq(a, b)` ties two existing writables. `freeze(s)` strips the writable brand so a lens factory's per-input policy skips it; `gated(s, when)` does the same dynamically.
+Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. The escape hatch for relations that don't fit a chain is the explicit `Num.lens(get, set)` form. Symmetric `eq(a, b)` ties two existing writables. `freeze(s)` strips the writable brand so a lens factory's per-input policy skips it; `gated(s, when)` does the same dynamically.
 
 <md-pulley></md-pulley>
 

@@ -1,5 +1,5 @@
 import {
-  Anchor, Diagram, Mount, polar, num, signal, vec, type Vec, type Num,
+  Anchor, Diagram, Mount, polar, num, signal, vec, type Vec,
   circle, drag, drive, label, type Writable,
 } from "../../minim";
 
@@ -10,11 +10,10 @@ export class MdSolarSystem extends Diagram {
     const view = this.view(560, 360);
 
     // The whole solar system is deterministic in `time`. Each body's
-    // angle is `time.scale(2π/period)` — an invertible chain. Polar
-    // with `"circular"` policy means writes go only to the angle —
-    // which writes back to time. So dragging ANY body scrubs time;
-    // every other body recomputes from the new time. The bidirectional
-    // story makes one degree of freedom out of the whole system.
+    // angle is `time.affine(τ/period, phase)` — a single invertible op.
+    // Polar with `"circular"` policy writes only to the angle, which
+    // writes back through affine to time. So dragging ANY body scrubs
+    // time; every other body recomputes. One scalar, every visual.
     const time = num(0);
     const dragging = signal(false);
 
@@ -29,7 +28,7 @@ export class MdSolarSystem extends Diagram {
       color: string,
       size: number,
     ) => {
-      const angle = time.scale(TAU / period).add(phase) as unknown as Writable<Num>;
+      const angle = time.affine(TAU / period, phase);
       const pos = polar(parent, dist, angle, "circular");
       // Faint orbit ring.
       s(circle(parent, dist, { thin: true, dashed: true, opacity: 0.18 }));
@@ -60,7 +59,7 @@ export class MdSolarSystem extends Diagram {
         "drag any planet or moon — the whole system winds/unwinds in time",
         { size: 12, align: Anchor.Center, opacity: 0.7 }),
       label(view.bottom.up(16),
-        "one `time: Num` · every body angle = time.scale(τ/period) · circular polar",
+        "one `time: Num` · every body angle = time.affine(τ/period, phase) · circular polar",
         { size: 10, align: Anchor.Center, opacity: 0.5 }),
     );
   }

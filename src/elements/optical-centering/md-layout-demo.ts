@@ -3,8 +3,6 @@ import {
   Mount,
   Anchor,
   Vec,
-  type Writable,
-  lens,
   arrange,
   handle,
   label,
@@ -42,19 +40,18 @@ export class MdLayoutDemo extends Diagram {
     cards[0].translate.value = { x: 30, y: cy - HEIGHTS[0] / 2 };
     arrange(cards, "row", { gap: GAP, align: 0.5 });
 
+    // Each handle sits at the card's right edge: x = w.clamp(MIN_W,∞)
+    // + card.translate.x. The invertible chain absorbs writes back
+    // through to the width signal (clamped to MIN_W). The Vec.lens
+    // just locks y to the card's vertical centre.
     const handles = widths.map((w, i) => {
       const card = cards[i];
       const h = HEIGHTS[i];
-      const pos = lens(
-        () => ({
-          x: card.translate.value.x + w.value,
-          y: card.translate.value.y + h / 2,
-        }),
-        (p) => {
-          w.value = Math.max(MIN_W, p.x - card.translate.value.x);
-        },
-        Vec,
-      ) as unknown as Writable<Vec>;
+      const handleX = w.clamp(MIN_W, Infinity).add(card.translate.x);
+      const pos = Vec.lens(
+        () => ({ x: handleX.value, y: card.translate.value.y + h / 2 }),
+        (p) => { handleX.value = p.x; },
+      );
       return s(handle(pos, { cursor: "ew-resize", r: 5 }));
     });
 
