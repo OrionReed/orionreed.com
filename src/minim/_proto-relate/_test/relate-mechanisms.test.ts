@@ -14,8 +14,8 @@
 
 import { describe, expect, it } from "vitest";
 import { dist, pinPoint, point } from "../constraints";
-import { clusterHealth } from "../relate";
 import { batch, num } from "../index";
+import { clusterHealth } from "../relate";
 
 describe("Four-bar linkage — driven crank, output rocker", () => {
   it("driving the crank traces a non-trivial coupler curve, fast steady state", () => {

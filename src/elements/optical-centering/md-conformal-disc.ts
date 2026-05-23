@@ -168,7 +168,7 @@ export class MdConformalDisc extends Diagram {
         target => {
           worldVec.value = clampOpen(fromScreen(target));
         },
-      )
+      );
 
     // Curve segment for the geodesic arc from Pw to Qw (world coords),
     // rendered in screen coords. Diameter case falls back to a line.

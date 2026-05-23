@@ -127,12 +127,18 @@ export function eq(a: NumCell, b: NumCell): Relation {
 // Look up a cell's packer trait. Mirrors `relate.ts`'s `packerOf`;
 // duplicated here so we don't need to widen relate's public surface.
 // biome-ignore lint/suspicious/noExplicitAny: traits are opaque
-function packerOfCell(cell: any): { dim: number; pack: (v: any, into: number[], off: number) => void; unpack: (from: readonly number[], off: number) => any } {
+function packerOfCell(cell: any): {
+  dim: number;
+  pack: (v: any, into: number[], off: number) => void;
+  unpack: (from: readonly number[], off: number) => any;
+} {
   const traits = cell?.constructor?.traits;
   return (
     traits?.packer ?? {
       dim: 1,
-      pack: (v: number, into: number[], off: number) => { into[off] = v; },
+      pack: (v: number, into: number[], off: number) => {
+        into[off] = v;
+      },
       unpack: (from: readonly number[], off: number) => from[off]!,
     }
   );
@@ -273,12 +279,7 @@ export function normalizeVec(v: VecCell, magnitude: number = 1): Relation {
 }
 
 /** Vec → Vec lens. `fwd` and `bwd` map `{x,y}` to `{x,y}`. */
-export function lensVec(
-  a: VecCell,
-  b: VecCell,
-  fwd: (a: V) => V,
-  bwd: (b: V) => V,
-): Relation {
+export function lensVec(a: VecCell, b: VecCell, fwd: (a: V) => V, bwd: (b: V) => V): Relation {
   return lens<V>(a, b, fwd, bwd);
 }
 

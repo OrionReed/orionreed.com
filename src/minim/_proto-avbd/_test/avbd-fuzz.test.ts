@@ -4,7 +4,7 @@
 // seed so a fix is reproducible by hard-coding that seed.
 
 import { describe, expect, it } from "vitest";
-import { num, type Num, vec, type Vec, type Writable } from "../../signals";
+import { type Num, num, type Vec, vec, type Writable } from "../../signals";
 import { distance, eq, leq, pin, Solver } from "../index";
 import { forAll } from "./_fuzz";
 
@@ -13,7 +13,7 @@ type WNum = Writable<Num>;
 
 describe("AVBD fuzz — invariants over random scenes", () => {
   it("random pinned-chain: all distance constraints satisfied at convergence", () => {
-    forAll(50, (rng) => {
+    forAll(50, rng => {
       const N = rng.int(3, 16);
       const cells: WVec[] = [];
       for (let i = 0; i < N; i++) cells.push(vec(rng.float(-1, 1), rng.float(-1, 1)));
@@ -45,7 +45,7 @@ describe("AVBD fuzz — invariants over random scenes", () => {
   });
 
   it("hard inequality leq(a, b) keeps a ≤ b for any feasible target", () => {
-    forAll(50, (rng) => {
+    forAll(50, rng => {
       const aInit = rng.float(-10, 10);
       const bInit = rng.float(-10, 10);
       const a = num(aInit);
@@ -59,7 +59,7 @@ describe("AVBD fuzz — invariants over random scenes", () => {
   });
 
   it("eq propagates through arbitrary chain of eq() constraints", () => {
-    forAll(20, (rng) => {
+    forAll(20, rng => {
       const N = rng.int(3, 8);
       const cells: WNum[] = [];
       for (let i = 0; i < N; i++) cells.push(num(rng.float(-5, 5)));

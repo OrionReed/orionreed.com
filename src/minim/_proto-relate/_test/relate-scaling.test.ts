@@ -14,8 +14,8 @@
 // in pass/fail but in absolute slowdown.
 
 import { describe, expect, it } from "vitest";
-import { num, vec } from "../index";
 import { dist, pinPoint } from "../constraints";
+import { num, vec } from "../index";
 import { relate } from "../relate";
 
 function timeDragChain(N: number, drags: number): { perFrame: number; constructTime: number } {
@@ -61,17 +61,23 @@ function timeDragChain2D(N: number, drags: number): { perFrame: number; construc
 describe("Scaling — 1D linear chain (eq cells)", () => {
   it("N=10: per-frame drag time", () => {
     const r = timeDragChain(10, 100);
-    console.log(`  N=10 1D chain: construct=${r.constructTime.toFixed(2)}ms, perFrame=${r.perFrame.toFixed(3)}ms`);
+    console.log(
+      `  N=10 1D chain: construct=${r.constructTime.toFixed(2)}ms, perFrame=${r.perFrame.toFixed(3)}ms`,
+    );
     expect(r.perFrame).toBeLessThan(0.5);
   });
   it("N=50: per-frame drag time", () => {
     const r = timeDragChain(50, 50);
-    console.log(`  N=50 1D chain: construct=${r.constructTime.toFixed(2)}ms, perFrame=${r.perFrame.toFixed(3)}ms`);
+    console.log(
+      `  N=50 1D chain: construct=${r.constructTime.toFixed(2)}ms, perFrame=${r.perFrame.toFixed(3)}ms`,
+    );
     expect(r.perFrame).toBeLessThan(5);
   });
   it("N=100: per-frame drag time", () => {
     const r = timeDragChain(100, 30);
-    console.log(`  N=100 1D chain: construct=${r.constructTime.toFixed(2)}ms, perFrame=${r.perFrame.toFixed(3)}ms`);
+    console.log(
+      `  N=100 1D chain: construct=${r.constructTime.toFixed(2)}ms, perFrame=${r.perFrame.toFixed(3)}ms`,
+    );
     expect(r.perFrame).toBeLessThan(30);
   });
 });
@@ -133,9 +139,7 @@ describe("Scaling — separate clusters scale linearly", () => {
     }
     const t1 = performance.now();
     const perFrame = (t1 - t0) / 10;
-    console.log(
-      `  100 clusters × 5 cells: ${perFrame.toFixed(3)}ms/frame for all 100`,
-    );
+    console.log(`  100 clusters × 5 cells: ${perFrame.toFixed(3)}ms/frame for all 100`);
     // Each cluster solves independently. 100 clusters × small-cluster
     // cost should still be < 30ms.
     expect(perFrame).toBeLessThan(50);

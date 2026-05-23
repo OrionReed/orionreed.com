@@ -110,7 +110,10 @@ describe("Topology — 2D lattice (mesh)", () => {
     // Bars near the corner stay close to length 1 (LSQ best-fit
     // for a rigid lattice with small forced displacement).
     expect(
-      Math.hypot(corner.value.x - grid[N - 1]![N - 2]!.value.x, corner.value.y - grid[N - 1]![N - 2]!.value.y),
+      Math.hypot(
+        corner.value.x - grid[N - 1]![N - 2]!.value.x,
+        corner.value.y - grid[N - 1]![N - 2]!.value.y,
+      ),
     ).toBeCloseTo(1, 1);
   });
 
@@ -240,9 +243,18 @@ describe("Topology — irregular sparse", () => {
     // Manually picked edges to be irregular.
     const nodes = Array.from({ length: 8 }, (_, i) => vec(i % 4, Math.floor(i / 4)));
     const edges: [number, number][] = [
-      [0, 1], [1, 2], [2, 3], [4, 5], [5, 6], [6, 7],
-      [0, 4], [1, 5], [2, 6], [3, 7],
-      [0, 5], [3, 6],
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [4, 5],
+      [5, 6],
+      [6, 7],
+      [0, 4],
+      [1, 5],
+      [2, 6],
+      [3, 7],
+      [0, 5],
+      [3, 6],
     ];
     for (const [a, b] of edges) {
       const va = nodes[a]!.value;

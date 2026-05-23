@@ -454,7 +454,13 @@ export function generic(
   fn: ResidualFn,
   opts?: { fdStep?: number; hard?: boolean; stiffness?: number },
 ): GenericForce {
-  const f = new GenericForce(s, cells.map(c => s.bind(c)), rows, fn, opts);
+  const f = new GenericForce(
+    s,
+    cells.map(c => s.bind(c)),
+    rows,
+    fn,
+    opts,
+  );
   s.addForce(f);
   return f;
 }
@@ -462,7 +468,13 @@ export function generic(
 // ─── Sketchpad primitives via `generic` ──────────────────────────────
 
 /** Interior angle ABC = θ. */
-export function angle(s: Solver, A: Bindable, B: Bindable, C: Bindable, theta: number): GenericForce {
+export function angle(
+  s: Solver,
+  A: Bindable,
+  B: Bindable,
+  C: Bindable,
+  theta: number,
+): GenericForce {
   return generic(s, [A, B, C], 1, (pos, out) => {
     const a = pos[0]!,
       b = pos[1]!,
@@ -540,12 +552,7 @@ export function collinear(s: Solver, P: Bindable, A: Bindable, B: Bindable): Gen
 }
 
 /** Point P on a circle of given center and radius. */
-export function onCircle(
-  s: Solver,
-  P: Bindable,
-  center: Bindable,
-  radius: number,
-): GenericForce {
+export function onCircle(s: Solver, P: Bindable, center: Bindable, radius: number): GenericForce {
   return generic(s, [P, center], 1, (pos, out) => {
     const p = pos[0]!,
       c = pos[1]!;

@@ -437,10 +437,7 @@ function applyFastPaths(c: Cluster): boolean {
     if (hardPinned.has(e.cell)) fixed.add(e.cell);
   }
 
-  const peelPhase = (
-    countAsPinned: (cell: Cell) => boolean,
-    runCorrectors: boolean,
-  ): void => {
+  const peelPhase = (countAsPinned: (cell: Cell) => boolean, runCorrectors: boolean): void => {
     const localVals: unknown[] = [];
     const localPinned: boolean[] = [];
     let changed = true;
@@ -860,16 +857,10 @@ function solveCluster(c: Cluster): void {
     if (c.useSparse) {
       const Rsubset = buildResidualSubset(c);
       if (c.sparseScratch === undefined) c.sparseScratch = makeSparseScratch();
-      return dampedNewtonSparse(
-        xs,
-        R,
-        Rsubset,
-        c.m,
-        c.pinMask,
-        c.sparseInfo!,
-        c.sparseScratch,
-        { maxIters, tol },
-      );
+      return dampedNewtonSparse(xs, R, Rsubset, c.m, c.pinMask, c.sparseInfo!, c.sparseScratch, {
+        maxIters,
+        tol,
+      });
     }
     return dampedNewton(xs, R, c.m, c.pinMask, { maxIters, tol });
   };
@@ -1140,12 +1131,14 @@ export function clusterRelations(cell: Cell): readonly Relation[] {
  *  given topology, and that RCM is delivering its expected
  *  bandwidth reduction. Returns `undefined` if the cell isn't in
  *  any cluster yet. */
-export function _clusterSparseInfo(cell: Cell): {
-  totalSlots: number;
-  totalNNZ: number;
-  bandwidth: number;
-  useSparse: boolean | undefined;
-} | undefined {
+export function _clusterSparseInfo(cell: Cell):
+  | {
+      totalSlots: number;
+      totalNNZ: number;
+      bandwidth: number;
+      useSparse: boolean | undefined;
+    }
+  | undefined {
   const c = cellToCluster.get(cell);
   if (!c) return undefined;
   if (!c.sparseInfo) {

@@ -46,10 +46,7 @@ export class Rng {
 
 /** Run `body` `n` times with seeds 1..n. On failure, the seed is
  *  attached to the assertion message so reproduction is one line. */
-export function forAll(
-  n: number,
-  body: (rng: Rng, seed: number) => void,
-): void {
+export function forAll(n: number, body: (rng: Rng, seed: number) => void): void {
   for (let seed = 1; seed <= n; seed++) {
     try {
       body(new Rng(seed), seed);

@@ -190,12 +190,20 @@ export class Vec extends Signal<V> {
 
   get x(): Num {
     return lazy(this, "x", () =>
-      this.lensTo(Num, s => s.x, (v, s) => ({ ...s, x: v })),
+      this.lensTo(
+        Num,
+        s => s.x,
+        (v, s) => ({ ...s, x: v }),
+      ),
     );
   }
   get y(): Num {
     return lazy(this, "y", () =>
-      this.lensTo(Num, s => s.y, (v, s) => ({ ...s, y: v })),
+      this.lensTo(
+        Num,
+        s => s.y,
+        (v, s) => ({ ...s, y: v }),
+      ),
     );
   }
   get magnitude(): Num {

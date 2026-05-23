@@ -21,7 +21,7 @@
 // (or use the `pin(sig)` helper).
 
 import { type Pack, preEffect, type Signal } from "../signals";
-import { setReactiveInstaller, Solver } from "./solver";
+import { Solver, setReactiveInstaller } from "./solver";
 
 /** Install (or no-op if already installed) the reactive driver
  *  for `solver`. Called from `Solver.bind()`. */
@@ -62,7 +62,9 @@ setReactiveInstaller(install);
 export function pin(sig: Signal<any>): () => void {
   const id = findCellId(sig);
   if (id === undefined) {
-    throw new Error("pin: signal is not bound to any solver. Call s.bind(sig) first or pass it to a constraint factory.");
+    throw new Error(
+      "pin: signal is not bound to any solver. Call s.bind(sig) first or pass it to a constraint factory.",
+    );
   }
   const { solver } = id;
   const prev = solver.massOf(id.cellId);

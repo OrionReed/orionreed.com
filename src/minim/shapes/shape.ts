@@ -269,7 +269,11 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
    *  binds the shape's native geometry (e.g. `{cx, cy, r}` for circle);
    *  it's skipped when `opts.dashed` since the intrinsic is then a
    *  `<path>` whose `d` is driven by `segments()`. */
-  stroke(opts: CommonOpts, closed: boolean, nativeAttrs?: Record<string, Val<string | number>>): void {
+  stroke(
+    opts: CommonOpts,
+    closed: boolean,
+    nativeAttrs?: Record<string, Val<string | number>>,
+  ): void {
     if (opts.dashed) {
       const cap = opts.cap ?? "round";
       this.attr("stroke-linecap", cap);

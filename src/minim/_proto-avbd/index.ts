@@ -48,9 +48,9 @@ export {
   perpendicular,
   type ResidualFn,
   SoftTargetForce,
+  Strength,
   softTarget,
   spring,
-  Strength,
 } from "./constraints";
 export { Force, PENALTY_MAX, PENALTY_MIN } from "./force";
 // Side-effect import: registers the reactive driver factory so

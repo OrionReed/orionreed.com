@@ -1,14 +1,6 @@
 // handle.* — writable derived shapes (draggable circles wired to a Vec).
 
-import {
-  Mix,
-  mix,
-  polar as polarLens,
-  Signal,
-  signal,
-  Vec,
-  type Writable,
-} from "@minim/signals";
+import { Mix, mix, polar as polarLens, Signal, signal, Vec, type Writable } from "@minim/signals";
 import { Circle, type CircleOpts } from "./circle";
 import { drag } from "./interaction";
 import type { Path } from "./path";

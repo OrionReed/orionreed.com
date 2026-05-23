@@ -5,8 +5,8 @@
 import { describe, expect, it } from "vitest";
 import {
   invertibles,
-  lazy,
   type Linear,
+  lazy,
   Num,
   Signal,
   type SignalOptions,
@@ -70,17 +70,29 @@ class Hsl extends Signal<V> {
 
   get h(): Num {
     return lazy(this, "h", () =>
-      this.lensTo(Num, s => s.h, (v, s) => ({ ...s, h: v })),
+      this.lensTo(
+        Num,
+        s => s.h,
+        (v, s) => ({ ...s, h: v }),
+      ),
     );
   }
   get s(): Num {
     return lazy(this, "s", () =>
-      this.lensTo(Num, s => s.s, (v, s) => ({ ...s, s: v })),
+      this.lensTo(
+        Num,
+        s => s.s,
+        (v, s) => ({ ...s, s: v }),
+      ),
     );
   }
   get l(): Num {
     return lazy(this, "l", () =>
-      this.lensTo(Num, s => s.l, (v, s) => ({ ...s, l: v })),
+      this.lensTo(
+        Num,
+        s => s.l,
+        (v, s) => ({ ...s, l: v }),
+      ),
     );
   }
 }

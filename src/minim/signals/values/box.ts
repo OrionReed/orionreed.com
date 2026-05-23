@@ -6,7 +6,16 @@
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { computed, lazy, type Of, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
+import {
+  computed,
+  lazy,
+  type Of,
+  Signal,
+  type SignalOptions,
+  type Val,
+  valFn,
+  value,
+} from "../signal";
 import { type Linear, type Pack, traits } from "../traits";
 import { derived, field, type Wr, type Writable } from "../writable";
 import { Num } from "./num";

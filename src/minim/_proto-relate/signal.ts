@@ -667,7 +667,6 @@ export class Signal<T = unknown> implements ReactiveNode {
     return inst as this;
   }
 
-
   /** Read with tracking. Branches on signal vs computed mode. */
   get value(): T {
     const flags = this.flags;

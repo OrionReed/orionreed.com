@@ -114,27 +114,47 @@ export class Transform extends Signal<V> {
 
   get translate(): Vec {
     return lazy(this, "translate", () =>
-      this.lensTo(Vec, s => s.translate, (v, s) => ({ ...s, translate: v })),
+      this.lensTo(
+        Vec,
+        s => s.translate,
+        (v, s) => ({ ...s, translate: v }),
+      ),
     );
   }
   get scale(): Vec {
     return lazy(this, "scale", () =>
-      this.lensTo(Vec, s => s.scale, (v, s) => ({ ...s, scale: v })),
+      this.lensTo(
+        Vec,
+        s => s.scale,
+        (v, s) => ({ ...s, scale: v }),
+      ),
     );
   }
   get origin(): Vec {
     return lazy(this, "origin", () =>
-      this.lensTo(Vec, s => s.origin, (v, s) => ({ ...s, origin: v })),
+      this.lensTo(
+        Vec,
+        s => s.origin,
+        (v, s) => ({ ...s, origin: v }),
+      ),
     );
   }
   get rotate(): Num {
     return lazy(this, "rotate", () =>
-      this.lensTo(Num, s => s.rotate, (v, s) => ({ ...s, rotate: v })),
+      this.lensTo(
+        Num,
+        s => s.rotate,
+        (v, s) => ({ ...s, rotate: v }),
+      ),
     );
   }
   get opacity(): Num {
     return lazy(this, "opacity", () =>
-      this.lensTo(Num, s => s.opacity, (v, s) => ({ ...s, opacity: v })),
+      this.lensTo(
+        Num,
+        s => s.opacity,
+        (v, s) => ({ ...s, opacity: v }),
+      ),
     );
   }
 

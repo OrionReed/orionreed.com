@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 import { num, vec } from "../../signals";
-import { clamp, distance, eq, lensNum, pin, softTarget, Solver, spring } from "../index";
+import { clamp, distance, eq, lensNum, pin, Solver, softTarget, spring } from "../index";
 
 describe("AVBD basic — single constraint correctness", () => {
   it("hard equality between two Num cells", () => {

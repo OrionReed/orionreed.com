@@ -24,8 +24,8 @@ export { Rect, type RectOpts, rect } from "./rect";
 export {
   type AnimatableKey,
   type AnyShape,
-  centroid,
   type CommonOpts,
+  centroid,
   type Has,
   meanRotation,
   meanScale,

@@ -261,4 +261,3 @@ describe("pin — persistent fixed value (soft)", () => {
     expect(b.value).toBeCloseTo(5, 6);
   });
 });
-

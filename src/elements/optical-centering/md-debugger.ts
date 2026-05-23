@@ -35,13 +35,13 @@ import {
   Mount,
   type Num,
   type Read,
-  type Writable,
   rect,
   Shape,
   signal,
   type Val,
   Vec,
   vec,
+  type Writable,
 } from "../../minim";
 import { authorOf, claim, record, type Span, scope } from "../../minim/assert";
 

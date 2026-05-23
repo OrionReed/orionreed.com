@@ -128,32 +128,56 @@ export class Matrix extends Signal<V> {
 
   get a(): Num {
     return lazy(this, "a", () =>
-      this.lensTo(Num, s => s.a, (v, s) => ({ ...s, a: v })),
+      this.lensTo(
+        Num,
+        s => s.a,
+        (v, s) => ({ ...s, a: v }),
+      ),
     );
   }
   get b(): Num {
     return lazy(this, "b", () =>
-      this.lensTo(Num, s => s.b, (v, s) => ({ ...s, b: v })),
+      this.lensTo(
+        Num,
+        s => s.b,
+        (v, s) => ({ ...s, b: v }),
+      ),
     );
   }
   get c(): Num {
     return lazy(this, "c", () =>
-      this.lensTo(Num, s => s.c, (v, s) => ({ ...s, c: v })),
+      this.lensTo(
+        Num,
+        s => s.c,
+        (v, s) => ({ ...s, c: v }),
+      ),
     );
   }
   get d(): Num {
     return lazy(this, "d", () =>
-      this.lensTo(Num, s => s.d, (v, s) => ({ ...s, d: v })),
+      this.lensTo(
+        Num,
+        s => s.d,
+        (v, s) => ({ ...s, d: v }),
+      ),
     );
   }
   get e(): Num {
     return lazy(this, "e", () =>
-      this.lensTo(Num, s => s.e, (v, s) => ({ ...s, e: v })),
+      this.lensTo(
+        Num,
+        s => s.e,
+        (v, s) => ({ ...s, e: v }),
+      ),
     );
   }
   get f(): Num {
     return lazy(this, "f", () =>
-      this.lensTo(Num, s => s.f, (v, s) => ({ ...s, f: v })),
+      this.lensTo(
+        Num,
+        s => s.f,
+        (v, s) => ({ ...s, f: v }),
+      ),
     );
   }
 

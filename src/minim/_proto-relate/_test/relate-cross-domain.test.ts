@@ -10,10 +10,10 @@ import {
   dist,
   pinPoint,
   rigid,
+  Strength,
   softNum,
   softVec,
   space,
-  Strength,
 } from "../constraints";
 import { num, vec } from "../index";
 import { hardPin, relate } from "../relate";

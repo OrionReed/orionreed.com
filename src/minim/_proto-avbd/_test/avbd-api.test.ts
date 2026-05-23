@@ -4,16 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { num, vec } from "../../signals";
-import {
-  bounded,
-  distance,
-  geq,
-  leq,
-  pin,
-  Solver,
-  spring,
-  Strength,
-} from "../index";
+import { bounded, distance, geq, leq, pin, Solver, Strength, spring } from "../index";
 
 describe("API — Strength constants", () => {
   it("constants ordered low → high; HARD = ∞", () => {

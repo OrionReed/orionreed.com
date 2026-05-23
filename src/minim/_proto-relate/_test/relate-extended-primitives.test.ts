@@ -15,8 +15,8 @@ import {
   perpendicularBisector,
   pinPoint,
   rigid,
-  space,
   Strength,
+  space,
   tangentCircles,
   tangentLineCircle,
 } from "../constraints";

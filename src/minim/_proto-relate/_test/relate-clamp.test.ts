@@ -10,7 +10,7 @@
 // arithmetic), snap-to-grid, normalise-to-unit-vector, etc.
 
 import { describe, expect, it } from "vitest";
-import { clamp, leq, lensNum, softNum } from "../constraints";
+import { clamp, lensNum, leq, softNum } from "../constraints";
 import { num } from "../index";
 import { clusterHealth, hardPin } from "../relate";
 

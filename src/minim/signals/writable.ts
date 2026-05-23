@@ -85,7 +85,13 @@ export type { WritableBrand };
  *  construction-time check in `Signal._fuse`, breaking legitimate
  *  read-only patterns like `box.center.x.value`. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo
-export function field<S extends Signal<any>, K extends keyof Of<S>, C extends new (...args: never[]) => Signal<Of<S>[K]>>(
+export function field<
+  S extends Signal<any>,
+  K extends keyof Of<S>,
+  C extends new (
+    ...args: never[]
+  ) => Signal<Of<S>[K]>,
+>(
   parent: S,
   key: K,
   Cls: C,

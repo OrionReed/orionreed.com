@@ -171,8 +171,9 @@ describe("Regular polygon by repeated equal-distance sides + diagonals", () => {
       expect(Math.hypot(a.x.value - b.x.value, a.y.value - b.y.value)).toBeCloseTo(R, EPS);
     }
     // Vertex 3 should be antipodal to vertex 0.
-    expect(Math.hypot(verts[3]!.x.value + verts[0]!.x.value, verts[3]!.y.value + verts[0]!.y.value))
-      .toBeCloseTo(0, 4);
+    expect(
+      Math.hypot(verts[3]!.x.value + verts[0]!.x.value, verts[3]!.y.value + verts[0]!.y.value),
+    ).toBeCloseTo(0, 4);
   });
 });
 

@@ -613,7 +613,9 @@ export class Signal<T = unknown> implements ReactiveNode {
   ): InstanceType<C> {
     return Signal._fuse(
       this as Signal<unknown>,
-      Cls as unknown as new (...args: never[]) => Signal<Of<InstanceType<C>>>,
+      Cls as unknown as new (
+        ...args: never[]
+      ) => Signal<Of<InstanceType<C>>>,
       fwd as (s: unknown) => Of<InstanceType<C>>,
       (u, s) => bwd(u, s as T),
       false,
@@ -632,7 +634,9 @@ export class Signal<T = unknown> implements ReactiveNode {
   ): InstanceType<C> {
     return Signal._fuse(
       this as Signal<unknown>,
-      Cls as unknown as new (...args: never[]) => Signal<Of<InstanceType<C>>>,
+      Cls as unknown as new (
+        ...args: never[]
+      ) => Signal<Of<InstanceType<C>>>,
       fwd as (s: unknown) => Of<InstanceType<C>>,
     ) as InstanceType<C>;
   }
@@ -738,9 +742,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     const priorStateless = prior?.bwdStateless ?? true;
     const fusedStateless = bwdLocal === undefined ? priorStateless : newStateless && priorStateless;
 
-    const composedFwd: (s: unknown) => U = priorFwd
-      ? s => fwdLocal(priorFwd(s))
-      : fwdLocal;
+    const composedFwd: (s: unknown) => U = priorFwd ? s => fwdLocal(priorFwd(s)) : fwdLocal;
 
     // composedBwd is stored on `_fusedOf` for downstream fusion to
     // compose against. The stateless variant skips `priorFwd(s)`
@@ -816,7 +818,6 @@ export class Signal<T = unknown> implements ReactiveNode {
     return inst as Signal<U>;
   }
 
-
   /** Read with tracking. Branches on signal vs computed mode. */
   get value(): T {
     const flags = this.flags;
@@ -889,10 +890,7 @@ export class Signal<T = unknown> implements ReactiveNode {
       // pre-effects queued from external invalidate calls (e.g. a
       // constraint solver that registered a new binding earlier
       // and is waiting for a write to drive a re-subscribe run).
-      if (
-        batchDepth === 0 &&
-        (subs !== undefined || preQueuedLength > preNotifyIndex)
-      ) {
+      if (batchDepth === 0 && (subs !== undefined || preQueuedLength > preNotifyIndex)) {
         flush();
       }
     }

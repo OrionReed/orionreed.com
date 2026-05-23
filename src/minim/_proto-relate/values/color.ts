@@ -83,22 +83,38 @@ export class Color extends Signal<V> {
 
   get r(): Num {
     return lazy(this, "r", () =>
-      this.lensTo(Num, s => s.r, (v, s) => ({ ...s, r: v })),
+      this.lensTo(
+        Num,
+        s => s.r,
+        (v, s) => ({ ...s, r: v }),
+      ),
     );
   }
   get g(): Num {
     return lazy(this, "g", () =>
-      this.lensTo(Num, s => s.g, (v, s) => ({ ...s, g: v })),
+      this.lensTo(
+        Num,
+        s => s.g,
+        (v, s) => ({ ...s, g: v }),
+      ),
     );
   }
   get b(): Num {
     return lazy(this, "b", () =>
-      this.lensTo(Num, s => s.b, (v, s) => ({ ...s, b: v })),
+      this.lensTo(
+        Num,
+        s => s.b,
+        (v, s) => ({ ...s, b: v }),
+      ),
     );
   }
   get a(): Num {
     return lazy(this, "a", () =>
-      this.lensTo(Num, s => s.a, (v, s) => ({ ...s, a: v })),
+      this.lensTo(
+        Num,
+        s => s.a,
+        (v, s) => ({ ...s, a: v }),
+      ),
     );
   }
   get luminance(): Num {

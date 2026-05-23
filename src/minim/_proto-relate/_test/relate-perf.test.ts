@@ -9,8 +9,8 @@
 
 import { describe, expect, it } from "vitest";
 import { dist, pinPoint, point } from "../constraints";
-import { clusterHealth, relate } from "../relate";
 import { num } from "../index";
+import { clusterHealth, relate } from "../relate";
 
 describe("warm-start: steady-state drag ⇒ ≤2 Newton iterations", () => {
   it("4-bar linkage, small angle steps", () => {

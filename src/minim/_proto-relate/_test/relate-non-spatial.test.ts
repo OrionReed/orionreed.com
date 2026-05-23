@@ -16,10 +16,10 @@
 
 import { describe, expect, it } from "vitest";
 import { num, rgb, vec } from "../index";
+import { hardPin, relate, Strength } from "../relate";
 import { Box } from "../values/box";
 import { Color } from "../values/color";
 import type { Writable } from "../writable";
-import { hardPin, relate, Strength } from "../relate";
 
 const EPS = 1e-3;
 

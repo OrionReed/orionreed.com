@@ -15,8 +15,8 @@
 // dt, gravity) is `Simulation`'s job — see simulation.ts.
 
 import { type Pack, requirePack, type Signal } from "../signals";
-import { PENALTY_MAX, PENALTY_MIN } from "./force";
 import type { Force } from "./force";
+import { PENALTY_MAX, PENALTY_MIN } from "./force";
 import { clamp, solveSPD } from "./linalg";
 
 export interface SolverOpts {

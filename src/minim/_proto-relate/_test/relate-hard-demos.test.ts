@@ -6,8 +6,8 @@
 
 import { describe, expect, it } from "vitest";
 import { dist, pinPoint, point } from "../constraints";
-import { clusterHealth, relate } from "../relate";
 import { batch, num, vec } from "../index";
+import { clusterHealth, relate } from "../relate";
 
 describe("3-link IK arm with soft rest-pose preferences", () => {
   it("drag tip — joints solve to nearest-config that respects soft prior", () => {
@@ -273,7 +273,9 @@ describe("Strandbeest-style 7-bar leg", () => {
       expect(Math.hypot(ax!, ay!)).toBeCloseTo(Lcrank, 3);
     }
     // Foot moves over the arc.
-    const distinct = new Set(trajectory.map(([, , fx, fy]) => `${fx!.toFixed(2)},${fy!.toFixed(2)}`));
+    const distinct = new Set(
+      trajectory.map(([, , fx, fy]) => `${fx!.toFixed(2)},${fy!.toFixed(2)}`),
+    );
     expect(distinct.size).toBeGreaterThan(8);
   });
 });

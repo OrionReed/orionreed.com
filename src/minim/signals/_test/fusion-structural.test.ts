@@ -16,11 +16,10 @@
 // available without modifying the engine.
 
 import { describe, expect, it } from "vitest";
-import { box, effect, num, Num, rgb, type Signal, transform, vec, Vec } from "../index";
+import { box, effect, Num, num, rgb, type Signal, transform, Vec, vec } from "../index";
 
 // Does `s` have a non-empty `.subs` linked list?
-const hasSubscribers = (s: unknown): boolean =>
-  (s as { subs?: unknown }).subs !== undefined;
+const hasSubscribers = (s: unknown): boolean => (s as { subs?: unknown }).subs !== undefined;
 
 const fusedParent = (s: unknown): unknown =>
   (s as { _fusedOf?: { parent: unknown } })._fusedOf?.parent;

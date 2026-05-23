@@ -16,7 +16,7 @@
 // `race`, `suspend`, etc., from `core/anim`.
 
 import type { Tick } from "../core/anim";
-import type { Signal, Pack } from "../signals";
+import type { Pack, Signal } from "../signals";
 import type { Solver } from "./solver";
 
 export interface SimulationOpts {

@@ -10,7 +10,7 @@
 //   §3.7 — Warm-start across calls reduces iterations needed.
 
 import { describe, expect, it } from "vitest";
-import { vec, type Vec, type Writable } from "../../signals";
+import { type Vec, vec, type Writable } from "../../signals";
 import { distance, pin, Simulation, Solver, spring } from "../index";
 
 type WVec = Writable<Vec>;
@@ -42,7 +42,9 @@ describe("AVBD stress — high stiffness ratios (paper §3.4)", () => {
     const dist = distance(s, a, b, 5);
     pin(a);
     a.value = { x: 0.0001, y: 0 };
-    expect(Math.abs(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y) - 5)).toBeLessThan(1e-2);
+    expect(Math.abs(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y) - 5)).toBeLessThan(
+      1e-2,
+    );
     expect(dist.penalty[0]!).toBeLessThan(1e7);
   });
 });

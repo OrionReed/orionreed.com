@@ -4,7 +4,7 @@
 // shouldn't depend on machine speed.
 
 import { describe, expect, it } from "vitest";
-import { vec, type Vec, type Writable } from "../../signals";
+import { type Vec, vec, type Writable } from "../../signals";
 import { distance, pin, Solver } from "../index";
 
 type WVec = Writable<Vec>;
@@ -82,7 +82,9 @@ describe("AVBD bench — SOA hot path", () => {
     }
     const t = (performance.now() - t0) / drags;
     const perVU = (t * 1000) / (100 * 100 * 5);
-    console.log(`  lattice 100×100 iter=5: ${t.toFixed(2)}ms/step, ${perVU.toFixed(2)}µs/vertex-update`);
+    console.log(
+      `  lattice 100×100 iter=5: ${t.toFixed(2)}ms/step, ${perVU.toFixed(2)}µs/vertex-update`,
+    );
     void s;
     expect(Number.isFinite(t)).toBe(true);
   });
@@ -99,7 +101,9 @@ describe("AVBD bench — SOA hot path", () => {
     }
     const t = (performance.now() - t0) / drags;
     const perVU = (t * 1000) / (200 * 200 * 5);
-    console.log(`  lattice 200×200 iter=5: ${t.toFixed(2)}ms/step, ${perVU.toFixed(2)}µs/vertex-update`);
+    console.log(
+      `  lattice 200×200 iter=5: ${t.toFixed(2)}ms/step, ${perVU.toFixed(2)}µs/vertex-update`,
+    );
     void s;
     expect(Number.isFinite(t)).toBe(true);
   });

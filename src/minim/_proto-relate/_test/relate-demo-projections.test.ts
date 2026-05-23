@@ -14,14 +14,7 @@
 // runs.
 
 import { describe, expect, it } from "vitest";
-import {
-  clamp,
-  lensNum,
-  normalizeVec,
-  snapToGrid,
-  softNum,
-  wrap,
-} from "../constraints";
+import { clamp, lensNum, normalizeVec, snapToGrid, softNum, wrap } from "../constraints";
 import { num, vec } from "../index";
 import { clusterHealth } from "../relate";
 

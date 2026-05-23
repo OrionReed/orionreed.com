@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from "vitest";
 import { dist, eq, pinPoint, point } from "../constraints";
-import { batch, computed, effect, num, Num } from "../index";
+import { batch, computed, effect, Num, num } from "../index";
 import { relate } from "../relate";
 
 const EPS = 1e-6;

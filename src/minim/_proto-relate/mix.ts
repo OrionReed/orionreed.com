@@ -67,9 +67,7 @@ export interface Contribution<T> {
  *  `Merge<V>` for any concrete `V`, sidestepping `TraitDict<T>`'s
  *  invariance. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape for built-ins
-export type Merge<T = any> = (
-  traits: TraitDict<T>,
-) => (parts: readonly Contribution<T>[]) => T;
+export type Merge<T = any> = (traits: TraitDict<T>) => (parts: readonly Contribution<T>[]) => T;
 
 /** A writeback: two-stage, dual to `Merge`. `Writeback<T>` is a
  *  factory — given the class's traits, returns a
@@ -87,9 +85,9 @@ export type Writeback<T = any> = (
 /** Weighted mean, normalised by total weight. Equal-weight mean is
  *  the special case where every contributor was added without a
  *  weight (defaulting to 1). Requires the `linear` trait. */
-export const mean: Merge = (traits) => {
+export const mean: Merge = traits => {
   const lin = needLinear(traits as TraitDict<unknown>, "mean");
-  return (parts) => {
+  return parts => {
     if (parts.length === 0) throw new Error("mix(mean): no contributors");
     let acc = lin.scale(parts[0]!.value, parts[0]!.weight);
     let total = parts[0]!.weight;
@@ -102,9 +100,9 @@ export const mean: Merge = (traits) => {
 };
 
 /** Weighted sum (no normalisation). Requires the `linear` trait. */
-export const sum: Merge = (traits) => {
+export const sum: Merge = traits => {
   const lin = needLinear(traits as TraitDict<unknown>, "sum");
-  return (parts) => {
+  return parts => {
     if (parts.length === 0) throw new Error("mix(sum): no contributors");
     let acc = lin.scale(parts[0]!.value, parts[0]!.weight);
     for (let i = 1; i < parts.length; i++) {
@@ -116,7 +114,7 @@ export const sum: Merge = (traits) => {
 
 /** Highest-weight contributor wins. Ties resolved by index order.
  *  Trait-free. */
-export const priority: Merge = () => (parts) => {
+export const priority: Merge = () => parts => {
   if (parts.length === 0) throw new Error("mix(priority): no contributors");
   let best = parts[0]!;
   for (let i = 1; i < parts.length; i++) {
@@ -126,20 +124,20 @@ export const priority: Merge = () => (parts) => {
 };
 
 /** Last contributor (in index order) wins. Trait-free. */
-export const latest: Merge = () => (parts) => {
+export const latest: Merge = () => parts => {
   if (parts.length === 0) throw new Error("mix(latest): no contributors");
   return parts[parts.length - 1]!.value;
 };
 
 /** First non-null contribution wins. Useful for default/fallback chains. */
-export const firstNonNull: Merge = () => (parts) => {
+export const firstNonNull: Merge = () => parts => {
   for (const p of parts) if (p.value != null) return p.value;
   if (parts.length === 0) throw new Error("mix(firstNonNull): no contributors");
   return parts[0]!.value;
 };
 
 /** Numeric minimum across contributors. Trait-free. */
-export const min: Merge<number> = () => (parts) => {
+export const min: Merge<number> = () => parts => {
   if (parts.length === 0) throw new Error("mix(min): no contributors");
   let m = parts[0]!.value;
   for (let i = 1; i < parts.length; i++) if (parts[i]!.value < m) m = parts[i]!.value;
@@ -147,7 +145,7 @@ export const min: Merge<number> = () => (parts) => {
 };
 
 /** Numeric maximum across contributors. Trait-free. */
-export const max: Merge<number> = () => (parts) => {
+export const max: Merge<number> = () => parts => {
   if (parts.length === 0) throw new Error("mix(max): no contributors");
   let m = parts[0]!.value;
   for (let i = 1; i < parts.length; i++) if (parts[i]!.value > m) m = parts[i]!.value;
@@ -158,7 +156,7 @@ export const max: Merge<number> = () => (parts) => {
 
 /** Distribute the `next - current` delta equally to every contributor.
  *  Dual to `mean` on the merge side. Requires the `linear` trait. */
-export const deltaEven: Writeback = (traits) => {
+export const deltaEven: Writeback = traits => {
   const lin = needLinear(traits as TraitDict<unknown>, "deltaEven");
   return (next, parts) => {
     if (parts.length === 0) return [];
@@ -186,7 +184,7 @@ export const replaceFirst: Writeback = () => (next, parts) => {
 /** Distribute the delta proportionally to each contributor's weight.
  *  High-weight contributors absorb more of the residual. Requires
  *  Linear. Falls back to `deltaEven` when total weight is 0. */
-export const proportional: Writeback = (traits) => {
+export const proportional: Writeback = traits => {
   const lin = needLinear(traits as TraitDict<unknown>, "proportional");
   // Pre-resolve `deltaEven`'s fallback path too, so the zero-weight
   // branch doesn't pay the trait lookup either.
@@ -221,27 +219,27 @@ export const proportional: Writeback = (traits) => {
 /** Take only the top `n` contributors by weight before applying `base`. */
 export const top =
   <T>(n: number, base: Merge<T>): Merge<T> =>
-  (traits) => {
+  traits => {
     const prepared = base(traits);
-    return (parts) =>
+    return parts =>
       prepared([...parts].sort((a, b) => b.weight - a.weight).slice(0, Math.max(0, n)));
   };
 
 /** Drop contributors whose weight is `≤ threshold`, then apply `base`. */
 export const above =
   <T>(threshold: number, base: Merge<T>): Merge<T> =>
-  (traits) => {
+  traits => {
     const prepared = base(traits);
-    return (parts) => prepared(parts.filter(p => p.weight > threshold));
+    return parts => prepared(parts.filter(p => p.weight > threshold));
   };
 
 /** Re-map each contributor's weight via `fn` before applying `base`.
  *  Useful for non-linear weighting (exp, softmax, …). */
 export const reweight =
   <T>(fn: (p: Contribution<T>) => number, base: Merge<T>): Merge<T> =>
-  (traits) => {
+  traits => {
     const prepared = base(traits);
-    return (parts) => prepared(parts.map(p => ({ value: p.value, weight: fn(p) })));
+    return parts => prepared(parts.map(p => ({ value: p.value, weight: fn(p) })));
   };
 
 // ─── Trait-lookup helpers (public) ──────────────────────────────────

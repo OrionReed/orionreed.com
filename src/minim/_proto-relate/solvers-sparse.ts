@@ -249,7 +249,13 @@ export function makeSparseScratch(): SparseScratch {
   };
 }
 
-function ensureScratch(s: SparseScratch, m: number, nnz: number, bandLen: number, nf: number): void {
+function ensureScratch(
+  s: SparseScratch,
+  m: number,
+  nnz: number,
+  bandLen: number,
+  nf: number,
+): void {
   if (s.capacityM < m) {
     s.r = new Float64Array(m);
     s.r2 = new Float64Array(m);
@@ -466,9 +472,10 @@ export function dampedNewtonSparse(
       }
       for (let k = 0; k < nnz; k++) rowCount[jRow[k]!]!++;
       // Prefix-sum to get bucket starts.
-      const rowStart = scratch._rowStart && scratch._rowStart.length >= m
-        ? scratch._rowStart
-        : (scratch._rowStart = new Int32Array(m));
+      const rowStart =
+        scratch._rowStart && scratch._rowStart.length >= m
+          ? scratch._rowStart
+          : (scratch._rowStart = new Int32Array(m));
       let acc = 0;
       for (let i = 0; i < m; i++) {
         rowStart[i] = acc;
