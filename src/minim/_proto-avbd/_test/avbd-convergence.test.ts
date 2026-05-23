@@ -11,7 +11,7 @@
 //     the AVBD paper (where Newton-style methods choke).
 
 import { describe, expect, it } from "vitest";
-import { distance, Solver, spring, vec, VecCell } from "../index";
+import { distance, Simulation, Solver, spring, vec, VecCell } from "../index";
 
 function buildChain(N: number) {
   const cells: VecCell[] = [];
@@ -92,19 +92,14 @@ describe("AVBD convergence — residual vs iteration count", () => {
     top.mass = 0;
     const A = vec(0, -1);
     const B = vec(0, -2);
-    const s = new Solver({
-      iterations: 1,
-      dt: 1 / 60,
-      aExt: [0, -10],
-      staticMode: false,
-    });
+    const s = new Solver({ iterations: 1, alpha: 0.99 });
+    const sim = new Simulation(s, { gravity: [0, -10] });
     s.addCell(top);
     s.addCell(A);
     s.addCell(B);
     spring(s, top, A, 1, 1e4);
     spring(s, A, B, 1, 1);
-    // Run to steady state.
-    for (let i = 0; i < 200; i++) s.step();
+    for (let i = 0; i < 200; i++) sim.tick(1 / 60);
     const dispA = -A.y;
     const dispB = -B.y;
     console.log(`  steady-state: A_y=${A.y.toFixed(3)}, B_y=${B.y.toFixed(3)}`);

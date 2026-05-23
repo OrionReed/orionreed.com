@@ -17,7 +17,7 @@
 //   4. Mass-spring physics (just to confirm physics still works).
 
 import { describe, expect, it } from "vitest";
-import { distance, generic, num, Solver, spring, vec, VecCell } from "../index";
+import { distance, generic, num, Simulation, Solver, spring, vec, VecCell } from "../index";
 
 // ─── 1. Force-directed graph layout ─────────────────────────────────
 
@@ -221,16 +221,12 @@ describe("Generality — mass-spring physics still works", () => {
     const anchor = vec(0, 0);
     anchor.mass = 0;
     const bob = vec(1, 0);
-    const s = new Solver({
-      iterations: 8,
-      dt: 1 / 60,
-      aExt: [0, -10],
-      staticMode: false,
-    });
+    const s = new Solver({ iterations: 8, alpha: 0.99 });
+    const sim = new Simulation(s, { gravity: [0, -10] });
     s.addCell(anchor);
     s.addCell(bob);
     distance(s, anchor, bob, 1);
-    for (let i = 0; i < 120; i++) s.step();
+    for (let i = 0; i < 120; i++) sim.tick(1 / 60);
     const d = Math.hypot(bob.x, bob.y);
     expect(d).toBeCloseTo(1, 2);
     expect(Math.abs(bob.x - 1)).toBeGreaterThan(0.05);
@@ -247,12 +243,8 @@ describe("Generality — mass-spring physics still works", () => {
     }
     cells[0]![0]!.mass = 0;
     cells[0]![W - 1]!.mass = 0;
-    const s = new Solver({
-      iterations: 5,
-      dt: 1 / 60,
-      aExt: [0, -10],
-      staticMode: false,
-    });
+    const s = new Solver({ iterations: 5, alpha: 0.99 });
+    const sim = new Simulation(s, { gravity: [0, -10] });
     for (const row of cells) for (const c of row) s.addCell(c);
     for (let j = 0; j < H; j++)
       for (let i = 1; i < W; i++)
@@ -261,7 +253,7 @@ describe("Generality — mass-spring physics still works", () => {
       for (let j = 1; j < H; j++)
         distance(s, cells[j - 1]![i]!, cells[j]![i]!, 1);
     const t0 = performance.now();
-    for (let i = 0; i < 120; i++) s.step();
+    for (let i = 0; i < 120; i++) sim.tick(1 / 60);
     const t = performance.now() - t0;
     console.log(`  64-cell cloth, 120 frames physics: ${t.toFixed(1)}ms`);
     const bottomY = cells[H - 1]![Math.floor(W / 2)]!.y;

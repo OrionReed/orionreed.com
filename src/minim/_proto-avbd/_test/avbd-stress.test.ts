@@ -19,6 +19,7 @@
 import { describe, expect, it } from "vitest";
 import {
   distance,
+  Simulation,
   Solver,
   spring,
   vec,
@@ -41,18 +42,14 @@ describe("AVBD stress — high stiffness ratios (paper §3.4)", () => {
     top.mass = 0; // fixed
     const A = vec(0, -1);
     const B = vec(0, -2);
-    const s = new Solver({
-      iterations: 5,
-      aExt: [0, -10], // gravity
-      dt: 1 / 60,
-      staticMode: false, // dynamics
-    });
+    const s = new Solver({ iterations: 5, alpha: 0.99 });
+    const sim = new Simulation(s, { gravity: [0, -10] });
     s.addCell(top);
     s.addCell(A);
     s.addCell(B);
     spring(s, top, A, 1, 1e4); // stiff spring
     spring(s, A, B, 1, 1); // weak spring
-    for (let step = 0; step < 60; step++) s.step();
+    for (let step = 0; step < 60; step++) sim.tick(1 / 60);
     const dTopA = Math.hypot(A.x - top.x, A.y - top.y);
     expect(dTopA).toBeGreaterThan(0.95);
     expect(dTopA).toBeLessThan(1.5);

@@ -80,6 +80,69 @@ export function setSignalWriteHook(fn: ((sig: Signal<unknown>) => void) | undefi
   };
 }
 
+// ─── Solver / relation integration hooks ─────────────────────────────
+//
+// Three additive primitives an external relation engine (constraint
+// solver, propagator network, etc.) needs to plug in without forking
+// the signal core:
+//
+//   - `setPinHook` registers a callback that fires on user writes.
+//     "User write" = a `Signal.set value` invocation that is *not*
+//     happening inside `withSolverActive`. The relation engine uses
+//     this to track which cells the user is actively pinning so it
+//     can prefer their values when re-solving.
+//
+//   - `withSolverActive(fn)` runs `fn` with pin notifications
+//     suppressed. Used by the engine while it writes solved values
+//     back to signals — those writes are not user pins, just
+//     propagation.
+//
+//   - `addPreFlushTask(fn)` queues `fn` to run during the next
+//     `flush()`, *before* regular effects drain. The relation
+//     engine queues a solver-run task here so cells reach their
+//     solved state before any subscribed UI effect reads them.
+//
+// All three are no-ops with zero allocation when no pin hook is
+// registered — the constraint subsystem is fully opt-in.
+
+let pinHook: ((sig: Signal<unknown>) => void) | undefined;
+let solverActive = false;
+const preFlushTasks: (() => void)[] = [];
+
+/** Register the pin-hook callback. The previous hook (if any) is
+ *  restored when the returned dispose function is called. */
+export function setPinHook(fn: ((sig: Signal<unknown>) => void) | undefined): () => void {
+  const prev = pinHook;
+  pinHook = fn;
+  return () => {
+    pinHook = prev;
+  };
+}
+
+/** Run `fn` with pin notifications suppressed. Writes to signals
+ *  inside `fn` propagate to subscribers normally; they just don't
+ *  fire `pinHook`. Re-entrant safe. */
+export function withSolverActive<R>(fn: () => R): R {
+  const prev = solverActive;
+  solverActive = true;
+  try {
+    return fn();
+  } finally {
+    solverActive = prev;
+  }
+}
+
+/** Queue `fn` to run during the next `flush()`, before regular
+ *  effects. Multiple tasks queue in registration order. The
+ *  returned dispose removes the task if it hasn't fired yet. */
+export function addPreFlushTask(fn: () => void): () => void {
+  preFlushTasks.push(fn);
+  return () => {
+    const i = preFlushTasks.indexOf(fn);
+    if (i >= 0) preFlushTasks.splice(i, 1);
+  };
+}
+
 // ─── alien-signals algorithm — link / unlink / propagate / etc. ──────
 
 function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
@@ -263,10 +326,23 @@ function flush(): void {
   if (flushing) return;
   flushing = true;
   try {
-    while (notifyIndex < queuedLength) {
-      const e = queued[notifyIndex]!;
-      queued[notifyIndex++] = undefined;
-      e._run();
+    // Outer loop: alternate draining pre-flush tasks (e.g. solver
+    // runs) and effects. Pre-flush tasks may write to signals,
+    // queueing more effects; effects may write to signals, requeueing
+    // more pre-flush tasks. Continue until both queues are empty.
+    for (;;) {
+      // Drain pre-flush tasks. We use a length-snapshot loop because
+      // a task's writes may push more tasks during its own run.
+      while (preFlushTasks.length > 0) {
+        const task = preFlushTasks.shift()!;
+        task();
+      }
+      if (notifyIndex >= queuedLength) break;
+      while (notifyIndex < queuedLength) {
+        const e = queued[notifyIndex]!;
+        queued[notifyIndex++] = undefined;
+        e._run();
+      }
     }
   } finally {
     while (notifyIndex < queuedLength) {
@@ -840,10 +916,21 @@ export class Signal<T = unknown> implements ReactiveNode {
     if (!same) {
       this.flags = F.Mutable | F.Dirty;
       if (writeHook !== undefined) writeHook(this as Signal<unknown>);
+      // Pin-hook fires on user writes only — solver-driven back-writes
+      // suppress it via `withSolverActive`.
+      let pinned = false;
+      if (pinHook !== undefined && !solverActive) {
+        pinHook(this as Signal<unknown>);
+        pinned = true;
+      }
       const subs = this.subs;
       if (subs !== undefined) {
         propagate(subs, runDepth > 0);
         if (batchDepth === 0) flush();
+      } else if (pinned && batchDepth === 0) {
+        // No subscribers, but a pin-hook fired and queued a pre-flush
+        // task. We still need to drain it.
+        flush();
       }
     }
   }

@@ -46,6 +46,7 @@ export * as Mix from "./mix";
 export { type Merge, mix, type Writeback } from "./mix";
 // ─── Engine ───────────────────────────────────────────────────────
 export {
+  addPreFlushTask,
   batch,
   computed,
   effect,
@@ -56,6 +57,7 @@ export {
   lens,
   type Of,
   type Read,
+  setPinHook,
   Signal,
   type SignalOptions,
   setSignalWriteHook,
@@ -64,6 +66,7 @@ export {
   type Val,
   valFn,
   value,
+  withSolverActive,
   type WritableBrand,
 } from "./signal";
 // ─── Traits ───────────────────────────────────────────────────────

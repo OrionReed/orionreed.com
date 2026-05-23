@@ -7,13 +7,16 @@
 // Naming follows the AVBD paper:
 //
 //   position  — `x`, current value (what the solver writes).
-//   initial   — `x⁻`, snapshot at start of timestep.
+//   initial   — `x⁻`, snapshot at start of step.
 //   inertial  — `y`, warm-start anchor; the inertia term pulls
-//               position toward this. Static mode: y = x⁻.
-//               Physics mode: y = x⁻ + h·v + h²·a_ext.
-//   velocity  — physics-mode-only; static mode ignores it.
+//               position toward this. By default `y = x⁻` (no
+//               extrapolation). `Simulation` overwrites with
+//               `x⁻ + dt·v + dt²·a_ext` for physics.
 //   mass      — regularisation weight. `1` = mild Tikhonov
 //               regularisation; `0` = kinematic / pinned.
+//
+// Velocity lives on `Simulation`, not on `Cell` — the bare solver
+// is time-free.
 //
 // User-facing factories (`num`, `vec`, `box` — see below) wrap
 // `Cell` with typed `value` accessors so consumers can write
@@ -28,15 +31,11 @@ export class Cell {
   readonly dim: number;
   /** Current position. The solver writes here directly. */
   readonly position: Float64Array;
-  /** Position at start of timestep (`x⁻`). Solver-managed. */
+  /** Position at start of step (`x⁻`). Solver-managed. */
   readonly initial: Float64Array;
-  /** Warm-start anchor (`y`). Solver-managed. */
+  /** Warm-start anchor (`y`). Defaults to `initial`; `Simulation`
+   *  overwrites for physics. */
   readonly inertial: Float64Array;
-  /** Velocity at end of last timestep. Physics-mode only. */
-  readonly velocity: Float64Array;
-  /** Previous-step velocity, for paper §3.7 adaptive warm-start.
-   *  Reserved for future physics-mode improvements. */
-  readonly prevVelocity: Float64Array;
   /** Inertia-term weight. Default 1; `0` = kinematic / pinned
    *  (primal update is skipped, value stays put). */
   mass: number;
@@ -51,8 +50,6 @@ export class Cell {
     this.position = new Float64Array(dim);
     this.initial = new Float64Array(dim);
     this.inertial = new Float64Array(dim);
-    this.velocity = new Float64Array(dim);
-    this.prevVelocity = new Float64Array(dim);
     this.mass = 1;
     if (initial) {
       for (let i = 0; i < dim; i++) {

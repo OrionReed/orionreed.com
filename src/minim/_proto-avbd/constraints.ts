@@ -26,9 +26,16 @@
 // equality, range-clamp). The architecture is open: any new force
 // is just a Force subclass.
 
+import type { Signal } from "../signals";
 import { Cell, NumCell } from "./cell";
 import { Force } from "./force";
+import { asCell } from "./reactive";
 import { Solver } from "./solver";
+
+/** A cell-or-signal; constraint factories accept either. Signals
+ *  are auto-bound to the solver via `asCell`, with their typed
+ *  values mirrored into a backing `Cell`. */
+export type Bindable = Cell | Signal<unknown>;
 
 // ─── Strength constants ──────────────────────────────────────────────
 //
@@ -44,6 +51,10 @@ export const Strength = {
   MEDIUM: 1e3,
   STRONG: 1e6,
   REQUIRED: 1e9,
+  /** True hard constraint: solved via the augmented Lagrangian path
+   *  rather than penalty weighting. The default for `eq`, `distance`,
+   *  `bounded`, `lensNum`, etc. */
+  HARD: Infinity,
 } as const;
 
 // ─── Pinning ─────────────────────────────────────────────────────────
@@ -471,49 +482,49 @@ declare module "./constraints" {
 // instance. Mutating the returned force (e.g., `f.fmin[0] = ...`)
 // adjusts behaviour for the next step.
 
-export function eq(s: Solver, a: Cell, b: Cell): EqForce {
-  const f = new EqForce(a, b);
+export function eq(s: Solver, a: Bindable, b: Bindable): EqForce {
+  const f = new EqForce(asCell(s, a), asCell(s, b));
   s.addForce(f);
   return f;
 }
 
 export function lensNum(
   s: Solver,
-  a: Cell,
-  b: Cell,
+  a: Bindable,
+  b: Bindable,
   fwd: (x: number) => number,
 ): LensNumForce {
-  const f = new LensNumForce(a, b, fwd);
+  const f = new LensNumForce(asCell(s, a), asCell(s, b), fwd);
   s.addForce(f);
   return f;
 }
 
-export function distance(s: Solver, a: Cell, b: Cell, rest: number): DistanceForce {
-  const f = new DistanceForce(a, b, rest);
+export function distance(s: Solver, a: Bindable, b: Bindable, rest: number): DistanceForce {
+  const f = new DistanceForce(asCell(s, a), asCell(s, b), rest);
   s.addForce(f);
   return f;
 }
 
 export function spring(
   s: Solver,
-  a: Cell,
-  b: Cell,
+  a: Bindable,
+  b: Bindable,
   rest: number,
   stiffness: number,
 ): DistanceForce {
-  const f = new DistanceForce(a, b, rest, false, stiffness);
+  const f = new DistanceForce(asCell(s, a), asCell(s, b), rest, false, stiffness);
   s.addForce(f);
   return f;
 }
 
 /** 1D range constraint: `lo ≤ x ≤ hi`. Hard by default. Synonym
  *  for the older `clamp` name. */
-export function bounded(s: Solver, x: NumCell, lo: number, hi: number): BoundsForce {
+export function bounded(s: Solver, x: NumCell | Bindable, lo: number, hi: number): BoundsForce {
   return clamp(s, x, lo, hi);
 }
 
-export function clamp(s: Solver, cell: Cell, lo: number, hi: number): BoundsForce {
-  const f = new BoundsForce(cell, lo, hi);
+export function clamp(s: Solver, cell: Bindable, lo: number, hi: number): BoundsForce {
+  const f = new BoundsForce(asCell(s, cell), lo, hi);
   s.addForce(f);
   return f;
 }
@@ -524,8 +535,8 @@ export function clamp(s: Solver, cell: Cell, lo: number, hi: number): BoundsForc
  *  multiplier clamped to `λ ≤ 0` (`fmax = 0`). When `a > b`, the
  *  dual builds up negative magnitude and pushes `a` down / `b` up.
  *  When feasible, the dual saturates at zero → zero force. */
-export function leq(s: Solver, a: NumCell, b: NumCell): GenericForce {
-  const f = generic(s, [a, b], 1, (pos, out) => {
+export function leq(s: Solver, a: Bindable, b: Bindable): GenericForce {
+  const f = generic(s, [asCell(s, a), asCell(s, b)], 1, (pos, out) => {
     out[0]! = pos[1]![0]! - pos[0]![0]!;
   });
   f.fmax[0]! = 0;
@@ -533,17 +544,17 @@ export function leq(s: Solver, a: NumCell, b: NumCell): GenericForce {
 }
 
 /** Hard inequality `a ≥ b` (symmetric of `leq`). */
-export function geq(s: Solver, a: NumCell, b: NumCell): GenericForce {
+export function geq(s: Solver, a: Bindable, b: Bindable): GenericForce {
   return leq(s, b, a);
 }
 
 export function softTarget(
   s: Solver,
-  cell: Cell,
+  cell: Bindable,
   target: ArrayLike<number>,
   stiffness: number,
 ): SoftTargetForce {
-  const f = new SoftTargetForce(cell, target, stiffness);
+  const f = new SoftTargetForce(asCell(s, cell), target, stiffness);
   s.addForce(f);
   return f;
 }
@@ -554,12 +565,12 @@ export function softTarget(
  *  but trivially correct. Use for prototyping or one-off constraints. */
 export function generic(
   s: Solver,
-  cells: readonly Cell[],
+  cells: readonly Bindable[],
   rows: number,
   fn: ResidualFn,
   opts?: { fdStep?: number; hard?: boolean; stiffness?: number },
 ): GenericForce {
-  const f = new GenericForce(cells, rows, fn, opts);
+  const f = new GenericForce(cells.map(c => asCell(s, c)), rows, fn, opts);
   s.addForce(f);
   return f;
 }
@@ -571,7 +582,7 @@ export function generic(
 // the box and demonstrate end-user extensibility.
 
 /** Interior angle ABC = θ. Three points + a target angle. */
-export function angle(s: Solver, A: Cell, B: Cell, C: Cell, theta: number): GenericForce {
+export function angle(s: Solver, A: Bindable, B: Bindable, C: Bindable, theta: number): GenericForce {
   return generic(s, [A, B, C], 1, (pos, out) => {
     const a = pos[0]!,
       b = pos[1]!,
@@ -595,10 +606,10 @@ export function angle(s: Solver, A: Cell, B: Cell, C: Cell, theta: number): Gene
 /** Lines AB and CD parallel: cross product of direction vectors = 0. */
 export function parallel(
   s: Solver,
-  A: Cell,
-  B: Cell,
-  C: Cell,
-  D: Cell,
+  A: Bindable,
+  B: Bindable,
+  C: Bindable,
+  D: Bindable,
 ): GenericForce {
   return generic(s, [A, B, C, D], 1, (pos, out) => {
     const a = pos[0]!,
@@ -616,10 +627,10 @@ export function parallel(
 /** Lines AB and CD perpendicular: dot product = 0. */
 export function perpendicular(
   s: Solver,
-  A: Cell,
-  B: Cell,
-  C: Cell,
-  D: Cell,
+  A: Bindable,
+  B: Bindable,
+  C: Bindable,
+  D: Bindable,
 ): GenericForce {
   return generic(s, [A, B, C, D], 1, (pos, out) => {
     const a = pos[0]!,
@@ -635,7 +646,7 @@ export function perpendicular(
 }
 
 /** Point P collinear with A and B (P on line through A, B): cross = 0. */
-export function collinear(s: Solver, P: Cell, A: Cell, B: Cell): GenericForce {
+export function collinear(s: Solver, P: Bindable, A: Bindable, B: Bindable): GenericForce {
   return generic(s, [P, A, B], 1, (pos, out) => {
     const p = pos[0]!,
       a = pos[1]!,
@@ -653,8 +664,8 @@ export function collinear(s: Solver, P: Cell, A: Cell, B: Cell): GenericForce {
  *  need a reactive radius). */
 export function onCircle(
   s: Solver,
-  P: Cell,
-  center: Cell,
+  P: Bindable,
+  center: Bindable,
   radius: number,
 ): GenericForce {
   return generic(s, [P, center], 1, (pos, out) => {
@@ -669,10 +680,10 @@ export function onCircle(
 /** Equal distance: |AB| = |CD|. */
 export function equalDist(
   s: Solver,
-  A: Cell,
-  B: Cell,
-  C: Cell,
-  D: Cell,
+  A: Bindable,
+  B: Bindable,
+  C: Bindable,
+  D: Bindable,
 ): GenericForce {
   return generic(s, [A, B, C, D], 1, (pos, out) => {
     const a = pos[0]!,
@@ -686,7 +697,7 @@ export function equalDist(
 }
 
 /** Midpoint: M = (A + B) / 2 → 2M - A - B = 0 (per axis). */
-export function midpoint(s: Solver, M: Cell, A: Cell, B: Cell): GenericForce {
+export function midpoint(s: Solver, M: Bindable, A: Bindable, B: Bindable): GenericForce {
   return generic(s, [M, A, B], 2, (pos, out) => {
     const m = pos[0]!,
       a = pos[1]!,

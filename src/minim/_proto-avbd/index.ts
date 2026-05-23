@@ -28,6 +28,7 @@
 export { box, BoxCell, Cell, num, NumCell, vec, VecCell } from "./cell";
 export {
   angle,
+  type Bindable,
   BoundsForce,
   bounded,
   clamp,
@@ -54,4 +55,6 @@ export {
   Strength,
 } from "./constraints";
 export { Force, PENALTY_MAX, PENALTY_MIN } from "./force";
+export { asCell, bindSignal, registerBinder, unbindSolver } from "./reactive";
+export { Simulation, type SimulationOpts } from "./simulation";
 export { Solver, type SolverOpts } from "./solver";
