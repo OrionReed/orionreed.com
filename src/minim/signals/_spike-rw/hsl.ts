@@ -2,10 +2,10 @@
 // authoring story end-to-end: 3 numeric fields, full trait support,
 // invertible methods, factory.
 
-import { Signal, type SignalOptions, type Val, valFn } from "../signal";
+import { lazy, Signal, type SignalOptions, type Val, valFn } from "../signal";
 import { type Linear, traits } from "../traits";
 import { Num } from "./num";
-import { field, type Wr, type Writable } from "./writable";
+import type { Wr, Writable } from "./writable";
 
 type V = { h: number; s: number; l: number };
 
@@ -27,7 +27,7 @@ export class Hsl extends Signal<V> {
     equals: (a: V, b: V) => a.h === b.h && a.s === b.s && a.l === b.l,
   });
 
-  declare readonly _writable: Wr<Hsl>;
+  declare readonly _writable: Hsl_W;
 
   constructor(v: V = { h: 0, s: 0, l: 0 }, opts?: SignalOptions<V>) {
     super(v, opts);
@@ -42,19 +42,32 @@ export class Hsl extends Signal<V> {
     return this.through(v => hslScale(v, kf()), n => hslScale(n, 1 / kf()));
   }
 
-  get h() {
-    return field(this, "h", Num);
+  get h(): Num {
+    return lazy(this, "h", () =>
+      this.lensTo(Num, s => s.h, (v, s) => ({ ...s, h: v })),
+    );
   }
-  get s() {
-    return field(this, "s", Num);
+  get s(): Num {
+    return lazy(this, "s", () =>
+      this.lensTo(Num, s => s.s, (v, s) => ({ ...s, s: v })),
+    );
   }
-  get l() {
-    return field(this, "l", Num);
+  get l(): Num {
+    return lazy(this, "l", () =>
+      this.lensTo(Num, s => s.l, (v, s) => ({ ...s, l: v })),
+    );
   }
 }
 export interface Hsl {
   readonly constructor: typeof Hsl;
   get value(): V;
+}
+
+/** Writable Hsl — overrides each field-lens to its writable counterpart. */
+export interface Hsl_W extends Wr<Hsl> {
+  get h(): Writable<Num>;
+  get s(): Writable<Num>;
+  get l(): Writable<Num>;
 }
 
 export function hsl(h = 0, s = 0, l = 0): Writable<Hsl> {

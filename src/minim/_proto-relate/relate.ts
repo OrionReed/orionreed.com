@@ -189,7 +189,7 @@ function newCluster(): Cluster {
     xScratch: [],
     rScratch: [],
     pinMask: [],
-    health: signal({ residual: 0, iters: 0, converged: true }),
+    health: signal<ClusterHealth>({ residual: 0, iters: 0, converged: true }),
   };
   allClusters.add(c);
   return c;
@@ -274,19 +274,26 @@ function solveCluster(c: Cluster): void {
       c.pinMask[i] = c.pinned.has(cell);
     }
   }
-
   const R = buildResidual(c);
   const result: NewtonResult = dampedNewton(xs, R, c.m, c.pinMask, {
     maxIters,
     tol,
   });
+  // (We considered persisting `c.lambda` across solves to warm-start
+  // the trust region, but in practice the per-call default of 1e-6
+  // converges as fast or faster on our test workloads — the rejection
+  // bumps that adapt λ within one call cover small drift well, and
+  // persisting can carry over a too-aggressive λ from a lucky prior
+  // frame and force several rejection cycles. Keep it simple.)
 
-  // Write back unpinned cells whose value changed beyond float-eq.
-  // Pinned cells are skipped — the user already wrote them and
-  // re-writing would trigger the pin hook (suppressed via
-  // withSolverActive) but also do redundant work.
+  // Write back any cell whose final xs differs from its current value.
+  // - Free cells: Newton may have moved them.
+  // - User-pinned cells: xs[i] = peek (no change, write is no-op).
+  // - Hard-pinned cells: xs[i] = pin value, peek may differ (e.g.
+  //   user just wrote a different value that the pin overrides).
+  // Solver writes are suppressed from pin tracking via
+  // withSolverActive in the caller.
   for (let i = 0; i < n; i++) {
-    if (c.pinMask[i]) continue;
     const cell = c.cells[i]!;
     const cur = cell.peek();
     if (cur !== xs[i]) cell.value = xs[i]!;
@@ -408,18 +415,20 @@ export function relate(opts: RelateOpts): Relation {
   target.m += opts.m;
   rel._cluster = target;
 
-  // Prime: schedule a solve so the new relation's residual is
-  // computed and (if cells are far from satisfaction) the cluster
-  // converges. The user can pin nothing and the cluster will adjust
-  // free cells to satisfy the new constraint immediately. This is
-  // important for the "add a constraint, watch the figure snap into
-  // place" affordance — without it the user has to wiggle a cell to
-  // trigger the first solve.
-  dirtyClusters.add(target);
-  if (!scheduled) {
-    scheduled = true;
-    addPreFlushTask(drainSolves);
-  }
+  // Prime: solve immediately so the new relation's residual is up to
+  // date and (if cells are far from satisfaction) the cluster
+  // converges. Without this, "add a constraint, see the figure snap
+  // into place" requires the user to wiggle a cell first.
+  //
+  // Direct solve (rather than queue-via-flush) keeps construction
+  // semantically synchronous: constructing N relations in a row and
+  // then reading any of their residuals gets the joint-solved state.
+  // Any user pins already accumulated this batch are honoured (they
+  // were recorded by pinHook before construction).
+  withSolverActive(() => solveCluster(target));
+  // The direct solve cleared `pinned`. Make sure the cluster isn't
+  // also queued for a redundant re-solve via the flush task.
+  dirtyClusters.delete(target);
 
   return rel;
 }
@@ -451,14 +460,13 @@ export function clusterHealth(cell: NumCell): Read<ClusterHealth> | undefined {
 export function hardPin(cell: NumCell, value: HardPinValue): () => void {
   ensureSetup();
   hardPinned.set(cell, value);
-  // Schedule a solve so the cell snaps to its pinned value.
+  // Solve immediately if this cell is already in a cluster. Mirror
+  // relate()'s synchronous-solve semantics so that "add a hard pin,
+  // see the figure snap" works without requiring a downstream write.
   const cluster = cellToCluster.get(cell);
   if (cluster !== undefined) {
-    dirtyClusters.add(cluster);
-    if (!scheduled) {
-      scheduled = true;
-      addPreFlushTask(drainSolves);
-    }
+    withSolverActive(() => solveCluster(cluster));
+    dirtyClusters.delete(cluster);
   } else {
     // Not in a cluster yet — write directly via withSolverActive so
     // the value sticks without firing pin hook.

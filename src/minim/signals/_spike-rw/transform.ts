@@ -1,10 +1,10 @@
-// transform.ts (spike) — nested writable Vec fields. Demonstrates that
-// the conditional in `field()` propagates through nested chains:
-// `tr.translate.x.value = 5` works on writable Transform (because both
-// `tr.translate` and `.x` resolve to writable forms), and is blocked
-// on RO Transform.
+// transform.ts (spike) — nested writable Vec fields. Two levels of
+// writable propagation: `Transform_W` overrides each field-lens to
+// writable, and `Vec_W` (in vec.ts) overrides Vec's own field lenses
+// to writable. So `tr.translate.x.value = 5` types-check on writable
+// Transform; the bare RO equivalent is blocked.
 
-import { type Of, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
+import { lazy, type Of, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
 import { type Linear, traits } from "../traits";
 import { bind } from "./bind";
 import { Num } from "./num";
@@ -17,7 +17,7 @@ import {
   scale as vScale,
   sub as vSub,
 } from "./vec";
-import { field, type Wr, type Writable } from "./writable";
+import type { Wr, Writable } from "./writable";
 
 type V = {
   translate: Of<Vec>;
@@ -82,7 +82,7 @@ const linearImpl: Linear<V> = { add, sub, scale };
 export class Transform extends Signal<V> {
   static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
 
-  declare readonly _writable: Wr<Transform>;
+  declare readonly _writable: Transform_W;
 
   constructor(v: V = DEFAULT, opts?: SignalOptions<V>) {
     super(v, opts);
@@ -100,25 +100,44 @@ export class Transform extends Signal<V> {
     return Transform.derive(() => lerp(this.value, value(b), value(t)));
   }
 
-  get translate() {
-    return field(this, "translate", Vec);
+  get translate(): Vec {
+    return lazy(this, "translate", () =>
+      this.lensTo(Vec, s => s.translate, (v, s) => ({ ...s, translate: v })),
+    );
   }
-  get scale() {
-    return field(this, "scale", Vec);
+  get scale(): Vec {
+    return lazy(this, "scale", () =>
+      this.lensTo(Vec, s => s.scale, (v, s) => ({ ...s, scale: v })),
+    );
   }
-  get origin() {
-    return field(this, "origin", Vec);
+  get origin(): Vec {
+    return lazy(this, "origin", () =>
+      this.lensTo(Vec, s => s.origin, (v, s) => ({ ...s, origin: v })),
+    );
   }
-  get rotate() {
-    return field(this, "rotate", Num);
+  get rotate(): Num {
+    return lazy(this, "rotate", () =>
+      this.lensTo(Num, s => s.rotate, (v, s) => ({ ...s, rotate: v })),
+    );
   }
-  get opacity() {
-    return field(this, "opacity", Num);
+  get opacity(): Num {
+    return lazy(this, "opacity", () =>
+      this.lensTo(Num, s => s.opacity, (v, s) => ({ ...s, opacity: v })),
+    );
   }
 }
 export interface Transform {
   readonly constructor: typeof Transform;
   get value(): V;
+}
+
+/** Writable Transform — overrides every field-lens to writable. */
+export interface Transform_W extends Wr<Transform> {
+  get translate(): Writable<Vec>;
+  get scale(): Writable<Vec>;
+  get origin(): Writable<Vec>;
+  get rotate(): Writable<Num>;
+  get opacity(): Writable<Num>;
 }
 
 export type TransformInit = { [K in keyof V]?: Val<V[K]> };

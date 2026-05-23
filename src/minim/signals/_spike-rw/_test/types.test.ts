@@ -18,7 +18,6 @@ import {
   vec,
   type Writable,
   type WritableOf,
-  type Wr,
 } from "../index";
 
 describe("spike type probes", () => {
@@ -145,22 +144,23 @@ function _probes(): void {
   const _check: CheckV = v;
   void _check;
 
-  // ─── 14b. Inherits<this, T>-conditional getters: bare → RO, writable → RW ─
-  // Bare Vec.x is Num (RO Num)
+  // ─── 14b. Field-lens types: bare → RO, writable → writable counterpart ─
+  // Bare Vec.x is Num (RO via interface merge)
   const xRO: Num = ro.x;
   void xRO;
-  // Writable Vec.x is Wr<Num>
-  const xRW: Wr<Num> = v.x;
+  // Writable<Vec>.x is Writable<Num> via Vec_W's per-field override
+  const xRW: Writable<Num> = v.x;
   void xRW;
-  // @ts-expect-error — bare .x is not Wr<Num>
-  const _xMis: Wr<Num> = ro.x;
+  // @ts-expect-error — bare Vec.x is plain Num, not Writable<Num>
+  const _xMis: Writable<Num> = ro.x;
   void _xMis;
 
   // ─── 14c. Derived RO views stay RO on writable receivers ────────
-  // `magnitude` is explicitly typed as Num (no `Inherits` conditional);
-  // even on a writable Vec, magnitude.value can't be written. Today's
-  // recursive `LiftField` would make this writable — a type lie since
-  // magnitude is `deriveTo` (RO) at runtime.
+  // `magnitude` is explicitly typed as Num. `Vec_W` does NOT override
+  // it, so writable `vec.magnitude` is still RO at the type level.
+  // Today's recursive `LiftField` would over-eagerly type this as
+  // writable — a lie because `deriveTo` is RO at runtime. This spike
+  // fixes that.
   // @ts-expect-error
   v.magnitude.value = 10;
   // @ts-expect-error

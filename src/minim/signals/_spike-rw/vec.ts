@@ -1,14 +1,15 @@
-// vec.ts (spike) — Vec authoring with `field()` and `derived()`
-// helpers. Field-lens getters become 1-liners; derived RO views (like
-// `magnitude`) are honestly typed (no LiftField type lie).
+// vec.ts (spike) — Vec authoring with explicit `lazy + lensTo`
+// field-lens getters and a per-class `Vec_W` interface that overrides
+// the writable counterparts. Derived RO views (`magnitude`) stay
+// typed as plain `Num` (no `LiftField` type lie even on writable Vec).
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { batch, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
+import { batch, lazy, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
 import { type Linear, traits } from "../traits";
 import { bind } from "./bind";
 import { Num } from "./num";
-import { derived, field, type Wr, type Writable } from "./writable";
+import type { Wr, Writable } from "./writable";
 
 type V = { x: number; y: number };
 
@@ -32,7 +33,8 @@ const linearImpl: Linear<V> = { add, sub, scale };
 export class Vec extends Signal<V> {
   static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
 
-  declare readonly _writable: Wr<Vec>;
+  /** Phantom registry brand — `Writable<Vec>` resolves to `Vec_W`. */
+  declare readonly _writable: Vec_W;
 
   constructor(v: V = { x: 0, y: 0 }, opts?: SignalOptions<V>) {
     super(v, opts);
@@ -129,17 +131,28 @@ export class Vec extends Signal<V> {
     return this.deriveTo(Num, v => metric(v, value(other)));
   }
 
-  // ── field lenses & derived views — one-line authoring via the
-  //    `field` / `derived` helpers. `field()` returns Inherits<this,T>;
-  //    `derived()` returns plain T (correct RO semantics). ──
-  get x() {
-    return field(this, "x", Num);
+  // ── field lenses ────────────────────────────────────────────────
+  // Typed as bare `Num` (RO at type level via interface merge). On
+  // writable Vec receivers, `Vec_W` (below) overrides `.x` and `.y`
+  // to `Writable<Num>`, propagating writability through the chain.
+  // The runtime is a writable lens in both cases — the type just
+  // gates the public surface.
+  get x(): Num {
+    return lazy(this, "x", () =>
+      this.lensTo(Num, s => s.x, (v, s) => ({ ...s, x: v })),
+    );
   }
-  get y() {
-    return field(this, "y", Num);
+  get y(): Num {
+    return lazy(this, "y", () =>
+      this.lensTo(Num, s => s.y, (v, s) => ({ ...s, y: v })),
+    );
   }
-  get magnitude() {
-    return derived(this, "magnitude", Num, v => Math.hypot(v.x, v.y));
+  /** Derived RO — typed as plain `Num` regardless of receiver
+   *  writability. `Vec_W` does NOT override this getter, so writable
+   *  `vec.magnitude.value = …` is correctly rejected at compile time
+   *  (today's `LiftField` would type-lie this as writable). */
+  get magnitude(): Num {
+    return lazy(this, "magnitude", () => this.deriveTo(Num, v => Math.hypot(v.x, v.y)));
   }
 
   /** Tween — `this: Writable<Vec>` constrains the receiver to
@@ -153,6 +166,14 @@ export interface Vec {
   get value(): V;
 }
 
+/** Writable Vec — extends the default writable shape (`Wr<Vec>`) and
+ *  overrides each field-lens getter with its writable counterpart.
+ *  `magnitude` is intentionally omitted (it's a derived RO view; not
+ *  writable in any meaningful sense). */
+export interface Vec_W extends Wr<Vec> {
+  get x(): Writable<Num>;
+  get y(): Writable<Num>;
+}
 
 export function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
   // `as unknown as` is a spike-only artefact — the live `Signal.install`

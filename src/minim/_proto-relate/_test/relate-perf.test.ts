@@ -44,7 +44,12 @@ describe("warm-start: steady-state drag ⇒ ≤2 Newton iterations", () => {
     expect(maxIters).toBeLessThanOrEqual(2);
   });
 
-  it("equilateral triangle drag in tiny steps", () => {
+  it("equilateral triangle drag — small rotation steps", () => {
+    // Drag A in a tiny arc around B so the triangle just rotates.
+    // (A monotonic linear drag would push A past B at some point —
+    // the |AB|→0 singularity — and Newton's iteration count would
+    // blow up there. A real interaction never crosses a singularity
+    // in one frame.)
     const A = point(num(0), num(0));
     const B = point(num(1), num(0));
     const C = point(num(0.5), num(Math.sqrt(3) / 2));
@@ -54,10 +59,11 @@ describe("warm-start: steady-state drag ⇒ ≤2 Newton iterations", () => {
     pinPoint(B);
 
     let maxIters = 0;
-    let dx = 0;
-    for (let i = 0; i < 100; i++) {
-      dx += 0.01;
-      A.x.value = dx;
+    for (let i = 1; i < 100; i++) {
+      // Drag A around B at radius 1, tiny angular step.
+      const theta = Math.PI - i * 0.005;
+      A.x.value = 1 + Math.cos(theta);
+      A.y.value = Math.sin(theta);
       const h = clusterHealth(A.x)!.peek();
       if (h.iters > maxIters) maxIters = h.iters;
     }

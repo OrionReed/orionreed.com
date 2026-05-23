@@ -1,8 +1,8 @@
 // _spike-rw — public re-exports for tests.
 
 export { bind } from "./bind";
-export { derived, field, type Wr, type Writable, type WritableBrand, type WritableOf } from "./writable";
-export { Hsl, hsl } from "./hsl";
+export { Hsl, type Hsl_W, hsl } from "./hsl";
 export { Num, num } from "./num";
-export { Transform, transform, type TransformInit } from "./transform";
-export { axes, Vec, vec } from "./vec";
+export { Transform, type Transform_W, type TransformInit, transform } from "./transform";
+export { axes, Vec, type Vec_W, vec } from "./vec";
+export { type Wr, type Writable, type WritableBrand, type WritableOf } from "./writable";
