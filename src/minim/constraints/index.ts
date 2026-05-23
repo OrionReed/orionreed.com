@@ -53,7 +53,15 @@ export {
   spring,
 } from "./factories";
 export { Force, LAMBDA_MAX, PENALTY_MAX, PENALTY_MIN } from "./force";
-export { Body, type BodyOpts, BoxContact, RigidWorld, type RigidWorldOpts } from "./rigid";
+export {
+  Body,
+  type BodyOpts,
+  BoxContact,
+  Joint,
+  type JointStiffness,
+  RigidWorld,
+  type RigidWorldOpts,
+} from "./rigid";
 export {
   BoundsForce,
   DistanceForce,

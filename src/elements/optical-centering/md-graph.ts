@@ -1,11 +1,13 @@
 // md-graph.ts — force-directed graph layout via constraints.
 //
-// Edges are soft springs (weak attraction at rest length). Every
-// pair of nodes gets a hard `gap` constraint (no two nodes
-// overlap). Drag any node and the layout rearranges; the cluster
-// solves all O(N²) pair constraints + O(E) edges per drag.
+// Edges are soft springs (attraction at rest length). Every pair
+// of nodes gets a hard `gap` constraint (no overlap). The cluster
+// is driven by `Simulation` with zero gravity and moderate
+// damping — that gives the nodes momentum so the layout has a
+// physical "spring it into place" feel rather than the slowly-
+// converging snap of a pure static solve.
 
-import { Cluster, gap, spring } from "@minim/constraints";
+import { Cluster, gap, Simulation, spring } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -80,19 +82,21 @@ export class MdGraph extends Diagram {
       nodes.push(vec(cx + r * Math.cos(a), cy + r * Math.sin(a)));
     }
 
-    const cluster = new Cluster({ iterations: 12 });
+    const cluster = new Cluster({ iterations: 12, postStabilize: true });
 
     for (const e of EDGES) spring(cluster, nodes[e.a]!, nodes[e.b]!, REST, STIFFNESS);
     for (let i = 0; i < N; i++) {
       for (let j = i + 1; j < N; j++) gap(cluster, nodes[i]!, nodes[j]!, MIN_GAP);
     }
 
-    // Lightweight centering pin: anchor node 0 to the centroid we want.
+    // Lightweight centering pin: anchor node 0.
     cluster.pin(nodes[0]!);
 
-    // Re-fire the cluster every frame so the layout settles even
-    // without a drag (springs need a drive when nothing else writes).
-    this.anim.start(drive(() => cluster.update()));
+    // Simulation with zero gravity and moderate damping: the nodes
+    // get momentum (drag and release → it keeps moving briefly) but
+    // the layout still settles in a few seconds.
+    const sim = new Simulation(cluster, { damping: 0.99 });
+    this.anim.start(drive(tick => sim.tick(tick.dt)));
 
     for (const e of EDGES) s(line(nodes[e.a]!, nodes[e.b]!, { thin: true, opacity: 0.5 }));
     for (let i = 0; i < N; i++)

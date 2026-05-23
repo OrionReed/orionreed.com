@@ -36,7 +36,7 @@ export class MdChain extends Diagram {
       links.push(vec(anchor.value.x + i * LINK, anchor.value.y));
     }
 
-    const cluster = new Cluster({ iterations: 12, alpha: 0.99 });
+    const cluster = new Cluster({ iterations: 10, postStabilize: true });
     for (let i = 1; i < N; i++) distance(cluster, links[i - 1]!, links[i]!, LINK);
     cluster.pin(anchor);
 
@@ -51,7 +51,7 @@ export class MdChain extends Diagram {
     const midHandle = s(handle(links[midIdx]!, { fill: "#e25c5c", r: 6 }));
     effect(() => (midHandle.dragging.value ? cluster.pin(links[midIdx]!) : undefined));
 
-    const sim = new Simulation(cluster, { gravity: [0, 220], damping: 0.985 });
+    const sim = new Simulation(cluster, { gravity: [0, 500], damping: 0.998 });
     this.anim.start(drive(tick => sim.tick(Math.min(tick.dt, 1 / 30))));
 
     s(

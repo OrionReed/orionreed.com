@@ -321,6 +321,10 @@ The same engine handles **proper** rigid bodies just as well — boxes with full
 
 The same `Cluster` + `Simulation` that runs the cloth, the chain, and the algebraic equation solver runs this — only the constraint shapes and the cell dimension differ. The solver's `dim = 3` primal-sweep specialization (one hand-unrolled local Newton per body) means the rigid path doesn't pay any "generality tax" relative to a hand-rolled physics engine.
 
+Joints between rigid bodies turn the same machinery into a chain of bars — AVBD's `sceneRope` setup. Each link is its own rigid body with rotational inertia, hinged to the next via a `Joint` force whose position rows are hard and angle row is free. Drag any link and the rest swings; the bars rotate the way bars do, not the way beads on a string do.
+
+<md-rigid-rope></md-rigid-rope>
+
 The same pattern works on a 1D submanifold inside 2D. Each circle gets a Vec position `P` and a scalar parameter `t`, coupled by a `generic` constraint that fixes `P = (R·sin t, R·sin 2t / 2)` — the figure-8 Lissajous map. Pairwise `gap` enforces non-overlap in 2D; the curve constraint enforces incidence. Drag any circle and it slides along the curve, scooting the others aside; near the self-intersection at the origin, the constraint admits both branches and the solver may flip from one to the other (the multi-solution caveat the factories header warns about).
 
 <md-figure8></md-figure8>

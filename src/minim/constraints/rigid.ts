@@ -136,15 +136,13 @@ function flipFP(fp: number): number {
   return makeFP(inE2, outE2, inE1, outE1);
 }
 
-function setInE1(fp: number, edge: number): number {
-  return (fp & ~0xff) | (edge & 0xff);
-}
-
-function setOutE1(fp: number, edge: number): number {
-  return (fp & ~0xff00) | ((edge & 0xff) << 8);
-}
-
-/** Clip the segment `vIn` against a half-plane `n · v ≤ offset`. */
+/** Clip the segment `vIn` against a half-plane `n · v ≤ offset`.
+ *  When the plane bisects the segment, the new vertex inherits the
+ *  feature pair from whichever vIn endpoint was on the clipped side
+ *  and overwrites either the in-edge or out-edge of the *clipping*
+ *  axis (edge 1) with `clipEdge`, zeroing the corresponding edge-2
+ *  field per Box2D-Lite. Stable feature pairs across frames are
+ *  what lets penalty / λ warm-start through sliding contacts. */
 function clipSegmentToLine(
   vOut: ClipVertex[],
   vIn: ClipVertex[],
@@ -164,17 +162,19 @@ function clipSegmentToLine(
     const y = vIn[0]!.y + (vIn[1]!.y - vIn[0]!.y) * t;
     let fp: number;
     if (d0 > 0) {
-      fp = vIn[0]!.fp;
-      fp = setInE1(fp, clipEdge);
-      // outEdge1 stays from vIn[0]
-      // inEdge2/outEdge2 from vIn[0]
-      fp = (fp & 0x00ffffff) | (Edge.None << 8); // outEdge1 wait no
-      // Actually let me redo: when d0 > 0, vIn[0] is the one that got clipped; we mark inE1 = clipEdge.
-      // inE2/outE2 carry over from vIn[0].
-      fp = setInE1(vIn[0]!.fp, clipEdge);
-      // outE1, inE2, outE2 untouched.
+      // vIn[0] was on the wrong side. Inherit fp from vIn[0] but
+      // overwrite inEdge1 with clipEdge and clear inEdge2.
+      const src = vIn[0]!.fp;
+      const outE1 = (src >> 8) & 0xff;
+      const outE2 = (src >> 24) & 0xff;
+      fp = makeFP(clipEdge, outE1, Edge.None, outE2);
     } else {
-      fp = setOutE1(vIn[1]!.fp, clipEdge);
+      // vIn[1] was on the wrong side. Inherit fp from vIn[1] but
+      // overwrite outEdge1 with clipEdge and clear outEdge2.
+      const src = vIn[1]!.fp;
+      const inE1 = src & 0xff;
+      const inE2 = (src >> 16) & 0xff;
+      fp = makeFP(inE1, clipEdge, inE2, Edge.None);
     }
     vOut[n++] = { x, y, fp };
   }
@@ -669,9 +669,155 @@ export class BoxContact extends Force {
   }
 }
 
+// ─── Joint (revolute joint between two rigid bodies) ────────────────
+
+export interface JointStiffness {
+  /** Stiffness for the X position row. `Infinity` = hard. Default `Infinity`. */
+  x?: number;
+  /** Stiffness for the Y position row. `Infinity` = hard. Default `Infinity`. */
+  y?: number;
+  /** Stiffness for the angle row. `0` = free (revolute joint, the
+   *  rope/chain default). `Infinity` = rigid weld. Default `0`. */
+  angle?: number;
+}
+
+/** Revolute joint connecting body-local anchor `rA` on `bodyA` to
+ *  body-local anchor `rB` on `bodyB`. By default the position rows
+ *  are hard and the angle row is free (a rope/chain segment hinge);
+ *  override with `JointStiffness` for soft springs or rigid welds.
+ *  Faithful port of `Joint` from the AVBD 2D reference. */
+export class Joint extends Force {
+  readonly bodyA: Body;
+  readonly bodyB: Body;
+  rAx: number;
+  rAy: number;
+  rBx: number;
+  rBy: number;
+  readonly torqueArm: number;
+  readonly restAngle: number;
+  // Cached anchor-rotation values per body (refreshed each iter).
+  private _Cn = new Float64Array(3);
+  private _C0Cache = new Float64Array(3);
+
+  constructor(
+    solver: Solver,
+    bodyA: Body,
+    bodyB: Body,
+    rA: { x: number; y: number },
+    rB: { x: number; y: number },
+    opts: JointStiffness = {},
+  ) {
+    super(solver, [bodyA.cellId, bodyB.cellId], 3);
+    this.bodyA = bodyA;
+    this.bodyB = bodyB;
+    this.rAx = rA.x;
+    this.rAy = rA.y;
+    this.rBx = rB.x;
+    this.rBy = rB.y;
+    this.stiffness[0]! = opts.x ?? Infinity;
+    this.stiffness[1]! = opts.y ?? Infinity;
+    this.stiffness[2]! = opts.angle ?? 0;
+    this.restAngle = bodyA.pose().theta - bodyB.pose().theta;
+    const sumW = bodyA.w + bodyB.w;
+    const sumH = bodyA.h + bodyB.h;
+    // AVBD's torqueArm scales the angular row so its units are
+    // commensurate with the positional rows.
+    this.torqueArm = sumW * sumW + sumH * sumH;
+  }
+
+  initialize(): boolean {
+    const poseA = this.bodyA.pose();
+    const poseB = this.bodyB.pose();
+    const cA = Math.cos(poseA.theta);
+    const sA = Math.sin(poseA.theta);
+    const cB = Math.cos(poseB.theta);
+    const sB = Math.sin(poseB.theta);
+    const aWx = poseA.x + cA * this.rAx - sA * this.rAy;
+    const aWy = poseA.y + sA * this.rAx + cA * this.rAy;
+    const bWx = poseB.x + cB * this.rBx - sB * this.rBy;
+    const bWy = poseB.y + sB * this.rBx + cB * this.rBy;
+    this._C0Cache[0]! = aWx - bWx;
+    this._C0Cache[1]! = aWy - bWy;
+    this._C0Cache[2]! = (poseA.theta - poseB.theta - this.restAngle) * this.torqueArm;
+    // Mirror into solver's C0 buffer too — solver.prepare() also
+    // calls computeConstraint(0) and writes to C0 itself, but we
+    // want our cached value used in computeConstraint via this._Cn.
+    return this.stiffness[0]! !== 0 || this.stiffness[1]! !== 0 || this.stiffness[2]! !== 0;
+  }
+
+  computeConstraint(alpha: number): void {
+    const poseA = this.bodyA.pose();
+    const poseB = this.bodyB.pose();
+    const cA = Math.cos(poseA.theta);
+    const sA = Math.sin(poseA.theta);
+    const cB = Math.cos(poseB.theta);
+    const sB = Math.sin(poseB.theta);
+    const aWx = poseA.x + cA * this.rAx - sA * this.rAy;
+    const aWy = poseA.y + sA * this.rAx + cA * this.rAy;
+    const bWx = poseB.x + cB * this.rBx - sB * this.rBy;
+    const bWy = poseB.y + sB * this.rBx + cB * this.rBy;
+    this._Cn[0]! = aWx - bWx;
+    this._Cn[1]! = aWy - bWy;
+    this._Cn[2]! = (poseA.theta - poseB.theta - this.restAngle) * this.torqueArm;
+    for (let i = 0; i < 3; i++) {
+      if (this.stiffness[i]! === Infinity) {
+        this.C[i]! = this._Cn[i]! - this.C0[i]! * alpha;
+      } else {
+        this.C[i]! = this._Cn[i]!;
+      }
+    }
+  }
+
+  computeDerivatives(cellIdx: number): void {
+    const J = this.J[cellIdx]!;
+    const Hcols = this.HCols[cellIdx]!;
+    const body = cellIdx === 0 ? this.bodyA : this.bodyB;
+    const pose = body.pose();
+    const c = Math.cos(pose.theta);
+    const s = Math.sin(pose.theta);
+    const rLocalX = cellIdx === 0 ? this.rAx : this.rBx;
+    const rLocalY = cellIdx === 0 ? this.rAy : this.rBy;
+    const rWx = c * rLocalX - s * rLocalY;
+    const rWy = s * rLocalX + c * rLocalY;
+    const sign = cellIdx === 0 ? 1 : -1;
+    // Row 0: ∂C[0]/∂(x, y, θ)
+    J[0]! = sign;
+    J[1]! = 0;
+    J[2]! = -sign * rWy;
+    // Row 1: ∂C[1]/∂(x, y, θ)
+    J[3]! = 0;
+    J[4]! = sign;
+    J[5]! = sign * rWx;
+    // Row 2: angle row
+    J[6]! = 0;
+    J[7]! = 0;
+    J[8]! = sign * this.torqueArm;
+    // Hessian column norms — only non-zero entries are at H[r][2,2].
+    Hcols[0]! = 0;
+    Hcols[1]! = 0;
+    Hcols[2]! = Math.abs(rWx);
+    Hcols[3]! = 0;
+    Hcols[4]! = 0;
+    Hcols[5]! = Math.abs(rWy);
+    Hcols[6]! = 0;
+    Hcols[7]! = 0;
+    Hcols[8]! = 0;
+  }
+}
+
 // ─── World ──────────────────────────────────────────────────────────
 
-export interface RigidWorldOpts extends SolverOpts, SimulationOpts {}
+export interface RigidWorldOpts extends SolverOpts, SimulationOpts {
+  /** Hard cap on angular speed (rad/s) — matches the reference 2D
+   *  AVBD demo's `±50` rad/s clamp, applied each step before the
+   *  inertial extrapolation. Prevents a body that picked up spurious
+   *  angular impulse during drag or contact transition from spinning
+   *  out of control. Default `50`. */
+  maxAngularSpeed?: number;
+  /** Cap on `dt` per step — frame-rate spikes (debugger paused, tab
+   *  unbacked) shouldn't deliver one giant frame. Default `1/30`. */
+  maxDt?: number;
+}
 
 export class RigidWorld {
   readonly cluster: Cluster;
@@ -679,6 +825,13 @@ export class RigidWorld {
   readonly bodies: Body[] = [];
   /** Active manifolds keyed by `(idA, idB)` pair (idA < idB). */
   private readonly _manifolds = new Map<string, BoxContact>();
+  /** Body-pairs explicitly linked by a `Joint`. The broadphase skips
+   *  contact generation between linked pairs — otherwise the joint
+   *  and the box-box contact fight each other. AVBD calls this
+   *  `constrainedTo`; we precompute the set when joints are added. */
+  private readonly _jointed = new Set<string>();
+  private readonly maxAngularSpeed: number;
+  private readonly maxDt: number;
 
   constructor(opts: RigidWorldOpts = {}) {
     this.cluster = new Cluster({
@@ -693,6 +846,8 @@ export class RigidWorld {
       damping: opts.damping ?? 1,
       adaptiveWarmstart: opts.adaptiveWarmstart,
     });
+    this.maxAngularSpeed = opts.maxAngularSpeed ?? 50;
+    this.maxDt = opts.maxDt ?? 1 / 30;
   }
 
   add(opts: BodyOpts, init: { x: number; y: number; theta?: number }): Body {
@@ -701,9 +856,47 @@ export class RigidWorld {
     return body;
   }
 
+  /** Add a revolute joint between two bodies. World-anchor joints
+   *  are achieved by passing a static (`density: 0`) body for `bodyA`.
+   *  Joint-linked pairs are excluded from contact generation so the
+   *  joint and a stray box-box contact don't fight each other. */
+  joint(
+    bodyA: Body,
+    bodyB: Body,
+    rA: { x: number; y: number },
+    rB: { x: number; y: number },
+    opts?: JointStiffness,
+  ): Joint {
+    const j = new Joint(this.cluster.solver, bodyA, bodyB, rA, rB, opts);
+    this.cluster.solver.addForce(j);
+    const a = Math.min(bodyA.cellId, bodyB.cellId);
+    const b = Math.max(bodyA.cellId, bodyB.cellId);
+    this._jointed.add(`${a}_${b}`);
+    return j;
+  }
+
   step(dt: number): void {
+    // Cap dt so a single jumbo frame can't punch a body through
+    // contacts (and so the inertial extrapolation stays bounded).
+    const dtClamped = Math.min(dt, this.maxDt);
+    // Clamp angular velocity before the next step's inertial
+    // extrapolation. AVBD ref does this each frame; in our setup it
+    // belongs in `RigidWorld` since only rigid bodies have a
+    // rotational DOF.
+    const cap = this.maxAngularSpeed;
+    const v = this.simulation.velocities;
+    const offsets = this.cluster.solver.offsets;
+    const dims = this.cluster.solver.dims;
+    for (const body of this.bodies) {
+      const off = offsets[body.cellId]!;
+      if (dims[body.cellId]! >= 3) {
+        const w = v[off + 2]!;
+        if (w > cap) v[off + 2]! = cap;
+        else if (w < -cap) v[off + 2]! = -cap;
+      }
+    }
     this._updateContacts();
-    this.simulation.tick(dt);
+    this.simulation.tick(dtClamped);
     for (const body of this.bodies) body._syncSignals();
   }
 
@@ -718,6 +911,10 @@ export class RigidWorld {
         const B = this.bodies[j]!;
         // Skip if both static.
         if (A.mass === 0 && B.mass === 0) continue;
+        // Skip joint-linked pairs (joint already constrains them).
+        const ca = Math.min(A.cellId, B.cellId);
+        const cb = Math.max(A.cellId, B.cellId);
+        if (this._jointed.has(`${ca}_${cb}`)) continue;
         const poseB = B.pose();
         const dx = poseA.x - poseB.x;
         const dy = poseA.y - poseB.y;

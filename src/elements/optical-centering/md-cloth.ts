@@ -92,7 +92,10 @@ export class MdCloth extends Diagram {
       effect(() => (h.dragging.value ? cluster.pin(sig) : undefined));
     }
 
-    const sim = new Simulation(cluster, { gravity: [0, 90], damping: 0.99 });
+    // post-stabilization + adaptive warm-start absorb most of the
+    // energy through constraint drift, so we can run with very
+    // light damping — the cloth feels alive instead of underwater.
+    const sim = new Simulation(cluster, { gravity: [0, 90], damping: 0.997 });
     this.anim.start(drive(tick => sim.tick(tick.dt)));
 
     s(

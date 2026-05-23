@@ -6,23 +6,93 @@
 // + ground; dynamic stack falls and settles. Drag any box to
 // throw it around — pin during drag, release lets gravity do its
 // thing.
+//
+// Uses a custom `dragWorld` helper rather than the stock `drag()`:
+// `shape.toLocal()` returns coordinates in the shape's *intrinsic*
+// frame, which for a rotating rigid-body rect is itself rotating —
+// so feeding those values back into the world-frame body position
+// produces a teleporting box. Reading client coordinates through
+// the SVG root's CTM gives stable world-frame coords regardless
+// of how the rect is transformed.
 
 import {
+  type AnyShape,
   Anchor,
   Diagram,
-  drag,
   drive,
   effect,
   label,
-  line,
   Mount,
   rect,
+  type Signal,
   signal,
-  vec,
   type Vec,
   type Writable,
 } from "../../minim";
 import { type Body, RigidWorld } from "@minim/constraints";
+
+function findSvgRoot(el: Element | null): SVGSVGElement | null {
+  let walker: Element | null = el;
+  while (walker) {
+    if (walker.tagName === "svg") return walker as SVGSVGElement;
+    walker = walker.parentElement;
+  }
+  return null;
+}
+
+/** Drag a shape and write the cursor (in the SVG root's frame) into
+ *  `target`. Unlike the default `drag()`, this never goes through
+ *  `shape.toLocal()` — works correctly even when the dragged shape
+ *  has a rotation transform. */
+function dragWorld(shape: AnyShape, target: Writable<Vec>, dragging: Signal<boolean>): () => void {
+  const root = findSvgRoot(shape.el);
+  const toWorld = (clientX: number, clientY: number): { x: number; y: number } => {
+    const ctm = root?.getScreenCTM()?.inverse();
+    if (!ctm) return { x: 0, y: 0 };
+    return {
+      x: clientX * ctm.a + clientY * ctm.c + ctm.e,
+      y: clientX * ctm.b + clientY * ctm.d + ctm.f,
+    };
+  };
+  let pointerId = -1;
+  let dx = 0;
+  let dy = 0;
+  const offDown = shape.on("pointerdown", e => {
+    const pe = e as PointerEvent;
+    const w = toWorld(pe.clientX, pe.clientY);
+    const v = target.value;
+    dx = w.x - v.x;
+    dy = w.y - v.y;
+    pointerId = pe.pointerId;
+    shape.el.setPointerCapture(pointerId);
+    (dragging as Writable<typeof dragging>).value = true;
+  });
+  const offMove = shape.on("pointermove", e => {
+    if (pointerId === -1) return;
+    const pe = e as PointerEvent;
+    const w = toWorld(pe.clientX, pe.clientY);
+    target.value = { x: w.x - dx, y: w.y - dy };
+  });
+  const stop = () => {
+    if (pointerId !== -1) {
+      try {
+        shape.el.releasePointerCapture(pointerId);
+      } catch {
+        /* fine */
+      }
+      pointerId = -1;
+    }
+    (dragging as Writable<typeof dragging>).value = false;
+  };
+  const offUp = shape.on("pointerup", stop);
+  const offCancel = shape.on("pointercancel", stop);
+  return () => {
+    offDown();
+    offMove();
+    offUp();
+    offCancel();
+  };
+}
 
 const PALETTE = ["#5b8def", "#e25c5c", "#f5a623", "#7ed321", "#9b59b6", "#1abc9c"];
 
@@ -38,7 +108,10 @@ export class MdRigidStack extends Diagram {
       gravity: [0, 1500],
       iterations: 14,
       postStabilize: true,
-      damping: 0.995,
+      // The augmented Lagrangian with post-stabilization absorbs
+      // enough energy through constraint drift that no explicit
+      // velocity damping is needed for a stable stack.
+      damping: 1,
     });
 
     // Static walls and ground.
@@ -88,10 +161,9 @@ export class MdRigidStack extends Diagram {
       });
       r.el.style.cursor = "grab";
 
-      // Drag: write to the body's position signal AND pin during drag
-      // so the solver respects the user's value.
+      // World-frame drag (avoids shape.toLocal's rotated-frame trap).
       const dragging = signal(false);
-      drag(r, b.position as Writable<Vec>, dragging);
+      dragWorld(r, b.position as Writable<Vec>, dragging);
       let release: (() => void) | undefined;
       effect(() => {
         if (dragging.value) {
@@ -101,9 +173,8 @@ export class MdRigidStack extends Diagram {
           release = undefined;
         }
       });
-      // While dragging, the user writes to b.position (Vec). The solver
-      // reads from its own SOA buffer. Push the dragged values back into
-      // the solver before each step so the constraint solve sees them.
+      // While dragging, push the user's write into the solver buffer
+      // so the constraint solve sees the new position immediately.
       effect(() => {
         if (!dragging.value) return;
         const p = b.position.value;
@@ -127,6 +198,5 @@ export class MdRigidStack extends Diagram {
         { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );
-    void line;
   }
 }
