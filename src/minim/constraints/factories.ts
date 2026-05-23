@@ -150,6 +150,19 @@ export function perpendicular(c: Cluster, A: S, B: S, C: S, D: S): GenericForce 
   });
 }
 
+/** Right angle at B between segments AB and BC. Pass B once; the
+ *  generic FD path needs cells distinct (otherwise the local Newton
+ *  LHS misses the cross-coupling between the duplicated cell's
+ *  Jacobian columns). */
+export function rightAngle(c: Cluster, A: S, B: S, C: S): GenericForce {
+  return generic(c, [A, B, C], 1, (pos, out) => {
+    const a = pos[0]!, b = pos[1]!, cc = pos[2]!;
+    const ux = b[0]! - a[0]!, uy = b[1]! - a[1]!;
+    const vx = cc[0]! - b[0]!, vy = cc[1]! - b[1]!;
+    out[0]! = ux * vx + uy * vy;
+  });
+}
+
 /** Point P on line AB. */
 export function collinear(c: Cluster, P: S, A: S, B: S): GenericForce {
   return generic(c, [P, A, B], 1, (pos, out) => {

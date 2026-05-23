@@ -413,7 +413,8 @@ export interface SignalOptions<T = unknown> {
 // consecutive field edges collapses to a path-aware spread-replace
 // setter that's ~3.5× faster than the generic stateful composition.
 
-function isBwdStateful(bwd: ((v: unknown, s: unknown) => unknown) | undefined): boolean {
+// biome-ignore lint/suspicious/noExplicitAny: arity-only inspection; types of v/s are irrelevant here
+function isBwdStateful(bwd: ((v: any, s: any) => any) | undefined): boolean {
   return bwd !== undefined && bwd.length >= 2;
 }
 
@@ -744,29 +745,33 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  after `.through(f, b)` collapses to one cell with composed fns.
    *
    *  Statefulness is inferred from `bwd`'s declared arity:
-   *    - `bwd: (v) => …`     — stateless. Iso/projection chains fuse
+   *    - `bwd: v => …`       — stateless. Iso/projection chains fuse
    *                            to a fast setter that skips `parent.peek()`.
    *    - `bwd: (v, s) => …`  — stateful. Engine threads the genuine
    *                            receiver-input value through `s`.
    *  See `cyclic` for an example of the stateful pattern.
    *
+   *  TS inference note: declaring the param as `(v: T, s: T) => T`
+   *  lets unary lambdas (`v => …`) infer `v: T` cleanly via
+   *  contextual typing while still accepting binary `(v, s) => …`.
+   *  JS's parameter-arity tolerance does the rest at runtime.
+   *
    *  Smart-dispatch on RO receivers: if `this` is a fused-RO chain,
    *  the bwd has no place to land — drop it and build a computed
    *  via `fwd` only. */
-  through(this: Signal<T>, fwd: (v: T) => T, bwd: ((v: T, s: T) => T) | ((v: T) => T)): this {
+  through(this: Signal<T>, fwd: (v: T) => T, bwd: (v: T, s: T) => T): this {
     const Cls = this.constructor as new (...args: never[]) => Signal<T>;
     if (this._fusedOf !== undefined && this._fusedOf.bwd === undefined) {
       return Signal._fuse(
         this as Signal<unknown>,
-        Cls,
-        fwd as (s: unknown) => T,
-        undefined,
+        Cls as new (...args: never[]) => Signal<unknown>,
+        fwd as (s: unknown) => unknown,
       ) as unknown as this;
     }
     return Signal._fuse(
       this as Signal<unknown>,
-      Cls,
-      fwd as (s: unknown) => T,
+      Cls as new (...args: never[]) => Signal<unknown>,
+      fwd as (s: unknown) => unknown,
       bwd as (v: unknown, s: unknown) => unknown,
     ) as unknown as this;
   }

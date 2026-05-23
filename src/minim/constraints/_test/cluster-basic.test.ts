@@ -137,6 +137,42 @@ describe("Cluster (writeBack) — lens composition", () => {
   });
 });
 
+describe("Cluster — numerical robustness", () => {
+  it("aggressive random drag stays finite (no NaN poisoning)", async () => {
+    const { distance, perpendicular } = await import("../index");
+    const c = new Cluster({ iterations: 8 });
+    const A = vec(0, 0);
+    const B = vec(100, 0);
+    const C = vec(100, 60);
+    const D = vec(180, 60);
+    distance(c, A, B, 100);
+    distance(c, B, C, 60);
+    distance(c, C, D, 80);
+    // Intentionally use the duplicated-cell form: this used to feed
+    // NaN through `solveSPD` whenever the local LHS went rank-
+    // deficient. The guard in `_primalSweep` should keep positions
+    // finite regardless.
+    perpendicular(c, A, B, B, C);
+    c.pin(A);
+
+    let seed = 12345;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0xffffffff;
+    };
+
+    for (let i = 0; i < 200; i++) {
+      const ang = rand() * Math.PI * 2;
+      const r = 50 + rand() * 200;
+      A.value = { x: Math.cos(ang) * r, y: Math.sin(ang) * r };
+    }
+    for (const sig of [A, B, C, D]) {
+      expect(Number.isFinite(sig.value.x)).toBe(true);
+      expect(Number.isFinite(sig.value.y)).toBe(true);
+    }
+  });
+});
+
 describe("Cluster — constraint lifecycle", () => {
   it("force.dispose() removes the constraint at the next solve", () => {
     const c = new Cluster({ iterations: 20 });

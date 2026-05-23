@@ -265,6 +265,32 @@ When the mechanism is a single closed loop, _vector-loop_ is the textbook angle-
 
 <md-loop></md-loop>
 
+Each of the above is a hand-rolled approach to a specific constraint shape — a closed-form inverse, a single Newton step, Gauss–Seidel projections, or a vector loop. The general path lives in `constraints/`: a `Cluster` binds any number of `Signal`s and runs an [Augmented Vertex Block Descent](https://graphics.cs.utah.edu/research/projects/avbd/) solve on every write. Constraints are ordinary factory calls — `distance`, `perpendicular`, `parallel`, `angle`, `onCircle`, `equalDist`, `lensNum`, `clamp`, `leq`, plus `generic` for anything you can write a residual for — and they all compose in the same cluster:
+
+```ts
+const c = new Cluster({ iterations: 12 });
+distance(c, A, B, 160);
+distance(c, B, C, 120);
+distance(c, C, D, 80);
+perpendicular(c, A, B, B, C);
+```
+
+Drag any handle; the cluster's effect re-fires, runs the solver, and writes the new positions back through `writeBack` — so the writes propagate to the rendering effects but don't re-trigger the solver itself. Single solve per write, no convergence loop, no fragile self-mute.
+
+<md-sketchpad></md-sketchpad>
+
+Constraints can be added and disposed at runtime — the factory returns a handle with `.dispose()`, and `cluster.update()` forces an immediate re-solve. The square below is held by four side constraints and one toggleable diagonal: with the brace, the quad is rigid and only translates and rotates; without it, one internal degree of freedom returns and it flexes as a 4-bar linkage.
+
+<md-rigid></md-rigid>
+
+Constraints describe loci as readily as they describe shapes. `onCircle(P, center, r)` keeps `P` on a circle of fixed radius around a (possibly draggable) center; `collinear(P, A, B)` keeps `P` on the line through two anchors. Drag a constrained point: the solver projects the cursor onto the closest point of the locus. Drag the anchors: the locus moves with them and the constrained point slides.
+
+<md-incidence></md-incidence>
+
+The same primitive scales up to closed kinematic loops. A 4-bar linkage is just three distance constraints and two pinned ground pivots — the fourth side is the (implicit) line between the pinned points. The mechanism's single internal degree of freedom emerges from the constraint count without any branching machinery; drag any free joint and the rocker, coupler and crank coordinate through their shared loop.
+
+<md-fourbar></md-fourbar>
+
 Curves matter too. `Path` is a reactive polyline — cheap, fast, plenty for line plots and node-to-node connectors. When ellipses or arcs are needed, the sibling `Curve` carries the same reactive plumbing but with `ellipseArc` segments rendered via SVG's native `A` command. The standalone `ellipse(center, a, b, rotation?)` factory accepts `Val<>` on every parameter, so a family of confocal conics — five ellipses through fixed eccentricities, four hyperbola pairs sampled as polylines — comes from a couple of loops driven by two draggable foci. Drag a focus; the whole grid re-rescales. Drag the probe; the unique ellipse and hyperbola through it track in real time:
 
 ```ts

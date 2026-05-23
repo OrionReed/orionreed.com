@@ -45,6 +45,7 @@ export {
   onCircle,
   parallel,
   perpendicular,
+  rightAngle,
   softTarget,
   spring,
 } from "./factories";

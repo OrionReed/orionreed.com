@@ -356,11 +356,25 @@ export class Solver {
       }
 
       // Solve `lhs · delta = -rhs`, write `position -= delta`.
-      solveSPD(lhs, rhs, dim);
+      // Skip if the local system is rank-deficient (rhs in undefined
+      // state) or if anything went non-finite (would otherwise poison
+      // `positions` with NaN, which propagates everywhere).
+      if (!solveSPD(lhs, rhs, dim)) continue;
       if (dim === 2) {
-        positions[off]! -= rhs[0]!;
-        positions[off + 1]! -= rhs[1]!;
+        const r0 = rhs[0]!;
+        const r1 = rhs[1]!;
+        if (!Number.isFinite(r0) || !Number.isFinite(r1)) continue;
+        positions[off]! -= r0;
+        positions[off + 1]! -= r1;
       } else {
+        let bad = false;
+        for (let k = 0; k < dim; k++) {
+          if (!Number.isFinite(rhs[k]!)) {
+            bad = true;
+            break;
+          }
+        }
+        if (bad) continue;
         for (let k = 0; k < dim; k++) positions[off + k]! -= rhs[k]!;
       }
     }

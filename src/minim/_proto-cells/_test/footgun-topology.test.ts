@@ -14,8 +14,8 @@ describe("topology: diamond through fanin", () => {
     // Effect reads both → consistent snapshot.
     const a = num(0);
     const b = num(0);
-    const sumA = fanin(Num, [a, b] as const, (x, y) => x + y + 10);
-    const sumB = fanin(Num, [a, b] as const, (x, y) => x + y + 100);
+    const sumA = fanin(Num, [a, b] as const, vals => vals[0] + vals[1] + 10);
+    const sumB = fanin(Num, [a, b] as const, vals => vals[0] + vals[1] + 100);
 
     let observed: { a: number; b: number; diff: number }[] = [];
     effect(() => {
@@ -110,7 +110,7 @@ describe("topology: relate sharing a cell with a fanin", () => {
       x => x * 2,
       y => y / 2,
     );
-    const sum = fanin(Num, [a, c] as const, (x, y) => x + y);
+    const sum = fanin(Num, [a, c] as const, vals => vals[0] + vals[1]);
 
     let observed: { a: number; b: number; sum: number }[] = [];
     effect(() => {

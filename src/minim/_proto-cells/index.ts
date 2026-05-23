@@ -79,3 +79,33 @@ export {
 export { relate, type Relation } from "./relate";
 
 export { fanin } from "./fanin";
+
+// Aggregate primitives built on `fanin` — A/B comparison against
+// `signals/mix.ts` + `signals/argmin.ts`. See `aggregates.ts` for
+// the comparison and `_test/ab-aggregates.{test,bench}.ts` for the
+// numbers.
+export {
+  argminNumLens,
+  axesLens,
+  centroidLens,
+  maxLens,
+  meanLens,
+  midpointLens,
+  minLens,
+  polarCircular,
+  sumLens,
+} from "./aggregates";
+
+// New primitives that `fanin` makes natural to express. See
+// `new-primitives.ts`.
+export {
+  angleLens,
+  bezier2,
+  bezier3,
+  clampedMean,
+  diffLens,
+  distanceLens,
+  pulleySum,
+  reflectionLens,
+  vecLerp,
+} from "./new-primitives";
