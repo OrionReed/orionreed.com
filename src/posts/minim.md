@@ -225,6 +225,8 @@ Anywhere a writable Point exists, a handle can sit on it.
 
 <md-handles></md-handles>
 
+<md-invertible></md-invertible>
+
 <md-layout-demo></md-layout-demo>
 
 The same idea generalises. `polar(c, r, a)` is `center + (r·cos a, r·sin a)` — and its inverse is one of four policies on which inputs absorb a write: `rotate` (c fixed, write r and a), `translate` (only c shifts), `radial` (only r), `circular` (only a). `handle.rotate` is one line of `polar(center, radius, angle, "circular")`.
