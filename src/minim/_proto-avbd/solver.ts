@@ -253,109 +253,8 @@ export class Solver {
     for (let it = 0; it < this.iterations; it++) {
       const currentAlpha = this.alpha;
 
-      // ─── 3a. Primal pass: per-vertex local Newton ─────────────
-      // Hot loop. Avoid: subarray allocation, indexOf scans,
-      // function-call overhead. Specialise dim=2 (Vec) since it's
-      // by far the most common case.
-      const lhs = this._lhs;
-      const rhs = this._rhs;
-      const cells = this.cells;
-      for (let cellI = 0; cellI < cells.length; cellI++) {
-        const cell = cells[cellI]!;
-        if (cell.mass <= 0) continue;
-        const dim = cell.dim;
-        const cellPos = cell.position;
-        const cellInertial = cell.inertial;
-        const massInvDt2 = cell.mass * inv_dt2;
-        // Initialise lhs = M / dt² · I, rhs = M / dt² · (x − y).
-        if (dim === 2) {
-          lhs[0]! = massInvDt2;
-          lhs[1]! = 0;
-          lhs[2]! = 0;
-          lhs[3]! = massInvDt2;
-          rhs[0]! = massInvDt2 * (cellPos[0]! - cellInertial[0]!);
-          rhs[1]! = massInvDt2 * (cellPos[1]! - cellInertial[1]!);
-        } else {
-          for (let i = 0; i < dim * dim; i++) lhs[i]! = 0;
-          for (let i = 0; i < dim; i++) lhs[i * dim + i]! = massInvDt2;
-          for (let k = 0; k < dim; k++) {
-            rhs[k]! = massInvDt2 * (cellPos[k]! - cellInertial[k]!);
-          }
-        }
-        // Accumulate force contributions.
-        const cellForces = cell.forces;
-        const cellForceIdx = cell.forceCellIdx;
-        for (let fi = 0; fi < cellForces.length; fi++) {
-          const f = cellForces[fi]!;
-          if (f.disabled) continue;
-          const ci = cellForceIdx[fi]!;
-          f.computeConstraint(currentAlpha);
-          f.computeDerivatives(ci);
-          const Jblock = f.J[ci]!;
-          const Hcols = f.HCols[ci]!;
-          const fHard = f.hard;
-          const fLambda = f.lambda;
-          const fPenalty = f.penalty;
-          const fC = f.C;
-          const fMin = f.fmin;
-          const fMax = f.fmax;
-          const rows = f.rows;
-          for (let r = 0; r < rows; r++) {
-            const lambda = fHard[r]! === 1 ? fLambda[r]! : 0;
-            const kC = fPenalty[r]! * fC[r]! + lambda;
-            const lo = fMin[r]!;
-            const hi = fMax[r]!;
-            const fc = kC < lo ? lo : kC > hi ? hi : kC;
-            const baseJ = r * dim;
-            const penalty_r = fPenalty[r]!;
-            const absF = fc < 0 ? -fc : fc;
-            if (dim === 2) {
-              const j0 = Jblock[baseJ]!;
-              const j1 = Jblock[baseJ + 1]!;
-              rhs[0]! += j0 * fc;
-              rhs[1]! += j1 * fc;
-              lhs[0]! += penalty_r * j0 * j0;
-              lhs[1]! += penalty_r * j0 * j1;
-              lhs[2]! += penalty_r * j1 * j0;
-              lhs[3]! += penalty_r * j1 * j1;
-              if (absF > TINY) {
-                lhs[0]! += Hcols[baseJ]! * absF;
-                lhs[3]! += Hcols[baseJ + 1]! * absF;
-              }
-            } else {
-              for (let k = 0; k < dim; k++) rhs[k]! += Jblock[baseJ + k]! * fc;
-              for (let i = 0; i < dim; i++) {
-                const ji = penalty_r * Jblock[baseJ + i]!;
-                for (let j = 0; j < dim; j++) {
-                  lhs[i * dim + j]! += ji * Jblock[baseJ + j]!;
-                }
-              }
-              if (absF > TINY) {
-                for (let k = 0; k < dim; k++) {
-                  lhs[k * dim + k]! += Hcols[baseJ + k]! * absF;
-                }
-              }
-            }
-          }
-        }
-        // Solve and apply.
-        if (dim === 2) {
-          // Inline 2x2 SPD solve.
-          const a = lhs[0]!;
-          const c = lhs[1]!;
-          const d = lhs[3]!;
-          const det = a * d - c * c;
-          if (det > 1e-14) {
-            const invDet = 1 / det;
-            const b0 = rhs[0]!;
-            const b1 = rhs[1]!;
-            cellPos[0]! -= (d * b0 - c * b1) * invDet;
-            cellPos[1]! -= (-c * b0 + a * b1) * invDet;
-          }
-        } else if (solveSPD(lhs, rhs, dim)) {
-          for (let k = 0; k < dim; k++) cellPos[k]! -= rhs[k]!;
-        }
-      }
+      // ─── 3a. Primal pass: per-vertex local Newton ────────────
+      this._primalSweep(currentAlpha, +1);
 
       // ─── 3b. Dual pass ────────────────────────────────────────
       {
@@ -451,5 +350,108 @@ export class Solver {
       for (let r = 0; r < f.rows; r++) s += f.C[r]! * f.C[r]!;
     }
     return Math.sqrt(s);
+  }
+
+  /** Forward Gauss-Seidel sweep over cells. Hot path. */
+  private _primalSweep(currentAlpha: number, _direction: 1 | -1): void {
+    const lhs = this._lhs;
+    const rhs = this._rhs;
+    const cells = this.cells;
+    const inv_dt2 = 1 / (this.dt * this.dt);
+    for (let cellI = 0; cellI < cells.length; cellI++) {
+      const cell = cells[cellI]!;
+      if (cell.mass <= 0) continue;
+      const dim = cell.dim;
+      const cellPos = cell.position;
+      const cellInertial = cell.inertial;
+      const massInvDt2 = cell.mass * inv_dt2;
+      // Initialise lhs = M / dt² · I, rhs = M / dt² · (x − y).
+      if (dim === 2) {
+        lhs[0]! = massInvDt2;
+        lhs[1]! = 0;
+        lhs[2]! = 0;
+        lhs[3]! = massInvDt2;
+        rhs[0]! = massInvDt2 * (cellPos[0]! - cellInertial[0]!);
+        rhs[1]! = massInvDt2 * (cellPos[1]! - cellInertial[1]!);
+      } else {
+        for (let i = 0; i < dim * dim; i++) lhs[i]! = 0;
+        for (let i = 0; i < dim; i++) lhs[i * dim + i]! = massInvDt2;
+        for (let k = 0; k < dim; k++) {
+          rhs[k]! = massInvDt2 * (cellPos[k]! - cellInertial[k]!);
+        }
+      }
+      // Accumulate force contributions.
+      const cellForces = cell.forces;
+      const cellForceIdx = cell.forceCellIdx;
+      for (let fi = 0; fi < cellForces.length; fi++) {
+        const f = cellForces[fi]!;
+        if (f.disabled) continue;
+        const ci = cellForceIdx[fi]!;
+        f.computeConstraint(currentAlpha);
+        f.computeDerivatives(ci);
+        const Jblock = f.J[ci]!;
+        const Hcols = f.HCols[ci]!;
+        const fHard = f.hard;
+        const fLambda = f.lambda;
+        const fPenalty = f.penalty;
+        const fC = f.C;
+        const fMin = f.fmin;
+        const fMax = f.fmax;
+        const rows = f.rows;
+        for (let r = 0; r < rows; r++) {
+          const lambda = fHard[r]! === 1 ? fLambda[r]! : 0;
+          const kC = fPenalty[r]! * fC[r]! + lambda;
+          const lo = fMin[r]!;
+          const hi = fMax[r]!;
+          const fc = kC < lo ? lo : kC > hi ? hi : kC;
+          const baseJ = r * dim;
+          const penalty_r = fPenalty[r]!;
+          const absF = fc < 0 ? -fc : fc;
+          if (dim === 2) {
+            const j0 = Jblock[baseJ]!;
+            const j1 = Jblock[baseJ + 1]!;
+            rhs[0]! += j0 * fc;
+            rhs[1]! += j1 * fc;
+            lhs[0]! += penalty_r * j0 * j0;
+            lhs[1]! += penalty_r * j0 * j1;
+            lhs[2]! += penalty_r * j1 * j0;
+            lhs[3]! += penalty_r * j1 * j1;
+            if (absF > TINY) {
+              lhs[0]! += Hcols[baseJ]! * absF;
+              lhs[3]! += Hcols[baseJ + 1]! * absF;
+            }
+          } else {
+            for (let k = 0; k < dim; k++) rhs[k]! += Jblock[baseJ + k]! * fc;
+            for (let i = 0; i < dim; i++) {
+              const ji = penalty_r * Jblock[baseJ + i]!;
+              for (let j = 0; j < dim; j++) {
+                lhs[i * dim + j]! += ji * Jblock[baseJ + j]!;
+              }
+            }
+            if (absF > TINY) {
+              for (let k = 0; k < dim; k++) {
+                lhs[k * dim + k]! += Hcols[baseJ + k]! * absF;
+              }
+            }
+          }
+        }
+      }
+      // Solve and apply.
+      if (dim === 2) {
+        const a = lhs[0]!;
+        const c = lhs[1]!;
+        const d = lhs[3]!;
+        const det = a * d - c * c;
+        if (det > 1e-14) {
+          const invDet = 1 / det;
+          const b0 = rhs[0]!;
+          const b1 = rhs[1]!;
+          cellPos[0]! -= (d * b0 - c * b1) * invDet;
+          cellPos[1]! -= (-c * b0 + a * b1) * invDet;
+        }
+      } else if (solveSPD(lhs, rhs, dim)) {
+        for (let k = 0; k < dim; k++) cellPos[k]! -= rhs[k]!;
+      }
+    }
   }
 }
