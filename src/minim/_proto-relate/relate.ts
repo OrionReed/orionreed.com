@@ -47,17 +47,17 @@
 //
 // Each is asserted in `_test/relate-laws.test.ts`.
 
-import { dampedNewton, type NewtonResult, residualNorm } from "./solvers";
 import {
   addPreFlushTask,
   computed,
   type Read,
-  setPinHook,
   Signal,
+  setPinHook,
   signal,
   type WritableBrand,
   withSolverActive,
 } from "./signal";
+import { dampedNewton, type NewtonResult, residualNorm } from "./solvers";
 import type { Packer, TraitDict } from "./traits";
 
 // ─── Public types ────────────────────────────────────────────────────
@@ -88,9 +88,30 @@ export interface RelateOpts {
   residual: Residual;
   /** Length of the residual vector. */
   m: number;
+  /** Soft-constraint strength. Residual entries are multiplied by
+   *  `sqrt(weight)` before contributing to the cluster's combined
+   *  least-squares objective; high weights dominate. Cassowary-
+   *  style conventions:
+   *
+   *    WEAK     ≈ 1
+   *    MEDIUM   ≈ 1e3
+   *    STRONG   ≈ 1e6
+   *    REQUIRED ≈ 1e9   (effectively "always-satisfied")
+   *
+   *  Defaults to 1 (everyone equal). */
+  weight?: number;
   /** Diagnostic name. */
   name?: string;
 }
+
+/** Cassowary-style strength constants. Use as `weight: STRONG` to
+ *  give a constraint priority over `MEDIUM`-strength ones. */
+export const Strength = {
+  WEAK: 1,
+  MEDIUM: 1e3,
+  STRONG: 1e6,
+  REQUIRED: 1e9,
+} as const;
 
 export interface Relation {
   /** Cells bound by this relation, in declaration order. */
@@ -318,7 +339,14 @@ function buildResidual(c: Cluster): (xs: readonly number[], out: number[]) => vo
       for (let i = 0; i < idx.length; i++) subVals[i] = valsScratch[idx[i]!];
       const subR = rel._outScratch;
       rel.residualFn(subVals, subR);
-      for (let i = 0; i < rel.m; i++) out[off + i] = subR[i]!;
+      // Apply per-relation weight (sqrt scales the LSQ contribution
+      // linearly in `weight`).
+      const w = rel._sqrtWeight;
+      if (w === 1) {
+        for (let i = 0; i < rel.m; i++) out[off + i] = subR[i]!;
+      } else {
+        for (let i = 0; i < rel.m; i++) out[off + i] = subR[i]! * w;
+      }
       off += rel.m;
     }
   };
@@ -372,13 +400,20 @@ function solveCluster(c: Cluster): void {
     iters: result.iters,
     converged: result.converged,
   };
-  // Per-relation residual updates.
+  // Per-relation residual updates. R(xs, rScratch) stores the
+  // *weighted* residual (entries × sqrt(weight)); the per-relation
+  // signal exposes the UNWEIGHTED norm so consumers can flag actual
+  // constraint violations, independent of strength.
   R(xs, c.rScratch);
   let off = 0;
   for (const entry of c.relations) {
     const rel = entry.rel;
+    const w = rel._sqrtWeight;
     let s = 0;
-    for (let i = 0; i < rel.m; i++) s += c.rScratch[off + i]! ** 2;
+    for (let i = 0; i < rel.m; i++) {
+      const ri = w === 1 ? c.rScratch[off + i]! : c.rScratch[off + i]! / w;
+      s += ri * ri;
+    }
     rel._residualSig.value = Math.sqrt(s);
     off += rel.m;
   }
@@ -427,6 +462,9 @@ class RelationImpl implements Relation {
   // biome-ignore lint/suspicious/noExplicitAny: heterogeneous values
   _argScratch: any[];
   _outScratch: number[];
+  /** @internal — sqrt(weight); pre-multiplied so the hot path
+   *  doesn't need to call Math.sqrt per evaluation. */
+  _sqrtWeight: number;
   private _disposed = false;
 
   constructor(opts: RelateOpts) {
@@ -436,6 +474,7 @@ class RelationImpl implements Relation {
     this.residualFn = opts.residual;
     this._argScratch = new Array<unknown>(opts.cells.length);
     this._outScratch = new Array<number>(opts.m);
+    this._sqrtWeight = Math.sqrt(opts.weight ?? 1);
     this._residualSig = signal(Number.POSITIVE_INFINITY);
     this.residual = this._residualSig;
     this.satisfied = computed(() => this._residualSig.value < 1e-6);
