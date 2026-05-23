@@ -1,10 +1,10 @@
-// avbd-api.test.ts — exercises the user-facing API: signal-driven
-// constraint factories, `Strength` constants, inequality factories
-// (`bounded` / `leq` / `geq`), and the `pin()` helper.
+// cluster-api.test.ts — user-facing API: signal-driven constraint
+// factories, `Strength` constants, inequality factories (`clamp` /
+// `leq` / `geq`), and the `pin()` helper.
 
 import { describe, expect, it } from "vitest";
 import { num, vec } from "../../signals";
-import { bounded, distance, geq, leq, Cluster, Strength, spring } from "../index";
+import { clamp, distance, geq, leq, Cluster, Strength, spring } from "../index";
 
 describe("API — Strength constants", () => {
   it("constants ordered low → high; HARD = ∞", () => {
@@ -27,10 +27,10 @@ describe("API — Strength constants", () => {
 });
 
 describe("API — inequality factories", () => {
-  it("bounded(x, 0, 10) clamps a far-above x to 10", () => {
+  it("clamp(x, 0, 10) pins a far-above x to 10", () => {
     const x = num(50);
     const s = new Cluster({ iterations: 10 });
-    bounded(s, x, 0, 10);
+    clamp(s, x, 0, 10);
     x.value = 50.0001;
     expect(x.value).toBeLessThanOrEqual(10 + 1e-3);
     expect(x.value).toBeGreaterThanOrEqual(0);

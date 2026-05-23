@@ -50,10 +50,8 @@ export class Cluster {
   private readonly _sigToCell = new Map<Signal<any>, number>();
   private readonly _bindings: (Binding | undefined)[] = [];
 
-  /** Generation counter as a signal. Each `bind()` bumps it; the
-   *  cluster effect subscribes to it so newly-bound signals get
-   *  picked up on the next effect run. Cheap: one signal write +
-   *  one effect re-run per bind, regardless of cluster size. */
+  /** Generation counter; bumped on `bind()` and `update()` to force
+   *  the effect to re-run (and refresh its dep set). */
   private readonly _gen: Signal<number> & WritableBrand;
   /** Cluster effect handle (`undefined` before first bind). */
   private _disposeEffect?: () => void;
@@ -63,8 +61,8 @@ export class Cluster {
     this._gen = signal(0);
   }
 
-  /** Bind a `Signal` to this cluster and return its cell id. */
-  // biome-ignore lint/suspicious/noExplicitAny: see Bindable
+  /** Bind a signal and return its cell id. Idempotent. */
+  // biome-ignore lint/suspicious/noExplicitAny: see file header
   bind(sig: Signal<any>): number {
     const existing = this._sigToCell.get(sig);
     if (existing !== undefined) return existing;
@@ -73,28 +71,28 @@ export class Cluster {
     pack.read(sig.peek(), this.solver.positions, this.solver.offsets[id]!);
     this._sigToCell.set(sig, id);
     this._bindings[id] = { sig, pack };
-
     if (this._disposeEffect === undefined) this._installEffect();
-    // Bump generation. The cluster effect is subscribed to `_gen`,
-    // so this re-fires it; the effect's next run picks up this
-    // new binding as a dep alongside the existing ones.
     this._gen.value = this._gen.value + 1;
     return id;
   }
 
-  /** Pin a bound signal (`mass = 0`). Returns an unpin thunk. */
-  // biome-ignore lint/suspicious/noExplicitAny: see Bindable
+  /** Pin a bound signal (mass = 0). Returns an unpin thunk. */
+  // biome-ignore lint/suspicious/noExplicitAny: see file header
   pin(sig: Signal<any>): () => void {
     const id = this._sigToCell.get(sig);
-    if (id === undefined) {
-      throw new Error("pin: signal is not bound to this cluster.");
-    }
+    if (id === undefined) throw new Error("pin: signal is not bound to this cluster.");
     const prev = this.solver.massOf(id);
     this.solver.setMass(id, 0);
     return () => this.solver.setMass(id, prev);
   }
 
-  /** Tear down the cluster's effect. Bound signals retain their
+  /** Force a re-solve on the next flush. Use after `force.dispose()`
+   *  when you want the change visible without a signal write. */
+  update(): void {
+    this._gen.value = this._gen.value + 1;
+  }
+
+  /** Tear down the cluster's effect. Bound signals keep their
    *  current values but stop being constraint-driven. */
   dispose(): void {
     if (this._disposeEffect !== undefined) {

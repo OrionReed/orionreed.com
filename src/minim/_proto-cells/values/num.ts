@@ -85,7 +85,9 @@ export class Num extends Signal<V> {
         h = hf();
       return v < l ? l : v > h ? h : v;
     };
-    return this.through(c, c, "projection");
+    // 1-arg bwd → arity-detected as stateless (iso/projection class
+    // — same setter dispatch).
+    return this.through(c, c);
   }
 
   /** Lossy lens that snaps reads and writes to the nearest multiple
@@ -96,7 +98,7 @@ export class Num extends Signal<V> {
       const s = sf();
       return Math.round(v / s) * s;
     };
-    return this.through(q, q, "projection");
+    return this.through(q, q);
   }
 
   /** Cyclic-coordinate lens. Reads pass through (the source's
@@ -105,12 +107,10 @@ export class Num extends Signal<V> {
    *  small visible amount without jumping a full revolution when the
    *  source has accumulated many.
    *
-   *  Declared `"stateful"` because the bwd reads the receiver's
-   *  current value (the `s` argument) to compute the nearest
-   *  representative. Replaces the previous `this.peek()` side-channel
-   *  with the engine-supplied state — fusion now threads the correct
-   *  `priorFwd(rootValue)` through, so the bwd sees the genuine
-   *  intermediate even across composed chains. */
+   *  The 2-arg bwd `(v, s) => …` is arity-detected as stateful by the
+   *  engine, which threads the genuine receiver-input value (the
+   *  current accumulated angle) through `s` even across composed
+   *  chains. No `this.peek()` side-channel needed. */
   cyclic(period: Val<number>): this {
     const pf = valFn(period);
     return this.through(
@@ -120,7 +120,6 @@ export class Num extends Signal<V> {
         const delta = v - s;
         return s + delta - p * Math.round(delta / p);
       },
-      "stateful",
     );
   }
 }

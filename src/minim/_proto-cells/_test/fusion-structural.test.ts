@@ -171,11 +171,11 @@ describe("structural: only root + effect-subscribed leaves carry subs", () => {
   });
 });
 
-describe("structural: lens-law propagation", () => {
-  const law = (s: unknown): string | undefined =>
-    (s as { _fusedOf?: { law?: string } })._fusedOf?.law;
+describe("structural: stateful-flag propagation (arity-inferred)", () => {
+  const stateful = (s: unknown): boolean | undefined =>
+    (s as { _fusedOf?: { stateful?: boolean } })._fusedOf?.stateful;
 
-  it("pure through chain is iso throughout", () => {
+  it("pure 1-arg-bwd through chain is stateless (iso)", () => {
     const a = num(0);
     const c = a
       .through(
@@ -190,39 +190,39 @@ describe("structural: lens-law propagation", () => {
         v => v - 3,
         v => v + 3,
       );
-    expect(law(c)).toBe("iso");
+    expect(stateful(c)).toBe(false);
   });
 
-  it("a single lensTo (via field) marks the chain stateful", () => {
+  it("field marks the chain stateful (bwd is 2-arg spread-replace)", () => {
     const tr = transform({ translate: { x: 0, y: 0 } });
-    expect(law(tr.translate as unknown as Signal<unknown>)).toBe("stateful");
-    expect(law(tr.translate.x as unknown as Signal<unknown>)).toBe("stateful");
+    expect(stateful(tr.translate as unknown as Signal<unknown>)).toBe(true);
+    expect(stateful(tr.translate.x as unknown as Signal<unknown>)).toBe(true);
   });
 
-  it("through after stateful stays stateful", () => {
+  it("through-iso after stateful stays stateful (any layer poisons upward)", () => {
     const tr = transform({ translate: { x: 0, y: 0 } });
     const scaled = tr.translate.x.through(
       v => v * 10,
       v => v / 10,
     );
-    expect(law(scaled as unknown as Signal<unknown>)).toBe("stateful");
+    expect(stateful(scaled as unknown as Signal<unknown>)).toBe(true);
   });
 
-  it("clamp is projection law", () => {
+  it("clamp is stateless (bwd is 1-arg pointwise)", () => {
     const a = num(0);
     const c = a.clamp(0, 1);
-    expect(law(c as unknown as Signal<unknown>)).toBe("projection");
+    expect(stateful(c as unknown as Signal<unknown>)).toBe(false);
   });
 
-  it("cyclic is stateful law (uses the s argument honestly)", () => {
+  it("cyclic is stateful (bwd is 2-arg, uses receiver state)", () => {
     const a = num(0);
     const c = a.cyclic(2 * Math.PI);
-    expect(law(c as unknown as Signal<unknown>)).toBe("stateful");
+    expect(stateful(c as unknown as Signal<unknown>)).toBe(true);
   });
 
-  it("deriveTo chain stays iso (no bwd path; law inherited from prior)", () => {
+  it("deriveTo chain inherits prior's stateful flag (here: false)", () => {
     const a = num(0);
     const ro = a.deriveTo(Num, v => v * 2);
-    expect(law(ro)).toBe("iso");
+    expect(stateful(ro)).toBe(false);
   });
 });

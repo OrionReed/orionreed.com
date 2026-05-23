@@ -386,51 +386,35 @@ export interface SignalOptions<T = unknown> {
   equals?: Equals<T>;
 }
 
-// ─── Lens law classification ────────────────────────────────────────
+// ─── Statefulness inference ─────────────────────────────────────────
 //
-// Every fused layer carries one of four algebraic classes. Composing
-// laws follows a small lattice (`fuseLaw` below). The point is *honest
-// classification*, not enforcement — the runtime trusts the caller's
-// declaration the same way the previous `bwdStateless: boolean` did,
-// but with a four-way refinement that gives correct semantics across
-// chains involving stateful or projective layers.
+// A bwd is "stateful" iff it reads the receiver's input-position value
+// to compute the new root state — `cyclic`'s nearest-representative,
+// `lensTo`'s spread-replace, etc. The engine detects this from the
+// bwd's declared arity (`bwd.length >= 2`), so users don't pass an
+// explicit law tag:
 //
-// - **Iso** — `bwd ∘ fwd = id` and `fwd ∘ bwd = id`. `bwd` ignores `s`.
-//   `add`, `sub`, `scale`, `affine`, `through(f, g)` with f/g inverses.
-// - **Projection** — `fwd` idempotent, `bwd = fwd` (or lands in `fwd`'s
-//   image). `bwd` ignores `s`. `clamp`, `quantize`. PutGet within the
-//   image; outside it the projection silently corrects.
-// - **Stateful** — `bwd(v, s)` reads `s` to compute the new root state
-//   (e.g., spread-replace). `lensTo`'s spread-replace, `cyclic`'s
-//   nearest-representative pick.
-// - **Opaque** — hand-built lens with no fusion contract (`Signal.install`,
-//   `polar`). Never fuses; subsequent layers stack as separate cells.
+//   through(v => v + 1, v => v - 1)         // 1-arg → stateless
+//   through(v => v, (v, s) => stateful_fn)  // 2-arg → stateful
 //
-// `field()` lenses are a refinement of Stateful where `bwd` has the
-// shape `(v, s) => ({ ...s, [key]: v })`. Fusion of consecutive field
-// edges collapses to a path-aware spread-replace setter that's roughly
-// 2x faster than the generic stateful composition.
-export type LensLaw = "iso" | "projection" | "stateful" | "opaque";
+// Composition rule: a chain is stateful iff any layer in it is
+// stateful. The setter dispatch branches on this — stateless setters
+// skip `parent.peek()` and `priorFwd(s)`, which matters at depth.
+//
+// Footgun considerations:
+//   - Default args reduce `Function.length` (e.g., `(v, s = 0) => …`
+//     reports length 1). This is the only realistic way to misdeclare;
+//     surfaces as: stateful logic gets s=undefined, default kicks in,
+//     observed as a static value. Tested in footgun-probe.
+//   - Rest params have `length === 0` → treated stateless. Same as
+//     1-arg in observable behaviour.
+//
+// `field()` lenses additionally tag `_fusedOf.fieldPath`. Fusion of
+// consecutive field edges collapses to a path-aware spread-replace
+// setter that's ~3.5× faster than the generic stateful composition.
 
-/** Compose two laws bottom-up (prior law of the chain below, local law
- *  of the new layer being added). Returns the law of the resulting
- *  composite. The fusion algorithm in `_fuse` uses this to decide
- *  whether the chain is still stateless (Iso/Projection compose to
- *  stateless setters) or stateful (any Stateful in the chain pollutes
- *  upward). Opaque is sticky: once a layer is opaque, no further
- *  fusion occurs through it. */
-function fuseLaw(prior: LensLaw, local: LensLaw): LensLaw {
-  if (prior === "opaque" || local === "opaque") return "opaque";
-  if (prior === "stateful" || local === "stateful") return "stateful";
-  if (prior === "projection" || local === "projection") return "projection";
-  return "iso";
-}
-
-/** Predicate: does this law's composed `bwd` ignore the receiver state?
- *  Iso and Projection do; Stateful does not. The setter inlines without
- *  `parent.peek()` / `priorFwd(s)` when this returns true. */
-function lawStateless(l: LensLaw): boolean {
-  return l === "iso" || l === "projection";
+function isBwdStateful(bwd: ((v: unknown, s: unknown) => unknown) | undefined): boolean {
+  return bwd !== undefined && bwd.length >= 2;
 }
 
 // ─── Field-path specialisation ──────────────────────────────────────
@@ -585,20 +569,19 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  into a single cell pointing at the same root, composing fwd/bwd
    *  in value-space. Internal.
    *
-   *  `law` is the algebraic class of the composite chain — see
-   *  `LensLaw` below. The class controls fusion (Iso/Projection chains
-   *  fuse into a single inlined setter; the first non-Iso layer is a
-   *  fusion barrier above which we still build a real cell).
+   *  `stateful` is true iff any layer's `bwd` declares `(v, s) => …`
+   *  (arity ≥ 2). The setter dispatch branches on this — stateless
+   *  setters skip `parent.peek()` + `priorFwd(s)`, which is the perf
+   *  optimisation for iso chains.
    *
    *  `fieldPath`, when set, identifies the bwd as a chain of "set
    *  field at key" operations, which `_fuse` collapses into a single
-   *  spread-replace closure. This is the headline optimisation for
-   *  `tr.translate.x` and similar paths. */
+   *  spread-replace closure. Headline optimisation for `tr.translate.x`. */
   _fusedOf?: {
     parent: Signal<unknown>;
     fwd: (s: unknown) => T;
     bwd?: (v: T, s: unknown) => unknown;
-    law: LensLaw;
+    stateful: boolean;
     fieldPath?: readonly (string | number | symbol)[];
   };
 
@@ -732,8 +715,8 @@ export class Signal<T = unknown> implements ReactiveNode {
         ...args: never[]
       ) => Signal<Of<InstanceType<C>>>,
       fwd as (s: unknown) => Of<InstanceType<C>>,
+      // Adapter takes (v, s); arity 2 → engine treats as stateful.
       (u, s) => bwd(u, s as T),
-      "stateful",
     ) as InstanceType<C>;
   }
 
@@ -753,32 +736,24 @@ export class Signal<T = unknown> implements ReactiveNode {
         ...args: never[]
       ) => Signal<Of<InstanceType<C>>>,
       fwd as (s: unknown) => Of<InstanceType<C>>,
-      undefined,
-      "iso",
     ) as InstanceType<C>;
   }
 
   /** Endo-lens: wrap this cell with a `(fwd, bwd)` pair in value-space.
    *  Returns a lens of the same class. Auto-fuses: `.through(F, B)`
-   *  after `.through(f, b)` collapses to one cell with composed fns,
-   *  avoiding per-chain allocation and dep-graph nodes.
+   *  after `.through(f, b)` collapses to one cell with composed fns.
    *
-   *  By default the layer is tagged **Iso** (assumed bijection). For
-   *  layers that are lossy or stateful, pass `law` explicitly:
-   *  - `"projection"` — `clamp`, `quantize` (idempotent, fwd = bwd).
-   *  - `"stateful"`   — `cyclic` (bwd reads receiver state via `s`).
-   *  Iso/Projection chains fuse to a stateless setter; any Stateful
-   *  layer threads `priorFwd(s)` honestly through the chain.
+   *  Statefulness is inferred from `bwd`'s declared arity:
+   *    - `bwd: (v) => …`     — stateless. Iso/projection chains fuse
+   *                            to a fast setter that skips `parent.peek()`.
+   *    - `bwd: (v, s) => …`  — stateful. Engine threads the genuine
+   *                            receiver-input value through `s`.
+   *  See `cyclic` for an example of the stateful pattern.
    *
-   *  Smart-dispatch on RO receivers: if `this` is a fused-RO chain
-   *  (e.g., from `.deriveTo()`), the bwd has no place to land —
-   *  drop it and build a computed via `fwd` only. */
-  through(
-    this: Signal<T>,
-    fwd: (v: T) => T,
-    bwd: (v: T, s: T) => T,
-    law: LensLaw = "iso",
-  ): this {
+   *  Smart-dispatch on RO receivers: if `this` is a fused-RO chain,
+   *  the bwd has no place to land — drop it and build a computed
+   *  via `fwd` only. */
+  through(this: Signal<T>, fwd: (v: T) => T, bwd: ((v: T, s: T) => T) | ((v: T) => T)): this {
     const Cls = this.constructor as new (...args: never[]) => Signal<T>;
     if (this._fusedOf !== undefined && this._fusedOf.bwd === undefined) {
       return Signal._fuse(
@@ -786,7 +761,6 @@ export class Signal<T = unknown> implements ReactiveNode {
         Cls,
         fwd as (s: unknown) => T,
         undefined,
-        law,
       ) as unknown as this;
     }
     return Signal._fuse(
@@ -794,7 +768,6 @@ export class Signal<T = unknown> implements ReactiveNode {
       Cls,
       fwd as (s: unknown) => T,
       bwd as (v: unknown, s: unknown) => unknown,
-      law,
     ) as unknown as this;
   }
 
@@ -802,18 +775,15 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  `.deriveTo()` / `field()`. Collapses receiver-anchored chains
    *  in value-space.
    *
-   *  Semantics: parent = receiver's root (chases `_fusedOf.parent`);
-   *  composedFwd reads `fwdLocal(priorFwd(rootValue))`; composedBwd
-   *  threads receiver state through stateful layers. The chain's
-   *  composite `law` is `fuseLaw(prior.law, localLaw)` and decides
-   *  whether the setter inlines without `parent.peek()`.
+   *  Statefulness is inferred from `bwdLocal.length` (≥ 2 → stateful).
+   *  The composite chain is stateful iff any layer is. The setter
+   *  branches on this — stateless setters skip `parent.peek()` and
+   *  `priorFwd(s)`, which matters at depth.
    *
-   *  Field-path specialisation: if both prior and local layers are
-   *  field-set patterns (`bwd: (v, s) => ({ ...s, [key]: v })`,
-   *  `fwd: s => s[key]`), we tag the result with `fieldPath` so that
-   *  the next fusion atop it can still recognise the path and emit
-   *  a single inlined spread-replace setter for the whole chain —
-   *  the headline win for `tr.translate.x` and similar.
+   *  Field-path specialisation: if `fieldKey` is set AND the prior
+   *  chain is also field-tagged (or empty), we collapse to a path-
+   *  walking spread-replace setter that skips priorFwd/bwdLocal/priorBwd
+   *  dispatch entirely. ~3.5× faster than the generic stateful setter.
    *
    *  Error: a writable view on top of a fused-RO receiver (e.g.
    *  `.deriveTo(...).lensTo(...)`) has no bwd path. We throw a
@@ -823,7 +793,6 @@ export class Signal<T = unknown> implements ReactiveNode {
     Cls: new (...args: never[]) => Signal<U>,
     fwdLocal: (s: unknown) => U,
     bwdLocal?: (v: U, s: unknown) => unknown,
-    localLaw: LensLaw = "iso",
     /** Optional: the `key` if `bwdLocal` is a field-set pattern. */
     fieldKey?: string | number | symbol,
   ): Signal<U> {
@@ -832,7 +801,7 @@ export class Signal<T = unknown> implements ReactiveNode {
           parent: Signal<unknown>;
           fwd: (s: unknown) => unknown;
           bwd?: (v: unknown, s: unknown) => unknown;
-          law: LensLaw;
+          stateful: boolean;
           fieldPath?: readonly (string | number | symbol)[];
         }
       | undefined;
@@ -847,10 +816,14 @@ export class Signal<T = unknown> implements ReactiveNode {
     const parent = prior !== undefined ? prior.parent : receiver;
     const priorFwd = prior?.fwd;
     const priorBwd = prior?.bwd;
-    const priorLaw: LensLaw = prior?.law ?? "iso";
-    const composedLaw =
-      bwdLocal === undefined ? priorLaw : fuseLaw(priorLaw, localLaw);
-    const stateless = bwdLocal === undefined ? lawStateless(priorLaw) : lawStateless(composedLaw);
+    const priorStateful = prior?.stateful ?? false;
+    const localStateful = isBwdStateful(bwdLocal);
+    // Composite chain is stateful iff any layer is. RO cells (no
+    // bwd at this layer) inherit prior's flag — they don't add bwd
+    // statefulness, but downstream fusion has to know whether the
+    // chain *can* compose to a stateful bwd.
+    const stateful = bwdLocal === undefined ? priorStateful : priorStateful || localStateful;
+    const stateless = !stateful;
 
     const composedFwd: (s: unknown) => U = priorFwd ? s => fwdLocal(priorFwd(s)) : fwdLocal;
 
@@ -944,7 +917,7 @@ export class Signal<T = unknown> implements ReactiveNode {
       parent,
       fwd: composedFwd,
       bwd: composedBwd,
-      law: composedLaw,
+      stateful,
       fieldPath: composedPath,
     };
     return inst as Signal<U>;
@@ -969,9 +942,9 @@ export class Signal<T = unknown> implements ReactiveNode {
         ...args: never[]
       ) => Signal<Of<InstanceType<C>>>,
       s => (s as Record<string | number | symbol, unknown>)[key] as Of<InstanceType<C>>,
+      // 2-arg bwd → arity-detected as stateful.
       (v, s) =>
         ({ ...(s as object), [key]: v }) as unknown,
-      "stateful",
       key,
     ) as InstanceType<C>;
   }

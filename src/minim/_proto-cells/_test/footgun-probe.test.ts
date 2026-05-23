@@ -61,29 +61,26 @@ describe("footgun: field path on top of non-field stateful lens", () => {
   });
 });
 
-describe("footgun: stateful bwd declared as iso (caller error)", () => {
-  it("stateful bwd called with s=undefined when declared iso", () => {
-    // If a user writes a bwd that uses `s` but forgets to declare
-    // law="stateful", the engine builds a stateless setter that
-    // passes s=undefined. Document the footgun.
+describe("statefulness: arity-inferred (no explicit law tag needed)", () => {
+  it("1-arg bwd → engine treats as stateless; bwd never receives s", () => {
+    // Arity-based dispatch: bwd.length === 1 → stateless setter.
+    // The engine doesn't compute or pass s.
     const a = num(10);
-    let receivedS: unknown = "unset";
+    let bwdCalled = false;
     const c = a.through(
-      v => v,
-      (v, s) => {
-        receivedS = s;
-        return v + 1;
+      v => v + 1,
+      v => {
+        bwdCalled = true;
+        return v - 1;
       },
-      // No third arg → defaults to "iso" → stateless setter
     );
 
     (c as unknown as { value: number }).value = 5;
-
-    expect(receivedS).toBe(undefined);
-    expect(a.value).toBe(6);
+    expect(bwdCalled).toBe(true);
+    expect(a.value).toBe(4);
   });
 
-  it("explicit stateful: s is the genuine prior-fwd value", () => {
+  it("2-arg bwd → engine treats as stateful; s is the prior-fwd value", () => {
     const a = num(10);
     let receivedS: unknown = "unset";
     const c = a.through(
@@ -92,12 +89,32 @@ describe("footgun: stateful bwd declared as iso (caller error)", () => {
         receivedS = s;
         return v - 100;
       },
-      "stateful",
     );
 
     (c as unknown as { value: number }).value = 105;
-    expect(receivedS).toBe(10);
+    expect(receivedS).toBe(10); // genuine prior state
     expect(a.value).toBe(5);
+  });
+
+  it("FOOTGUN: default args reduce arity (caveat)", () => {
+    // `(v, s = 0) => …` reports length === 1 (default args reduce
+    // Function.length). Engine treats as stateless, default s=0
+    // kicks in. Subtle bug surface — declare without defaults if you
+    // need real receiver state.
+    const a = num(10);
+    let observedS = -1;
+    const c = a.through(
+      v => v,
+      (v, s = 0) => {
+        observedS = s;
+        return v;
+      },
+    );
+
+    (c as unknown as { value: number }).value = 7;
+    // Despite the chain logically being stateful, arity-inferred as
+    // stateless → s=0 always.
+    expect(observedS).toBe(0);
   });
 });
 

@@ -70,7 +70,8 @@ export abstract class Force {
   readonly penalty: Float64Array;
   /** Lagrange multiplier for hard constraints (soft uses 0). */
   readonly lambda: Float64Array;
-  /** Whether the force is disabled (fractured / removed). */
+  /** Marks the force for removal at the next `solver.prepare()`.
+   *  Set by `dispose()` (user) or by `_dualPass` (fracture). */
   disabled = false;
 
   /** Jacobian per cell-index: `J[ci]` is `rows × dim_{cells[ci]}`
@@ -105,15 +106,17 @@ export abstract class Force {
   abstract computeConstraint(alpha: number): void;
   abstract computeDerivatives(cellIdx: number): void;
 
-  disable(): void {
+  /** Mark this force for removal. Takes effect on the next solver
+   *  pass (the cluster's effect, or an explicit `solver.step()`).
+   *  In a reactive `Cluster`, calling `cluster.update()` after
+   *  `dispose()` materialises the change immediately. */
+  dispose(): void {
     this.disabled = true;
   }
 
-  /** True iff `stiffness[row]` is `Infinity` — i.e. this row is
-   *  solved via the augmented-Lagrangian path rather than penalty
-   *  weighting. Caching this used to be a manual contract via
-   *  `refreshHardFlags`; we now derive it on demand. The hot path
-   *  inlines the `=== Infinity` check directly. */
+  /** True iff `stiffness[row]` is `Infinity` — solved via the
+   *  augmented-Lagrangian path rather than penalty weighting.
+   *  Hot paths inline the `=== Infinity` check directly. */
   isHard(row: number): boolean {
     return this.stiffness[row]! === Infinity;
   }

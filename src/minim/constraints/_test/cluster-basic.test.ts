@@ -136,3 +136,34 @@ describe("Cluster (writeBack) — lens composition", () => {
     expect(b.value.x).toBeCloseTo(7, 1);
   });
 });
+
+describe("Cluster — constraint lifecycle", () => {
+  it("force.dispose() removes the constraint at the next solve", () => {
+    const c = new Cluster({ iterations: 20 });
+    const a = num(0);
+    const b = num(0);
+    const link = eq(c, a, b);
+    c.pin(a);
+    a.value = 5;
+    expect(b.value).toBeCloseTo(5, 2);
+
+    link.dispose();
+    c.update();
+    a.value = 9;
+    expect(b.value).toBeCloseTo(5, 1); // b stays put — no longer linked
+  });
+
+  it("cluster.update() forces a solve without a signal write", () => {
+    const c = new Cluster({ iterations: 20 });
+    const a = vec(0, 0);
+    const b = vec(1, 0);
+    const link = distance(c, a, b, 3);
+    c.pin(a);
+    a.value = { x: 0.0001, y: 0 };
+    expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(3, 1);
+
+    link.dispose();
+    c.update();
+    expect(c.solver.forces.length).toBe(0);
+  });
+});

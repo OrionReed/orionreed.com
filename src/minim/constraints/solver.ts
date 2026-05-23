@@ -1,21 +1,17 @@
 // solver.ts — Augmented Vertex Block Descent numerical kernel.
 //
-// SOA layout: per-cell state lives in packed `Float64Array` /
-// typed-array buffers indexed by integer cell id (`number`). No
-// per-cell heap allocation; the hot loop streams contiguous
-// memory and the JIT keeps stable hidden classes.
+// SOA layout: per-cell state lives in packed Float64/Uint typed-
+// array buffers indexed by integer cell id. No per-cell heap
+// allocation; the hot loop streams contiguous memory and the JIT
+// keeps hidden classes stable.
 //
-// This module is signal-free. Cells are integer handles returned
-// by `addCell(dim, init?)`. Forces store `cells: number[]` and
-// read positions via `solver.positions[solver.offsets[id] + k]`.
+// Signal-free. Cells are integer handles returned by `addCell`.
+// Forces store cell ids and read positions via
+// `positions[offsets[id] + k]`. Reactive integration is layered
+// on top in `cluster.ts`; time-stepping in `simulation.ts`.
 //
-// Reactive integration (binding `Signal`s, running on signal
-// writes, etc.) lives in a separate package — see
-// `_proto-relate3/cluster.ts`. Time-stepping (velocity, dt,
-// gravity) lives in that same package's `simulation.ts`.
-//
-// The solver answers the time-free question: "given an inertial
-// anchor `y` and constraints, find `x`."
+// Solver answers: "given an inertial anchor `y` and a set of
+// constraints, find `x` near `y` that satisfies them."
 
 import type { Force } from "./force";
 import { PENALTY_MAX, PENALTY_MIN } from "./force";
@@ -132,22 +128,11 @@ export class Solver {
     this.dims[id] = dim;
     this.offsets[id] = off;
     this.masses[id] = 1;
-    if (init) {
-      for (let k = 0; k < dim; k++) {
-        const v = init[k] ?? 0;
-        this.positions[off + k] = v;
-        this.initials[off + k] = v;
-        this.inertials[off + k] = v;
-      }
-    } else {
-      // Already zero-initialised by Float64Array, but make it
-      // explicit for clarity / future-proofing if we ever switch
-      // to a non-zero-init store.
-      for (let k = 0; k < dim; k++) {
-        this.positions[off + k] = 0;
-        this.initials[off + k] = 0;
-        this.inertials[off + k] = 0;
-      }
+    for (let k = 0; k < dim; k++) {
+      const v = init?.[k] ?? 0;
+      this.positions[off + k] = v;
+      this.initials[off + k] = v;
+      this.inertials[off + k] = v;
     }
     this._totalDof += dim;
     this._cellCount++;
@@ -406,7 +391,7 @@ export class Solver {
         fLambda[r]! = newLambda;
         const absLambda = newLambda < 0 ? -newLambda : newLambda;
         if (absLambda >= fFracture[r]!) {
-          f.disable();
+          f.dispose();
           break;
         }
         if (newLambda > lo && newLambda < hi) {

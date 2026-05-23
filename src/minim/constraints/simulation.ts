@@ -1,11 +1,11 @@
 // simulation.ts — time-stepping wrapper around `Cluster`.
 //
-// Same shape as `_proto-avbd/simulation.ts` but operates on a
-// `Cluster` (which owns signal binding) instead of a raw `Solver`.
-// The signal sync — read all bound signals before tick, write
-// solved values back after — uses `writeBack` so the cluster's
-// own internal effect doesn't re-fire on the writeback (it would
-// otherwise treat its own writes as user changes).
+// Wraps a `Cluster`'s solver with velocity, gravity, and a `tick`
+// that advances by `dt` seconds. The simulation owns the time
+// loop and disposes the cluster's reactive driver on construction;
+// signal sync (read all bound signals before tick, write solved
+// values back after) goes through `writeBack` so the writeback
+// doesn't re-trigger anything that just wrote a signal.
 
 import type { Tick } from "../core/anim";
 import type { Pack, Signal } from "../signals";

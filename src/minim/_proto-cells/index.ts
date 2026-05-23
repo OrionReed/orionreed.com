@@ -1,25 +1,27 @@
 // _proto-cells — prototype rewrite of the signals engine.
 //
 // Goals (from the original challenge):
-//   1. Glitch-free; passes the existing signal tests.
+//   1. Glitch-free; passes the existing signal tests + RFTS suite.
 //   2. As-fast-or-faster than current.
-//   3. More correct: explicit law tagging on lens layers (Iso /
-//      Projection / Stateful / Opaque) so non-invertibles compose
-//      honestly.
+//   3. More correct: stateful bwds use the engine-supplied `s` arg
+//      honestly (no `this.peek()` side-channel).
 //   4. More expressive: bidirectional `relate(a, b, fwd, bwd)`
-//      primitive that admits multi-root writes for re-orientable
-//      relations (the alga case).
+//      primitive that admits multi-root writes (the alga case).
 //
 // Design:
 //   - `Signal` is the same single-class signal/computed/lens primitive
 //     as alien-signals v2, with the same flag dispatch.
-//   - The `_fusedOf` tag now carries an explicit `LensLaw` rather than
-//     the binary `bwdStateless`. The setter is built from the fused
-//     law: Iso chains use a stateless setter; Stateful chains thread
-//     `priorFwd(s)` honestly; Projection chains short-circuit when
-//     idempotent.
-//   - `preEffect` removed — failed experiment in the original code,
-//     unnecessary now that bidirectional relations live in `relate.ts`.
+//   - Statefulness is **arity-inferred** from `bwd.length`:
+//       through(v => v + 1, v => v - 1)         // stateless (iso)
+//       through(v => v, (v, s) => stateful_fn)  // stateful
+//     No explicit law tag — `bwd.length >= 2` declares intent.
+//   - `_fusedOf.stateful: boolean` flag composes by OR — any stateful
+//     layer poisons the chain upward.
+//   - `_fusedOf.fieldPath` enables a path-walking spread-replace fast
+//     path for chains of `field()` lenses (3.5× faster writes than the
+//     generic stateful composition).
+//   - `preEffect` removed — failed experiment; `writeBack` (with
+//     active-sub exclusion) is the cleaner replacement.
 
 export {
   batch,
@@ -75,3 +77,5 @@ export {
 } from "./writable";
 
 export { relate, type Relation } from "./relate";
+
+export { fanin } from "./fanin";

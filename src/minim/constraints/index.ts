@@ -1,35 +1,28 @@
 // constraints/ — reactive constraint engine.
 //
 // AVBD-based solver tightly integrated with the signals layer.
-// Designed to scale from "set two values equal" to sketchpad-style
-// scenes (1000s of points, lines, hard joints, soft springs).
+// Scales from "make two values equal" to sketchpad-style scenes
+// (thousands of points, lines, joints, springs).
 //
 // Layered as:
 //
-//   - Numerical kernel (signal-free):
-//       solver.ts   — `Solver`, SOA cell state + AVBD inner loop.
-//       force.ts    — `Force` base class.
-//       forces.ts   — Concrete `*Force` subclasses (`EqForce`,
-//                     `DistanceForce`, `LensNumForce`,
-//                     `BoundsForce`, `SoftTargetForce`,
-//                     `GenericForce`) + `Strength` constants.
-//       linalg.ts   — Sparse SPD solve, clamp, etc.
+//   Numerical kernel (signal-free):
+//     solver.ts     `Solver`, SOA cell state + AVBD inner loop.
+//     force.ts      `Force` base class.
+//     forces.ts     `*Force` subclasses + `Strength` constants.
+//     linalg.ts     Sparse SPD solve helpers.
 //
-//   - Reactive integration:
-//       cluster.ts    — `Cluster`: binds `Signal`s to a `Solver`.
-//                       Wraps a regular `effect()` whose writebacks
-//                       go through `signal.writeBack(value)` for
-//                       structural termination.
-//       factories.ts  — Signal-aware constraint factories: `eq`,
-//                       `distance`, `spring`, `lensNum`, `clamp`,
-//                       `bounded`, `leq`, `geq`, `softTarget`,
-//                       `generic`, plus sketchpad primitives
-//                       (`angle`, `parallel`, `perpendicular`,
-//                       `collinear`, `onCircle`, `equalDist`,
-//                       `midpoint`).
-//       simulation.ts — `Simulation`: time-stepping wrapper
-//                       (velocity, gravity). Composes with
-//                       `core/anim` via `animate()`.
+//   Reactive integration:
+//     cluster.ts    `Cluster`: binds `Signal`s to a `Solver`,
+//                   solves on writes, writes back without re-firing
+//                   (via `signal.writeBack`).
+//     factories.ts  Signal-aware constraint constructors (`eq`,
+//                   `distance`, `spring`, `lensNum`, `clamp`, `leq`,
+//                   `geq`, `softTarget`, `generic`, plus sketchpad
+//                   primitives: `angle`, `parallel`, `perpendicular`,
+//                   `collinear`, `onCircle`, `equalDist`, `midpoint`).
+//     simulation.ts `Simulation`: velocity + gravity time-stepper,
+//                   integrates with `core/anim`.
 //
 // Reference: Giles, Diaz, Yuksel (2025). Augmented Vertex Block
 // Descent. ACM TOG 44(4) — SIGGRAPH 2025. Extends Chen et al.
@@ -39,8 +32,6 @@
 export { Cluster } from "./cluster";
 export {
   angle,
-  type Bindable,
-  bounded,
   clamp,
   collinear,
   distance,

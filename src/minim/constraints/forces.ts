@@ -1,12 +1,10 @@
-// constraints.ts — concrete Force subclasses (numerical kernel).
+// forces.ts — concrete `Force` subclasses (numerical kernel).
 //
-// Each subclass operates on cell ids (`number`) into the solver's
-// SOA buffers. Subclasses read positions via `solver.positions` /
-// `solver.offsets`. Constructors take `(Solver, ...cellIds, ...)`.
-//
-// The user-facing factory functions that accept `Signal`s live in
-// `_proto-relate3/constraints.ts` (a layer above this module).
-// This module is signal-free.
+// Each subclass operates on cell ids into the solver's SOA buffers.
+// Subclasses read positions via `solver.positions` / `solver.offsets`,
+// and write Jacobian / Hessian column norms into `J[ci]` / `HCols[ci]`.
+// Constructors take `(solver, ...cellIds, ...args)`. The signal-aware
+// factories that accept `Signal`s live in `factories.ts`.
 
 import { Force } from "./force";
 import { Solver } from "./solver";
