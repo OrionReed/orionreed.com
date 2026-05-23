@@ -80,29 +80,6 @@ export function setSignalWriteHook(fn: ((sig: Signal<unknown>) => void) | undefi
   };
 }
 
-// ─── Pre-effects (for read-write coupled subsystems) ─────────────────
-//
-// `preEffect(fn)` is a peer of `effect(fn)` with two semantic
-// differences that together make it suitable for systems that read
-// signals AND write back (constraint solvers, propagators, two-way
-// data binding, etc.):
-//
-//   1. **Pre-flush phase.** Pre-effects drain *before* regular
-//      effects, so subscribers reading via `effect()` see post-
-//      processing values, not stale ones.
-//
-//   2. **Self-trigger suppressed.** Writes inside the pre-effect's
-//      run don't re-queue the same pre-effect. Without this, a
-//      read-write effect that touches its own dependencies would
-//      loop forever.
-//
-// Pre-effects are otherwise identical to effects: same dependency
-// tracking, same cleanup, same `dispose()` semantics. Multiple pre-
-// effects can coexist; each gets its own self-mute scope.
-
-const preQueued: (PreEffect | undefined)[] = [];
-let preNotifyIndex = 0;
-let preQueuedLength = 0;
 
 // ─── alien-signals algorithm — link / unlink / propagate / etc. ──────
 
@@ -298,22 +275,10 @@ function flush(): void {
   if (flushing) return;
   flushing = true;
   try {
-    // Outer loop: alternate draining pre-effects and regular effects.
-    // A pre-effect's writes can queue more effects; an effect's
-    // writes can queue more pre-effects. Continue until both queues
-    // are empty.
-    for (;;) {
-      while (preNotifyIndex < preQueuedLength) {
-        const pe = preQueued[preNotifyIndex]!;
-        preQueued[preNotifyIndex++] = undefined;
-        pe._run();
-      }
-      if (notifyIndex >= queuedLength) break;
-      while (notifyIndex < queuedLength) {
-        const e = queued[notifyIndex]!;
-        queued[notifyIndex++] = undefined;
-        e._run();
-      }
+    while (notifyIndex < queuedLength) {
+      const e = queued[notifyIndex]!;
+      queued[notifyIndex++] = undefined;
+      e._run();
     }
   } finally {
     while (notifyIndex < queuedLength) {
@@ -321,13 +286,6 @@ function flush(): void {
       queued[notifyIndex++] = undefined;
       e.flags |= F.Watching | F.Recursed;
     }
-    while (preNotifyIndex < preQueuedLength) {
-      const pe = preQueued[preNotifyIndex]!;
-      preQueued[preNotifyIndex++] = undefined;
-      pe.flags |= F.Watching | F.Recursed;
-    }
-    preNotifyIndex = 0;
-    preQueuedLength = 0;
     notifyIndex = 0;
     queuedLength = 0;
     flushing = false;
@@ -917,13 +875,9 @@ export class Signal<T = unknown> implements ReactiveNode {
       this.flags = F.Mutable | F.Dirty;
       if (writeHook !== undefined) writeHook(this as Signal<unknown>);
       const subs = this.subs;
-      if (subs !== undefined) propagate(subs, runDepth > 0, excluding);
-      // Flush if there's any work pending: this signal's subs OR
-      // pre-effects queued from external invalidate calls (e.g. a
-      // constraint solver that registered a new binding earlier
-      // and is waiting for a write to drive a re-subscribe run).
-      if (batchDepth === 0 && (subs !== undefined || preQueuedLength > preNotifyIndex)) {
-        flush();
+      if (subs !== undefined) {
+        propagate(subs, runDepth > 0, excluding);
+        if (batchDepth === 0) flush();
       }
     }
   }
@@ -1095,55 +1049,6 @@ class Effect implements ReactiveNode {
   }
 }
 
-// ─── PreEffect (pre-flush phase) ─────────────────────────────────────
-//
-// Identical to Effect except `_notify` enqueues into `preQueued`,
-// which `flush()` drains before regular effects. Self-mute during
-// the pre-effect's own run is already provided by alien-signals'
-// `RecursedCheck` flag — `propagate` skips notifying any sub that
-// has `RecursedCheck` set, which is exactly the state we're in
-// while `fn()` is executing.
-class PreEffect extends Effect {
-  override _notify(): void {
-    // Dedup: only queue if Watching is still set (cleared on first
-    // queue, restored each `_run`). Without this, a propagate
-    // following each of N rapid signal writes would push us to the
-    // queue N times.
-    if (!(this.flags & F.Watching)) return;
-    preQueued[preQueuedLength++] = this;
-    this.flags &= ~F.Watching;
-  }
-
-  override _run(): void {
-    super._run();
-    // Self-write hygiene. While `fn` runs, writes to signals we're
-    // subscribed to set `Pending|Recursed` on us via `propagate`'s
-    // branch 4 (RecursedCheck protects _notify, so we aren't re-
-    // queued at this point). The residual Pending later trips
-    // `shallowPropagate` — when a subscribed signal is read while
-    // still Dirty, it sees `(Pending|Dirty) === Pending` on us and
-    // re-queues. That's a false positive: our writes already
-    // produced the value the reader is about to see. Clear the
-    // residue so subsequent reads don't ping us back.
-    this.flags &= ~(F.Pending | F.Recursed | F.Dirty);
-  }
-
-  /** External re-queue. Used by relation engines that want to
-   *  refresh the preEffect's dependency set after registering
-   *  new tracked signals (e.g. on `solver.bind()`). Sets Dirty so
-   *  `_run` actually executes `fn` (otherwise alien-signals'
-   *  dirty-check would skip a clean effect's body), and pushes
-   *  to the pre-flush queue if not already queued. */
-  invalidate(): void {
-    if (this.flags & F.Watching) {
-      preQueued[preQueuedLength++] = this;
-      this.flags = (this.flags & ~F.Watching) | F.Dirty;
-    } else {
-      this.flags |= F.Dirty;
-    }
-  }
-}
-
 // ─── Public factories ────────────────────────────────────────────────
 
 /** Writable source. Returns a branded `Signal<T>` so `.value =` is
@@ -1169,28 +1074,6 @@ export function lens<T>(getter: () => T, setter: (v: T) => void): Writable<Signa
 export function effect(fn: () => void | (() => void)): () => void {
   const e = new Effect(fn);
   return () => e._unwatched();
-}
-
-/** Handle returned by `preEffect()`. `dispose()` removes the
- *  pre-effect; `invalidate()` queues it for re-run on the next
- *  flush (used when external state changes that the pre-effect
- *  needs to re-subscribe to — e.g. a constraint solver's binding
- *  list grew). */
-export interface PreEffectHandle {
-  dispose(): void;
-  invalidate(): void;
-}
-
-/** Like `effect()`, but drains in pre-flush phase and self-mutes
- *  during its own run. The right primitive for read-write coupled
- *  subsystems (constraint solvers, propagators, two-way bindings).
- *  See the PreEffect class header for details. */
-export function preEffect(fn: () => void | (() => void)): PreEffectHandle {
-  const e = new PreEffect(fn);
-  return {
-    dispose: () => e._unwatched(),
-    invalidate: () => e.invalidate(),
-  };
 }
 
 export function batch<R>(fn: () => R): R {

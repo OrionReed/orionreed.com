@@ -55,8 +55,6 @@ export {
   lazy,
   lens,
   type Of,
-  type PreEffectHandle,
-  preEffect,
   type Read,
   Signal,
   type SignalOptions,
