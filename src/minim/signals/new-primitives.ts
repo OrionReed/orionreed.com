@@ -27,12 +27,16 @@ export function angleLens(a: Signal<V>, b: Signal<V>): Num {
   return fanin(Num, [a, b] as const, vals => Math.atan2(vals[1].y - vals[0].y, vals[1].x - vals[0].x));
 }
 
-/** Reflect `point` across the perpendicular bisector of `axisStart` →
- *  `axisEnd`. RO. */
-export function reflectionLens(point: Signal<V>, axisStart: Signal<V>, axisEnd: Signal<V>): Vec {
-  return fanin(Vec, [point, axisStart, axisEnd] as const, vals => {
-    const [p, a, b] = vals;
-    // Project onto axis, then mirror.
+/** Reflect `point` across the line through `axisStart` and `axisEnd`.
+ *  Bidirectional: writes the reflected position back to `point`
+ *  (axis is unchanged). Reflection is involutive — the same projection
+ *  formula reads and writes. */
+export function reflectionLens(
+  point: Signal<V>,
+  axisStart: Signal<V>,
+  axisEnd: Signal<V>,
+): Writable<Vec> {
+  const reflect = (p: V, a: V, b: V): V => {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const len2 = dx * dx + dy * dy;
@@ -41,7 +45,13 @@ export function reflectionLens(point: Signal<V>, axisStart: Signal<V>, axisEnd: 
     const projX = a.x + t * dx;
     const projY = a.y + t * dy;
     return { x: 2 * projX - p.x, y: 2 * projY - p.y };
-  });
+  };
+  return fanin(
+    Vec,
+    [point, axisStart, axisEnd] as const,
+    vals => reflect(vals[0], vals[1], vals[2]),
+    (target, vals) => [reflect(target, vals[1], vals[2]), undefined, undefined] as never,
+  );
 }
 
 /** Linear interpolation between two Vecs at parameter `t`. Both

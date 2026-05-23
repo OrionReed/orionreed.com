@@ -239,11 +239,11 @@ The bidirectional story extends to `vec(num, num)` (writes propagate to both axe
 
 <md-gears></md-gears>
 
-The lenses don't care what the values *mean*. A colour has two natural coordinate systems — HSL and RGB — and the conversion between them is a bijection. Make HSL canonical, expose R/G/B as `Num.lens(hslToRgb, rgbToHsl)`, render the picker on a polar wheel and three RGB sliders, and you get five draggable inputs all manipulating the same state from different coordinate systems. Drag the wheel, the RGB sliders move. Drag a slider, the wheel picker moves. *Same colour, two views.*
+The lenses don't care what the values *mean*. A colour has two natural coordinate systems — HSL and RGB — and the conversion between them is a bijection. Make HSL canonical, expose each R/G/B as `fanin([h, s, l], hslToRgb, rgbToHsl)` — a 3-input lens that reads through the bijection on the way out and back through it on the way in — render the picker on a polar wheel and three RGB sliders, and you get five draggable inputs all manipulating the same state from different coordinate systems. Drag the wheel, the RGB sliders move. Drag a slider, the wheel picker moves. *Same colour, two views.*
 
 <md-color></md-color>
 
-Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. The escape hatch for relations that don't fit a chain is the explicit `Num.lens(get, set)` form: write the forward computation and the inverse, get the same bidirectional semantics.
+Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. When the relation needs to read multiple sources or distribute writes across them, `fanin(Cls, parents, fwd, bwd)` is the n-input generalisation: read aggregates through `fwd`, writes split via `bwd` and apply atomically. The escape hatch for everything else is the explicit `Cls.lens(get, set)` form, or `relate(a, b, fwd, bwd)` for re-orientable bidirectional bindings between two existing signals (either side can be the driver).
 
 <md-pulley></md-pulley>
 
@@ -314,6 +314,12 @@ Pair `gap` with rectangular containment (`inside(P, xLo, yLo, xHi, yHi)` — fou
 Stack rigid links inside the same scene and you have rigid bodies. Each body below is three small circles in an equilateral triangle, rigidified by three hard distance constraints — the count works out exactly: 3 cells × 2 DOF − 3 distances = 3 DOF, the translation and rotation of a 2D rigid body. Pairwise `gap` between every cell of *different* bodies handles non-overlap; `inside` keeps everything in the box. Drop them under gravity and they tumble, stack, and shove each other around. Drag any circle and its whole body translates and rotates rigidly.
 
 <md-rigid-bodies></md-rigid-bodies>
+
+The same engine handles **proper** rigid bodies just as well — boxes with full position + rotation, contact constraints with friction, stacking, the whole show. A rigid body in this version is a single 3-DOF cell `(x, y, θ)` with a diagonal mass matrix `(m, m, I)` (linear and rotational inertia). Box-box collisions are detected by SAT (the same algorithm Box2D uses) and turned into `BoxContact` forces with normal and tangential rows; the tangential clamp is set per-iteration to `±μ·|λ_normal|` for Coulomb friction. Edge identifiers carry across frames so penalty and λ warm-start correctly through contact events. Drop a pyramid of dynamic boxes onto a static floor and they stack and settle:
+
+<md-rigid-stack></md-rigid-stack>
+
+The same `Cluster` + `Simulation` that runs the cloth, the chain, and the algebraic equation solver runs this — only the constraint shapes and the cell dimension differ. The solver's `dim = 3` primal-sweep specialization (one hand-unrolled local Newton per body) means the rigid path doesn't pay any "generality tax" relative to a hand-rolled physics engine.
 
 The same pattern works on a 1D submanifold inside 2D. Each circle gets a Vec position `P` and a scalar parameter `t`, coupled by a `generic` constraint that fixes `P = (R·sin t, R·sin 2t / 2)` — the figure-8 Lissajous map. Pairwise `gap` enforces non-overlap in 2D; the curve constraint enforces incidence. Drag any circle and it slides along the curve, scooting the others aside; near the self-intersection at the origin, the constraint admits both branches and the solver may flip from one to the other (the multi-solution caveat the factories header warns about).
 

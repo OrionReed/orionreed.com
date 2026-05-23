@@ -1,23 +1,18 @@
 // md-cloth.ts — gravity-driven cloth simulation.
 //
-// 14×10 grid of point masses linked by horizontal and vertical
-// `spring`s (no diagonals — keeps the cloth soft). Top corners
-// are pinned. Drag any node and it leads while the rest reflows
-// under gravity.
+// 14×10 grid of point masses with three force types:
+//   - horizontal + vertical edge springs (stretching resistance)
+//   - 3-point `bend`s along rows and columns (bending resistance)
 //
-// Soft springs at `Strength.MEDIUM` (k=1e3), not hard `distance`.
-// Two reasons:
-//   1. Hard's augmented Lagrangian compounds drift in coupled
-//      networks — a 14×10 grid is wide enough that pin info
-//      doesn't reach the bottom in any reasonable iteration count.
-//   2. At `dt = 1/60`, very stiff springs (Strength.STRONG and up)
-//      drive the local Newton's mass-vs-stiffness ratio past the
-//      sweet spot for the warm-start step; iterations spent on
-//      sub-frame oscillation rather than equilibrium. Probed on
-//      this exact scene: k=1e3 settles to ~1 px/sec residual after
-//      drag, k=1e6 leaves ~7 px/sec.
+// `postStabilize` runs the AVBD paper's recommended physics
+// loop: regular iters with α=1 (drift-tolerant), then one final
+// α=0 iter to zero the residual at frame end. Adaptive warm-start
+// (default-on when gravity is present) attenuates the gravity
+// term in the position seed for cells that are being supported
+// by their constraints, killing the residual jitter that
+// supported bodies otherwise produce.
 
-import { Cluster, Simulation, Strength, spring } from "@minim/constraints";
+import { bend, Cluster, Simulation, Strength, spring } from "@minim/constraints";
 import {
   Anchor,
   Diagram,
@@ -53,8 +48,9 @@ export class MdCloth extends Diagram {
       grid.push(row);
     }
 
-    const cluster = new Cluster({ iterations: 30 });
+    const cluster = new Cluster({ iterations: 12, postStabilize: true });
 
+    // Edge springs — resist stretching.
     for (let j = 0; j < H; j++) {
       for (let i = 1; i < W; i++)
         spring(cluster, grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM);
@@ -62,6 +58,16 @@ export class MdCloth extends Diagram {
     for (let i = 0; i < W; i++) {
       for (let j = 1; j < H; j++)
         spring(cluster, grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM);
+    }
+
+    // 3-point bends — resist folding (the missing piece for cloth-like drape).
+    for (let j = 0; j < H; j++) {
+      for (let i = 2; i < W; i++)
+        bend(cluster, grid[j]![i - 2]!, grid[j]![i - 1]!, grid[j]![i]!, 0.5);
+    }
+    for (let i = 0; i < W; i++) {
+      for (let j = 2; j < H; j++)
+        bend(cluster, grid[j - 2]![i]!, grid[j - 1]![i]!, grid[j]![i]!, 0.5);
     }
 
     cluster.pin(grid[0]![0]!);
@@ -86,7 +92,7 @@ export class MdCloth extends Diagram {
       effect(() => (h.dragging.value ? cluster.pin(sig) : undefined));
     }
 
-    const sim = new Simulation(cluster, { gravity: [0, 200], damping: 0.98 });
+    const sim = new Simulation(cluster, { gravity: [0, 90], damping: 0.99 });
     this.anim.start(drive(tick => sim.tick(tick.dt)));
 
     s(

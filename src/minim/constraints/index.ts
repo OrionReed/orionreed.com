@@ -32,6 +32,7 @@
 export { Cluster } from "./cluster";
 export {
   angle,
+  bend,
   clamp,
   collinear,
   distance,
@@ -52,6 +53,7 @@ export {
   spring,
 } from "./factories";
 export { Force, LAMBDA_MAX, PENALTY_MAX, PENALTY_MIN } from "./force";
+export { Body, type BodyOpts, BoxContact, RigidWorld, type RigidWorldOpts } from "./rigid";
 export {
   BoundsForce,
   DistanceForce,

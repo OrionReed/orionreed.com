@@ -44,6 +44,22 @@ describe("reflectionLens", () => {
     const r = reflectionLens(p, a, b);
     expect(r.value).toEqual({ x: 2, y: -5 });
   });
+
+  it("writes propagate back through the involution to `point`", () => {
+    const p = vec(2, 5);
+    const a = vec(0, 0);
+    const b = vec(10, 0);
+    const r = reflectionLens(p, a, b);
+    expect(r.value).toEqual({ x: 2, y: -5 });
+    // Drag the reflected point: write back through the (involutive)
+    // bwd. Original point updates; axis untouched.
+    r.value = { x: 7, y: -3 };
+    expect(p.value).toEqual({ x: 7, y: 3 });
+    expect(a.value).toEqual({ x: 0, y: 0 });
+    expect(b.value).toEqual({ x: 10, y: 0 });
+    // Forward read reflects again — should match what we wrote.
+    expect(r.value).toEqual({ x: 7, y: -3 });
+  });
 });
 
 describe("vecLerp", () => {

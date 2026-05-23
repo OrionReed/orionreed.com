@@ -219,6 +219,28 @@ export function rightAngle(c: Cluster, A: S, B: S, C: S): GenericForce {
   });
 }
 
+/** Soft 3-point bending resistance at vertex B. Penalizes the cross
+ *  product `(B − A) × (C − B)`, which is zero when A, B, C are
+ *  collinear — so the constraint pulls toward a straight line through
+ *  the three points (rest angle = π). The stiffness controls how
+ *  cloth-like (low) versus paper-like (high) the structure feels.
+ *  Used in cloth and rope sims to give bending resistance on top of
+ *  edge-length springs. */
+export function bend(c: Cluster, A: S, B: S, C: S, stiffness: number = Strength.MEDIUM): GenericForce {
+  return generic(
+    c,
+    [A, B, C],
+    1,
+    (pos, out) => {
+      const a = pos[0]!, b = pos[1]!, cc = pos[2]!;
+      const ux = b[0]! - a[0]!, uy = b[1]! - a[1]!;
+      const vx = cc[0]! - b[0]!, vy = cc[1]! - b[1]!;
+      out[0]! = ux * vy - uy * vx;
+    },
+    { hard: false, stiffness },
+  );
+}
+
 /** Point P on line AB. */
 export function collinear(c: Cluster, P: S, A: S, B: S): GenericForce {
   return generic(c, [P, A, B], 1, (pos, out) => {

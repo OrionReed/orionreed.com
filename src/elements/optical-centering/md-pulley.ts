@@ -3,6 +3,7 @@ import {
   circle,
   Diagram,
   drag,
+  fanin,
   label,
   line,
   Mount,
@@ -32,13 +33,14 @@ export class MdPulley extends Diagram {
     const bDrop = aDrop.affine(-1, TOTAL);
 
     // A weight hangs from its tangent on the wheel: x locked to the
-    // tangent, y rides the drop signal. Drag writes back through y.
+    // tangent, y rides the drop signal. 2-input fanin reads both,
+    // writes only `drop`; tangent is read-only at this layer.
     const hang = (tangent: Vec, drop: Writable<Num>) =>
-      Vec.lens(
-        () => ({ x: tangent.value.x, y: tangent.value.y + drop.value }),
-        p => {
-          drop.value = p.y - tangent.value.y;
-        },
+      fanin(
+        Vec,
+        [tangent, drop] as const,
+        vals => ({ x: vals[0].x, y: vals[0].y + vals[1] }),
+        (target, vals) => [undefined, target.y - vals[0].y],
       );
     const aPos = hang(leftTan, aDrop);
     const bPos = hang(rightTan, bDrop);

@@ -1,10 +1,10 @@
 import {
   Anchor,
-  batch,
   circle,
   computed,
   Diagram,
   drag,
+  fanin,
   label,
   line,
   Mount,
@@ -71,22 +71,21 @@ export class MdColor extends Diagram {
         `hsl(${hue.value.toFixed(0)}deg, ${(sat.value * 100).toFixed(0)}%, ${(lit.value * 100).toFixed(0)}%)`,
     );
 
-    // R, G, B are lenses through the bijection. Reading converts
-    // HSL → RGB; writing converts the new RGB back and updates all
-    // three HSL signals atomically — so the wheel and L slider also
-    // move when any RGB channel is dragged.
+    // R, G, B are 3-input fanin lenses through the bijection. Reading
+    // converts HSL → RGB; writing converts the new RGB back and
+    // updates all three HSL signals atomically (fanin's batch).
+    // `vals` arrives pre-peeked; the bwd returns the new (h, s, l)
+    // tuple; fanin handles the batched writeback.
     const rgbChannel = (idx: "r" | "g" | "b"): Writable<Num> =>
-      Num.lens(
-        () => hslToRgb(hue.value, sat.value, lit.value)[idx],
-        v => {
-          const cur = hslToRgb(hue.peek(), sat.peek(), lit.peek());
-          const next = { ...cur, [idx]: clamp01(v) };
+      fanin(
+        Num,
+        [hue, sat, lit] as const,
+        vals => hslToRgb(vals[0], vals[1], vals[2])[idx],
+        (target, vals) => {
+          const cur = hslToRgb(vals[0], vals[1], vals[2]);
+          const next = { ...cur, [idx]: clamp01(target) };
           const out = rgbToHsl(next.r, next.g, next.b);
-          batch(() => {
-            hue.value = out.h;
-            sat.value = out.s;
-            lit.value = out.l;
-          });
+          return [out.h, out.s, out.l];
         },
       );
     const r = rgbChannel("r");
@@ -167,7 +166,7 @@ export class MdColor extends Diagram {
       }),
       label(
         view.bottom.up(16),
-        "R/G/B = Num.lens(hslToRgb, rgbToHsl) · drag any view; every other view updates through the bijection",
+        "R/G/B = fanin([h, s, l], hslToRgb, rgbToHsl) · drag any view; every other view updates through the bijection",
         { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );

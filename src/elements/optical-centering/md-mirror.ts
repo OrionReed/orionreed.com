@@ -3,28 +3,13 @@ import {
   Diagram,
   handle,
   label,
-  lens,
   line,
   Mount,
-  type Of,
+  reflectionLens,
   Vec,
   vec,
   type Writable,
 } from "../../minim";
-
-type VecValue = Of<Vec>;
-
-/** Reflect `p` across line a–b; returns `p` unchanged when a==b. */
-function reflect(p: VecValue, a: VecValue, b: VecValue): VecValue {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len2 = dx * dx + dy * dy;
-  if (len2 === 0) return p;
-  const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
-  const fx = a.x + t * dx;
-  const fy = a.y + t * dy;
-  return { x: 2 * fx - p.x, y: 2 * fy - p.y };
-}
 
 export class MdMirror extends Diagram {
   protected scene(s: Mount): void {
@@ -33,14 +18,11 @@ export class MdMirror extends Diagram {
     const mA = vec(360, 30);
     const mB = vec(360, 330);
 
-    // Reflection is an involution — same formula reads and writes.
-    const mirrorOf = (src: Writable<Vec>): Writable<Vec> =>
-      Vec.lens(
-        () => reflect(src.value, mA.value, mB.value),
-        target => {
-          src.value = reflect(target, mA.value, mB.value);
-        },
-      );
+    // Reflection is an involution — `reflectionLens` reads `reflect(src,
+    // mA, mB)` and on writes applies the same formula to land back in
+    // src. The lens is itself a 3-input fanin; only `src` is updated
+    // on writes (the axis stays put).
+    const mirrorOf = (src: Writable<Vec>): Writable<Vec> => reflectionLens(src, mA, mB);
 
     const stemTop = vec(200, 90);
     const stemBot = vec(200, 270);
@@ -93,7 +75,7 @@ export class MdMirror extends Diagram {
       }),
       label(
         view.bottom.up(16),
-        "lens(read = reflect,  write = reflect)  ·  one formula, both directions",
+        "reflectionLens(p, mA, mB)  ·  one involutive formula, both directions",
         { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );

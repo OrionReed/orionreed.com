@@ -7,6 +7,7 @@ import {
   compose,
   computed,
   effect,
+  fanin,
   lazy,
   Matrix,
   meanLens,
@@ -211,23 +212,29 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   }
 
   #makeAnchor(u: number, v: number): Writable<Vec> {
-    const boxSig = this.box;
-    const lf = this.localFrame;
-    const tr = this.transform;
-    return Vec.lens(
-      () => {
-        const b = boxSig.value;
-        return transformPoint(lf.value, { x: b.x + u * b.w, y: b.y + v * b.h });
+    // 3-input fanin: reads `box`, `localFrame`, `transform.translate`;
+    // writes only `transform.translate` (other slots `undefined`).
+    // The bwd shifts the translate by the world-space drag delta so
+    // the anchor lands at the target — anchor-drag = body-translate.
+    return fanin(
+      Vec,
+      [this.box, this.localFrame, this.transform.translate] as const,
+      vals => {
+        const [b, m] = vals;
+        return transformPoint(m, { x: b.x + u * b.w, y: b.y + v * b.h });
       },
-      target => {
-        const b = boxSig.peek();
+      (target, vals) => {
+        const [b, m, tNow] = vals;
         const local = { x: b.x + u * b.w, y: b.y + v * b.h };
-        const currentWorld = transformPoint(lf.peek(), local);
-        const tNow = tr.translate.peek();
-        tr.translate.value = {
-          x: tNow.x + (target.x - currentWorld.x),
-          y: tNow.y + (target.y - currentWorld.y),
-        };
+        const currentWorld = transformPoint(m, local);
+        return [
+          undefined,
+          undefined,
+          {
+            x: tNow.x + (target.x - currentWorld.x),
+            y: tNow.y + (target.y - currentWorld.y),
+          },
+        ];
       },
     );
   }

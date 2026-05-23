@@ -156,7 +156,7 @@ describe("Simulation — numerical robustness", () => {
   });
 
   it("cloth grid under gravity settles (low residual velocity at end)", async () => {
-    const { Simulation, spring, Strength } = await import("../index");
+    const { bend, Simulation, spring, Strength } = await import("../index");
     const W = 8;
     const H = 6;
     const SP = 20;
@@ -166,18 +166,23 @@ describe("Simulation — numerical robustness", () => {
       for (let i = 0; i < W; i++) row.push(vec(i * SP, j * SP));
       grid.push(row);
     }
-    const c = new Cluster({ iterations: 10 });
+    // `postStabilize` + adaptive warm-start (default-on under gravity)
+    // are the AVBD physics defaults; this test pins them in.
+    const c = new Cluster({ iterations: 12, postStabilize: true });
     for (let j = 0; j < H; j++)
-      for (let i = 1; i < W; i++) spring(c, grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.STRONG);
+      for (let i = 1; i < W; i++) spring(c, grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM);
     for (let i = 0; i < W; i++)
-      for (let j = 1; j < H; j++) spring(c, grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.STRONG);
+      for (let j = 1; j < H; j++) spring(c, grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM);
+    for (let j = 0; j < H; j++)
+      for (let i = 2; i < W; i++) bend(c, grid[j]![i - 2]!, grid[j]![i - 1]!, grid[j]![i]!, 0.5);
+    for (let i = 0; i < W; i++)
+      for (let j = 2; j < H; j++) bend(c, grid[j - 2]![i]!, grid[j - 1]![i]!, grid[j]![i]!, 0.5);
     c.pin(grid[0]![0]!);
     c.pin(grid[0]![W - 1]!);
 
-    const sim = new Simulation(c, { gravity: [0, 90], damping: 0.96 });
+    const sim = new Simulation(c, { gravity: [0, 90], damping: 0.99 });
     for (let f = 0; f < 600; f++) sim.tick(1 / 60);
 
-    // After ten seconds the cloth should be stationary.
     let maxV = 0;
     for (let id = 0; id < c.solver.cellCount; id++) {
       const v = sim.velocity(id);
