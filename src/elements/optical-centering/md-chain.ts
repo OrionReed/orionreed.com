@@ -5,6 +5,7 @@
 // to lead. With each link a unit hard constraint and a `Simulation`
 // time-step, the chain behaves like a physical rope.
 
+import { Cluster, distance, Simulation } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -15,15 +16,14 @@ import {
   label,
   line,
   Mount,
-  vec,
   type Vec,
+  vec,
   type Writable,
 } from "../../minim";
-import { Cluster, distance, Simulation } from "@minim/constraints";
 
 type WVec = Writable<Vec>;
 
-const N = 40;
+const N = 20;
 const LINK = 12;
 
 export class MdChain extends Diagram {
@@ -36,7 +36,7 @@ export class MdChain extends Diagram {
       links.push(vec(anchor.value.x + i * LINK, anchor.value.y));
     }
 
-    const cluster = new Cluster({ iterations: 12 });
+    const cluster = new Cluster({ iterations: 12, alpha: 0.99 });
     for (let i = 1; i < N; i++) distance(cluster, links[i - 1]!, links[i]!, LINK);
     cluster.pin(anchor);
 
@@ -51,7 +51,7 @@ export class MdChain extends Diagram {
     const midHandle = s(handle(links[midIdx]!, { fill: "#e25c5c", r: 6 }));
     effect(() => (midHandle.dragging.value ? cluster.pin(links[midIdx]!) : undefined));
 
-    const sim = new Simulation(cluster, { gravity: [0, 220] });
+    const sim = new Simulation(cluster, { gravity: [0, 220], damping: 0.985 });
     this.anim.start(drive(tick => sim.tick(Math.min(tick.dt, 1 / 30))));
 
     s(

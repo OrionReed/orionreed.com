@@ -155,8 +155,8 @@ describe("Simulation — numerical robustness", () => {
     expect(Number.isFinite(b.value.y)).toBe(true);
   });
 
-  it("cloth grid under gravity stays bounded across many frames", async () => {
-    const { distance, Simulation } = await import("../index");
+  it("cloth grid under gravity settles (low residual velocity at end)", async () => {
+    const { Simulation, spring, Strength } = await import("../index");
     const W = 8;
     const H = 6;
     const SP = 20;
@@ -166,47 +166,121 @@ describe("Simulation — numerical robustness", () => {
       for (let i = 0; i < W; i++) row.push(vec(i * SP, j * SP));
       grid.push(row);
     }
-    const c = new Cluster({ iterations: 8 });
+    const c = new Cluster({ iterations: 10 });
     for (let j = 0; j < H; j++)
-      for (let i = 1; i < W; i++) distance(c, grid[j]![i - 1]!, grid[j]![i]!, SP);
+      for (let i = 1; i < W; i++) spring(c, grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.STRONG);
     for (let i = 0; i < W; i++)
-      for (let j = 1; j < H; j++) distance(c, grid[j - 1]![i]!, grid[j]![i]!, SP);
+      for (let j = 1; j < H; j++) spring(c, grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.STRONG);
     c.pin(grid[0]![0]!);
     c.pin(grid[0]![W - 1]!);
 
-    const sim = new Simulation(c, { gravity: [0, 120] });
-    for (let f = 0; f < 240; f++) sim.tick(1 / 60);
+    const sim = new Simulation(c, { gravity: [0, 90], damping: 0.96 });
+    for (let f = 0; f < 600; f++) sim.tick(1 / 60);
 
+    // After ten seconds the cloth should be stationary.
+    let maxV = 0;
+    for (let id = 0; id < c.solver.cellCount; id++) {
+      const v = sim.velocity(id);
+      maxV = Math.max(maxV, Math.hypot(v[0]!, v[1]!));
+    }
+    expect(maxV).toBeLessThan(2);
     for (let j = 0; j < H; j++) {
       for (let i = 0; i < W; i++) {
         const v = grid[j]![i]!.value;
         expect(Number.isFinite(v.x)).toBe(true);
         expect(Number.isFinite(v.y)).toBe(true);
-        expect(Math.abs(v.x)).toBeLessThan(1e4);
-        expect(Math.abs(v.y)).toBeLessThan(1e4);
       }
     }
   });
 
-  it("hanging chain stays bounded across many frames", async () => {
+  it("cloth recovers after aggressive drag (no compression / no jitter)", async () => {
+    const { Simulation, spring, Strength } = await import("../index");
+    const W = 14;
+    const H = 10;
+    const SP = 26;
+    const grid: WVec[][] = [];
+    for (let j = 0; j < H; j++) {
+      const row: WVec[] = [];
+      for (let i = 0; i < W; i++) row.push(vec(i * SP, j * SP));
+      grid.push(row);
+    }
+    // Mirrors the `<md-cloth>` demo's actual config.
+    const c = new Cluster({ iterations: 10 });
+    for (let j = 0; j < H; j++)
+      for (let i = 1; i < W; i++) spring(c, grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM);
+    for (let i = 0; i < W; i++)
+      for (let j = 1; j < H; j++) spring(c, grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM);
+    c.pin(grid[0]![0]!);
+    c.pin(grid[0]![W - 1]!);
+
+    const sim = new Simulation(c, { gravity: [0, 90], damping: 0.94 });
+    for (let f = 0; f < 60; f++) sim.tick(1 / 60);
+
+    const drag = grid[H - 1]![W - 1]!;
+    c.pin(drag);
+    let seed = 31;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0xffffffff;
+    };
+    for (let f = 0; f < 60; f++) {
+      drag.value = {
+        x: (W - 1) * SP + (rand() - 0.5) * 200,
+        y: (H - 1) * SP + (rand() - 0.5) * 200,
+      };
+      sim.tick(1 / 60);
+    }
+    const dragId = c.bind(drag);
+    c.solver.setMass(dragId, 1);
+
+    for (let f = 0; f < 600; f++) sim.tick(1 / 60);
+
+    let maxV = 0;
+    for (let id = 0; id < c.solver.cellCount; id++) {
+      const v = sim.velocity(id);
+      maxV = Math.max(maxV, Math.hypot(v[0]!, v[1]!));
+    }
+    // Empirically: across drag-seed sweeps this lands in the 1–5 px/sec
+    // range (vs ~20 with the user's earlier STRONG/MEDIUM mix); 8 leaves
+    // a safety margin for variation.
+    expect(maxV).toBeLessThan(8);
+    let minD = Infinity;
+    for (let j = 0; j < H; j++) {
+      for (let i = 1; i < W; i++) {
+        const a = grid[j]![i - 1]!.value;
+        const b = grid[j]![i]!.value;
+        minD = Math.min(minD, Math.hypot(b.x - a.x, b.y - a.y));
+      }
+    }
+    for (let i = 0; i < W; i++) {
+      for (let j = 1; j < H; j++) {
+        const a = grid[j - 1]![i]!.value;
+        const b = grid[j]![i]!.value;
+        minD = Math.min(minD, Math.hypot(b.x - a.x, b.y - a.y));
+      }
+    }
+    expect(minD).toBeGreaterThan(SP * 0.5);
+  });
+
+  it("hanging chain settles (low residual velocity at end)", async () => {
     const { distance, Simulation } = await import("../index");
     const N = 20;
     const LINK = 12;
     const links: WVec[] = [];
     for (let i = 0; i < N; i++) links.push(vec(i * LINK, 0));
-    const c = new Cluster({ iterations: 12 });
+    const c = new Cluster({ iterations: 12, alpha: 0.99 });
     for (let i = 1; i < N; i++) distance(c, links[i - 1]!, links[i]!, LINK);
     c.pin(links[0]!);
 
-    const sim = new Simulation(c, { gravity: [0, 220] });
-    for (let f = 0; f < 240; f++) sim.tick(1 / 60);
+    const sim = new Simulation(c, { gravity: [0, 220], damping: 0.985 });
+    for (let f = 0; f < 600; f++) sim.tick(1 / 60);
 
-    for (const sig of links) {
-      expect(Number.isFinite(sig.value.x)).toBe(true);
-      expect(Number.isFinite(sig.value.y)).toBe(true);
-      expect(Math.abs(sig.value.x)).toBeLessThan(1e4);
-      expect(Math.abs(sig.value.y)).toBeLessThan(1e4);
+    let maxV = 0;
+    for (let id = 0; id < c.solver.cellCount; id++) {
+      const v = sim.velocity(id);
+      maxV = Math.max(maxV, Math.hypot(v[0]!, v[1]!));
     }
+    expect(maxV).toBeLessThan(5);
   });
 });
 

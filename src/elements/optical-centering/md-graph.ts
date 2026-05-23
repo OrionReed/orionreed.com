@@ -5,6 +5,7 @@
 // overlap). Drag any node and the layout rearranges; the cluster
 // solves all O(N²) pair constraints + O(E) edges per drag.
 
+import { Cluster, gap, spring } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -15,11 +16,10 @@ import {
   label,
   line,
   Mount,
-  vec,
   type Vec,
+  vec,
   type Writable,
 } from "../../minim";
-import { Cluster, gap, spring } from "@minim/constraints";
 
 type WVec = Writable<Vec>;
 
@@ -31,16 +31,29 @@ interface Edge {
 // Planar-ish small graph: 16 nodes, ~30 edges, mostly tree-ish with
 // a few cross-links. Hand-laid so the layout untangles cleanly.
 const EDGES: readonly Edge[] = [
-  { a: 0, b: 1 }, { a: 0, b: 2 }, { a: 0, b: 3 },
-  { a: 1, b: 4 }, { a: 1, b: 5 },
-  { a: 2, b: 6 }, { a: 2, b: 7 },
-  { a: 3, b: 8 }, { a: 3, b: 9 },
-  { a: 4, b: 10 }, { a: 5, b: 10 },
-  { a: 6, b: 11 }, { a: 7, b: 11 },
-  { a: 8, b: 12 }, { a: 9, b: 12 },
-  { a: 10, b: 13 }, { a: 11, b: 13 }, { a: 12, b: 13 },
-  { a: 13, b: 14 }, { a: 14, b: 15 },
-  { a: 4, b: 6 }, { a: 5, b: 7 }, { a: 8, b: 9 },
+  { a: 0, b: 1 },
+  { a: 0, b: 2 },
+  { a: 0, b: 3 },
+  { a: 1, b: 4 },
+  { a: 1, b: 5 },
+  { a: 2, b: 6 },
+  { a: 2, b: 7 },
+  { a: 3, b: 8 },
+  { a: 3, b: 9 },
+  { a: 4, b: 10 },
+  { a: 5, b: 10 },
+  { a: 6, b: 11 },
+  { a: 7, b: 11 },
+  { a: 8, b: 12 },
+  { a: 9, b: 12 },
+  { a: 10, b: 13 },
+  { a: 11, b: 13 },
+  { a: 12, b: 13 },
+  { a: 13, b: 14 },
+  { a: 14, b: 15 },
+  { a: 4, b: 6 },
+  { a: 5, b: 7 },
+  { a: 8, b: 9 },
 ];
 const N = 16;
 const REST = 60;
@@ -82,7 +95,8 @@ export class MdGraph extends Diagram {
     this.anim.start(drive(() => cluster.update()));
 
     for (const e of EDGES) s(line(nodes[e.a]!, nodes[e.b]!, { thin: true, opacity: 0.5 }));
-    for (let i = 0; i < N; i++) s(circle(nodes[i]!, MIN_GAP / 2, { fill: "rgba(91, 141, 239, 0.18)", thin: true }));
+    for (let i = 0; i < N; i++)
+      s(circle(nodes[i]!, MIN_GAP / 2, { fill: "rgba(91, 141, 239, 0.18)", thin: true }));
 
     for (let i = 0; i < N; i++) {
       const sig = nodes[i]!;
@@ -91,11 +105,15 @@ export class MdGraph extends Diagram {
     }
 
     s(
-      label(view.top.down(20), "drag any node — soft springs along edges, hard gap between every pair", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(
+        view.top.down(20),
+        "drag any node — soft springs along edges, hard gap between every pair",
+        {
+          size: 12,
+          align: Anchor.Center,
+          opacity: 0.7,
+        },
+      ),
       label(
         view.bottom.up(16),
         `${N} nodes · ${EDGES.length} springs · ${(N * (N - 1)) / 2} pairwise gaps`,

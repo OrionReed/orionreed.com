@@ -15,11 +15,19 @@ export interface SimulationOpts {
   /** External acceleration (e.g. gravity). Length must be ≥ the
    *  largest cell dim in the cluster. Default: zero vector. */
   gravity?: ArrayLike<number>;
+  /** Multiplicative velocity damping applied each tick — `1` is no
+   *  damping (energy-conserving except for whatever the augmented
+   *  Lagrangian absorbs through constraint drift), `<1` bleeds
+   *  kinetic energy. Default `1`. Cloth and rope-like scenes with
+   *  many coupled hard constraints typically want `0.97`–`0.995`
+   *  to settle in finite time; rigid pendula are happy with `1`. */
+  damping?: number;
 }
 
 export class Simulation {
   readonly cluster: Cluster;
   readonly aExt: Float64Array;
+  damping: number;
   velocities: Float64Array;
   private _velocityCapacity: number;
 
@@ -32,6 +40,7 @@ export class Simulation {
     } else {
       this.aExt = new Float64Array(0);
     }
+    this.damping = opts.damping ?? 1;
     this._velocityCapacity = cluster.solver.positions.length;
     this.velocities = new Float64Array(this._velocityCapacity);
     // Tear down the cluster's reactive driver — Simulation owns the
@@ -111,12 +120,13 @@ export class Simulation {
 
     solver.solve(dt);
 
+    const damp = this.damping;
     for (let id = 0; id < N; id++) {
       if (masses[id]! <= 0) continue;
       const off = offsets[id]!;
       const dim = dims[id]!;
       for (let k = 0; k < dim; k++) {
-        velocities[off + k] = (positions[off + k]! - initials[off + k]!) / dt;
+        velocities[off + k] = ((positions[off + k]! - initials[off + k]!) / dt) * damp;
       }
     }
 

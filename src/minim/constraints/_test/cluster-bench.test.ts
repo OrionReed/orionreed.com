@@ -20,7 +20,7 @@ function buildChain(N: number, iters: number) {
 
 describe("relate3 perf sanity", () => {
   it("cloth 14×10 — drag a corner 30 times", async () => {
-    const { distance } = await import("../index");
+    const { spring, Strength } = await import("../index");
     const W = 14;
     const H = 10;
     const SP = 26;
@@ -30,11 +30,11 @@ describe("relate3 perf sanity", () => {
       for (let i = 0; i < W; i++) row.push(vec(i * SP, j * SP));
       grid.push(row);
     }
-    const c = new Cluster({ iterations: 8 });
+    const c = new Cluster({ iterations: 16 });
     for (let j = 0; j < H; j++)
-      for (let i = 1; i < W; i++) distance(c, grid[j]![i - 1]!, grid[j]![i]!, SP);
+      for (let i = 1; i < W; i++) spring(c, grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.STRONG);
     for (let i = 0; i < W; i++)
-      for (let j = 1; j < H; j++) distance(c, grid[j - 1]![i]!, grid[j]![i]!, SP);
+      for (let j = 1; j < H; j++) spring(c, grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.STRONG);
     c.pin(grid[0]![0]!);
     c.pin(grid[0]![W - 1]!);
     c.pin(grid[H - 1]![W - 1]!);
@@ -48,7 +48,7 @@ describe("relate3 perf sanity", () => {
       grid[H - 1]![W - 1]!.value = { x: (W - 1) * SP, y: (H - 1) * SP + dy };
     }
     const ms = (performance.now() - t0) / drags;
-    console.log(`  cloth ${W}×${H} iter=8: ${ms.toFixed(3)}ms / drag`);
+    console.log(`  cloth ${W}×${H} spring(STRONG) iter=16: ${ms.toFixed(3)}ms / drag`);
     expect(Number.isFinite(ms)).toBe(true);
   });
 
