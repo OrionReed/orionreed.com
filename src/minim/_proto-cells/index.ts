@@ -74,4 +74,4 @@ export {
   type WritableOf,
 } from "./writable";
 
-// `relate` is added later — see `./relate.ts`.
+export { relate, type Relation } from "./relate";

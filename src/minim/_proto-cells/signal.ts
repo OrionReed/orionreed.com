@@ -856,13 +856,25 @@ export class Signal<T = unknown> implements ReactiveNode {
 
     // ── Field-path specialisation ──
     //
-    // When fusing `field(K2)` on top of a chain whose `bwd` is also a
-    // field-path, we can collapse the entire chain into a single
-    // spread-replace closure that walks the path. Skip the priorFwd /
-    // bwdLocal / priorBwd dispatch entirely.
+    // When fusing `field(K)` and the entire chain so far is field-
+    // tagged (or empty), collapse to a path-walking spread-replace
+    // setter that skips priorFwd/bwdLocal/priorBwd dispatch.
+    //
+    // Critical correctness condition: the fast path can only run when
+    // every layer in the chain is a field edge. If prior has a non-
+    // field stateful bwd (e.g., a custom `lensTo` or a `through`-iso
+    // layer), we MUST fall back to the generic composition — the fast
+    // path's setter writes directly to root with the path, bypassing
+    // any non-field bwd in between.
     let composedPath: readonly (string | number | symbol)[] | undefined;
     if (fieldKey !== undefined) {
-      composedPath = prior?.fieldPath ? [...prior.fieldPath, fieldKey] : [fieldKey];
+      if (prior === undefined) {
+        composedPath = [fieldKey];
+      } else if (prior.fieldPath !== undefined) {
+        composedPath = [...prior.fieldPath, fieldKey];
+      }
+      // Otherwise: prior has a non-field bwd. composedPath stays
+      // undefined → generic stateful composition runs.
     }
 
     let inst: Signal<U>;
