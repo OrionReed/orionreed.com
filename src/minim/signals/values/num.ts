@@ -2,16 +2,15 @@
 //
 // All invertible methods (`add`, `sub`, `scale`, `affine`, `clamp`,
 // `quantize`, `cyclic`) ride on the base `Signal#through(fwd, bwd)`
-// primitive. Chained calls auto-fuse to a single lens cell, so
-// `.scale(k).add(off).clamp(lo, hi)` is one allocation, one dep-graph
-// node.
+// primitive and return `: this` so chains preserve writability of
+// the receiver. Chained calls auto-fuse to a single lens cell.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
 import { Signal, type SignalOptions, type Val, valFn } from "../signal";
 import { type Linear, traits } from "../traits";
-import { invertibles, type Writable } from "../writable";
+import { type Wr, type Writable } from "../writable";
 
 type V = number;
 
@@ -25,45 +24,30 @@ export const equals = (a: V, b: V) => a === b;
 const linearImpl: Linear<V> = { add, sub, scale };
 
 export class Num extends Signal<V> {
-  // ── class-level config ─────────────────────────────────────────
   static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
-  // Methods that return a writable lens (whether strict or lossy).
-  // `Writable<R>` lifts these to `(...) => Writable<Num>` so chains
-  // stay writable. Strict-vs-lossy compliance is a separate concern
-  // (eventually tracked in docstrings + types); for now this list is
-  // simply "methods you can write back through."
-  static invertibles = invertibles<Num>()(
-    "add",
-    "sub",
-    "scale",
-    "affine",
-    "clamp",
-    "quantize",
-    "cyclic",
-    "through",
-  );
 
-  // ── instance ───────────────────────────────────────────────────
-  // (derive / lens / is inherited from Signal)
+  /** Phantom registry brand — `Writable<Num>` resolves to `Wr<Num>`. */
+  declare readonly _writable: Wr<Num>;
+
   constructor(v: V = 0, opts?: SignalOptions<V>) {
     super(v, opts);
   }
 
-  add(b: Val<V>): Num {
+  add(b: Val<V>): this {
     const bf = valFn(b);
     return this.through(
       v => v + bf(),
       n => n - bf(),
     );
   }
-  sub(b: Val<V>): Num {
+  sub(b: Val<V>): this {
     const bf = valFn(b);
     return this.through(
       v => v - bf(),
       n => n + bf(),
     );
   }
-  scale(k: Val<number>): Num {
+  scale(k: Val<number>): this {
     const kf = valFn(k);
     return this.through(
       v => v * kf(),
@@ -74,7 +58,7 @@ export class Num extends Signal<V> {
    *  `.scale(k).add(off)` — the chain auto-fuses to one cell, so this
    *  is purely a readability alias. Sliders: `t.affine(width, x0)`
    *  maps `t ∈ [0,1]` to screen coords. */
-  affine(k: Val<number>, off: Val<number>): Num {
+  affine(k: Val<number>, off: Val<number>): this {
     const kf = valFn(k);
     const of = valFn(off);
     return this.through(
@@ -88,7 +72,7 @@ export class Num extends Signal<V> {
    *  write outside `[lo, hi]` returns the clamped value, not the
    *  written one). Use for sliders, gauges, anywhere a value
    *  shouldn't escape its range. */
-  clamp(lo: Val<V>, hi: Val<V>): Num {
+  clamp(lo: Val<V>, hi: Val<V>): this {
     const lf = valFn(lo);
     const hf = valFn(hi);
     const c = (v: V) => {
@@ -101,7 +85,7 @@ export class Num extends Signal<V> {
 
   /** Lossy lens that snaps reads and writes to the nearest multiple
    *  of `step`. For knobs with discrete positions. */
-  quantize(step: Val<number>): Num {
+  quantize(step: Val<number>): this {
     const sf = valFn(step);
     const q = (v: V) => {
       const s = sf();
@@ -115,7 +99,7 @@ export class Num extends Signal<V> {
    *  the current value modulo `period`. Lets you drag an angle a
    *  small visible amount without jumping a full revolution when the
    *  source has accumulated many. */
-  cyclic(period: Val<number>): Num {
+  cyclic(period: Val<number>): this {
     const pf = valFn(period);
     return this.through(
       v => v,
@@ -128,11 +112,11 @@ export class Num extends Signal<V> {
     );
   }
 
-  /** Tween-builder, implied by the lerp trait. The cast bypasses the
-   *  WritableBrand requirement; tweens only make sense on writable
-   *  Nums but the runtime tween will fail on a Computed Num anyway. */
-  to(target: V, dur: Val<number>, ease?: Easing): Tween<V> {
-    return tween(this as never, target, dur, ease);
+  /** Tween-builder, implied by the lerp trait. The `this:` parameter
+   *  constraint gates the call site to writable receivers — bare RO
+   *  Num is rejected at compile time. */
+  to(this: Writable<Num>, target: V, dur: Val<number>, ease?: Easing): Tween<V> {
+    return tween(this, target, dur, ease);
   }
 }
 export interface Num {
@@ -141,7 +125,7 @@ export interface Num {
 }
 
 export function num(v: Val<V> = 0): Writable<Num> {
-  const n = new Num() as unknown as Writable<Num>;
+  const n = new Num() as Writable<Num>;
   bind(n, v);
   return n;
 }

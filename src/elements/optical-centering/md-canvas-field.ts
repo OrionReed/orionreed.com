@@ -89,7 +89,7 @@ export class MdCanvasField extends HTMLElement {
   #detachRaf: (() => void) | null = null;
 
   private phaseIdx = num(0);
-  private hueBase: Num = num(210);
+  private hueBase: Writable<Num> = num(210);
   private hueSpread = signal(80);
   private size = signal(2.1);
   private pointer: Writable<Vec> = vec(W / 2, H / 2);

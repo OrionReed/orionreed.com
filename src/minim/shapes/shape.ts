@@ -22,7 +22,6 @@ import {
   Vec,
   value,
   type Writable,
-  type WritableOf,
 } from "@minim/signals";
 import { dashedPath } from "./dashed";
 import { tokens } from "./tokens";
@@ -154,11 +153,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     }
 
     this.transform = new Transform() as Writable<Transform>;
-    // Field-lens targets carry WritableBrand at runtime; the `as never`
-    // cast bypasses the brand constraint on `bind()` since TS can't
-    // see through the field-lens type to verify it.
-    const setField = <T>(target: Signal<T>, src: Val<T> | undefined): void => {
-      if (src !== undefined) bind(target as never as WritableOf<T>, src);
+    const setField = <T>(target: Writable<Signal<T>>, src: Val<T> | undefined): void => {
+      if (src !== undefined) bind(target, src);
     };
     setField(this.transform.translate, opts.translate ?? defaults.translate ?? { x: 0, y: 0 });
     setField(this.transform.rotate, opts.rotate ?? defaults.rotate ?? 0);

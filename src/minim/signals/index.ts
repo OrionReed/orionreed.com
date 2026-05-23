@@ -118,9 +118,11 @@ export * as TransformMath from "./values/transform";
 export { Transform, type TransformInit, transform } from "./values/transform";
 export * as VecMath from "./values/vec";
 export { axes, type PolarPolicy, polar, tangentPoint, Vec, vec } from "./values/vec";
-// ─── Writable modifier ────────────────────────────────────────────
+// ─── Writable modifier + authoring helpers ───────────────────────
 export {
-  invertibles,
+  derived,
+  field,
+  type Wr,
   type Writable,
   type WritableOf,
 } from "./writable";

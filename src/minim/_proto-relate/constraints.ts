@@ -98,7 +98,188 @@ export function eq(a: NumCell, b: NumCell): Relation {
       out[0] = x! - y!;
     },
     m: 1,
+    fastPath: (vals, pinned) => {
+      // Pin one side → derive the other (no Newton).
+      if (pinned[0] && !pinned[1]) return [{ cellIdx: 1, value: vals[0] }];
+      if (pinned[1] && !pinned[0]) return [{ cellIdx: 0, value: vals[1] }];
+      return undefined;
+    },
   });
+}
+
+// ─── Invertible lenses ───────────────────────────────────────────────
+//
+// A `lens(a, b, fwd, bwd)` declares the constraint `b = fwd(a)`,
+// where `fwd` and `bwd` are mutual inverses. When either side is
+// pinned (by user, hard-pin, or another lens that just resolved),
+// the cluster solver applies `fwd` or `bwd` directly — no Newton
+// iteration. Chains of lenses cascade in one peeling pass.
+//
+// When neither side is pinned (or both are), the lens contributes
+// its residual `b - fwd(a)` to the LSQ objective like any other
+// relation, and Newton handles it.
+//
+// This is the reactive-engine's `Signal#through` lens promoted to a
+// first-class cluster-aware constraint: same semantics, but it can
+// participate in clusters and survive contention with other
+// relations.
+
+// Look up a cell's packer trait. Mirrors `relate.ts`'s `packerOf`;
+// duplicated here so we don't need to widen relate's public surface.
+// biome-ignore lint/suspicious/noExplicitAny: traits are opaque
+function packerOfCell(cell: any): { dim: number; pack: (v: any, into: number[], off: number) => void; unpack: (from: readonly number[], off: number) => any } {
+  const traits = cell?.constructor?.traits;
+  return (
+    traits?.packer ?? {
+      dim: 1,
+      pack: (v: number, into: number[], off: number) => { into[off] = v; },
+      unpack: (from: readonly number[], off: number) => from[off]!,
+    }
+  );
+}
+
+/** Polymorphic invertible lens: `b = fwd(a)`. Works for any cell
+ *  type (Num, Vec, Box, Color, …) — uses the packer trait to
+ *  construct the residual automatically. Newton-free when either
+ *  side is pinned.
+ *
+ *  Both cells must be writable cells of the same type. For
+ *  cross-type lenses, define a custom `relate({ fastPath, ... })`. */
+// biome-ignore lint/suspicious/noExplicitAny: T is variant; cells are Cell-shaped.
+export function lens<T>(a: any, b: any, fwd: (a: T) => T, bwd: (b: T) => T): Relation {
+  const packer = packerOfCell(b);
+  const dim = packer.dim;
+  const expectedFlat = new Array<number>(dim);
+  const actualFlat = new Array<number>(dim);
+  return relate({
+    name: "lens",
+    cells: [a, b],
+    residual: ([va, vb], out) => {
+      const expectedVal = fwd(va as T);
+      packer.pack(expectedVal, expectedFlat, 0);
+      packer.pack(vb, actualFlat, 0);
+      for (let k = 0; k < dim; k++) out[k] = actualFlat[k]! - expectedFlat[k]!;
+    },
+    m: dim,
+    fastPath: (vals, pinned) => {
+      if (pinned[0] && !pinned[1]) {
+        return [{ cellIdx: 1, value: fwd(vals[0] as T) }];
+      }
+      if (pinned[1] && !pinned[0]) {
+        return [{ cellIdx: 0, value: bwd(vals[1] as T) }];
+      }
+      return undefined;
+    },
+  });
+}
+
+/** Closed-form hard projection on a single cell: `x ← project(x)`
+ *  whenever `x` is pinned. Idempotent — `project(project(x)) ===
+ *  project(x)` should hold or convergence isn't guaranteed.
+ *
+ *  This is the general escape hatch for hard inequalities or
+ *  constraints with known projections. `clamp`, `snapToGrid`, and
+ *  `wrap` are specialisations: each is a single-cell `projection`
+ *  with a particular `project` function.
+ *
+ *  Use `projection` directly when you need a custom hard
+ *  inequality without a Newton fallback (e.g., snap-to-bezier-curve,
+ *  project-onto-polygon, force-onto-manifold). For non-idempotent
+ *  or non-pure projections, prefer `relate({ ..., hard: true })`
+ *  with a residual that the LSQ + escalation loop can handle.
+ *
+ *  The runtime supplies the LSQ residual as `x - project(x)`, so
+ *  the projection's distance to its image is also reportable via
+ *  `cluster.health.residual`. */
+// biome-ignore lint/suspicious/noExplicitAny: cell is Cell-shaped
+export function projection<T>(cell: any, project: (v: T) => T): Relation {
+  const packer = packerOfCell(cell);
+  const dim = packer.dim;
+  const projectedFlat = new Array<number>(dim);
+  const actualFlat = new Array<number>(dim);
+  return relate({
+    name: "projection",
+    cells: [cell],
+    residual: ([v], out) => {
+      const proj = project(v as T);
+      packer.pack(proj, projectedFlat, 0);
+      packer.pack(v, actualFlat, 0);
+      for (let k = 0; k < dim; k++) out[k] = actualFlat[k]! - projectedFlat[k]!;
+    },
+    m: dim,
+    weight: Strength.STRONG,
+    hard: true,
+    fastPath: (vals, pinned) => {
+      if (!pinned[0]) return undefined;
+      const v = vals[0] as T;
+      const p = project(v);
+      // Cheap eq check: pack both, compare.
+      packer.pack(v, actualFlat, 0);
+      packer.pack(p, projectedFlat, 0);
+      let same = true;
+      for (let k = 0; k < dim; k++) {
+        if (Math.abs(actualFlat[k]! - projectedFlat[k]!) > 1e-12) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return undefined;
+      return [{ cellIdx: 0, value: p }];
+    },
+    fastPathCorrector: true,
+  });
+}
+
+/** Scalar specialisation of `lens`. Identical semantics, tighter
+ *  type for the common Num→Num case. */
+export function lensNum(
+  a: NumCell,
+  b: NumCell,
+  fwd: (a: number) => number,
+  bwd: (b: number) => number,
+): Relation {
+  return lens<number>(a, b, fwd, bwd);
+}
+
+/** Hard range constraint: `x ∈ [lo, hi]`. Implemented via
+ *  `projection` — out-of-range writes are clipped in zero Newton
+ *  iterations. See `projection` for the general pattern. */
+export function clamp(x: NumCell, lo: number, hi: number): Relation {
+  return projection<number>(x, v => (v < lo ? lo : v > hi ? hi : v));
+}
+
+/** Snap-to-grid: `x ∈ {origin + k·step | k ∈ ℤ}`. */
+export function snapToGrid(x: NumCell, step: number, origin: number = 0): Relation {
+  if (step <= 0) throw new Error("snapToGrid: step must be positive");
+  return projection<number>(x, v => origin + Math.round((v - origin) / step) * step);
+}
+
+/** Modular wrap: `x ∈ [lo, hi)`. Useful for angles, hue, time-of-day. */
+export function wrap(x: NumCell, lo: number, hi: number): Relation {
+  const span = hi - lo;
+  if (span <= 0) throw new Error("wrap: hi must exceed lo");
+  return projection<number>(x, v => lo + ((((v - lo) % span) + span) % span));
+}
+
+/** Force `v` to a given magnitude (default 1). The zero vector is
+ *  left untouched (no canonical direction). */
+export function normalizeVec(v: VecCell, magnitude: number = 1): Relation {
+  return projection<V>(v, V => {
+    const m = Math.hypot(V.x, V.y);
+    if (m === 0) return V;
+    const k = magnitude / m;
+    return { x: V.x * k, y: V.y * k };
+  });
+}
+
+/** Vec → Vec lens. `fwd` and `bwd` map `{x,y}` to `{x,y}`. */
+export function lensVec(
+  a: VecCell,
+  b: VecCell,
+  fwd: (a: V) => V,
+  bwd: (b: V) => V,
+): Relation {
+  return lens<V>(a, b, fwd, bwd);
 }
 
 /** Distance: `|PQ| = L`. P and Q can be Vec instances or two-Num

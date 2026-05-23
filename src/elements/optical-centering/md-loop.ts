@@ -153,7 +153,7 @@ export class MdLoop extends Diagram {
     // that mutation; here we only need the seeds to make Newton's
     // finite-difference Jacobian well-conditioned.
     const M = argminVec(
-      [thetaOA as unknown as Writable<Num>],
+      [thetaOA as Writable<Num>],
       ([t]) => {
         const r = solveFourBar(O.value, P.value, r1, r2, r3, t, liveAB, liveBP);
         return { x: (r.A.x + r.B.x) / 2, y: (r.A.y + r.B.y) / 2 };

@@ -385,5 +385,5 @@ export function mix<C extends Signal<any>>(
     ) => Signal<T>,
     getter,
     setter,
-  ) as unknown as Writable<C>;
+  ) as Writable<C>;
 }

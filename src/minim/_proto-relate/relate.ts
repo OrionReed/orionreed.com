@@ -159,9 +159,48 @@ export interface RelateOpts {
    *
    *  Default: false. */
   hard?: boolean;
+  /** Optional closed-form fast path applied BEFORE Newton on each
+   *  cluster solve. The runtime calls this with the relation's
+   *  current cell values and pinned-status flags; if the relation
+   *  can solve itself given the current pin pattern (e.g., an
+   *  invertible lens with one side pinned), it returns the cell
+   *  updates to apply. Cells thus updated are marked pinned, so
+   *  Newton skips them.
+   *
+   *  Peeling iterates: `lensNum(a, b, fwd, bwd)` followed by
+   *  `lensNum(b, c, fwd2, bwd2)` cascades — pinning `a` derives
+   *  `b`, which then derives `c`, all without Newton. When no
+   *  more relations can solve themselves in closed form, control
+   *  passes to Newton on the residual that remains.
+   *
+   *  The function is pure-ish: it should not mutate `vals` or
+   *  `pinned`. It returns `undefined` when it has nothing to
+   *  contribute. */
+  fastPath?: FastPath;
+  /** When `true`, the fast path is treated as a *corrector* rather
+   *  than a *deriver*: it runs AFTER all derivers, can overwrite
+   *  cells that derivers (or other correctors) have already
+   *  written, and does NOT claim ownership of the cells it
+   *  touches. Used for projections like `clamp` and `snapToGrid`
+   *  that should compose with lens derivations.
+   *
+   *  Note: a corrector's edit doesn't propagate back through
+   *  upstream lenses on the same iteration. If you need true
+   *  bidirectional propagation, model the projection as a `lens`
+   *  with a closed-form inverse instead. Default false. */
+  fastPathCorrector?: boolean;
   /** Diagnostic name. */
   name?: string;
 }
+
+/** A closed-form solver for one relation. Returns the cell updates
+ *  to apply (cellIdx into `cells`, plus the new value), or
+ *  `undefined` when no fast path applies given the current pin
+ *  pattern. */
+export type FastPath = (
+  vals: readonly unknown[],
+  pinned: readonly boolean[],
+) => readonly { cellIdx: number; value: unknown }[] | undefined;
 
 /** Strength constants. Use as `weight: STRONG` to give a
  *  constraint priority over MEDIUM-strength ones.
@@ -277,6 +316,14 @@ interface Cluster {
    *  so the hot path skips escalation entirely when no relation
    *  is hard. */
   hasHardConstraints: boolean;
+  /** Whether any relation in this cluster declares a `fastPath`.
+   *  Maintained on add/dispose so the peeling pass is skipped
+   *  entirely for clusters without invertibles. */
+  hasFastPaths: boolean;
+  /** Set once `ensureLensRelations` has scanned this cluster's
+   *  cells for `_throughOf` lens-source pairs and injected the
+   *  corresponding synthetic relations. Reset when topology changes. */
+  lensRelationsScanned: boolean;
 }
 
 const cellToCluster = new WeakMap<Cell, Cluster>();
@@ -322,6 +369,243 @@ function drainSolves(): void {
   });
 }
 
+/** Approximate equality between typed cell values for fast-path
+ *  idempotency checks. Handles scalars, `{x,y}` Vecs, and `{x,y,w,h}`
+ *  Boxes. Other shapes fall back to strict reference equality. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  const eps = 1e-12;
+  if (typeof a === "number" && typeof b === "number") {
+    return Math.abs(a - b) < eps;
+  }
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    // Compare enumerable numeric keys; cheap structural compare.
+    const ao = a as Record<string, unknown>;
+    const bo = b as Record<string, unknown>;
+    const akeys = Object.keys(ao);
+    if (akeys.length !== Object.keys(bo).length) return false;
+    for (const k of akeys) {
+      const av = ao[k];
+      const bv = bo[k];
+      if (typeof av === "number" && typeof bv === "number") {
+        if (Math.abs(av - bv) >= eps) return false;
+      } else if (av !== bv) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+/** Closed-form peeling: iterate over relations with `fastPath`,
+ *  asking each whether it can solve itself given the current pin
+ *  state. Updates from a fast-path are written into `xScratch` and
+ *  the affected slots are marked pinned. Cascades: pinning a cell
+ *  may unlock the next relation.
+ *
+ *  Two-phase priority:
+ *    Phase 1 — hard pins propagate. Lens chains rooted at hardPin
+ *              cells derive their downstream cells, and those
+ *              derivations override user-pins on the derived side.
+ *              (Mirror of the engine's `Signal#through` behaviour:
+ *              writing to a derived cell is overridden when the
+ *              source is bound.)
+ *    Phase 2 — user pins propagate, BUT only into still-free cells.
+ *              Cells already derived (or hard-pinned) in phase 1
+ *              are immutable here.
+ *
+ *  Returns `true` iff every cluster slot ends up pinned — Newton
+ *  can then be skipped entirely. */
+function applyFastPaths(c: Cluster): boolean {
+  // Pre-compute cell-position lookups so per-relation queries are O(1).
+  const cellToOffset = new Map<Cell, number>();
+  const cellToDim = new Map<Cell, number>();
+  // biome-ignore lint/suspicious/noExplicitAny: packer is opaque
+  const cellToPacker = new Map<Cell, any>();
+  for (const e of c.cellEntries) {
+    cellToOffset.set(e.cell, e.offset);
+    cellToDim.set(e.cell, e.packer.dim);
+    cellToPacker.set(e.cell, e.packer);
+  }
+
+  // `fixed`: cells whose values are determined and may not change
+  // (hard-pinned, or derived during peeling). User pins are NOT
+  // automatically here — they're weaker.
+  const fixed = new Set<Cell>();
+  for (const e of c.cellEntries) {
+    if (hardPinned.has(e.cell)) fixed.add(e.cell);
+  }
+
+  const peelPhase = (
+    countAsPinned: (cell: Cell) => boolean,
+    runCorrectors: boolean,
+  ): void => {
+    const localVals: unknown[] = [];
+    const localPinned: boolean[] = [];
+    let changed = true;
+    let iter = 0;
+    const MAX_PEEL_ITERS = 32;
+    while (changed && iter < MAX_PEEL_ITERS) {
+      changed = false;
+      iter++;
+      for (const entry of c.relations) {
+        const rel = entry.rel;
+        const fp = rel._fastPath;
+        if (fp === undefined) continue;
+        // Skip correctors during deriver passes, and vice versa.
+        if (rel._fastPathCorrector !== runCorrectors) continue;
+        const n = rel.cells.length;
+        localVals.length = n;
+        localPinned.length = n;
+        for (let i = 0; i < n; i++) {
+          const cell = rel.cells[i]!;
+          const off = cellToOffset.get(cell);
+          if (off === undefined) {
+            localVals[i] = cell.peek();
+            localPinned[i] = false;
+            continue;
+          }
+          const packer = cellToPacker.get(cell);
+          localVals[i] = packer ? packer.unpack(c.xScratch, off) : c.xScratch[off];
+          localPinned[i] = countAsPinned(cell);
+        }
+        const updates = fp(localVals, localPinned);
+        if (!updates || updates.length === 0) continue;
+        for (const u of updates) {
+          const cell = rel.cells[u.cellIdx];
+          if (!cell) continue;
+          // Derivers respect existing fixed claims (no overwrites);
+          // correctors are allowed to overwrite derivations BUT
+          // hard pins are sacred either way.
+          if (hardPinned.has(cell)) continue;
+          if (!rel._fastPathCorrector && fixed.has(cell)) continue;
+          const off = cellToOffset.get(cell);
+          if (off === undefined) continue;
+          const dim = cellToDim.get(cell)!;
+          const packer = cellToPacker.get(cell);
+          // Idempotency check: skip if the value would be unchanged
+          // (within a tight tolerance). This is what makes corrector
+          // loops terminate.
+          const cur = packer ? packer.unpack(c.xScratch, off) : c.xScratch[off];
+          if (sameValue(cur, u.value)) continue;
+          if (packer) {
+            packer.pack(u.value, c.xScratch, off);
+          } else {
+            c.xScratch[off] = u.value as number;
+          }
+          for (let k = 0; k < dim; k++) c.pinMask[off + k] = true;
+          if (!rel._fastPathCorrector) fixed.add(cell);
+          changed = true;
+        }
+      }
+    }
+  };
+
+  // Derivation passes:
+  //   Phase 1 — only hard pins count as sources.
+  peelPhase(cell => fixed.has(cell), false);
+  //   Phase 2 — user pins also act as sources.
+  peelPhase(cell => fixed.has(cell) || c.pinned.has(cell), false);
+  // Correction pass: clamps / snaps run AFTER all derivations have
+  // settled. Correctors may overwrite derived values.
+  peelPhase(cell => fixed.has(cell) || c.pinned.has(cell), true);
+
+  // Final pinMask reconciliation. fixed cells were already
+  // pinMask=true; user-pinned cells were already true from
+  // solveCluster's pack step. Nothing to do here.
+  for (let i = 0; i < c.totalDim; i++) {
+    if (!c.pinMask[i]) return false;
+  }
+  return true;
+}
+
+/** Auto-injection of synthetic lens relations.
+ *
+ *  When a cell `b` is created via `a.through(fwd, bwd)`, the engine
+ *  records that relationship on `b._throughOf`. If both `a` and
+ *  `b` end up in the same cluster, the cluster solver needs to
+ *  know they're linked — otherwise Newton's FD perturbation moves
+ *  their slots independently and the residual sees inconsistent
+ *  state.
+ *
+ *  This pass scans the cluster's cells once per topology change.
+ *  For each lens cell whose source is also in the cluster, it
+ *  injects a synthetic relation:
+ *
+ *      cells:   [source, lens]
+ *      residual: pack(fwd(source)) - pack(lens)   // dim entries
+ *      fastPath: source pinned → derive lens via fwd
+ *                lens pinned   → derive source via bwd
+ *
+ *  Almost always solves in zero Newton iterations via the fastPath. */
+function ensureLensRelations(c: Cluster): void {
+  if (c.lensRelationsScanned) return;
+  c.lensRelationsScanned = true;
+  // Build a fast index: cell → entry-index in cluster.cellEntries.
+  const cellIdxMap = new Map<Cell, number>();
+  for (let i = 0; i < c.cellEntries.length; i++) {
+    cellIdxMap.set(c.cellEntries[i]!.cell, i);
+  }
+  for (let i = 0; i < c.cellEntries.length; i++) {
+    const e = c.cellEntries[i]!;
+    // biome-ignore lint/suspicious/noExplicitAny: probing engine internals
+    const tof = (e.cell as any)._throughOf as
+      | { parent: Cell; fwd: (v: unknown) => unknown; bwd: (v: unknown) => unknown }
+      | undefined;
+    if (!tof) continue;
+    const parent = tof.parent;
+    const parentIdx = cellIdxMap.get(parent);
+    if (parentIdx === undefined) continue;
+    // Don't double-inject: skip if the user already wrote a relation
+    // over the same (parent, lens) pair (rare; tolerated).
+    const alreadyExplicit = c.relations.some(
+      r =>
+        r.rel.cells.length === 2 &&
+        ((r.rel.cells[0] === parent && r.rel.cells[1] === e.cell) ||
+          (r.rel.cells[0] === e.cell && r.rel.cells[1] === parent)),
+    );
+    if (alreadyExplicit) continue;
+
+    // Build the synthetic relation. Use the lens's packer to get
+    // dim and pack/unpack — handles Num, Vec, Box uniformly.
+    const packer = e.packer;
+    const dim = packer.dim;
+    const fwd = tof.fwd;
+    const bwd = tof.bwd;
+    // Scratch buffers for residual computation. Captured in closure.
+    const expectedFlat = new Array<number>(dim);
+    const actualFlat = new Array<number>(dim);
+
+    const synth = new RelationImpl({
+      name: "auto-lens",
+      cells: [parent, e.cell],
+      residual: ([va, vb], out) => {
+        const expectedVal = fwd(va);
+        packer.pack(expectedVal, expectedFlat, 0);
+        packer.pack(vb, actualFlat, 0);
+        for (let k = 0; k < dim; k++) out[k] = actualFlat[k]! - expectedFlat[k]!;
+      },
+      m: dim,
+      fastPath: (vals, pinned) => {
+        if (pinned[0] && !pinned[1]) {
+          return [{ cellIdx: 1, value: fwd(vals[0]) }];
+        }
+        if (pinned[1] && !pinned[0]) {
+          return [{ cellIdx: 0, value: bwd(vals[1]) }];
+        }
+        return undefined;
+      },
+    });
+    // Synthetic relations don't set _cluster (relate() factory does
+    // that for user relations). Set it manually here.
+    synth._cluster = c;
+    c.relations.push({ rel: synth, cellIdx: [parentIdx, i] });
+    c.m += dim;
+    c.hasFastPaths = true;
+  }
+}
+
 function newCluster(): Cluster {
   const c: Cluster = {
     cellEntries: [],
@@ -335,6 +619,8 @@ function newCluster(): Cluster {
     valsScratch: [],
     health: signal<ClusterHealth>({ residual: 0, iters: 0, converged: true }),
     hasHardConstraints: false,
+    hasFastPaths: false,
+    lensRelationsScanned: false,
   };
   allClusters.add(c);
   return c;
@@ -364,6 +650,7 @@ function mergeClusters(a: Cluster, b: Cluster): Cluster {
   for (const p of b.pinned) a.pinned.add(p);
   a.m += b.m;
   if (b.hasHardConstraints) a.hasHardConstraints = true;
+  if (b.hasFastPaths) a.hasFastPaths = true;
   resizeScratch(a);
   allClusters.delete(b);
   if (dirtyClusters.has(b)) {
@@ -509,6 +796,10 @@ function buildResidual(c: Cluster): (xs: readonly number[], out: ResidualOut) =>
 }
 
 function solveCluster(c: Cluster): void {
+  // Auto-inject `_throughOf` lens relations BEFORE the early-return
+  // check — they may be the only constraints if user gave us cells
+  // without an explicit residual.
+  ensureLensRelations(c);
   if (c.m === 0) return;
   resizeScratch(c);
   const totalDim = c.totalDim;
@@ -527,6 +818,16 @@ function solveCluster(c: Cluster): void {
     }
   }
 
+  // Closed-form peeling. For relations that declare a `fastPath`,
+  // ask "given the current pin pattern, can you solve yourself?".
+  // Iterate until quiescent: a relation that derives a cell makes
+  // it pinned, which may unlock the next relation's fast path.
+  // After this loop, Newton runs on what's left.
+  let peeledAllPinned = false;
+  if (c.hasFastPaths) {
+    peeledAllPinned = applyFastPaths(c);
+  }
+
   // Lazy sparsity info build + dispatch decision. We use the sparse
   // path when:
   //   - totalDim ≥ SPARSE_DISPATCH_THRESHOLD (small dense beats
@@ -543,6 +844,19 @@ function solveCluster(c: Cluster): void {
   const R = buildResidual(c);
   let result: NewtonResult | SparseNewtonResult;
   const runNewton = (): NewtonResult | SparseNewtonResult => {
+    if (peeledAllPinned) {
+      // Every cell got pinned by closed-form peeling — nothing for
+      // Newton to do. Compute the residual once for health reporting
+      // and return a converged-by-construction result.
+      R(xs, c.rScratch);
+      let s = 0;
+      for (let i = 0; i < c.m; i++) {
+        const v = (c.rScratch as number[])[i]!;
+        s += v * v;
+      }
+      const norm = Math.sqrt(s);
+      return { residual: norm, iters: 0, converged: norm < tol, lambda: 0 };
+    }
     if (c.useSparse) {
       const Rsubset = buildResidualSubset(c);
       if (c.sparseScratch === undefined) c.sparseScratch = makeSparseScratch();
@@ -689,6 +1003,10 @@ class RelationImpl implements Relation {
   /** @internal — true iff this is a hard constraint (escalates
    *  weight if residual > tol after solve). */
   _isHard: boolean;
+  /** @internal — optional closed-form fast path. */
+  _fastPath: FastPath | undefined;
+  /** @internal — true iff fastPath is a corrector (overwrites). */
+  _fastPathCorrector: boolean;
   private _disposed = false;
 
   constructor(opts: RelateOpts) {
@@ -701,6 +1019,8 @@ class RelationImpl implements Relation {
     this._baseSqrtWeight = Math.sqrt(opts.weight ?? 1);
     this._sqrtWeight = this._baseSqrtWeight;
     this._isHard = opts.hard ?? false;
+    this._fastPath = opts.fastPath;
+    this._fastPathCorrector = opts.fastPathCorrector ?? false;
     this._residualSig = signal(Number.POSITIVE_INFINITY);
     this.residual = this._residualSig;
     this.satisfied = computed(() => this._residualSig.value < 1e-6);
@@ -717,10 +1037,14 @@ class RelationImpl implements Relation {
     // changed. Sparse path will rebuild on next solve.
     c.sparseInfo = undefined;
     c.useSparse = undefined;
+    c.lensRelationsScanned = false;
     // Recompute the hard-constraint flag (may have been the only
     // hard relation in this cluster).
     if (this._isHard) {
       c.hasHardConstraints = c.relations.some(e => e.rel._isHard);
+    }
+    if (this._fastPath !== undefined) {
+      c.hasFastPaths = c.relations.some(e => e.rel._fastPath !== undefined);
     }
     // Note: doesn't currently split clusters when removing a
     // relation disconnects the graph. Disconnected components stay
@@ -767,9 +1091,12 @@ export function relate(opts: RelateOpts): Relation {
   target.m += opts.m;
   rel._cluster = target;
   if (rel._isHard) target.hasHardConstraints = true;
+  if (rel._fastPath !== undefined) target.hasFastPaths = true;
   // Invalidate cached sparsity info; it'll rebuild lazily on next solve.
   target.sparseInfo = undefined;
   target.useSparse = undefined;
+  // Cells changed → re-scan for `_throughOf` lens relationships.
+  target.lensRelationsScanned = false;
 
   // Prime: solve immediately so the new relation's residual is up
   // to date.
@@ -789,6 +1116,23 @@ export function clusterHealth(cell: Cell): Read<ClusterHealth> | undefined {
 export function clusterSize(cell: Cell): number {
   const c = cellToCluster.get(cell);
   return c?.cellEntries.length ?? 0;
+}
+
+/** List the cells in `cell`'s cluster (transitive closure of any
+ *  relation that touches `cell`). Returns an empty array if the
+ *  cell isn't in any cluster. */
+export function clusterCells(cell: Cell): readonly Cell[] {
+  const c = cellToCluster.get(cell);
+  if (!c) return [];
+  return c.cellEntries.map(e => e.cell);
+}
+
+/** List the relations in `cell`'s cluster. Includes auto-injected
+ *  `_throughOf` lens relations — these are tagged `name: "auto-lens"`. */
+export function clusterRelations(cell: Cell): readonly Relation[] {
+  const c = cellToCluster.get(cell);
+  if (!c) return [];
+  return c.relations.map(e => e.rel);
 }
 
 /** Diagnostic snapshot of a cluster's sparsity structure. Used by

@@ -1,14 +1,17 @@
 // transform.ts — reactive 2D transform.
 //
-// Invertibles (`add`, `sub`) ride on `Signal#through(fwd, bwd)`.
-// Chained calls auto-fuse.
+// Invertibles (`add`, `sub`) return `: this` and ride on
+// `Signal#through(fwd, bwd)`. Chained calls auto-fuse. Field-lens
+// getters use `field()`; `Transform.translate.x.value = 5` works on
+// writable receivers because writability propagates through nested
+// chains via the conditional return.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { lazy, type Of, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
+import { type Of, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
 import { type Linear, traits } from "../traits";
-import { invertibles, type Writable } from "../writable";
+import { field, type Wr, type Writable } from "../writable";
 import { Num } from "./num";
 import {
   Vec,
@@ -81,27 +84,27 @@ export const metric = (a: V, b: V) =>
 const linearImpl: Linear<V> = { add, sub, scale };
 
 export class Transform extends Signal<V> {
-  // ── class-level config ─────────────────────────────────────────
   static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
+
+  /** Phantom registry brand — `Writable<Transform>` resolves to `Wr<Transform>`. */
+  declare readonly _writable: Wr<Transform>;
+
   /** Scalar `scale` lives as a Vec field lens (`.scale`), not as an
    *  invertible eager method — to scalar-multiply a Transform, use
    *  `Transform.lens(...)` or compose via field writes. */
-  static invertibles = invertibles<Transform>()("add", "sub", "through");
 
-  // ── instance ───────────────────────────────────────────────────
-  // (derive / lens / is inherited from Signal)
   constructor(v: V = DEFAULT, opts?: SignalOptions<V>) {
     super(v, opts);
   }
 
-  add(b: Val<V>): Transform {
+  add(b: Val<V>): this {
     const bf = valFn(b);
     return this.through(
       v => add(v, bf()),
       n => sub(n, bf()),
     );
   }
-  sub(b: Val<V>): Transform {
+  sub(b: Val<V>): this {
     const bf = valFn(b);
     return this.through(
       v => sub(v, bf()),
@@ -112,35 +115,25 @@ export class Transform extends Signal<V> {
     return Transform.derive(() => lerp(this.value, value(b), value(t)));
   }
 
-  get translate(): Vec {
-    return lazy(this, "translate", () =>
-      this.lensTo(Vec, s => s.translate, (v, s) => ({ ...s, translate: v })),
-    );
+  get translate() {
+    return field(this, "translate", Vec);
   }
-  get scale(): Vec {
-    return lazy(this, "scale", () =>
-      this.lensTo(Vec, s => s.scale, (v, s) => ({ ...s, scale: v })),
-    );
+  get scale() {
+    return field(this, "scale", Vec);
   }
-  get origin(): Vec {
-    return lazy(this, "origin", () =>
-      this.lensTo(Vec, s => s.origin, (v, s) => ({ ...s, origin: v })),
-    );
+  get origin() {
+    return field(this, "origin", Vec);
   }
-  get rotate(): Num {
-    return lazy(this, "rotate", () =>
-      this.lensTo(Num, s => s.rotate, (v, s) => ({ ...s, rotate: v })),
-    );
+  get rotate() {
+    return field(this, "rotate", Num);
   }
-  get opacity(): Num {
-    return lazy(this, "opacity", () =>
-      this.lensTo(Num, s => s.opacity, (v, s) => ({ ...s, opacity: v })),
-    );
+  get opacity() {
+    return field(this, "opacity", Num);
   }
 
   /** Tween-builder, implied by the lerp trait. */
-  to(target: V, dur: Val<number>, ease?: Easing): Tween<V> {
-    return tween(this as never, target, dur, ease);
+  to(this: Writable<Transform>, target: V, dur: Val<number>, ease?: Easing): Tween<V> {
+    return tween(this, target, dur, ease);
   }
 }
 export interface Transform {

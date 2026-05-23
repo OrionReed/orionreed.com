@@ -1,14 +1,17 @@
 // vec.ts — reactive 2D point.
 //
 // Invertibles (`add`, `sub`, `scale`, `offset`, `up`, `down`, `left`,
-// `right`) ride on `Signal#through(fwd, bwd)`. Chained calls auto-fuse.
+// `right`) return `: this` and ride on `Signal#through(fwd, bwd)`.
+// Chained calls auto-fuse. Field-lens getters use the `field()`
+// helper, whose conditional return type propagates writability from
+// the receiver; `derived()` wraps RO views.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { batch, lazy, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
+import { batch, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
 import { type Linear, traits } from "../traits";
-import { invertibles, type Writable } from "../writable";
+import { derived, field, type Wr, type Writable } from "../writable";
 import { Num } from "./num";
 
 type V = { x: number; y: number };
@@ -60,27 +63,17 @@ const nearestAngle = (target: number, current: number): number =>
 const linearImpl: Linear<V> = { add, sub, scale };
 
 export class Vec extends Signal<V> {
-  // ── class-level config ─────────────────────────────────────────
   static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
-  static invertibles = invertibles<Vec>()(
-    "add",
-    "sub",
-    "scale",
-    "offset",
-    "up",
-    "down",
-    "left",
-    "right",
-    "through",
-  );
 
-  // ── instance ───────────────────────────────────────────────────
-  // (derive / lens / is inherited from Signal)
+  /** Phantom registry brand — `Writable<Vec>` resolves to `Wr<Vec>`. */
+  declare readonly _writable: Wr<Vec>;
+
   constructor(v: V = { x: 0, y: 0 }, opts?: SignalOptions<V>) {
     super(v, opts);
   }
 
-  add(b: Val<V>): Vec {
+  // ── invertibles: return `: this`, propagating writability ──────────
+  add(b: Val<V>): this {
     const bf = valFn(b);
     return this.through(
       v => {
@@ -93,7 +86,7 @@ export class Vec extends Signal<V> {
       },
     );
   }
-  sub(b: Val<V>): Vec {
+  sub(b: Val<V>): this {
     const bf = valFn(b);
     return this.through(
       v => {
@@ -106,7 +99,7 @@ export class Vec extends Signal<V> {
       },
     );
   }
-  scale(k: Val<number>): Vec {
+  scale(k: Val<number>): this {
     const kf = valFn(k);
     return this.through(
       v => {
@@ -119,7 +112,7 @@ export class Vec extends Signal<V> {
       },
     );
   }
-  offset(dx: Val<number>, dy: Val<number>): Vec {
+  offset(dx: Val<number>, dy: Val<number>): this {
     const xf = valFn(dx);
     const yf = valFn(dy);
     return this.through(
@@ -128,28 +121,28 @@ export class Vec extends Signal<V> {
     );
   }
   // Axis-aligned offset sugar — same fwd/bwd shape as offset.
-  up(n: Val<number>): Vec {
+  up(n: Val<number>): this {
     const f = valFn(n);
     return this.through(
       v => ({ x: v.x, y: v.y - f() }),
       o => ({ x: o.x, y: o.y + f() }),
     );
   }
-  down(n: Val<number>): Vec {
+  down(n: Val<number>): this {
     const f = valFn(n);
     return this.through(
       v => ({ x: v.x, y: v.y + f() }),
       o => ({ x: o.x, y: o.y - f() }),
     );
   }
-  left(n: Val<number>): Vec {
+  left(n: Val<number>): this {
     const f = valFn(n);
     return this.through(
       v => ({ x: v.x - f(), y: v.y }),
       o => ({ x: o.x + f(), y: o.y }),
     );
   }
-  right(n: Val<number>): Vec {
+  right(n: Val<number>): this {
     const f = valFn(n);
     return this.through(
       v => ({ x: v.x + f(), y: v.y }),
@@ -157,6 +150,7 @@ export class Vec extends Signal<V> {
     );
   }
 
+  // ── non-invertibles: explicit RO return ────────────────────────────
   normalize(): Vec {
     return Vec.derive(() => normalize(this.value));
   }
@@ -170,23 +164,22 @@ export class Vec extends Signal<V> {
     return this.deriveTo(Num, v => metric(v, value(other)));
   }
 
-  get x(): Num {
-    return lazy(this, "x", () =>
-      this.lensTo(Num, s => s.x, (v, s) => ({ ...s, x: v })),
-    );
+  // ── field lenses & derived views ───────────────────────────────────
+  get x() {
+    return field(this, "x", Num);
   }
-  get y(): Num {
-    return lazy(this, "y", () =>
-      this.lensTo(Num, s => s.y, (v, s) => ({ ...s, y: v })),
-    );
+  get y() {
+    return field(this, "y", Num);
   }
-  get magnitude(): Num {
-    return lazy(this, "magnitude", () => this.deriveTo(Num, v => Math.hypot(v.x, v.y)));
+  get magnitude() {
+    return derived(this, "magnitude", Num, v => Math.hypot(v.x, v.y));
   }
 
-  /** Tween-builder, implied by the lerp trait. */
-  to(target: V, dur: Val<number>, ease?: Easing): Tween<V> {
-    return tween(this as never, target, dur, ease);
+  /** Tween-builder, implied by the lerp trait. `this: Writable<Vec>`
+   *  gates the call site to writable receivers — bare RO Vec is
+   *  rejected at compile time. */
+  to(this: Writable<Vec>, target: V, dur: Val<number>, ease?: Easing): Tween<V> {
+    return tween(this, target, dur, ease);
   }
 }
 export interface Vec {

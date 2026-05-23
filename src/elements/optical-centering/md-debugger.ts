@@ -35,6 +35,7 @@ import {
   Mount,
   type Num,
   type Read,
+  type Writable,
   rect,
   Shape,
   signal,
@@ -45,7 +46,7 @@ import {
 import { authorOf, claim, record, type Span, scope } from "../../minim/assert";
 
 interface HasOpacity {
-  opacity: Num;
+  opacity: Writable<Num>;
 }
 
 // ─── buggy scene ─────────────────────────────────────────────────

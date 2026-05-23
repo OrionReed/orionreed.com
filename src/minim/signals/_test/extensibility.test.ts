@@ -1,11 +1,12 @@
-// extensibility.test.ts — confirm Writable<R> works for USER-DEFINED
-// value classes with ZERO library changes. This is the property the
-// hand-maintained `LiftField` registry was blocking.
+// extensibility.test.ts — confirm the value-class authoring story
+// works end-to-end for USER-DEFINED classes with ZERO library
+// changes. The pattern: extend Signal<V>, declare `_writable: Wr<R>`
+// for the registry brand, declare invertibles with `: this` returns,
+// and use the `field()` / `derived()` helpers for getter bodies.
 
 import { describe, expect, it } from "vitest";
 import {
-  invertibles,
-  lazy,
+  field,
   type Linear,
   Num,
   Signal,
@@ -13,15 +14,21 @@ import {
   traits,
   type Val,
   valFn,
+  type Wr,
   type Writable,
 } from "../index";
 
 // ─── A user-defined value class ──────────────────────────────────
 //
-// Made of three numeric fields (h, s, l). The library doesn't know
-// about this class; we just declare it in user-space and Writable<Hsl>
-// should "just work" — invertible methods lift, field lenses lift to
-// Writable<Num>, brand applied via factory cast.
+// Made of three numeric fields (h, s, l). Authoring template:
+//   1. pure value-space functions
+//   2. class extends Signal<V>
+//   3. static traits dict
+//   4. declare _writable: Wr<R>  (registry brand, 1 line)
+//   5. invertible methods return `: this` (no list to maintain)
+//   6. field-lens getters call `field(this, "k", Cls)`
+//   7. interface merge for RO `value`
+//   8. factory casts `as Writable<Hsl>` (one cast)
 
 type V = { h: number; s: number; l: number };
 
@@ -43,24 +50,21 @@ class Hsl extends Signal<V> {
     metric: (a: V, b: V) => Math.abs(a.h - b.h) + Math.abs(a.s - b.s) + Math.abs(a.l - b.l),
     equals: (a: V, b: V) => a.h === b.h && a.s === b.s && a.l === b.l,
   });
-  static invertibles = invertibles<Hsl>()("add", "scale");
 
-  // (derive / lens / is inherited from Signal — the whole point of
-  // this test is to demonstrate user value classes get the static
-  // surface for free, no per-class boilerplate.)
+  declare readonly _writable: Wr<Hsl>;
 
   constructor(v: V = { h: 0, s: 0, l: 0 }, opts?: SignalOptions<V>) {
     super(v, opts);
   }
 
-  add(b: Val<V>): Hsl {
+  add(b: Val<V>): this {
     const bf = valFn(b);
     return this.through(
       v => hslAdd(v, bf()),
       n => hslSub(n, bf()),
     );
   }
-  scale(k: Val<number>): Hsl {
+  scale(k: Val<number>): this {
     const kf = valFn(k);
     return this.through(
       v => hslScale(v, kf()),
@@ -68,20 +72,14 @@ class Hsl extends Signal<V> {
     );
   }
 
-  get h(): Num {
-    return lazy(this, "h", () =>
-      this.lensTo(Num, s => s.h, (v, s) => ({ ...s, h: v })),
-    );
+  get h() {
+    return field(this, "h", Num);
   }
-  get s(): Num {
-    return lazy(this, "s", () =>
-      this.lensTo(Num, s => s.s, (v, s) => ({ ...s, s: v })),
-    );
+  get s() {
+    return field(this, "s", Num);
   }
-  get l(): Num {
-    return lazy(this, "l", () =>
-      this.lensTo(Num, s => s.l, (v, s) => ({ ...s, l: v })),
-    );
+  get l() {
+    return field(this, "l", Num);
   }
 }
 interface Hsl {
@@ -90,11 +88,10 @@ interface Hsl {
 }
 
 function hsl(h = 0, s = 0, l = 0): Writable<Hsl> {
-  const x = new Hsl({ h, s, l }) as unknown as Writable<Hsl>;
-  return x;
+  return new Hsl({ h, s, l }) as Writable<Hsl>;
 }
 
-describe("Extensibility — Writable<UserClass> works without library changes", () => {
+describe("Extensibility — user-defined value classes work without library changes", () => {
   it("Writable<Hsl> exposes writable value + invertibles + field lenses", () => {
     const c = hsl(0.5, 0.7, 0.3);
     expect(c.value).toEqual({ h: 0.5, s: 0.7, l: 0.3 });

@@ -224,7 +224,7 @@ export class TexShape<Names extends string = string> extends Shape {
       const cls = partClass(m.name);
       const boxSig = new Box(
         measured.rects.get(cls) ?? { x: 0, y: 0, w: 0, h: 0 },
-      ) as unknown as Writable<Box>;
+      ) as Writable<Box>;
       boxWriters.set(cls, boxSig);
       list.push(new Part(m.name, m.content, boxSig, m, this as TexShape));
     }

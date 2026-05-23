@@ -454,11 +454,9 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  This is the lower-level typed factory: for parent-based lenses,
    *  prefer `parent.lensTo(Cls, fwd, bwd)` / `parent.deriveTo(Cls, fwd)`.
    *
-   *  Overload: with a setter, returns `Writable<C>` (full lifted shape,
-   *  brand included). Without, returns plain `C` (read-only at the type
-   *  level). The setter form removes the per-callsite
-   *  `as unknown as Writable<X>` casts that used to ride on every
-   *  `static lens` and factory function. */
+   *  Overload: with a setter, returns `Writable<C>` (registry-resolved
+   *  to the per-class writable form, e.g. `Wr<Vec>` for Vec). Without,
+   *  returns plain `C` (read-only at the type level). */
   static install<T, C extends Signal<T>>(Cls: new (...args: never[]) => C, getter: () => T): C;
   static install<T, C extends Signal<T>>(
     Cls: new (...args: never[]) => C,
@@ -511,7 +509,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     g: () => Of<InstanceType<C>>,
     s: (v: Of<InstanceType<C>>) => void,
   ): Writable<InstanceType<C>> {
-    return Signal.install(this, g, s) as unknown as Writable<InstanceType<C>>;
+    return Signal.install(this, g, s) as Writable<InstanceType<C>>;
   }
 
   /** Type predicate against this class. `Vec.is(x)` narrows `x` to

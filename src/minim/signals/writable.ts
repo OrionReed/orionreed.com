@@ -1,67 +1,54 @@
-// writable.ts — `Writable<R>` as a generic modifier.
+// writable.ts — public types + value-class authoring helpers.
 //
-// Value classes are RO at the public type level (interface merge of
-// `get value(): V`). Factories return `Writable<R>` to expose the
-// writable surface AND brand the result so animator-style structural
-// constraints reject bare RO values.
+// Public types:
 //
-// Extensibility: `Writable<R>` works for ANY value class that
-// declares `static invertibles = [...]` and field-lens getters typed
-// as `Read<unknown>`. No per-class registry — `LiftField<X>`
-// recursively applies `Writable<X>` to any Read-shaped field.
+//   Writable<R>      — registry lookup: "the writable form of R".
+//                      Single hop, no recursion. Each value class
+//                      declares `_writable: Wr<Foo>` (a phantom
+//                      registry brand) so this lookup resolves.
+//
+//   Wr<R>            — default writable shape: `R & WritableBrand &
+//                      { value: Of<R> }`. The standard `_writable`
+//                      declaration target on every value class.
+//
+//   WritableOf<T>    — T-anchored animator constraint.
+//
+// Authoring helpers (call from inside class getters):
+//
+//   field(this, "x", Num)              — bidirectional field lens.
+//                                        Conditional return: writable
+//                                        on writable parent, bare on
+//                                        RO parent. Combines `lazy` +
+//                                        `lensTo` + spread-replace.
+//
+//   derived(this, "k", Cls, fn)        — read-only derived view via
+//                                        `deriveTo`. Always returns
+//                                        bare `Cls` (RO).
+//
+// Authors don't import the brand-conditional type directly — the
+// helpers encapsulate it. The author's choice between `field()`
+// (bidirectional) and `derived()` (RO) IS the local declaration of
+// writability behaviour at each getter site, mirroring the locality
+// of `: this` invertible method returns.
+//
+// For escape-hatch caching of arbitrary computed views (e.g.
+// `Color.css` building a CSS string), use `lazy()` from "../signal"
+// directly with whatever `make()` body you want.
 
-import { type Read, type WritableBrand } from "./signal";
+import { lazy, type Of, Signal, type WritableBrand } from "./signal";
 
-// ─── Writers surface (internal) ───────────────────────────────────
+// ─── Public types ────────────────────────────────────────────────────
 
-interface Writers<T> {
-  value: T;
-}
+/** Default writable shape. Used as the `_writable` declaration target
+ *  on every value class — `_writable` is the phantom registry hook. */
+export type Wr<R> = R & WritableBrand & { value: Of<R> };
 
-// ─── Type-level dispatch ──────────────────────────────────────────
-
-/** Pick keys whose value is `Read<unknown>` (i.e. a field lens). */
-type LensFields<R> = Exclude<
-  { [K in keyof R]: R[K] extends Read<unknown> ? K : never }[keyof R],
-  undefined
->;
-
-/** Lift any Read<unknown>-shaped field to its writable form.
- *  Recursive: a Vec field gets fully lifted to Writable<Vec> (which
- *  has its own LensFields lifted in turn). No per-class registry —
- *  the same `Writable<X>` modifier handles any value class that
- *  declares its invertibles + field-lens getters.
- *
- *  Non-Read fields pass through unchanged. */
-type LiftField<X> = X extends Read<unknown> ? Writable<X> : X;
-
-/** Extract invertible method names from `static invertibles = [...] as const`. */
-type InvOf<R> = R extends { readonly constructor: { readonly invertibles: infer I } }
-  ? I extends readonly (keyof R)[]
-    ? I[number]
-    : never
-  : never;
-
-// ─── Public surface ───────────────────────────────────────────────
-
-/** "R, but writable." Generic modifier — works on any value class
- *  that declares `static invertibles = [...] as const`.
- *
- *  Lifts invertible methods so chains stay writable, lifts field
- *  lenses to their own writable forms, and adds a writable `.value`
- *  plus a nominal brand. (Driving from a source uses the free
- *  `bind(target, source)` helper in `lateral.ts`.)
- *
- *  Note: we INTERSECT rather than Omit-then-add for invertibles and
- *  fields. The intersection of `(...) => Num` and `(...) => Writable<Num>`
- *  is `(...) => Writable<Num>` (the writable form is a subtype). This
- *  preserves R's full structural shape so `this: R & WritableBrand`
- *  constraints on inherited methods still match. */
-export type Writable<R> = Omit<R, "value" | InvOf<R> | LensFields<R>> &
-  Writers<R extends Read<infer T> ? T : never> &
-  WritableBrand & {
-    [K in InvOf<R>]: R[K] extends (...a: infer A) => R ? (...a: A) => Writable<R> : R[K];
-  } & { [K in LensFields<R>]: LiftField<R[K]> };
+/** "The writable form of R." Resolves via the per-class `_writable`
+ *  registry brand when present (so `Writable<Vec>` returns the
+ *  Vec-specific writable shape); falls back to the default `Wr<R>`
+ *  for plain `Signal<T>` and other classes that don't declare a
+ *  custom writable form. Single hop, no recursion. */
+export type Writable<R> = R extends { readonly _writable: infer W } ? W : Wr<R>;
 
 /** T-anchored constraint for animator-style parameters:
  *
@@ -75,25 +62,50 @@ export interface WritableOf<T> extends WritableBrand {
   peek(): T;
 }
 
-// ─── Author-side: declaring invertibles ──────────────────────────
+export type { WritableBrand };
 
-/** Helper for declaring `static invertibles` with literal narrowing
- *  AND a compile-time check that each listed key is actually a method
- *  on R whose return type is R (the invertible-chain shape).
+// ─── Authoring helpers ───────────────────────────────────────────────
+
+/** Bidirectional field lens onto `parent.value[key]`. Read returns
+ *  the field; write spread-replaces the composite. Cached per
+ *  (instance, key) via `lazy()`. Return type is conditional on the
+ *  receiver: `Writable<Cls>` when `parent` carries the brand,
+ *  bare `Cls` otherwise.
  *
- *      class Vec extends Signal<V> {
- *        static invertibles = invertibles<Vec>()("add", "sub", "scale", "offset");
- *      }
+ *      get x() { return field(this, "x", Num); }
  *
- *  Forgetting `as const` is no longer possible; typos / non-invertible
- *  method names fail at the call site. The curried form lets us anchor
- *  R first so the second-arg key check has full inference. */
-export function invertibles<R>(): <
-  K extends ReadonlyArray<
-    { [P in keyof R]: R[P] extends (...args: never[]) => R ? P : never }[keyof R]
-  >,
->(
-  ...keys: K
-) => K {
-  return ((...keys: readonly unknown[]) => keys) as never;
+ *  TS infers the getter's return type from `field()`'s conditional —
+ *  no per-getter annotation needed. */
+// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo
+export function field<S extends Signal<any>, K extends keyof Of<S>, C extends new (...args: never[]) => Signal<Of<S>[K]>>(
+  parent: S,
+  key: K,
+  Cls: C,
+): S extends WritableBrand ? Writable<InstanceType<C>> : InstanceType<C> {
+  return lazy(parent, key as string | symbol, () =>
+    (parent as Signal<Of<S>>).lensTo(
+      Cls,
+      s => s[key] as Of<InstanceType<C>>,
+      (v, s) => ({ ...(s as object), [key]: v }) as Of<S>,
+    ),
+  ) as never;
+}
+
+/** Read-only derived view via `deriveTo`. Cached per (instance, key).
+ *  Always returns bare `Cls` (RO) regardless of parent writability —
+ *  derived views are RO at runtime, so this is the honest type
+ *  (today's recursive `LiftField` over-eagerly typed these as
+ *  writable on writable receivers).
+ *
+ *      get magnitude() {
+ *        return derived(this, "magnitude", Num, v => Math.hypot(v.x, v.y));
+ *      } */
+// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors deriveTo
+export function derived<S extends Signal<any>, C extends new (...args: never[]) => Signal<any>>(
+  parent: S,
+  key: string | symbol,
+  Cls: C,
+  fn: (v: Of<S>) => Of<InstanceType<C>>,
+): InstanceType<C> {
+  return lazy(parent, key, () => (parent as Signal<Of<S>>).deriveTo(Cls, fn)) as InstanceType<C>;
 }

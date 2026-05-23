@@ -5,14 +5,14 @@
 // doesn't decompose, so `spring`/`tween`/`mean` etc. reject Matrix at
 // compile time (no linear/lerp/metric).
 //
-// Two clearly-invertible ops, both via `Signal#through`:
+// Two clearly-invertible ops, both `: this` via `Signal#through`:
 //   - `multiply(b)` — inverse is multiply by `invert(b)`
 //   - `invert()`    — its own inverse
 
 import { bind } from "../lateral";
-import { lazy, type Of, Signal, type SignalOptions, type Val, valFn } from "../signal";
+import { type Of, Signal, type SignalOptions, type Val, valFn } from "../signal";
 import { traits } from "../traits";
-import { invertibles, type Writable } from "../writable";
+import { derived, field, type Wr, type Writable } from "../writable";
 import { Num } from "./num";
 import { Vec } from "./vec";
 
@@ -105,60 +105,47 @@ export function compose(t: Of<Vec>, r: number, s: Of<Vec>, pivot: Of<Vec>): V {
 export const toMatrixString = (m: V): string => `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
 
 export class Matrix extends Signal<V> {
-  // ── class-level config ─────────────────────────────────────────
   static traits = traits<V>()({ equals });
-  static invertibles = invertibles<Matrix>()("multiply", "invert", "through");
 
-  // ── instance ───────────────────────────────────────────────────
-  // (derive / lens / is inherited from Signal)
+  /** Phantom registry brand — `Writable<Matrix>` resolves to `Wr<Matrix>`. */
+  declare readonly _writable: Wr<Matrix>;
+
   constructor(v: V = identity(), opts?: SignalOptions<V>) {
     super(v, opts);
   }
 
-  multiply(b: Val<V>): Matrix {
+  multiply(b: Val<V>): this {
     const bf = valFn(b);
     return this.through(
       v => multiply(v, bf()),
       n => multiply(n, invert(bf())),
     );
   }
-  invert(): Matrix {
+  invert(): this {
     return this.through(invert, invert);
   }
 
-  get a(): Num {
-    return lazy(this, "a", () =>
-      this.lensTo(Num, s => s.a, (v, s) => ({ ...s, a: v })),
-    );
+  get a() {
+    return field(this, "a", Num);
   }
-  get b(): Num {
-    return lazy(this, "b", () =>
-      this.lensTo(Num, s => s.b, (v, s) => ({ ...s, b: v })),
-    );
+  get b() {
+    return field(this, "b", Num);
   }
-  get c(): Num {
-    return lazy(this, "c", () =>
-      this.lensTo(Num, s => s.c, (v, s) => ({ ...s, c: v })),
-    );
+  get c() {
+    return field(this, "c", Num);
   }
-  get d(): Num {
-    return lazy(this, "d", () =>
-      this.lensTo(Num, s => s.d, (v, s) => ({ ...s, d: v })),
-    );
+  get d() {
+    return field(this, "d", Num);
   }
-  get e(): Num {
-    return lazy(this, "e", () =>
-      this.lensTo(Num, s => s.e, (v, s) => ({ ...s, e: v })),
-    );
+  get e() {
+    return field(this, "e", Num);
   }
-  get f(): Num {
-    return lazy(this, "f", () =>
-      this.lensTo(Num, s => s.f, (v, s) => ({ ...s, f: v })),
-    );
+  get f() {
+    return field(this, "f", Num);
   }
 
-  get determinant(): Num {
-    return lazy(this, "determinant", () => this.deriveTo(Num, determinant));
+  get determinant() {
+    return derived(this, "determinant", Num, determinant);
   }
 }
 export interface Matrix {

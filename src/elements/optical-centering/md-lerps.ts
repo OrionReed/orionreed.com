@@ -1,6 +1,7 @@
 import {
   Anchor,
   Box,
+  box,
   Color,
   circle,
   computed,
@@ -84,7 +85,7 @@ export class MdLerps extends Diagram {
     const baseY = (i: number) => rowY(i) + 9;
     const n = num(0.15);
     const pos = vec(VIS_X + 12, baseY(1));
-    const box = new Box({ x: VIS_X + 4, y: rowY(2) - 6, w: 30, h: 20 });
+    const box_ = box(VIS_X + 4, rowY(2) - 6, 30, 20);
     const col = rgb(0.4, 0.6, 0.9);
     const txt = new Text("hello");
 
@@ -139,14 +140,14 @@ export class MdLerps extends Diagram {
     s(
       rowLabel(2, "Box"),
       track(VIS_X, rowY(2) - 14, VIS_W, 36, 0.1),
-      rect(box.x, box.y, box.w, box.h, {
+      rect(box_.x, box_.y, box_.w, box_.h, {
         stroke: "transparent",
         fill: true,
         corner: 3,
       }),
       readout(
         2,
-        computed(() => fmtBox(box.value)),
+        computed(() => fmtBox(box_.value)),
       ),
     );
 
@@ -206,7 +207,7 @@ export class MdLerps extends Diagram {
           yield [
             n.to(f.n, DUR),
             pos.to(f.v, DUR),
-            box.to(f.b, DUR),
+            box_.to(f.b, DUR),
             col.to(f.c, DUR),
             tween(txt as never, f.t, DUR),
           ];

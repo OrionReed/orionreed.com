@@ -1,23 +1,14 @@
 // box.ts — reactive axis-aligned rectangle.
 //
-// Invertibles (`add`, `sub`, `scale`, `expand`) ride on
-// `Signal#through(fwd, bwd)`. Chained calls auto-fuse.
+// Invertibles (`add`, `sub`, `scale`, `expand`) return `: this` and
+// ride on `Signal#through(fwd, bwd)`. Chained calls auto-fuse.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import {
-  computed,
-  lazy,
-  type Of,
-  Signal,
-  type SignalOptions,
-  type Val,
-  valFn,
-  value,
-} from "../signal";
+import { computed, lazy, type Of, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
 import { type Linear, traits } from "../traits";
-import { invertibles, type Writable } from "../writable";
+import { derived, field, type Wr, type Writable } from "../writable";
 import { Num } from "./num";
 import { Vec } from "./vec";
 
@@ -78,38 +69,37 @@ export function edgeFrom(b: V, toward: Of<Vec>): Of<Vec> {
 const linearImpl: Linear<V> = { add, sub, scale };
 
 export class Box extends Signal<V> {
-  // ── class-level config ─────────────────────────────────────────
   static traits = traits<V>()({ linear: linearImpl, lerp, equals });
-  static invertibles = invertibles<Box>()("add", "sub", "scale", "expand", "through");
 
-  // ── instance ───────────────────────────────────────────────────
-  // (derive / lens / is inherited from Signal)
+  /** Phantom registry brand — `Writable<Box>` resolves to `Wr<Box>`. */
+  declare readonly _writable: Wr<Box>;
+
   constructor(v: V = { x: 0, y: 0, w: 0, h: 0 }, opts?: SignalOptions<V>) {
     super(v, opts);
   }
 
-  add(b: Val<V>): Box {
+  add(b: Val<V>): this {
     const bf = valFn(b);
     return this.through(
       v => add(v, bf()),
       n => sub(n, bf()),
     );
   }
-  sub(b: Val<V>): Box {
+  sub(b: Val<V>): this {
     const bf = valFn(b);
     return this.through(
       v => sub(v, bf()),
       n => add(n, bf()),
     );
   }
-  scale(k: Val<number>): Box {
+  scale(k: Val<number>): this {
     const kf = valFn(k);
     return this.through(
       v => scale(v, kf()),
       n => scale(n, 1 / kf()),
     );
   }
-  expand(n: Val<number>): Box {
+  expand(n: Val<number>): this {
     const nf = valFn(n);
     return this.through(
       v => expand(v, nf()),
@@ -124,28 +114,21 @@ export class Box extends Signal<V> {
     return computed(() => contains(this.value, value(p)));
   }
 
-  get x(): Num {
-    return lazy(this, "x", () =>
-      this.lensTo(Num, s => s.x, (v, s) => ({ ...s, x: v })),
-    );
+  // ── field lenses & derived views ──────────────────────────────────
+  get x() {
+    return field(this, "x", Num);
   }
-  get y(): Num {
-    return lazy(this, "y", () =>
-      this.lensTo(Num, s => s.y, (v, s) => ({ ...s, y: v })),
-    );
+  get y() {
+    return field(this, "y", Num);
   }
-  get w(): Num {
-    return lazy(this, "w", () =>
-      this.lensTo(Num, s => s.w, (v, s) => ({ ...s, w: v })),
-    );
+  get w() {
+    return field(this, "w", Num);
   }
-  get h(): Num {
-    return lazy(this, "h", () =>
-      this.lensTo(Num, s => s.h, (v, s) => ({ ...s, h: v })),
-    );
+  get h() {
+    return field(this, "h", Num);
   }
-  get area(): Num {
-    return lazy(this, "area", () => this.deriveTo(Num, b => b.w * b.h));
+  get area() {
+    return derived(this, "area", Num, b => b.w * b.h);
   }
 
   /** Vec at parametric (u, v) within `[0,1]²`. Not memoised — arbitrary
@@ -154,8 +137,10 @@ export class Box extends Signal<V> {
   at(u: number, v: number): Vec {
     return this.deriveTo(Vec, b => ({ x: b.x + u * b.w, y: b.y + v * b.h }));
   }
-  // Named edges — memoised separately under stable keys for identity
-  // (effects subscribing to `b.center` should always see the same Vec).
+  // Named edges — derived RO views over `at(u, v)`. Memoised under
+  // stable keys for identity (effects subscribing to `b.center` should
+  // always see the same Vec). `lazy()` directly because `at()` already
+  // returns a Vec — no need to `derived(this, …, Vec, fn)` again.
   get center(): Vec {
     return lazy(this, "center", () => this.at(0.5, 0.5));
   }
@@ -173,8 +158,8 @@ export class Box extends Signal<V> {
   }
 
   /** Tween-builder, implied by the lerp trait. */
-  to(target: V, dur: Val<number>, ease?: Easing): Tween<V> {
-    return tween(this as never, target, dur, ease);
+  to(this: Writable<Box>, target: V, dur: Val<number>, ease?: Easing): Tween<V> {
+    return tween(this, target, dur, ease);
   }
 }
 export interface Box {
