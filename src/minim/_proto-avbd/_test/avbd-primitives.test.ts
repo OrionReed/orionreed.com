@@ -13,7 +13,6 @@ import {
   onCircle,
   parallel,
   perpendicular,
-  pin,
   Solver,
 } from "../index";
 
@@ -25,8 +24,8 @@ describe("AVBD sketchpad primitives via FD", () => {
     const s = new Solver({ iterations: 30 });
     angle(s, A, B, C, Math.PI / 2);
     distance(s, B, C, 1);
-    pin(A);
-    pin(B);
+    s.pin(A);
+    s.pin(B);
     A.value = { x: 1.0001, y: 0 };
     expect(Math.hypot(C.value.x, C.value.y)).toBeCloseTo(1, 1);
     const dot = A.value.x * C.value.x + A.value.y * C.value.y;
@@ -40,9 +39,9 @@ describe("AVBD sketchpad primitives via FD", () => {
     const D = vec(3, 2);
     const s = new Solver({ iterations: 30 });
     parallel(s, A, B, C, D);
-    pin(A);
-    pin(B);
-    pin(C);
+    s.pin(A);
+    s.pin(B);
+    s.pin(C);
     A.value = { x: 0.0001, y: 0 };
     expect(D.value.y).toBeCloseTo(1, 1);
   });
@@ -53,8 +52,8 @@ describe("AVBD sketchpad primitives via FD", () => {
     const P = vec(3, 5);
     const s = new Solver({ iterations: 50 });
     collinear(s, P, A, B);
-    pin(A);
-    pin(B);
+    s.pin(A);
+    s.pin(B);
     A.value = { x: 0.0001, y: 0 };
     const apx = P.value.x;
     const apy = P.value.y;
@@ -66,7 +65,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const P = vec(2, 0);
     const s = new Solver({ iterations: 30 });
     onCircle(s, P, center, 1);
-    pin(center);
+    s.pin(center);
     center.value = { x: 0.0001, y: 0 };
     expect(Math.hypot(P.value.x, P.value.y)).toBeCloseTo(1, 1);
   });
@@ -78,9 +77,9 @@ describe("AVBD sketchpad primitives via FD", () => {
     const D = vec(5, 0);
     const s = new Solver({ iterations: 30 });
     equalDist(s, A, B, C, D);
-    pin(A);
-    pin(B);
-    pin(C);
+    s.pin(A);
+    s.pin(B);
+    s.pin(C);
     A.value = { x: 0.0001, y: 0 };
     expect(Math.hypot(D.value.x, D.value.y)).toBeCloseTo(3, 1);
   });
@@ -91,8 +90,8 @@ describe("AVBD sketchpad primitives via FD", () => {
     const M = vec(0, 0);
     const s = new Solver({ iterations: 20 });
     midpoint(s, M, A, B);
-    pin(A);
-    pin(B);
+    s.pin(A);
+    s.pin(B);
     A.value = { x: 0.0001, y: 0 };
     expect(M.value.x).toBeCloseTo(2, 1);
     expect(M.value.y).toBeCloseTo(3, 1);
@@ -110,8 +109,8 @@ describe("AVBD sketchpad primitives via FD", () => {
       out[0]! = b[0]! - 0.5 * (a[0]! + c[0]!);
       out[1]! = b[1]! - Math.sin(b[0]!);
     });
-    pin(A);
-    pin(C);
+    s.pin(A);
+    s.pin(C);
     A.value = { x: 0.0001, y: 0 };
     expect(B.value.x).toBeCloseTo(5, 1);
     expect(B.value.y).toBeCloseTo(Math.sin(5), 1);
@@ -124,9 +123,9 @@ describe("AVBD sketchpad primitives via FD", () => {
     const D = vec(2, 1);
     const s = new Solver({ iterations: 30 });
     perpendicular(s, A, B, C, D);
-    pin(A);
-    pin(B);
-    pin(C);
+    s.pin(A);
+    s.pin(B);
+    s.pin(C);
     A.value = { x: 0.0001, y: 0 };
     expect(D.value.x).toBeCloseTo(0, 1);
   });

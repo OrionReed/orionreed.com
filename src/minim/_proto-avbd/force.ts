@@ -34,13 +34,21 @@ export const PENALTY_MIN = 1.0;
 export const PENALTY_MAX = 1e9;
 
 export abstract class Force {
-  /** Solver this force belongs to. Subclasses read positions and
-   *  cell metadata via `solver.positions`, `solver.offsets`,
-   *  `solver.dims`. */
+  /** Solver this force belongs to. Subclasses read positions via
+   *  `solver.positions[off + k]`, with `off` taken from
+   *  `cellOffsets[ci]` (cached at construction). */
   readonly solver: Solver;
   /** Cell ids this force binds, in the order subclasses expect.
    *  `cells[ci]` is the cell-index-`ci` cell. */
   readonly cells: readonly number[];
+  /** Per-cell-index starting offset into `solver.positions`,
+   *  cached at construction. Solver offsets are append-only —
+   *  once set, never moved — so caching is safe. Subclasses
+   *  read positions as `solver.positions[cellOffsets[ci] + k]`,
+   *  saving one array lookup per inner-loop access. */
+  readonly cellOffsets: readonly number[];
+  /** Per-cell-index dim, cached for the same reason as offsets. */
+  readonly cellDims: readonly number[];
   /** Number of constraint scalar rows. */
   readonly rows: number;
 
@@ -62,9 +70,6 @@ export abstract class Force {
   readonly penalty: Float64Array;
   /** Lagrange multiplier for hard constraints (soft uses 0). */
   readonly lambda: Float64Array;
-  /** Cached `isHard(r)` per row. Maintained by mutating-`stiffness`
-   *  callers via `refreshHardFlags`. */
-  readonly hard: Uint8Array;
   /** Whether the force is disabled (fractured / removed). */
   disabled = false;
 
@@ -77,6 +82,8 @@ export abstract class Force {
   constructor(solver: Solver, cells: readonly number[], rows: number) {
     this.solver = solver;
     this.cells = cells;
+    this.cellOffsets = cells.map(id => solver.offsets[id]!);
+    this.cellDims = cells.map(id => solver.dims[id]!);
     this.rows = rows;
     this.C = new Float64Array(rows);
     this.C0 = new Float64Array(rows);
@@ -86,20 +93,11 @@ export abstract class Force {
     this.fracture = new Float64Array(rows).fill(Infinity);
     this.penalty = new Float64Array(rows).fill(PENALTY_MIN);
     this.lambda = new Float64Array(rows);
-    this.hard = new Uint8Array(rows).fill(1);
-    this.J = cells.map(id => new Float64Array(rows * solver.dims[id]!));
-    this.HCols = cells.map(id => new Float64Array(rows * solver.dims[id]!));
+    this.J = this.cellDims.map(d => new Float64Array(rows * d));
+    this.HCols = this.cellDims.map(d => new Float64Array(rows * d));
     // Wire adjacency.
     for (let ci = 0; ci < cells.length; ci++) {
       solver._connectForce(this, cells[ci]!, ci);
-    }
-  }
-
-  /** Refresh `hard` flags from `stiffness`. Call after mutating
-   *  `stiffness` (most user code never does). */
-  refreshHardFlags(): void {
-    for (let r = 0; r < this.rows; r++) {
-      this.hard[r] = Number.isFinite(this.stiffness[r]!) ? 0 : 1;
     }
   }
 
@@ -111,7 +109,12 @@ export abstract class Force {
     this.disabled = true;
   }
 
+  /** True iff `stiffness[row]` is `Infinity` — i.e. this row is
+   *  solved via the augmented-Lagrangian path rather than penalty
+   *  weighting. Caching this used to be a manual contract via
+   *  `refreshHardFlags`; we now derive it on demand. The hot path
+   *  inlines the `=== Infinity` check directly. */
   isHard(row: number): boolean {
-    return this.hard[row] === 1;
+    return this.stiffness[row]! === Infinity;
   }
 }

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { num, vec } from "../../signals";
-import { bounded, distance, geq, leq, pin, Solver, Strength, spring } from "../index";
+import { bounded, distance, geq, leq, Solver, Strength, spring } from "../index";
 
 describe("API — Strength constants", () => {
   it("constants ordered low → high; HARD = ∞", () => {
@@ -20,7 +20,7 @@ describe("API — Strength constants", () => {
     const b = vec(5, 0);
     const s = new Solver({ iterations: 30 });
     spring(s, a, b, 1, Strength.STRONG);
-    pin(a);
+    s.pin(a);
     a.value = { x: 0.0001, y: 0 };
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(1, 1);
   });
@@ -41,7 +41,7 @@ describe("API — inequality factories", () => {
     const b = num(3);
     const s = new Solver({ iterations: 30 });
     leq(s, a, b);
-    pin(b);
+    s.pin(b);
     b.value = 3.0001;
     expect(a.value).toBeLessThanOrEqual(b.value + 1e-2);
   });
@@ -51,7 +51,7 @@ describe("API — inequality factories", () => {
     const b = num(5);
     const s = new Solver({ iterations: 30 });
     geq(s, a, b);
-    pin(b);
+    s.pin(b);
     b.value = 5.0001;
     expect(a.value).toBeGreaterThanOrEqual(5 - 1e-2);
   });
@@ -63,7 +63,7 @@ describe("API — `pin()` is the canonical drag mechanism", () => {
     const b = vec(0, 0);
     const s = new Solver({ iterations: 30 });
     distance(s, a, b, 1);
-    pin(a);
+    s.pin(a);
     a.value = { x: 7.0001, y: 11 };
     expect(a.value.x).toBeCloseTo(7, 1);
     expect(a.value.y).toBeCloseTo(11, 1);
@@ -75,7 +75,7 @@ describe("API — `pin()` is the canonical drag mechanism", () => {
     const b = num(0);
     const s = new Solver({ iterations: 20 });
     leq(s, a, b);
-    const release = pin(a);
+    const release = s.pin(a);
     expect(s.massOf(s.bind(a))).toBe(0);
     release();
     expect(s.massOf(s.bind(a))).toBe(1);

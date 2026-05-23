@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 import { num, vec } from "../../signals";
-import { clamp, distance, eq, lensNum, pin, Solver, softTarget, spring } from "../index";
+import { clamp, distance, eq, lensNum, Solver, softTarget, spring } from "../index";
 
 describe("AVBD basic — single constraint correctness", () => {
   it("hard equality between two Num cells", () => {
@@ -27,7 +27,7 @@ describe("AVBD basic — single constraint correctness", () => {
     const b = num(0);
     const s = new Solver();
     eq(s, a, b);
-    pin(a);
+    s.pin(a);
     a.value = 3;
     a.value = 3.0001; // fresh value triggers solve
     expect(a.value).toBeCloseTo(3, 3);
@@ -39,7 +39,7 @@ describe("AVBD basic — single constraint correctness", () => {
     const b = num(0);
     const s = new Solver({ iterations: 10 });
     lensNum(s, a, b, x => 2 * x);
-    pin(a);
+    s.pin(a);
     a.value = 4.0001;
     expect(b.value).toBeCloseTo(8, 3);
   });
@@ -49,7 +49,7 @@ describe("AVBD basic — single constraint correctness", () => {
     const b = num(10);
     const s = new Solver({ iterations: 30 });
     lensNum(s, a, b, x => 2 * x);
-    pin(b);
+    s.pin(b);
     b.value = 10.0001;
     // 10 = 2a → a = 5.
     expect(a.value).toBeCloseTo(5, 3);
@@ -60,7 +60,7 @@ describe("AVBD basic — single constraint correctness", () => {
     const b = vec(1, 0);
     const s = new Solver({ iterations: 20 });
     distance(s, a, b, 5);
-    pin(a);
+    s.pin(a);
     // Drag a slightly to trigger; b must be at distance 5 from a.
     a.value = { x: 0.001, y: 0 };
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(5, 1);
@@ -94,8 +94,8 @@ describe("AVBD basic — single constraint correctness", () => {
     const b = vec(5, 0);
     const s = new Solver({ iterations: 5 });
     const f = spring(s, a, b, 1, 10);
-    pin(a);
-    pin(b);
+    s.pin(a);
+    s.pin(b);
     // Trigger one solve.
     a.value = { x: 0.001, y: 0 };
     expect(Math.abs(f.C[0]!)).toBeCloseTo(4, 1);

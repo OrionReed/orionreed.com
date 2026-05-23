@@ -53,8 +53,5 @@ export {
   spring,
 } from "./constraints";
 export { Force, PENALTY_MAX, PENALTY_MIN } from "./force";
-// Side-effect import: registers the reactive driver factory so
-// `Solver.bind()` works. Re-exports `pin`.
-export { pin } from "./reactive";
 export { Simulation, type SimulationOpts } from "./simulation";
 export { Solver, type SolverOpts } from "./solver";

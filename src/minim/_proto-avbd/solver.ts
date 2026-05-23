@@ -7,14 +7,17 @@
 //
 // Cells are integer handles returned by `addCell(dim, init?)`.
 // Forces store `cells: number[]` and read positions via
-// `solver.positions[solver.offsets[id] + k]`. The reactive layer
-// (`reactive.ts`) maps signals to cell ids and back.
+// `solver.positions[solver.offsets[id] + k]`. Reactive `Signal`s
+// (any value class declaring the `pack` trait) bind through
+// `s.bind(sig)` — the solver tracks signal ↔ cell mapping and
+// runs solves through a `preEffect` driver installed lazily on
+// the first bind.
 //
 // The solver answers the time-free question: "given an inertial
 // anchor `y` and constraints, find `x`." Time-stepping (velocity,
 // dt, gravity) is `Simulation`'s job — see simulation.ts.
 
-import { type Pack, requirePack, type Signal } from "../signals";
+import { type Pack, preEffect, type PreEffectHandle, requirePack, type Signal } from "../signals";
 import type { Force } from "./force";
 import { PENALTY_MAX, PENALTY_MIN } from "./force";
 import { clamp, solveSPD } from "./linalg";
@@ -190,16 +193,24 @@ export class Solver {
   // `bind(sig)` registers a `Signal` (typed value class with the
   // `pack` trait) and returns its cell id. Repeat calls return the
   // same id. Mass starts at 1; flip to 0 to pin (or use the
-  // `pin(sig)` helper from `reactive.ts`). The signal layer
-  // handles propagation; the reactive driver (installed lazily by
-  // `reactive.ts` when first invoked) reads/writes signals at
-  // step boundaries.
+  // `pin(sig)` method below). On first bind, we install a
+  // `preEffect` driver that:
+  //   1. Reads each bound signal (subscribing via `.value`).
+  //   2. Pulls those values into `positions`.
+  //   3. Runs `step()`.
+  //   4. Writes solved positions back to the signals.
+  // `preEffect` self-mutes during its run, so step (4)'s writes
+  // don't re-queue the driver. Subsequent binds just `invalidate()`
+  // the driver — its next run picks up the new signals as deps.
 
   // biome-ignore lint/suspicious/noExplicitAny: see Bindable in constraints.ts
   private readonly _sigToCell = new Map<Signal<any>, number>();
-  /** @internal — reactive layer reads this to drive sync. */
+  /** @internal — sparse list of bindings indexed by cell id.
+   *  Entries are undefined for cells added via `addCell` (no signal). */
   // biome-ignore lint/suspicious/noExplicitAny: heterogeneous binding registry
-  readonly _cellToBinding: { sig: Signal<any>; pack: Pack<any> }[] = [];
+  readonly _bindings: ({ sig: Signal<any>; pack: Pack<any> } | undefined)[] = [];
+  /** @internal — `Simulation` clears this to take over the time loop. */
+  _reactiveHandle?: PreEffectHandle;
 
   /** Bind a reactive `Signal` (any value class declaring the `pack`
    *  trait — `Num`, `Vec`, `Box`, `Color`, …) and return its cell
@@ -213,19 +224,57 @@ export class Solver {
     pack.read(sig.peek(), init, 0);
     const id = this.addCell(pack.dim, init);
     this._sigToCell.set(sig, id);
-    this._cellToBinding[id] = { sig, pack };
-    // Lazy-install the reactive driver on the first bind. For
-    // subsequent binds, just `invalidate()` the existing driver:
-    // it'll re-run on the next flush, re-iterate the bindings
-    // map, and pick up the new signal as a dependency. This keeps
-    // the construction cost O(N) (one bind = one map insert +
-    // one invalidate) rather than O(N²) for re-installing.
+    this._bindings[id] = { sig, pack };
+    // Lazy-install the driver on the first bind; subsequent binds
+    // invalidate it so its next run picks up the new signal as a
+    // dep. Construction is O(N) (one bind = one invalidate), not
+    // O(N²) (which a dispose+reinstall would be).
     if (this._reactiveHandle === undefined) {
-      installReactiveDriver(this);
+      this._reactiveHandle = preEffect(() => this._driverRun());
     } else {
       this._reactiveHandle.invalidate();
     }
     return id;
+  }
+
+  /** Pin a bound signal at its current value (mass = 0). Returns an
+   *  `unpin` function that restores the prior mass. Throws if `sig`
+   *  isn't bound to this solver. */
+  // biome-ignore lint/suspicious/noExplicitAny: see Bindable
+  pin(sig: Signal<any>): () => void {
+    const id = this._sigToCell.get(sig);
+    if (id === undefined) {
+      throw new Error(
+        "pin: signal is not bound to this solver. Call s.bind(sig) " +
+          "first or pass it to a constraint factory.",
+      );
+    }
+    const prev = this.masses[id]!;
+    this.masses[id] = 0;
+    return () => {
+      this.masses[id] = prev;
+    };
+  }
+
+  /** @internal — body of the reactive driver. Pulled out so
+   *  `bind()` can pass it to `preEffect`. */
+  private _driverRun(): void {
+    const positions = this.positions;
+    const offsets = this.offsets;
+    const bindings = this._bindings;
+    const N = this._cellCount;
+    for (let id = 0; id < N; id++) {
+      const b = bindings[id];
+      if (!b) continue;
+      b.pack.read(b.sig.value, positions, offsets[id]!);
+    }
+    this.step();
+    for (let id = 0; id < N; id++) {
+      const b = bindings[id];
+      if (!b) continue;
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic pack typing
+      (b.sig as Signal<any>).value = b.pack.write(positions, offsets[id]!);
+    }
   }
 
   /** Read cell `id`'s position into `out` (or a fresh array). */
@@ -365,7 +414,7 @@ export class Solver {
         f.computeDerivatives(ci);
         const Jblock = f.J[ci]!;
         const Hcols = f.HCols[ci]!;
-        const fHard = f.hard;
+        const fStiff = f.stiffness;
         const fLambda = f.lambda;
         const fPenalty = f.penalty;
         const fC = f.C;
@@ -373,7 +422,7 @@ export class Solver {
         const fMax = f.fmax;
         const rows = f.rows;
         for (let r = 0; r < rows; r++) {
-          const lambda = fHard[r]! === 1 ? fLambda[r]! : 0;
+          const lambda = fStiff[r]! === Infinity ? fLambda[r]! : 0;
           const kC = fPenalty[r]! * fC[r]! + lambda;
           const lo = fMin[r]!;
           const hi = fMax[r]!;
@@ -430,7 +479,6 @@ export class Solver {
       const f = allForces[fi]!;
       if (f.disabled) continue;
       f.computeConstraint(currentAlpha);
-      const fHard = f.hard;
       const fLambda = f.lambda;
       const fPenalty = f.penalty;
       const fC = f.C;
@@ -440,7 +488,7 @@ export class Solver {
       const fFracture = f.fracture;
       const rows = f.rows;
       for (let r = 0; r < rows; r++) {
-        const lambda = fHard[r]! === 1 ? fLambda[r]! : 0;
+        const lambda = fStiff[r]! === Infinity ? fLambda[r]! : 0;
         const kC = fPenalty[r]! * fC[r]! + lambda;
         const lo = fMin[r]!;
         const hi = fMax[r]!;
@@ -477,16 +525,6 @@ export class Solver {
     this.masses = newMasses;
   }
 
-  /** @internal — set by reactive.ts when it installs a driver. */
-  _reactiveHandle?: { dispose(): void; invalidate(): void };
-  /** @internal — convenience accessor for legacy paths. */
-  get _reactiveDispose(): (() => void) | undefined {
-    return this._reactiveHandle?.dispose.bind(this._reactiveHandle);
-  }
-  set _reactiveDispose(v: (() => void) | undefined) {
-    if (v === undefined) this._reactiveHandle = undefined;
-  }
-
   private _growScalarBuffers(needed: number): void {
     let cap = this._capacity || 1;
     while (cap < this._totalDof + needed) cap *= 2;
@@ -503,23 +541,3 @@ export class Solver {
   }
 }
 
-// ─── Reactive driver lazy-install hook ───────────────────────────────
-//
-// `Solver.bind()` calls `installReactiveDriver(this)` on first
-// invocation. The implementation lives in `reactive.ts`; we use a
-// late-bound function ref to avoid a top-level import cycle (and
-// to keep the reactive cost off solvers that never bind a signal).
-// `reactive.ts` registers itself via `setReactiveInstaller` at
-// module load.
-
-let installReactiveDriver: (s: Solver) => void = () => {
-  throw new Error(
-    "AVBD: Solver.bind() called before reactive integration was loaded. " +
-      "Make sure `_proto-avbd/reactive.ts` is reachable in your import graph.",
-  );
-};
-
-/** @internal — reactive.ts installs its driver factory here. */
-export function setReactiveInstaller(installer: (s: Solver) => void): void {
-  installReactiveDriver = installer;
-}

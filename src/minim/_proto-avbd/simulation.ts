@@ -104,7 +104,7 @@ export class Simulation {
     const velocities = this.velocities;
     const N = solver.cellCount;
     // biome-ignore lint/suspicious/noExplicitAny: heterogeneous binding registry
-    const bindings = solver._cellToBinding as readonly { sig: Signal<any>; pack: Pack<any> }[];
+    const bindings = solver._bindings as readonly ({ sig: Signal<any>; pack: Pack<any> } | undefined)[];
 
     // Snapshot signal values into solver positions (catches user
     // writes since the last tick).

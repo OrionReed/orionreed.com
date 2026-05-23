@@ -55,10 +55,7 @@ export class EqForce extends Force {
       throw new Error("eq: cell dims must match");
     }
     super(solver, [a, b], solver.dims[a]!);
-    if (!hard) {
-      this.stiffness.fill(1e6);
-      this.refreshHardFlags();
-    }
+    if (!hard) this.stiffness.fill(1e6);
   }
 
   initialize(): boolean {
@@ -67,11 +64,11 @@ export class EqForce extends Force {
 
   computeConstraint(alpha: number): void {
     const positions = this.solver.positions;
-    const aOff = this.solver.offsets[this.cells[0]!]!;
-    const bOff = this.solver.offsets[this.cells[1]!]!;
+    const aOff = this.cellOffsets[0]!;
+    const bOff = this.cellOffsets[1]!;
     for (let k = 0; k < this.rows; k++) {
       const Cn = positions[aOff + k]! - positions[bOff + k]!;
-      this.C[k]! = this.isHard(k) ? Cn - alpha * this.C0[k]! : Cn;
+      this.C[k]! = this.stiffness[k]! === Infinity ? Cn - alpha * this.C0[k]! : Cn;
     }
   }
 
@@ -108,15 +105,15 @@ export class LensNumForce extends Force {
 
   computeConstraint(alpha: number): void {
     const positions = this.solver.positions;
-    const aOff = this.solver.offsets[this.cells[0]!]!;
-    const bOff = this.solver.offsets[this.cells[1]!]!;
+    const aOff = this.cellOffsets[0]!;
+    const bOff = this.cellOffsets[1]!;
     const a = positions[aOff]!;
     const b = positions[bOff]!;
     const fa = this.fwd(a);
     this._cachedFwdA = fa;
     this._cachedA = a;
     const Cn = b - fa;
-    this.C[0]! = this.isHard(0) ? Cn - alpha * this.C0[0]! : Cn;
+    this.C[0]! = this.stiffness[0]! === Infinity ? Cn - alpha * this.C0[0]! : Cn;
   }
 
   computeDerivatives(cellIdx: number): void {
@@ -147,10 +144,7 @@ export class DistanceForce extends Force {
     }
     super(solver, [a, b], 1);
     this.rest = rest;
-    if (!hard) {
-      this.stiffness.fill(stiffness);
-      this.refreshHardFlags();
-    }
+    if (!hard) this.stiffness.fill(stiffness);
   }
 
   initialize(): boolean {
@@ -159,8 +153,8 @@ export class DistanceForce extends Force {
 
   computeConstraint(alpha: number): void {
     const positions = this.solver.positions;
-    const aOff = this.solver.offsets[this.cells[0]!]!;
-    const bOff = this.solver.offsets[this.cells[1]!]!;
+    const aOff = this.cellOffsets[0]!;
+    const bOff = this.cellOffsets[1]!;
     const dx = positions[aOff]! - positions[bOff]!;
     const dy = positions[aOff + 1]! - positions[bOff + 1]!;
     const d2 = dx * dx + dy * dy;
@@ -170,7 +164,7 @@ export class DistanceForce extends Force {
       this._cachedNy = 0;
       this._cachedInvD = 0;
       const Cn = -this.rest;
-      this.C[0]! = this.hard[0] === 1 ? Cn - alpha * this.C0[0]! : Cn;
+      this.C[0]! = this.stiffness[0]! === Infinity ? Cn - alpha * this.C0[0]! : Cn;
       return;
     }
     const d = Math.sqrt(d2);
@@ -180,7 +174,7 @@ export class DistanceForce extends Force {
     this._cachedNy = dy * inv;
     this._cachedInvD = inv;
     const Cn = d - this.rest;
-    this.C[0]! = this.hard[0] === 1 ? Cn - alpha * this.C0[0]! : Cn;
+    this.C[0]! = this.stiffness[0]! === Infinity ? Cn - alpha * this.C0[0]! : Cn;
   }
 
   computeDerivatives(cellIdx: number): void {
@@ -225,12 +219,13 @@ export class BoundsForce extends Force {
 
   computeConstraint(alpha: number): void {
     const positions = this.solver.positions;
-    const off = this.solver.offsets[this.cells[0]!]!;
+    const off = this.cellOffsets[0]!;
     const x = positions[off]!;
     const c0 = x - this.lo;
     const c1 = this.hi - x;
-    this.C[0]! = this.isHard(0) ? c0 - alpha * this.C0[0]! : c0;
-    this.C[1]! = this.isHard(1) ? c1 - alpha * this.C0[1]! : c1;
+    const stiff = this.stiffness;
+    this.C[0]! = stiff[0]! === Infinity ? c0 - alpha * this.C0[0]! : c0;
+    this.C[1]! = stiff[1]! === Infinity ? c1 - alpha * this.C0[1]! : c1;
   }
 
   computeDerivatives(_cellIdx: number): void {
@@ -251,7 +246,6 @@ export class SoftTargetForce extends Force {
     this.target = new Float64Array(dim);
     for (let k = 0; k < dim; k++) this.target[k]! = target[k] ?? 0;
     this.stiffness.fill(stiffness);
-    this.refreshHardFlags();
   }
 
   initialize(): boolean {
@@ -260,7 +254,7 @@ export class SoftTargetForce extends Force {
 
   computeConstraint(_alpha: number): void {
     const positions = this.solver.positions;
-    const off = this.solver.offsets[this.cells[0]!]!;
+    const off = this.cellOffsets[0]!;
     const dim = this.rows;
     for (let k = 0; k < dim; k++) {
       this.C[k]! = positions[off + k]! - this.target[k]!;
@@ -314,11 +308,8 @@ export class GenericForce extends Force {
     this._fdScratchPlus = new Float64Array(rows);
     this._fdScratchMinus = new Float64Array(rows);
     this._fdRawBase = new Float64Array(rows);
-    this._fdPositions = cells.map(id => new Float64Array(solver.dims[id]!));
-    if (opts.hard === false) {
-      this.stiffness.fill(opts.stiffness ?? 1e6);
-      this.refreshHardFlags();
-    }
+    this._fdPositions = this.cellDims.map(d => new Float64Array(d));
+    if (opts.hard === false) this.stiffness.fill(opts.stiffness ?? 1e6);
   }
 
   initialize(): boolean {
@@ -328,25 +319,24 @@ export class GenericForce extends Force {
   computeConstraint(alpha: number): void {
     // Snapshot cell positions into our scratch.
     const positions = this.solver.positions;
-    const offsets = this.solver.offsets;
-    const dims = this.solver.dims;
+    const offsets = this.cellOffsets;
+    const dims = this.cellDims;
     for (let i = 0; i < this.cells.length; i++) {
-      const id = this.cells[i]!;
-      const off = offsets[id]!;
-      const dim = dims[id]!;
+      const off = offsets[i]!;
+      const dim = dims[i]!;
       const into = this._fdPositions[i]!;
       for (let k = 0; k < dim; k++) into[k]! = positions[off + k]!;
     }
     this.fn(this._fdPositions, this._fdRawBase);
+    const stiff = this.stiffness;
     for (let r = 0; r < this.rows; r++) {
       const raw = this._fdRawBase[r]!;
-      this.C[r]! = this.hard[r] === 1 ? raw - alpha * this.C0[r]! : raw;
+      this.C[r]! = stiff[r]! === Infinity ? raw - alpha * this.C0[r]! : raw;
     }
   }
 
   computeDerivatives(cellIdx: number): void {
-    const id = this.cells[cellIdx]!;
-    const dim = this.solver.dims[id]!;
+    const dim = this.cellDims[cellIdx]!;
     const J = this.J[cellIdx]!;
     const Hcols = this.HCols[cellIdx]!;
     const baseRaw = this._fdRawBase;

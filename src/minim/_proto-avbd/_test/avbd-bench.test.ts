@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { type Vec, vec, type Writable } from "../../signals";
-import { distance, pin, Solver } from "../index";
+import { distance, Solver } from "../index";
 
 type WVec = Writable<Vec>;
 
@@ -14,8 +14,8 @@ function chain(N: number, iters: number) {
   for (let i = 0; i < N; i++) cells.push(vec(i, 0));
   const s = new Solver({ iterations: iters });
   for (let i = 1; i < N; i++) distance(s, cells[i - 1]!, cells[i]!, 1);
-  pin(cells[0]!);
-  pin(cells[N - 1]!);
+  s.pin(cells[0]!);
+  s.pin(cells[N - 1]!);
   return { s, cells };
 }
 
@@ -31,8 +31,8 @@ function lattice(W: number, H: number, iters: number) {
     for (let i = 1; i < W; i++) distance(s, cells[j]![i - 1]!, cells[j]![i]!, 1);
   for (let i = 0; i < W; i++)
     for (let j = 1; j < H; j++) distance(s, cells[j - 1]![i]!, cells[j]![i]!, 1);
-  pin(cells[0]![0]!);
-  pin(cells[0]![W - 1]!);
+  s.pin(cells[0]![0]!);
+  s.pin(cells[0]![W - 1]!);
   return { s, cells };
 }
 
@@ -56,7 +56,7 @@ describe("AVBD bench — SOA hot path", () => {
 
   it("lattice 32x32 iter=5", () => {
     const { s, cells } = lattice(32, 32, 5);
-    pin(cells[31]![31]!);
+    s.pin(cells[31]![31]!);
     const drags = 20;
     let dy = 0.5;
     const t0 = performance.now();
@@ -72,7 +72,7 @@ describe("AVBD bench — SOA hot path", () => {
 
   it("lattice 100x100 iter=5", () => {
     const { s, cells } = lattice(100, 100, 5);
-    pin(cells[99]![99]!);
+    s.pin(cells[99]![99]!);
     const drags = 3;
     let dy = 0.5;
     const t0 = performance.now();
@@ -91,7 +91,7 @@ describe("AVBD bench — SOA hot path", () => {
 
   it("lattice 200x200 iter=5", () => {
     const { s, cells } = lattice(200, 200, 5);
-    pin(cells[199]![199]!);
+    s.pin(cells[199]![199]!);
     const drags = 2;
     let dy = 0.5;
     const t0 = performance.now();

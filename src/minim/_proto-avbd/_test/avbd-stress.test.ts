@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import { type Vec, vec, type Writable } from "../../signals";
-import { distance, pin, Simulation, Solver, spring } from "../index";
+import { distance, Simulation, Solver, spring } from "../index";
 
 type WVec = Writable<Vec>;
 
@@ -23,7 +23,7 @@ describe("AVBD stress — high stiffness ratios (paper §3.4)", () => {
     const s = new Solver({ iterations: 5, alpha: 0.99 });
     spring(s, top, A, 1, 1e4);
     spring(s, A, B, 1, 1);
-    pin(top);
+    s.pin(top);
     const sim = new Simulation(s, { gravity: [0, -10] });
     for (let step = 0; step < 60; step++) sim.tick(1 / 60);
     const dTopA = Math.hypot(A.value.x - top.value.x, A.value.y - top.value.y);
@@ -40,7 +40,7 @@ describe("AVBD stress — high stiffness ratios (paper §3.4)", () => {
     const b = vec(3, 0);
     const s = new Solver({ iterations: 20 });
     const dist = distance(s, a, b, 5);
-    pin(a);
+    s.pin(a);
     a.value = { x: 0.0001, y: 0 };
     expect(Math.abs(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y) - 5)).toBeLessThan(
       1e-2,
@@ -56,8 +56,8 @@ describe("AVBD stress — long chain stability (paper §1, §3.4)", () => {
     for (let i = 0; i < N; i++) cells.push(vec(i, 0));
     const s = new Solver({ iterations: 20 });
     for (let i = 1; i < N; i++) distance(s, cells[i - 1]!, cells[i]!, 1);
-    pin(cells[0]!);
-    pin(cells[N - 1]!);
+    s.pin(cells[0]!);
+    s.pin(cells[N - 1]!);
     // Multiple incremental drags so warm-start helps — chain
     // problems converge poorly from a cold start in 20 iters.
     cells[N - 1]!.value = { x: N - 5, y: 5 };
@@ -82,8 +82,8 @@ describe("AVBD stress — long chain stability (paper §1, §3.4)", () => {
     for (let i = 0; i < N; i++) cells.push(vec(i, 0));
     const s = new Solver({ iterations: 1 });
     for (let i = 1; i < N; i++) distance(s, cells[i - 1]!, cells[i]!, 1);
-    pin(cells[0]!);
-    pin(cells[N - 1]!);
+    s.pin(cells[0]!);
+    s.pin(cells[N - 1]!);
     for (let step = 0; step < 100; step++) {
       const t = step * 0.05;
       cells[N - 1]!.value = { x: N - 5 + Math.cos(t), y: Math.sin(t) };

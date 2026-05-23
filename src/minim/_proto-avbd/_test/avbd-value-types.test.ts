@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { box, num, vec } from "../../signals";
-import { generic, lensNum, pin, Solver } from "../index";
+import { generic, lensNum, Solver } from "../index";
 
 describe("AVBD value types — scalars (dim=1)", () => {
   it("Num cells with lensNum: b = 2a", () => {
@@ -13,7 +13,7 @@ describe("AVBD value types — scalars (dim=1)", () => {
     const b = num(0);
     const s = new Solver({ iterations: 10 });
     lensNum(s, a, b, x => 2 * x);
-    pin(a);
+    s.pin(a);
     a.value = 3.0001;
     expect(b.value).toBeCloseTo(6, 1);
   });
@@ -53,7 +53,7 @@ describe("AVBD value types — Box (dim=4: x, y, w, h)", () => {
         b = pos[1]!;
       out[0]! = b[0]! - (a[0]! + a[2]!);
     });
-    pin(A);
+    s.pin(A);
     A.value = { x: 0.0001, y: 0, w: 5, h: 3 };
     expect(B.value.x).toBeCloseTo(5, 1);
     expect(B.value.y).toBeCloseTo(0, 3);
@@ -85,7 +85,7 @@ describe("AVBD value types — cyclic / wraparound angles", () => {
       diff -= 2 * Math.PI * Math.round(diff / (2 * Math.PI));
       out[0]! = diff;
     });
-    pin(a);
+    s.pin(a);
     a.value = Math.PI / 4 + 0.0001;
     let diff = b.value - a.value;
     diff -= 2 * Math.PI * Math.round(diff / (2 * Math.PI));
@@ -103,7 +103,7 @@ describe("AVBD value types — mixed dimensions in same cluster", () => {
       const p = pos[1]!;
       out[0]! = Math.hypot(p[0]!, p[1]!) - l;
     });
-    pin(L);
+    s.pin(L);
     L.value = 3.0001;
     expect(Math.hypot(P.value.x, P.value.y)).toBeCloseTo(3, 1);
   });
@@ -116,8 +116,8 @@ describe("AVBD value types — mixed dimensions in same cluster", () => {
     generic(s, [gain, inp, out], 1, (pos, residual) => {
       residual[0]! = pos[2]![0]! - pos[0]![0]! * pos[1]![0]!;
     });
-    pin(gain);
-    pin(inp);
+    s.pin(gain);
+    s.pin(inp);
     inp.value = 5.0001;
     expect(out.value).toBeCloseTo(10, 1);
   });
