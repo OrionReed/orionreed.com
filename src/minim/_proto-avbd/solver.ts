@@ -61,8 +61,8 @@ import { clamp, solveSPD } from "./linalg";
 export interface SolverOpts {
   /** Timestep size. Default 1.0 (kinematic / static editing mode). */
   dt?: number;
-  /** External acceleration applied to every cell (length = max
-   *  cell dim). Defaults to zero — no gravity. */
+  /** External acceleration applied to every cell. Length must be
+   *  ≥ the maximum cell dim in the solver. Default zero. */
   aExt?: ArrayLike<number>;
   /** Number of primal+dual iterations per step. Default 10. */
   iterations?: number;
@@ -89,20 +89,13 @@ export interface SolverOpts {
    *  Set to `false` for true physics simulation: `y = x⁻ + h·v +
    *  h²·a` and `v = (x − x⁻) / h`. */
   staticMode?: boolean;
-  /** Estimated spectral radius for Chebyshev semi-iterative
-   *  acceleration (paper §3.8). `0` (default) disables. Values
-   *  near 1 (0.9-0.99) accelerate convergence dramatically on
-   *  smooth-energy systems (soft springs, elastic deformation)
-   *  but cause overshoot when constraint forces are stiff /
-   *  discontinuous. Opt-in for clean physics simulation. */
-  chebyshevRho?: number;
 }
 
 const TINY = 1e-14;
 
 export class Solver {
-  cells: Cell[] = [];
-  forces: Force[] = [];
+  private readonly _cells: Cell[] = [];
+  private readonly _forces: Force[] = [];
 
   dt: number;
   aExt: Float64Array;
@@ -111,7 +104,15 @@ export class Solver {
   beta: number;
   gamma: number;
   staticMode: boolean;
-  chebyshevRho: number;
+
+  /** Read-only view of registered cells. */
+  get cells(): readonly Cell[] {
+    return this._cells;
+  }
+  /** Read-only view of registered forces. */
+  get forces(): readonly Force[] {
+    return this._forces;
+  }
 
   // Reusable scratch buffers for the local Newton system. Sized to
   // the largest cell dim seen so far.
@@ -126,32 +127,37 @@ export class Solver {
     this.beta = opts.beta ?? 1e5;
     this.gamma = opts.gamma ?? 0.99;
     this.staticMode = opts.staticMode ?? true;
-    this.chebyshevRho = opts.chebyshevRho ?? 0;
-    // Default aExt = 0 of size 4 (covers Num/Vec/Box/Color cells).
     if (opts.aExt) {
       this.aExt = new Float64Array(opts.aExt.length);
       for (let i = 0; i < opts.aExt.length; i++) this.aExt[i]! = opts.aExt[i]!;
     } else {
-      this.aExt = new Float64Array(4);
+      this.aExt = new Float64Array(0);
     }
   }
 
   addCell(cell: Cell): void {
-    this.cells.push(cell);
+    this._cells.push(cell);
     if (cell.dim > this._maxDim) {
       this._maxDim = cell.dim;
       this._lhs = new Float64Array(cell.dim * cell.dim);
       this._rhs = new Float64Array(cell.dim);
+      // Grow aExt if it's smaller than the largest cell — out-of-
+      // bounds reads would silently return 0, masking errors.
+      if (this.aExt.length < cell.dim) {
+        const old = this.aExt;
+        this.aExt = new Float64Array(cell.dim);
+        for (let i = 0; i < old.length; i++) this.aExt[i]! = old[i]!;
+      }
     }
   }
 
   addForce(force: Force): void {
-    this.forces.push(force);
+    this._forces.push(force);
   }
 
   removeForce(force: Force): void {
-    const idx = this.forces.indexOf(force);
-    if (idx >= 0) this.forces.splice(idx, 1);
+    const idx = this._forces.indexOf(force);
+    if (idx >= 0) this._forces.splice(idx, 1);
     for (const c of force.cells) {
       const ci = c.forces.indexOf(force);
       if (ci >= 0) {
@@ -168,8 +174,8 @@ export class Solver {
     const inv_dt2 = 1 / dt2;
 
     // ─── 1. Force initialisation + warm-start ────────────────────
-    for (let fi = this.forces.length - 1; fi >= 0; fi--) {
-      const f = this.forces[fi]!;
+    for (let fi = this._forces.length - 1; fi >= 0; fi--) {
+      const f = this._forces[fi]!;
       if (f.disabled) {
         this.removeForce(f);
         continue;
@@ -201,7 +207,7 @@ export class Solver {
     }
 
     // ─── 2. Cell warm-start ──────────────────────────────────────
-    for (const cell of this.cells) {
+    for (const cell of this._cells) {
       const dim = cell.dim;
       // Save x⁻ = current position.
       for (let k = 0; k < dim; k++) cell.initial[k]! = cell.position[k]!;
@@ -222,44 +228,16 @@ export class Solver {
     }
 
     // ─── 3. Iterations ───────────────────────────────────────────
-    // Chebyshev acceleration setup (paper §3.8). When ρ > 0, after
-    // each Gauss-Seidel sweep we recompute positions as
-    //
-    //   x^(n) = ω_n · (x_bar^(n) − x^(n-2)) + x^(n-2)
-    //
-    // where `x_bar^(n)` is the freshly-computed sweep result, and
-    // ω_n follows the recurrence:
-    //
-    //   ω_1 = 1
-    //   ω_2 = 2 / (2 − ρ²)
-    //   ω_n = 4 / (4 − ρ² · ω_{n-1})
-    //
-    // Cost: O(cells × dim) per sweep — negligible. Improves the
-    // convergence rate from `(1 − 2/(N+1))` to `(1 − 2/√(N+1))` on
-    // tightly-coupled chains/grids. Order-of-magnitude fewer
-    // iterations to converge for long structures.
-    const useChebyshev = this.chebyshevRho > 0;
-    const rho2 = this.chebyshevRho * this.chebyshevRho;
-    let omegaPrev = 1.0;
-    if (useChebyshev) {
-      // Stash initial position as posPrev2 and posPrev1.
-      for (const cell of this.cells) {
-        for (let k = 0; k < cell.dim; k++) {
-          cell.posPrev2[k]! = cell.position[k]!;
-          cell.posPrev1[k]! = cell.position[k]!;
-        }
-      }
-    }
     for (let it = 0; it < this.iterations; it++) {
       const currentAlpha = this.alpha;
 
       // ─── 3a. Primal pass: per-vertex local Newton ────────────
-      this._primalSweep(currentAlpha, +1);
+      this._primalSweep(currentAlpha);
 
       // ─── 3b. Dual pass ────────────────────────────────────────
       {
         const beta = this.beta;
-        const allForces = this.forces;
+        const allForces = this._forces;
         for (let fi = 0; fi < allForces.length; fi++) {
           const f = allForces[fi]!;
           if (f.disabled) continue;
@@ -297,37 +275,11 @@ export class Solver {
         }
       }
 
-      // ─── 3c. Chebyshev acceleration step (paper §3.8) ───────
-      // Skip on the last iteration so dual updates above operate on
-      // the un-accelerated x_bar; otherwise lambda overshoots.
-      if (useChebyshev && it < this.iterations - 1) {
-        let omegaCur: number;
-        if (it === 0) omegaCur = 1.0;
-        else if (it === 1) omegaCur = 2.0 / (2.0 - rho2);
-        else omegaCur = 4.0 / (4.0 - rho2 * omegaPrev);
-        for (const cell of this.cells) {
-          if (cell.mass <= 0) continue;
-          for (let k = 0; k < cell.dim; k++) {
-            const xBar = cell.position[k]!;
-            // x^(n) = ω · (x_bar - x^(n-2)) + x^(n-2)
-            cell.position[k]! = omegaCur * (xBar - cell.posPrev2[k]!) + cell.posPrev2[k]!;
-          }
-        }
-        // Shift history.
-        for (const cell of this.cells) {
-          for (let k = 0; k < cell.dim; k++) {
-            cell.posPrev2[k]! = cell.posPrev1[k]!;
-            cell.posPrev1[k]! = cell.position[k]!;
-          }
-        }
-        omegaPrev = omegaCur;
-      }
-
-      // ─── 3d. Velocity update on the last iteration ──────────
+      // ─── 3c. Velocity update on the last iteration ──────────
       // Only in dynamics mode — static mode keeps velocities at 0
       // so cross-step error doesn't accumulate.
       if (!this.staticMode && it === this.iterations - 1) {
-        for (const cell of this.cells) {
+        for (const cell of this._cells) {
           for (let k = 0; k < cell.dim; k++) {
             cell.prevVelocity[k]! = cell.velocity[k]!;
             if (cell.mass > 0) {
@@ -344,7 +296,7 @@ export class Solver {
    *  vector ‖C‖. Cheap diagnostic for convergence checks in tests. */
   residualNorm(): number {
     let s = 0;
-    for (const f of this.forces) {
+    for (const f of this._forces) {
       if (f.disabled) continue;
       f.computeConstraint(0); // un-stabilised (raw) residual
       for (let r = 0; r < f.rows; r++) s += f.C[r]! * f.C[r]!;
@@ -353,10 +305,10 @@ export class Solver {
   }
 
   /** Forward Gauss-Seidel sweep over cells. Hot path. */
-  private _primalSweep(currentAlpha: number, _direction: 1 | -1): void {
+  private _primalSweep(currentAlpha: number): void {
     const lhs = this._lhs;
     const rhs = this._rhs;
-    const cells = this.cells;
+    const cells = this._cells;
     const inv_dt2 = 1 / (this.dt * this.dt);
     for (let cellI = 0; cellI < cells.length; cellI++) {
       const cell = cells[cellI]!;

@@ -10,15 +10,15 @@
 //      and AVBD breezes through.
 
 import { describe, expect, it } from "vitest";
-import { Cell, distance, spring, Solver } from "../index";
-import { dist as relateDist, pinPoint, softVec } from "../../_proto-relate/constraints";
-import { vec } from "../../_proto-relate/index";
+import { distance, spring, Solver, vec, VecCell } from "../index";
+import { dist as relateDist, pinPoint } from "../../_proto-relate/constraints";
+import { vec as relateVec } from "../../_proto-relate/index";
 
 // ─── Topology builders ──────────────────────────────────────────
 
 function buildAvbdChain(N: number, iters: number) {
-  const cells: Cell[] = [];
-  for (let i = 0; i < N; i++) cells.push(new Cell(2, [i, 0]));
+  const cells: VecCell[] = [];
+  for (let i = 0; i < N; i++) cells.push(vec(i, 0));
   cells[0]!.mass = 0;
   const s = new Solver({ iterations: iters });
   for (const c of cells) s.addCell(c);
@@ -27,41 +27,30 @@ function buildAvbdChain(N: number, iters: number) {
 }
 
 function buildAvbdLattice(W: number, H: number, iters: number) {
-  // W × H grid. Each interior point connected to 4 neighbours.
-  const cells: Cell[][] = [];
+  const cells: VecCell[][] = [];
   for (let j = 0; j < H; j++) {
-    const row: Cell[] = [];
-    for (let i = 0; i < W; i++) row.push(new Cell(2, [i, j]));
+    const row: VecCell[] = [];
+    for (let i = 0; i < W; i++) row.push(vec(i, j));
     cells.push(row);
   }
-  // Pin top corners.
   cells[0]![0]!.mass = 0;
   cells[0]![W - 1]!.mass = 0;
   const s = new Solver({ iterations: iters });
   for (const row of cells) for (const c of row) s.addCell(c);
-  // Horizontal links.
   for (let j = 0; j < H; j++) {
     for (let i = 1; i < W; i++) distance(s, cells[j]![i - 1]!, cells[j]![i]!, 1);
   }
-  // Vertical links.
   for (let i = 0; i < W; i++) {
     for (let j = 1; j < H; j++) distance(s, cells[j - 1]![i]!, cells[j]![i]!, 1);
   }
   return { s, cells };
 }
 
-function buildRelateChain(N: number) {
-  const cells = Array.from({ length: N }, (_, i) => vec(i, 0));
-  pinPoint(cells[0]!);
-  for (let i = 1; i < N; i++) relateDist(cells[i - 1]!, cells[i]!, 1);
-  return { cells };
-}
-
 function buildRelateLattice(W: number, H: number) {
-  const cells: ReturnType<typeof vec>[][] = [];
+  const cells: ReturnType<typeof relateVec>[][] = [];
   for (let j = 0; j < H; j++) {
-    const row: ReturnType<typeof vec>[] = [];
-    for (let i = 0; i < W; i++) row.push(vec(i, j));
+    const row: ReturnType<typeof relateVec>[] = [];
+    for (let i = 0; i < W; i++) row.push(relateVec(i, j));
     cells.push(row);
   }
   pinPoint(cells[0]![0]!);
@@ -83,17 +72,14 @@ describe("AVBD per-vertex cost (the headline figure)", () => {
     const iters = 5;
     const { s, cells } = buildAvbdChain(N, iters);
     cells[N - 1]!.mass = 0;
-    cells[N - 1]!.position[0]! = N - 5;
-    cells[N - 1]!.position[1]! = 1;
-    // Warm-up.
+    cells[N - 1]!.value = { x: N - 5, y: 1 };
     for (let i = 0; i < 10; i++) s.step();
-    // Time many drag steps.
     const drags = 50;
     let dy = 1;
     const t0 = performance.now();
     for (let i = 0; i < drags; i++) {
       dy += 0.01;
-      cells[N - 1]!.position[1]! = dy;
+      cells[N - 1]!.y = dy;
       s.step();
     }
     const totalMs = performance.now() - t0;
@@ -112,19 +98,17 @@ describe("AVBD vs relate — lattice topology", () => {
       H = 32;
     const drags = 20;
 
-    // AVBD.
     let tAvbd = 0;
     {
       const { s, cells } = buildAvbdLattice(W, H, 5);
       cells[H - 1]![W - 1]!.mass = 0;
-      cells[H - 1]![W - 1]!.position[0]! = W - 1 + 0.5;
-      cells[H - 1]![W - 1]!.position[1]! = H - 1 + 0.5;
+      cells[H - 1]![W - 1]!.value = { x: W - 1 + 0.5, y: H - 1 + 0.5 };
       for (let i = 0; i < 5; i++) s.step();
       let dy = 0.5;
       const t0 = performance.now();
       for (let i = 0; i < drags; i++) {
         dy += 0.05;
-        cells[H - 1]![W - 1]!.position[1]! = H - 1 + dy;
+        cells[H - 1]![W - 1]!.y = H - 1 + dy;
         s.step();
       }
       tAvbd = (performance.now() - t0) / drags;
@@ -157,14 +141,13 @@ describe("AVBD vs relate — lattice topology", () => {
 
     const { s, cells } = buildAvbdLattice(W, H, 5);
     cells[H - 1]![W - 1]!.mass = 0;
-    cells[H - 1]![W - 1]!.position[0]! = W - 1 + 0.5;
-    cells[H - 1]![W - 1]!.position[1]! = H - 1 + 0.5;
+    cells[H - 1]![W - 1]!.value = { x: W - 1 + 0.5, y: H - 1 + 0.5 };
     for (let i = 0; i < 2; i++) s.step();
     let dy = 0.5;
     const t0 = performance.now();
     for (let i = 0; i < drags; i++) {
       dy += 0.05;
-      cells[H - 1]![W - 1]!.position[1]! = H - 1 + dy;
+      cells[H - 1]![W - 1]!.y = H - 1 + dy;
       s.step();
     }
     const t = (performance.now() - t0) / drags;
@@ -180,14 +163,13 @@ describe("AVBD scaling — pushing toward 100K cells", () => {
     const drags = 3;
     const { s, cells } = buildAvbdLattice(W, H, 5);
     cells[H - 1]![W - 1]!.mass = 0;
-    cells[H - 1]![W - 1]!.position[0]! = W - 1 + 0.5;
-    cells[H - 1]![W - 1]!.position[1]! = H - 1 + 0.5;
+    cells[H - 1]![W - 1]!.value = { x: W - 1 + 0.5, y: H - 1 + 0.5 };
     for (let i = 0; i < 2; i++) s.step();
     let dy = 0.5;
     const t0 = performance.now();
     for (let i = 0; i < drags; i++) {
       dy += 0.05;
-      cells[H - 1]![W - 1]!.position[1]! = H - 1 + dy;
+      cells[H - 1]![W - 1]!.y = H - 1 + dy;
       s.step();
     }
     const t = (performance.now() - t0) / drags;
@@ -202,14 +184,13 @@ describe("AVBD scaling — pushing toward 100K cells", () => {
     const drags = 2;
     const { s, cells } = buildAvbdLattice(W, H, 5);
     cells[H - 1]![W - 1]!.mass = 0;
-    cells[H - 1]![W - 1]!.position[0]! = W - 1 + 0.5;
-    cells[H - 1]![W - 1]!.position[1]! = H - 1 + 0.5;
+    cells[H - 1]![W - 1]!.value = { x: W - 1 + 0.5, y: H - 1 + 0.5 };
     for (let i = 0; i < 1; i++) s.step();
     let dy = 0.5;
     const t0 = performance.now();
     for (let i = 0; i < drags; i++) {
       dy += 0.05;
-      cells[H - 1]![W - 1]!.position[1]! = H - 1 + dy;
+      cells[H - 1]![W - 1]!.y = H - 1 + dy;
       s.step();
     }
     const t = (performance.now() - t0) / drags;
@@ -226,8 +207,8 @@ describe("AVBD wins where Newton struggles", () => {
     // Top fixed; gravity pulls. Newton-LM with penalty would need
     // huge weights and still fight ill-conditioning.
     const N = 10;
-    const cells: Cell[] = [];
-    for (let i = 0; i < N; i++) cells.push(new Cell(2, [0, -i]));
+    const cells: VecCell[] = [];
+    for (let i = 0; i < N; i++) cells.push(vec(0, -i));
     cells[0]!.mass = 0;
     const s = new Solver({
       iterations: 10,
@@ -240,28 +221,20 @@ describe("AVBD wins where Newton struggles", () => {
       const stiffness = i % 2 === 1 ? 1e4 : 1;
       spring(s, cells[i - 1]!, cells[i]!, 1, stiffness);
     }
-    // Settle.
     for (let i = 0; i < 200; i++) s.step();
-    // Stiff springs near rest length, weak springs stretched.
-    const dStiff = Math.hypot(
-      cells[1]!.position[0]! - cells[0]!.position[0]!,
-      cells[1]!.position[1]! - cells[0]!.position[1]!,
-    );
+    const dStiff = Math.hypot(cells[1]!.x - cells[0]!.x, cells[1]!.y - cells[0]!.y);
     expect(Math.abs(dStiff - 1)).toBeLessThan(0.5);
-    expect(Number.isFinite(cells[N - 1]!.position[1]!)).toBe(true);
+    expect(Number.isFinite(cells[N - 1]!.y)).toBe(true);
     console.log(`  AVBD high-stiffness 10-chain: stiff link length=${dStiff.toFixed(3)}`);
   });
 
   it("high stiffness lattice: 16x16 with mixed stiffness", () => {
-    // Lattice where some links are 1e4× stiffer than others.
-    // A pinned point is dragged; the lattice should respond
-    // reasonably without collapsing or oscillating wildly.
     const W = 16,
       H = 16;
-    const cells: Cell[][] = [];
+    const cells: VecCell[][] = [];
     for (let j = 0; j < H; j++) {
-      const row: Cell[] = [];
-      for (let i = 0; i < W; i++) row.push(new Cell(2, [i, j]));
+      const row: VecCell[] = [];
+      for (let i = 0; i < W; i++) row.push(vec(i, j));
       cells.push(row);
     }
     cells[0]![0]!.mass = 0;
@@ -280,18 +253,15 @@ describe("AVBD wins where Newton struggles", () => {
       }
     }
     cells[H - 1]![W - 1]!.mass = 0;
-    cells[H - 1]![W - 1]!.position[0]! = W - 1 + 1;
-    cells[H - 1]![W - 1]!.position[1]! = H - 1 + 1;
-    // Drag in small steps.
+    cells[H - 1]![W - 1]!.value = { x: W - 1 + 1, y: H - 1 + 1 };
     for (let i = 0; i < 30; i++) {
-      cells[H - 1]![W - 1]!.position[1]! = H - 1 + 1 + i * 0.02;
+      cells[H - 1]![W - 1]!.y = H - 1 + 1 + i * 0.02;
       s.step();
     }
-    // No NaN, bounded.
     for (const row of cells) {
       for (const c of row) {
-        expect(Number.isFinite(c.position[0]!)).toBe(true);
-        expect(Math.abs(c.position[0]!)).toBeLessThan(100);
+        expect(Number.isFinite(c.x)).toBe(true);
+        expect(Math.abs(c.x)).toBeLessThan(100);
       }
     }
     console.log("  AVBD mixed-stiffness 16x16 lattice: stable under drag");

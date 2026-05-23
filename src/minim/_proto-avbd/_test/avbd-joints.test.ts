@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from "vitest";
 import { Cell } from "../cell";
-import { distance, Solver } from "../index";
+import { distance, Solver, vec } from "../index";
 
 // ─── Range-distance: a single distance-with-bounds constraint ─────
 //
@@ -95,36 +95,36 @@ function rangeDistance(s: Solver, a: Cell, b: Cell, min: number, max: number): R
 
 describe("AVBD joint limits — range-distance", () => {
   it("|a-b| ∈ [1, 2] — drag b far away, pulled back to range", () => {
-    const a = new Cell(2, [0, 0]);
-    const b = new Cell(2, [5, 0]); // |a-b| = 5, far above max
+    const a = vec(0, 0);
+    const b = vec(5, 0);
     a.mass = 0;
     const s = new Solver({ iterations: 20 });
     s.addCell(a);
     s.addCell(b);
     rangeDistance(s, a, b, 1, 2);
     for (let i = 0; i < 5; i++) s.step();
-    const d = Math.hypot(b.position[0]!, b.position[1]!);
+    const d = Math.hypot(b.x, b.y);
     expect(d).toBeGreaterThanOrEqual(1 - 1e-2);
     expect(d).toBeLessThanOrEqual(2 + 1e-2);
   });
 
   it("|a-b| ∈ [3, 5] — start too close, pushed apart", () => {
-    const a = new Cell(2, [0, 0]);
-    const b = new Cell(2, [0.1, 0]); // |a-b| = 0.1, below min
+    const a = vec(0, 0);
+    const b = vec(0.1, 0);
     a.mass = 0;
     const s = new Solver({ iterations: 30 });
     s.addCell(a);
     s.addCell(b);
     rangeDistance(s, a, b, 3, 5);
     for (let i = 0; i < 10; i++) s.step();
-    const d = Math.hypot(b.position[0]!, b.position[1]!);
+    const d = Math.hypot(b.x, b.y);
     expect(d).toBeGreaterThanOrEqual(3 - 1e-2);
     expect(d).toBeLessThanOrEqual(5 + 1e-2);
   });
 
   it("|a-b| in range — no force applied, b stays where dragged", () => {
-    const a = new Cell(2, [0, 0]);
-    const b = new Cell(2, [1.5, 0]); // |a-b| = 1.5, in [1, 2]
+    const a = vec(0, 0);
+    const b = vec(1.5, 0);
     a.mass = 0;
     const s = new Solver({ iterations: 10 });
     s.addCell(a);
@@ -132,30 +132,24 @@ describe("AVBD joint limits — range-distance", () => {
     rangeDistance(s, a, b, 1, 2);
     s.step();
     s.step();
-    expect(b.position[0]!).toBeCloseTo(1.5, 3);
-    expect(b.position[1]!).toBeCloseTo(0, 3);
+    expect(b.x).toBeCloseTo(1.5, 3);
+    expect(b.y).toBeCloseTo(0, 3);
   });
 
   it("competing forces: range constraint dominates a stiff spring outside its range", () => {
-    // Spring rest = 5 between a and b, but range constraint says
-    // |a-b| ≤ 2. The hard range constraint should win.
-    const a = new Cell(2, [0, 0]);
-    const b = new Cell(2, [3, 0]);
+    const a = vec(0, 0);
+    const b = vec(3, 0);
     a.mass = 0;
     const s = new Solver({ iterations: 30 });
     s.addCell(a);
     s.addCell(b);
     rangeDistance(s, a, b, 0, 2);
-    distance(s, a, b, 5); // wants 5 but is hard equality — conflict
-    // The two hard constraints conflict; AVBD's lambda accumulation
-    // settles on the boundary (|a-b| = 2, range wins because spring
-    // is hard equality but on its own would exceed range).
-    // Actually with both HARD, this is an infeasible system. Let's
-    // make spring SOFT so range dominates clearly.
+    distance(s, a, b, 5);
+    // Make spring SOFT so range dominates clearly.
     s.forces[1]!.stiffness[0]! = 100;
     for (let i = 0; i < 10; i++) s.step();
-    const d = Math.hypot(b.position[0]!, b.position[1]!);
+    const d = Math.hypot(b.x, b.y);
     expect(d).toBeLessThanOrEqual(2 + 1e-1);
-    expect(d).toBeGreaterThan(0); // some force from the spring, but capped
+    expect(d).toBeGreaterThan(0);
   });
 });

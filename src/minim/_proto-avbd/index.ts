@@ -25,10 +25,11 @@
 // `_proto-relate`. Once AVBD proves out, we'll converge the two
 // experiments.
 
-export { Cell } from "./cell";
+export { box, BoxCell, Cell, num, NumCell, vec, VecCell } from "./cell";
 export {
   angle,
   BoundsForce,
+  bounded,
   clamp,
   collinear,
   DistanceForce,
@@ -38,18 +39,19 @@ export {
   equalDist,
   GenericForce,
   generic,
+  geq,
   LensNumForce,
   lensNum,
+  leq,
   midpoint,
   onCircle,
-  PinForce,
   parallel,
   perpendicular,
-  pin,
   type ResidualFn,
   SoftTargetForce,
   softTarget,
   spring,
+  Strength,
 } from "./constraints";
 export { Force, PENALTY_MAX, PENALTY_MIN } from "./force";
 export { Solver, type SolverOpts } from "./solver";

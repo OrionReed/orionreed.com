@@ -11,11 +11,11 @@
 //     the AVBD paper (where Newton-style methods choke).
 
 import { describe, expect, it } from "vitest";
-import { Cell, distance, Solver, spring } from "../index";
+import { distance, Solver, spring, vec, VecCell } from "../index";
 
 function buildChain(N: number) {
-  const cells: Cell[] = [];
-  for (let i = 0; i < N; i++) cells.push(new Cell(2, [i, 0]));
+  const cells: VecCell[] = [];
+  for (let i = 0; i < N; i++) cells.push(vec(i, 0));
   cells[0]!.mass = 0;
   const s = new Solver({ iterations: 1 });
   for (const c of cells) s.addCell(c);
@@ -38,8 +38,7 @@ describe("AVBD convergence — residual vs iteration count", () => {
     // converges over a few frames.
     const N = 32;
     const { s, cells } = buildChain(N);
-    cells[N - 1]!.position[0]! = N - 5;
-    cells[N - 1]!.position[1]! = 3;
+    cells[N - 1]!.value = { x: N - 5, y: 3 };
     s.iterations = 5;
     const counts = [1, 2, 5, 10, 20];
     let stepIdx = 0;
@@ -64,20 +63,18 @@ describe("AVBD convergence — residual vs iteration count", () => {
     const N = 32;
     // First, warm up with high iter count to reach near-zero residual.
     const { s, cells } = buildChain(N);
-    cells[N - 1]!.position[0]! = N - 5;
-    cells[N - 1]!.position[1]! = 1;
+    cells[N - 1]!.value = { x: N - 5, y: 1 };
     s.iterations = 50;
     for (let i = 0; i < 5; i++) s.step();
     const initialResidual = s.residualNorm();
     expect(initialResidual).toBeLessThan(0.001);
 
-    // Now drop iter count and measure residual after small drag.
     s.iterations = 2;
     let dy = 1;
     let maxResidual = 0;
     for (let i = 0; i < 30; i++) {
       dy += 0.05;
-      cells[N - 1]!.position[1]! = dy;
+      cells[N - 1]!.y = dy;
       s.step();
       const r = s.residualNorm();
       if (r > maxResidual) maxResidual = r;
@@ -91,10 +88,10 @@ describe("AVBD convergence — residual vs iteration count", () => {
     // 3-block scenario, stiffness ratio 1e4. Measure how the
     // displacement of the bottom block converges with iteration
     // count.
-    const top = new Cell(2, [0, 0]);
+    const top = vec(0, 0);
     top.mass = 0;
-    const A = new Cell(2, [0, -1]);
-    const B = new Cell(2, [0, -2]);
+    const A = vec(0, -1);
+    const B = vec(0, -2);
     const s = new Solver({
       iterations: 1,
       dt: 1 / 60,
@@ -108,9 +105,9 @@ describe("AVBD convergence — residual vs iteration count", () => {
     spring(s, A, B, 1, 1);
     // Run to steady state.
     for (let i = 0; i < 200; i++) s.step();
-    const dispA = -A.position[1]!;
-    const dispB = -B.position[1]!;
-    console.log(`  steady-state: A_y=${A.position[1]!.toFixed(3)}, B_y=${B.position[1]!.toFixed(3)}`);
+    const dispA = -A.y;
+    const dispB = -B.y;
+    console.log(`  steady-state: A_y=${A.y.toFixed(3)}, B_y=${B.y.toFixed(3)}`);
     // A should be near 1 unit below top (stiff spring).
     expect(dispA).toBeGreaterThan(0.95);
     expect(dispA).toBeLessThan(1.5);

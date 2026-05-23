@@ -16,85 +16,76 @@
 // matrices are local-per-cell and rebuilt every iteration).
 
 import { describe, expect, it } from "vitest";
-import { Cell, distance, eq, Solver } from "../index";
+import { distance, Solver, vec, VecCell } from "../index";
 
 describe("AVBD topology — incremental changes", () => {
   it("adding a force during simulation: takes effect on next step", () => {
-    const a = new Cell(2, [0, 0]);
-    const b = new Cell(2, [5, 0]);
+    const a = vec(0, 0);
+    const b = vec(5, 0);
     a.mass = 0;
     const s = new Solver({ iterations: 20 });
     s.addCell(a);
     s.addCell(b);
-    // No constraints yet — b stays at [5, 0].
     s.step();
-    expect(b.position[0]!).toBe(5);
-    // Add a distance constraint mid-flight.
+    expect(b.x).toBe(5);
     distance(s, a, b, 1);
     for (let i = 0; i < 5; i++) s.step();
-    const d = Math.hypot(b.position[0]!, b.position[1]!);
+    const d = Math.hypot(b.x, b.y);
     expect(d).toBeCloseTo(1, 2);
   });
 
   it("removing a force during simulation: cell is freed", () => {
-    const a = new Cell(2, [0, 0]);
-    const b = new Cell(2, [1, 0]);
+    const a = vec(0, 0);
+    const b = vec(1, 0);
     a.mass = 0;
     const s = new Solver({ iterations: 10 });
     s.addCell(a);
     s.addCell(b);
     const f = distance(s, a, b, 1);
     for (let i = 0; i < 3; i++) s.step();
-    expect(Math.hypot(b.position[0]!, b.position[1]!)).toBeCloseTo(1, 2);
-    // Remove the force; b should now be free.
+    expect(Math.hypot(b.x, b.y)).toBeCloseTo(1, 2);
     s.removeForce(f);
-    // No constraint left — b stays where it was.
-    const bx = b.position[0]!;
-    const by = b.position[1]!;
+    const bx = b.x;
+    const by = b.y;
     s.step();
-    expect(b.position[0]!).toBeCloseTo(bx, 4);
-    expect(b.position[1]!).toBeCloseTo(by, 4);
+    expect(b.x).toBeCloseTo(bx, 4);
+    expect(b.y).toBeCloseTo(by, 4);
   });
 
   it("adding a cell during simulation: integrates immediately", () => {
-    const a = new Cell(2, [0, 0]);
+    const a = vec(0, 0);
     a.mass = 0;
     const s = new Solver({ iterations: 10 });
     s.addCell(a);
     s.step();
-    // Add a second cell + constraint.
-    const b = new Cell(2, [3, 0]);
+    const b = vec(3, 0);
     s.addCell(b);
     distance(s, a, b, 1);
     for (let i = 0; i < 5; i++) s.step();
-    expect(Math.hypot(b.position[0]!, b.position[1]!)).toBeCloseTo(1, 2);
+    expect(Math.hypot(b.x, b.y)).toBeCloseTo(1, 2);
   });
 
   it("disable() during dual update: force vanishes cleanly", () => {
-    const a = new Cell(2, [0, 0]);
-    const b = new Cell(2, [1, 0]);
+    const a = vec(0, 0);
+    const b = vec(1, 0);
     a.mass = 0;
     const s = new Solver({ iterations: 5 });
     s.addCell(a);
     s.addCell(b);
     const f1 = distance(s, a, b, 1);
-    const f2 = distance(s, a, b, 2); // conflicting; one gives way
+    distance(s, a, b, 2); // conflicting; one gives way
     f1.fracture[0]! = 0.5; // f1 fractures if |λ| > 0.5
     for (let i = 0; i < 30; i++) s.step();
-    // Eventually f1 should fracture (f2 wins, |a-b| → 2).
-    const d = Math.hypot(b.position[0]!, b.position[1]!);
-    // At least one force broke — should reach close to 2 or close to 1.
+    const d = Math.hypot(b.x, b.y);
     expect(d > 0.5).toBe(true);
   });
 });
 
 describe("AVBD topology — perf cost of changes", () => {
-  it("addForce is O(1) — 10K incremental constraints in <50ms", () => {
-    // Build a chain by adding constraints one at a time, measuring
-    // the cost. Each `distance()` call should be ~µs.
+  it("addForce is O(1) — 10K incremental constraints in <200ms", () => {
     const N = 10000;
-    const cells: Cell[] = [];
-    for (let i = 0; i < N; i++) cells.push(new Cell(2, [i, 0]));
+    const cells: VecCell[] = [];
+    for (let i = 0; i < N; i++) cells.push(vec(i, 0));
     const s = new Solver({ iterations: 1 });
     for (const c of cells) s.addCell(c);
     const t0 = performance.now();
@@ -106,8 +97,8 @@ describe("AVBD topology — perf cost of changes", () => {
 
   it("removeForce performance — sweep through 1000 deletions", () => {
     const N = 1000;
-    const cells: Cell[] = [];
-    for (let i = 0; i < N; i++) cells.push(new Cell(2, [i, 0]));
+    const cells: VecCell[] = [];
+    for (let i = 0; i < N; i++) cells.push(vec(i, 0));
     const s = new Solver({ iterations: 1 });
     for (const c of cells) s.addCell(c);
     const forces = [];
@@ -120,30 +111,25 @@ describe("AVBD topology — perf cost of changes", () => {
   });
 
   it("dynamic topology: alternate add/remove during drag", () => {
-    // Realistic case: user adds and removes constraints while
-    // dragging. Each step the topology may differ. Verify nothing
-    // degrades.
     const N = 64;
-    const cells: Cell[] = [];
-    for (let i = 0; i < N; i++) cells.push(new Cell(2, [i, 0]));
+    const cells: VecCell[] = [];
+    for (let i = 0; i < N; i++) cells.push(vec(i, 0));
     cells[0]!.mass = 0;
     cells[N - 1]!.mass = 0;
     const s = new Solver({ iterations: 5 });
     for (const c of cells) s.addCell(c);
     const links = [];
     for (let i = 1; i < N; i++) links.push(distance(s, cells[i - 1]!, cells[i]!, 1));
-    // Drag tail while toggling middle constraints.
     const t0 = performance.now();
     let dy = 0;
     for (let frame = 0; frame < 50; frame++) {
-      // Toggle a constraint every other frame.
       if (frame % 2 === 0 && frame > 0) {
         const idx = (frame / 2) % (links.length - 1);
         s.removeForce(links[idx]!);
         links[idx]! = distance(s, cells[idx]!, cells[idx + 1]!, 1);
       }
       dy += 0.05;
-      cells[N - 1]!.position[1]! = dy;
+      cells[N - 1]!.y = dy;
       s.step();
     }
     const t = performance.now() - t0;

@@ -9,41 +9,37 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  Cell,
-  distance,
-  eq,
+  box,
   generic,
   lensNum,
+  num,
+  NumCell,
   Solver,
+  vec,
 } from "../index";
 
 describe("AVBD value types — scalars (dim=1)", () => {
   it("Num cells with lensNum: b = 2a", () => {
-    const a = new Cell(1, [3]);
-    const b = new Cell(1, [0]);
+    const a = num(3);
+    const b = num(0);
     a.mass = 0;
     const s = new Solver({ iterations: 10 });
     s.addCell(a);
     s.addCell(b);
     lensNum(s, a, b, x => 2 * x);
     s.step();
-    expect(b.position[0]!).toBeCloseTo(6, 3);
+    expect(b.value).toBeCloseTo(6, 3);
   });
 
   it("scalar sum constraint: a₁ + a₂ + … + aₙ = K", () => {
-    // 5 scalars with target sum 100. With mass=1 regularisation
-    // toward initial values, AVBD finds the feasible point closest
-    // to the warm-start.
-    //
-    // Note: many-cell linear constraints converge SLOWER under
-    // AVBD than per-pair constraints — Gauss-Seidel sees a single
-    // residual scalar across all 5 cells; each iter only updates
-    // one cell's position toward satisfying it. This is a real
-    // characteristic of the algorithm. Workaround: more iters,
-    // or split into per-pair sub-constraints.
+    // Many-cell linear constraints converge slower under AVBD than
+    // per-pair constraints — Gauss-Seidel sees a single residual
+    // scalar across all cells; each iter only updates one cell's
+    // position toward satisfying it. Workaround: more iters, or
+    // split into per-pair sub-constraints.
     const N = 5;
-    const cells: Cell[] = [];
-    for (let i = 0; i < N; i++) cells.push(new Cell(1, [i + 1]));
+    const cells: NumCell[] = [];
+    for (let i = 0; i < N; i++) cells.push(num(i + 1));
     const s = new Solver({ iterations: 50 });
     for (const c of cells) s.addCell(c);
     generic(s, cells, 1, (pos, out) => {
@@ -53,22 +49,18 @@ describe("AVBD value types — scalars (dim=1)", () => {
     });
     for (let i = 0; i < 30; i++) s.step();
     let total = 0;
-    for (const c of cells) total += c.position[0]!;
+    for (const c of cells) total += c.value;
     expect(total).toBeCloseTo(100, 1);
-    // All cells moved upward (residual was negative initially).
     for (let i = 0; i < N; i++) {
-      expect(cells[i]!.position[0]!).toBeGreaterThan(i + 1);
+      expect(cells[i]!.value).toBeGreaterThan(i + 1);
     }
   });
 });
 
 describe("AVBD value types — Box (dim=4: x, y, w, h)", () => {
   it("two boxes sharing an edge: A.right = B.left", () => {
-    // Box A: [0, 0, 5, 3]. Box B: [10, 0, 4, 3].
-    // Constrain B.left = A.right ⇒ B.x = A.x + A.w.
-    // Pin A. B should slide left to (5, 0, 4, 3).
-    const A = new Cell(4, [0, 0, 5, 3]);
-    const B = new Cell(4, [10, 0, 4, 3]);
+    const A = box(0, 0, 5, 3);
+    const B = box(10, 0, 4, 3);
     A.mass = 0;
     const s = new Solver({ iterations: 10 });
     s.addCell(A);
@@ -76,40 +68,33 @@ describe("AVBD value types — Box (dim=4: x, y, w, h)", () => {
     generic(s, [A, B], 1, (pos, out) => {
       const a = pos[0]!,
         b = pos[1]!;
-      // Constraint: B.x − (A.x + A.w) = 0.
       out[0]! = b[0]! - (a[0]! + a[2]!);
     });
     s.step();
     s.step();
-    expect(B.position[0]!).toBeCloseTo(5, 2);
-    // Other components untouched (regularised toward inertial).
-    expect(B.position[1]!).toBeCloseTo(0, 3);
-    expect(B.position[2]!).toBeCloseTo(4, 3);
-    expect(B.position[3]!).toBeCloseTo(3, 3);
+    expect(B.value.x).toBeCloseTo(5, 2);
+    expect(B.value.y).toBeCloseTo(0, 3);
+    expect(B.value.w).toBeCloseTo(4, 3);
+    expect(B.value.h).toBeCloseTo(3, 3);
   });
 
   it("aspect-ratio constraint: w / h = 16/9", () => {
-    const box = new Cell(4, [0, 0, 100, 100]);
+    const b = box(0, 0, 100, 100);
     const s = new Solver({ iterations: 20 });
-    s.addCell(box);
-    generic(s, [box], 1, (pos, out) => {
-      const b = pos[0]!;
-      // 9w − 16h = 0.
-      out[0]! = 9 * b[2]! - 16 * b[3]!;
+    s.addCell(b);
+    generic(s, [b], 1, (pos, out) => {
+      const v = pos[0]!;
+      out[0]! = 9 * v[2]! - 16 * v[3]!;
     });
     for (let i = 0; i < 5; i++) s.step();
-    expect(box.position[2]! / box.position[3]!).toBeCloseTo(16 / 9, 2);
+    expect(b.value.w / b.value.h).toBeCloseTo(16 / 9, 2);
   });
 });
 
 describe("AVBD value types — cyclic / wraparound angles", () => {
   it("two angles within π of each other (smallest signed difference)", () => {
-    // Two scalar angles α, β; constrain β − α = 0 modulo 2π.
-    // The trick: residual = wrap(β − α, [-π, π)). The solver sees
-    // a smooth residual once values are within π, and the
-    // constraint becomes equivalent to equality.
-    const a = new Cell(1, [Math.PI / 4]);
-    const b = new Cell(1, [-Math.PI / 4]);
+    const a = num(Math.PI / 4);
+    const b = num(-Math.PI / 4);
     a.mass = 0;
     const s = new Solver({ iterations: 30 });
     s.addCell(a);
@@ -117,14 +102,12 @@ describe("AVBD value types — cyclic / wraparound angles", () => {
     generic(s, [a, b], 1, (pos, out) => {
       const x = pos[0]![0]!;
       const y = pos[1]![0]!;
-      // Wrap difference to (-π, π].
       let diff = y - x;
       diff -= 2 * Math.PI * Math.round(diff / (2 * Math.PI));
       out[0]! = diff;
     });
     for (let i = 0; i < 10; i++) s.step();
-    // β should converge to α (mod 2π).
-    let diff = b.position[0]! - a.position[0]!;
+    let diff = b.value - a.value;
     diff -= 2 * Math.PI * Math.round(diff / (2 * Math.PI));
     expect(Math.abs(diff)).toBeLessThan(0.05);
   });
@@ -132,10 +115,8 @@ describe("AVBD value types — cyclic / wraparound angles", () => {
 
 describe("AVBD value types — mixed dimensions in same cluster", () => {
   it("scalar (length) + vec (point) coupled by a constraint", () => {
-    // Length L (Num) and point P (Vec). Constraint: |P| = L.
-    // Pin L, the point should stay at distance L from origin.
-    const L = new Cell(1, [3]);
-    const P = new Cell(2, [5, 0]);
+    const L = num(3);
+    const P = vec(5, 0);
     L.mass = 0;
     const s = new Solver({ iterations: 20 });
     s.addCell(L);
@@ -146,22 +127,17 @@ describe("AVBD value types — mixed dimensions in same cluster", () => {
       out[0]! = Math.hypot(p[0]!, p[1]!) - l;
     });
     for (let i = 0; i < 5; i++) s.step();
-    expect(Math.hypot(P.position[0]!, P.position[1]!)).toBeCloseTo(3, 2);
+    expect(Math.hypot(P.x, P.y)).toBeCloseTo(3, 2);
 
-    // Now drag P somewhere else; |P| must still equal 3.
-    P.position[0]! = 0;
-    P.position[1]! = 5; // |P| = 5, violates
+    P.value = { x: 0, y: 5 };
     for (let i = 0; i < 5; i++) s.step();
-    expect(Math.hypot(P.position[0]!, P.position[1]!)).toBeCloseTo(3, 2);
+    expect(Math.hypot(P.x, P.y)).toBeCloseTo(3, 2);
   });
 
   it("scalar gain wired to two scalar signals: out = gain × in", () => {
-    // gain (Num), input (Num), output (Num). Pin gain=2, input=5.
-    // output should converge to 10. Then unpin output, pin to 7,
-    // input should converge to 3.5 if gain is fixed.
-    const gain = new Cell(1, [2]);
-    const inp = new Cell(1, [5]);
-    const out = new Cell(1, [0]);
+    const gain = num(2);
+    const inp = num(5);
+    const out = num(0);
     gain.mass = 0;
     inp.mass = 0;
     const s = new Solver({ iterations: 20 });
@@ -172,13 +148,12 @@ describe("AVBD value types — mixed dimensions in same cluster", () => {
       residual[0]! = pos[2]![0]! - pos[0]![0]! * pos[1]![0]!;
     });
     for (let i = 0; i < 5; i++) s.step();
-    expect(out.position[0]!).toBeCloseTo(10, 2);
+    expect(out.value).toBeCloseTo(10, 2);
 
-    // Flip pin direction: pin output, free input.
     inp.mass = 1;
     out.mass = 0;
-    out.position[0]! = 7;
+    out.value = 7;
     for (let i = 0; i < 10; i++) s.step();
-    expect(inp.position[0]!).toBeCloseTo(3.5, 2);
+    expect(inp.value).toBeCloseTo(3.5, 2);
   });
 });

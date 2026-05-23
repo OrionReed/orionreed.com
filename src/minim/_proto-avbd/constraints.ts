@@ -26,54 +26,38 @@
 // equality, range-clamp). The architecture is open: any new force
 // is just a Force subclass.
 
-import { Cell } from "./cell";
+import { Cell, NumCell } from "./cell";
 import { Force } from "./force";
 import { Solver } from "./solver";
 
-// ─── Fixed-anchor pin (cell ↔ static target) ─────────────────────────
+// ─── Strength constants ──────────────────────────────────────────────
 //
-// Constraint: cell.position − target = 0.
-// Used by `pin(cell, target)` for hard-pinning a cell to a fixed
-// world value while leaving it free in the cluster (so other
-// constraints can complain). For "make this cell completely
-// inert", just set `cell.mass = 0` instead.
+// Conventional weight values for soft constraints. Use as
+// `s.spring(a, b, 1, Strength.MEDIUM)`. Values outside this scale
+// also work; the constants are reading aids.
+//
+// AVBD's hard constraints are infinite-stiffness (use `Infinity` or
+// the `distance`/`eq`/`bounded` factories which default to hard).
 
-export class PinForce extends Force {
-  target: Float64Array;
+export const Strength = {
+  WEAK: 1,
+  MEDIUM: 1e3,
+  STRONG: 1e6,
+  REQUIRED: 1e9,
+} as const;
 
-  constructor(cell: Cell, target: ArrayLike<number>, hard = true) {
-    super([cell], cell.dim);
-    this.target = new Float64Array(cell.dim);
-    for (let k = 0; k < cell.dim; k++) this.target[k]! = target[k] ?? 0;
-    if (!hard) {
-      this.stiffness.fill(1e6);
-      this.refreshHardFlags();
-    }
-  }
-
-  initialize(): boolean {
-    return true;
-  }
-
-  computeConstraint(alpha: number): void {
-    const cell = this.cells[0]!;
-    for (let k = 0; k < cell.dim; k++) {
-      const Cn = cell.position[k]! - this.target[k]!;
-      this.C[k]! = this.isHard(k) ? Cn - alpha * this.C0[k]! : Cn;
-    }
-  }
-
-  computeDerivatives(_cellIdx: number): void {
-    const cell = this.cells[0]!;
-    const dim = cell.dim;
-    const J = this.J[0]!;
-    // J[r,k] = δ_{r,k} (identity). Set once; cheap.
-    for (let r = 0; r < dim; r++) {
-      for (let k = 0; k < dim; k++) J[r * dim + k]! = r === k ? 1.0 : 0.0;
-    }
-    // H is zero (constraint is linear).
-  }
-}
+// ─── Pinning ─────────────────────────────────────────────────────────
+//
+// To fix a cell at a position, set `cell.mass = 0` and write the
+// desired value to `cell.position` directly:
+//
+//   const p = vec(3, 4);
+//   p.mass = 0;
+//
+// The cell's primal update is skipped each step. This is the
+// canonical "pin" mechanism. We deliberately don't expose a
+// PinForce subclass — that was a redundant second way to do this
+// with subtly different semantics.
 
 // ─── Equality between two same-dim cells ─────────────────────────────
 //
@@ -116,19 +100,23 @@ export class EqForce extends Force {
 // ─── Generic invertible lens (Num→Num) ───────────────────────────────
 //
 // Constraint: b.position[0] − fwd(a.position[0]) = 0.
-// Both cells must have dim = 1. For Vec→Vec, write a custom Force
-// subclass (the `fwd`/`bwd` shape doesn't generalise cleanly via
-// numerical FD without duplicating the work).
+// Both cells must have dim = 1. For Vec→Vec or higher-dimensional
+// lenses, use `generic` with a custom residual function (or write
+// a hand-derived Force subclass for speed).
 //
-// Note: AVBD doesn't actually use `bwd` — the augmented Lagrangian
-// converges to the correct two-way solution via duality. We accept
-// `bwd` only for parity with the relate-prototype API; the runtime
-// ignores it. (TODO: consider removing it from the signature.)
+// AVBD's augmented Lagrangian formulation handles bidirectional
+// solving naturally: pin a, b derives via dual-driven Newton; pin
+// b, a derives the same way. No explicit `bwd` is required.
 
 export class LensNumForce extends Force {
   fwd: (a: number) => number;
-  // FD step for derivative.
   private readonly fdStep: number;
+  // Cached `fwd(a)` from `computeConstraint` so `computeDerivatives`
+  // doesn't have to call `fwd` again. Avoids two evaluations per
+  // iteration (matters for user `fwd` functions that allocate or
+  // do non-trivial work).
+  private _cachedFwdA = 0;
+  private _cachedA = NaN;
 
   constructor(a: Cell, b: Cell, fwd: (x: number) => number, fdStep = 1e-6) {
     if (a.dim !== 1 || b.dim !== 1) {
@@ -146,22 +134,26 @@ export class LensNumForce extends Force {
   computeConstraint(alpha: number): void {
     const a = this.cells[0]!.position[0]!;
     const b = this.cells[1]!.position[0]!;
-    const Cn = b - this.fwd(a);
+    const fa = this.fwd(a);
+    this._cachedFwdA = fa;
+    this._cachedA = a;
+    const Cn = b - fa;
     this.C[0]! = this.isHard(0) ? Cn - alpha * this.C0[0]! : Cn;
   }
 
   computeDerivatives(cellIdx: number): void {
     const J = this.J[cellIdx]!;
     if (cellIdx === 1) {
-      // ∂C / ∂b = 1.
       J[0]! = 1.0;
-    } else {
-      // ∂C / ∂a = -fwd'(a). Forward difference.
-      const a = this.cells[0]!.position[0]!;
-      const f0 = this.fwd(a);
-      const f1 = this.fwd(a + this.fdStep);
-      J[0]! = -(f1 - f0) / this.fdStep;
+      return;
     }
+    // ∂C / ∂a = -fwd'(a). Forward difference, reusing fwd(a) cached
+    // from `computeConstraint`. We only re-evaluate fwd at the
+    // perturbed point.
+    const a = this._cachedA;
+    const f0 = this._cachedFwdA;
+    const f1 = this.fwd(a + this.fdStep);
+    J[0]! = -(f1 - f0) / this.fdStep;
   }
 }
 
@@ -476,15 +468,8 @@ declare module "./constraints" {
 // ─── User-facing factories ───────────────────────────────────────────
 //
 // Each registers the force with the solver and returns the force
-// instance. The caller can later set `force.stiffness`, `force.fmin`,
-// etc., before the next step.
-
-export function pin(s: Solver, cell: Cell, target?: ArrayLike<number>): PinForce {
-  const t = target ?? Array.from(cell.position);
-  const f = new PinForce(cell, t);
-  s.addForce(f);
-  return f;
-}
+// instance. Mutating the returned force (e.g., `f.fmin[0] = ...`)
+// adjusts behaviour for the next step.
 
 export function eq(s: Solver, a: Cell, b: Cell): EqForce {
   const f = new EqForce(a, b);
@@ -521,10 +506,35 @@ export function spring(
   return f;
 }
 
+/** 1D range constraint: `lo ≤ x ≤ hi`. Hard by default. Synonym
+ *  for the older `clamp` name. */
+export function bounded(s: Solver, x: NumCell, lo: number, hi: number): BoundsForce {
+  return clamp(s, x, lo, hi);
+}
+
 export function clamp(s: Solver, cell: Cell, lo: number, hi: number): BoundsForce {
   const f = new BoundsForce(cell, lo, hi);
   s.addForce(f);
   return f;
+}
+
+/** Hard inequality `a ≤ b` between two scalar cells.
+ *
+ *  Encoded as the feasibility residual `C = b − a ≥ 0`, with the
+ *  multiplier clamped to `λ ≤ 0` (`fmax = 0`). When `a > b`, the
+ *  dual builds up negative magnitude and pushes `a` down / `b` up.
+ *  When feasible, the dual saturates at zero → zero force. */
+export function leq(s: Solver, a: NumCell, b: NumCell): GenericForce {
+  const f = generic(s, [a, b], 1, (pos, out) => {
+    out[0]! = pos[1]![0]! - pos[0]![0]!;
+  });
+  f.fmax[0]! = 0;
+  return f;
+}
+
+/** Hard inequality `a ≥ b` (symmetric of `leq`). */
+export function geq(s: Solver, a: NumCell, b: NumCell): GenericForce {
+  return leq(s, b, a);
 }
 
 export function softTarget(

@@ -13,46 +13,39 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  Cell as AvbdCell,
   distance as avbdDistance,
   Solver,
+  vec as avbdVec,
+  VecCell as AvbdVecCell,
 } from "../index";
 import { dist as relateDist, pinPoint } from "../../_proto-relate/constraints";
-import { vec } from "../../_proto-relate/index";
+import { vec as relateVec } from "../../_proto-relate/index";
 
 describe("AVBD vs relate — same answer on chain drag", () => {
   it("8-link 2D chain, both converge to same configuration", () => {
-    // Build a chain in both systems with identical setup.
     const N = 8;
 
-    // ── AVBD ──
-    const avCells: AvbdCell[] = [];
-    for (let i = 0; i < N; i++) avCells.push(new AvbdCell(2, [i, 0]));
+    const avCells: AvbdVecCell[] = [];
+    for (let i = 0; i < N; i++) avCells.push(avbdVec(i, 0));
     avCells[0]!.mass = 0;
     const avSolver = new Solver({ iterations: 30 });
     for (const c of avCells) avSolver.addCell(c);
     for (let i = 1; i < N; i++) avbdDistance(avSolver, avCells[i - 1]!, avCells[i]!, 1);
     avCells[N - 1]!.mass = 0;
-    avCells[N - 1]!.position[0]! = N - 4;
-    avCells[N - 1]!.position[1]! = 3;
+    avCells[N - 1]!.value = { x: N - 4, y: 3 };
     avSolver.step();
     avSolver.step();
     avSolver.step();
     avSolver.step();
 
-    // ── relate ──
-    const relCells = Array.from({ length: N }, (_, i) => vec(i, 0));
+    const relCells = Array.from({ length: N }, (_, i) => relateVec(i, 0));
     pinPoint(relCells[0]!);
     for (let i = 1; i < N; i++) relateDist(relCells[i - 1]!, relCells[i]!, 1);
     pinPoint(relCells[N - 1]!, { x: N - 4, y: 3 });
 
-    // Compare middle joints. They may differ — both systems are
-    // under-determined and choose based on warm-start. But we can
-    // verify both satisfy the distance constraints and the pinned
-    // endpoints match.
     for (let i = 1; i < N; i++) {
-      const dxA = avCells[i]!.position[0]! - avCells[i - 1]!.position[0]!;
-      const dyA = avCells[i]!.position[1]! - avCells[i - 1]!.position[1]!;
+      const dxA = avCells[i]!.x - avCells[i - 1]!.x;
+      const dyA = avCells[i]!.y - avCells[i - 1]!.y;
       expect(Math.hypot(dxA, dyA)).toBeCloseTo(1, 2);
       const dxR = relCells[i]!.value.x - relCells[i - 1]!.value.x;
       const dyR = relCells[i]!.value.y - relCells[i - 1]!.value.y;
@@ -63,8 +56,8 @@ describe("AVBD vs relate — same answer on chain drag", () => {
 
 describe("AVBD vs relate — chain drag perf", () => {
   function buildAvbd(N: number, iters: number) {
-    const cells: AvbdCell[] = [];
-    for (let i = 0; i < N; i++) cells.push(new AvbdCell(2, [i, 0]));
+    const cells: AvbdVecCell[] = [];
+    for (let i = 0; i < N; i++) cells.push(avbdVec(i, 0));
     cells[0]!.mass = 0;
     const s = new Solver({ iterations: iters });
     for (const c of cells) s.addCell(c);
@@ -74,7 +67,7 @@ describe("AVBD vs relate — chain drag perf", () => {
   }
 
   function buildRelate(N: number) {
-    const cells = Array.from({ length: N }, (_, i) => vec(i, 0));
+    const cells = Array.from({ length: N }, (_, i) => relateVec(i, 0));
     pinPoint(cells[0]!);
     for (let i = 1; i < N; i++) relateDist(cells[i - 1]!, cells[i]!, 1);
     return { cells };
@@ -84,28 +77,22 @@ describe("AVBD vs relate — chain drag perf", () => {
     const N = 64;
     const drags = 30;
 
-    // AVBD: warm up.
     const av = buildAvbd(N, 5);
-    av.cells[N - 1]!.position[0]! = N - 5;
-    av.cells[N - 1]!.position[1]! = 1;
-    for (let i = 0; i < 10; i++) av.s.step(); // warm
+    av.cells[N - 1]!.value = { x: N - 5, y: 1 };
+    for (let i = 0; i < 10; i++) av.s.step();
 
-    // Time AVBD.
     let dy = 1;
     const t0 = performance.now();
     for (let i = 0; i < drags; i++) {
       dy += 0.05;
-      av.cells[N - 1]!.position[1]! = dy;
+      av.cells[N - 1]!.y = dy;
       av.s.step();
     }
     const tAvbd = (performance.now() - t0) / drags;
 
-    // relate: warm up.
     const rel = buildRelate(N);
     pinPoint(rel.cells[N - 1]!, { x: N - 5, y: 1 });
-    // (warm-up happens automatically via initial solve)
 
-    // Time relate.
     let dy2 = 1;
     const t1 = performance.now();
     for (let i = 0; i < drags; i++) {
@@ -117,7 +104,6 @@ describe("AVBD vs relate — chain drag perf", () => {
     console.log(
       `  N=64 2D chain — avbd@5: ${tAvbd.toFixed(3)}ms, relate(LM): ${tRelate.toFixed(3)}ms, ratio: ${(tRelate / tAvbd).toFixed(2)}×`,
     );
-    // No assertion — just want the perf number visible.
     expect(tAvbd).toBeLessThan(50);
     expect(tRelate).toBeLessThan(200);
   });
@@ -127,15 +113,14 @@ describe("AVBD vs relate — chain drag perf", () => {
     const drags = 5;
 
     const av = buildAvbd(N, 5);
-    av.cells[N - 1]!.position[0]! = N - 5;
-    av.cells[N - 1]!.position[1]! = 1;
+    av.cells[N - 1]!.value = { x: N - 5, y: 1 };
     for (let i = 0; i < 5; i++) av.s.step();
 
     let dy = 1;
     const t0 = performance.now();
     for (let i = 0; i < drags; i++) {
       dy += 0.05;
-      av.cells[N - 1]!.position[1]! = dy;
+      av.cells[N - 1]!.y = dy;
       av.s.step();
     }
     const tAvbd = (performance.now() - t0) / drags;
@@ -161,29 +146,23 @@ describe("AVBD vs relate — chain drag perf", () => {
 
 describe("AVBD wins decisively — capped-iteration robustness", () => {
   it("64-chain at 1 iter/step stays bounded; LM may not converge", () => {
-    // AVBD's promise: even at iter=1, simulation is bounded. We
-    // can't compare directly because LM at maxIters=1 may diverge
-    // or oscillate. Just verify AVBD is stable.
     const N = 64;
-    const cells: AvbdCell[] = [];
-    for (let i = 0; i < N; i++) cells.push(new AvbdCell(2, [i, 0]));
+    const cells: AvbdVecCell[] = [];
+    for (let i = 0; i < N; i++) cells.push(avbdVec(i, 0));
     cells[0]!.mass = 0;
     const s = new Solver({ iterations: 1 });
     for (const c of cells) s.addCell(c);
     for (let i = 1; i < N; i++) avbdDistance(s, cells[i - 1]!, cells[i]!, 1);
     cells[N - 1]!.mass = 0;
 
-    // Drag along a smooth path with single-iter AVBD.
     for (let step = 0; step < 200; step++) {
       const t = step * 0.05;
-      cells[N - 1]!.position[0]! = (N - 5) + Math.cos(t);
-      cells[N - 1]!.position[1]! = Math.sin(t);
+      cells[N - 1]!.value = { x: N - 5 + Math.cos(t), y: Math.sin(t) };
       s.step();
     }
-    // Stability: no runaway.
     for (const c of cells) {
-      expect(Number.isFinite(c.position[0]!)).toBe(true);
-      expect(Math.abs(c.position[0]!)).toBeLessThan(200);
+      expect(Number.isFinite(c.x)).toBe(true);
+      expect(Math.abs(c.x)).toBeLessThan(200);
     }
   });
 });
