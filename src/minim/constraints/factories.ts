@@ -106,6 +106,25 @@ export function gap(c: Cluster, a: S, b: S, minDist: number): GenericForce {
   return f;
 }
 
+/** Hard rectangular containment: keep a `Vec` inside the AABB
+ *  `[xLo, xHi] × [yLo, yHi]`. Encoded as four one-sided inequalities
+ *  so the constraint only acts when `P` is on the wrong side of
+ *  a wall. */
+export function inside(c: Cluster, P: S, xLo: number, yLo: number, xHi: number, yHi: number): GenericForce {
+  const f = generic(c, [P], 4, (pos, out) => {
+    const p = pos[0]!;
+    out[0]! = p[0]! - xLo;
+    out[1]! = xHi - p[0]!;
+    out[2]! = p[1]! - yLo;
+    out[3]! = yHi - p[1]!;
+  });
+  f.fmax[0]! = 0;
+  f.fmax[1]! = 0;
+  f.fmax[2]! = 0;
+  f.fmax[3]! = 0;
+  return f;
+}
+
 /** Hard inequality `a ≤ b` between two scalar cells. */
 export function leq(c: Cluster, a: S, b: S): GenericForce {
   const f = generic(c, [a, b], 1, (pos, out) => {

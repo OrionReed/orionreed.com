@@ -291,6 +291,10 @@ The same primitive scales up to closed kinematic loops. A 4-bar linkage is just 
 
 <md-fourbar></md-fourbar>
 
+Mix shape constraints with locus constraints and you get classic mechanisms more or less for free. A slider-crank — the heart of every internal-combustion engine — is a rotating crank arm `O1—A`, a rigid connecting rod `A—B`, and a piston `B` that slides along a guide. Three constraints (`distance` × 2 + `collinear`) on six cells, four of which are pinned: the result is a one-DOF mechanism that converts rotation into linear reciprocation. Drag the crank tip and watch the piston track.
+
+<md-slider-crank></md-slider-crank>
+
 The same path scales up to physics. `Simulation(cluster, { gravity })` wraps the cluster in a velocity-and-extrapolation time-stepper that calls `tick(dt)` per frame. The cloth below is a 14×10 grid of point masses linked by ~250 hard distance constraints — every horizontal and vertical neighbour gets its own length constraint, top corners are pinned, the rest swings under gravity. Each frame the solver projects the whole net back onto the constraint manifold, in well under a millisecond.
 
 <md-cloth></md-cloth>
@@ -302,6 +306,10 @@ A hanging rope is the 1D special case: 40 point masses, 39 links, one anchor. Dr
 Constraints describe what _shouldn't_ happen as readily as what should. `gap(a, b, d)` keeps two points at least `d` apart — a hard inequality the solver only enforces when violated. With soft `spring`s along edges and a pairwise `gap` on every node pair, a force-directed graph layout falls out in two factory calls. The cluster handles all 120 pair constraints plus the spring forces, every frame.
 
 <md-graph></md-graph>
+
+Pair `gap` with rectangular containment (`inside(P, xLo, yLo, xHi, yHi)` — four one-sided inequalities, dormant when the point is in the box) and a touch of gravity, and you have a 2D snowglobe: 24 colored circles fall, settle into a hex packing, and shove each other out of the way when you grab one. The cluster solves 24 wall constraints + 276 pairwise gaps every frame — under a millisecond.
+
+<md-particles></md-particles>
 
 Curves matter too. `Path` is a reactive polyline — cheap, fast, plenty for line plots and node-to-node connectors. When ellipses or arcs are needed, the sibling `Curve` carries the same reactive plumbing but with `ellipseArc` segments rendered via SVG's native `A` command. The standalone `ellipse(center, a, b, rotation?)` factory accepts `Val<>` on every parameter, so a family of confocal conics — five ellipses through fixed eccentricities, four hyperbola pairs sampled as polylines — comes from a couple of loops driven by two draggable foci. Drag a focus; the whole grid re-rescales. Drag the probe; the unique ellipse and hyperbola through it track in real time:
 

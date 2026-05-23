@@ -40,6 +40,7 @@ export {
   gap,
   generic,
   geq,
+  inside,
   leq,
   lensNum,
   midpoint,

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { num, vec } from "../../signals";
-import { clamp, distance, gap, geq, leq, Cluster, Strength, spring } from "../index";
+import { clamp, distance, gap, geq, inside, leq, Cluster, Strength, spring } from "../index";
 
 describe("API — Strength constants", () => {
   it("constants ordered low → high; HARD = ∞", () => {
@@ -75,6 +75,39 @@ describe("API — inequality factories", () => {
     a.value = { x: 0.0001, y: 0 };
     expect(b.value.x).toBeCloseTo(20, 1);
     expect(b.value.y).toBeCloseTo(0, 1);
+  });
+
+  it("inside(P, xLo, yLo, xHi, yHi): pulls P inside the AABB", () => {
+    const P = vec(50, 50);
+    const s = new Cluster({ iterations: 20 });
+    inside(s, P, 0, 0, 10, 10);
+    P.value = { x: 50.0001, y: 50 };
+    expect(P.value.x).toBeLessThanOrEqual(10 + 1e-2);
+    expect(P.value.y).toBeLessThanOrEqual(10 + 1e-2);
+    expect(P.value.x).toBeGreaterThanOrEqual(0);
+    expect(P.value.y).toBeGreaterThanOrEqual(0);
+  });
+
+  it("inside is dormant when P is already inside", () => {
+    const P = vec(5, 5);
+    const s = new Cluster({ iterations: 10 });
+    inside(s, P, 0, 0, 10, 10);
+    P.value = { x: 5.0001, y: 5 };
+    expect(P.value.x).toBeCloseTo(5, 1);
+    expect(P.value.y).toBeCloseTo(5, 1);
+  });
+
+  it("inside + gap: two circles confined to a box stay separated", () => {
+    const a = vec(2, 5);
+    const b = vec(8, 5);
+    const s = new Cluster({ iterations: 30 });
+    inside(s, a, 0, 0, 10, 10);
+    inside(s, b, 0, 0, 10, 10);
+    gap(s, a, b, 4);
+    s.pin(a);
+    a.value = { x: 2.0001, y: 5 };
+    expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeGreaterThanOrEqual(4 - 1e-2);
+    expect(b.value.x).toBeLessThanOrEqual(10 + 1e-2);
   });
 });
 
