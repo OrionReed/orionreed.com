@@ -172,23 +172,22 @@ describe("mixed-flavour fusion (through ∘ lensTo, lensTo ∘ deriveTo, …)", 
     expect(fused.value).toBe(115);
   });
 
-  it("deriveTo then lensTo: writable view on top of RO chain falls back to non-fused install", () => {
+  it("deriveTo then lensTo: writable view on top of RO chain throws at construction", () => {
     // The chain upstream has no bwd (deriveTo is RO), so we can't
-    // compose a writable bwd through it. Writes should fail at the
-    // RO step, NOT silently succeed via fusion.
+    // compose a writable bwd through it. TS rejects this at the type
+    // level (deriveTo returns bare RO `Num`); the runtime check is
+    // a defense against escape-hatch casts. Error fires at the
+    // `.lensTo()` call so the stack trace points at the user's
+    // mistake rather than a much-later write.
     const a = num(0);
     const ro = a.deriveTo(Num, v => v * 2);
-    const lens = ro.lensTo(
-      Num,
-      n => n + 1,
-      (v, _s) => v - 1,
-    );
-    // Read works (the fwd path is fine).
-    expect(lens.value).toBe(1); // 2*0 + 1
-    // Write throws because it tries to write through the RO cell.
-    expect(() => {
-      (lens as unknown as { value: number }).value = 100;
-    }).toThrow(/Cannot write to a Computed/);
+    expect(() =>
+      ro.lensTo(
+        Num,
+        n => n + 1,
+        (v, _s) => v - 1,
+      ),
+    ).toThrow(/writable view on top of a read-only fused chain/);
   });
 
   it("box.expand(5).x — through then field, fuses onto box", () => {

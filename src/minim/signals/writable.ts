@@ -75,20 +75,32 @@ export type { WritableBrand };
  *      get x() { return field(this, "x", Num); }
  *
  *  TS infers the getter's return type from `field()`'s conditional —
- *  no per-getter annotation needed. */
+ *  no per-getter annotation needed.
+ *
+ *  Runtime smart-dispatch: when `parent` is a fused-RO chain (e.g.
+ *  `box.center` is built from `deriveTo`), the bwd path has no place
+ *  to land. Fall through to `deriveTo` to match the conditional
+ *  return type at runtime. Without this, `field()` would try to
+ *  install a writable lens onto a RO receiver and trip the
+ *  construction-time check in `Signal._fuse`, breaking legitimate
+ *  read-only patterns like `box.center.x.value`. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo
 export function field<S extends Signal<any>, K extends keyof Of<S>, C extends new (...args: never[]) => Signal<Of<S>[K]>>(
   parent: S,
   key: K,
   Cls: C,
 ): S extends WritableBrand ? Writable<InstanceType<C>> : InstanceType<C> {
-  return lazy(parent, key as string | symbol, () =>
-    (parent as Signal<Of<S>>).lensTo(
+  return lazy(parent, key as string | symbol, () => {
+    const fused = (parent as unknown as { _fusedOf?: { bwd?: unknown } })._fusedOf;
+    if (fused !== undefined && fused.bwd === undefined) {
+      return (parent as Signal<Of<S>>).deriveTo(Cls, s => s[key] as Of<InstanceType<C>>);
+    }
+    return (parent as Signal<Of<S>>).lensTo(
       Cls,
       s => s[key] as Of<InstanceType<C>>,
       (v, s) => ({ ...(s as object), [key]: v }) as Of<S>,
-    ),
-  ) as never;
+    );
+  }) as never;
 }
 
 /** Read-only derived view via `deriveTo`. Cached per (instance, key).

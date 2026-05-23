@@ -428,12 +428,20 @@ export class Signal<T = unknown> implements ReactiveNode {
    *
    *  Generalised from the original endo-only `_throughOf`: `fwd`/`bwd`
    *  may now bridge cross-type chains (`lensTo`/`deriveTo`). `bwd` is
-   *  `undefined` for fused-RO cells (deriveTo chains); composition
-   *  refuses to fuse a writable view on top of a fused-RO cell. */
+   *  `undefined` for fused-RO cells (deriveTo chains); `.lensTo()` on
+   *  a fused-RO cell throws at construction time.
+   *
+   *  `bwdStateless: true` is a hint from the caller that this chain's
+   *  bwd doesn't read its `s` parameter. `.through()` sets it (endo
+   *  bwds are stateless `(v) => v`); `.lensTo()` does not. When set on
+   *  every layer of a chain, fusion skips both `parent.peek()` and
+   *  `priorFwd(s)` in the setter — recovers the cost of threading
+   *  receiver-state that nobody reads. */
   _fusedOf?: {
     parent: Signal<unknown>;
     fwd: (s: unknown) => T;
     bwd?: (v: T, s: unknown) => unknown;
+    bwdStateless?: boolean;
   };
 
   constructor(initial: T, opts?: SignalOptions<T>) {
@@ -565,6 +573,7 @@ export class Signal<T = unknown> implements ReactiveNode {
       Cls as unknown as new (...args: never[]) => Signal<Of<InstanceType<C>>>,
       fwd as (s: unknown) => Of<InstanceType<C>>,
       (u, s) => bwd(u, s as T),
+      false,
     ) as InstanceType<C>;
   }
 
@@ -588,16 +597,34 @@ export class Signal<T = unknown> implements ReactiveNode {
   /** Endo-lens: wrap this cell with a `(fwd, bwd)` pair in value-space.
    *  Returns a lens of the same class. Auto-fuses: `.through(F, B)`
    *  after `.through(f, b)` collapses to one cell with composed fns,
-   *  avoiding per-chain allocation and dep-graph nodes. */
+   *  avoiding per-chain allocation and dep-graph nodes.
+   *
+   *  Smart-dispatch on RO receivers: if `this` is a fused-RO chain
+   *  (e.g., from `.deriveTo()`), the bwd has no place to land —
+   *  drop it and build a computed via `fwd` only. This matches the
+   *  receiver's writability at runtime and aligns with the `: this`
+   *  return type (RO receiver → RO result). `.scale(2)` on
+   *  `box.center` reads correctly; writes would throw "Cannot write
+   *  to a Computed" at the result cell. */
   through(this: Signal<T>, fwd: (v: T) => T, bwd: (v: T) => T): this {
     const Cls = this.constructor as new (...args: never[]) => Signal<T>;
+    if (this._fusedOf !== undefined && this._fusedOf.bwd === undefined) {
+      return Signal._fuse(
+        this as Signal<unknown>,
+        Cls,
+        fwd as (s: unknown) => T,
+      ) as unknown as this;
+    }
     // Through's bwd is stateless `(v) => v`; adapt to the unified
     // `(v, s) => s'` shape by ignoring the parent-state argument.
+    // `bwdStateless: true` lets fusion skip `parent.peek()` and
+    // `priorFwd(s)` in the setter when the whole chain is stateless.
     return Signal._fuse(
       this as Signal<unknown>,
       Cls,
       fwd as (s: unknown) => T,
       (v, _s) => bwd(v),
+      true,
     ) as unknown as this;
   }
 
@@ -608,9 +635,16 @@ export class Signal<T = unknown> implements ReactiveNode {
    *    - parent = receiver's root (chases `_fusedOf.parent`).
    *    - composedFwd : root_value → own_value (= fwdLocal ∘ priorFwd).
    *    - composedBwd : (own, root) → root' (= priorBwd ∘ bwdLocal),
-   *                    threading priorFwd(root) when bwdLocal needs the
-   *                    receiver's current state.
+   *                    threading priorFwd(root) when bwdLocal needs
+   *                    the receiver's current state. Skipped when the
+   *                    chain is `bwdStateless`-throughout.
    *    - tags result with `_fusedOf` so further fusion sees it.
+   *
+   *  `newStateless` (caller-supplied): does `bwdLocal` ignore its `s`
+   *  argument? `.through()` passes `true`, `.lensTo()` `false`. The
+   *  resulting chain is stateless iff this layer and every prior
+   *  layer is — then the setter inlines without `parent.peek()` /
+   *  `priorFwd(s)`. Any stateful layer poisons the flag upward.
    *
    *  Performance: the getter/setter closures installed on the cell
    *  call the composed fns directly, eliminating a wrapper-closure
@@ -618,48 +652,64 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  three). The `_fusedOf` tag stores the composed fns by reference
    *  so downstream fusion can compose against them without rebuilding.
    *
-   *  Edge case: writable view on top of a fused-RO receiver (e.g.
-   *  `.deriveTo(...).lensTo(...)`) can't compose its bwd through a
-   *  missing prior.bwd, so we don't fuse — install a non-fused lens
-   *  onto the receiver instead, preserving today's "writes throw at
-   *  the RO step" semantics rather than silently producing a fused
-   *  lens with a broken bwd path. */
+   *  Error: a writable view on top of a fused-RO receiver (e.g.
+   *  `.deriveTo(...).lensTo(...)`) has no bwd path. We throw a
+   *  `TypeError` at construction. TS already prevents this at the
+   *  type level (deriveTo returns bare RO `Cls`); the runtime check
+   *  is defensive against escape-hatch casts. */
   static _fuse<U>(
     receiver: Signal<unknown>,
     Cls: new (...args: never[]) => Signal<U>,
     fwdLocal: (s: unknown) => U,
     bwdLocal?: (v: U, s: unknown) => unknown,
+    newStateless: boolean = false,
   ): Signal<U> {
     const prior = receiver._fusedOf as
-      | { parent: Signal<unknown>; fwd: (s: unknown) => unknown; bwd?: (v: unknown, s: unknown) => unknown }
+      | {
+          parent: Signal<unknown>;
+          fwd: (s: unknown) => unknown;
+          bwd?: (v: unknown, s: unknown) => unknown;
+          bwdStateless?: boolean;
+        }
       | undefined;
 
-    // Writable-on-RO fallback: can't fuse if we'd need a bwd but the
-    // chain upstream has none. Install onto receiver, no fusion.
+    // Eager error: writable view on a read-only chain has no
+    // composable bwd path. Throw at construction so the stack trace
+    // points to the `.lensTo`/`.through` site, not a much-later
+    // write. TS rejects this at the type level for normal callers.
     if (bwdLocal !== undefined && prior !== undefined && prior.bwd === undefined) {
-      return Signal.install(
-        Cls,
-        () => fwdLocal(receiver.value),
-        v => {
-          (receiver as Signal<unknown>).value = bwdLocal(v, receiver.peek());
-        },
+      throw new TypeError(
+        "Signal: cannot install a writable view on top of a read-only fused chain. " +
+          "The receiver is a computed (no bwd path); .lensTo()/.through() require a writable parent.",
       );
     }
 
     const parent = prior !== undefined ? prior.parent : receiver;
     const priorFwd = prior?.fwd;
     const priorBwd = prior?.bwd;
+    // Fused chain is stateless iff this layer AND every prior layer
+    // is. No prior == trivially stateless above. RO cells (no bwd at
+    // this layer) propagate the prior flag unchanged — the flag is
+    // about the chain's *bwd potential*, and an RO layer contributes
+    // nothing stateful since it contributes no bwd at all.
+    const priorStateless = prior?.bwdStateless ?? true;
+    const fusedStateless = bwdLocal === undefined ? priorStateless : newStateless && priorStateless;
 
     const composedFwd: (s: unknown) => U = priorFwd
       ? s => fwdLocal(priorFwd(s))
       : fwdLocal;
 
+    // composedBwd is stored on `_fusedOf` for downstream fusion to
+    // compose against. The stateless variant skips `priorFwd(s)`
+    // (which would be passed to bwds that ignore it).
     const composedBwd: ((v: U, s: unknown) => unknown) | undefined =
       bwdLocal === undefined
         ? undefined
-        : priorBwd
-          ? (v, s) => priorBwd(bwdLocal(v, priorFwd!(s)), s)
-          : bwdLocal;
+        : priorBwd === undefined
+          ? bwdLocal
+          : fusedStateless
+            ? (v, s) => priorBwd(bwdLocal(v, s), s)
+            : (v, s) => priorBwd(bwdLocal(v, priorFwd!(s)), s);
 
     // Setter is installed with the composition inlined directly into
     // the setter body — calling `composedBwd(v, parent.peek())` would
@@ -667,32 +717,59 @@ export class Signal<T = unknown> implements ReactiveNode {
     // composition captures 3 fns from lexical scope). For the common
     // field-chain case this matters: micro-benchmarks show the
     // wrapping layer doubles write latency vs the hand-rolled
-    // nested-lens baseline. The composed bwd is still stored in
-    // `_fusedOf.bwd` for downstream fusion to compose against.
+    // nested-lens baseline.
+    //
+    // Four cases (by `bwdLocal` presence × `priorBwd` presence ×
+    // statelessness): RO install, 1-level stateless, 1-level stateful,
+    // 2+-level stateless, 2+-level stateful. We collapse the four
+    // writable cases by stateless-first dispatch; in the stateless
+    // arms, both `parent.peek()` and `priorFwd(s)` are skipped
+    // because nothing downstream reads them.
     let inst: Signal<U>;
     if (bwdLocal === undefined) {
       inst = Signal.install(Cls, () => composedFwd(parent.value));
-    } else if (priorBwd === undefined || priorFwd === undefined) {
-      // 1-level case: no prior to compose with.
-      inst = Signal.install(
-        Cls,
-        () => composedFwd(parent.value),
-        v => {
-          parent.value = bwdLocal(v, parent.peek());
-        },
-      );
+    } else if (priorBwd === undefined) {
+      // 1-level case (no prior to compose with).
+      inst = fusedStateless
+        ? Signal.install(
+            Cls,
+            () => composedFwd(parent.value),
+            v => {
+              parent.value = bwdLocal(v, undefined as never);
+            },
+          )
+        : Signal.install(
+            Cls,
+            () => composedFwd(parent.value),
+            v => {
+              parent.value = bwdLocal(v, parent.peek());
+            },
+          );
     } else {
       // 2+-level case: inline the composition into the setter.
-      inst = Signal.install(
-        Cls,
-        () => composedFwd(parent.value),
-        v => {
-          const s = parent.peek();
-          parent.value = priorBwd(bwdLocal(v, priorFwd(s)), s);
-        },
-      );
+      inst = fusedStateless
+        ? Signal.install(
+            Cls,
+            () => composedFwd(parent.value),
+            v => {
+              parent.value = priorBwd(bwdLocal(v, undefined as never), undefined as never);
+            },
+          )
+        : Signal.install(
+            Cls,
+            () => composedFwd(parent.value),
+            v => {
+              const s = parent.peek();
+              parent.value = priorBwd(bwdLocal(v, priorFwd!(s)), s);
+            },
+          );
     }
-    (inst as Signal<U>)._fusedOf = { parent, fwd: composedFwd, bwd: composedBwd };
+    (inst as Signal<U>)._fusedOf = {
+      parent,
+      fwd: composedFwd,
+      bwd: composedBwd,
+      bwdStateless: fusedStateless,
+    };
     return inst as Signal<U>;
   }
 
