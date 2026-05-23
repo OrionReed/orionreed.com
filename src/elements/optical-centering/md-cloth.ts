@@ -53,7 +53,7 @@ export class MdCloth extends Diagram {
       grid.push(row);
     }
 
-    const cluster = new Cluster({ iterations: 10 });
+    const cluster = new Cluster({ iterations: 30 });
 
     for (let j = 0; j < H; j++) {
       for (let i = 1; i < W; i++)
@@ -86,7 +86,7 @@ export class MdCloth extends Diagram {
       effect(() => (h.dragging.value ? cluster.pin(sig) : undefined));
     }
 
-    const sim = new Simulation(cluster, { gravity: [0, 90], damping: 0.94 });
+    const sim = new Simulation(cluster, { gravity: [0, 200], damping: 0.98 });
     this.anim.start(drive(tick => sim.tick(tick.dt)));
 
     s(

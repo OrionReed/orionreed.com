@@ -311,6 +311,18 @@ Pair `gap` with rectangular containment (`inside(P, xLo, yLo, xHi, yHi)` — fou
 
 <md-particles></md-particles>
 
+Stack rigid links inside the same scene and you have rigid bodies. Each body below is three small circles in an equilateral triangle, rigidified by three hard distance constraints — the count works out exactly: 3 cells × 2 DOF − 3 distances = 3 DOF, the translation and rotation of a 2D rigid body. Pairwise `gap` between every cell of *different* bodies handles non-overlap; `inside` keeps everything in the box. Drop them under gravity and they tumble, stack, and shove each other around. Drag any circle and its whole body translates and rotates rigidly.
+
+<md-rigid-bodies></md-rigid-bodies>
+
+The same pattern works on a 1D submanifold inside 2D. Each circle gets a Vec position `P` and a scalar parameter `t`, coupled by a `generic` constraint that fixes `P = (R·sin t, R·sin 2t / 2)` — the figure-8 Lissajous map. Pairwise `gap` enforces non-overlap in 2D; the curve constraint enforces incidence. Drag any circle and it slides along the curve, scooting the others aside; near the self-intersection at the origin, the constraint admits both branches and the solver may flip from one to the other (the multi-solution caveat the factories header warns about).
+
+<md-figure8></md-figure8>
+
+None of this is fundamentally geometric. The cluster operates on cells of arbitrary dimension and constraints over any function of those cells, so the same engine that solves a 4-bar linkage will solve an algebraic equation with no positions in sight. The three sliders below are plain `Num` cells with one `generic` constraint enforcing `a² + b² = c²` — drag any handle and the other two redistribute to satisfy the equation. The "redistribution" is the local Newton step picking the (a, b, c) on the constraint surface closest to the current values; pinning the dragged cell turns that into a 1-out-of-3 underdetermined solve.
+
+<md-equation></md-equation>
+
 Curves matter too. `Path` is a reactive polyline — cheap, fast, plenty for line plots and node-to-node connectors. When ellipses or arcs are needed, the sibling `Curve` carries the same reactive plumbing but with `ellipseArc` segments rendered via SVG's native `A` command. The standalone `ellipse(center, a, b, rotation?)` factory accepts `Val<>` on every parameter, so a family of confocal conics — five ellipses through fixed eccentricities, four hyperbola pairs sampled as polylines — comes from a couple of loops driven by two draggable foci. Drag a focus; the whole grid re-rescales. Drag the probe; the unique ellipse and hyperbola through it track in real time:
 
 ```ts

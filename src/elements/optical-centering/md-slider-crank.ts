@@ -3,22 +3,16 @@
 // One rotating crank arm `O1—A`, one rigid connecting rod `A—B`,
 // one piston `B` constrained to slide along a horizontal guide.
 // Three constraints, two pinned grounds, one slide axis defined
-// by two more pinned anchors. Drag the crank tip and the piston
-// reciprocates in perfect kinematic sync — no closed-form
-// inverse, no special-case logic, just constraints in a cluster.
+// by two more pinned anchors.
+//
+// Both the crank tip and the piston are draggable, but neither is
+// pinned during drag — the drag callback writes the signal to the
+// cursor, then the cluster's effect runs `solver.step()` which
+// projects the cell back onto the constraint manifold. With the
+// hard-distance penalty dominating the mass term in the local
+// Newton, the shape "slips" along the closest valid configuration.
 
-import {
-  Anchor,
-  circle,
-  Diagram,
-  effect,
-  handle,
-  label,
-  line,
-  Mount,
-  rect,
-  vec,
-} from "../../minim";
+import { Anchor, circle, Diagram, drag, label, line, Mount, rect, vec } from "../../minim";
 import { Cluster, collinear, distance } from "@minim/constraints";
 
 const CRANK = 50;
@@ -46,20 +40,19 @@ export class MdSliderCrank extends Diagram {
     cluster.pin(guide1);
     cluster.pin(guide2);
 
-    // Render the crank's reachable circle (debug-y).
     s(circle(O1, CRANK, { thin: true, opacity: 0.18 }));
-    // Slide guide.
     s(line(guide1, guide2, { thin: true, opacity: 0.25 }));
-    // Crank arm + connecting rod.
     s(line(O1, A, { thin: false }));
     s(line(A, B, { thin: false }));
-    // Pivots and piston body.
     s(circle(O1, 5, { fill: true }));
-    const piston = s(rect(B, 50, 18, { fill: "#5b8def", corner: 3 }));
-    piston.el.style.pointerEvents = "none";
 
-    const aH = s(handle(A, { fill: "#e25c5c", r: 7 }));
-    effect(() => (aH.dragging.value ? cluster.pin(A) : undefined));
+    const aH = s(circle(A, 8, { fill: "#e25c5c" }));
+    aH.el.style.cursor = "grab";
+    drag(aH, A);
+
+    const piston = s(rect(B, 56, 20, { fill: "#5b8def", corner: 3 }));
+    piston.el.style.cursor = "ew-resize";
+    drag(piston, B);
 
     s(
       label(view.top.down(20), "drag the red crank tip — the piston follows on the guide", {
