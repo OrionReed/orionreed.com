@@ -8,6 +8,29 @@
 // than a more typed `Signal<unknown>` because TS treats the
 // `setter` slot as contravariant, which makes `Writable<Num>`
 // unassignable to `Signal<unknown>`.
+//
+// Solver caveats worth remembering when authoring scenes:
+//
+// - **Multi-solution constraints can branch-flip.** Constraints
+//   like `onCircle`, `distance`, `equalDist` admit multiple
+//   geometrically valid configurations (a circle has two points
+//   at any chord distance, two distance constraints can intersect
+//   in two places). AVBD's local Newton + warm-start follows the
+//   nearest basin of attraction frame-to-frame; under fast drags
+//   that cross a critical point, the solver can jump to the
+//   alternate solution. There's no branch-tracking layer here.
+//
+// - **Infeasible configurations saturate, not explode.** When a
+//   cluster is dragged into a configuration where no constraint
+//   set has a solution, the solver caps `λ` at `LAMBDA_MAX` and
+//   the constraint applies its maximum allowable force. Positions
+//   stay bounded (see force.ts header).
+//
+// - **Duplicate cells hurt.** If the same cell appears twice in a
+//   `generic` factory's `cells` array (e.g. `[A, B, B, C]`), the
+//   FD path treats the two slots as independent and the local
+//   Newton LHS misses cross terms. Use `rightAngle(A, B, C)`
+//   instead of `perpendicular(A, B, B, C)` and similar.
 
 import type { Signal } from "../signals";
 import { Cluster } from "./cluster";
@@ -66,6 +89,20 @@ export function lensNum(c: Cluster, a: S, b: S, fwd: (x: number) => number): Len
 export function clamp(c: Cluster, x: S, lo: number, hi: number): BoundsForce {
   const f = new BoundsForce(c.solver, c.bind(x), lo, hi);
   c.solver.addForce(f);
+  return f;
+}
+
+/** Hard minimum distance: `‖b − a‖ ≥ minDist`. Used for non-
+ *  overlapping circles, body-body separation, etc. The constraint
+ *  only ever pushes the points apart — it has no effect when they
+ *  are already further than `minDist`. */
+export function gap(c: Cluster, a: S, b: S, minDist: number): GenericForce {
+  const f = generic(c, [a, b], 1, (pos, out) => {
+    const dx = pos[1]![0]! - pos[0]![0]!;
+    const dy = pos[1]![1]! - pos[0]![1]!;
+    out[0]! = Math.hypot(dx, dy) - minDist;
+  });
+  f.fmax[0]! = 0;
   return f;
 }
 

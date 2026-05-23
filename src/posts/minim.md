@@ -283,13 +283,25 @@ Constraints can be added and disposed at runtime — the factory returns a handl
 
 <md-rigid></md-rigid>
 
-Constraints describe loci as readily as they describe shapes. `onCircle(P, center, r)` keeps `P` on a circle of fixed radius around a (possibly draggable) center; `collinear(P, A, B)` keeps `P` on the line through two anchors. Drag a constrained point: the solver projects the cursor onto the closest point of the locus. Drag the anchors: the locus moves with them and the constrained point slides.
+Constraints describe loci as readily as they describe shapes — and the same cluster handles both at once. `onCircle(P, center, r)` keeps `P` on a circle of fixed radius around a (possibly draggable) center; `collinear(P, A, B)` keeps `P` on the line through two anchors. The bracket below has six constraints stacked in one cluster: two locus incidences, two equal-length bars, an `equalDist` symmetry, and a `rightAngle` at the inner vertex. Drag any anchor and the loci move; drag the bracket and it reconfigures while staying valid.
 
 <md-incidence></md-incidence>
 
 The same primitive scales up to closed kinematic loops. A 4-bar linkage is just three distance constraints and two pinned ground pivots — the fourth side is the (implicit) line between the pinned points. The mechanism's single internal degree of freedom emerges from the constraint count without any branching machinery; drag any free joint and the rocker, coupler and crank coordinate through their shared loop.
 
 <md-fourbar></md-fourbar>
+
+The same path scales up to physics. `Simulation(cluster, { gravity })` wraps the cluster in a velocity-and-extrapolation time-stepper that calls `tick(dt)` per frame. The cloth below is a 14×10 grid of point masses linked by ~250 hard distance constraints — every horizontal and vertical neighbour gets its own length constraint, top corners are pinned, the rest swings under gravity. Each frame the solver projects the whole net back onto the constraint manifold, in well under a millisecond.
+
+<md-cloth></md-cloth>
+
+A hanging rope is the 1D special case: 40 point masses, 39 links, one anchor. Drag the blue tip or grab the rope by the middle and physics carries the rest of the chain.
+
+<md-chain></md-chain>
+
+Constraints describe what _shouldn't_ happen as readily as what should. `gap(a, b, d)` keeps two points at least `d` apart — a hard inequality the solver only enforces when violated. With soft `spring`s along edges and a pairwise `gap` on every node pair, a force-directed graph layout falls out in two factory calls. The cluster handles all 120 pair constraints plus the spring forces, every frame.
+
+<md-graph></md-graph>
 
 Curves matter too. `Path` is a reactive polyline — cheap, fast, plenty for line plots and node-to-node connectors. When ellipses or arcs are needed, the sibling `Curve` carries the same reactive plumbing but with `ellipseArc` segments rendered via SVG's native `A` command. The standalone `ellipse(center, a, b, rotation?)` factory accepts `Val<>` on every parameter, so a family of confocal conics — five ellipses through fixed eccentricities, four hyperbola pairs sampled as polylines — comes from a couple of loops driven by two draggable foci. Drag a focus; the whole grid re-rescales. Drag the probe; the unique ellipse and hyperbola through it track in real time:
 

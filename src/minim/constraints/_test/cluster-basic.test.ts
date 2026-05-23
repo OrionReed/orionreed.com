@@ -1,8 +1,10 @@
 // cluster-basic.test.ts — verify the write-attribution model.
 
 import { describe, expect, it, vi } from "vitest";
-import { batch, effect, num, vec } from "../../signals";
+import { batch, effect, num, vec, type Vec, type Writable } from "../../signals";
 import { Cluster, distance, eq, leq, lensNum } from "../index";
+
+type WVec = Writable<Vec>;
 
 describe("Cluster (writeBack) — basic correctness", () => {
   it("eq: pinned a, write a → b matches", () => {
@@ -137,7 +139,110 @@ describe("Cluster (writeBack) — lens composition", () => {
   });
 });
 
+describe("Simulation — numerical robustness", () => {
+  it("Simulation.tick(0) is a no-op (would otherwise divide by zero)", async () => {
+    const { distance, Simulation } = await import("../index");
+    const a = vec(0, 0);
+    const b = vec(10, 0);
+    const c = new Cluster();
+    distance(c, a, b, 10);
+    c.pin(a);
+    const sim = new Simulation(c, { gravity: [0, 100] });
+    sim.tick(0);
+    sim.tick(0);
+    sim.tick(1 / 60);
+    expect(Number.isFinite(b.value.x)).toBe(true);
+    expect(Number.isFinite(b.value.y)).toBe(true);
+  });
+
+  it("cloth grid under gravity stays bounded across many frames", async () => {
+    const { distance, Simulation } = await import("../index");
+    const W = 8;
+    const H = 6;
+    const SP = 20;
+    const grid: WVec[][] = [];
+    for (let j = 0; j < H; j++) {
+      const row: WVec[] = [];
+      for (let i = 0; i < W; i++) row.push(vec(i * SP, j * SP));
+      grid.push(row);
+    }
+    const c = new Cluster({ iterations: 8 });
+    for (let j = 0; j < H; j++)
+      for (let i = 1; i < W; i++) distance(c, grid[j]![i - 1]!, grid[j]![i]!, SP);
+    for (let i = 0; i < W; i++)
+      for (let j = 1; j < H; j++) distance(c, grid[j - 1]![i]!, grid[j]![i]!, SP);
+    c.pin(grid[0]![0]!);
+    c.pin(grid[0]![W - 1]!);
+
+    const sim = new Simulation(c, { gravity: [0, 120] });
+    for (let f = 0; f < 240; f++) sim.tick(1 / 60);
+
+    for (let j = 0; j < H; j++) {
+      for (let i = 0; i < W; i++) {
+        const v = grid[j]![i]!.value;
+        expect(Number.isFinite(v.x)).toBe(true);
+        expect(Number.isFinite(v.y)).toBe(true);
+        expect(Math.abs(v.x)).toBeLessThan(1e4);
+        expect(Math.abs(v.y)).toBeLessThan(1e4);
+      }
+    }
+  });
+
+  it("hanging chain stays bounded across many frames", async () => {
+    const { distance, Simulation } = await import("../index");
+    const N = 20;
+    const LINK = 12;
+    const links: WVec[] = [];
+    for (let i = 0; i < N; i++) links.push(vec(i * LINK, 0));
+    const c = new Cluster({ iterations: 12 });
+    for (let i = 1; i < N; i++) distance(c, links[i - 1]!, links[i]!, LINK);
+    c.pin(links[0]!);
+
+    const sim = new Simulation(c, { gravity: [0, 220] });
+    for (let f = 0; f < 240; f++) sim.tick(1 / 60);
+
+    for (const sig of links) {
+      expect(Number.isFinite(sig.value.x)).toBe(true);
+      expect(Number.isFinite(sig.value.y)).toBe(true);
+      expect(Math.abs(sig.value.x)).toBeLessThan(1e4);
+      expect(Math.abs(sig.value.y)).toBeLessThan(1e4);
+    }
+  });
+});
+
 describe("Cluster — numerical robustness", () => {
+  it("4-bar dragged into infeasible workspace stays bounded (lambda cap)", async () => {
+    const { distance } = await import("../index");
+    const c = new Cluster({ iterations: 16 });
+    const O1 = vec(-100, 0);
+    const O2 = vec(100, 0);
+    const A = vec(-100, -80);
+    const B = vec(100, -50);
+    distance(c, O1, A, 80);
+    distance(c, A, B, 220);
+    distance(c, B, O2, 50);
+    c.pin(O1);
+    c.pin(O2);
+    c.pin(B);
+
+    let seed = 999;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0xffffffff;
+    };
+    // Throw B through deeply infeasible territory (4-bar reach is
+    // |O2 ± rocker| ≈ 50–150; we drag to 1000s).
+    for (let i = 0; i < 500; i++) {
+      B.value = { x: (rand() - 0.5) * 2000, y: (rand() - 0.5) * 2000 };
+    }
+    for (const sig of [A, B]) {
+      expect(Number.isFinite(sig.value.x)).toBe(true);
+      expect(Number.isFinite(sig.value.y)).toBe(true);
+      expect(Math.abs(sig.value.x)).toBeLessThan(1e5);
+      expect(Math.abs(sig.value.y)).toBeLessThan(1e5);
+    }
+  });
+
   it("aggressive random drag stays finite (no NaN poisoning)", async () => {
     const { distance, perpendicular } = await import("../index");
     const c = new Cluster({ iterations: 8 });

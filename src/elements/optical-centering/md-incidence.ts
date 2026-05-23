@@ -1,11 +1,11 @@
-// md-incidence.ts — points constrained to geometric loci.
+// md-incidence.ts — sketchpad / CAD-style construction.
 //
-// The blue point is constrained on a circle of fixed radius around
-// a draggable center; the red point is constrained collinear with
-// two draggable anchors. Each constrained point can be dragged
-// freely — the solver projects the user's cursor onto the locus
-// (closest point on circle / line). Drag the anchors and the loci
-// move with them; the constrained points slide.
+// A draggable circle (centered on a moving anchor), a draggable
+// guide line through two anchors, and a rigid bracket whose two
+// outer vertices are constrained to the circle and the line
+// respectively. Drag the anchors and the loci move; drag the free
+// inner vertex and the bracket articulates while keeping its
+// vertices on their respective loci.
 
 import {
   Anchor,
@@ -20,56 +20,71 @@ import {
   type Vec,
   type Writable,
 } from "../../minim";
-import { Cluster, collinear, onCircle } from "@minim/constraints";
+import { Cluster, collinear, distance, equalDist, onCircle, rightAngle } from "@minim/constraints";
 
 type WVec = Writable<Vec>;
 
-const RADIUS = 70;
+const RADIUS = 65;
+const BAR = 70;
 
 export class MdIncidence extends Diagram {
   protected scene(s: Mount): void {
-    const view = this.view(560, 380);
+    const view = this.view(620, 400);
     const cx = view.center.value.x;
     const cy = view.center.value.y;
 
-    // Circle locus: center C plus a free point P on the circle.
-    const center = vec(cx - 130, cy);
-    const onPt = vec(cx - 130 + RADIUS, cy);
-    s(circle(center, RADIUS, { thin: true, opacity: 0.4 }));
-    s(circle(center, 3, { fill: true }));
+    // Locus anchors.
+    const center = vec(cx - 140, cy);
+    const L1 = vec(cx + 70, cy + 110);
+    const L2 = vec(cx + 220, cy - 110);
 
-    // Line locus: anchors L1, L2 plus a free point Q on line(L1, L2).
-    const L1 = vec(cx + 30, cy + 80);
-    const L2 = vec(cx + 200, cy - 80);
-    const onLine = vec(cx + 100, cy);
-    s(line(L1, L2, { thin: true, opacity: 0.4 }));
+    // Bracket vertices.
+    const P = vec(cx - 140 + RADIUS, cy);     // on the circle
+    const Q = vec(cx + 145, cy);                 // on the line
+    const M = vec(cx - 30, cy);                  // free inner vertex
 
     const cluster = new Cluster({ iterations: 24 });
-    onCircle(cluster, onPt, center, RADIUS);
-    collinear(cluster, onLine, L1, L2);
+    onCircle(cluster, P, center, RADIUS);
+    collinear(cluster, Q, L1, L2);
+    distance(cluster, P, M, BAR);
+    distance(cluster, M, Q, BAR);
+    equalDist(cluster, P, M, M, Q);
+    rightAngle(cluster, P, M, Q);
 
-    const handles: ReadonlyArray<[WVec, ReturnType<typeof handle>]> = [
-      [center, s(handle(center, { r: 6 }))],
-      [onPt, s(handle(onPt, { fill: "#5b8def", r: 7 }))],
-      [L1, s(handle(L1, { r: 6 }))],
-      [L2, s(handle(L2, { r: 6 }))],
-      [onLine, s(handle(onLine, { fill: "#e25c5c", r: 7 }))],
+    // Render the loci behind everything else.
+    s(circle(center, RADIUS, { thin: true, opacity: 0.4 }));
+    s(circle(center, 3, { fill: true }));
+    s(line(L1, L2, { thin: true, opacity: 0.4 }));
+
+    // Bracket itself — two solid bars meeting at M with a small
+    // marker drawn at the right-angle corner.
+    s(line(P, M));
+    s(line(M, Q));
+    s(circle(M, 8, { thin: true, opacity: 0.45 }));
+
+    const handles: ReadonlyArray<[WVec, ReturnType<typeof handle>, string]> = [
+      [center, s(handle(center, { r: 6 })), "center"],
+      [L1, s(handle(L1, { r: 6 })), "L1"],
+      [L2, s(handle(L2, { r: 6 })), "L2"],
+      [P, s(handle(P, { fill: "#5b8def", r: 7 })), "P"],
+      [Q, s(handle(Q, { fill: "#e25c5c", r: 7 })), "Q"],
+      [M, s(handle(M, { fill: "#f5a623", r: 7 })), "M"],
     ];
     for (const [sig, h] of handles) {
       effect(() => (h.dragging.value ? cluster.pin(sig) : undefined));
     }
 
     s(
-      label(view.top.down(20), "blue stays on the circle, red stays on the line — drag any handle", {
+      label(view.top.down(20), "P stays on the circle, Q stays on the line, |PM| = |MQ| at a right angle", {
         size: 12,
         align: Anchor.Center,
         opacity: 0.7,
       }),
-      label(view.bottom.up(16), "onCircle(P, center, r) · collinear(P, L1, L2)", {
-        size: 10,
-        align: Anchor.Center,
-        opacity: 0.5,
-      }),
+      label(
+        view.bottom.up(16),
+        "onCircle · collinear · distance · equalDist · rightAngle — six constraints, one cluster",
+        { size: 10, align: Anchor.Center, opacity: 0.5 },
+      ),
     );
   }
 }

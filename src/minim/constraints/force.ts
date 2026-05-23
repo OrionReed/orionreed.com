@@ -33,6 +33,24 @@ import type { Solver } from "./solver";
 export const PENALTY_MIN = 1.0;
 export const PENALTY_MAX = 1e9;
 
+/** Hard cap on the augmented-Lagrangian multiplier `λ` per row.
+ *
+ *  Without a cap, the dual update `λ ← λ + ρ·C(x)` grows linearly
+ *  per iteration whenever `C(x)` stays nonzero — i.e. whenever the
+ *  constraint is *infeasible* in the current configuration. With
+ *  enough iterations of an infeasible drag (user pulls a 4-bar
+ *  joint outside its reachable workspace, two bodies pushed past
+ *  each other under conflicting gaps, etc.), `λ` runs to `±∞` and
+ *  the rhs in the local Newton solve overwhelms the lhs, sending
+ *  positions to infinity within a handful of frames.
+ *
+ *  Capping at `1e9` (matching `PENALTY_MAX`) bounds the maximum
+ *  "force" the constraint can apply, turning unsatisfiable
+ *  constraints into a saturation rather than an explosion. The
+ *  cap is symmetric (`±LAMBDA_MAX`) so equality constraints stay
+ *  reachable from either side. */
+export const LAMBDA_MAX = 1e9;
+
 export abstract class Force {
   /** Solver this force belongs to. Subclasses read positions via
    *  `solver.positions[off + k]`, with `off` taken from

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { num, vec } from "../../signals";
-import { clamp, distance, geq, leq, Cluster, Strength, spring } from "../index";
+import { clamp, distance, gap, geq, leq, Cluster, Strength, spring } from "../index";
 
 describe("API — Strength constants", () => {
   it("constants ordered low → high; HARD = ∞", () => {
@@ -54,6 +54,27 @@ describe("API — inequality factories", () => {
     s.pin(b);
     b.value = 5.0001;
     expect(a.value).toBeGreaterThanOrEqual(5 - 1e-2);
+  });
+
+  it("gap(a, b, d): two points pushed apart when too close", () => {
+    const a = vec(0, 0);
+    const b = vec(0.5, 0);
+    const s = new Cluster({ iterations: 30 });
+    gap(s, a, b, 5);
+    s.pin(a);
+    a.value = { x: 0.0001, y: 0 };
+    expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeGreaterThanOrEqual(5 - 1e-2);
+  });
+
+  it("gap(a, b, d): no force when already far apart", () => {
+    const a = vec(0, 0);
+    const b = vec(20, 0);
+    const s = new Cluster({ iterations: 10 });
+    gap(s, a, b, 5);
+    s.pin(a);
+    a.value = { x: 0.0001, y: 0 };
+    expect(b.value.x).toBeCloseTo(20, 1);
+    expect(b.value.y).toBeCloseTo(0, 1);
   });
 });
 

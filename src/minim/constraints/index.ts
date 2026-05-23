@@ -37,6 +37,7 @@ export {
   distance,
   eq,
   equalDist,
+  gap,
   generic,
   geq,
   leq,
@@ -49,7 +50,7 @@ export {
   softTarget,
   spring,
 } from "./factories";
-export { Force, PENALTY_MAX, PENALTY_MIN } from "./force";
+export { Force, LAMBDA_MAX, PENALTY_MAX, PENALTY_MIN } from "./force";
 export {
   BoundsForce,
   DistanceForce,

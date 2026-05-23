@@ -64,8 +64,13 @@ export class Simulation {
     for (let k = 0; k < dim; k++) this.velocities[off + k] = value[k] ?? 0;
   }
 
-  /** Advance one frame by `dt` seconds. */
+  /** Advance one frame by `dt` seconds. No-op for non-positive or
+   *  non-finite `dt` — the velocity update divides by `dt`, so a
+   *  zero or NaN tick would otherwise inject infinities into every
+   *  velocity slot and poison the simulation forever. (`attachRaf`
+   *  passes `dt = 0` on its first frame, for instance.) */
   tick(dt: number): void {
+    if (!(dt > 0) || !Number.isFinite(dt)) return;
     this._ensureVelocityCapacity();
     const solver = this.cluster.solver;
     const dt2 = dt * dt;

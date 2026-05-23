@@ -14,7 +14,7 @@
 // constraints, find `x` near `y` that satisfies them."
 
 import type { Force } from "./force";
-import { PENALTY_MAX, PENALTY_MIN } from "./force";
+import { LAMBDA_MAX, PENALTY_MAX, PENALTY_MIN } from "./force";
 import { clamp, solveSPD } from "./linalg";
 
 export interface SolverOpts {
@@ -401,7 +401,12 @@ export class Solver {
         const kC = fPenalty[r]! * fC[r]! + lambda;
         const lo = fMin[r]!;
         const hi = fMax[r]!;
-        const newLambda = kC < lo ? lo : kC > hi ? hi : kC;
+        // Two clamps: user-supplied `[fmin, fmax]` (one-sided for
+        // inequalities), and the unconditional `±LAMBDA_MAX` to
+        // prevent runaway under infeasibility — see force.ts header.
+        let newLambda = kC < lo ? lo : kC > hi ? hi : kC;
+        if (newLambda > LAMBDA_MAX) newLambda = LAMBDA_MAX;
+        else if (newLambda < -LAMBDA_MAX) newLambda = -LAMBDA_MAX;
         fLambda[r]! = newLambda;
         const absLambda = newLambda < 0 ? -newLambda : newLambda;
         if (absLambda >= fFracture[r]!) {
