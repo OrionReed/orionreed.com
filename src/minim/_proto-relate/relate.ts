@@ -1,5 +1,41 @@
 // relate.ts — first-class constraint relations over reactive cells.
 //
+// ─── Problem class we target ────────────────────────────────────────
+//
+// Continuous-domain nonlinear least-squares with optional convex
+// inequality constraints, solved within a reactive substrate that
+// supports dynamic topology change. Concretely:
+//
+//   IN-SCOPE:
+//     - Real-valued cells (Num, Vec, Box, Color, any class with a
+//       `traits.packer`).
+//     - Equality constraints `f(x) = 0` (any smooth, finite-valued
+//       residual function).
+//     - Inequality constraints `g(x) ≥ 0` via penalty residuals
+//       `max(0, -g(x))` — soft by default, escalatable via weight.
+//     - Cassowary-style strength hierarchy (weighted LSQ, not slack-
+//       variable simplex).
+//     - Reactive topology: add/remove relations any time, solver
+//       picks up the change next solve.
+//     - Mixed-type clusters (Num + Vec + Box + …).
+//     - Hard pins (engine-level), soft pins (residual), user pins
+//       (per-batch automatic).
+//
+//   OUT-OF-SCOPE:
+//     - Discrete or combinatorial domains (no integer programming,
+//       no SAT, no graph isomorphism).
+//     - Discontinuous residuals (subgradients OK; sharp jumps not).
+//     - Disconnected feasible regions / global optimization.
+//     - Worst-case real-time guarantees: we have soft frame budgets
+//       (≤4ms / 8ms target at 50% of 125fps), no hard timing
+//       contracts.
+//     - Cassowary-style "hard inequality with strict satisfaction"
+//       — those need slack variables + simplex, not LSQ. We instead
+//       model them as REQUIRED-weighted penalty constraints, which
+//       satisfy them very tightly but not exactly.
+//
+// ─── Behaviour ──────────────────────────────────────────────────────
+//
 // A `Relation` binds N reactive cells together via a residual
 // `R(x): R^N → R^M` that should equal zero. It does NOT pick a
 // "direction" of dataflow — when any subset of cells is written by
@@ -61,8 +97,10 @@ import { dampedNewton, type NewtonResult, residualNorm } from "./solvers";
 import {
   buildSparseInfo,
   dampedNewtonSparse,
+  makeSparseScratch,
   type SparseInfo,
   type SparseNewtonResult,
+  type SparseScratch,
 } from "./solvers-sparse";
 import type { Packer, TraitDict } from "./traits";
 
@@ -110,13 +148,23 @@ export interface RelateOpts {
   name?: string;
 }
 
-/** Cassowary-style strength constants. Use as `weight: STRONG` to
- *  give a constraint priority over `MEDIUM`-strength ones. */
+/** Strength constants. Use as `weight: STRONG` to give a
+ *  constraint priority over MEDIUM-strength ones.
+ *
+ *  HARD vs REQUIRED: REQUIRED is the standard Cassowary convention
+ *  (1e9× weak); HARD is an additional 1000× stronger, intended for
+ *  cases where you want near-perfect satisfaction even when other
+ *  REQUIRED constraints contend. At HARD, Newton can suffer from
+ *  ill-conditioning (the JᵀJ becomes nearly singular along the
+ *  constraint's null direction) — for hard inequality satisfaction
+ *  in particular, augmented-Lagrangian or active-set solvers are
+ *  the principled answer. We provide HARD as a pragmatic shortcut. */
 export const Strength = {
   WEAK: 1,
   MEDIUM: 1e3,
   STRONG: 1e6,
   REQUIRED: 1e9,
+  HARD: 1e12,
 } as const;
 
 export interface Relation {
@@ -206,9 +254,9 @@ interface Cluster {
    *  Determined at sparseInfo construction; sticks until topology
    *  changes. */
   useSparse?: boolean;
-  /** Persistent banded-storage scratch for the sparse path, sized
-   *  to `nf × (bandwidth + 1)`. Reallocated on topology change. */
-  sparseScratch?: number[];
+  /** Persistent scratch buffers for the sparse path. Allocated
+   *  lazily on first sparse solve; resized as the cluster grows. */
+  sparseScratch?: SparseScratch;
 }
 
 const cellToCluster = new WeakMap<Cell, Cluster>();
@@ -372,7 +420,7 @@ function buildClusterSparseInfo(c: Cluster): SparseInfo {
  *  Used by the sparse FD step to avoid full-cluster R evals. */
 function buildResidualSubset(
   c: Cluster,
-): (xs: readonly number[], which: readonly number[], out: number[]) => void {
+): (xs: readonly number[], which: readonly number[], out: ResidualOut) => void {
   const rels = c.relations;
   const cellEntries = c.cellEntries;
   const valsScratch = c.valsScratch;
@@ -429,12 +477,16 @@ function buildResidualSubset(
   };
 }
 
-function buildResidual(c: Cluster): (xs: readonly number[], out: number[]) => void {
+/** Numeric output buffer used by residual functions — accepts both
+ *  `number[]` (dense path) and `Float64Array` (sparse path). The
+ *  residual writes via indexed assignment which works for both. */
+type ResidualOut = number[] | Float64Array;
+
+function buildResidual(c: Cluster): (xs: readonly number[], out: ResidualOut) => void {
   const rels = c.relations;
   const cellEntries = c.cellEntries;
   const valsScratch = c.valsScratch;
   return (xs, out) => {
-    // Unpack ALL cells once — relations share the typed values.
     for (let i = 0; i < cellEntries.length; i++) {
       const e = cellEntries[i]!;
       valsScratch[i] = e.packer.unpack(xs, e.offset);
@@ -448,8 +500,6 @@ function buildResidual(c: Cluster): (xs: readonly number[], out: number[]) => vo
       for (let i = 0; i < idx.length; i++) subVals[i] = valsScratch[idx[i]!];
       const subR = rel._outScratch;
       rel.residualFn(subVals, subR);
-      // Apply per-relation weight (sqrt scales the LSQ contribution
-      // linearly in `weight`).
       const w = rel._sqrtWeight;
       if (w === 1) {
         for (let i = 0; i < rel.m; i++) out[off + i] = subR[i]!;
@@ -497,12 +547,17 @@ function solveCluster(c: Cluster): void {
   let result: NewtonResult | SparseNewtonResult;
   if (c.useSparse) {
     const Rsubset = buildResidualSubset(c);
-    // Translate cluster-pinMask (per-slot) to sparse solver's free-
-    // index list (handled inside dampedNewtonSparse from pinMask).
-    result = dampedNewtonSparse(xs, R, Rsubset, c.m, c.pinMask, c.sparseInfo, {
-      maxIters,
-      tol,
-    });
+    if (c.sparseScratch === undefined) c.sparseScratch = makeSparseScratch();
+    result = dampedNewtonSparse(
+      xs,
+      R,
+      Rsubset,
+      c.m,
+      c.pinMask,
+      c.sparseInfo!,
+      c.sparseScratch,
+      { maxIters, tol },
+    );
   } else {
     result = dampedNewton(xs, R, c.m, c.pinMask, {
       maxIters,
@@ -615,8 +670,15 @@ class RelationImpl implements Relation {
     const idx = c.relations.findIndex(e => e.rel === this);
     if (idx >= 0) c.relations.splice(idx, 1);
     c.m -= this.m;
+    // Invalidate cached sparsity info — the constraint structure
+    // changed. Sparse path will rebuild on next solve.
+    c.sparseInfo = undefined;
+    c.useSparse = undefined;
     // Note: doesn't currently split clusters when removing a
-    // relation disconnects the graph.
+    // relation disconnects the graph. Disconnected components stay
+    // in one cluster — correctness is preserved (block-diagonal
+    // JᵀJ solves correctly), but perf is suboptimal. Splitting on
+    // dispose is a future optimisation.
   }
 }
 

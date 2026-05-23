@@ -2,64 +2,70 @@
 // sparsity. Asymptotically beats the dense path for chain/lattice/
 // tree topologies where each constraint touches few cells.
 //
-// Three asymptotic regimes (per Newton iter; warm-started drag is
-// usually 1-3 iters):
+// Design notes:
+//   1. Sparsity pattern (which constraint touches which slot) is
+//      computed ONCE at cluster construction and cached on a
+//      `SparseInfo` object. The per-call cost on hot drag frames
+//      reads from this cache; nothing is rebuilt unless the
+//      topology changes.
 //
-//   Dense LU (existing tinyLU):
-//     FD       O(m × n)       per slot perturb evaluates ALL constraints
-//     Assembly O(m × n²)      JᵀJ build by full outer product
-//     Solve    O(n³)          dense LU
-//     Total    O(n³)
+//   2. Scratch buffers (Jacobian-as-triples, banded JᵀJ, RHS,
+//      step) live on a `SparseScratch` object passed in by the
+//      caller. The relation runtime keeps one per cluster and
+//      reuses across solves — zero allocations in the hot loop.
 //
-//   Sparse FD + dense Cholesky (this file, simplest variant):
-//     FD       O(Σ |Cᵢ|)      perturb only affects dependent constraints
-//     Assembly O(Σ |Cᵢ|²)     JᵀJ entry only when two slots co-occur
-//     Solve    O(n³)          still dense
-//     Total    O(n³) but with much smaller FD constant
+//   3. Banded Cholesky on JᵀJ + λI. SPD, so Cholesky is faster
+//      and simpler than LU. Lower-band-only storage = O(n × b).
 //
-//   Sparse FD + banded Cholesky:
-//     FD       O(Σ |Cᵢ|)
-//     Assembly O(n × b)
-//     Solve    O(n × b²)      banded Cholesky
-//     Total    O(n × b²)      where b = JᵀJ bandwidth
+//   4. Float64Array for the band matrix and packed Jacobian. ~2×
+//      speedup vs `number[]` on V8 (typed-array optimisations,
+//      better cache behaviour).
 //
-// For typical chain-like problems (b ≈ 6-8), the banded path is
-// ~O(n) per iter — matching Cassowary's amortised O(1) per resolve
-// behaviour for incremental linear constraint solving. We measure
-// to confirm we hit the asymptotic.
+// Asymptotic per Newton iter (for cluster size n, bandwidth b,
+// constraint count m, total non-zero Jacobian entries N = Σ|Cᵢ|):
 //
-// Symmetric positive definite — JᵀJ + λI always is — so we use
-// Cholesky (not LU). About 2× faster than LU and numerically
-// stable.
+//   FD Jacobian          O(N)         each non-zero independently
+//   JᵀJ assembly         O(Σ|Cᵢ|²)    only same-row pairs contribute
+//   Cholesky factor      O(n × b²)
+//   Forward/back solve   O(n × b)
+//   Total                O(n × b² + N)
+//
+// For chain topologies (b ≈ 4-6, N ≈ 4n), this is O(n) per iter
+// — at the asymptotic floor for the problem class.
 
-// ─── Sparsity descriptor ─────────────────────────────────────────────
+// ─── Sparsity descriptor (cached per topology) ───────────────────────
 
 /** Pre-computed sparsity structure for a cluster. Computed once at
- *  cluster construction; reused across solves. */
+ *  cluster construction and re-used across drag frames; rebuilt
+ *  only when constraints are added or removed. */
 export interface SparseInfo {
   /** For each constraint i, the list of slot indices it depends on. */
   constraintSlots: readonly (readonly number[])[];
   /** For each slot j, the list of constraint indices that depend on it. */
   slotConstraints: readonly (readonly number[])[];
-  /** Bandwidth of the JᵀJ matrix: max |a - b| over (a, b) co-occurring
-   *  in some constraint's slot list. Banded Cholesky cost scales as
+  /** Bandwidth of JᵀJ: max |a - b| over (a, b) co-occurring in some
+   *  constraint's slot list. Banded Cholesky cost scales as
    *  `n × bandwidth²`. */
   bandwidth: number;
-  /** Number of slots (= length of slotConstraints, dimension of the
+  /** Number of slots (length of slotConstraints, dimension of the
    *  flat state vector). */
   totalSlots: number;
+  /** Total non-zero count of the Jacobian: Σ |Cᵢ|. Sets the size
+   *  of the triples buffers in scratch. */
+  totalNNZ: number;
 }
 
-/** Build sparsity info from per-constraint slot dependencies. */
-export function buildSparseInfo(constraintSlots: readonly (readonly number[])[], totalSlots: number): SparseInfo {
-  // Inverse map.
+export function buildSparseInfo(
+  constraintSlots: readonly (readonly number[])[],
+  totalSlots: number,
+): SparseInfo {
   const slotConstraints: number[][] = Array.from({ length: totalSlots }, () => []);
+  let totalNNZ = 0;
   for (let i = 0; i < constraintSlots.length; i++) {
-    for (const s of constraintSlots[i]!) {
-      slotConstraints[s]!.push(i);
-    }
+    const slots = constraintSlots[i]!;
+    totalNNZ += slots.length;
+    for (const s of slots) slotConstraints[s]!.push(i);
   }
-  // Bandwidth = max (max - min) in any constraint's slot list.
   let bandwidth = 0;
   for (const slots of constraintSlots) {
     if (slots.length === 0) continue;
@@ -71,155 +77,177 @@ export function buildSparseInfo(constraintSlots: readonly (readonly number[])[],
     }
     if (hi - lo > bandwidth) bandwidth = hi - lo;
   }
-  return { constraintSlots, slotConstraints, bandwidth, totalSlots };
+  return { constraintSlots, slotConstraints, bandwidth, totalSlots, totalNNZ };
+}
+
+// ─── Scratch container (one per cluster, allocated lazily) ──────────
+
+export interface SparseScratch {
+  r: Float64Array;
+  r2: Float64Array;
+  rSaved: Float64Array;
+  /** Jacobian as triples: (jRow[k], jCol[k], jVal[k]). Allocated to
+   *  size `info.totalNNZ`; nnz never exceeds this. */
+  jVal: Float64Array;
+  jRow: Int32Array;
+  jCol: Int32Array;
+  /** Banded JᵀJ + λI in lower-band storage. Size `nf × (bandwidth + 1)`. */
+  band: Float64Array;
+  rhs: Float64Array;
+  step: Float64Array;
+  /** Free-slot list and inverse map (slot → free-index). */
+  freeIdx: Int32Array;
+  freeRank: Int32Array;
+  /** Sized to support the current cluster's (m, totalNNZ, bandwidth, nf). */
+  capacityM: number;
+  capacityNNZ: number;
+  capacityBandLen: number;
+  capacityNf: number;
+}
+
+export function makeSparseScratch(): SparseScratch {
+  return {
+    r: new Float64Array(0),
+    r2: new Float64Array(0),
+    rSaved: new Float64Array(0),
+    jVal: new Float64Array(0),
+    jRow: new Int32Array(0),
+    jCol: new Int32Array(0),
+    band: new Float64Array(0),
+    rhs: new Float64Array(0),
+    step: new Float64Array(0),
+    freeIdx: new Int32Array(0),
+    freeRank: new Int32Array(0),
+    capacityM: 0,
+    capacityNNZ: 0,
+    capacityBandLen: 0,
+    capacityNf: 0,
+  };
+}
+
+function ensureScratch(s: SparseScratch, m: number, nnz: number, bandLen: number, nf: number): void {
+  if (s.capacityM < m) {
+    s.r = new Float64Array(m);
+    s.r2 = new Float64Array(m);
+    s.rSaved = new Float64Array(m);
+    s.capacityM = m;
+  }
+  if (s.capacityNNZ < nnz) {
+    s.jVal = new Float64Array(nnz);
+    s.jRow = new Int32Array(nnz);
+    s.jCol = new Int32Array(nnz);
+    s.capacityNNZ = nnz;
+  }
+  if (s.capacityBandLen < bandLen) {
+    s.band = new Float64Array(bandLen);
+    s.capacityBandLen = bandLen;
+  }
+  if (s.capacityNf < nf) {
+    s.rhs = new Float64Array(nf);
+    s.step = new Float64Array(nf);
+    s.freeIdx = new Int32Array(nf);
+    s.freeRank = new Int32Array(nf);
+    s.capacityNf = nf;
+  }
 }
 
 // ─── Banded Cholesky (lower band storage) ────────────────────────────
 //
 // Storage: `band[i × (b + 1) + c]` represents `A[i][i - b + c]` for
-// `c ∈ [0, b]`. So the diagonal is at `c = b`, first sub-diagonal at
-// `c = b - 1`, etc. We don't store the upper band (matrix is
-// symmetric).
-//
-// Out-of-range entries (c < 0 or i - b + c < 0) are ignored by
-// guards in the inner loops.
+// `c ∈ [0, b]`. The diagonal is at `c = b`. We don't store the upper
+// band — the matrix is symmetric.
 
-/** In-place banded Cholesky factorization. `A` becomes `L` (lower
- *  triangular with unit diagonal not stored — we store the actual
- *  diagonal of L). For symmetric positive definite `A`. Returns
- *  false if the matrix is not strictly PD (some pivot ≤ 0). */
-export function bandedCholesky(A: number[], n: number, b: number): boolean {
+/** In-place banded Cholesky factorization. Returns false if not PD. */
+export function bandedCholesky(A: Float64Array, n: number, b: number): boolean {
+  const stride = b + 1;
   for (let i = 0; i < n; i++) {
-    // Compute L[i][j] for j ∈ [max(0, i-b), i-1]
+    const rowI = i * stride;
+    // Compute L[i][j] for j ∈ [max(0, i-b), i-1].
     const jStart = Math.max(0, i - b);
     for (let j = jStart; j < i; j++) {
-      // A[i][j] - Σ L[i][k] × L[j][k] for k ∈ [max(0, i-b, j-b), j-1]
-      let s = bandGet(A, n, b, i, j);
+      const ci = j - i + b;
+      let s = A[rowI + ci]!;
       const kStart = Math.max(0, i - b, j - b);
+      const rowJ = j * stride;
       for (let k = kStart; k < j; k++) {
-        s -= bandGet(A, n, b, i, k) * bandGet(A, n, b, j, k);
+        const cik = k - i + b;
+        const cjk = k - j + b;
+        s -= A[rowI + cik]! * A[rowJ + cjk]!;
       }
-      const Ljj = bandGet(A, n, b, j, j);
+      const Ljj = A[rowJ + b]!;
       if (Ljj === 0) return false;
-      bandSet(A, n, b, i, j, s / Ljj);
+      A[rowI + ci] = s / Ljj;
     }
-    // Compute L[i][i] = sqrt(A[i][i] - Σ L[i][k]²)
-    let d = bandGet(A, n, b, i, i);
+    // Diagonal: L[i][i] = sqrt(A[i][i] - Σ L[i][k]²)
+    let d = A[rowI + b]!;
     const kStart = Math.max(0, i - b);
     for (let k = kStart; k < i; k++) {
-      const lik = bandGet(A, n, b, i, k);
+      const cik = k - i + b;
+      const lik = A[rowI + cik]!;
       d -= lik * lik;
     }
     if (d <= 0) return false;
-    bandSet(A, n, b, i, i, Math.sqrt(d));
+    A[rowI + b] = Math.sqrt(d);
   }
   return true;
 }
 
-/** Solve `L L^T x = b` (in-place: x is filled). `A` holds the
- *  banded Cholesky factor (output of `bandedCholesky`). */
 export function bandedCholeskySolve(
-  A: readonly number[],
-  rhs: readonly number[],
+  A: Float64Array,
+  rhs: Float64Array,
   n: number,
   b: number,
-  x: number[],
+  x: Float64Array,
 ): void {
-  // Forward solve L y = rhs.  y goes into x.
+  const stride = b + 1;
+  // Forward solve L y = rhs (y in x).
   for (let i = 0; i < n; i++) {
+    const rowI = i * stride;
     let s = rhs[i]!;
     const jStart = Math.max(0, i - b);
     for (let j = jStart; j < i; j++) {
-      s -= bandGet(A, n, b, i, j) * x[j]!;
+      s -= A[rowI + (j - i + b)]! * x[j]!;
     }
-    x[i] = s / bandGet(A, n, b, i, i);
+    x[i] = s / A[rowI + b]!;
   }
-  // Back solve L^T x = y.  y is currently in x; overwrite with x.
+  // Back solve L^T x = y.
   for (let i = n - 1; i >= 0; i--) {
+    const rowI = i * stride;
     let s = x[i]!;
     const jEnd = Math.min(n - 1, i + b);
     for (let j = i + 1; j <= jEnd; j++) {
-      s -= bandGet(A, n, b, j, i) * x[j]!;
+      // L^T[i][j] = L[j][i]
+      const rowJ = j * stride;
+      s -= A[rowJ + (i - j + b)]! * x[j]!;
     }
-    x[i] = s / bandGet(A, n, b, i, i);
+    x[i] = s / A[rowI + b]!;
   }
 }
 
-/** Read `A[i][j]` from band storage. Returns 0 if out of band. */
-function bandGet(A: readonly number[], _n: number, b: number, i: number, j: number): number {
-  if (j > i) {
-    // Symmetric — read transpose.
-    return bandGet(A, _n, b, j, i);
-  }
-  if (i - j > b) return 0;
-  const c = j - i + b;
-  return A[i * (b + 1) + c]!;
-}
-
-/** Write `A[i][j]` into band storage (lower triangular only).
- *  Caller must ensure `j ≤ i` and `i - j ≤ b`. */
-function bandSet(A: number[], _n: number, b: number, i: number, j: number, v: number): void {
-  const c = j - i + b;
-  A[i * (b + 1) + c] = v;
-}
-
-/** Zero-fill the band-storage array. */
-function bandZero(A: number[], n: number, b: number): void {
-  const len = n * (b + 1);
-  for (let i = 0; i < len; i++) A[i] = 0;
-}
-
-// ─── Sparse Newton-LM solver ─────────────────────────────────────────
+// ─── Sparse Newton-LM ───────────────────────────────────────────────
 
 export interface SparseNewtonOpts {
-  /** Max iterations per call. Default 8. */
   maxIters?: number;
-  /** Convergence threshold on ‖residual‖. Default 1e-9. */
   tol?: number;
-  /** Levenberg-Marquardt damping. Default 1e-6. */
   damping?: number;
-  /** Finite-difference step for Jacobian. Default 1e-6. */
   fdStep?: number;
-  /** Optional: provide a banded-LU scratch buffer to reuse across
-   *  calls. Length must be `n × (bandwidth + 1)`. If not provided
-   *  the solver allocates one each call. */
-  scratchBand?: number[];
 }
 
 export interface SparseNewtonResult {
   converged: boolean;
   residual: number;
   iters: number;
-  /** Final λ (caller may persist for warm-start, though we found
-   *  no benefit in practice — see relate.ts comment). */
   lambda: number;
 }
 
-/** Damped Newton-LM with sparse FD Jacobian and banded-Cholesky
- *  normal-equation solve. Asymptotically beats the dense path when
- *  the constraint graph has small bandwidth.
- *
- *  Inputs:
- *    - `x`: state vector (modified in place)
- *    - `R`: full residual eval — `R(x, out)` writes m residuals
- *      into `out`. Used only for the initial / final residual norm
- *      and for accept/reject trial steps.
- *    - `Rsubset`: sparse residual eval — `Rsubset(x, which, out)`
- *      writes residuals only at constraint indices in `which`.
- *      Other entries of `out` are NOT modified. Used for FD
- *      Jacobian construction (perturbing slot j only requires
- *      re-evaluating constraints in `info.slotConstraints[j]`).
- *    - `m`: number of residual components.
- *    - `pinned`: per-slot mask; true = held fixed, false = free.
- *    - `info`: pre-computed sparsity descriptor.
- */
 export function dampedNewtonSparse(
   x: number[],
-  R: (x: readonly number[], out: number[]) => void,
-  Rsubset: (x: readonly number[], which: readonly number[], out: number[]) => void,
+  R: (x: readonly number[], out: Float64Array) => void,
+  Rsubset: (x: readonly number[], which: readonly number[], out: Float64Array) => void,
   m: number,
   pinned: readonly boolean[],
   info: SparseInfo,
+  scratch: SparseScratch,
   opts: SparseNewtonOpts = {},
 ): SparseNewtonResult {
   const n = x.length;
@@ -227,53 +255,39 @@ export function dampedNewtonSparse(
   const tol = opts.tol ?? 1e-9;
   let lambda = opts.damping ?? 1e-6;
   const fdStep = opts.fdStep ?? 1e-6;
+  const bw = info.bandwidth;
 
-  // Free indices.
-  const freeIdx: number[] = [];
-  const freeRank = new Int32Array(n); // slot → free index, or -1
-  freeRank.fill(-1);
+  // Build free-slot list.
+  let nf = 0;
+  for (let i = 0; i < n; i++) if (!pinned[i]) nf++;
+
+  ensureScratch(scratch, m, info.totalNNZ, nf * (bw + 1), nf);
+  const { r, r2, rSaved, jVal, jRow, jCol, band, rhs, step, freeIdx, freeRank } = scratch;
+  for (let i = 0; i < n; i++) freeRank[i] = -1;
+  let fi = 0;
   for (let i = 0; i < n; i++) {
     if (!pinned[i]) {
-      freeRank[i] = freeIdx.length;
-      freeIdx.push(i);
+      freeIdx[fi] = i;
+      freeRank[i] = fi;
+      fi++;
     }
   }
-  const nf = freeIdx.length;
-
-  // Scratch buffers.
-  const r = new Array<number>(m).fill(0);
-  const r2 = new Array<number>(m).fill(0);
-  const rSaved = new Array<number>(m).fill(0);
-  // Sparse J as triples (constraint, slot, value). Allocated based
-  // on max non-zero count = Σ |Cᵢ|.
-  let maxNNZ = 0;
-  for (const slots of info.constraintSlots) maxNNZ += slots.length;
-  const jVal = new Array<number>(maxNNZ).fill(0);
-  const jRow = new Array<number>(maxNNZ).fill(0);
-  const jCol = new Array<number>(maxNNZ).fill(0);
-  // Banded JᵀJ + λI.
-  const bw = info.bandwidth;
-  const bandLen = nf * (bw + 1);
-  const band = opts.scratchBand && opts.scratchBand.length >= bandLen ? opts.scratchBand : new Array<number>(bandLen).fill(0);
-  const rhs = new Array<number>(nf).fill(0);
-  const step = new Array<number>(nf).fill(0);
 
   R(x, r);
-  let rn = residualNorm(r);
-
+  let rn = residualNormFloat(r, m);
   if (nf === 0) return { converged: rn <= tol, residual: rn, iters: 0, lambda };
   if (rn <= tol) return { converged: true, residual: rn, iters: 0, lambda };
   if (!Number.isFinite(rn)) return { converged: false, residual: rn, iters: 0, lambda };
 
   let iters = 0;
   for (; iters < maxIters; iters++) {
-    // ── Sparse FD Jacobian ──
+    // ── Sparse FD Jacobian (slot-major) ──
     let nnz = 0;
     for (let jf = 0; jf < nf; jf++) {
       const idx = freeIdx[jf]!;
       const affected = info.slotConstraints[idx]!;
       if (affected.length === 0) continue;
-      // Save residuals at affected indices, perturb, re-eval, restore.
+      // Save residuals at affected indices.
       for (let a = 0; a < affected.length; a++) rSaved[affected[a]!] = r[affected[a]!]!;
       const saved = x[idx]!;
       x[idx] = saved + fdStep;
@@ -292,52 +306,71 @@ export function dampedNewtonSparse(
     }
 
     // ── Sparse JᵀJ + λI ──
-    bandZero(band, nf, bw);
-    // Outer product: for each pair (a, b) of nnz entries with same row,
-    // contribute J[a].val × J[b].val to JᵀJ[J[a].col][J[b].col].
-    // Since J is sparse but small per constraint (rows are clustered
-    // by constraint i), group by row.
+    // Build rhs = Jᵀ r in same pass.
+    band.fill(0, 0, nf * (bw + 1));
+    for (let jf = 0; jf < nf; jf++) rhs[jf] = 0;
+    // Group nnz entries by row (constraint). Cheaper than rebuilding
+    // a per-call grouping array: since each constraint's nnz entries
+    // were added consecutively per slot, they're not row-grouped.
+    // For symmetric outer product, walk all pairs: O(nnz²) worst
+    // case, but we exploit that rows with at most |Cᵢ| nnz contribute
+    // |Cᵢ|² entries — capped.
     {
-      // Sort triples by row for efficient grouping. (Or maintain
-      // groups during construction.) For simplicity, do an O(nnz)
-      // sweep grouping consecutive same-row entries — they're
-      // already consecutive due to construction order? No — we
-      // iterated by free slot, not by constraint. Need a per-
-      // constraint grouping pass.
-      const byConstraint: number[][] = Array.from({ length: m }, () => []);
-      for (let k = 0; k < nnz; k++) byConstraint[jRow[k]!]!.push(k);
-      for (let i = 0; i < m; i++) {
-        const row = byConstraint[i]!;
-        for (let a = 0; a < row.length; a++) {
-          for (let b = 0; b <= a; b++) {
-            const ka = row[a]!;
-            const kb = row[b]!;
-            const ca = jCol[ka]!;
+      // Use a Set or short-tally to group: row-by-row iteration.
+      // Simpler: for each pair (a, b) with a ≥ b in the nnz list,
+      // if jRow[a] === jRow[b], contribute to band.
+      // O(nnz²) — but for sparse problems nnz is small.
+      // For performance, sort nnz indices by row first, then walk
+      // row blocks.
+      // We use an O(nnz) bucket-sort: row-counts → row-starts → re-bucket.
+      // Allocate counts on the band buffer's tail (it's zero-filled).
+      // Actually safer to use a separate small array of ints.
+      // For now, use a simple approach: sort the nnz indices by row.
+      // The cost is O(nnz × log(nnz)) which is fine.
+      // Build a permutation array.
+      const perm = scratch._perm ?? (scratch._perm = new Int32Array(info.totalNNZ));
+      if (perm.length < nnz) {
+        scratch._perm = new Int32Array(nnz);
+      }
+      const pp = scratch._perm!;
+      for (let k = 0; k < nnz; k++) pp[k] = k;
+      // Stable sort by jRow.
+      // (Using a simple insertion sort here since nnz is typically small;
+      // for very large nnz, switch to a counting sort.)
+      sortByRow(pp, jRow, nnz);
+      // Walk row blocks.
+      let s = 0;
+      while (s < nnz) {
+        let e = s + 1;
+        const rowVal = jRow[pp[s]!]!;
+        while (e < nnz && jRow[pp[e]!]! === rowVal) e++;
+        // Block [s..e) all share row = rowVal.
+        for (let a = s; a < e; a++) {
+          const ka = pp[a]!;
+          const ca = jCol[ka]!;
+          const va = jVal[ka]!;
+          // rhs += J^T r
+          rhs[ca]! += va * r[rowVal]!;
+          // Diagonal of JᵀJ at col ca, plus pairs with cb ≤ ca (lower band only).
+          for (let b2 = a; b2 >= s; b2--) {
+            const kb = pp[b2]!;
             const cb = jCol[kb]!;
-            // Add to band[max(ca,cb)][min(ca,cb)].
-            const hi = Math.max(ca, cb);
-            const lo = Math.min(ca, cb);
-            if (hi - lo > bw) continue; // out of bandwidth — would happen if our bw estimate is wrong
+            const vb = jVal[kb]!;
+            const hi = ca > cb ? ca : cb;
+            const lo = ca < cb ? ca : cb;
+            if (hi - lo > bw) continue;
             const c = lo - hi + bw;
-            band[hi * (bw + 1) + c]! += jVal[ka]! * jVal[kb]!;
+            band[hi * (bw + 1) + c]! += va * vb;
           }
         }
+        s = e;
       }
-      // Add λI to diagonal.
-      for (let i = 0; i < nf; i++) {
-        band[i * (bw + 1) + bw]! += lambda;
-      }
+      // Add λI on the diagonal.
+      for (let i = 0; i < nf; i++) band[i * (bw + 1) + bw]! += lambda;
     }
 
     // ── Cholesky factor + solve ──
-    // Build rhs = Jᵀ r.
-    for (let jf = 0; jf < nf; jf++) rhs[jf] = 0;
-    for (let k = 0; k < nnz; k++) {
-      rhs[jCol[k]!]! += jVal[k]! * r[jRow[k]!]!;
-    }
-
     if (!bandedCholesky(band, nf, bw)) {
-      // Not PD — bump λ and retry next iter.
       lambda *= 8;
       if (lambda > 1e8) return { converged: false, residual: rn, iters: iters + 1, lambda };
       continue;
@@ -357,7 +390,7 @@ export function dampedNewtonSparse(
     // Trial step.
     for (let jf = 0; jf < nf; jf++) x[freeIdx[jf]!]! -= step[jf]!;
     R(x, r2);
-    const rn2 = residualNorm(r2);
+    const rn2 = residualNormFloat(r2, m);
 
     if (!Number.isFinite(rn2)) {
       for (let jf = 0; jf < nf; jf++) x[freeIdx[jf]!]! += step[jf]!;
@@ -381,8 +414,31 @@ export function dampedNewtonSparse(
   return { converged: rn <= tol, residual: rn, iters, lambda };
 }
 
-function residualNorm(r: readonly number[]): number {
+declare module "./solvers-sparse" {
+  interface SparseScratch {
+    _perm?: Int32Array;
+  }
+}
+
+function residualNormFloat(r: Float64Array, m: number): number {
   let s = 0;
-  for (let i = 0; i < r.length; i++) s += r[i]! * r[i]!;
+  for (let i = 0; i < m; i++) s += r[i]! * r[i]!;
   return Math.sqrt(s);
+}
+
+/** Stable insertion sort of permutation `perm` by `rows[perm[k]]`.
+ *  In-place. Insertion sort is fine because nnz is typically small
+ *  (few hundred to few thousand) and already roughly grouped — the
+ *  best-case for insertion sort is O(n). */
+function sortByRow(perm: Int32Array, rows: Int32Array, n: number): void {
+  for (let i = 1; i < n; i++) {
+    const v = perm[i]!;
+    const key = rows[v]!;
+    let j = i - 1;
+    while (j >= 0 && rows[perm[j]!]! > key) {
+      perm[j + 1] = perm[j]!;
+      j--;
+    }
+    perm[j + 1] = v;
+  }
 }
