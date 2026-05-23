@@ -322,22 +322,27 @@ function flush(): void {
   flushing = true;
   try {
     // Pre-flush: relation solvers run first so effects observe post-
-    // solve state. Tasks may enqueue more work (cluster solves
-    // triggering further solver writes); we loop until quiescent or
-    // the budget is exhausted. Budget protects against pathologically
-    // coupled clusters that ping-pong indefinitely.
-    let preFlushPasses = 0;
-    while (preFlushTasks.length > 0 && preFlushPasses < 8) {
-      // Snapshot — tasks may register more tasks; those run next pass.
-      const snapshot = preFlushTasks.slice();
-      preFlushTasks.length = 0;
-      for (const t of snapshot) t();
-      preFlushPasses++;
-    }
-    while (notifyIndex < queuedLength) {
-      const e = queued[notifyIndex]!;
-      queued[notifyIndex++] = undefined;
-      e._run();
+    // solve state. After effects run they may write to cluster cells,
+    // which queues more pre-flush tasks. Alternate until both
+    // queues are empty (or budget exhausted). Budget protects
+    // against pathologically coupled feedback loops.
+    let outerPasses = 0;
+    while ((preFlushTasks.length > 0 || notifyIndex < queuedLength) && outerPasses < 8) {
+      // Drain pre-flush tasks (cluster solvers).
+      let preFlushPasses = 0;
+      while (preFlushTasks.length > 0 && preFlushPasses < 8) {
+        const snapshot = preFlushTasks.slice();
+        preFlushTasks.length = 0;
+        for (const t of snapshot) t();
+        preFlushPasses++;
+      }
+      // Drain effects.
+      while (notifyIndex < queuedLength) {
+        const e = queued[notifyIndex]!;
+        queued[notifyIndex++] = undefined;
+        e._run();
+      }
+      outerPasses++;
     }
   } finally {
     while (notifyIndex < queuedLength) {
@@ -726,25 +731,34 @@ export class Signal<T = unknown> implements ReactiveNode {
     this.pendingValue = next;
     const equals = this._equals;
     const same = equals ? equals(prev, next) : prev === next;
+    // Pin tracking fires on EVERY user write, regardless of whether
+    // the value changed. Reason: a write to a cluster cell signals
+    // user intent ("I want this value here"), and the relation
+    // runtime needs to count it as pinned even when the new value
+    // happens to equal the old one. (E.g. `axes(x, y)` writes both
+    // axes in a batch; if y didn't change, an equality-skip would
+    // drop y's pin and the solver might drift it during a re-solve.)
+    let pinned = false;
+    if (pinHook !== undefined && !solverActive) {
+      pinHook(this as Signal<unknown>);
+      pinned = true;
+    }
     if (!same) {
       this.flags = F.Mutable | F.Dirty;
       if (writeHook !== undefined) writeHook(this as Signal<unknown>);
-      let pinned = false;
-      if (pinHook !== undefined && !solverActive) {
-        pinHook(this as Signal<unknown>);
-        pinned = true;
-      }
       const subs = this.subs;
       if (subs !== undefined) {
         propagate(subs, runDepth > 0);
         if (batchDepth === 0) flush();
-      } else if (pinned && batchDepth === 0) {
-        // Pinned write with no engine subs (e.g. a relation cell that
-        // nothing has effected on). Still flush so the relation
-        // solver fires; otherwise the constraint would never be
-        // re-satisfied after a write.
-        flush();
+        return;
       }
+    }
+    if (pinned && batchDepth === 0) {
+      // Pinned write with no engine propagation needed (no subs,
+      // or value unchanged). Still flush so the relation solver
+      // fires; otherwise a no-op write that should pin (e.g. an
+      // axes-bind to an already-correct value) would be dropped.
+      flush();
     }
   }
 

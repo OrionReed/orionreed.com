@@ -163,6 +163,12 @@ export function dampedNewton(
 
   if (nf === 0) return { converged: rn <= tol, residual: rn, iters: 0, lambda };
   if (rn <= tol) return { converged: true, residual: rn, iters: 0, lambda };
+  // NaN / Infinity guard: if the residual is non-finite we can't
+  // make any progress numerically. Return immediately, leaving x
+  // unchanged. Caller sees `converged: false` and a non-finite
+  // residual on the cluster's health signal — the right diagnostic
+  // for "your residual function is producing garbage".
+  if (!Number.isFinite(rn)) return { converged: false, residual: rn, iters: 0, lambda };
 
   let iters = 0;
   for (; iters < maxIters; iters++) {
@@ -198,6 +204,20 @@ export function dampedNewton(
       // Should not happen with λ > 0, but bail safely.
       return { converged: false, residual: rn, iters, lambda };
     }
+    // NaN guard on the step: if the Jacobian had NaN entries, the
+    // LU might silently produce NaN steps (NaN comparisons evaluate
+    // to false, so the singularity check doesn't catch it). Detect
+    // and bail.
+    let stepFinite = true;
+    for (let j = 0; j < nf; j++) {
+      if (!Number.isFinite(step[j]!)) {
+        stepFinite = false;
+        break;
+      }
+    }
+    if (!stepFinite) {
+      return { converged: false, residual: rn, iters, lambda };
+    }
 
     // Trial step.
     for (let j = 0; j < nf; j++) {
@@ -205,6 +225,17 @@ export function dampedNewton(
     }
     R(x, r2);
     const rn2 = residualNorm(r2);
+
+    // NaN / Infinity guard on trial residual. If the step produced
+    // garbage values, roll back and bail. (Without this, x sticks
+    // at NaN and every subsequent solve fails — the cluster gets
+    // poisoned. The rollback restores x to its pre-step state.)
+    if (!Number.isFinite(rn2)) {
+      for (let j = 0; j < nf; j++) {
+        x[freeIdx[j]!]! += step[j]!;
+      }
+      return { converged: false, residual: rn, iters: iters + 1, lambda };
+    }
 
     if (rn2 < rn) {
       // Improvement — accept, decrease damping.

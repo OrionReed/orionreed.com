@@ -148,22 +148,70 @@ let pinHookInstalled = false;
 type HardPinValue = number | (() => number);
 const hardPinned = new WeakMap<NumCell, HardPinValue>();
 
+/** Parent-tracking for lens cells: when the user writes a parent
+ *  signal (e.g. a Vec source `A`), the engine fires `pinHook(A)`. The
+ *  cluster cells are A.x, A.y — derived field lenses, NOT A. Without
+ *  this map, the pin event would be dropped on the floor. The map
+ *  routes a pin on the parent to pinning all its registered lens
+ *  cells. Populated by constraint factories that consume composite
+ *  values (Vec, Box, etc.) — see `point()` in `constraints.ts`. */
+const sourceToLensCells = new WeakMap<Signal<unknown>, NumCell[]>();
+
 const tol = 1e-9;
-const maxIters = 16;
+// Per-flush iteration budget. 64 is comfortable for most clusters
+// we've benchmarked (4-bar warm-start: 1-2; equilateral: 3-4;
+// strandbeest leg: 8-12; 4×4 mass-spring lattice: 12-20). Larger
+// systems may need to span multiple flushes; for now we cap and
+// accept partial convergence (the cluster's `health` signal exposes
+// the residual so consumers can react to non-convergence).
+const maxIters = 64;
 
 function ensureSetup(): void {
   if (pinHookInstalled) return;
   pinHookInstalled = true;
   setPinHook(sig => {
+    // Direct cluster cell? — pin it.
     const cluster = cellToCluster.get(sig as NumCell);
-    if (cluster === undefined) return;
-    cluster.pinned.add(sig as NumCell);
-    dirtyClusters.add(cluster);
-    if (!scheduled) {
-      scheduled = true;
-      addPreFlushTask(drainSolves);
+    if (cluster !== undefined) {
+      cluster.pinned.add(sig as NumCell);
+      dirtyClusters.add(cluster);
+      schedulePostFlush();
+      return;
+    }
+    // Parent of one or more cluster cells (e.g. a Vec source whose
+    // .x / .y field lenses are in clusters)? — pin all of them.
+    const lensCells = sourceToLensCells.get(sig);
+    if (lensCells !== undefined) {
+      for (const lc of lensCells) {
+        const cl = cellToCluster.get(lc);
+        if (cl !== undefined) {
+          cl.pinned.add(lc);
+          dirtyClusters.add(cl);
+        }
+      }
+      schedulePostFlush();
     }
   });
+}
+
+function schedulePostFlush(): void {
+  if (!scheduled) {
+    scheduled = true;
+    addPreFlushTask(drainSolves);
+  }
+}
+
+/** Register `source` as a parent of `lensCells`. When the user writes
+ *  `source`, every cell in `lensCells` is pinned in its cluster.
+ *  Idempotent — re-registering with overlapping cells appends. */
+export function trackLensSource(source: Signal<unknown>, lensCells: readonly NumCell[]): void {
+  ensureSetup();
+  const existing = sourceToLensCells.get(source);
+  if (existing !== undefined) {
+    for (const c of lensCells) if (!existing.includes(c)) existing.push(c);
+  } else {
+    sourceToLensCells.set(source, lensCells.slice());
+  }
 }
 
 function drainSolves(): void {

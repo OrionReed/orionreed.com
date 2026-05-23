@@ -28,7 +28,8 @@
 //                                added to system's least-squares fit)
 
 import { Signal, type Val, valFn, type WritableBrand } from "./signal";
-import { hardPin, relate, type Relation } from "./relate";
+import { hardPin, relate, type Relation, trackLensSource } from "./relate";
+import { Vec } from "./values/vec";
 
 // ─── Point sugar ─────────────────────────────────────────────────────
 
@@ -37,13 +38,39 @@ export interface Point {
   readonly y: Signal<number> & WritableBrand;
 }
 
-/** Bundle two Nums as a Point for ergonomic constraint calls. The
- *  bundle is purely a tuple — no engine identity, no extra cells. */
+/** Bundle two Nums as a Point for ergonomic constraint calls.
+ *
+ *  Two overloads:
+ *    - `point(x, y)` — wrap two source Nums (the basic case).
+ *    - `point(v)`    — wrap a Vec instance, exposing v.x and v.y as
+ *                      the Point's coords. The Vec's parent is also
+ *                      registered for pin tracking, so writing
+ *                      `v.value = {...}` (which fires pinHook for v,
+ *                      not for v.x or v.y individually) still pins
+ *                      the field-lens cells in the cluster.
+ *
+ *  The bundle is purely a tuple — no engine identity, no extra cells.
+ *  The Vec form has a side effect: `trackLensSource(v, [v.x, v.y])`. */
 export function point(
   x: Signal<number> & WritableBrand,
   y: Signal<number> & WritableBrand,
+): Point;
+export function point(v: Vec & WritableBrand): Point;
+export function point(
+  arg1: (Signal<number> & WritableBrand) | (Vec & WritableBrand),
+  arg2?: Signal<number> & WritableBrand,
 ): Point {
-  return { x, y };
+  if (arg2 === undefined) {
+    // Vec form. Field lenses .x and .y are Num instances; widen the
+    // type to the loose `Signal<number> & WritableBrand` shape used
+    // by the constraint primitives.
+    const v = arg1 as Vec & WritableBrand;
+    const x = v.x as unknown as Signal<number> & WritableBrand;
+    const y = v.y as unknown as Signal<number> & WritableBrand;
+    trackLensSource(v as unknown as Signal<unknown>, [x, y]);
+    return { x, y };
+  }
+  return { x: arg1 as unknown as Signal<number> & WritableBrand, y: arg2 };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
