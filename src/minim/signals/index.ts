@@ -128,3 +128,55 @@ export {
   type Writable,
   type WritableOf,
 } from "./writable";
+
+// ─── Bidirectional relations + multi-input lenses ─────────────────
+//
+// `relate(a, b, fwd, bwd)` is a re-orientable bidirectional binding
+// between two existing writable signals — either side can be the
+// driver (the propagator-network shape). Termination is structural
+// (writeBack-based exclusion + the engine's `===` short-circuit)
+// for any Iso or contractive pair.
+//
+// `fanin(Cls, parents, fwd, bwd?)` is the n-to-1 lens generalisation
+// of `lensTo` — read aggregates over N parents, write distributes
+// the new value back via a bwd. Subsumes the patterns previously
+// hand-rolled via `Signal.install` (axes/polar) or assembled via
+// `mix` (mean+deltaEven for centroid/midpoint/etc.).
+export { relate, type Relation } from "./relate";
+export { fanin } from "./fanin";
+
+// Aggregate primitives built on `fanin`. The fanin-based versions
+// are 1.4–1.93× faster than the equivalent `mix(..., mean, deltaEven)`
+// on aggregations (the higher the arity, the bigger the win) because
+// the scratch buffer is per-cell and the bwd is invoked directly
+// without two-stage trait dispatch. `axesLens` and `polarCircular`
+// are *also* available, but the hand-tuned `axes()` and `polar()`
+// in `./values/vec.ts` remain the canonical surface for those —
+// they win on 1-write polymorphic cases.
+export {
+  argminNumLens,
+  axesLens,
+  centroidLens,
+  maxLens,
+  meanLens,
+  midpointLens,
+  minLens,
+  polarCircular,
+  sumLens,
+} from "./aggregates";
+
+// New primitives that fanin makes natural. `vecLerp` / `pulleySum` /
+// `diffLens` give bidirectional drag on derived values; `bezier2`/3,
+// `clampedMean`, `distanceLens`, `angleLens`, `reflectionLens` are
+// RO geometric helpers.
+export {
+  angleLens,
+  bezier2,
+  bezier3,
+  clampedMean,
+  diffLens,
+  distanceLens,
+  pulleySum,
+  reflectionLens,
+  vecLerp,
+} from "./new-primitives";

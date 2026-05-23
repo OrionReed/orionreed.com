@@ -69,7 +69,7 @@ describe("cyclic correctness — engine-supplied state argument", () => {
       return { a, c: c as Num };
     }
     function makeReference(): { a: Num; c: Num } {
-      const a = num(0) as Num;
+      const a = num(0);
       const sLens = Num.lens(
         () => a.value * 2,
         v => {

@@ -12,18 +12,20 @@ import type { Signal } from "./signal";
 import { type Linear } from "./traits";
 import { Num } from "./values/num";
 import { Vec } from "./values/vec";
+import type { Writable } from "./writable";
 
 type V = { x: number; y: number };
 
 // ─── Linear-aggregate merges (Num + Vec, etc.) ──────────────────────
 
 /** Equal-weight mean of N Linear-trait values, with delta-even
- *  distribution on writes. Subsumes `mix(Cls, parts, mean, deltaEven)`. */
+ *  distribution on writes. Subsumes `mix(Cls, parts, mean, deltaEven)`.
+ *  Returns `Writable<C>` since the bwd is always present. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors fanin's signature
 export function meanLens<T, C extends new (...args: never[]) => Signal<any>>(
   Cls: C,
   parents: readonly Signal<T>[],
-): InstanceType<C> {
+): Writable<InstanceType<C>> {
   const lin = ((Cls as unknown as { traits?: { linear?: Linear<T> } }).traits?.linear ??
     (() => {
       throw new Error("meanLens: value class has no 'linear' trait");
@@ -102,7 +104,7 @@ export function maxLens(parents: readonly Signal<number>[]): Num {
 
 /** Midpoint of two writable Vecs. Drag updates both endpoints by the
  *  same delta so the segment translates rigidly. */
-export function midpointLens(a: Signal<V>, b: Signal<V>): Vec {
+export function midpointLens(a: Signal<V>, b: Signal<V>): Writable<Vec> {
   return fanin(
     Vec,
     [a, b] as const,
@@ -124,7 +126,7 @@ export function midpointLens(a: Signal<V>, b: Signal<V>): Vec {
 
 /** Centroid of N writable Vecs. Drag-translates all members by the
  *  same delta. */
-export function centroidLens(parents: readonly Signal<V>[]): Vec {
+export function centroidLens(parents: readonly Signal<V>[]): Writable<Vec> {
   const n = parents.length;
   const inv = 1 / n;
   return fanin(
@@ -164,7 +166,7 @@ export function centroidLens(parents: readonly Signal<V>[]): Vec {
 /** Vec from two writable Num axes. Subsumes `axes(x, y)`. The bwd is
  *  stateless (doesn't read parent values), so fanin skips the peek
  *  loop — matches the perf of the hand-rolled original. */
-export function axesLens(x: Num, y: Num): Vec {
+export function axesLens(x: Num, y: Num): Writable<Vec> {
   return fanin(
     Vec,
     [x, y] as const,
@@ -176,7 +178,7 @@ export function axesLens(x: Num, y: Num): Vec {
 /** Polar Vec at `(c.x + r·cos a, c.y + r·sin a)`. Bidirectional under
  *  the `circular` policy: writes update only `a`. Other policies in
  *  `signals/values/vec.ts` are similar small variations on the bwd. */
-export function polarCircular(c: Signal<V>, r: Num, a: Num): Vec {
+export function polarCircular(c: Signal<V>, r: Num, a: Num): Writable<Vec> {
   return fanin(
     Vec,
     [c, r, a] as const,
@@ -208,7 +210,7 @@ export function argminNumLens(
   weights: readonly number[],
   eps = 1e-4,
   damping = 1e-6,
-): Num {
+): Writable<Num> {
   if (weights.length !== inputs.length) {
     throw new Error("argminNumLens: weights/inputs length mismatch");
   }

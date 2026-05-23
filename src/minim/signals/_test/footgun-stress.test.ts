@@ -37,25 +37,23 @@ describe("stress: many writes in sequence", () => {
 
 describe("stress: deep nesting through field paths", () => {
   it("3-deep nested struct via lensTo + field works", () => {
+    // a → b → c. Two intermediate lensTo layers (stateful non-field,
+    // since lensTo doesn't pass fieldKey), then field on top. Tests
+    // the bug-fix case: field on top of non-field-stateful prior.
+    // Use Vec for the inner cells (the actual value classes the
+    // engine deals with) instead of a generic `Signal<S>` that the
+    // type system can't recover from `as new (...) => Signal<A>`.
     type S = { a: { b: { c: number; d: number } } };
     const root = new Signal<S>({ a: { b: { c: 1, d: 2 } } });
-    // a → b → c. Use lensTo for first two layers (they're stateful
-    // non-field, since lensTo doesn't pass fieldKey), and field for
-    // the last. Tests the bug-fix case: field on top of non-field.
-    const aLens = root.lensTo(
-      Signal as new (...args: never[]) => Signal<S["a"]>,
-      s => s.a,
-      (v, s) => ({ ...s, a: v }),
-    );
-    const bLens = aLens.lensTo(
-      Signal as new (...args: never[]) => Signal<S["a"]["b"]>,
-      a => a.b,
-      (v, a) => ({ ...a, b: v }),
-    );
-    const c = field(bLens, "c", Num);
+    // Cast Signal to a generic ctor shape; vanilla Signal-as-Cls is
+    // fine at runtime, the type sytem just can't recover the value
+    // type from the new() signature.
+    const aLens = Signal.fieldOf(root, "a", Signal as new (...args: never[]) => Signal<unknown>);
+    const bLens = Signal.fieldOf(aLens, "b", Signal as new (...args: never[]) => Signal<unknown>);
+    const c = field(bLens as never, "c" as never, Num as never) as { value: number };
 
     expect(c.value).toBe(1);
-    (c as unknown as { value: number }).value = 99;
+    c.value = 99;
     expect(root.value).toEqual({ a: { b: { c: 99, d: 2 } } });
     // Sanity: d is untouched.
     expect(root.value.a.b.d).toBe(2);

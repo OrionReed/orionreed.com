@@ -105,16 +105,20 @@ export class Num extends Signal<V> {
    *  accumulated value); writes pick the representative closest to
    *  the current value modulo `period`. Lets you drag an angle a
    *  small visible amount without jumping a full revolution when the
-   *  source has accumulated many. */
+   *  source has accumulated many.
+   *
+   *  The 2-arg bwd `(v, s) => …` is arity-detected as stateful by
+   *  the engine, which threads the genuine receiver-input value
+   *  (the current accumulated angle) through `s` even across
+   *  composed chains. No `this.peek()` side-channel needed. */
   cyclic(period: Val<number>): this {
     const pf = valFn(period);
     return this.through(
       v => v,
-      v => {
-        const cur = this.peek();
+      (v, s) => {
         const p = pf();
-        const delta = v - cur;
-        return cur + delta - p * Math.round(delta / p);
+        const delta = v - s;
+        return s + delta - p * Math.round(delta / p);
       },
     );
   }

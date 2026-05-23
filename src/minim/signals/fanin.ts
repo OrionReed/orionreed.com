@@ -25,6 +25,7 @@
 // for in-place writeback. Not yet.)
 
 import { batch, Signal } from "./signal";
+import type { Writable } from "./writable";
 
 /** Tuple type: `Vals<P>` = `[V1, V2, ...]` for parents `[Signal<V1>, Signal<V2>, ...]`. */
 type Vals<P extends readonly Signal<unknown>[]> = {
@@ -37,14 +38,29 @@ type Updates<P extends readonly Signal<unknown>[]> = {
   [K in keyof P]?: P[K] extends Signal<infer V> ? V : never;
 };
 
-/** Multi-input lens: reads from N parents, writes back via `bwd`. */
+/** Multi-input lens: reads from N parents. RO overload (no bwd). */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo / mix
 export function fanin<P extends readonly Signal<any>[], R, C extends new (...args: never[]) => Signal<any>>(
   Cls: C,
   parents: P,
   fwd: (vals: Vals<P>) => R,
+): InstanceType<C>;
+/** Multi-input lens: reads from N parents, writes back via `bwd`.
+ *  Brand-typed return — `mix`'s overload pattern. */
+// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo / mix
+export function fanin<P extends readonly Signal<any>[], R, C extends new (...args: never[]) => Signal<any>>(
+  Cls: C,
+  parents: P,
+  fwd: (vals: Vals<P>) => R,
+  bwd: ((target: R) => Updates<P>) | ((target: R, vals: Vals<P>) => Updates<P>),
+): Writable<InstanceType<C>>;
+// biome-ignore lint/suspicious/noExplicitAny: variance escape
+export function fanin<P extends readonly Signal<any>[], R, C extends new (...args: never[]) => Signal<any>>(
+  Cls: C,
+  parents: P,
+  fwd: (vals: Vals<P>) => R,
   bwd?: ((target: R) => Updates<P>) | ((target: R, vals: Vals<P>) => Updates<P>),
-): InstanceType<C> {
+): InstanceType<C> | Writable<InstanceType<C>> {
   const n = parents.length;
   const vals = new Array(n) as Vals<P>;
 

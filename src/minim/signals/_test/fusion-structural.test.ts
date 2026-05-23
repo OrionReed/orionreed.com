@@ -184,16 +184,16 @@ describe("structural: only root + effect-subscribed leaves carry subs", () => {
   });
 });
 
-describe("structural: stateless-bwd flag propagation", () => {
-  // `bwdStateless: true` is set by `.through()` (endo bwds ignore `s`).
-  // Any `.lensTo()` in a chain pollutes the flag (lensTo's bwd uses `s`).
-  // This test inspects the tag directly to verify the flag travels
-  // correctly across fusion.
+describe("structural: stateful-flag propagation (arity-inferred)", () => {
+  // Statefulness is inferred from `bwd.length` — `bwd: v => …` is
+  // stateless (length 1), `bwd: (v, s) => …` is stateful (length 2).
+  // The chain's `_fusedOf.stateful` is the OR over its layers.
+  // Stateless setters skip `parent.peek()` + `priorFwd(s)`.
 
-  const flag = (s: unknown): boolean | undefined =>
-    (s as { _fusedOf?: { bwdStateless?: boolean } })._fusedOf?.bwdStateless;
+  const stateful = (s: unknown): boolean | undefined =>
+    (s as { _fusedOf?: { stateful?: boolean } })._fusedOf?.stateful;
 
-  it("pure through chain is stateless throughout", () => {
+  it("pure 1-arg-bwd through chain is stateless", () => {
     const a = num(0);
     const c = a
       .through(
@@ -208,34 +208,27 @@ describe("structural: stateless-bwd flag propagation", () => {
         v => v - 3,
         v => v + 3,
       );
-    expect(flag(c)).toBe(true);
+    expect(stateful(c)).toBe(false);
   });
 
-  it("a single lensTo in the chain pollutes the flag downstream", () => {
+  it("field marks the chain stateful (bwd is 2-arg spread-replace)", () => {
     const tr = transform({ translate: { x: 0, y: 0 } });
-    // tr.translate is built via field()→lensTo. Stateful.
-    expect(flag(tr.translate as unknown as Signal<unknown>)).toBe(false);
-    // tr.translate.x is built via field()→lensTo on a stateful chain. Stateful.
-    expect(flag(tr.translate.x as unknown as Signal<unknown>)).toBe(false);
+    expect(stateful(tr.translate as unknown as Signal<unknown>)).toBe(true);
+    expect(stateful(tr.translate.x as unknown as Signal<unknown>)).toBe(true);
   });
 
-  it("through after lensTo stays stateful (lensTo's stateful flag propagates)", () => {
+  it("through-iso after stateful stays stateful (any layer poisons upward)", () => {
     const tr = transform({ translate: { x: 0, y: 0 } });
     const scaled = tr.translate.x.through(
       v => v * 10,
       v => v / 10,
     );
-    expect(flag(scaled as unknown as Signal<unknown>)).toBe(false);
+    expect(stateful(scaled as unknown as Signal<unknown>)).toBe(true);
   });
 
-  it("deriveTo cell has no bwd, flag still tracked (true by default in chain)", () => {
-    // deriveTo has no bwd, so the flag means "if you fuse a writable
-    // layer on top later, would it be stateless?" — yes, trivially.
-    // (In practice this fusion path is blocked by the eager TypeError.)
+  it("deriveTo chain inherits prior's stateful flag (here: false)", () => {
     const a = num(0);
     const ro = a.deriveTo(Num, v => v * 2);
-    // No write path so the flag value isn't strictly meaningful, but
-    // we set it to `true` since no stateful bwd participated.
-    expect(flag(ro)).toBe(true);
+    expect(stateful(ro)).toBe(false);
   });
 });

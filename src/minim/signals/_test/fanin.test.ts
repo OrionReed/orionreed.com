@@ -138,8 +138,8 @@ describe("fanin: writable with bwd", () => {
     const v = fanin(
       Vec,
       [x, y] as const,
-      vals => ({ x: vals[0], y: vals[1] }),
-      target => [target.x, target.y] as never,
+      (vals): { x: number; y: number } => ({ x: vals[0], y: vals[1] }),
+      (target: { x: number; y: number }) => [target.x, target.y] as never,
     );
     (v as unknown as { value: { x: number; y: number } }).value = { x: 10, y: 20 };
     expect(x.value).toBe(10);

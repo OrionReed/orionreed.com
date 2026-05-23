@@ -101,11 +101,7 @@ export function field<
     if (fused !== undefined && fused.bwd === undefined) {
       return (parent as Signal<Of<S>>).deriveTo(Cls, s => s[key] as Of<InstanceType<C>>);
     }
-    return (parent as Signal<Of<S>>).lensTo(
-      Cls,
-      s => s[key] as Of<InstanceType<C>>,
-      (v, s) => ({ ...(s as object), [key]: v }) as Of<S>,
-    );
+    return Signal.fieldOf(parent as unknown as Signal<unknown>, key as string | symbol, Cls);
   }) as never;
 }
 

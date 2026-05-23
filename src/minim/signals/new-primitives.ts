@@ -8,6 +8,7 @@ import { fanin } from "./fanin";
 import type { Signal } from "./signal";
 import { Num } from "./values/num";
 import { Vec } from "./values/vec";
+import type { Writable } from "./writable";
 
 type V = { x: number; y: number };
 
@@ -46,7 +47,7 @@ export function reflectionLens(point: Signal<V>, axisStart: Signal<V>, axisEnd: 
 /** Linear interpolation between two Vecs at parameter `t`. Both
  *  endpoints are writable: write the interpolated point, both move
  *  rigidly along the interpolation direction (preserving t). */
-export function vecLerp(a: Signal<V>, b: Signal<V>, t: Signal<number>): Vec {
+export function vecLerp(a: Signal<V>, b: Signal<V>, t: Signal<number>): Writable<Vec> {
   return fanin(
     Vec,
     [a, b, t] as const,
@@ -74,7 +75,7 @@ export function vecLerp(a: Signal<V>, b: Signal<V>, t: Signal<number>): Vec {
 /** Sum of two nums, with conservation: writing the sum redistributes
  *  the delta equally between a and b. The "pulley" pattern from the
  *  argmin docstring, made first-class. */
-export function pulleySum(a: Num, b: Num): Num {
+export function pulleySum(a: Num, b: Num): Writable<Num> {
   return fanin(
     Num,
     [a, b] as const,
@@ -90,7 +91,7 @@ export function pulleySum(a: Num, b: Num): Num {
 
 /** Difference of two nums: `a - b`. Writing the difference shifts
  *  both inputs symmetrically by ±half-delta. */
-export function diffLens(a: Num, b: Num): Num {
+export function diffLens(a: Num, b: Num): Writable<Num> {
   return fanin(
     Num,
     [a, b] as const,
@@ -109,7 +110,7 @@ export function diffLens(a: Num, b: Num): Num {
 /** Mean of N nums, clamped to `[lo, hi]` on read AND on write. The
  *  clamp is applied at the aggregate level; writes outside the range
  *  produce a write-back that's clamped first, then distributed. */
-export function clampedMean(parents: readonly Num[], lo: number, hi: number): Num {
+export function clampedMean(parents: readonly Num[], lo: number, hi: number): Writable<Num> {
   const n = parents.length;
   const inv = 1 / n;
   return fanin(
