@@ -290,7 +290,7 @@ describe(".through() fusion", () => {
   });
 
   it("fusion does NOT cross non-through boundaries (manual lens)", () => {
-    // A manual Num.lens is not tagged with _throughOf, so a subsequent
+    // A manual Num.lens is not tagged with _fusedOf, so a subsequent
     // .through() starts a fresh fusion-chain over the manual lens.
     const a = num(0);
     const manual = Num.lens(

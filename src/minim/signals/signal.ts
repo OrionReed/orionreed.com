@@ -420,10 +420,21 @@ export class Signal<T = unknown> implements ReactiveNode {
   _equals: Equals<T> | undefined = undefined;
   _watched?: () => void;
   _unwatchedHook?: () => void;
-  /** Fusion tag set by `.through(...)`. Lets a subsequent `.through()`
-   *  collapse `(this) → (parent) → (root)` into a single lens onto
-   *  `root`, composing fwd/bwd in value-space. Internal. */
-  _throughOf?: { parent: Signal<T>; fwd: (v: T) => T; bwd: (v: T) => T };
+  /** Fusion tag. Marks this cell as a value-space pipeline (fwd, bwd?)
+   *  on top of a root `parent`. Subsequent `.through()`, `.lensTo()`,
+   *  or `.deriveTo()` calls on this cell collapse the chain into a
+   *  single cell pointing at the same root, composing fwd/bwd
+   *  in value-space. Internal.
+   *
+   *  Generalised from the original endo-only `_throughOf`: `fwd`/`bwd`
+   *  may now bridge cross-type chains (`lensTo`/`deriveTo`). `bwd` is
+   *  `undefined` for fused-RO cells (deriveTo chains); composition
+   *  refuses to fuse a writable view on top of a fused-RO cell. */
+  _fusedOf?: {
+    parent: Signal<unknown>;
+    fwd: (s: unknown) => T;
+    bwd?: (v: T, s: unknown) => unknown;
+  };
 
   constructor(initial: T, opts?: SignalOptions<T>) {
     this.currentValue = initial;
@@ -531,6 +542,11 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  For arbitrary-shape typed lenses without a parent, use
    *  `Signal.install(Cls, g, s)` directly.
    *
+   *  Fuses with the receiver's prior fusion tag: chained `lensTo`s on
+   *  fused parents collapse to one cell pointing at the chain's root.
+   *  In particular, nested `field()` access (`transform.translate.x`)
+   *  is a single fused lens onto `transform`.
+   *
    *  Signature note: `Cls` is typed as a constructor returning
    *  `Signal<any>` (so subclasses with invariant setters fit) and `U`
    *  is recovered from `InstanceType<C>` via `ValueOf<>`. The fwd/bwd
@@ -544,24 +560,29 @@ export class Signal<T = unknown> implements ReactiveNode {
     fwd: (s: T) => Of<InstanceType<C>>,
     bwd: (u: Of<InstanceType<C>>, s: T) => T,
   ): InstanceType<C> {
-    return Signal.install(
-      Cls,
-      () => fwd(this.value),
-      u => {
-        this.value = bwd(u, this.peek());
-      },
+    return Signal._fuse(
+      this as Signal<unknown>,
+      Cls as unknown as new (...args: never[]) => Signal<Of<InstanceType<C>>>,
+      fwd as (s: unknown) => Of<InstanceType<C>>,
+      (u, s) => bwd(u, s as T),
     ) as InstanceType<C>;
   }
 
   /** Cross-type computed: read-only `Cls`-instance derived from
-   *  `fwd(this.value)`. The one-way analog of `lensTo`. */
+   *  `fwd(this.value)`. The one-way analog of `lensTo`. Fuses with
+   *  the receiver's prior fusion tag (any chain of derive/lens/through
+   *  collapses to a single computed pointing at the root). */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape hatch
   deriveTo<C extends new (...args: never[]) => Signal<any>>(
     this: Signal<T>,
     Cls: C,
     fwd: (s: T) => Of<InstanceType<C>>,
   ): InstanceType<C> {
-    return Signal.install(Cls, () => fwd(this.value)) as InstanceType<C>;
+    return Signal._fuse(
+      this as Signal<unknown>,
+      Cls as unknown as new (...args: never[]) => Signal<Of<InstanceType<C>>>,
+      fwd as (s: unknown) => Of<InstanceType<C>>,
+    ) as InstanceType<C>;
   }
 
   /** Endo-lens: wrap this cell with a `(fwd, bwd)` pair in value-space.
@@ -570,23 +591,109 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  avoiding per-chain allocation and dep-graph nodes. */
   through(this: Signal<T>, fwd: (v: T) => T, bwd: (v: T) => T): this {
     const Cls = this.constructor as new (...args: never[]) => Signal<T>;
-    const prior = this._throughOf;
-    const parent = prior ? prior.parent : this;
-    const composedFwd = prior ? (v: T) => fwd(prior.fwd(v)) : fwd;
-    const composedBwd = prior ? (v: T) => prior.bwd(bwd(v)) : bwd;
-    // `as unknown as Signal<T>` — TS can't see through `Writable<Signal<T>>`
-    // when T is a free generic (LensFields/InvOf conditionals bail to "could
-    // be anything"). Runtime is a fresh Signal subclass, so accessing
-    // `_throughOf` and re-casting to `this` is safe.
-    const inst = Signal.install(
+    // Through's bwd is stateless `(v) => v`; adapt to the unified
+    // `(v, s) => s'` shape by ignoring the parent-state argument.
+    return Signal._fuse(
+      this as Signal<unknown>,
       Cls,
-      () => composedFwd(parent.value),
-      v => {
-        parent.value = composedBwd(v);
-      },
-    ) as unknown as Signal<T>;
-    inst._throughOf = { parent, fwd: composedFwd, bwd: composedBwd };
-    return inst as this;
+      fwd as (s: unknown) => T,
+      (v, _s) => bwd(v),
+    ) as unknown as this;
+  }
+
+  /** Internal fusion helper used by `.through()` / `.lensTo()` /
+   *  `.deriveTo()`. Collapses receiver-anchored chains in value-space.
+   *
+   *  Semantics:
+   *    - parent = receiver's root (chases `_fusedOf.parent`).
+   *    - composedFwd : root_value → own_value (= fwdLocal ∘ priorFwd).
+   *    - composedBwd : (own, root) → root' (= priorBwd ∘ bwdLocal),
+   *                    threading priorFwd(root) when bwdLocal needs the
+   *                    receiver's current state.
+   *    - tags result with `_fusedOf` so further fusion sees it.
+   *
+   *  Performance: the getter/setter closures installed on the cell
+   *  call the composed fns directly, eliminating a wrapper-closure
+   *  layer (V8 inlines two-level user closures fine but bails on
+   *  three). The `_fusedOf` tag stores the composed fns by reference
+   *  so downstream fusion can compose against them without rebuilding.
+   *
+   *  Edge case: writable view on top of a fused-RO receiver (e.g.
+   *  `.deriveTo(...).lensTo(...)`) can't compose its bwd through a
+   *  missing prior.bwd, so we don't fuse — install a non-fused lens
+   *  onto the receiver instead, preserving today's "writes throw at
+   *  the RO step" semantics rather than silently producing a fused
+   *  lens with a broken bwd path. */
+  static _fuse<U>(
+    receiver: Signal<unknown>,
+    Cls: new (...args: never[]) => Signal<U>,
+    fwdLocal: (s: unknown) => U,
+    bwdLocal?: (v: U, s: unknown) => unknown,
+  ): Signal<U> {
+    const prior = receiver._fusedOf as
+      | { parent: Signal<unknown>; fwd: (s: unknown) => unknown; bwd?: (v: unknown, s: unknown) => unknown }
+      | undefined;
+
+    // Writable-on-RO fallback: can't fuse if we'd need a bwd but the
+    // chain upstream has none. Install onto receiver, no fusion.
+    if (bwdLocal !== undefined && prior !== undefined && prior.bwd === undefined) {
+      return Signal.install(
+        Cls,
+        () => fwdLocal(receiver.value),
+        v => {
+          (receiver as Signal<unknown>).value = bwdLocal(v, receiver.peek());
+        },
+      );
+    }
+
+    const parent = prior !== undefined ? prior.parent : receiver;
+    const priorFwd = prior?.fwd;
+    const priorBwd = prior?.bwd;
+
+    const composedFwd: (s: unknown) => U = priorFwd
+      ? s => fwdLocal(priorFwd(s))
+      : fwdLocal;
+
+    const composedBwd: ((v: U, s: unknown) => unknown) | undefined =
+      bwdLocal === undefined
+        ? undefined
+        : priorBwd
+          ? (v, s) => priorBwd(bwdLocal(v, priorFwd!(s)), s)
+          : bwdLocal;
+
+    // Setter is installed with the composition inlined directly into
+    // the setter body — calling `composedBwd(v, parent.peek())` would
+    // add a closure-call layer that V8 can't always inline (the bwd
+    // composition captures 3 fns from lexical scope). For the common
+    // field-chain case this matters: micro-benchmarks show the
+    // wrapping layer doubles write latency vs the hand-rolled
+    // nested-lens baseline. The composed bwd is still stored in
+    // `_fusedOf.bwd` for downstream fusion to compose against.
+    let inst: Signal<U>;
+    if (bwdLocal === undefined) {
+      inst = Signal.install(Cls, () => composedFwd(parent.value));
+    } else if (priorBwd === undefined || priorFwd === undefined) {
+      // 1-level case: no prior to compose with.
+      inst = Signal.install(
+        Cls,
+        () => composedFwd(parent.value),
+        v => {
+          parent.value = bwdLocal(v, parent.peek());
+        },
+      );
+    } else {
+      // 2+-level case: inline the composition into the setter.
+      inst = Signal.install(
+        Cls,
+        () => composedFwd(parent.value),
+        v => {
+          const s = parent.peek();
+          parent.value = priorBwd(bwdLocal(v, priorFwd(s)), s);
+        },
+      );
+    }
+    (inst as Signal<U>)._fusedOf = { parent, fwd: composedFwd, bwd: composedBwd };
+    return inst as Signal<U>;
   }
 
 
