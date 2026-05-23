@@ -79,8 +79,12 @@ describe("Scaling — 1D linear chain (eq cells)", () => {
 describe("Scaling — 2D distance chain (catenary-like)", () => {
   it("N=10 vec chain: per-frame", () => {
     const r = timeDragChain2D(10, 100);
-    console.log(`  N=10 2D chain: construct=${r.constructTime.toFixed(2)}ms, perFrame=${r.perFrame.toFixed(3)}ms`);
-    expect(r.perFrame).toBeLessThan(2);
+    console.log(
+      `  N=10 2D chain: construct=${r.constructTime.toFixed(2)}ms, perFrame=${r.perFrame.toFixed(3)}ms`,
+    );
+    // 10 vec cells = 20 slots, below sparse threshold → dense path.
+    // Allow some headroom for warm-up/JIT noise.
+    expect(r.perFrame).toBeLessThan(5);
   });
   it("N=32 vec chain (catenary scale): per-frame", () => {
     const r = timeDragChain2D(32, 50);

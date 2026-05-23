@@ -58,6 +58,12 @@ import {
   withSolverActive,
 } from "./signal";
 import { dampedNewton, type NewtonResult, residualNorm } from "./solvers";
+import {
+  buildSparseInfo,
+  dampedNewtonSparse,
+  type SparseInfo,
+  type SparseNewtonResult,
+} from "./solvers-sparse";
 import type { Packer, TraitDict } from "./traits";
 
 // ─── Public types ────────────────────────────────────────────────────
@@ -192,6 +198,17 @@ interface Cluster {
   valsScratch: any[];
   /** Health observable. */
   health: Signal<ClusterHealth>;
+  /** Cached sparsity info; invalidated when relations are added or
+   *  removed. The runtime builds this lazily — only clusters that
+   *  qualify for the sparse path materialise it. */
+  sparseInfo?: SparseInfo;
+  /** True iff this cluster is being solved via the sparse path.
+   *  Determined at sparseInfo construction; sticks until topology
+   *  changes. */
+  useSparse?: boolean;
+  /** Persistent banded-storage scratch for the sparse path, sized
+   *  to `nf × (bandwidth + 1)`. Reallocated on topology change. */
+  sparseScratch?: number[];
 }
 
 const cellToCluster = new WeakMap<Cell, Cluster>();
@@ -320,6 +337,98 @@ function resizeScratch(c: Cluster): void {
 
 // ─── Solver ──────────────────────────────────────────────────────────
 
+/** Threshold for sparse-path dispatch. Below this slot count, the
+ *  dense LU's per-call setup overhead dominates and the sparse
+ *  path's per-call alloc + bookkeeping makes it slower. Tuned
+ *  empirically on chain workloads — the crossover is around 30-40
+ *  slots; below this dense wins, above sparse wins (sometimes by
+ *  orders of magnitude). */
+const SPARSE_DISPATCH_THRESHOLD = 32;
+
+/** Compute per-cluster sparsity descriptor: which slots each
+ *  constraint touches, and inverse map. Built once per topology
+ *  change and cached. */
+function buildClusterSparseInfo(c: Cluster): SparseInfo {
+  const constraintSlots: number[][] = [];
+  for (const entry of c.relations) {
+    const rel = entry.rel;
+    const slots: number[] = [];
+    for (let i = 0; i < entry.cellIdx.length; i++) {
+      const cellIdx = entry.cellIdx[i]!;
+      const cellEntry = c.cellEntries[cellIdx]!;
+      const off = cellEntry.offset;
+      const dim = cellEntry.packer.dim;
+      for (let k = 0; k < dim; k++) slots.push(off + k);
+    }
+    // The same `slots` array is replicated for each of rel.m
+    // residuals — each residual depends on the same cells.
+    for (let i = 0; i < rel.m; i++) constraintSlots.push(slots.slice());
+  }
+  return buildSparseInfo(constraintSlots, c.totalDim);
+}
+
+/** Build a residual function that evaluates ONLY the constraint
+ *  indices in `which`, leaving other entries of `out` untouched.
+ *  Used by the sparse FD step to avoid full-cluster R evals. */
+function buildResidualSubset(
+  c: Cluster,
+): (xs: readonly number[], which: readonly number[], out: number[]) => void {
+  const rels = c.relations;
+  const cellEntries = c.cellEntries;
+  const valsScratch = c.valsScratch;
+  // For each residual index in the cluster's flat residual vector,
+  // which relation owns it and at what local offset.
+  const residualToRel = new Int32Array(c.m);
+  const residualLocal = new Int32Array(c.m);
+  let rOff = 0;
+  for (let r = 0; r < rels.length; r++) {
+    const rm = rels[r]!.rel.m;
+    for (let i = 0; i < rm; i++) {
+      residualToRel[rOff + i] = r;
+      residualLocal[rOff + i] = i;
+    }
+    rOff += rm;
+  }
+  // Per-relation residual block start in cluster's flat vector.
+  const relOffset = new Int32Array(rels.length);
+  let off = 0;
+  for (let r = 0; r < rels.length; r++) {
+    relOffset[r] = off;
+    off += rels[r]!.rel.m;
+  }
+  return (xs, which, out) => {
+    // Determine which RELATIONS need re-eval. A relation needs
+    // re-eval if any of its m residual indices appears in `which`.
+    // Build a Set on the fly.
+    const seenRel = new Set<number>();
+    for (const idx of which) {
+      seenRel.add(residualToRel[idx]!);
+    }
+    for (const r of seenRel) {
+      const entry = rels[r]!;
+      const rel = entry.rel;
+      const idxList = entry.cellIdx;
+      const subVals = rel._argScratch;
+      // Unpack just the cells this relation needs.
+      for (let i = 0; i < idxList.length; i++) {
+        const ci = idxList[i]!;
+        const e = cellEntries[ci]!;
+        valsScratch[ci] = e.packer.unpack(xs, e.offset);
+        subVals[i] = valsScratch[ci];
+      }
+      const subR = rel._outScratch;
+      rel.residualFn(subVals, subR);
+      const w = rel._sqrtWeight;
+      const blockStart = relOffset[r]!;
+      if (w === 1) {
+        for (let i = 0; i < rel.m; i++) out[blockStart + i] = subR[i]!;
+      } else {
+        for (let i = 0; i < rel.m; i++) out[blockStart + i] = subR[i]! * w;
+      }
+    }
+  };
+}
+
 function buildResidual(c: Cluster): (xs: readonly number[], out: number[]) => void {
   const rels = c.relations;
   const cellEntries = c.cellEntries;
@@ -359,11 +468,6 @@ function solveCluster(c: Cluster): void {
   const xs = c.xScratch;
 
   // Pack each cell's value into the flat state.
-  //   - Hard-pinned: closure returns the pin target (typed); pack via
-  //     the cell's packer; mark all its slots pinned.
-  //   - User-pinned (set this batch via pinHook): pack peek; mark
-  //     pinned.
-  //   - Otherwise: pack peek; mark free.
   for (const e of c.cellEntries) {
     const hp = hardPinned.get(e.cell);
     if (hp !== undefined) {
@@ -376,11 +480,35 @@ function solveCluster(c: Cluster): void {
     }
   }
 
+  // Lazy sparsity info build + dispatch decision. We use the sparse
+  // path when:
+  //   - totalDim ≥ SPARSE_DISPATCH_THRESHOLD (small dense beats
+  //     sparse overhead for tiny clusters), AND
+  //   - bandwidth is significantly smaller than totalDim (otherwise
+  //     banded Cholesky offers no asymptotic win over dense LU).
+  if (c.sparseInfo === undefined) {
+    c.sparseInfo = buildClusterSparseInfo(c);
+    c.useSparse =
+      c.totalDim >= SPARSE_DISPATCH_THRESHOLD &&
+      c.sparseInfo.bandwidth < Math.floor(c.totalDim / 2);
+  }
+
   const R = buildResidual(c);
-  const result: NewtonResult = dampedNewton(xs, R, c.m, c.pinMask, {
-    maxIters,
-    tol,
-  });
+  let result: NewtonResult | SparseNewtonResult;
+  if (c.useSparse) {
+    const Rsubset = buildResidualSubset(c);
+    // Translate cluster-pinMask (per-slot) to sparse solver's free-
+    // index list (handled inside dampedNewtonSparse from pinMask).
+    result = dampedNewtonSparse(xs, R, Rsubset, c.m, c.pinMask, c.sparseInfo, {
+      maxIters,
+      tol,
+    });
+  } else {
+    result = dampedNewton(xs, R, c.m, c.pinMask, {
+      maxIters,
+      tol,
+    });
+  }
 
   // Write back any cell whose final xs differs from its current value.
   for (const e of c.cellEntries) {
@@ -528,6 +656,9 @@ export function relate(opts: RelateOpts): Relation {
   target.relations.push({ rel, cellIdx });
   target.m += opts.m;
   rel._cluster = target;
+  // Invalidate cached sparsity info; it'll rebuild lazily on next solve.
+  target.sparseInfo = undefined;
+  target.useSparse = undefined;
 
   // Prime: solve immediately so the new relation's residual is up
   // to date.

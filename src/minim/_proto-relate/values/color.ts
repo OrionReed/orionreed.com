@@ -28,7 +28,26 @@ const linearImpl: Linear<V> = { add, sub, scale };
 
 export class Color extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
-  static traits = traits<V>()({ linear: linearImpl, lerp, equals });
+  static traits = traits<V>()({
+    linear: linearImpl,
+    lerp,
+    equals,
+    packer: {
+      dim: 4,
+      pack: (v: V, into: number[], off: number) => {
+        into[off] = v.r;
+        into[off + 1] = v.g;
+        into[off + 2] = v.b;
+        into[off + 3] = v.a;
+      },
+      unpack: (from: readonly number[], off: number): V => ({
+        r: from[off]!,
+        g: from[off + 1]!,
+        b: from[off + 2]!,
+        a: from[off + 3]!,
+      }),
+    },
+  });
   static invertibles = invertibles<Color>()("add", "sub", "scale", "through");
 
   // ── instance ───────────────────────────────────────────────────
