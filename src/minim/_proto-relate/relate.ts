@@ -144,6 +144,21 @@ export interface RelateOpts {
    *
    *  Defaults to 1 (everyone equal). */
   weight?: number;
+  /** Hard-constraint mode. If `true`, the cluster solver enters an
+   *  escalation outer loop after the standard Newton solve: any
+   *  hard relation with residual > tol gets its effective weight
+   *  bumped 10× and the cluster re-solves. Up to 5 escalations.
+   *  After the cluster finishes, weights are restored.
+   *
+   *  This is a pragmatic substitute for true active-set / KKT-
+   *  based hard inequality satisfaction. It works well when hard
+   *  constraints are not in mutual contradiction (typical for
+   *  layout / IK use cases). When contradictory, the highest-weight
+   *  one wins per Newton iteration; the system degrades to LSQ
+   *  best-fit at saturation.
+   *
+   *  Default: false. */
+  hard?: boolean;
   /** Diagnostic name. */
   name?: string;
 }
@@ -257,6 +272,11 @@ interface Cluster {
   /** Persistent scratch buffers for the sparse path. Allocated
    *  lazily on first sparse solve; resized as the cluster grows. */
   sparseScratch?: SparseScratch;
+  /** Whether any relation in this cluster requires the hard-
+   *  constraint escalation outer loop. Maintained on add/dispose
+   *  so the hot path skips escalation entirely when no relation
+   *  is hard. */
+  hasHardConstraints: boolean;
 }
 
 const cellToCluster = new WeakMap<Cell, Cluster>();
@@ -272,39 +292,14 @@ let pinHookInstalled = false;
  *  Num cells it returns a number; for Vec cells, a `{x, y}`; etc. */
 const hardPinned = new WeakMap<Cell, () => unknown>();
 
-/** Backward-compat parent-tracking: pinning `source` pins all the
- *  cells in `sourceToLensCells.get(source)`. Used for the
- *  field-lens-with-composite-parent pattern (cluster has Vec.x and
- *  Vec.y, user writes Vec.value). Most users should pass the
- *  composite (Vec) as the cell directly — the runtime auto-handles
- *  it via the Vec packer. */
-const sourceToLensCells = new WeakMap<Signal<unknown>, Cell[]>();
-
 function ensureSetup(): void {
   if (pinHookInstalled) return;
   pinHookInstalled = true;
   setPinHook(sig => {
-    // Direct cluster cell? — pin it.
     const cluster = cellToCluster.get(sig as Cell);
     if (cluster !== undefined) {
       cluster.pinned.add(sig as Cell);
       dirtyClusters.add(cluster);
-      schedulePostFlush();
-      return;
-    }
-    // Backward-compat: parent of one or more cluster cells via
-    // `trackLensSource`. Pin all of them. Used when consumers
-    // decompose a composite (Vec, Box) into per-axis Nums but
-    // still want composite-write pin propagation.
-    const lensCells = sourceToLensCells.get(sig);
-    if (lensCells !== undefined) {
-      for (const lc of lensCells) {
-        const cl = cellToCluster.get(lc);
-        if (cl !== undefined) {
-          cl.pinned.add(lc);
-          dirtyClusters.add(cl);
-        }
-      }
       schedulePostFlush();
     }
   });
@@ -339,6 +334,7 @@ function newCluster(): Cluster {
     pinMask: [],
     valsScratch: [],
     health: signal<ClusterHealth>({ residual: 0, iters: 0, converged: true }),
+    hasHardConstraints: false,
   };
   allClusters.add(c);
   return c;
@@ -367,6 +363,7 @@ function mergeClusters(a: Cluster, b: Cluster): Cluster {
   }
   for (const p of b.pinned) a.pinned.add(p);
   a.m += b.m;
+  if (b.hasHardConstraints) a.hasHardConstraints = true;
   resizeScratch(a);
   allClusters.delete(b);
   if (dirtyClusters.has(b)) {
@@ -545,24 +542,61 @@ function solveCluster(c: Cluster): void {
 
   const R = buildResidual(c);
   let result: NewtonResult | SparseNewtonResult;
-  if (c.useSparse) {
-    const Rsubset = buildResidualSubset(c);
-    if (c.sparseScratch === undefined) c.sparseScratch = makeSparseScratch();
-    result = dampedNewtonSparse(
-      xs,
-      R,
-      Rsubset,
-      c.m,
-      c.pinMask,
-      c.sparseInfo!,
-      c.sparseScratch,
-      { maxIters, tol },
-    );
-  } else {
-    result = dampedNewton(xs, R, c.m, c.pinMask, {
-      maxIters,
-      tol,
-    });
+  const runNewton = (): NewtonResult | SparseNewtonResult => {
+    if (c.useSparse) {
+      const Rsubset = buildResidualSubset(c);
+      if (c.sparseScratch === undefined) c.sparseScratch = makeSparseScratch();
+      return dampedNewtonSparse(
+        xs,
+        R,
+        Rsubset,
+        c.m,
+        c.pinMask,
+        c.sparseInfo!,
+        c.sparseScratch,
+        { maxIters, tol },
+      );
+    }
+    return dampedNewton(xs, R, c.m, c.pinMask, { maxIters, tol });
+  };
+  result = runNewton();
+
+  // Hard-constraint escalation outer loop. After Newton converges,
+  // check each `hard` relation's residual; if any exceeds tol, bump
+  // its weight 10× and re-solve. Up to 5 escalations. After we're
+  // done (converged or budget exhausted), restore base weights.
+  if (c.hasHardConstraints) {
+    for (let escalation = 0; escalation < 5; escalation++) {
+      let anyViolation = false;
+      // Compute per-relation residual using current weights.
+      R(xs, c.rScratch);
+      let off = 0;
+      for (const entry of c.relations) {
+        const rel = entry.rel;
+        if (rel._isHard) {
+          const w = rel._sqrtWeight;
+          let s = 0;
+          for (let i = 0; i < rel.m; i++) {
+            const ri = w === 1 ? c.rScratch[off + i]! : c.rScratch[off + i]! / w;
+            s += ri * ri;
+          }
+          if (Math.sqrt(s) > tol * 10) {
+            // Hard violation — escalate this relation's weight.
+            rel._sqrtWeight *= Math.sqrt(10);
+            anyViolation = true;
+          }
+        }
+        off += rel.m;
+      }
+      if (!anyViolation) break;
+      result = runNewton();
+    }
+    // Restore base weights so subsequent solves see the user's
+    // declared weight, not the inflated one. (The next solve may
+    // have a different pin set and its own escalation needs.)
+    for (const entry of c.relations) {
+      entry.rel._sqrtWeight = entry.rel._baseSqrtWeight;
+    }
   }
 
   // Write back any cell whose final xs differs from its current value.
@@ -646,8 +680,15 @@ class RelationImpl implements Relation {
   _argScratch: any[];
   _outScratch: number[];
   /** @internal — sqrt(weight); pre-multiplied so the hot path
-   *  doesn't need to call Math.sqrt per evaluation. */
+   *  doesn't need to call Math.sqrt per evaluation. May be
+   *  temporarily inflated by the escalation outer loop for hard
+   *  constraints, then restored. */
   _sqrtWeight: number;
+  /** @internal — base sqrt(weight); preserved across escalation. */
+  _baseSqrtWeight: number;
+  /** @internal — true iff this is a hard constraint (escalates
+   *  weight if residual > tol after solve). */
+  _isHard: boolean;
   private _disposed = false;
 
   constructor(opts: RelateOpts) {
@@ -657,7 +698,9 @@ class RelationImpl implements Relation {
     this.residualFn = opts.residual;
     this._argScratch = new Array<unknown>(opts.cells.length);
     this._outScratch = new Array<number>(opts.m);
-    this._sqrtWeight = Math.sqrt(opts.weight ?? 1);
+    this._baseSqrtWeight = Math.sqrt(opts.weight ?? 1);
+    this._sqrtWeight = this._baseSqrtWeight;
+    this._isHard = opts.hard ?? false;
     this._residualSig = signal(Number.POSITIVE_INFINITY);
     this.residual = this._residualSig;
     this.satisfied = computed(() => this._residualSig.value < 1e-6);
@@ -674,6 +717,11 @@ class RelationImpl implements Relation {
     // changed. Sparse path will rebuild on next solve.
     c.sparseInfo = undefined;
     c.useSparse = undefined;
+    // Recompute the hard-constraint flag (may have been the only
+    // hard relation in this cluster).
+    if (this._isHard) {
+      c.hasHardConstraints = c.relations.some(e => e.rel._isHard);
+    }
     // Note: doesn't currently split clusters when removing a
     // relation disconnects the graph. Disconnected components stay
     // in one cluster — correctness is preserved (block-diagonal
@@ -718,6 +766,7 @@ export function relate(opts: RelateOpts): Relation {
   target.relations.push({ rel, cellIdx });
   target.m += opts.m;
   rel._cluster = target;
+  if (rel._isHard) target.hasHardConstraints = true;
   // Invalidate cached sparsity info; it'll rebuild lazily on next solve.
   target.sparseInfo = undefined;
   target.useSparse = undefined;
@@ -740,6 +789,33 @@ export function clusterHealth(cell: Cell): Read<ClusterHealth> | undefined {
 export function clusterSize(cell: Cell): number {
   const c = cellToCluster.get(cell);
   return c?.cellEntries.length ?? 0;
+}
+
+/** Diagnostic snapshot of a cluster's sparsity structure. Used by
+ *  benchmarks to confirm that the sparse path is reachable for a
+ *  given topology, and that RCM is delivering its expected
+ *  bandwidth reduction. Returns `undefined` if the cell isn't in
+ *  any cluster yet. */
+export function _clusterSparseInfo(cell: Cell): {
+  totalSlots: number;
+  totalNNZ: number;
+  bandwidth: number;
+  useSparse: boolean | undefined;
+} | undefined {
+  const c = cellToCluster.get(cell);
+  if (!c) return undefined;
+  if (!c.sparseInfo) {
+    c.sparseInfo = buildClusterSparseInfo(c);
+    c.useSparse =
+      c.totalDim >= SPARSE_DISPATCH_THRESHOLD &&
+      c.sparseInfo.bandwidth < Math.floor(c.totalDim / 2);
+  }
+  return {
+    totalSlots: c.sparseInfo.totalSlots,
+    totalNNZ: c.sparseInfo.totalNNZ,
+    bandwidth: c.sparseInfo.bandwidth,
+    useSparse: c.useSparse,
+  };
 }
 
 export function _allClusters(): readonly Cluster[] {
@@ -778,22 +854,4 @@ export function hardPin<T>(
 
 export function isHardPinned(cell: Cell): boolean {
   return hardPinned.has(cell);
-}
-
-/** Backward-compat: register that pinning `source` should also pin
- *  `lensCells`. Useful for the field-lens-with-composite-parent
- *  pattern (cluster has Vec.x and Vec.y; user writes Vec.value).
- *
- *  Most users should pass the composite (Vec) as the cluster cell
- *  directly — this is no longer needed for the common case. Kept
- *  for the niche pattern of decomposing Vec/Box into per-axis Nums
- *  while still wanting composite-write pin propagation. */
-export function trackLensSource(source: Signal<unknown>, lensCells: readonly Cell[]): void {
-  ensureSetup();
-  const existing = sourceToLensCells.get(source);
-  if (existing !== undefined) {
-    for (const c of lensCells) if (!existing.includes(c)) existing.push(c);
-  } else {
-    sourceToLensCells.set(source, lensCells.slice());
-  }
 }

@@ -451,8 +451,31 @@ export function pinPoint(
 // satisfaction (always-satisfied) requires Cassowary-style slack
 // variables and a simplex inner solver — not yet implemented.
 
+/** Inequality options. `weight` defaults to `MEDIUM`. Pass
+ *  `hard: true` to enable the escalation outer loop and treat the
+ *  inequality as a true hard constraint (best-effort: cluster will
+ *  bump weight up to 5× until the residual falls below tol or
+ *  budget is exhausted). */
+export interface InequalityOpts {
+  weight?: number;
+  hard?: boolean;
+}
+
+function inequalityOpts(arg: number | InequalityOpts | undefined): {
+  weight: number;
+  hard: boolean;
+} {
+  if (typeof arg === "number") return { weight: arg, hard: false };
+  return { weight: arg?.weight ?? Strength.MEDIUM, hard: arg?.hard ?? false };
+}
+
 /** `a ≤ b`. Residual `max(0, a - b)`, zero when satisfied. */
-export function leq(a: NumCell, b: NumCell, weight: number = Strength.MEDIUM): Relation {
+export function leq(
+  a: NumCell,
+  b: NumCell,
+  opts: number | InequalityOpts = Strength.MEDIUM,
+): Relation {
+  const { weight, hard } = inequalityOpts(opts);
   return relate({
     name: "leq",
     cells: [a, b],
@@ -462,12 +485,17 @@ export function leq(a: NumCell, b: NumCell, weight: number = Strength.MEDIUM): R
     },
     m: 1,
     weight,
+    hard,
   });
 }
 
 /** `a ≥ b`. Residual `max(0, b - a)`. */
-export function geq(a: NumCell, b: NumCell, weight: number = Strength.MEDIUM): Relation {
-  return leq(b, a, weight);
+export function geq(
+  a: NumCell,
+  b: NumCell,
+  opts: number | InequalityOpts = Strength.MEDIUM,
+): Relation {
+  return leq(b, a, opts);
 }
 
 /** `lo ≤ x ≤ hi`. Implemented as two `leq` relations. Returns a
@@ -476,10 +504,9 @@ export function bounded(
   x: NumCell,
   lo: NumCell | number,
   hi: NumCell | number,
-  weight: number = Strength.MEDIUM,
+  opts: number | InequalityOpts = Strength.MEDIUM,
 ): { lo: Relation; hi: Relation; dispose(): void } {
-  // Materialise scalar bounds as pinned Nums so they can join the
-  // cluster (and be reactive if the consumer chooses).
+  const { weight, hard } = inequalityOpts(opts);
   const loRel =
     typeof lo === "number"
       ? relate({
@@ -491,8 +518,9 @@ export function bounded(
           },
           m: 1,
           weight,
+          hard,
         })
-      : leq(lo, x, weight);
+      : leq(lo, x, opts);
   const hiRel =
     typeof hi === "number"
       ? relate({
@@ -504,8 +532,9 @@ export function bounded(
           },
           m: 1,
           weight,
+          hard,
         })
-      : leq(x, hi, weight);
+      : leq(x, hi, opts);
   return {
     lo: loRel,
     hi: hiRel,

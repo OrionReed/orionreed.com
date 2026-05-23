@@ -37,21 +37,36 @@
 
 /** Pre-computed sparsity structure for a cluster. Computed once at
  *  cluster construction and re-used across drag frames; rebuilt
- *  only when constraints are added or removed. */
+ *  only when constraints are added or removed.
+ *
+ *  Includes a Reverse Cuthill-McKee permutation that minimises
+ *  the bandwidth of JᵀJ. For natural orderings already with low
+ *  bandwidth (chains, lattices), RCM is roughly a no-op; for
+ *  arbitrary topologies (trees, mixed-construction figures) it
+ *  can drop bandwidth from O(n) to O(√n) or better, extending
+ *  the sparse-banded path's reach. */
 export interface SparseInfo {
   /** For each constraint i, the list of slot indices it depends on. */
   constraintSlots: readonly (readonly number[])[];
   /** For each slot j, the list of constraint indices that depend on it. */
   slotConstraints: readonly (readonly number[])[];
-  /** Bandwidth of JᵀJ: max |a - b| over (a, b) co-occurring in some
-   *  constraint's slot list. Banded Cholesky cost scales as
-   *  `n × bandwidth²`. */
+  /** RCM ordering: `slotByRank[r]` is the original slot index
+   *  occupying rank `r` in the band-friendly ordering. Solver
+   *  iterates slots in this order when building free-index lists,
+   *  so consecutively-indexed positions in the band matrix
+   *  correspond to slots that are actually close in the constraint
+   *  graph. */
+  slotByRank: Int32Array;
+  /** Inverse of `slotByRank`: `slotRank[s]` is the band-matrix
+   *  rank of slot `s`. */
+  slotRank: Int32Array;
+  /** Bandwidth of JᵀJ in the RCM-permuted ordering: max
+   *  `|slotRank[a] - slotRank[b]|` over (a, b) co-occurring in
+   *  some constraint's slot list. */
   bandwidth: number;
-  /** Number of slots (length of slotConstraints, dimension of the
-   *  flat state vector). */
+  /** Number of slots. */
   totalSlots: number;
-  /** Total non-zero count of the Jacobian: Σ |Cᵢ|. Sets the size
-   *  of the triples buffers in scratch. */
+  /** Total non-zero count of the Jacobian: Σ |Cᵢ|. */
   totalNNZ: number;
 }
 
@@ -66,18 +81,127 @@ export function buildSparseInfo(
     totalNNZ += slots.length;
     for (const s of slots) slotConstraints[s]!.push(i);
   }
+
+  // Build adjacency graph: slots a, b adjacent iff they co-occur in
+  // some constraint. RCM operates on this graph.
+  const adjacency: number[][] = Array.from({ length: totalSlots }, () => []);
+  const seenEdge = new Set<number>();
+  for (const slots of constraintSlots) {
+    for (let i = 0; i < slots.length; i++) {
+      const a = slots[i]!;
+      for (let j = i + 1; j < slots.length; j++) {
+        const b = slots[j]!;
+        // Encode (min, max) as a single number to dedupe.
+        const lo = a < b ? a : b;
+        const hi = a < b ? b : a;
+        const key = lo * totalSlots + hi;
+        if (seenEdge.has(key)) continue;
+        seenEdge.add(key);
+        adjacency[a]!.push(b);
+        adjacency[b]!.push(a);
+      }
+    }
+  }
+  const slotByRank = reverseCuthillMcKee(adjacency, totalSlots);
+  const slotRank = new Int32Array(totalSlots);
+  for (let r = 0; r < totalSlots; r++) slotRank[slotByRank[r]!] = r;
+
+  // Compute bandwidth in the RCM-permuted coordinates.
   let bandwidth = 0;
   for (const slots of constraintSlots) {
     if (slots.length === 0) continue;
-    let lo = slots[0]!;
-    let hi = slots[0]!;
+    let lo = slotRank[slots[0]!]!;
+    let hi = lo;
     for (const s of slots) {
-      if (s < lo) lo = s;
-      if (s > hi) hi = s;
+      const r = slotRank[s]!;
+      if (r < lo) lo = r;
+      if (r > hi) hi = r;
     }
     if (hi - lo > bandwidth) bandwidth = hi - lo;
   }
-  return { constraintSlots, slotConstraints, bandwidth, totalSlots, totalNNZ };
+
+  return {
+    constraintSlots,
+    slotConstraints,
+    slotByRank,
+    slotRank,
+    bandwidth,
+    totalSlots,
+    totalNNZ,
+  };
+}
+
+// ─── Reverse Cuthill-McKee bandwidth-reducing ordering ───────────────
+//
+// Standard graph-reordering algorithm that minimises matrix bandwidth
+// for sparse symmetric systems. Roughly:
+//   1. Pick a starting node — usually the lowest-degree node, which
+//      tends to be peripheral.
+//   2. BFS from start; within each level visit unvisited neighbours
+//      in increasing-degree order.
+//   3. Reverse the resulting node order. (The "Reverse" trick lowers
+//      the band matrix profile in addition to the bandwidth.)
+//
+// Disconnected components: any unvisited slots after the BFS get
+// appended in arbitrary order. That doesn't affect within-component
+// bandwidth.
+//
+// Cost: O(|V| log |V| + |E|) due to per-level degree sorts. Run once
+// at cluster construction; not on the hot path.
+
+function reverseCuthillMcKee(adjacency: number[][], n: number): Int32Array {
+  // Pick starting node: lowest-degree (excluding isolated nodes).
+  let startNode = -1;
+  let minDeg = Infinity;
+  for (let i = 0; i < n; i++) {
+    const d = adjacency[i]!.length;
+    if (d > 0 && d < minDeg) {
+      minDeg = d;
+      startNode = i;
+    }
+  }
+  // If all nodes are isolated, identity ordering.
+  const result = new Int32Array(n);
+  if (startNode === -1) {
+    for (let i = 0; i < n; i++) result[i] = i;
+    return result;
+  }
+
+  const visited = new Uint8Array(n);
+  const order: number[] = [];
+  let frontier: number[] = [startNode];
+  visited[startNode] = 1;
+
+  while (frontier.length > 0) {
+    // Sort current frontier by degree (ascending) — affects within-
+    // level ordering. Stable sort, so ties keep insertion order.
+    frontier.sort((a, b) => adjacency[a]!.length - adjacency[b]!.length);
+    const next: number[] = [];
+    for (const u of frontier) {
+      order.push(u);
+      // Collect unvisited neighbours, sorted by degree.
+      const neighbours = adjacency[u]!.filter(v => !visited[v]);
+      neighbours.sort((a, b) => adjacency[a]!.length - adjacency[b]!.length);
+      for (const v of neighbours) {
+        if (!visited[v]) {
+          visited[v] = 1;
+          next.push(v);
+        }
+      }
+    }
+    frontier = next;
+  }
+  // Append disconnected nodes (or isolated ones).
+  for (let i = 0; i < n; i++) {
+    if (!visited[i]) {
+      order.push(i);
+      visited[i] = 1;
+    }
+  }
+  // Reverse for "Reverse" Cuthill-McKee.
+  order.reverse();
+  for (let r = 0; r < order.length; r++) result[r] = order[r]!;
+  return result;
 }
 
 // ─── Scratch container (one per cluster, allocated lazily) ──────────
@@ -264,8 +388,11 @@ export function dampedNewtonSparse(
   ensureScratch(scratch, m, info.totalNNZ, nf * (bw + 1), nf);
   const { r, r2, rSaved, jVal, jRow, jCol, band, rhs, step, freeIdx, freeRank } = scratch;
   for (let i = 0; i < n; i++) freeRank[i] = -1;
+  // Build freeIdx in RCM rank order. Free-slot positions in the
+  // band matrix end up minimising bandwidth this way.
   let fi = 0;
-  for (let i = 0; i < n; i++) {
+  for (let rank = 0; rank < n; rank++) {
+    const i = info.slotByRank[rank]!;
     if (!pinned[i]) {
       freeIdx[fi] = i;
       freeRank[i] = fi;
@@ -316,28 +443,44 @@ export function dampedNewtonSparse(
     // case, but we exploit that rows with at most |Cᵢ| nnz contribute
     // |Cᵢ|² entries — capped.
     {
-      // Use a Set or short-tally to group: row-by-row iteration.
-      // Simpler: for each pair (a, b) with a ≥ b in the nnz list,
-      // if jRow[a] === jRow[b], contribute to band.
-      // O(nnz²) — but for sparse problems nnz is small.
-      // For performance, sort nnz indices by row first, then walk
-      // row blocks.
-      // We use an O(nnz) bucket-sort: row-counts → row-starts → re-bucket.
-      // Allocate counts on the band buffer's tail (it's zero-filled).
-      // Actually safer to use a separate small array of ints.
-      // For now, use a simple approach: sort the nnz indices by row.
-      // The cost is O(nnz × log(nnz)) which is fine.
-      // Build a permutation array.
-      const perm = scratch._perm ?? (scratch._perm = new Int32Array(info.totalNNZ));
-      if (perm.length < nnz) {
-        scratch._perm = new Int32Array(nnz);
+      // Group nnz triples by row (constraint index) using a stable
+      // counting sort — O(nnz + m), worst-case independent of input
+      // order. Plain insertion sort would degrade to O(nnz²) on
+      // reverse-sorted input (which RCM ordering can produce).
+      const perm =
+        scratch._perm && scratch._perm.length >= nnz
+          ? scratch._perm
+          : (scratch._perm = new Int32Array(Math.max(nnz, info.totalNNZ)));
+      const rowCount =
+        scratch._rowCount && scratch._rowCount.length >= m
+          ? scratch._rowCount
+          : (scratch._rowCount = new Int32Array(m));
+      const rowFill =
+        scratch._rowFill && scratch._rowFill.length >= m
+          ? scratch._rowFill
+          : (scratch._rowFill = new Int32Array(m));
+      // Reset counters used this iter.
+      for (let i = 0; i < m; i++) {
+        rowCount[i] = 0;
+        rowFill[i] = 0;
       }
-      const pp = scratch._perm!;
-      for (let k = 0; k < nnz; k++) pp[k] = k;
-      // Stable sort by jRow.
-      // (Using a simple insertion sort here since nnz is typically small;
-      // for very large nnz, switch to a counting sort.)
-      sortByRow(pp, jRow, nnz);
+      for (let k = 0; k < nnz; k++) rowCount[jRow[k]!]!++;
+      // Prefix-sum to get bucket starts.
+      const rowStart = scratch._rowStart && scratch._rowStart.length >= m
+        ? scratch._rowStart
+        : (scratch._rowStart = new Int32Array(m));
+      let acc = 0;
+      for (let i = 0; i < m; i++) {
+        rowStart[i] = acc;
+        acc += rowCount[i]!;
+      }
+      // Place each nnz index at its bucket position (stable order).
+      for (let k = 0; k < nnz; k++) {
+        const row = jRow[k]!;
+        perm[rowStart[row]! + rowFill[row]!]! = k;
+        rowFill[row]!++;
+      }
+      const pp = perm;
       // Walk row blocks.
       let s = 0;
       while (s < nnz) {
@@ -417,6 +560,9 @@ export function dampedNewtonSparse(
 declare module "./solvers-sparse" {
   interface SparseScratch {
     _perm?: Int32Array;
+    _rowCount?: Int32Array;
+    _rowFill?: Int32Array;
+    _rowStart?: Int32Array;
   }
 }
 
@@ -424,21 +570,4 @@ function residualNormFloat(r: Float64Array, m: number): number {
   let s = 0;
   for (let i = 0; i < m; i++) s += r[i]! * r[i]!;
   return Math.sqrt(s);
-}
-
-/** Stable insertion sort of permutation `perm` by `rows[perm[k]]`.
- *  In-place. Insertion sort is fine because nnz is typically small
- *  (few hundred to few thousand) and already roughly grouped — the
- *  best-case for insertion sort is O(n). */
-function sortByRow(perm: Int32Array, rows: Int32Array, n: number): void {
-  for (let i = 1; i < n; i++) {
-    const v = perm[i]!;
-    const key = rows[v]!;
-    let j = i - 1;
-    while (j >= 0 && rows[perm[j]!]! > key) {
-      perm[j + 1] = perm[j]!;
-      j--;
-    }
-    perm[j + 1] = v;
-  }
 }
