@@ -59,9 +59,27 @@ const nearestAngle = (target: number, current: number): number =>
 
 const linearImpl: Linear<V> = { add, sub, scale };
 
+const packerImpl = {
+  dim: 2,
+  pack: (v: V, into: number[], off: number) => {
+    into[off] = v.x;
+    into[off + 1] = v.y;
+  },
+  unpack: (from: readonly number[], off: number): V => ({
+    x: from[off]!,
+    y: from[off + 1]!,
+  }),
+};
+
 export class Vec extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
-  static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
+  static traits = traits<V>()({
+    linear: linearImpl,
+    lerp,
+    metric,
+    equals,
+    packer: packerImpl,
+  });
   static invertibles = invertibles<Vec>()(
     "add",
     "sub",

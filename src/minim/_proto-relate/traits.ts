@@ -32,6 +32,20 @@ export type Lerp<T> = (a: T, b: T, t: number) => T;
 export type Metric<T> = (a: T, b: T) => number;
 export type Equals<T> = (a: T, b: T) => boolean;
 
+/** Pack a typed value into a flat number array slot. Used by the
+ *  relation runtime to translate cell values to/from the solver's
+ *  flat state vector. Each value class declares its `dim` (slot
+ *  count) and corresponding pack/unpack functions; the runtime
+ *  reads them once at cluster-construction time. */
+export interface Packer<T> {
+  /** Number of doubles this value occupies. */
+  dim: number;
+  /** Write `value` into `into[offset..offset+dim]`. */
+  pack(value: T, into: number[], offset: number): void;
+  /** Read a value from `from[offset..offset+dim]`. */
+  unpack(from: readonly number[], offset: number): T;
+}
+
 // ─── Trait dictionary ────────────────────────────────────────────────
 
 /** Shape of a value class's `static traits` dict. Subclasses fill the
@@ -41,6 +55,7 @@ export interface TraitDict<T> {
   lerp?: Lerp<T>;
   metric?: Metric<T>;
   equals?: Equals<T>;
+  packer?: Packer<T>;
 }
 
 /** Valid keys of `TraitDict`. The set of declarable traits. */

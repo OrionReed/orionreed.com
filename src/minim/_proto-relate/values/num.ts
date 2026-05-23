@@ -24,9 +24,23 @@ export const equals = (a: V, b: V) => a === b;
 
 const linearImpl: Linear<V> = { add, sub, scale };
 
+const packerImpl = {
+  dim: 1,
+  pack: (v: V, into: number[], off: number) => {
+    into[off] = v;
+  },
+  unpack: (from: readonly number[], off: number): V => from[off]!,
+};
+
 export class Num extends Signal<V> {
   // ── class-level config ─────────────────────────────────────────
-  static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
+  static traits = traits<V>()({
+    linear: linearImpl,
+    lerp,
+    metric,
+    equals,
+    packer: packerImpl,
+  });
   // Methods that return a writable lens (whether strict or lossy).
   // `Writable<R>` lifts these to `(...) => Writable<Num>` so chains
   // stay writable. Strict-vs-lossy compliance is a separate concern
