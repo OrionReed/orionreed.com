@@ -1,7 +1,6 @@
 // _proto-avbd — Augmented Vertex Block Descent prototype.
 //
-// A second-generation constraint solver, replacing the Newton-LM
-// core of `_proto-relate` with the algorithm from
+// A constraint solver based on the algorithm from
 //
 //   Giles, Diaz, Yuksel (2025). Augmented Vertex Block Descent.
 //   ACM TOG 44(4) — SIGGRAPH 2025.
@@ -10,22 +9,21 @@
 // 2D implementation by Chris Giles is at
 //   https://github.com/savant117/avbd-demo2d
 //
-// Why AVBD over Newton-LM:
-//   - Per-cell local Newton (DOF-sized) instead of global
-//     factorisation. Eliminates the bandwidth / sparse-matrix
-//     machinery the old prototype was wrestling with.
-//   - Augmented Lagrangian gives true hard constraints (joint
-//     limits, equality, attachment) without ill-conditioning.
-//   - Per-iteration cost is O(cells × avg_force_per_cell × dim²).
-//     Time-per-frame degrades gracefully — capping the iter count
-//     stays stable, just leaves more residual.
-//   - Maps directly to GPU coordinate descent should we want it.
+// Architecture:
 //
-// This folder is intentionally clean-slate. We don't depend on
-// `_proto-relate`. Once AVBD proves out, we'll converge the two
-// experiments.
+//   - `Solver` owns SOA buffers (positions/initials/inertials/masses)
+//     indexed by integer cell ids. `addCell(dim, init?)` returns
+//     a fresh id; `bind(sig)` registers a reactive `Signal` (any
+//     class declaring the `pack` trait) and returns its id.
+//   - `Force` and subclasses (`EqForce`, `DistanceForce`, …) operate
+//     on cell ids and read positions through the solver's buffers.
+//   - `reactive.ts` installs a `preEffect` driver per solver that
+//     pulls signal values into cells, runs the solver, and writes
+//     results back. Self-mutes via the signals layer's preEffect
+//     primitive.
+//   - `Simulation` wraps the solver with velocity, gravity, and
+//     time-stepping. Composes with `core/anim` via `animate()`.
 
-export { box, BoxCell, Cell, num, NumCell, vec, VecCell } from "./cell";
 export {
   angle,
   type Bindable,
@@ -55,6 +53,8 @@ export {
   Strength,
 } from "./constraints";
 export { Force, PENALTY_MAX, PENALTY_MIN } from "./force";
-export { asCell, bindSignal, registerBinder, unbindSolver } from "./reactive";
+// Side-effect import: registers the reactive driver factory so
+// `Solver.bind()` works. Re-exports `pin`.
+export { pin } from "./reactive";
 export { Simulation, type SimulationOpts } from "./simulation";
 export { Solver, type SolverOpts } from "./solver";

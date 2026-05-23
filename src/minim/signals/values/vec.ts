@@ -10,7 +10,7 @@ import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
 import { batch, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
-import { type Linear, traits } from "../traits";
+import { type Linear, type Pack, traits } from "../traits";
 import { derived, field, type Wr, type Writable } from "../writable";
 import { Num } from "./num";
 
@@ -61,9 +61,17 @@ const nearestAngle = (target: number, current: number): number =>
   current + wrapToPi(target - current);
 
 const linearImpl: Linear<V> = { add, sub, scale };
+const packImpl: Pack<V> = {
+  dim: 2,
+  read: (v, a, o) => {
+    a[o] = v.x;
+    a[o + 1] = v.y;
+  },
+  write: (a, o) => ({ x: a[o]!, y: a[o + 1]! }),
+};
 
 export class Vec extends Signal<V> {
-  static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
+  static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals, pack: packImpl });
 
   /** Phantom registry brand — `Writable<Vec>` resolves to `Wr<Vec>`. */
   declare readonly _writable: Wr<Vec>;

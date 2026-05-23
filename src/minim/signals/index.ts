@@ -46,7 +46,6 @@ export * as Mix from "./mix";
 export { type Merge, mix, type Writeback } from "./mix";
 // ─── Engine ───────────────────────────────────────────────────────
 export {
-  addPreFlushTask,
   batch,
   computed,
   effect,
@@ -56,8 +55,9 @@ export {
   lazy,
   lens,
   type Of,
+  preEffect,
+  type PreEffectHandle,
   type Read,
-  setPinHook,
   Signal,
   type SignalOptions,
   setSignalWriteHook,
@@ -66,7 +66,6 @@ export {
   type Val,
   valFn,
   value,
-  withSolverActive,
   type WritableBrand,
 } from "./signal";
 // ─── Traits ───────────────────────────────────────────────────────
@@ -75,10 +74,12 @@ export {
   type Lerp,
   type Linear,
   type Metric,
+  type Pack,
   requireEquals,
   requireLerp,
   requireLinear,
   requireMetric,
+  requirePack,
   type TraitDict,
   type TraitKey,
   type Traits,

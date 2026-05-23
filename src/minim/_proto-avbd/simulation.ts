@@ -4,23 +4,19 @@
 // free: given an inertial anchor `y` and constraints, find `x`. A
 // `Simulation` adds three things:
 //
-//   1. Per-cell velocity, allocated lazily on demand.
+//   1. Per-cell velocity, packed alongside the solver's SOA buffers.
 //   2. Inertial extrapolation each tick: `y = x⁻ + dt·v + dt²·a`.
 //   3. Velocity update at the end: `v = (x − x⁻) / dt`.
 //
-// Velocity lives off the `Cell` (in a `WeakMap`) so static editing
-// doesn't pay the memory cost. Cells with `mass = 0` are kinematic
-// — Simulation skips their inertial extrapolation and velocity
-// update.
+// Cells with `mass = 0` are kinematic — Simulation skips their
+// inertial extrapolation and velocity update.
 //
-// Composition with the Anim runtime: `Simulation.animate()` is an
-// `Animator<never, Tick>`. It parks each frame, resumes with the
-// engine's `Tick`, and runs one `tick()` per frame. Pause it via
-// `suspend`; slo-mo via `tick(dt * 0.1)`; multi-rate physics via
-// two simulations with independent driving generators.
+// Composition with the Anim runtime: `Simulation.animate()` yields
+// each frame and resumes with the engine's `Tick`. Compose with
+// `race`, `suspend`, etc., from `core/anim`.
 
 import type { Tick } from "../core/anim";
-import type { Cell } from "./cell";
+import type { Signal, Pack } from "../signals";
 import type { Solver } from "./solver";
 
 export interface SimulationOpts {
@@ -33,9 +29,10 @@ export class Simulation {
   readonly solver: Solver;
   /** External acceleration applied to every cell each tick. */
   readonly aExt: Float64Array;
-  /** Per-cell velocity. Lazily allocated. WeakMap so disposed cells
-   *  are GC-collectable without manual cleanup. */
-  private readonly _velocity = new WeakMap<Cell, Float64Array>();
+  /** Per-cell velocity, packed in the same SOA layout as
+   *  `solver.positions`. Grows when the solver grows. */
+  velocities: Float64Array;
+  private _velocityCapacity: number;
 
   constructor(solver: Solver, opts: SimulationOpts = {}) {
     this.solver = solver;
@@ -46,67 +43,118 @@ export class Simulation {
     } else {
       this.aExt = new Float64Array(0);
     }
+    this._velocityCapacity = solver.positions.length;
+    this.velocities = new Float64Array(this._velocityCapacity);
+    // Simulation owns the time loop — disable the reactive driver
+    // so signal writes don't kick off conflicting solver.step calls.
+    // Signal sync happens inside `tick()` instead.
+    if (solver._reactiveHandle !== undefined) {
+      solver._reactiveHandle.dispose();
+      solver._reactiveHandle = undefined;
+    }
   }
 
-  /** Get (or lazily allocate) the velocity buffer for `cell`. Mutating
-   *  the returned array sets the cell's velocity. */
-  velocity(cell: Cell): Float64Array {
-    let v = this._velocity.get(cell);
-    if (!v) {
-      v = new Float64Array(cell.dim);
-      this._velocity.set(cell, v);
+  private _ensureVelocityCapacity(): void {
+    if (this.solver.positions.length > this._velocityCapacity) {
+      this._velocityCapacity = this.solver.positions.length;
+      const grown = new Float64Array(this._velocityCapacity);
+      grown.set(this.velocities);
+      this.velocities = grown;
     }
-    return v;
+  }
+
+  /** Read the velocity of cell `id` into `out` (or a fresh array). */
+  velocity(id: number, out: number[] = []): number[] {
+    this._ensureVelocityCapacity();
+    const off = this.solver.offsets[id]!;
+    const dim = this.solver.dims[id]!;
+    for (let k = 0; k < dim; k++) out[k] = this.velocities[off + k]!;
+    out.length = dim;
+    return out;
+  }
+
+  /** Set the velocity of cell `id`. */
+  setVelocity(id: number, value: ArrayLike<number>): void {
+    this._ensureVelocityCapacity();
+    const off = this.solver.offsets[id]!;
+    const dim = this.solver.dims[id]!;
+    for (let k = 0; k < dim; k++) this.velocities[off + k] = value[k] ?? 0;
   }
 
   /** Advance one frame by `dt` seconds.
    *
-   *  1. `solver.prepare()` snapshots positions and resets inertial
-   *     anchors to the current position.
-   *  2. We overwrite `cell.inertial` with the inertial extrapolation
-   *     `x⁻ + dt·v + dt²·a` for cells with mass > 0, and seed
-   *     `position` at that extrapolation as the initial guess.
+   *  1. `solver.prepare()` snapshots positions and resets `inertials`
+   *     to the current positions.
+   *  2. Overwrite `inertials` with `x⁻ + dt·v + dt²·a` for cells
+   *     with mass > 0, and seed `positions` at that extrapolation.
    *  3. `solver.solve(dt)` iterates.
-   *  4. Velocity update: `v = (x − x⁻) / dt`.
-   */
+   *  4. Velocity update: `v = (x − x⁻) / dt`. */
   tick(dt: number): void {
+    this._ensureVelocityCapacity();
     const solver = this.solver;
-    const cells = solver.cells;
     const dt2 = dt * dt;
     const aExt = this.aExt;
     const aExtLen = aExt.length;
+    const positions = solver.positions;
+    const initials = solver.initials;
+    const inertials = solver.inertials;
+    const masses = solver.masses;
+    const dims = solver.dims;
+    const offsets = solver.offsets;
+    const velocities = this.velocities;
+    const N = solver.cellCount;
+    // biome-ignore lint/suspicious/noExplicitAny: heterogeneous binding registry
+    const bindings = solver._cellToBinding as readonly { sig: Signal<any>; pack: Pack<any> }[];
+
+    // Snapshot signal values into solver positions (catches user
+    // writes since the last tick).
+    for (let id = 0; id < N; id++) {
+      const b = bindings[id];
+      if (!b) continue;
+      b.pack.read(b.sig.peek(), positions, offsets[id]!);
+    }
 
     solver.prepare();
 
-    // Inertial extrapolation: y = x⁻ + dt·v + dt²·a; seed x = y.
-    for (const cell of cells) {
-      if (cell.mass <= 0) continue;
-      const v = this.velocity(cell);
-      const dim = cell.dim;
+    // Inertial extrapolation + initial guess seeded at extrapolated point.
+    for (let id = 0; id < N; id++) {
+      if (masses[id]! <= 0) continue;
+      const off = offsets[id]!;
+      const dim = dims[id]!;
       for (let k = 0; k < dim; k++) {
         const a = k < aExtLen ? aExt[k]! : 0;
-        const y = cell.initial[k]! + dt * v[k]! + dt2 * a;
-        cell.inertial[k]! = y;
-        cell.position[k]! = y;
+        const y = initials[off + k]! + dt * velocities[off + k]! + dt2 * a;
+        inertials[off + k] = y;
+        positions[off + k] = y;
       }
     }
 
     solver.solve(dt);
 
-    // Velocity update: v = (x − x⁻) / dt.
-    for (const cell of cells) {
-      if (cell.mass <= 0) continue;
-      const v = this.velocity(cell);
-      const dim = cell.dim;
+    // Velocity update.
+    for (let id = 0; id < N; id++) {
+      if (masses[id]! <= 0) continue;
+      const off = offsets[id]!;
+      const dim = dims[id]!;
       for (let k = 0; k < dim; k++) {
-        v[k]! = (cell.position[k]! - cell.initial[k]!) / dt;
+        velocities[off + k] = (positions[off + k]! - initials[off + k]!) / dt;
       }
+    }
+
+    // Write solved positions back into bound signals. We use peek/
+    // set value directly — there's no preEffect to mute, and any
+    // subscribers (UI effects) will see the updated values on the
+    // next flush.
+    for (let id = 0; id < N; id++) {
+      const b = bindings[id];
+      if (!b) continue;
+      // biome-ignore lint/suspicious/noExplicitAny: dynamic pack typing
+      (b.sig as Signal<any>).value = b.pack.write(positions, offsets[id]!);
     }
   }
 
   /** Animator-shaped generator. Each yield parks one frame; the
-   *  Anim runtime resumes with a `Tick` carrying `dt`. Compose with
-   *  `race`, `suspend`, etc., from the core anim runtime. */
+   *  Anim runtime resumes with a `Tick` carrying `dt`. */
   *animate(): Generator<undefined, never, Tick> {
     for (;;) {
       const tick: Tick = yield;

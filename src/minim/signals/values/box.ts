@@ -7,7 +7,7 @@ import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
 import { computed, lazy, type Of, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
-import { type Linear, traits } from "../traits";
+import { type Linear, type Pack, traits } from "../traits";
 import { derived, field, type Wr, type Writable } from "../writable";
 import { Num } from "./num";
 import { Vec } from "./vec";
@@ -67,9 +67,19 @@ export function edgeFrom(b: V, toward: Of<Vec>): Of<Vec> {
 }
 
 const linearImpl: Linear<V> = { add, sub, scale };
+const packImpl: Pack<V> = {
+  dim: 4,
+  read: (v, a, o) => {
+    a[o] = v.x;
+    a[o + 1] = v.y;
+    a[o + 2] = v.w;
+    a[o + 3] = v.h;
+  },
+  write: (a, o) => ({ x: a[o]!, y: a[o + 1]!, w: a[o + 2]!, h: a[o + 3]! }),
+};
 
 export class Box extends Signal<V> {
-  static traits = traits<V>()({ linear: linearImpl, lerp, equals });
+  static traits = traits<V>()({ linear: linearImpl, lerp, equals, pack: packImpl });
 
   /** Phantom registry brand — `Writable<Box>` resolves to `Wr<Box>`. */
   declare readonly _writable: Wr<Box>;

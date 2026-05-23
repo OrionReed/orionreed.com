@@ -1,34 +1,46 @@
 // avbd-reactive.test.ts — Signal-driven AVBD constraints.
 //
 // Exercise the integration:
-//   - Pass `Signal<Num>`, `Signal<Vec>`, etc., to constraint factories.
+//   - Pass `Num`, `Vec`, `Box`, `Color` signals (and any subclass
+//     that declares the `pack` trait) to constraint factories.
 //   - Writes to a signal trigger a solver run during pre-flush.
 //   - Subscribers (effects) see post-solve values.
-//   - Lens-derived signals (`Vec.x`, `.y`, etc.) work transparently —
-//     constraints over `vec.x` propagate via the signal layer's
-//     existing `_throughOf` lens chain. No special handling needed
-//     in the solver.
-//   - Multiple signals can be constrained against bare `Cell`s in
-//     the same solver.
+//   - Lens-derived signals (`Vec.x`, `.y`, …) work transparently —
+//     the signal layer's existing `_fusedOf` chain dirties them
+//     when the parent is written; preEffect fires; solver runs.
+//
+// **Pin model**: the reactive layer does *not* auto-pin user-
+// written signals. To "drag" a signal (force the solver to honor
+// the user's value, dragging others to match), use the explicit
+// `pin()` helper (or set `cell.mass = 0` directly).
 
 import { describe, expect, it } from "vitest";
-import { batch, effect, Num, num as numSig, signal, type Signal, Vec, vec as vecSig } from "../../signals";
-import { distance, eq, leq, Solver } from "../index";
+import { batch, effect, Num, num as numSig, Vec, vec as vecSig } from "../../signals";
+import { distance, eq, leq, pin, Solver } from "../index";
 
 describe("AVBD reactive — basic signal binding", () => {
-  it("eq(sigA, sigB) propagates writes to either side", () => {
+  it("eq(sigA, sigB) settles to a common value when both are free", () => {
     const s = new Solver({ iterations: 20 });
     const a = numSig(3);
     const b = numSig(7);
     eq(s, a, b);
 
-    // Writing to `a` should drag `b` to match (after flush).
+    // No pin: triggering a solve drives both toward the midpoint.
     a.value = 5;
-    expect(b.value).toBeCloseTo(5, 2);
+    expect(a.value).toBeCloseTo(b.value, 2);
+  });
 
-    // And vice versa.
-    b.value = 11;
-    expect(a.value).toBeCloseTo(11, 2);
+  it("pin(a) + write a → b drags to match (Sketchpad-style drag)", () => {
+    const s = new Solver({ iterations: 20 });
+    const a = numSig(3);
+    const b = numSig(7);
+    eq(s, a, b);
+
+    const release = pin(a);
+    a.value = 5;
+    expect(a.value).toBeCloseTo(5, 2);
+    expect(b.value).toBeCloseTo(5, 2);
+    release();
   });
 
   it("distance(vecA, vecB) on Vec signals", () => {
@@ -37,8 +49,10 @@ describe("AVBD reactive — basic signal binding", () => {
     const b = vecSig(1, 0);
     distance(s, a, b, 5);
 
-    // Trigger a solve by writing a different value to a (drag).
-    a.value = { x: 0.5, y: 0 };
+    // Pin a so the constraint pulls b out, not both toward each other.
+    pin(a);
+    // Write a fresh value to a (different from initial) to trigger the solver.
+    a.value = { x: 0.1, y: 0 };
     const av = a.value;
     const bv = b.value;
     expect(Math.hypot(av.x - bv.x, av.y - bv.y)).toBeCloseTo(5, 1);
@@ -49,42 +63,40 @@ describe("AVBD reactive — basic signal binding", () => {
     const a = numSig(3);
     const b = numSig(7);
     eq(s, a, b);
+    pin(a);
 
     let observed = -1;
     const dispose = effect(() => {
-      observed = b.value; // each effect run snapshots b
+      observed = b.value;
     });
-
-    // Initial effect run: observed = 7.
     expect(observed).toBe(7);
 
-    // Drive a: solver should run before the effect, so the effect
-    // sees b ≈ 5 (matching a), not the old 7.
     a.value = 5;
+    // Pre-effect (solver) drains before regular effects, so the
+    // effect sees b ≈ 5 (matching a), not the old 7.
     expect(observed).toBeCloseTo(5, 2);
 
     dispose();
   });
 
-  it("withSolverActive suppresses re-trigger from solver writes", () => {
-    // If the solver's back-write wasn't suppressed, every iteration
-    // would re-queue the cluster and we'd loop. This test verifies a
-    // single drain runs each user write.
+  it("self-mute prevents back-write loops", () => {
+    // If the solver's back-write re-triggered the pre-effect, every
+    // user write would loop. We verify a single user write produces
+    // exactly one extra effect run.
     const s = new Solver({ iterations: 10 });
     const a = numSig(0);
     const b = numSig(0);
     eq(s, a, b);
+    pin(a);
 
     let bWrites = 0;
     const dispose = effect(() => {
       b.value;
       bWrites++;
     });
-    // Initial effect run.
     expect(bWrites).toBe(1);
 
     a.value = 42;
-    // One additional flush triggered by the user write; effect runs once.
     expect(bWrites).toBe(2);
     expect(b.value).toBeCloseTo(42, 2);
 
@@ -98,6 +110,7 @@ describe("AVBD reactive — basic signal binding", () => {
     const c = numSig(0);
     eq(s, a, b);
     eq(s, b, c);
+    pin(a);
 
     let cWrites = 0;
     const dispose = effect(() => {
@@ -111,7 +124,7 @@ describe("AVBD reactive — basic signal binding", () => {
       a.value = 10;
       a.value = 15;
     });
-    // Three writes → one solver run → one effect re-run.
+    // Three writes → one pre-effect run → one effect re-run.
     expect(cWrites).toBe(2);
     expect(c.value).toBeCloseTo(15, 2);
 
@@ -120,73 +133,57 @@ describe("AVBD reactive — basic signal binding", () => {
 });
 
 describe("AVBD reactive — lens composition", () => {
-  it("eq(vecA.x, vecB.x) works through the signals lens chain", () => {
-    // The constraint binds `vecA.x` and `vecB.x` (lens-derived
-    // Num signals). When we write to `vecA`, the signals layer
-    // dirties the lens-derived `vecA.x`; the pin-hook fires for
-    // *vecA.x*, the cluster solver runs, and the back-write to
-    // `vecB.x` propagates through the lens to `vecB`.
+  it("eq(a.x, b.x) propagates writes through the signals fusion chain", () => {
+    // The constraint binds `a.x` and `b.x` (lens-derived Num signals).
+    // Writing the parent `a` dirties `a.x` via the existing `_fusedOf`
+    // chain; the pre-effect's deps include `a.x` so it fires; solver
+    // runs; back-write to `b.x` propagates back to `b` via the lens.
     const s = new Solver({ iterations: 30 });
     const a = vecSig(0, 0);
     const b = vecSig(5, 5);
 
-    // Constrain x-axes only — y-axes are free.
     eq(s, a.x, b.x);
-
-    // Drag a: a.x = 3 → b.x converges to 3, b.y untouched.
+    pin(a.x);
     a.value = { x: 3, y: 0 };
+
     expect(b.value.x).toBeCloseTo(3, 2);
-    // b.y was 5 originally; should be close to 5 still (within solver
-    // numerical noise).
-    expect(b.value.y).toBeCloseTo(5, 1);
+    expect(b.value.y).toBeCloseTo(5, 1); // y untouched by the constraint
   });
 
-  it("dragging the lens-derived child propagates back through the lens", () => {
+  it("writing the lens-derived child propagates through the lens both ways", () => {
     const s = new Solver({ iterations: 30 });
     const a = vecSig(0, 0);
     const b = vecSig(5, 5);
     eq(s, a.x, b.x);
+    pin(a.x);
 
-    // Write directly to a.x — should drag a (via lens bwd), trigger
-    // the solver, and update b.x.
     a.x.value = 7;
     expect(a.value.x).toBeCloseTo(7, 2);
     expect(b.value.x).toBeCloseTo(7, 2);
   });
 });
 
-describe("AVBD reactive — mixed cells + signals", () => {
-  it("inequality on signals", () => {
+describe("AVBD reactive — inequalities", () => {
+  it("leq(a, b) saturates: writing a above b pulls a down", () => {
     const s = new Solver({ iterations: 30 });
-    const a = numSig(5);
+    const a = numSig(3);
     const b = numSig(3);
     leq(s, a, b);
+    pin(b);
 
-    // Trigger an initial solve by writing to b. a should be pulled
-    // down to b.
-    b.value = 3;
-    // Same value, no-op — write a fresh value:
-    b.value = 3.0001;
+    // Push a above b; constraint should saturate.
+    a.value = 10; // expect to be pulled back to ≤ b
+    // Without pinning a, the solver finds the closest feasible point
+    // — so a should land at b.
     expect(a.value).toBeLessThanOrEqual(b.value + 0.01);
 
-    // Raise b — a is free below the boundary, stays put.
-    b.value = 10;
-    expect(a.value).toBeCloseTo(a.value, 1);
-    expect(a.value).toBeLessThanOrEqual(10);
+    // Move b up — a is free below the boundary, stays put.
+    b.value = 20;
+    expect(a.value).toBeLessThanOrEqual(20);
 
     // Drop b below a — a must follow down.
     b.value = -5;
     expect(a.value).toBeLessThanOrEqual(-5 + 0.01);
-  });
-
-  it("signal bound to one solver throws if added to another", () => {
-    const s1 = new Solver();
-    const s2 = new Solver();
-    const x = numSig(0);
-    const y = numSig(0);
-
-    eq(s1, x, y); // x and y bound to s1.
-    expect(() => eq(s2, x, y)).toThrow(/already bound/);
   });
 });
 
@@ -196,8 +193,5 @@ describe("AVBD reactive — type checks", () => {
     const v = vecSig(1, 2);
     expect(n).toBeInstanceOf(Num);
     expect(v).toBeInstanceOf(Vec);
-    // Type-only smoke: factories accept Bindable, our Num/Vec inhabit it.
-    const _suppress: Signal<unknown>[] = [n, v];
-    void _suppress;
   });
 });

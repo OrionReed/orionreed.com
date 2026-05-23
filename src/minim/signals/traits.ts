@@ -32,6 +32,18 @@ export type Lerp<T> = (a: T, b: T, t: number) => T;
 export type Metric<T> = (a: T, b: T) => number;
 export type Equals<T> = (a: T, b: T) => boolean;
 
+/** A flat-buffer codec for a value type. Used by numerical engines
+ *  (constraint solvers, vectorised computations) that need to view
+ *  a typed value as a `dim`-sized slice of a shared `Float64Array`.
+ *
+ *  Read/write by offset into the buffer to avoid object allocations
+ *  in hot loops. */
+export interface Pack<T> {
+  readonly dim: number;
+  read(value: T, into: Float64Array, offset: number): void;
+  write(from: Float64Array, offset: number): T;
+}
+
 // ─── Trait dictionary ────────────────────────────────────────────────
 
 /** Shape of a value class's `static traits` dict. Subclasses fill the
@@ -41,6 +53,7 @@ export interface TraitDict<T> {
   lerp?: Lerp<T>;
   metric?: Metric<T>;
   equals?: Equals<T>;
+  pack?: Pack<T>;
 }
 
 /** Valid keys of `TraitDict`. The set of declarable traits. */
@@ -124,5 +137,10 @@ export function requireMetric<T>(s: Traits<T, "metric">): Metric<T> {
 export function requireEquals<T>(s: Traits<T, "equals">): Equals<T> {
   const v = dictOf<T>(s as unknown as Read<T>).equals;
   if (!v) throw missing(s, "Equals");
+  return v;
+}
+export function requirePack<T>(s: Traits<T, "pack">): Pack<T> {
+  const v = dictOf<T>(s as unknown as Read<T>).pack;
+  if (!v) throw missing(s, "Pack");
   return v;
 }

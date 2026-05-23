@@ -80,68 +80,29 @@ export function setSignalWriteHook(fn: ((sig: Signal<unknown>) => void) | undefi
   };
 }
 
-// ─── Solver / relation integration hooks ─────────────────────────────
+// ─── Pre-effects (for read-write coupled subsystems) ─────────────────
 //
-// Three additive primitives an external relation engine (constraint
-// solver, propagator network, etc.) needs to plug in without forking
-// the signal core:
+// `preEffect(fn)` is a peer of `effect(fn)` with two semantic
+// differences that together make it suitable for systems that read
+// signals AND write back (constraint solvers, propagators, two-way
+// data binding, etc.):
 //
-//   - `setPinHook` registers a callback that fires on user writes.
-//     "User write" = a `Signal.set value` invocation that is *not*
-//     happening inside `withSolverActive`. The relation engine uses
-//     this to track which cells the user is actively pinning so it
-//     can prefer their values when re-solving.
+//   1. **Pre-flush phase.** Pre-effects drain *before* regular
+//      effects, so subscribers reading via `effect()` see post-
+//      processing values, not stale ones.
 //
-//   - `withSolverActive(fn)` runs `fn` with pin notifications
-//     suppressed. Used by the engine while it writes solved values
-//     back to signals — those writes are not user pins, just
-//     propagation.
+//   2. **Self-trigger suppressed.** Writes inside the pre-effect's
+//      run don't re-queue the same pre-effect. Without this, a
+//      read-write effect that touches its own dependencies would
+//      loop forever.
 //
-//   - `addPreFlushTask(fn)` queues `fn` to run during the next
-//     `flush()`, *before* regular effects drain. The relation
-//     engine queues a solver-run task here so cells reach their
-//     solved state before any subscribed UI effect reads them.
-//
-// All three are no-ops with zero allocation when no pin hook is
-// registered — the constraint subsystem is fully opt-in.
+// Pre-effects are otherwise identical to effects: same dependency
+// tracking, same cleanup, same `dispose()` semantics. Multiple pre-
+// effects can coexist; each gets its own self-mute scope.
 
-let pinHook: ((sig: Signal<unknown>) => void) | undefined;
-let solverActive = false;
-const preFlushTasks: (() => void)[] = [];
-
-/** Register the pin-hook callback. The previous hook (if any) is
- *  restored when the returned dispose function is called. */
-export function setPinHook(fn: ((sig: Signal<unknown>) => void) | undefined): () => void {
-  const prev = pinHook;
-  pinHook = fn;
-  return () => {
-    pinHook = prev;
-  };
-}
-
-/** Run `fn` with pin notifications suppressed. Writes to signals
- *  inside `fn` propagate to subscribers normally; they just don't
- *  fire `pinHook`. Re-entrant safe. */
-export function withSolverActive<R>(fn: () => R): R {
-  const prev = solverActive;
-  solverActive = true;
-  try {
-    return fn();
-  } finally {
-    solverActive = prev;
-  }
-}
-
-/** Queue `fn` to run during the next `flush()`, before regular
- *  effects. Multiple tasks queue in registration order. The
- *  returned dispose removes the task if it hasn't fired yet. */
-export function addPreFlushTask(fn: () => void): () => void {
-  preFlushTasks.push(fn);
-  return () => {
-    const i = preFlushTasks.indexOf(fn);
-    if (i >= 0) preFlushTasks.splice(i, 1);
-  };
-}
+const preQueued: (PreEffect | undefined)[] = [];
+let preNotifyIndex = 0;
+let preQueuedLength = 0;
 
 // ─── alien-signals algorithm — link / unlink / propagate / etc. ──────
 
@@ -326,16 +287,15 @@ function flush(): void {
   if (flushing) return;
   flushing = true;
   try {
-    // Outer loop: alternate draining pre-flush tasks (e.g. solver
-    // runs) and effects. Pre-flush tasks may write to signals,
-    // queueing more effects; effects may write to signals, requeueing
-    // more pre-flush tasks. Continue until both queues are empty.
+    // Outer loop: alternate draining pre-effects and regular effects.
+    // A pre-effect's writes can queue more effects; an effect's
+    // writes can queue more pre-effects. Continue until both queues
+    // are empty.
     for (;;) {
-      // Drain pre-flush tasks. We use a length-snapshot loop because
-      // a task's writes may push more tasks during its own run.
-      while (preFlushTasks.length > 0) {
-        const task = preFlushTasks.shift()!;
-        task();
+      while (preNotifyIndex < preQueuedLength) {
+        const pe = preQueued[preNotifyIndex]!;
+        preQueued[preNotifyIndex++] = undefined;
+        pe._run();
       }
       if (notifyIndex >= queuedLength) break;
       while (notifyIndex < queuedLength) {
@@ -350,6 +310,13 @@ function flush(): void {
       queued[notifyIndex++] = undefined;
       e.flags |= F.Watching | F.Recursed;
     }
+    while (preNotifyIndex < preQueuedLength) {
+      const pe = preQueued[preNotifyIndex]!;
+      preQueued[preNotifyIndex++] = undefined;
+      pe.flags |= F.Watching | F.Recursed;
+    }
+    preNotifyIndex = 0;
+    preQueuedLength = 0;
     notifyIndex = 0;
     queuedLength = 0;
     flushing = false;
@@ -916,20 +883,16 @@ export class Signal<T = unknown> implements ReactiveNode {
     if (!same) {
       this.flags = F.Mutable | F.Dirty;
       if (writeHook !== undefined) writeHook(this as Signal<unknown>);
-      // Pin-hook fires on user writes only — solver-driven back-writes
-      // suppress it via `withSolverActive`.
-      let pinned = false;
-      if (pinHook !== undefined && !solverActive) {
-        pinHook(this as Signal<unknown>);
-        pinned = true;
-      }
       const subs = this.subs;
-      if (subs !== undefined) {
-        propagate(subs, runDepth > 0);
-        if (batchDepth === 0) flush();
-      } else if (pinned && batchDepth === 0) {
-        // No subscribers, but a pin-hook fired and queued a pre-flush
-        // task. We still need to drain it.
+      if (subs !== undefined) propagate(subs, runDepth > 0);
+      // Flush if there's any work pending: this signal's subs OR
+      // pre-effects queued from external invalidate calls (e.g. a
+      // constraint solver that registered a new binding earlier
+      // and is waiting for a write to drive a re-subscribe run).
+      if (
+        batchDepth === 0 &&
+        (subs !== undefined || preQueuedLength > preNotifyIndex)
+      ) {
         flush();
       }
     }
@@ -1102,6 +1065,55 @@ class Effect implements ReactiveNode {
   }
 }
 
+// ─── PreEffect (pre-flush phase) ─────────────────────────────────────
+//
+// Identical to Effect except `_notify` enqueues into `preQueued`,
+// which `flush()` drains before regular effects. Self-mute during
+// the pre-effect's own run is already provided by alien-signals'
+// `RecursedCheck` flag — `propagate` skips notifying any sub that
+// has `RecursedCheck` set, which is exactly the state we're in
+// while `fn()` is executing.
+class PreEffect extends Effect {
+  override _notify(): void {
+    // Dedup: only queue if Watching is still set (cleared on first
+    // queue, restored each `_run`). Without this, a propagate
+    // following each of N rapid signal writes would push us to the
+    // queue N times.
+    if (!(this.flags & F.Watching)) return;
+    preQueued[preQueuedLength++] = this;
+    this.flags &= ~F.Watching;
+  }
+
+  override _run(): void {
+    super._run();
+    // Self-write hygiene. While `fn` runs, writes to signals we're
+    // subscribed to set `Pending|Recursed` on us via `propagate`'s
+    // branch 4 (RecursedCheck protects _notify, so we aren't re-
+    // queued at this point). The residual Pending later trips
+    // `shallowPropagate` — when a subscribed signal is read while
+    // still Dirty, it sees `(Pending|Dirty) === Pending` on us and
+    // re-queues. That's a false positive: our writes already
+    // produced the value the reader is about to see. Clear the
+    // residue so subsequent reads don't ping us back.
+    this.flags &= ~(F.Pending | F.Recursed | F.Dirty);
+  }
+
+  /** External re-queue. Used by relation engines that want to
+   *  refresh the preEffect's dependency set after registering
+   *  new tracked signals (e.g. on `solver.bind()`). Sets Dirty so
+   *  `_run` actually executes `fn` (otherwise alien-signals'
+   *  dirty-check would skip a clean effect's body), and pushes
+   *  to the pre-flush queue if not already queued. */
+  invalidate(): void {
+    if (this.flags & F.Watching) {
+      preQueued[preQueuedLength++] = this;
+      this.flags = (this.flags & ~F.Watching) | F.Dirty;
+    } else {
+      this.flags |= F.Dirty;
+    }
+  }
+}
+
 // ─── Public factories ────────────────────────────────────────────────
 
 /** Writable source. Returns a branded `Signal<T>` so `.value =` is
@@ -1127,6 +1139,28 @@ export function lens<T>(getter: () => T, setter: (v: T) => void): Writable<Signa
 export function effect(fn: () => void | (() => void)): () => void {
   const e = new Effect(fn);
   return () => e._unwatched();
+}
+
+/** Handle returned by `preEffect()`. `dispose()` removes the
+ *  pre-effect; `invalidate()` queues it for re-run on the next
+ *  flush (used when external state changes that the pre-effect
+ *  needs to re-subscribe to — e.g. a constraint solver's binding
+ *  list grew). */
+export interface PreEffectHandle {
+  dispose(): void;
+  invalidate(): void;
+}
+
+/** Like `effect()`, but drains in pre-flush phase and self-mutes
+ *  during its own run. The right primitive for read-write coupled
+ *  subsystems (constraint solvers, propagators, two-way bindings).
+ *  See the PreEffect class header for details. */
+export function preEffect(fn: () => void | (() => void)): PreEffectHandle {
+  const e = new PreEffect(fn);
+  return {
+    dispose: () => e._unwatched(),
+    invalidate: () => e.invalidate(),
+  };
 }
 
 export function batch<R>(fn: () => R): R {

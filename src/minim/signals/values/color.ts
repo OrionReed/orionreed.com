@@ -6,7 +6,7 @@
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { computed, lazy, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
-import { type Linear, traits } from "../traits";
+import { type Linear, type Pack, traits } from "../traits";
 import { derived, field, type Wr, type Writable } from "../writable";
 import { Num } from "./num";
 
@@ -25,9 +25,19 @@ export const equals = (a: V, b: V) =>
   a === b || (a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a);
 
 const linearImpl: Linear<V> = { add, sub, scale };
+const packImpl: Pack<V> = {
+  dim: 4,
+  read: (v, a, o) => {
+    a[o] = v.r;
+    a[o + 1] = v.g;
+    a[o + 2] = v.b;
+    a[o + 3] = v.a;
+  },
+  write: (a, o) => ({ r: a[o]!, g: a[o + 1]!, b: a[o + 2]!, a: a[o + 3]! }),
+};
 
 export class Color extends Signal<V> {
-  static traits = traits<V>()({ linear: linearImpl, lerp, equals });
+  static traits = traits<V>()({ linear: linearImpl, lerp, equals, pack: packImpl });
 
   /** Phantom registry brand — `Writable<Color>` resolves to `Wr<Color>`. */
   declare readonly _writable: Wr<Color>;
