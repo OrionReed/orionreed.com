@@ -26,20 +26,30 @@
 // experiments.
 
 export { Cell } from "./cell";
-export { Force, PENALTY_MAX, PENALTY_MIN } from "./force";
-export { Solver, type SolverOpts } from "./solver";
 export {
+  angle,
   BoundsForce,
   clamp,
-  distance,
+  collinear,
   DistanceForce,
-  eq,
+  distance,
   EqForce,
-  lensNum,
+  eq,
+  equalDist,
+  GenericForce,
+  generic,
   LensNumForce,
-  pin,
+  lensNum,
+  midpoint,
+  onCircle,
   PinForce,
-  softTarget,
+  parallel,
+  perpendicular,
+  pin,
+  type ResidualFn,
   SoftTargetForce,
+  softTarget,
   spring,
 } from "./constraints";
+export { Force, PENALTY_MAX, PENALTY_MIN } from "./force";
+export { Solver, type SolverOpts } from "./solver";

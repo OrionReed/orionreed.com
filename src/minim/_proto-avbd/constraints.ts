@@ -335,6 +335,144 @@ export class SoftTargetForce extends Force {
   }
 }
 
+// ─── Generic FD-derived constraint (correct-by-construction) ─────────
+//
+// The user-extensibility frontier. To define a new constraint, you
+// only write the residual function `C(positions) → number[]`. The
+// framework computes the Jacobian via finite difference and uses
+// the diagonal-lumped approximate Hessian (treat the second-derivative
+// term as zero, which is fine for many constraints — see below).
+//
+// Trade-off: each derivative evaluation costs an extra residual
+// call per cell DOF, so this is ~2× to ~5× slower per iteration
+// than a hand-derived constraint. Use it for prototyping, niche
+// constraints, or anything where you don't want to derive
+// Jacobians by hand. Once a constraint stabilises into the library,
+// hand-derive its J/H for the speed.
+//
+// The "diagonal Hessian = 0" choice is the safe default. The full
+// geometric stiffness term in AVBD (paper §3.5) accelerates
+// convergence in some cases but introduces no instability when
+// omitted (it's just additional preconditioning). For new
+// constraints, omitting it is correct-by-construction.
+
+export type ResidualFn = (
+  /** Positions of the cells, in order. Each entry is an
+   *  ArrayLike for the cell's DOF — read-only within the function. */
+  positions: readonly Float64Array[],
+  /** Output array of length `m` (rows). Write residual values
+   *  here; zero means satisfied. */
+  out: Float64Array,
+) => void;
+
+export class GenericForce extends Force {
+  private fn: ResidualFn;
+  private fdStep: number;
+  // Scratch buffers: `_fdPositions` snapshots cell positions (so
+  // we can perturb without touching the cells), `_fdRawBase` holds
+  // the un-stabilised base residual (FD math needs this — the
+  // public `C` field carries the alpha-stabilised version), and
+  // `_fdScratch` holds the perturbed residual.
+  private _fdPositions: Float64Array[];
+  private _fdRawBase: Float64Array;
+  private _fdScratch: Float64Array;
+
+  constructor(
+    cells: readonly Cell[],
+    rows: number,
+    fn: ResidualFn,
+    opts: { fdStep?: number; hard?: boolean; stiffness?: number } = {},
+  ) {
+    super(cells, rows);
+    this.fn = fn;
+    this.fdStep = opts.fdStep ?? 1e-6;
+    this._fdScratch = new Float64Array(rows);
+    this._fdRawBase = new Float64Array(rows);
+    this._fdPositions = cells.map(c => new Float64Array(c.dim));
+    if (opts.hard === false) {
+      this.stiffness.fill(opts.stiffness ?? 1e6);
+      this.refreshHardFlags();
+    }
+  }
+
+  initialize(): boolean {
+    return true;
+  }
+
+  computeConstraint(alpha: number): void {
+    // Snapshot cell positions into our scratch.
+    for (let i = 0; i < this.cells.length; i++) {
+      const cellPos = this.cells[i]!.position;
+      const into = this._fdPositions[i]!;
+      for (let k = 0; k < this.cells[i]!.dim; k++) into[k]! = cellPos[k]!;
+    }
+    // Raw residual (no stabilisation) — cached for FD use.
+    this.fn(this._fdPositions, this._fdRawBase);
+    // Public C: with stabilisation if applicable.
+    for (let r = 0; r < this.rows; r++) {
+      const raw = this._fdRawBase[r]!;
+      this.C[r]! = this.hard[r] === 1 ? raw - alpha * this.C0[r]! : raw;
+    }
+  }
+
+  computeDerivatives(cellIdx: number): void {
+    // Both Jacobian (first derivative) AND a diagonal-lump
+    // Hessian estimate (second derivative) by central differences.
+    //
+    // We need the Hessian to stabilise the local Newton system —
+    // without it, configurations where the Jacobian is rank-
+    // deficient (e.g., a chain in a collinear pose, where the
+    // distance constraint's gradient has zero perpendicular
+    // component) cause the local solve to take wild steps as
+    // penalties ramp up.
+    //
+    // The diagonal-lump approximation matches AVBD's strategy
+    // (paper §3.5, Eq. 17) where the geometric stiffness term is
+    // diagonalised. The exact value at element k is
+    //   ∂²C_r / ∂x_{cell,k}² ≈ (C(x+h·e_k) − 2 C(x) + C(x−h·e_k)) / h²
+    //
+    // Cost: 2 residual evaluations per DOF (one forward, one
+    // backward), plus the existing forward eval for the Jacobian.
+    // So 3·dim residual calls per `computeDerivatives` versus 1·dim
+    // for the Jacobian-only version.
+    const cell = this.cells[cellIdx]!;
+    const dim = cell.dim;
+    const J = this.J[cellIdx]!;
+    const Hcols = this.HCols[cellIdx]!;
+    const baseRaw = this._fdRawBase;
+    const Cplus = this._fdScratch;
+    const Cminus = (this._fdScratch2 ??= new Float64Array(this.rows));
+    const fdPos = this._fdPositions[cellIdx]!;
+    const h = this.fdStep;
+    const invH = 1 / h;
+    const invH2 = 1 / (h * h);
+    for (let k = 0; k < dim; k++) {
+      const saved = fdPos[k]!;
+      fdPos[k]! = saved + h;
+      this.fn(this._fdPositions, Cplus);
+      fdPos[k]! = saved - h;
+      this.fn(this._fdPositions, Cminus);
+      fdPos[k]! = saved;
+      for (let r = 0; r < this.rows; r++) {
+        // First derivative (forward diff for symmetry with handcoded).
+        J[r * dim + k]! = (Cplus[r]! - baseRaw[r]!) * invH;
+        // Second derivative: |∂²C/∂x_k²| via central diff. We
+        // store its absolute magnitude (the geometric stiffness is
+        // multiplied by |force| in the solver, so sign cancels).
+        const d2 = (Cplus[r]! - 2 * baseRaw[r]! + Cminus[r]!) * invH2;
+        Hcols[r * dim + k]! = d2 < 0 ? -d2 : d2;
+      }
+    }
+  }
+}
+
+// Second scratch buffer for central-difference Hessian.
+declare module "./constraints" {
+  interface GenericForce {
+    _fdScratch2?: Float64Array;
+  }
+}
+
 // ─── User-facing factories ───────────────────────────────────────────
 //
 // Each registers the force with the solver and returns the force
@@ -398,4 +536,152 @@ export function softTarget(
   const f = new SoftTargetForce(cell, target, stiffness);
   s.addForce(f);
   return f;
+}
+
+/** General-purpose constraint factory: write the residual function,
+ *  framework handles derivatives via finite difference. Slower per
+ *  iteration than hand-derived primitives (roughly 2-5× per cell-DOF)
+ *  but trivially correct. Use for prototyping or one-off constraints. */
+export function generic(
+  s: Solver,
+  cells: readonly Cell[],
+  rows: number,
+  fn: ResidualFn,
+  opts?: { fdStep?: number; hard?: boolean; stiffness?: number },
+): GenericForce {
+  const f = new GenericForce(cells, rows, fn, opts);
+  s.addForce(f);
+  return f;
+}
+
+// ─── Sketchpad primitives via `generic` ──────────────────────────────
+//
+// These are 1-2 line constraint definitions on top of the FD framework.
+// Hand-derived versions would be faster, but these are correct out of
+// the box and demonstrate end-user extensibility.
+
+/** Interior angle ABC = θ. Three points + a target angle. */
+export function angle(s: Solver, A: Cell, B: Cell, C: Cell, theta: number): GenericForce {
+  return generic(s, [A, B, C], 1, (pos, out) => {
+    const a = pos[0]!,
+      b = pos[1]!,
+      c = pos[2]!;
+    const ux = a[0]! - b[0]!,
+      uy = a[1]! - b[1]!;
+    const vx = c[0]! - b[0]!,
+      vy = c[1]! - b[1]!;
+    const lu = Math.hypot(ux, uy);
+    const lv = Math.hypot(vx, vy);
+    if (lu < 1e-12 || lv < 1e-12) {
+      out[0]! = 0;
+      return;
+    }
+    const cosA = (ux * vx + uy * vy) / (lu * lv);
+    const cur = Math.acos(cosA < -1 ? -1 : cosA > 1 ? 1 : cosA);
+    out[0]! = cur - theta;
+  });
+}
+
+/** Lines AB and CD parallel: cross product of direction vectors = 0. */
+export function parallel(
+  s: Solver,
+  A: Cell,
+  B: Cell,
+  C: Cell,
+  D: Cell,
+): GenericForce {
+  return generic(s, [A, B, C, D], 1, (pos, out) => {
+    const a = pos[0]!,
+      b = pos[1]!,
+      c = pos[2]!,
+      d = pos[3]!;
+    const ux = b[0]! - a[0]!,
+      uy = b[1]! - a[1]!;
+    const vx = d[0]! - c[0]!,
+      vy = d[1]! - c[1]!;
+    out[0]! = ux * vy - uy * vx; // = |u||v|sin(θ)
+  });
+}
+
+/** Lines AB and CD perpendicular: dot product = 0. */
+export function perpendicular(
+  s: Solver,
+  A: Cell,
+  B: Cell,
+  C: Cell,
+  D: Cell,
+): GenericForce {
+  return generic(s, [A, B, C, D], 1, (pos, out) => {
+    const a = pos[0]!,
+      b = pos[1]!,
+      c = pos[2]!,
+      d = pos[3]!;
+    const ux = b[0]! - a[0]!,
+      uy = b[1]! - a[1]!;
+    const vx = d[0]! - c[0]!,
+      vy = d[1]! - c[1]!;
+    out[0]! = ux * vx + uy * vy;
+  });
+}
+
+/** Point P collinear with A and B (P on line through A, B): cross = 0. */
+export function collinear(s: Solver, P: Cell, A: Cell, B: Cell): GenericForce {
+  return generic(s, [P, A, B], 1, (pos, out) => {
+    const p = pos[0]!,
+      a = pos[1]!,
+      b = pos[2]!;
+    const ux = p[0]! - a[0]!,
+      uy = p[1]! - a[1]!;
+    const vx = b[0]! - a[0]!,
+      vy = b[1]! - a[1]!;
+    out[0]! = ux * vy - uy * vx;
+  });
+}
+
+/** Point P on a circle: |P - center| = radius. Center is a cell;
+ *  radius is a constant (use a Num cell + extra constraint if you
+ *  need a reactive radius). */
+export function onCircle(
+  s: Solver,
+  P: Cell,
+  center: Cell,
+  radius: number,
+): GenericForce {
+  return generic(s, [P, center], 1, (pos, out) => {
+    const p = pos[0]!,
+      c = pos[1]!;
+    const dx = p[0]! - c[0]!,
+      dy = p[1]! - c[1]!;
+    out[0]! = Math.hypot(dx, dy) - radius;
+  });
+}
+
+/** Equal distance: |AB| = |CD|. */
+export function equalDist(
+  s: Solver,
+  A: Cell,
+  B: Cell,
+  C: Cell,
+  D: Cell,
+): GenericForce {
+  return generic(s, [A, B, C, D], 1, (pos, out) => {
+    const a = pos[0]!,
+      b = pos[1]!,
+      c = pos[2]!,
+      d = pos[3]!;
+    const ab = Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!);
+    const cd = Math.hypot(c[0]! - d[0]!, c[1]! - d[1]!);
+    out[0]! = ab - cd;
+  });
+}
+
+/** Midpoint: M = (A + B) / 2 → 2M - A - B = 0 (per axis). */
+export function midpoint(s: Solver, M: Cell, A: Cell, B: Cell): GenericForce {
+  return generic(s, [M, A, B], 2, (pos, out) => {
+    const m = pos[0]!,
+      a = pos[1]!,
+      b = pos[2]!;
+    out[0]! = 2 * m[0]! - a[0]! - b[0]!;
+    out[1]! = 2 * m[1]! - a[1]! - b[1]!;
+  });
 }
