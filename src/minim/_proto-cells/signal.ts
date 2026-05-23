@@ -80,30 +80,6 @@ export function setSignalWriteHook(fn: ((sig: Signal<unknown>) => void) | undefi
   };
 }
 
-// ─── Pre-effects (for read-write coupled subsystems) ─────────────────
-//
-// `preEffect(fn)` is a peer of `effect(fn)` with two semantic
-// differences that together make it suitable for systems that read
-// signals AND write back (constraint solvers, propagators, two-way
-// data binding, etc.):
-//
-//   1. **Pre-flush phase.** Pre-effects drain *before* regular
-//      effects, so subscribers reading via `effect()` see post-
-//      processing values, not stale ones.
-//
-//   2. **Self-trigger suppressed.** Writes inside the pre-effect's
-//      run don't re-queue the same pre-effect. Without this, a
-//      read-write effect that touches its own dependencies would
-//      loop forever.
-//
-// Pre-effects are otherwise identical to effects: same dependency
-// tracking, same cleanup, same `dispose()` semantics. Multiple pre-
-// effects can coexist; each gets its own self-mute scope.
-
-const preQueued: (PreEffect | undefined)[] = [];
-let preNotifyIndex = 0;
-let preQueuedLength = 0;
-
 // ─── alien-signals algorithm — link / unlink / propagate / etc. ──────
 
 function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
@@ -298,22 +274,10 @@ function flush(): void {
   if (flushing) return;
   flushing = true;
   try {
-    // Outer loop: alternate draining pre-effects and regular effects.
-    // A pre-effect's writes can queue more effects; an effect's
-    // writes can queue more pre-effects. Continue until both queues
-    // are empty.
-    for (;;) {
-      while (preNotifyIndex < preQueuedLength) {
-        const pe = preQueued[preNotifyIndex]!;
-        preQueued[preNotifyIndex++] = undefined;
-        pe._run();
-      }
-      if (notifyIndex >= queuedLength) break;
-      while (notifyIndex < queuedLength) {
-        const e = queued[notifyIndex]!;
-        queued[notifyIndex++] = undefined;
-        e._run();
-      }
+    while (notifyIndex < queuedLength) {
+      const e = queued[notifyIndex]!;
+      queued[notifyIndex++] = undefined;
+      e._run();
     }
   } finally {
     while (notifyIndex < queuedLength) {
@@ -321,13 +285,6 @@ function flush(): void {
       queued[notifyIndex++] = undefined;
       e.flags |= F.Watching | F.Recursed;
     }
-    while (preNotifyIndex < preQueuedLength) {
-      const pe = preQueued[preNotifyIndex]!;
-      preQueued[preNotifyIndex++] = undefined;
-      pe.flags |= F.Watching | F.Recursed;
-    }
-    preNotifyIndex = 0;
-    preQueuedLength = 0;
     notifyIndex = 0;
     queuedLength = 0;
     flushing = false;
@@ -429,6 +386,154 @@ export interface SignalOptions<T = unknown> {
   equals?: Equals<T>;
 }
 
+// ─── Lens law classification ────────────────────────────────────────
+//
+// Every fused layer carries one of four algebraic classes. Composing
+// laws follows a small lattice (`fuseLaw` below). The point is *honest
+// classification*, not enforcement — the runtime trusts the caller's
+// declaration the same way the previous `bwdStateless: boolean` did,
+// but with a four-way refinement that gives correct semantics across
+// chains involving stateful or projective layers.
+//
+// - **Iso** — `bwd ∘ fwd = id` and `fwd ∘ bwd = id`. `bwd` ignores `s`.
+//   `add`, `sub`, `scale`, `affine`, `through(f, g)` with f/g inverses.
+// - **Projection** — `fwd` idempotent, `bwd = fwd` (or lands in `fwd`'s
+//   image). `bwd` ignores `s`. `clamp`, `quantize`. PutGet within the
+//   image; outside it the projection silently corrects.
+// - **Stateful** — `bwd(v, s)` reads `s` to compute the new root state
+//   (e.g., spread-replace). `lensTo`'s spread-replace, `cyclic`'s
+//   nearest-representative pick.
+// - **Opaque** — hand-built lens with no fusion contract (`Signal.install`,
+//   `polar`). Never fuses; subsequent layers stack as separate cells.
+//
+// `field()` lenses are a refinement of Stateful where `bwd` has the
+// shape `(v, s) => ({ ...s, [key]: v })`. Fusion of consecutive field
+// edges collapses to a path-aware spread-replace setter that's roughly
+// 2x faster than the generic stateful composition.
+export type LensLaw = "iso" | "projection" | "stateful" | "opaque";
+
+/** Compose two laws bottom-up (prior law of the chain below, local law
+ *  of the new layer being added). Returns the law of the resulting
+ *  composite. The fusion algorithm in `_fuse` uses this to decide
+ *  whether the chain is still stateless (Iso/Projection compose to
+ *  stateless setters) or stateful (any Stateful in the chain pollutes
+ *  upward). Opaque is sticky: once a layer is opaque, no further
+ *  fusion occurs through it. */
+function fuseLaw(prior: LensLaw, local: LensLaw): LensLaw {
+  if (prior === "opaque" || local === "opaque") return "opaque";
+  if (prior === "stateful" || local === "stateful") return "stateful";
+  if (prior === "projection" || local === "projection") return "projection";
+  return "iso";
+}
+
+/** Predicate: does this law's composed `bwd` ignore the receiver state?
+ *  Iso and Projection do; Stateful does not. The setter inlines without
+ *  `parent.peek()` / `priorFwd(s)` when this returns true. */
+function lawStateless(l: LensLaw): boolean {
+  return l === "iso" || l === "projection";
+}
+
+// ─── Field-path specialisation ──────────────────────────────────────
+//
+// Field chains (`tr.translate.x`, `box.center.x`, …) are the regression
+// site for fusion: the generic stateful composition runs three user
+// closures + `parent.peek()` per write. A path-aware setter walks the
+// path in a single closure with one peek and N spreads — measurably
+// faster (and matches the hand-rolled nested-lens baseline).
+//
+// Length-specialised fns hit the common cases (1-3 deep) without a
+// loop; deeper chains fall back to `pathSetN`. Hot-path inlining
+// matters here — V8 has no trouble with these specific shapes.
+
+function makeFieldGetter<T>(path: readonly (string | number | symbol)[]): (s: unknown) => T {
+  if (path.length === 1) {
+    const k = path[0]!;
+    return s => (s as Record<string | number | symbol, unknown>)[k] as T;
+  }
+  if (path.length === 2) {
+    const k0 = path[0]!;
+    const k1 = path[1]!;
+    return s => {
+      const a = (s as Record<string | number | symbol, unknown>)[k0] as Record<
+        string | number | symbol,
+        unknown
+      >;
+      return a[k1] as T;
+    };
+  }
+  if (path.length === 3) {
+    const k0 = path[0]!;
+    const k1 = path[1]!;
+    const k2 = path[2]!;
+    return s => {
+      const a = (s as Record<string | number | symbol, unknown>)[k0] as Record<
+        string | number | symbol,
+        unknown
+      >;
+      const b = a[k1] as Record<string | number | symbol, unknown>;
+      return b[k2] as T;
+    };
+  }
+  return s => {
+    let cur: unknown = s;
+    for (let i = 0; i < path.length; i++) {
+      cur = (cur as Record<string | number | symbol, unknown>)[path[i]!];
+    }
+    return cur as T;
+  };
+}
+
+function makeFieldSetter<T>(
+  parent: Signal<unknown>,
+  path: readonly (string | number | symbol)[],
+): (v: T) => void {
+  if (path.length === 1) {
+    const k = path[0]!;
+    return v => {
+      const s = parent.peek() as object;
+      parent.value = { ...s, [k]: v };
+    };
+  }
+  if (path.length === 2) {
+    const k0 = path[0]!;
+    const k1 = path[1]!;
+    return v => {
+      const s = parent.peek() as Record<string | number | symbol, unknown>;
+      const a = s[k0] as object;
+      parent.value = { ...s, [k0]: { ...a, [k1]: v } };
+    };
+  }
+  if (path.length === 3) {
+    const k0 = path[0]!;
+    const k1 = path[1]!;
+    const k2 = path[2]!;
+    return v => {
+      const s = parent.peek() as Record<string | number | symbol, unknown>;
+      const a = s[k0] as Record<string | number | symbol, unknown>;
+      const b = a[k1] as object;
+      parent.value = { ...s, [k0]: { ...a, [k1]: { ...b, [k2]: v } } };
+    };
+  }
+  return v => {
+    const s = parent.peek();
+    parent.value = pathSetN(s, path, 0, v);
+  };
+}
+
+function pathSetN(
+  s: unknown,
+  path: readonly (string | number | symbol)[],
+  i: number,
+  v: unknown,
+): unknown {
+  if (i === path.length - 1) {
+    return { ...(s as object), [path[i]!]: v };
+  }
+  const k = path[i]!;
+  const inner = (s as Record<string | number | symbol, unknown>)[k];
+  return { ...(s as object), [k]: pathSetN(inner, path, i + 1, v) };
+}
+
 // ─── The Signal class ──────────────────────────────────────────────
 
 /** Single reactive primitive. Mode is determined by which fields are set.
@@ -476,26 +581,25 @@ export class Signal<T = unknown> implements ReactiveNode {
   _unwatchedHook?: () => void;
   /** Fusion tag. Marks this cell as a value-space pipeline (fwd, bwd?)
    *  on top of a root `parent`. Subsequent `.through()`, `.lensTo()`,
-   *  or `.deriveTo()` calls on this cell collapse the chain into a
-   *  single cell pointing at the same root, composing fwd/bwd
+   *  `.deriveTo()`, or `field()` calls on this cell collapse the chain
+   *  into a single cell pointing at the same root, composing fwd/bwd
    *  in value-space. Internal.
    *
-   *  Generalised from the original endo-only `_throughOf`: `fwd`/`bwd`
-   *  may now bridge cross-type chains (`lensTo`/`deriveTo`). `bwd` is
-   *  `undefined` for fused-RO cells (deriveTo chains); `.lensTo()` on
-   *  a fused-RO cell throws at construction time.
+   *  `law` is the algebraic class of the composite chain — see
+   *  `LensLaw` below. The class controls fusion (Iso/Projection chains
+   *  fuse into a single inlined setter; the first non-Iso layer is a
+   *  fusion barrier above which we still build a real cell).
    *
-   *  `bwdStateless: true` is a hint from the caller that this chain's
-   *  bwd doesn't read its `s` parameter. `.through()` sets it (endo
-   *  bwds are stateless `(v) => v`); `.lensTo()` does not. When set on
-   *  every layer of a chain, fusion skips both `parent.peek()` and
-   *  `priorFwd(s)` in the setter — recovers the cost of threading
-   *  receiver-state that nobody reads. */
+   *  `fieldPath`, when set, identifies the bwd as a chain of "set
+   *  field at key" operations, which `_fuse` collapses into a single
+   *  spread-replace closure. This is the headline optimisation for
+   *  `tr.translate.x` and similar paths. */
   _fusedOf?: {
     parent: Signal<unknown>;
     fwd: (s: unknown) => T;
     bwd?: (v: T, s: unknown) => unknown;
-    bwdStateless?: boolean;
+    law: LensLaw;
+    fieldPath?: readonly (string | number | symbol)[];
   };
 
   constructor(initial: T, opts?: SignalOptions<T>) {
@@ -629,7 +733,7 @@ export class Signal<T = unknown> implements ReactiveNode {
       ) => Signal<Of<InstanceType<C>>>,
       fwd as (s: unknown) => Of<InstanceType<C>>,
       (u, s) => bwd(u, s as T),
-      false,
+      "stateful",
     ) as InstanceType<C>;
   }
 
@@ -649,6 +753,8 @@ export class Signal<T = unknown> implements ReactiveNode {
         ...args: never[]
       ) => Signal<Of<InstanceType<C>>>,
       fwd as (s: unknown) => Of<InstanceType<C>>,
+      undefined,
+      "iso",
     ) as InstanceType<C>;
   }
 
@@ -657,84 +763,80 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  after `.through(f, b)` collapses to one cell with composed fns,
    *  avoiding per-chain allocation and dep-graph nodes.
    *
+   *  By default the layer is tagged **Iso** (assumed bijection). For
+   *  layers that are lossy or stateful, pass `law` explicitly:
+   *  - `"projection"` — `clamp`, `quantize` (idempotent, fwd = bwd).
+   *  - `"stateful"`   — `cyclic` (bwd reads receiver state via `s`).
+   *  Iso/Projection chains fuse to a stateless setter; any Stateful
+   *  layer threads `priorFwd(s)` honestly through the chain.
+   *
    *  Smart-dispatch on RO receivers: if `this` is a fused-RO chain
    *  (e.g., from `.deriveTo()`), the bwd has no place to land —
-   *  drop it and build a computed via `fwd` only. This matches the
-   *  receiver's writability at runtime and aligns with the `: this`
-   *  return type (RO receiver → RO result). `.scale(2)` on
-   *  `box.center` reads correctly; writes would throw "Cannot write
-   *  to a Computed" at the result cell. */
-  through(this: Signal<T>, fwd: (v: T) => T, bwd: (v: T) => T): this {
+   *  drop it and build a computed via `fwd` only. */
+  through(
+    this: Signal<T>,
+    fwd: (v: T) => T,
+    bwd: (v: T, s: T) => T,
+    law: LensLaw = "iso",
+  ): this {
     const Cls = this.constructor as new (...args: never[]) => Signal<T>;
     if (this._fusedOf !== undefined && this._fusedOf.bwd === undefined) {
       return Signal._fuse(
         this as Signal<unknown>,
         Cls,
         fwd as (s: unknown) => T,
+        undefined,
+        law,
       ) as unknown as this;
     }
-    // Through's bwd is stateless `(v) => v`; adapt to the unified
-    // `(v, s) => s'` shape by ignoring the parent-state argument.
-    // `bwdStateless: true` lets fusion skip `parent.peek()` and
-    // `priorFwd(s)` in the setter when the whole chain is stateless.
     return Signal._fuse(
       this as Signal<unknown>,
       Cls,
       fwd as (s: unknown) => T,
-      (v, _s) => bwd(v),
-      true,
+      bwd as (v: unknown, s: unknown) => unknown,
+      law,
     ) as unknown as this;
   }
 
   /** Internal fusion helper used by `.through()` / `.lensTo()` /
-   *  `.deriveTo()`. Collapses receiver-anchored chains in value-space.
+   *  `.deriveTo()` / `field()`. Collapses receiver-anchored chains
+   *  in value-space.
    *
-   *  Semantics:
-   *    - parent = receiver's root (chases `_fusedOf.parent`).
-   *    - composedFwd : root_value → own_value (= fwdLocal ∘ priorFwd).
-   *    - composedBwd : (own, root) → root' (= priorBwd ∘ bwdLocal),
-   *                    threading priorFwd(root) when bwdLocal needs
-   *                    the receiver's current state. Skipped when the
-   *                    chain is `bwdStateless`-throughout.
-   *    - tags result with `_fusedOf` so further fusion sees it.
+   *  Semantics: parent = receiver's root (chases `_fusedOf.parent`);
+   *  composedFwd reads `fwdLocal(priorFwd(rootValue))`; composedBwd
+   *  threads receiver state through stateful layers. The chain's
+   *  composite `law` is `fuseLaw(prior.law, localLaw)` and decides
+   *  whether the setter inlines without `parent.peek()`.
    *
-   *  `newStateless` (caller-supplied): does `bwdLocal` ignore its `s`
-   *  argument? `.through()` passes `true`, `.lensTo()` `false`. The
-   *  resulting chain is stateless iff this layer and every prior
-   *  layer is — then the setter inlines without `parent.peek()` /
-   *  `priorFwd(s)`. Any stateful layer poisons the flag upward.
-   *
-   *  Performance: the getter/setter closures installed on the cell
-   *  call the composed fns directly, eliminating a wrapper-closure
-   *  layer (V8 inlines two-level user closures fine but bails on
-   *  three). The `_fusedOf` tag stores the composed fns by reference
-   *  so downstream fusion can compose against them without rebuilding.
+   *  Field-path specialisation: if both prior and local layers are
+   *  field-set patterns (`bwd: (v, s) => ({ ...s, [key]: v })`,
+   *  `fwd: s => s[key]`), we tag the result with `fieldPath` so that
+   *  the next fusion atop it can still recognise the path and emit
+   *  a single inlined spread-replace setter for the whole chain —
+   *  the headline win for `tr.translate.x` and similar.
    *
    *  Error: a writable view on top of a fused-RO receiver (e.g.
    *  `.deriveTo(...).lensTo(...)`) has no bwd path. We throw a
-   *  `TypeError` at construction. TS already prevents this at the
-   *  type level (deriveTo returns bare RO `Cls`); the runtime check
-   *  is defensive against escape-hatch casts. */
+   *  `TypeError` at construction. */
   static _fuse<U>(
     receiver: Signal<unknown>,
     Cls: new (...args: never[]) => Signal<U>,
     fwdLocal: (s: unknown) => U,
     bwdLocal?: (v: U, s: unknown) => unknown,
-    newStateless: boolean = false,
+    localLaw: LensLaw = "iso",
+    /** Optional: the `key` if `bwdLocal` is a field-set pattern. */
+    fieldKey?: string | number | symbol,
   ): Signal<U> {
     const prior = receiver._fusedOf as
       | {
           parent: Signal<unknown>;
           fwd: (s: unknown) => unknown;
           bwd?: (v: unknown, s: unknown) => unknown;
-          bwdStateless?: boolean;
+          law: LensLaw;
+          fieldPath?: readonly (string | number | symbol)[];
         }
       | undefined;
 
-    // Eager error: writable view on a read-only chain has no
-    // composable bwd path. Throw at construction so the stack trace
-    // points to the `.lensTo`/`.through` site, not a much-later
-    // write. TS rejects this at the type level for normal callers.
     if (bwdLocal !== undefined && prior !== undefined && prior.bwd === undefined) {
       throw new TypeError(
         "Signal: cannot install a writable view on top of a read-only fused chain. " +
@@ -745,48 +847,41 @@ export class Signal<T = unknown> implements ReactiveNode {
     const parent = prior !== undefined ? prior.parent : receiver;
     const priorFwd = prior?.fwd;
     const priorBwd = prior?.bwd;
-    // Fused chain is stateless iff this layer AND every prior layer
-    // is. No prior == trivially stateless above. RO cells (no bwd at
-    // this layer) propagate the prior flag unchanged — the flag is
-    // about the chain's *bwd potential*, and an RO layer contributes
-    // nothing stateful since it contributes no bwd at all.
-    const priorStateless = prior?.bwdStateless ?? true;
-    const fusedStateless = bwdLocal === undefined ? priorStateless : newStateless && priorStateless;
+    const priorLaw: LensLaw = prior?.law ?? "iso";
+    const composedLaw =
+      bwdLocal === undefined ? priorLaw : fuseLaw(priorLaw, localLaw);
+    const stateless = bwdLocal === undefined ? lawStateless(priorLaw) : lawStateless(composedLaw);
 
     const composedFwd: (s: unknown) => U = priorFwd ? s => fwdLocal(priorFwd(s)) : fwdLocal;
 
-    // composedBwd is stored on `_fusedOf` for downstream fusion to
-    // compose against. The stateless variant skips `priorFwd(s)`
-    // (which would be passed to bwds that ignore it).
-    const composedBwd: ((v: U, s: unknown) => unknown) | undefined =
-      bwdLocal === undefined
-        ? undefined
-        : priorBwd === undefined
-          ? bwdLocal
-          : fusedStateless
-            ? (v, s) => priorBwd(bwdLocal(v, s), s)
-            : (v, s) => priorBwd(bwdLocal(v, priorFwd!(s)), s);
-
-    // Setter is installed with the composition inlined directly into
-    // the setter body — calling `composedBwd(v, parent.peek())` would
-    // add a closure-call layer that V8 can't always inline (the bwd
-    // composition captures 3 fns from lexical scope). For the common
-    // field-chain case this matters: micro-benchmarks show the
-    // wrapping layer doubles write latency vs the hand-rolled
-    // nested-lens baseline.
+    // ── Field-path specialisation ──
     //
-    // Four cases (by `bwdLocal` presence × `priorBwd` presence ×
-    // statelessness): RO install, 1-level stateless, 1-level stateful,
-    // 2+-level stateless, 2+-level stateful. We collapse the four
-    // writable cases by stateless-first dispatch; in the stateless
-    // arms, both `parent.peek()` and `priorFwd(s)` are skipped
-    // because nothing downstream reads them.
+    // When fusing `field(K2)` on top of a chain whose `bwd` is also a
+    // field-path, we can collapse the entire chain into a single
+    // spread-replace closure that walks the path. Skip the priorFwd /
+    // bwdLocal / priorBwd dispatch entirely.
+    let composedPath: readonly (string | number | symbol)[] | undefined;
+    if (fieldKey !== undefined) {
+      composedPath = prior?.fieldPath ? [...prior.fieldPath, fieldKey] : [fieldKey];
+    }
+
     let inst: Signal<U>;
-    if (bwdLocal === undefined) {
+
+    if (composedPath !== undefined && bwdLocal !== undefined) {
+      // ── Field-path fast path ──
+      // Build a path-walking getter/setter without the user-closure
+      // composition. ~2x faster than the generic stateful setter on
+      // 2-deep field chains.
+      const path = composedPath;
+      const getter = makeFieldGetter<U>(path);
+      const setter = makeFieldSetter<U>(parent, path);
+      inst = Signal.install(Cls, () => getter(parent.value), setter);
+    } else if (bwdLocal === undefined) {
+      // RO cell (deriveTo). No setter.
       inst = Signal.install(Cls, () => composedFwd(parent.value));
     } else if (priorBwd === undefined) {
-      // 1-level case (no prior to compose with).
-      inst = fusedStateless
+      // 1-level writable.
+      inst = stateless
         ? Signal.install(
             Cls,
             () => composedFwd(parent.value),
@@ -802,8 +897,8 @@ export class Signal<T = unknown> implements ReactiveNode {
             },
           );
     } else {
-      // 2+-level case: inline the composition into the setter.
-      inst = fusedStateless
+      // 2+-level writable: inline the composition into the setter.
+      inst = stateless
         ? Signal.install(
             Cls,
             () => composedFwd(parent.value),
@@ -820,13 +915,53 @@ export class Signal<T = unknown> implements ReactiveNode {
             },
           );
     }
+
+    // composedBwd: stored on `_fusedOf` for downstream fusion to
+    // compose against (when subsequent .through()/.lensTo() lands on
+    // this cell).
+    const composedBwd: ((v: U, s: unknown) => unknown) | undefined =
+      bwdLocal === undefined
+        ? undefined
+        : priorBwd === undefined
+          ? bwdLocal
+          : stateless
+            ? (v, s) => priorBwd(bwdLocal(v, s), s)
+            : (v, s) => priorBwd(bwdLocal(v, priorFwd!(s)), s);
+
     (inst as Signal<U>)._fusedOf = {
       parent,
       fwd: composedFwd,
       bwd: composedBwd,
-      bwdStateless: fusedStateless,
+      law: composedLaw,
+      fieldPath: composedPath,
     };
     return inst as Signal<U>;
+  }
+
+  /** Field lens onto `parent.value[key]`. Optimised path: when chained
+   *  on top of another `fieldOf` lens, the fused setter walks the full
+   *  path in a single closure instead of composing per-layer spread-
+   *  replace user closures.
+   *
+   *  Use via `field(parent, "key", Cls)` from `./writable.ts`; this
+   *  static is the engine entry point. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo
+  static fieldOf<C extends new (...args: never[]) => Signal<any>>(
+    parent: Signal<unknown>,
+    key: string | number | symbol,
+    Cls: C,
+  ): InstanceType<C> {
+    return Signal._fuse(
+      parent,
+      Cls as unknown as new (
+        ...args: never[]
+      ) => Signal<Of<InstanceType<C>>>,
+      s => (s as Record<string | number | symbol, unknown>)[key] as Of<InstanceType<C>>,
+      (v, s) =>
+        ({ ...(s as object), [key]: v }) as unknown,
+      "stateful",
+      key,
+    ) as InstanceType<C>;
   }
 
   /** Read with tracking. Branches on signal vs computed mode. */
@@ -918,11 +1053,7 @@ export class Signal<T = unknown> implements ReactiveNode {
       if (writeHook !== undefined) writeHook(this as Signal<unknown>);
       const subs = this.subs;
       if (subs !== undefined) propagate(subs, runDepth > 0, excluding);
-      // Flush if there's any work pending: this signal's subs OR
-      // pre-effects queued from external invalidate calls (e.g. a
-      // constraint solver that registered a new binding earlier
-      // and is waiting for a write to drive a re-subscribe run).
-      if (batchDepth === 0 && (subs !== undefined || preQueuedLength > preNotifyIndex)) {
+      if (batchDepth === 0 && subs !== undefined) {
         flush();
       }
     }
@@ -1095,55 +1226,6 @@ class Effect implements ReactiveNode {
   }
 }
 
-// ─── PreEffect (pre-flush phase) ─────────────────────────────────────
-//
-// Identical to Effect except `_notify` enqueues into `preQueued`,
-// which `flush()` drains before regular effects. Self-mute during
-// the pre-effect's own run is already provided by alien-signals'
-// `RecursedCheck` flag — `propagate` skips notifying any sub that
-// has `RecursedCheck` set, which is exactly the state we're in
-// while `fn()` is executing.
-class PreEffect extends Effect {
-  override _notify(): void {
-    // Dedup: only queue if Watching is still set (cleared on first
-    // queue, restored each `_run`). Without this, a propagate
-    // following each of N rapid signal writes would push us to the
-    // queue N times.
-    if (!(this.flags & F.Watching)) return;
-    preQueued[preQueuedLength++] = this;
-    this.flags &= ~F.Watching;
-  }
-
-  override _run(): void {
-    super._run();
-    // Self-write hygiene. While `fn` runs, writes to signals we're
-    // subscribed to set `Pending|Recursed` on us via `propagate`'s
-    // branch 4 (RecursedCheck protects _notify, so we aren't re-
-    // queued at this point). The residual Pending later trips
-    // `shallowPropagate` — when a subscribed signal is read while
-    // still Dirty, it sees `(Pending|Dirty) === Pending` on us and
-    // re-queues. That's a false positive: our writes already
-    // produced the value the reader is about to see. Clear the
-    // residue so subsequent reads don't ping us back.
-    this.flags &= ~(F.Pending | F.Recursed | F.Dirty);
-  }
-
-  /** External re-queue. Used by relation engines that want to
-   *  refresh the preEffect's dependency set after registering
-   *  new tracked signals (e.g. on `solver.bind()`). Sets Dirty so
-   *  `_run` actually executes `fn` (otherwise alien-signals'
-   *  dirty-check would skip a clean effect's body), and pushes
-   *  to the pre-flush queue if not already queued. */
-  invalidate(): void {
-    if (this.flags & F.Watching) {
-      preQueued[preQueuedLength++] = this;
-      this.flags = (this.flags & ~F.Watching) | F.Dirty;
-    } else {
-      this.flags |= F.Dirty;
-    }
-  }
-}
-
 // ─── Public factories ────────────────────────────────────────────────
 
 /** Writable source. Returns a branded `Signal<T>` so `.value =` is
@@ -1169,28 +1251,6 @@ export function lens<T>(getter: () => T, setter: (v: T) => void): Writable<Signa
 export function effect(fn: () => void | (() => void)): () => void {
   const e = new Effect(fn);
   return () => e._unwatched();
-}
-
-/** Handle returned by `preEffect()`. `dispose()` removes the
- *  pre-effect; `invalidate()` queues it for re-run on the next
- *  flush (used when external state changes that the pre-effect
- *  needs to re-subscribe to — e.g. a constraint solver's binding
- *  list grew). */
-export interface PreEffectHandle {
-  dispose(): void;
-  invalidate(): void;
-}
-
-/** Like `effect()`, but drains in pre-flush phase and self-mutes
- *  during its own run. The right primitive for read-write coupled
- *  subsystems (constraint solvers, propagators, two-way bindings).
- *  See the PreEffect class header for details. */
-export function preEffect(fn: () => void | (() => void)): PreEffectHandle {
-  const e = new PreEffect(fn);
-  return {
-    dispose: () => e._unwatched(),
-    invalidate: () => e.invalidate(),
-  };
 }
 
 export function batch<R>(fn: () => R): R {
