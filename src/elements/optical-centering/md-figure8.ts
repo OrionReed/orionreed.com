@@ -8,7 +8,7 @@
 // to the cursor (typically by sliding along the curve, until a
 // branch flip near the self-intersection at the origin).
 
-import { Cluster, gap, generic } from "@minim/constraints";
+import { constraints, gap, generic } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -53,7 +53,7 @@ export class MdFigure8 extends Diagram {
 
     const positions: WVec[] = [];
     const params: WNum[] = [];
-    const cluster = new Cluster({ iterations: 16 });
+    const cluster = constraints({ iterations: 16 });
 
     for (let i = 0; i < N; i++) {
       const t0 = (i / N) * 2 * Math.PI;

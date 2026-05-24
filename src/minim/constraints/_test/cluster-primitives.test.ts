@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { vec } from "../../signals";
 import {
   angle,
-  Cluster,
+  constraints,
   collinear,
   distance,
   equalDist,
@@ -21,7 +21,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const A = vec(1, 0);
     const B = vec(0, 0);
     const C = vec(0, 1.5);
-    const s = new Cluster({ iterations: 30 });
+    const s = constraints({ iterations: 30 });
     s.add(angle(A, B, C, Math.PI / 2));
     s.add(distance(B, C, 1));
     s.pin(A);
@@ -37,7 +37,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const B = vec(3, 0);
     const C = vec(0, 1);
     const D = vec(3, 2);
-    const s = new Cluster({ iterations: 30 });
+    const s = constraints({ iterations: 30 });
     s.add(parallel(A, B, C, D));
     s.pin(A);
     s.pin(B);
@@ -50,7 +50,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const A = vec(0, 0);
     const B = vec(10, 5);
     const P = vec(3, 5);
-    const s = new Cluster({ iterations: 50 });
+    const s = constraints({ iterations: 50 });
     s.add(collinear(P, A, B));
     s.pin(A);
     s.pin(B);
@@ -63,7 +63,7 @@ describe("AVBD sketchpad primitives via FD", () => {
   it("onCircle: P on unit circle around origin", () => {
     const center = vec(0, 0);
     const P = vec(2, 0);
-    const s = new Cluster({ iterations: 30 });
+    const s = constraints({ iterations: 30 });
     s.add(onCircle(P, center, 1));
     s.pin(center);
     center.value = { x: 0.0001, y: 0 };
@@ -75,7 +75,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const B = vec(3, 0);
     const C = vec(0, 0);
     const D = vec(5, 0);
-    const s = new Cluster({ iterations: 30 });
+    const s = constraints({ iterations: 30 });
     s.add(equalDist(A, B, C, D));
     s.pin(A);
     s.pin(B);
@@ -88,7 +88,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const A = vec(0, 0);
     const B = vec(4, 6);
     const M = vec(0, 0);
-    const s = new Cluster({ iterations: 20 });
+    const s = constraints({ iterations: 20 });
     s.add(midpoint(M, A, B));
     s.pin(A);
     s.pin(B);
@@ -101,7 +101,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const A = vec(0, 0);
     const B = vec(5, 0);
     const C = vec(10, 0);
-    const s = new Cluster({ iterations: 20 });
+    const s = constraints({ iterations: 20 });
     s.add(
       generic([A, B, C], 2, (pos, out) => {
         const a = pos[0]!,
@@ -123,7 +123,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const B = vec(1, 0);
     const C = vec(0, 0.5);
     const D = vec(2, 1);
-    const s = new Cluster({ iterations: 30 });
+    const s = constraints({ iterations: 30 });
     s.add(perpendicular(A, B, C, D));
     s.pin(A);
     s.pin(B);

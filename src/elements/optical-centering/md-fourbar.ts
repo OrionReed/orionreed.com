@@ -6,7 +6,7 @@
 // over four DOF (A, B), the mechanism has one internal degree of
 // freedom — drag a joint anywhere and the rest of the loop follows.
 
-import { Cluster, distance } from "@minim/constraints";
+import { constraints, distance } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -38,19 +38,19 @@ export class MdFourbar extends Diagram {
     const rocker = 60;
     const coupler = Math.hypot(B.value.x - A.value.x, B.value.y - A.value.y);
 
-    const cluster = new Cluster({ iterations: 24 });
-    cluster.add(distance(O1, A, crank));
-    cluster.add(distance(A, B, coupler));
-    cluster.add(distance(B, O2, rocker));
+    const cluster = constraints({ iterations: 24 });
+    cluster.add(distance(O1, A, crank), distance(A, B, coupler), distance(B, O2, rocker));
     cluster.pin(O1);
     cluster.pin(O2);
 
-    s(line(O1, O2, { thin: true, opacity: 0.18 }));
-    s(line(O1, A));
-    s(line(A, B));
-    s(line(B, O2));
-
-    s(circle(O1, 4, { fill: true }), circle(O2, 4, { fill: true }));
+    s(
+      line(O1, O2, { thin: true, opacity: 0.18 }),
+      line(O1, A),
+      line(A, B),
+      line(B, O2),
+      circle(O1, 4, { fill: true }),
+      circle(O2, 4, { fill: true }),
+    );
 
     const handles: ReadonlyArray<[WVec, ReturnType<typeof handle>]> = [
       [A, s(handle(A, { fill: "#5b8def", r: 7 }))],

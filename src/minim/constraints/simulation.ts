@@ -1,6 +1,6 @@
-// simulation.ts — time-stepping wrapper around `Cluster`.
+// simulation.ts — time-stepping wrapper around `Constraints`.
 //
-// Wraps a `Cluster`'s solver with velocity, gravity, and a `tick`
+// Wraps a `Constraints`'s solver with velocity, gravity, and a `tick`
 // that advances by `dt` seconds. The simulation owns the time
 // loop and disposes the cluster's reactive driver on construction;
 // signal sync (read all bound signals before tick, write solved
@@ -9,7 +9,7 @@
 
 import type { Tick } from "../core/anim";
 import type { Pack, Signal } from "../signals";
-import type { Cluster } from "./cluster";
+import type { Constraints } from "./cluster";
 
 export interface SimulationOpts {
   /** External acceleration (e.g. gravity). Length must be ≥ the
@@ -38,7 +38,7 @@ export interface SimulationOpts {
 }
 
 export class Simulation {
-  readonly cluster: Cluster;
+  readonly cluster: Constraints;
   readonly aExt: Float64Array;
   damping: number;
   adaptiveWarmstart: boolean;
@@ -47,7 +47,7 @@ export class Simulation {
   private _velocityCapacity: number;
   private _aExtNormSq: number;
 
-  constructor(cluster: Cluster, opts: SimulationOpts = {}) {
+  constructor(cluster: Constraints, opts: SimulationOpts = {}) {
     this.cluster = cluster;
     const grav = opts.gravity;
     if (grav) {
@@ -120,7 +120,7 @@ export class Simulation {
     const velocities = this.velocities;
     const prevVelocities = this.prevVelocities;
     const N = solver.cellCount;
-    // Cluster's _bindings is structurally compatible.
+    // Constraints's _bindings is structurally compatible.
     // biome-ignore lint/suspicious/noExplicitAny: heterogeneous binding registry
     const bindings = (this.cluster as any)._bindings as readonly (
       | { sig: Signal<any>; pack: Pack<any> }

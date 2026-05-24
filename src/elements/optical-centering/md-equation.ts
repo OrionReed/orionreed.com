@@ -8,7 +8,7 @@
 // surface closest to the current values, which feels like
 // "redistribute the violation among the un-pinned cells."
 
-import { Cluster, clamp, generic } from "@minim/constraints";
+import { clamp, constraints, generic } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -40,7 +40,7 @@ export class MdEquation extends Diagram {
     const b = num(4);
     const c = num(5);
 
-    const cluster = new Cluster({ iterations: 24 });
+    const cluster = constraints({ iterations: 24 });
     cluster.add(
       generic([a, b, c], 1, (pos, out) => {
         const av = pos[0]![0]!;
@@ -48,10 +48,10 @@ export class MdEquation extends Diagram {
         const cv = pos[2]![0]!;
         out[0]! = av * av + bv * bv - cv * cv;
       }),
+      clamp(a, 0.5, A_MAX),
+      clamp(b, 0.5, A_MAX),
+      clamp(c, 0.5, C_MAX),
     );
-    cluster.add(clamp(a, 0.5, A_MAX));
-    cluster.add(clamp(b, 0.5, A_MAX));
-    cluster.add(clamp(c, 0.5, C_MAX));
 
     const tracks = [
       { sig: a, max: A_MAX, color: "#5b8def", label: "a", y: 130 },

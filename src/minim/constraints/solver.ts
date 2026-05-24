@@ -1,4 +1,4 @@
-// solver.ts — Augmented Vertex Block Descent numerical kernel.
+// solver.ts — Augmented Vertex Block Descent (AVBD) numerical kernel.
 //
 // SOA layout: per-cell state lives in packed Float64/Uint typed-
 // array buffers indexed by integer cell id. No per-cell heap

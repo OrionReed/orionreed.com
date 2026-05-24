@@ -10,7 +10,7 @@
 // solver is doing 24 wall constraints + 276 pairwise gap
 // constraints every frame.
 
-import { Cluster, gap, inside, Simulation } from "@minim/constraints";
+import { constraints, gap, inside, Simulation } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -57,7 +57,7 @@ export class MdParticles extends Diagram {
       particles.push(vec(xLo + R + rand() * (W - 2 * R), yLo + R + rand() * (H * 0.4)));
     }
 
-    const cluster = new Cluster({ iterations: 14 });
+    const cluster = constraints({ iterations: 14 });
     for (const p of particles) cluster.add(inside(p, xLo + R, yLo + R, xHi - R, yHi - R));
     for (let i = 0; i < N; i++) {
       for (let j = i + 1; j < N; j++) cluster.add(gap(particles[i]!, particles[j]!, 2 * R));

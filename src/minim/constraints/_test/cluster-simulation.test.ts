@@ -3,18 +3,18 @@
 import { describe, expect, it } from "vitest";
 import type { Tick } from "../../core/anim";
 import { vec } from "../../signals";
-import { Cluster, distance, Simulation, spring } from "../index";
+import { constraints, distance, Simulation, spring } from "../index";
 
 describe("Simulation — composes solver + time-stepping", () => {
   it("velocity is per-cell, lazily allocated; mass=0 cells skip update", () => {
     const a = vec(0, 0);
     const b = vec(1, 0);
-    const s = new Cluster();
+    const s = constraints();
     s.add(distance(a, b, 1)); // forces them both bound
     s.pin(a);
     const sim = new Simulation(s, { gravity: [0, -10] });
-    const aId = s.bind(a);
-    const bId = s.bind(b);
+    const aId = s._bind(a);
+    const bId = s._bind(b);
     expect(sim.velocity(aId).length).toBe(2);
     expect(sim.velocity(bId).length).toBe(2);
 
@@ -26,7 +26,7 @@ describe("Simulation — composes solver + time-stepping", () => {
   it("pendulum: bob swings under gravity, distance preserved", () => {
     const anchor = vec(0, 0);
     const bob = vec(1, 0);
-    const s = new Cluster({ iterations: 8, alpha: 0.99 });
+    const s = constraints({ iterations: 8, alpha: 0.99 });
     s.add(distance(anchor, bob, 1));
     s.pin(anchor);
 
@@ -43,7 +43,7 @@ describe("Simulation — composes solver + time-stepping", () => {
   it("animate() is a Tick-driven generator", () => {
     const a = vec(0, 0);
     const b = vec(0, 0);
-    const s = new Cluster({ iterations: 4, alpha: 0.99 });
+    const s = constraints({ iterations: 4, alpha: 0.99 });
     s.add(spring(a, b, 0, 1e3));
     s.pin(a);
     const sim = new Simulation(s, { gravity: [0, -10] });
@@ -60,7 +60,7 @@ describe("Simulation — composes solver + time-stepping", () => {
     const buildSim = () => {
       const top = vec(0, 0);
       const bob = vec(0, -1);
-      const s = new Cluster({ iterations: 6, alpha: 0.99 });
+      const s = constraints({ iterations: 6, alpha: 0.99 });
       s.add(distance(top, bob, 1));
       s.pin(top);
       const sim = new Simulation(s, { gravity: [0.5, 0] });
@@ -77,7 +77,7 @@ describe("Simulation — composes solver + time-stepping", () => {
   });
 
   it("static editing: bare solver with raw cell ids works without Simulation", () => {
-    const s = new Cluster({ iterations: 20 });
+    const s = constraints({ iterations: 20 });
     const a = s.solver.addCell(2, [0, 0]);
     s.solver.addCell(2, [5, 0]);
     s.solver.setMass(a, 0);

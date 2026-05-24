@@ -16,7 +16,7 @@
 //     the rotational degree of freedom that a single pin otherwise
 //     leaves behind, and centers the layout in the viewport.
 
-import { Cluster, gap, repel, Simulation, softTarget, spring } from "@minim/constraints";
+import { constraints, gap, repel, Simulation, softTarget, spring } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -91,7 +91,7 @@ export class MdGraph extends Diagram {
       nodes.push(vec(cx + r * Math.cos(a), cy + r * Math.sin(a)));
     }
 
-    const cluster = new Cluster({ iterations: 12, postStabilize: true });
+    const cluster = constraints({ iterations: 12, postStabilize: true });
 
     for (const e of EDGES) cluster.add(spring(nodes[e.a]!, nodes[e.b]!, REST, SPRING_K));
     for (let i = 0; i < N; i++) {

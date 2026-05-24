@@ -7,7 +7,7 @@
 // and the quad becomes a rigid body that only translates and
 // rotates as a whole.
 
-import { Cluster, distance, type Relation } from "@minim/constraints";
+import { constraints, distance, type Relation } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -36,7 +36,7 @@ export class MdRigid extends Diagram {
     const C = vec(cx + 80, cy + 60);
     const D = vec(cx - 80, cy + 60);
 
-    const cluster = new Cluster({ iterations: 16 });
+    const cluster = constraints({ iterations: 16 });
     cluster.add(distance(A, B, 160));
     cluster.add(distance(B, C, 120));
     cluster.add(distance(C, D, 160));
@@ -96,7 +96,7 @@ export class MdRigid extends Diagram {
       }),
       label(
         view.bottom.up(16),
-        "4 side constraints + 1 toggleable diagonal — same Cluster, structural change at runtime",
+        "4 side constraints + 1 toggleable diagonal — same constraints, structural change at runtime",
         { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );

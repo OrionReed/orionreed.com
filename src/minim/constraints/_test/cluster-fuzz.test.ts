@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { type Num, num, type Vec, vec, type Writable } from "../../signals";
-import { Cluster, distance, eq, leq } from "../index";
+import { constraints, distance, eq, leq } from "../index";
 import { forAll } from "./_fuzz";
 
 type WVec = Writable<Vec>;
@@ -23,7 +23,7 @@ describe("AVBD fuzz — invariants over random scenes", () => {
       const headTailDist = Math.hypot(tailX, tailY);
       if (headTailDist > N - 1) return;
 
-      const s = new Cluster({ iterations: 30 });
+      const s = constraints({ iterations: 30 });
       for (let i = 1; i < N; i++) s.add(distance(cells[i - 1]!, cells[i]!, 1));
       s.pin(cells[0]!);
       s.pin(cells[N - 1]!);
@@ -50,7 +50,7 @@ describe("AVBD fuzz — invariants over random scenes", () => {
       const bInit = rng.float(-10, 10);
       const a = num(aInit);
       const b = num(bInit);
-      const s = new Cluster({ iterations: 20 });
+      const s = constraints({ iterations: 20 });
       s.add(leq(a, b));
       s.pin(b);
       b.value = bInit + 1e-9; // trigger
@@ -65,7 +65,7 @@ describe("AVBD fuzz — invariants over random scenes", () => {
       for (let i = 0; i < N; i++) cells.push(num(rng.float(-5, 5)));
       const target = rng.float(-10, 10);
 
-      const s = new Cluster({ iterations: 30 });
+      const s = constraints({ iterations: 30 });
       for (let i = 1; i < N; i++) s.add(eq(cells[i - 1]!, cells[i]!));
       s.pin(cells[0]!);
       cells[0]!.value = target;

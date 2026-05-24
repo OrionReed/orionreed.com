@@ -12,7 +12,7 @@
 // by their constraints, killing the residual jitter that
 // supported bodies otherwise produce.
 
-import { bend, Cluster, Simulation, Strength, spring } from "@minim/constraints";
+import { bend, constraints, Simulation, Strength, spring } from "@minim/constraints";
 import {
   Anchor,
   Diagram,
@@ -48,7 +48,7 @@ export class MdCloth extends Diagram {
       grid.push(row);
     }
 
-    const cluster = new Cluster({ iterations: 12, postStabilize: true });
+    const cluster = constraints({ iterations: 12, postStabilize: true });
 
     // Edge springs — resist stretching.
     for (let j = 0; j < H; j++) {

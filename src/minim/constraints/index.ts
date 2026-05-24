@@ -34,12 +34,14 @@
 // (2024) "Vertex Block Descent". 2D demo at
 // https://github.com/savant117/avbd-demo2d.
 
-export { Cluster, defineRelation, type Relation } from "./cluster";
+export { Constraints, constraints, defineRelation, type Relation } from "./cluster";
 export {
   angle,
+  type BoundsRelation,
   bend,
   clamp,
   collinear,
+  type DistanceRelation,
   distance,
   eq,
   equalDist,
@@ -53,9 +55,9 @@ export {
   onCircle,
   parallel,
   perpendicular,
-  pin,
   repel,
   rightAngle,
+  type SpringRelation,
   softTarget,
   spring,
 } from "./factories";

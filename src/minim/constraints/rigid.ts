@@ -16,7 +16,7 @@
 // https://github.com/savant117/avbd-demo2d/blob/main/source/collide.cpp
 
 import { type Num, num, type Vec, vec, type Writable } from "../signals";
-import { Cluster } from "./cluster";
+import { Constraints, constraints } from "./cluster";
 import { Force } from "./force";
 import { Simulation, type SimulationOpts } from "./simulation";
 import type { Solver, SolverOpts } from "./solver";
@@ -893,7 +893,7 @@ export interface RigidWorldOpts extends SolverOpts, SimulationOpts {
 }
 
 export class RigidWorld {
-  readonly cluster: Cluster;
+  readonly cluster: Constraints;
   readonly simulation: Simulation;
   readonly bodies: Body[] = [];
   /** Active manifolds keyed by `(idA, idB)` pair (idA < idB). */
@@ -909,7 +909,7 @@ export class RigidWorld {
   private accumulator = 0;
 
   constructor(opts: RigidWorldOpts = {}) {
-    this.cluster = new Cluster({
+    this.cluster = constraints({
       iterations: opts.iterations ?? 10,
       alpha: opts.alpha ?? 0.99,
       beta: opts.beta ?? 1e5,

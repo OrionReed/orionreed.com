@@ -7,7 +7,7 @@
 // inner vertex and the bracket articulates while keeping its
 // vertices on their respective loci.
 
-import { Cluster, collinear, distance, equalDist, onCircle, rightAngle } from "@minim/constraints";
+import { constraints, collinear, distance, equalDist, onCircle, rightAngle } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -43,7 +43,7 @@ export class MdIncidence extends Diagram {
     const Q = vec(cx + 145, cy); // on the line
     const M = vec(cx - 30, cy); // free inner vertex
 
-    const cluster = new Cluster({ iterations: 24 });
+    const cluster = constraints({ iterations: 24 });
     cluster.add(onCircle(P, center, RADIUS));
     cluster.add(collinear(Q, L1, L2));
     cluster.add(distance(P, M, BAR));

@@ -4,14 +4,14 @@
 
 import { describe, expect, it } from "vitest";
 import { type Vec, vec, type Writable } from "../../signals";
-import { Cluster, distance } from "../index";
+import { constraints, distance } from "../index";
 
 type WVec = Writable<Vec>;
 
 function buildChain(N: number, iters: number) {
   const cells: WVec[] = [];
   for (let i = 0; i < N; i++) cells.push(vec(i, 0));
-  const c = new Cluster({ iterations: iters });
+  const c = constraints({ iterations: iters });
   for (let i = 1; i < N; i++) c.add(distance(cells[i - 1]!, cells[i]!, 1));
   c.pin(cells[0]!);
   c.pin(cells[N - 1]!);
@@ -87,7 +87,7 @@ describe("relate3 perf sanity", () => {
       for (let i = 0; i < W; i++) row.push(vec(i * SP, j * SP));
       grid.push(row);
     }
-    const c = new Cluster({ iterations: 16 });
+    const c = constraints({ iterations: 16 });
     for (let j = 0; j < H; j++)
       for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.STRONG));
     for (let i = 0; i < W; i++)
@@ -146,7 +146,7 @@ describe("relate3 perf sanity", () => {
       [5, 7],
       [8, 9],
     ];
-    const c = new Cluster({ iterations: 12 });
+    const c = constraints({ iterations: 12 });
     for (const [a, b] of edges) c.add(spring(nodes[a]!, nodes[b]!, REST, STIFFNESS));
     for (let i = 0; i < N; i++)
       for (let j = i + 1; j < N; j++) c.add(gap(nodes[i]!, nodes[j]!, MIN_GAP));
@@ -194,7 +194,7 @@ describe("relate3 perf sanity", () => {
       for (let i = 0; i < W; i++) row.push(vec(i, j));
       cells.push(row);
     }
-    const c = new Cluster({ iterations: 5 });
+    const c = constraints({ iterations: 5 });
     for (let j = 0; j < H; j++)
       for (let i = 1; i < W; i++) c.add(distance(cells[j]![i - 1]!, cells[j]![i]!, 1));
     for (let i = 0; i < W; i++)

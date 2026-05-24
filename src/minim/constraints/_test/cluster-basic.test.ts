@@ -2,13 +2,13 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { batch, effect, num, type Vec, vec, type Writable } from "../../signals";
-import { Cluster, distance, eq, lensNum, leq } from "../index";
+import { constraints, distance, eq, lensNum, leq } from "../index";
 
 type WVec = Writable<Vec>;
 
 describe("Cluster (writeBack) — basic correctness", () => {
   it("eq: pinned a, write a → b matches", () => {
-    const c = new Cluster({ iterations: 10 });
+    const c = constraints({ iterations: 10 });
     const a = num(3);
     const b = num(7);
     c.add(eq(a, b));
@@ -18,7 +18,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
   });
 
   it("distance: pinned a, drag → b at distance 5", () => {
-    const c = new Cluster({ iterations: 20 });
+    const c = constraints({ iterations: 20 });
     const a = vec(0, 0);
     const b = vec(1, 0);
     c.add(distance(a, b, 5));
@@ -28,7 +28,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
   });
 
   it("lensNum: pin b, write b → a back-propagates to b/2", () => {
-    const c = new Cluster({ iterations: 30 });
+    const c = constraints({ iterations: 30 });
     const a = num(0);
     const b = num(10);
     c.add(lensNum(a, b, x => 2 * x));
@@ -38,7 +38,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
   });
 
   it("leq: a above b is pulled down", () => {
-    const c = new Cluster({ iterations: 30 });
+    const c = constraints({ iterations: 30 });
     const a = num(5);
     const b = num(3);
     c.add(leq(a, b));
@@ -50,7 +50,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
 
 describe("Cluster (writeBack) — structural single-fire", () => {
   it("one user write = one solver step (NOT two)", () => {
-    const c = new Cluster({ iterations: 20 });
+    const c = constraints({ iterations: 20 });
     const a = num(0);
     const b = num(0);
     c.add(eq(a, b));
@@ -69,7 +69,7 @@ describe("Cluster (writeBack) — structural single-fire", () => {
   });
 
   it("batch coalesces multiple writes; cluster runs once", () => {
-    const c = new Cluster({ iterations: 20 });
+    const c = constraints({ iterations: 20 });
     const a = num(0);
     const b = num(0);
     c.add(eq(a, b));
@@ -89,7 +89,7 @@ describe("Cluster (writeBack) — structural single-fire", () => {
   });
 
   it("subscriber sees post-solve value via standard effect()", () => {
-    const c = new Cluster({ iterations: 20 });
+    const c = constraints({ iterations: 20 });
     const a = num(3);
     const b = num(7);
     c.add(eq(a, b));
@@ -117,7 +117,7 @@ describe("Cluster (writeBack) — lens composition", () => {
   // propagates normally). Nothing about the lens is replaced.
 
   it("eq(a.x, b.x) with parent write propagates correctly", () => {
-    const c = new Cluster({ iterations: 30 });
+    const c = constraints({ iterations: 30 });
     const a = vec(0, 0);
     const b = vec(5, 5);
     c.add(eq(a.x, b.x));
@@ -128,7 +128,7 @@ describe("Cluster (writeBack) — lens composition", () => {
   });
 
   it("eq(a.x, b.x) with lens-child write back-propagates", () => {
-    const c = new Cluster({ iterations: 30 });
+    const c = constraints({ iterations: 30 });
     const a = vec(0, 0);
     const b = vec(5, 5);
     c.add(eq(a.x, b.x));
@@ -144,7 +144,7 @@ describe("Simulation — numerical robustness", () => {
     const { distance, Simulation } = await import("../index");
     const a = vec(0, 0);
     const b = vec(10, 0);
-    const c = new Cluster();
+    const c = constraints();
     c.add(distance(a, b, 10));
     c.pin(a);
     const sim = new Simulation(c, { gravity: [0, 100] });
@@ -168,7 +168,7 @@ describe("Simulation — numerical robustness", () => {
     }
     // `postStabilize` + adaptive warm-start (default-on under gravity)
     // are the AVBD physics defaults; this test pins them in.
-    const c = new Cluster({ iterations: 12, postStabilize: true });
+    const c = constraints({ iterations: 12, postStabilize: true });
     for (let j = 0; j < H; j++)
       for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM));
     for (let i = 0; i < W; i++)
@@ -210,7 +210,7 @@ describe("Simulation — numerical robustness", () => {
       grid.push(row);
     }
     // Mirrors the `<md-cloth>` demo's actual config.
-    const c = new Cluster({ iterations: 10 });
+    const c = constraints({ iterations: 10 });
     for (let j = 0; j < H; j++)
       for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM));
     for (let i = 0; i < W; i++)
@@ -235,7 +235,7 @@ describe("Simulation — numerical robustness", () => {
       };
       sim.tick(1 / 60);
     }
-    const dragId = c.bind(drag);
+    const dragId = c._bind(drag);
     c.solver.setMass(dragId, 1);
 
     for (let f = 0; f < 600; f++) sim.tick(1 / 60);
@@ -273,7 +273,7 @@ describe("Simulation — numerical robustness", () => {
     const LINK = 12;
     const links: WVec[] = [];
     for (let i = 0; i < N; i++) links.push(vec(i * LINK, 0));
-    const c = new Cluster({ iterations: 12, alpha: 0.99 });
+    const c = constraints({ iterations: 12, alpha: 0.99 });
     for (let i = 1; i < N; i++) c.add(distance(links[i - 1]!, links[i]!, LINK));
     c.pin(links[0]!);
 
@@ -292,7 +292,7 @@ describe("Simulation — numerical robustness", () => {
 describe("Cluster — numerical robustness", () => {
   it("4-bar dragged into infeasible workspace stays bounded (lambda cap)", async () => {
     const { distance } = await import("../index");
-    const c = new Cluster({ iterations: 16 });
+    const c = constraints({ iterations: 16 });
     const O1 = vec(-100, 0);
     const O2 = vec(100, 0);
     const A = vec(-100, -80);
@@ -324,7 +324,7 @@ describe("Cluster — numerical robustness", () => {
 
   it("aggressive random drag stays finite (no NaN poisoning)", async () => {
     const { distance, perpendicular } = await import("../index");
-    const c = new Cluster({ iterations: 8 });
+    const c = constraints({ iterations: 8 });
     const A = vec(0, 0);
     const B = vec(100, 0);
     const C = vec(100, 60);
@@ -359,7 +359,7 @@ describe("Cluster — numerical robustness", () => {
 
 describe("Cluster — constraint lifecycle", () => {
   it("cluster.remove(rel) removes the constraint at the next solve", () => {
-    const c = new Cluster({ iterations: 20 });
+    const c = constraints({ iterations: 20 });
     const a = num(0);
     const b = num(0);
     const link = c.add(eq(a, b));
@@ -373,7 +373,7 @@ describe("Cluster — constraint lifecycle", () => {
   });
 
   it("cluster.remove(rel) clears the underlying force", () => {
-    const c = new Cluster({ iterations: 20 });
+    const c = constraints({ iterations: 20 });
     const a = vec(0, 0);
     const b = vec(1, 0);
     const link = c.add(distance(a, b, 3));
@@ -382,7 +382,6 @@ describe("Cluster — constraint lifecycle", () => {
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(3, 1);
 
     c.remove(link);
-    c.update();
     expect(c.solver.forces.length).toBe(0);
   });
 });

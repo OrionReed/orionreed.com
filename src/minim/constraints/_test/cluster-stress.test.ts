@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import { type Vec, vec, type Writable } from "../../signals";
-import { Cluster, distance, Simulation, spring } from "../index";
+import { constraints, distance, Simulation, spring } from "../index";
 
 type WVec = Writable<Vec>;
 
@@ -20,7 +20,7 @@ describe("AVBD stress — high stiffness ratios (paper §3.4)", () => {
     const top = vec(0, 0);
     const A = vec(0, -1);
     const B = vec(0, -2);
-    const s = new Cluster({ iterations: 5, alpha: 0.99 });
+    const s = constraints({ iterations: 5, alpha: 0.99 });
     s.add(spring(top, A, 1, 1e4));
     s.add(spring(A, B, 1, 1));
     s.pin(top);
@@ -38,7 +38,7 @@ describe("AVBD stress — high stiffness ratios (paper §3.4)", () => {
   it("hard constraint satisfied without numerical pathology", () => {
     const a = vec(0, 0);
     const b = vec(3, 0);
-    const s = new Cluster({ iterations: 20 });
+    const s = constraints({ iterations: 20 });
     s.add(distance(a, b, 5));
     s.pin(a);
     a.value = { x: 0.0001, y: 0 };
@@ -56,7 +56,7 @@ describe("AVBD stress — long chain stability (paper §1, §3.4)", () => {
     const N = 32;
     const cells: WVec[] = [];
     for (let i = 0; i < N; i++) cells.push(vec(i, 0));
-    const s = new Cluster({ iterations: 20 });
+    const s = constraints({ iterations: 20 });
     for (let i = 1; i < N; i++) s.add(distance(cells[i - 1]!, cells[i]!, 1));
     s.pin(cells[0]!);
     s.pin(cells[N - 1]!);
@@ -82,7 +82,7 @@ describe("AVBD stress — long chain stability (paper §1, §3.4)", () => {
     const N = 32;
     const cells: WVec[] = [];
     for (let i = 0; i < N; i++) cells.push(vec(i, 0));
-    const s = new Cluster({ iterations: 1 });
+    const s = constraints({ iterations: 1 });
     for (let i = 1; i < N; i++) s.add(distance(cells[i - 1]!, cells[i]!, 1));
     s.pin(cells[0]!);
     s.pin(cells[N - 1]!);

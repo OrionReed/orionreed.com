@@ -2,44 +2,46 @@
 //
 // Each factory is a free function that constructs a `Relation` —
 // plain data + an attach/detach lifecycle. Pass them to a cluster
-// via `cluster.add(rel)`:
+// via `c.add(rel)`:
 //
-//   const cluster = new Cluster();
-//   cluster.add(distance(a, b, 100));
-//   cluster.add(spring(b, c, 60, 200));
+//   const c = constraints({ iterations: 24 });
+//   c.add(distance(a, b, 100));
+//   const [r1, r2] = c.add(spring(b, c, 60, 200), gap(a, c, 30));
 //
-// Or in the constructor (sugar for repeated `add`):
-//   const cluster = new Cluster();
-//   const r1 = cluster.add(distance(a, b, 100));
-//   cluster.remove(r1); // dynamic remove
+// Mutable parameters: factories that take a numeric arg also accept
+// a `Signal<number>`. Either form gives a relation whose underlying
+// param can be mutated reactively — the cluster's settle re-fires
+// on parameter changes and the inner solve picks up the new value:
 //
-// The runtime contract on every signal arg is "value class declares
-// the `pack` trait"; this is checked by `cluster.bind` when the
+//   const len = signal(100);
+//   const r = c.add(distance(a, b, len));
+//   len.value = 50;        // ← re-solves with new rest length
+//   r.rest = 75;           // ← also works (writes to the same signal)
+//
+// The runtime contract on every cell-signal arg is "value class
+// declares the `pack` trait"; this is checked by `c._bind` when the
 // relation is attached. We accept `Signal<any>` rather than a more
 // typed `Signal<unknown>` because TS treats the `setter` slot as
 // contravariant, which makes `Writable<Num>` unassignable to
 // `Signal<unknown>`.
 //
-// Solver caveats worth remembering when authoring scenes:
+// Solver caveats:
 //
-// - **Multi-solution constraints can branch-flip.** Constraints like
-//   `onCircle`, `distance`, `equalDist` admit multiple geometrically
-//   valid configurations. AVBD's local Newton + warm-start follows
-//   the nearest basin of attraction frame-to-frame; under fast drags
-//   that cross a critical point, the solver can jump to the alternate
-//   solution. There's no branch-tracking layer here.
-//
-// - **Infeasible configurations saturate, not explode.** `λ` capped
-//   at `LAMBDA_MAX` (see force.ts header).
-//
-// - **Duplicate cells hurt.** If the same cell appears twice in a
-//   `generic` factory's `cells` array (e.g. `[A, B, B, C]`), the FD
-//   path treats the two slots as independent and the local Newton
-//   LHS misses cross terms. Use `rightAngle(A, B, C)` instead of
-//   `perpendicular(A, B, B, C)` and similar.
+// - **Multi-solution constraints can branch-flip** under fast drags
+//   that cross critical points (no branch tracking).
+// - **Infeasible configurations saturate, not explode** (`λ` capped
+//   at `LAMBDA_MAX`).
+// - **Duplicate cells hurt** in `generic` (e.g. `[A, B, B, C]`):
+//   the FD path treats duplicated slots as independent. Use
+//   `rightAngle(A, B, C)` instead of `perpendicular(A, B, B, C)`.
 
-import type { Signal } from "../signals";
-import { type Cluster, defineRelation, type Relation } from "./cluster";
+import { type Signal } from "../signals";
+import { param } from "../signals/settle-utils";
+import {
+  type Constraints,
+  defineRelation,
+  type Relation,
+} from "./cluster";
 import {
   BoundsForce,
   DistanceForce,
@@ -61,37 +63,87 @@ type S = Signal<any>;
 /** Hard equality `a = b`. Cell dims must match. */
 export function eq(a: S, b: S): Relation {
   return defineRelation([a, b], c => {
-    const f = new EqForce(c.solver, c.bind(a), c.bind(b));
+    const f = new EqForce(c.solver, c._bind(a), c._bind(b));
     c.solver.addForce(f);
     return f;
   });
 }
 
-/** Hard distance constraint `‖b − a‖ = rest`. */
-export function distance(a: S, b: S, rest: number): Relation {
-  return defineRelation([a, b], c => {
-    const f = new DistanceForce(c.solver, c.bind(a), c.bind(b), rest);
-    c.solver.addForce(f);
-    return f;
-  });
+/** Hard distance constraint `‖b − a‖ = rest`. The returned relation
+ *  exposes a mutable `rest` (number or signal) — write `r.rest = 50`
+ *  or pass a `Signal<number>` and mutate that. */
+export interface DistanceRelation extends Relation {
+  /** Current rest length. Writes propagate to the underlying signal,
+   *  triggering the next solve in the normal reactive flow. */
+  rest: number;
+  /** The underlying rest-length signal — for binding to UI controls
+   *  or composing with derived signals. */
+  readonly restSignal: Signal<number>;
 }
 
-/** Soft distance constraint with finite stiffness (Hooke spring). */
-export function spring(a: S, b: S, rest: number, stiffness: number): Relation {
-  return defineRelation([a, b], c => {
-    const f = new DistanceForce(c.solver, c.bind(a), c.bind(b), rest, false, stiffness);
-    c.solver.addForce(f);
-    return f;
-  });
+export function distance(a: S, b: S, rest: number | Signal<number>): DistanceRelation {
+  const restSig = param(rest);
+  let force: DistanceForce | undefined;
+  return {
+    members: [a as S, b as S, restSig as S],
+    get rest() {
+      return restSig.value;
+    },
+    set rest(v: number) {
+      restSig.value = v;
+    },
+    restSignal: restSig,
+    attach(c) {
+      force = new DistanceForce(c.solver, c._bind(a), c._bind(b), restSig);
+      c.solver.addForce(force);
+    },
+    detach(c) {
+      if (force !== undefined) {
+        c.solver.removeForce(force);
+        force = undefined;
+      }
+    },
+  };
 }
 
-/** Scalar relation `b = fwd(a)` between two `Num` signals. The inverse
- *  is auto-derived via finite differences, so callers only need to
- *  supply the forward map. Useful when `fwd` is awkward to invert by
- *  hand (rational, polynomial, transcendental). */
+/** Soft distance constraint with finite stiffness (Hooke spring).
+ *  Same mutable-`rest` shape as `distance`. */
+export interface SpringRelation extends DistanceRelation {}
+
+export function spring(
+  a: S,
+  b: S,
+  rest: number | Signal<number>,
+  stiffness: number,
+): SpringRelation {
+  const restSig = param(rest);
+  let force: DistanceForce | undefined;
+  return {
+    members: [a as S, b as S, restSig as S],
+    get rest() {
+      return restSig.value;
+    },
+    set rest(v: number) {
+      restSig.value = v;
+    },
+    restSignal: restSig,
+    attach(c) {
+      force = new DistanceForce(c.solver, c._bind(a), c._bind(b), restSig, false, stiffness);
+      c.solver.addForce(force);
+    },
+    detach(c) {
+      if (force !== undefined) {
+        c.solver.removeForce(force);
+        force = undefined;
+      }
+    },
+  };
+}
+
+/** Scalar relation `b = fwd(a)` between two `Num` signals. */
 export function lensNum(a: S, b: S, fwd: (x: number) => number): Relation {
   return defineRelation([a, b], c => {
-    const f = new LensNumForce(c.solver, c.bind(a), c.bind(b), fwd);
+    const f = new LensNumForce(c.solver, c._bind(a), c._bind(b), fwd);
     c.solver.addForce(f);
     return f;
   });
@@ -99,36 +151,70 @@ export function lensNum(a: S, b: S, fwd: (x: number) => number): Relation {
 
 // ─── Inequalities ────────────────────────────────────────────────────
 
-/** Hard 1D range `lo ≤ x ≤ hi`. */
-export function clamp(x: S, lo: number, hi: number): Relation {
-  return defineRelation([x], c => {
-    const f = new BoundsForce(c.solver, c.bind(x), lo, hi);
-    c.solver.addForce(f);
-    return f;
-  });
+/** Hard 1D range `lo ≤ x ≤ hi`. Both bounds are mutable via the
+ *  returned relation's `lo` / `hi` setters or via passed signals. */
+export interface BoundsRelation extends Relation {
+  lo: number;
+  hi: number;
+  readonly loSignal: Signal<number>;
+  readonly hiSignal: Signal<number>;
+}
+
+export function clamp(
+  x: S,
+  lo: number | Signal<number>,
+  hi: number | Signal<number>,
+): BoundsRelation {
+  const loSig = param(lo);
+  const hiSig = param(hi);
+  let force: BoundsForce | undefined;
+  return {
+    members: [x as S, loSig as S, hiSig as S],
+    get lo() {
+      return loSig.value;
+    },
+    set lo(v: number) {
+      loSig.value = v;
+    },
+    get hi() {
+      return hiSig.value;
+    },
+    set hi(v: number) {
+      hiSig.value = v;
+    },
+    loSignal: loSig,
+    hiSignal: hiSig,
+    attach(c) {
+      force = new BoundsForce(c.solver, c._bind(x), loSig, hiSig);
+      c.solver.addForce(force);
+    },
+    detach(c) {
+      if (force !== undefined) {
+        c.solver.removeForce(force);
+        force = undefined;
+      }
+    },
+  };
 }
 
 /** Hard minimum distance: `‖b − a‖ ≥ minDist`. Used for non-overlapping
- *  circles, body-body separation, etc. The constraint only ever pushes
- *  the points apart — it has no effect when they are already further
- *  than `minDist`. */
+ *  circles, body-body separation, etc. */
 export function gap(a: S, b: S, minDist: number): Relation {
-  return generic([a, b], 1, (pos, out) => {
-    const dx = pos[1]![0]! - pos[0]![0]!;
-    const dy = pos[1]![1]! - pos[0]![1]!;
-    out[0]! = Math.hypot(dx, dy) - minDist;
-  }, { fmax: [0] });
+  return generic(
+    [a, b],
+    1,
+    (pos, out) => {
+      const dx = pos[1]![0]! - pos[0]![0]!;
+      const dy = pos[1]![1]! - pos[0]![1]!;
+      out[0]! = Math.hypot(dx, dy) - minDist;
+    },
+    { fmax: [0] },
+  );
 }
 
 /** Soft long-range repulsion: pushes two points apart with force
  *  `stiffness · (range − ‖b − a‖)` while they're closer than `range`,
- *  dropping to zero outside. Inspired by Fruchterman–Reingold's
- *  `F_rep ∝ k²/d` term — the missing ingredient for graph-layout-
- *  style force-directed scenes, where `gap` only enforces a hard
- *  collision distance and leaves nothing to spread non-touching
- *  pairs apart. Use a large `range` (e.g. the canvas extent) and a
- *  small `stiffness` so the repulsion is gentle far away and ramps
- *  up as nodes crowd. */
+ *  dropping to zero outside. */
 export function repel(a: S, b: S, range: number, stiffness: number): Relation {
   return generic(
     [a, b],
@@ -143,9 +229,7 @@ export function repel(a: S, b: S, range: number, stiffness: number): Relation {
 }
 
 /** Hard rectangular containment: keep a `Vec` inside the AABB
- *  `[xLo, xHi] × [yLo, yHi]`. Encoded as four one-sided inequalities
- *  so the constraint only acts when `P` is on the wrong side of a
- *  wall. */
+ *  `[xLo, xHi] × [yLo, yHi]`. */
 export function inside(P: S, xLo: number, yLo: number, xHi: number, yHi: number): Relation {
   return generic(
     [P],
@@ -163,9 +247,14 @@ export function inside(P: S, xLo: number, yLo: number, xHi: number, yHi: number)
 
 /** Hard inequality `a ≤ b` between two scalar cells. */
 export function leq(a: S, b: S): Relation {
-  return generic([a, b], 1, (pos, out) => {
-    out[0]! = pos[1]![0]! - pos[0]![0]!;
-  }, { fmax: [0] });
+  return generic(
+    [a, b],
+    1,
+    (pos, out) => {
+      out[0]! = pos[1]![0]! - pos[0]![0]!;
+    },
+    { fmax: [0] },
+  );
 }
 
 /** Hard inequality `a ≥ b`. */
@@ -178,7 +267,7 @@ export function geq(a: S, b: S): Relation {
 /** Pull `cell` toward `target` with finite stiffness. */
 export function softTarget(cell: S, target: ArrayLike<number>, stiffness: number): Relation {
   return defineRelation([cell], c => {
-    const f = new SoftTargetForce(c.solver, c.bind(cell), target, stiffness);
+    const f = new SoftTargetForce(c.solver, c._bind(cell), target, stiffness);
     c.solver.addForce(f);
     return f;
   });
@@ -186,12 +275,7 @@ export function softTarget(cell: S, target: ArrayLike<number>, stiffness: number
 
 // ─── General-purpose FD constraint ───────────────────────────────────
 
-/** Custom constraint with `rows` residual outputs computed by `fn`.
- *  Jacobian and Hessian are auto-derived via central differences
- *  (`fdStep` defaults to 1e-6). The default is hard; pass
- *  `{ stiffness }` for a soft variant. `fmax` array (one entry per
- *  row) optionally caps each row's `+λ` upper bound to that value
- *  (use `0` for one-sided inequality `≥ 0`). */
+/** Custom constraint with `rows` residual outputs computed by `fn`. */
 export function generic(
   cells: readonly S[],
   rows: number,
@@ -201,7 +285,7 @@ export function generic(
   return defineRelation(cells, c => {
     const f = new GenericForce(
       c.solver,
-      cells.map(s => c.bind(s)),
+      cells.map(s => c._bind(s)),
       rows,
       fn,
       opts,
@@ -270,10 +354,7 @@ export function perpendicular(A: S, B: S, C: S, D: S): Relation {
   });
 }
 
-/** Right angle at B between segments AB and BC. Pass B once; the
- *  generic FD path needs cells distinct (otherwise the local Newton
- *  LHS misses the cross-coupling between the duplicated cell's
- *  Jacobian columns). */
+/** Right angle at B between segments AB and BC. */
 export function rightAngle(A: S, B: S, C: S): Relation {
   return generic([A, B, C], 1, (pos, out) => {
     const a = pos[0]!,
@@ -287,13 +368,8 @@ export function rightAngle(A: S, B: S, C: S): Relation {
   });
 }
 
-/** Soft 3-point bending resistance at vertex B. Penalizes the cross
- *  product `(B − A) × (C − B)`, which is zero when A, B, C are
- *  collinear — so the constraint pulls toward a straight line through
- *  the three points (rest angle = π). The stiffness controls how
- *  cloth-like (low) versus paper-like (high) the structure feels.
- *  Used in cloth and rope sims to give bending resistance on top of
- *  edge-length springs. */
+/** Soft 3-point bending resistance at vertex B (cross product
+ *  toward zero ⇒ A, B, C collinear). */
 export function bend(A: S, B: S, C: S, stiffness: number = Strength.MEDIUM): Relation {
   return generic(
     [A, B, C],
@@ -359,30 +435,4 @@ export function midpoint(M: S, A: S, B: S): Relation {
     out[0]! = 2 * m[0]! - a[0]! - b[0]!;
     out[1]! = 2 * m[1]! - a[1]! - b[1]!;
   });
-}
-
-// ─── Pin (convenience) ──────────────────────────────────────────────
-
-/** Pin a signal in place: returns a Relation that, while attached,
- *  pins the signal (sets its mass to 0). Detaching restores the
- *  previous mass. Equivalent to `cluster.pin(sig)` but composes
- *  with the `add`/`remove` API:
- *
- *    const p = cluster.add(pin(sig));
- *    cluster.remove(p);    // unpins */
-export function pin(sig: S): Relation {
-  let unpin: (() => void) | undefined;
-  return {
-    members: [sig],
-    attach(cluster: Cluster) {
-      cluster.bind(sig); // ensure bound
-      unpin = cluster.pin(sig);
-    },
-    detach() {
-      if (unpin) {
-        unpin();
-        unpin = undefined;
-      }
-    },
-  };
 }

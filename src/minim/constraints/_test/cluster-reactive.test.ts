@@ -17,11 +17,11 @@
 
 import { describe, expect, it } from "vitest";
 import { batch, effect, Num, num as numSig, Vec, vec as vecSig } from "../../signals";
-import { Cluster, distance, eq, leq } from "../index";
+import { constraints, distance, eq, leq } from "../index";
 
 describe("AVBD reactive — basic signal binding", () => {
   it("eq(sigA, sigB) settles to a common value when both are free", () => {
-    const s = new Cluster({ iterations: 20 });
+    const s = constraints({ iterations: 20 });
     const a = numSig(3);
     const b = numSig(7);
     s.add(eq(a, b));
@@ -32,7 +32,7 @@ describe("AVBD reactive — basic signal binding", () => {
   });
 
   it("pin(a) + write a → b drags to match (Sketchpad-style drag)", () => {
-    const s = new Cluster({ iterations: 20 });
+    const s = constraints({ iterations: 20 });
     const a = numSig(3);
     const b = numSig(7);
     s.add(eq(a, b));
@@ -45,7 +45,7 @@ describe("AVBD reactive — basic signal binding", () => {
   });
 
   it("distance(vecA, vecB) on Vec signals", () => {
-    const s = new Cluster({ iterations: 30 });
+    const s = constraints({ iterations: 30 });
     const a = vecSig(0, 0);
     const b = vecSig(1, 0);
     s.add(distance(a, b, 5));
@@ -60,7 +60,7 @@ describe("AVBD reactive — basic signal binding", () => {
   });
 
   it("subscribers see post-solve values (pre-flush ordering)", () => {
-    const s = new Cluster({ iterations: 20 });
+    const s = constraints({ iterations: 20 });
     const a = numSig(3);
     const b = numSig(7);
     s.add(eq(a, b));
@@ -84,7 +84,7 @@ describe("AVBD reactive — basic signal binding", () => {
     // If the solver's back-write re-triggered the pre-effect, every
     // user write would loop. We verify a single user write produces
     // exactly one extra effect run.
-    const s = new Cluster({ iterations: 10 });
+    const s = constraints({ iterations: 10 });
     const a = numSig(0);
     const b = numSig(0);
     s.add(eq(a, b));
@@ -105,7 +105,7 @@ describe("AVBD reactive — basic signal binding", () => {
   });
 
   it("batch coalesces multiple signal writes into one solve", () => {
-    const s = new Cluster({ iterations: 20 });
+    const s = constraints({ iterations: 20 });
     const a = numSig(0);
     const b = numSig(0);
     const c = numSig(0);
@@ -139,7 +139,7 @@ describe("AVBD reactive — lens composition", () => {
     // Writing the parent `a` dirties `a.x` via the existing `_fusedOf`
     // chain; the pre-effect's deps include `a.x` so it fires; solver
     // runs; back-write to `b.x` propagates back to `b` via the lens.
-    const s = new Cluster({ iterations: 30 });
+    const s = constraints({ iterations: 30 });
     const a = vecSig(0, 0);
     const b = vecSig(5, 5);
 
@@ -152,7 +152,7 @@ describe("AVBD reactive — lens composition", () => {
   });
 
   it("writing the lens-derived child propagates through the lens both ways", () => {
-    const s = new Cluster({ iterations: 30 });
+    const s = constraints({ iterations: 30 });
     const a = vecSig(0, 0);
     const b = vecSig(5, 5);
     s.add(eq(a.x, b.x));
@@ -166,7 +166,7 @@ describe("AVBD reactive — lens composition", () => {
 
 describe("AVBD reactive — inequalities", () => {
   it("leq(a, b) saturates: writing a above b pulls a down", () => {
-    const s = new Cluster({ iterations: 30 });
+    const s = constraints({ iterations: 30 });
     const a = numSig(3);
     const b = numSig(3);
     s.add(leq(a, b));

@@ -5,7 +5,7 @@
 // engine re-solves on every write and the rest of the figure
 // reflows to keep all four constraints satisfied.
 
-import { Cluster, distance, rightAngle } from "@minim/constraints";
+import { constraints, distance, rightAngle } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -33,7 +33,7 @@ export class MdSketchpad extends Diagram {
     const C = vec(cx + 60, cy + 60);
     const D = vec(cx + 140, cy + 60);
 
-    const cluster = new Cluster({ iterations: 24 });
+    const cluster = constraints({ iterations: 24 });
     cluster.add(distance(A, B, 160));
     cluster.add(distance(B, C, 120));
     cluster.add(distance(C, D, 80));

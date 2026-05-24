@@ -3,9 +3,24 @@
 // Each subclass operates on cell ids into the solver's SOA buffers.
 // Subclasses read positions via `solver.positions` / `solver.offsets`,
 // and write Jacobian / Hessian column norms into `J[ci]` / `HCols[ci]`.
-// Constructors take `(solver, ...cellIds, ...args)`. The signal-aware
-// factories that accept `Signal`s live in `factories.ts`.
+//
+// **Mutable parameters via signals.** Numeric parameters that the
+// user might want to mutate (rest lengths, bounds, target stiffness,
+// …) are stored as `Signal<number>` and *cached* in `initialize()`
+// — which the AVBD outer loop calls once per `solver.step()`. The
+// inner per-iteration computeConstraint/computeDerivatives methods
+// use the cached primitive, so the inner loop stays signal-free
+// (no `.value` reads, no subscription bookkeeping, identical perf
+// to the previous fixed-number form).
+//
+// Subscription happens at the cluster layer: `Constraints`'s settle
+// body reads each relation's members (including param signals) so
+// mutating `restSignal.value = 50` triggers a re-solve via the
+// normal reactive flow. The force then peeks the new value when
+// `initialize()` runs.
 
+import { type Signal } from "../signals";
+import { param } from "../signals/settle-utils";
 import { Force } from "./force";
 import { Solver } from "./solver";
 
@@ -107,22 +122,43 @@ export class LensNumForce extends Force {
 // ─── Distance constraint (Vec ↔ Vec) ─────────────────────────────────
 
 export class DistanceForce extends Force {
-  rest: number;
+  /** The mutable rest-length signal (writable). Reading or writing
+   *  `.value` participates in normal reactivity — set it from a
+   *  Relation wrapper's setter for ergonomic mutation. */
+  readonly rest: Signal<number>;
+  /** Snapshot of `rest.value` at the start of each `solver.step()`,
+   *  used in the inner loop to keep the hot path signal-free. */
+  private _restCached = 0;
   private _cachedNx = 0;
   private _cachedNy = 0;
   private _cachedInvD = 0;
   private _cachedDegenerate = false;
 
-  constructor(solver: Solver, a: number, b: number, rest: number, hard = true, stiffness = 1e6) {
+  constructor(
+    solver: Solver,
+    a: number,
+    b: number,
+    rest: number | Signal<number>,
+    hard = true,
+    stiffness = 1e6,
+  ) {
     if (solver.dims[a]! !== 2 || solver.dims[b]! !== 2) {
       throw new Error("distance: both cells must be Vec (dim=2)");
     }
     super(solver, [a, b], 1);
-    this.rest = rest;
+    this.rest = param(rest);
+    this._restCached = this.rest.peek();
     if (!hard) this.stiffness.fill(stiffness);
   }
 
   initialize(): boolean {
+    // `.value` (not `.peek()`) — runs inside the cluster's settle
+    // body where `activeSettler` is set, so the read both refreshes
+    // the cache AND subscribes the settler to this param signal.
+    // Mutations to `rest` then trigger normal re-fire via the
+    // signal DAG. The inner per-iteration loop reads the cached
+    // primitive only — no signals on the hot path.
+    this._restCached = this.rest.value;
     return true;
   }
 
@@ -133,12 +169,13 @@ export class DistanceForce extends Force {
     const dx = positions[aOff]! - positions[bOff]!;
     const dy = positions[aOff + 1]! - positions[bOff + 1]!;
     const d2 = dx * dx + dy * dy;
+    const restCached = this._restCached;
     if (d2 < 1e-24) {
       this._cachedDegenerate = true;
       this._cachedNx = 0;
       this._cachedNy = 0;
       this._cachedInvD = 0;
-      const Cn = -this.rest;
+      const Cn = -restCached;
       this.C[0]! = this.stiffness[0]! === Infinity ? Cn - alpha * this.C0[0]! : Cn;
       return;
     }
@@ -148,7 +185,7 @@ export class DistanceForce extends Force {
     this._cachedNx = dx * inv;
     this._cachedNy = dy * inv;
     this._cachedInvD = inv;
-    const Cn = d - this.rest;
+    const Cn = d - restCached;
     this.C[0]! = this.stiffness[0]! === Infinity ? Cn - alpha * this.C0[0]! : Cn;
   }
 
@@ -176,19 +213,26 @@ export class DistanceForce extends Force {
 // ─── 1D bounds (clamp) ───────────────────────────────────────────────
 
 export class BoundsForce extends Force {
-  lo: number;
-  hi: number;
+  readonly lo: Signal<number>;
+  readonly hi: Signal<number>;
+  private _loCached = 0;
+  private _hiCached = 0;
 
-  constructor(solver: Solver, cell: number, lo: number, hi: number) {
+  constructor(solver: Solver, cell: number, lo: number | Signal<number>, hi: number | Signal<number>) {
     if (solver.dims[cell]! !== 1) throw new Error("clamp: cell must be Num (dim=1)");
     super(solver, [cell], 2);
-    this.lo = lo;
-    this.hi = hi;
+    this.lo = param(lo);
+    this.hi = param(hi);
+    this._loCached = this.lo.peek();
+    this._hiCached = this.hi.peek();
     this.fmax[0]! = 0;
     this.fmax[1]! = 0;
   }
 
   initialize(): boolean {
+    // `.value` to subscribe + refresh cache; see DistanceForce note.
+    this._loCached = this.lo.value;
+    this._hiCached = this.hi.value;
     return true;
   }
 
@@ -196,8 +240,8 @@ export class BoundsForce extends Force {
     const positions = this.solver.positions;
     const off = this.cellOffsets[0]!;
     const x = positions[off]!;
-    const c0 = x - this.lo;
-    const c1 = this.hi - x;
+    const c0 = x - this._loCached;
+    const c1 = this._hiCached - x;
     const stiff = this.stiffness;
     this.C[0]! = stiff[0]! === Infinity ? c0 - alpha * this.C0[0]! : c0;
     this.C[1]! = stiff[1]! === Infinity ? c1 - alpha * this.C0[1]! : c1;

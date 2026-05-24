@@ -12,7 +12,7 @@
 // hard-distance penalty dominating the mass term in the local
 // Newton, the shape "slips" along the closest valid configuration.
 
-import { Cluster, collinear, distance } from "@minim/constraints";
+import { constraints, collinear, distance } from "@minim/constraints";
 import { Anchor, circle, Diagram, drag, label, line, Mount, rect, vec } from "../../minim";
 
 const CRANK = 50;
@@ -32,7 +32,7 @@ export class MdSliderCrank extends Diagram {
     const guide1 = vec(cx + 30, cy);
     const guide2 = vec(cx + 200, cy);
 
-    const cluster = new Cluster({ iterations: 24 });
+    const cluster = constraints({ iterations: 24 });
     cluster.add(distance(O1, A, CRANK));
     cluster.add(distance(A, B, ROD));
     cluster.add(collinear(B, guide1, guide2));

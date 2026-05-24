@@ -5,13 +5,13 @@
 
 import { describe, expect, it } from "vitest";
 import { box, num, vec } from "../../signals";
-import { Cluster, generic, lensNum } from "../index";
+import { constraints, generic, lensNum } from "../index";
 
 describe("AVBD value types — scalars (dim=1)", () => {
   it("Num cells with lensNum: b = 2a", () => {
     const a = num(3);
     const b = num(0);
-    const s = new Cluster({ iterations: 10 });
+    const s = constraints({ iterations: 10 });
     s.add(lensNum(a, b, x => 2 * x));
     s.pin(a);
     a.value = 3.0001;
@@ -27,7 +27,7 @@ describe("AVBD value types — scalars (dim=1)", () => {
     const N = 5;
     const cells = [];
     for (let i = 0; i < N; i++) cells.push(num(i + 1));
-    const s = new Cluster({ iterations: 50 });
+    const s = constraints({ iterations: 50 });
     s.add(
       generic(cells, 1, (pos, out) => {
         let sum = 0;
@@ -49,7 +49,7 @@ describe("AVBD value types — Box (dim=4: x, y, w, h)", () => {
   it("two boxes sharing an edge: A.right = B.left", () => {
     const A = box(0, 0, 5, 3);
     const B = box(10, 0, 4, 3);
-    const s = new Cluster({ iterations: 10 });
+    const s = constraints({ iterations: 10 });
     s.add(
       generic([A, B], 1, (pos, out) => {
         const a = pos[0]!,
@@ -67,7 +67,7 @@ describe("AVBD value types — Box (dim=4: x, y, w, h)", () => {
 
   it("aspect-ratio constraint: w / h = 16/9", () => {
     const b = box(0, 0, 100, 100);
-    const s = new Cluster({ iterations: 20 });
+    const s = constraints({ iterations: 20 });
     s.add(
       generic([b], 1, (pos, out) => {
         const v = pos[0]!;
@@ -83,7 +83,7 @@ describe("AVBD value types — cyclic / wraparound angles", () => {
   it("two angles within π of each other (smallest signed difference)", () => {
     const a = num(Math.PI / 4);
     const b = num(-Math.PI / 4);
-    const s = new Cluster({ iterations: 30 });
+    const s = constraints({ iterations: 30 });
     s.add(
       generic([a, b], 1, (pos, out) => {
         const x = pos[0]![0]!;
@@ -105,7 +105,7 @@ describe("AVBD value types — mixed dimensions in same cluster", () => {
   it("scalar (length) + vec (point) coupled by a constraint", () => {
     const L = num(3);
     const P = vec(5, 0);
-    const s = new Cluster({ iterations: 20 });
+    const s = constraints({ iterations: 20 });
     s.add(
       generic([L, P], 1, (pos, out) => {
         const l = pos[0]![0]!;
@@ -122,7 +122,7 @@ describe("AVBD value types — mixed dimensions in same cluster", () => {
     const gain = num(2);
     const inp = num(5);
     const out = num(0);
-    const s = new Cluster({ iterations: 20 });
+    const s = constraints({ iterations: 20 });
     s.add(
       generic([gain, inp, out], 1, (pos, residual) => {
         residual[0]! = pos[2]![0]! - pos[0]![0]! * pos[1]![0]!;

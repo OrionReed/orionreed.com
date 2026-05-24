@@ -17,7 +17,14 @@
 // Tool-mode dispatch: the active `tool` signal decides what each click
 // does. Drags are universal — every point is always draggable.
 
-import { Cluster, distance, eq, type Relation, rightAngle } from "@minim/constraints";
+import {
+  type Constraints,
+  constraints,
+  distance,
+  eq,
+  type Relation,
+  rightAngle,
+} from "@minim/constraints";
 import {
   Anchor,
   type AnyShape,
@@ -118,14 +125,14 @@ export class MdSketchpadLive extends Diagram {
   protected scene(s: Mount): void {
     this.view(W, H);
 
-    const cluster = new Cluster({ iterations: 24 });
+    const cluster = constraints({ iterations: 24 });
 
     // Identity counters for stable forEach keys.
     let nextPointId = 1;
     let nextConstraintId = 1;
 
     const points = signal<readonly PointInst[]>([]);
-    const constraints = signal<readonly ConstraintInst[]>([]);
+    const constraintList = signal<readonly ConstraintInst[]>([]);
     const tool = signal<ToolId>("point");
     const selection = signal<readonly PointInst[]>([]);
 
@@ -152,17 +159,17 @@ export class MdSketchpadLive extends Diagram {
     /** Remove a point and every constraint it participates in. */
     const removePoint = (p: PointInst): void => {
       const survivors: ConstraintInst[] = [];
-      for (const c of constraints.peek()) {
+      for (const c of constraintList.peek()) {
         if (c.points.includes(p)) cluster.remove(c.force);
         else survivors.push(c);
       }
-      constraints.value = survivors;
+      constraintList.value = survivors;
       points.value = points.peek().filter(q => q !== p);
     };
 
     const removeConstraint = (c: ConstraintInst): void => {
       cluster.remove(c.force);
-      constraints.value = constraints.peek().filter(x => x !== c);
+      constraintList.value = constraintList.peek().filter(x => x !== c);
     };
 
     /** Build a constraint of the given kind from `picks`, taking the
@@ -210,8 +217,7 @@ export class MdSketchpadLive extends Diagram {
       const kind = t.id as ConstraintInst["kind"];
       const c = makeConstraint(kind, sel);
       if (c) {
-        constraints.value = [...constraints.peek(), c];
-        cluster.update();
+        constraintList.value = [...constraintList.peek(), c];
       }
       selection.value = [];
     };
@@ -311,7 +317,7 @@ export class MdSketchpadLive extends Diagram {
 
     // ─── constraint rendering ──────────────────────────────────────
 
-    forEach(s.root, constraints, c => renderConstraint(c, tool, removeConstraint), {
+    forEach(s.root, constraintList, c => renderConstraint(c, tool, removeConstraint), {
       key: c => c.id,
     });
 
@@ -327,7 +333,7 @@ export class MdSketchpadLive extends Diagram {
     const a = addPoint({ x: CANVAS_X + 140, y: CANVAS_Y + 200 });
     const b = addPoint({ x: CANVAS_X + 320, y: CANVAS_Y + 200 });
     const seed = makeConstraint("distance", [a, b]);
-    if (seed) constraints.value = [seed];
+    if (seed) constraintList.value = [seed];
 
     // ─── footer ─────────────────────────────────────────────────────
 
@@ -345,7 +351,7 @@ export class MdSketchpadLive extends Diagram {
 
 function renderPoint(
   p: PointInst,
-  cluster: Cluster,
+  cluster: Constraints,
   selection: Signal<readonly PointInst[]>,
   onClick: (p: PointInst) => void,
 ): AnyShape {
