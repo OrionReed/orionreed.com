@@ -135,7 +135,14 @@ export function repel(c: Cluster, a: S, b: S, range: number, stiffness: number):
  *  `[xLo, xHi] × [yLo, yHi]`. Encoded as four one-sided inequalities
  *  so the constraint only acts when `P` is on the wrong side of
  *  a wall. */
-export function inside(c: Cluster, P: S, xLo: number, yLo: number, xHi: number, yHi: number): GenericForce {
+export function inside(
+  c: Cluster,
+  P: S,
+  xLo: number,
+  yLo: number,
+  xHi: number,
+  yHi: number,
+): GenericForce {
   const f = generic(c, [P], 4, (pos, out) => {
     const p = pos[0]!;
     out[0]! = p[0]! - xLo;
@@ -167,7 +174,12 @@ export function geq(c: Cluster, a: S, b: S): GenericForce {
 // ─── Soft target ─────────────────────────────────────────────────────
 
 /** Pull `cell` toward `target` with finite stiffness. */
-export function softTarget(c: Cluster, cell: S, target: ArrayLike<number>, stiffness: number): SoftTargetForce {
+export function softTarget(
+  c: Cluster,
+  cell: S,
+  target: ArrayLike<number>,
+  stiffness: number,
+): SoftTargetForce {
   const f = new SoftTargetForce(c.solver, c.bind(cell), target, stiffness);
   c.solver.addForce(f);
   return f;
@@ -186,7 +198,13 @@ export function generic(
   fn: ResidualFn,
   opts?: { fdStep?: number; hard?: boolean; stiffness?: number },
 ): GenericForce {
-  const f = new GenericForce(c.solver, cells.map(s => c.bind(s)), rows, fn, opts);
+  const f = new GenericForce(
+    c.solver,
+    cells.map(s => c.bind(s)),
+    rows,
+    fn,
+    opts,
+  );
   c.solver.addForce(f);
   return f;
 }
@@ -196,9 +214,13 @@ export function generic(
 /** Interior angle ABC = θ. */
 export function angle(c: Cluster, A: S, B: S, C: S, theta: number): GenericForce {
   return generic(c, [A, B, C], 1, (pos, out) => {
-    const a = pos[0]!, b = pos[1]!, cc = pos[2]!;
-    const ux = a[0]! - b[0]!, uy = a[1]! - b[1]!;
-    const vx = cc[0]! - b[0]!, vy = cc[1]! - b[1]!;
+    const a = pos[0]!,
+      b = pos[1]!,
+      cc = pos[2]!;
+    const ux = a[0]! - b[0]!,
+      uy = a[1]! - b[1]!;
+    const vx = cc[0]! - b[0]!,
+      vy = cc[1]! - b[1]!;
     const lu = Math.hypot(ux, uy);
     const lv = Math.hypot(vx, vy);
     if (lu < 1e-12 || lv < 1e-12) {
@@ -214,9 +236,14 @@ export function angle(c: Cluster, A: S, B: S, C: S, theta: number): GenericForce
 /** Lines AB ∥ CD: cross product of direction vectors = 0. */
 export function parallel(c: Cluster, A: S, B: S, C: S, D: S): GenericForce {
   return generic(c, [A, B, C, D], 1, (pos, out) => {
-    const a = pos[0]!, b = pos[1]!, cc = pos[2]!, d = pos[3]!;
-    const ux = b[0]! - a[0]!, uy = b[1]! - a[1]!;
-    const vx = d[0]! - cc[0]!, vy = d[1]! - cc[1]!;
+    const a = pos[0]!,
+      b = pos[1]!,
+      cc = pos[2]!,
+      d = pos[3]!;
+    const ux = b[0]! - a[0]!,
+      uy = b[1]! - a[1]!;
+    const vx = d[0]! - cc[0]!,
+      vy = d[1]! - cc[1]!;
     out[0]! = ux * vy - uy * vx;
   });
 }
@@ -224,9 +251,14 @@ export function parallel(c: Cluster, A: S, B: S, C: S, D: S): GenericForce {
 /** Lines AB ⟂ CD: dot product = 0. */
 export function perpendicular(c: Cluster, A: S, B: S, C: S, D: S): GenericForce {
   return generic(c, [A, B, C, D], 1, (pos, out) => {
-    const a = pos[0]!, b = pos[1]!, cc = pos[2]!, d = pos[3]!;
-    const ux = b[0]! - a[0]!, uy = b[1]! - a[1]!;
-    const vx = d[0]! - cc[0]!, vy = d[1]! - cc[1]!;
+    const a = pos[0]!,
+      b = pos[1]!,
+      cc = pos[2]!,
+      d = pos[3]!;
+    const ux = b[0]! - a[0]!,
+      uy = b[1]! - a[1]!;
+    const vx = d[0]! - cc[0]!,
+      vy = d[1]! - cc[1]!;
     out[0]! = ux * vx + uy * vy;
   });
 }
@@ -237,9 +269,13 @@ export function perpendicular(c: Cluster, A: S, B: S, C: S, D: S): GenericForce 
  *  Jacobian columns). */
 export function rightAngle(c: Cluster, A: S, B: S, C: S): GenericForce {
   return generic(c, [A, B, C], 1, (pos, out) => {
-    const a = pos[0]!, b = pos[1]!, cc = pos[2]!;
-    const ux = b[0]! - a[0]!, uy = b[1]! - a[1]!;
-    const vx = cc[0]! - b[0]!, vy = cc[1]! - b[1]!;
+    const a = pos[0]!,
+      b = pos[1]!,
+      cc = pos[2]!;
+    const ux = b[0]! - a[0]!,
+      uy = b[1]! - a[1]!;
+    const vx = cc[0]! - b[0]!,
+      vy = cc[1]! - b[1]!;
     out[0]! = ux * vx + uy * vy;
   });
 }
@@ -251,15 +287,25 @@ export function rightAngle(c: Cluster, A: S, B: S, C: S): GenericForce {
  *  cloth-like (low) versus paper-like (high) the structure feels.
  *  Used in cloth and rope sims to give bending resistance on top of
  *  edge-length springs. */
-export function bend(c: Cluster, A: S, B: S, C: S, stiffness: number = Strength.MEDIUM): GenericForce {
+export function bend(
+  c: Cluster,
+  A: S,
+  B: S,
+  C: S,
+  stiffness: number = Strength.MEDIUM,
+): GenericForce {
   return generic(
     c,
     [A, B, C],
     1,
     (pos, out) => {
-      const a = pos[0]!, b = pos[1]!, cc = pos[2]!;
-      const ux = b[0]! - a[0]!, uy = b[1]! - a[1]!;
-      const vx = cc[0]! - b[0]!, vy = cc[1]! - b[1]!;
+      const a = pos[0]!,
+        b = pos[1]!,
+        cc = pos[2]!;
+      const ux = b[0]! - a[0]!,
+        uy = b[1]! - a[1]!;
+      const vx = cc[0]! - b[0]!,
+        vy = cc[1]! - b[1]!;
       out[0]! = ux * vy - uy * vx;
     },
     { hard: false, stiffness },
@@ -269,9 +315,13 @@ export function bend(c: Cluster, A: S, B: S, C: S, stiffness: number = Strength.
 /** Point P on line AB. */
 export function collinear(c: Cluster, P: S, A: S, B: S): GenericForce {
   return generic(c, [P, A, B], 1, (pos, out) => {
-    const p = pos[0]!, a = pos[1]!, b = pos[2]!;
-    const ux = p[0]! - a[0]!, uy = p[1]! - a[1]!;
-    const vx = b[0]! - a[0]!, vy = b[1]! - a[1]!;
+    const p = pos[0]!,
+      a = pos[1]!,
+      b = pos[2]!;
+    const ux = p[0]! - a[0]!,
+      uy = p[1]! - a[1]!;
+    const vx = b[0]! - a[0]!,
+      vy = b[1]! - a[1]!;
     out[0]! = ux * vy - uy * vx;
   });
 }
@@ -279,8 +329,10 @@ export function collinear(c: Cluster, P: S, A: S, B: S): GenericForce {
 /** Point P on a circle of given center and radius. */
 export function onCircle(c: Cluster, P: S, center: S, radius: number): GenericForce {
   return generic(c, [P, center], 1, (pos, out) => {
-    const p = pos[0]!, cc = pos[1]!;
-    const dx = p[0]! - cc[0]!, dy = p[1]! - cc[1]!;
+    const p = pos[0]!,
+      cc = pos[1]!;
+    const dx = p[0]! - cc[0]!,
+      dy = p[1]! - cc[1]!;
     out[0]! = Math.hypot(dx, dy) - radius;
   });
 }
@@ -288,7 +340,10 @@ export function onCircle(c: Cluster, P: S, center: S, radius: number): GenericFo
 /** Equal distance: ‖A − B‖ = ‖C − D‖. */
 export function equalDist(c: Cluster, A: S, B: S, C: S, D: S): GenericForce {
   return generic(c, [A, B, C, D], 1, (pos, out) => {
-    const a = pos[0]!, b = pos[1]!, cc = pos[2]!, d = pos[3]!;
+    const a = pos[0]!,
+      b = pos[1]!,
+      cc = pos[2]!,
+      d = pos[3]!;
     const ab = Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!);
     const cd = Math.hypot(cc[0]! - d[0]!, cc[1]! - d[1]!);
     out[0]! = ab - cd;
@@ -298,7 +353,9 @@ export function equalDist(c: Cluster, A: S, B: S, C: S, D: S): GenericForce {
 /** Midpoint: M = (A + B) / 2. */
 export function midpoint(c: Cluster, M: S, A: S, B: S): GenericForce {
   return generic(c, [M, A, B], 2, (pos, out) => {
-    const m = pos[0]!, a = pos[1]!, b = pos[2]!;
+    const m = pos[0]!,
+      a = pos[1]!,
+      b = pos[2]!;
     out[0]! = 2 * m[0]! - a[0]! - b[0]!;
     out[1]! = 2 * m[1]! - a[1]! - b[1]!;
   });

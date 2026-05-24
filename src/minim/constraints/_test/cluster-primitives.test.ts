@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { vec } from "../../signals";
 import {
   angle,
+  Cluster,
   collinear,
   distance,
   equalDist,
@@ -13,7 +14,6 @@ import {
   onCircle,
   parallel,
   perpendicular,
-  Cluster,
 } from "../index";
 
 describe("AVBD sketchpad primitives via FD", () => {

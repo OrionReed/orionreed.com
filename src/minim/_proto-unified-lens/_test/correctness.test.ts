@@ -117,15 +117,8 @@ describe("free lens — N inputs (subsumes fanin)", () => {
     const b2 = num(2);
     const c2 = num(3);
 
-    const oldOne = fanin(
-      Num,
-      [a1, b1, c1] as const,
-      vals => vals[0] * vals[1] - vals[2],
-    );
-    const newOne = derive(
-      [a2, b2, c2],
-      vals => vals[0] * vals[1] - vals[2],
-    );
+    const oldOne = fanin(Num, [a1, b1, c1] as const, vals => vals[0] * vals[1] - vals[2]);
+    const newOne = derive([a2, b2, c2], vals => vals[0] * vals[1] - vals[2]);
 
     expect(newOne.value).toBe(oldOne.value);
     a1.value = 10;

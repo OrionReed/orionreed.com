@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { box, num, vec } from "../../signals";
-import { generic, lensNum, Cluster } from "../index";
+import { Cluster, generic, lensNum } from "../index";
 
 describe("AVBD value types — scalars (dim=1)", () => {
   it("Num cells with lensNum: b = 2a", () => {

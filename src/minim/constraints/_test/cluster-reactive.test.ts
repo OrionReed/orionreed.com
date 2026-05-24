@@ -17,7 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 import { batch, effect, Num, num as numSig, Vec, vec as vecSig } from "../../signals";
-import { distance, eq, leq, Cluster } from "../index";
+import { Cluster, distance, eq, leq } from "../index";
 
 describe("AVBD reactive — basic signal binding", () => {
   it("eq(sigA, sigB) settles to a common value when both are free", () => {

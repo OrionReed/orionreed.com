@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import { type Vec, vec, type Writable } from "../../signals";
-import { distance, Simulation, Cluster, spring } from "../index";
+import { Cluster, distance, Simulation, spring } from "../index";
 
 type WVec = Writable<Vec>;
 

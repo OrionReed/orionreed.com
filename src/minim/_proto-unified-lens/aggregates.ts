@@ -14,8 +14,8 @@
 // to confirm the new surface FITS the existing call shapes without
 // any awkwardness — same LOC, same arg shape.
 
-import { type Linear, type Signal, Num, Vec } from "../signals";
 import type { Writable } from "../signals";
+import { type Linear, Num, type Signal, Vec } from "../signals";
 import { classDerive, classLens } from "./core";
 
 type V = { x: number; y: number };

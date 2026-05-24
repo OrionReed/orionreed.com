@@ -23,14 +23,7 @@
 //     allocated scratch buffer + arity-based bwd dispatch. Subsumes
 //     `fanin` directly.
 
-import {
-  batch,
-  fanin,
-  type Of,
-  type Read,
-  Signal,
-  type Writable,
-} from "../signals";
+import { fanin, type Of, type Read, Signal, type Writable } from "../signals";
 
 // ─── Type helpers ────────────────────────────────────────────────
 
@@ -63,25 +56,22 @@ export function lens<P extends readonly Read<unknown>[], R>(
   fwd: (vals: Vals<P>) => R,
   bwd: (target: R, vals: Vals<P>) => Updates<P>,
 ): Writable<Signal<R>>;
-export function lens(
-  parent: unknown,
-  fwd: unknown,
-  bwd: unknown,
-): unknown {
-  // Hot path inlined for v8 — avoids extra wrapper depth that costs
-  // ~5ns/op on writes through closure capture chains.
+export function lens(parent: unknown, fwd: unknown, bwd: unknown): unknown {
   if (Array.isArray(parent)) {
-    return _faninImpl(
-      Signal as unknown as new (...args: never[]) => Signal<unknown>,
-      parent as readonly Read<unknown>[],
-      fwd as (vals: unknown[]) => unknown,
-      // biome-ignore lint/suspicious/noExplicitAny: dispatch
-      bwd as (...args: any[]) => unknown,
+    return fanin(
+      Signal as unknown as new (
+        ...args: never[]
+      ) => Signal<unknown>,
+      parent as never,
+      fwd as never,
+      bwd as never,
     );
   }
   return Signal._fuse(
     parent as Signal<unknown>,
-    Signal as unknown as new (...args: never[]) => Signal<unknown>,
+    Signal as unknown as new (
+      ...args: never[]
+    ) => Signal<unknown>,
     fwd as (s: unknown) => unknown,
     bwd as (v: unknown, s: unknown) => unknown,
   );
@@ -90,10 +80,7 @@ export function lens(
 // ─── derive (free function) ──────────────────────────────────────
 
 /** RO derived signal from one parent. Goes through `Signal._fuse`. */
-export function derive<P, R>(
-  parent: Read<P>,
-  fn: (v: P) => R,
-): Signal<R>;
+export function derive<P, R>(parent: Read<P>, fn: (v: P) => R): Signal<R>;
 /** RO derived signal from N parents. */
 export function derive<P extends readonly Read<unknown>[], R>(
   parents: P,
@@ -101,15 +88,19 @@ export function derive<P extends readonly Read<unknown>[], R>(
 ): Signal<R>;
 export function derive(parent: unknown, fn: unknown): unknown {
   if (Array.isArray(parent)) {
-    return _faninImpl(
-      Signal as unknown as new (...args: never[]) => Signal<unknown>,
-      parent as readonly Read<unknown>[],
-      fn as (vals: unknown[]) => unknown,
+    return fanin(
+      Signal as unknown as new (
+        ...args: never[]
+      ) => Signal<unknown>,
+      parent as never,
+      fn as never,
     );
   }
   return Signal._fuse(
     parent as Signal<unknown>,
-    Signal as unknown as new (...args: never[]) => Signal<unknown>,
+    Signal as unknown as new (
+      ...args: never[]
+    ) => Signal<unknown>,
     fn as (s: unknown) => unknown,
   );
 }
@@ -125,7 +116,9 @@ export function classLens<
   P,
   R,
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  C extends new (...args: never[]) => Signal<any>,
+  C extends new (
+    ...args: never[]
+  ) => Signal<any>,
 >(
   Cls: AnyCls<C>,
   parent: Read<P>,
@@ -137,7 +130,9 @@ export function classLens<
   P extends readonly Read<unknown>[],
   R,
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  C extends new (...args: never[]) => Signal<any>,
+  C extends new (
+    ...args: never[]
+  ) => Signal<any>,
 >(
   Cls: AnyCls<C>,
   parents: P,
@@ -151,15 +146,12 @@ export function classLens(
   fwd: unknown,
   bwd: unknown,
 ): unknown {
-  // Inlined for the same reason as `lens`.
   if (Array.isArray(parent)) {
-    return _faninImpl(
-      Cls,
-      parent as readonly Read<unknown>[],
-      fwd as (vals: unknown[]) => unknown,
-      // biome-ignore lint/suspicious/noExplicitAny: dispatch
-      bwd as (...args: any[]) => unknown,
-    );
+    // Delegate to existing `fanin` for N-input. This guarantees perf
+    // parity (same monomorphic call site) and avoids re-implementing
+    // the scratch+arity-dispatch logic.
+    // biome-ignore lint/suspicious/noExplicitAny: variance
+    return fanin(Cls as any, parent as never, fwd as never, bwd as never);
   }
   return Signal._fuse(
     parent as Signal<unknown>,
@@ -174,23 +166,19 @@ export function classDerive<
   P,
   R,
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  C extends new (...args: never[]) => Signal<any>,
->(
-  Cls: AnyCls<C>,
-  parent: Read<P>,
-  fn: (v: P) => R,
-): InstanceType<C>;
+  C extends new (
+    ...args: never[]
+  ) => Signal<any>,
+>(Cls: AnyCls<C>, parent: Read<P>, fn: (v: P) => R): InstanceType<C>;
 /** Typed RO derived signal from N parents. */
 export function classDerive<
   P extends readonly Read<unknown>[],
   R,
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  C extends new (...args: never[]) => Signal<any>,
->(
-  Cls: AnyCls<C>,
-  parents: P,
-  fn: (vals: Vals<P>) => R,
-): InstanceType<C>;
+  C extends new (
+    ...args: never[]
+  ) => Signal<any>,
+>(Cls: AnyCls<C>, parents: P, fn: (vals: Vals<P>) => R): InstanceType<C>;
 export function classDerive(
   // biome-ignore lint/suspicious/noExplicitAny: variance
   Cls: new (...args: never[]) => Signal<any>,
@@ -198,17 +186,10 @@ export function classDerive(
   fn: unknown,
 ): unknown {
   if (Array.isArray(parent)) {
-    return _faninImpl(
-      Cls,
-      parent as readonly Read<unknown>[],
-      fn as (vals: unknown[]) => unknown,
-    );
+    // biome-ignore lint/suspicious/noExplicitAny: variance
+    return fanin(Cls as any, parent as never, fn as never);
   }
-  return Signal._fuse(
-    parent as Signal<unknown>,
-    Cls,
-    fn as (s: unknown) => unknown,
-  );
+  return Signal._fuse(parent as Signal<unknown>, Cls, fn as (s: unknown) => unknown);
 }
 
 // ─── endo: parent.lens(fwd, bwd) ─────────────────────────────────
@@ -227,58 +208,6 @@ export function endoLens<S extends Signal<unknown>>(
   ) as S;
 }
 
-// ─── Implementation ──────────────────────────────────────────────
-
-/** N-input lens body. Pre-allocated scratch + arity dispatch.
- *  Mirrors `signals/fanin.ts` byte-for-byte for perf parity. */
-function _faninImpl(
-  // biome-ignore lint/suspicious/noExplicitAny: variance
-  Cls: new (...args: never[]) => Signal<any>,
-  parents: readonly Read<unknown>[],
-  fwd: (vals: unknown[]) => unknown,
-  // biome-ignore lint/suspicious/noExplicitAny: dispatch
-  bwd?: (...args: any[]) => unknown,
-): unknown {
-  const n = parents.length;
-  const vals: unknown[] = new Array(n);
-
-  const getter = (): unknown => {
-    for (let i = 0; i < n; i++) vals[i] = (parents[i] as Signal<unknown>).value;
-    return fwd(vals);
-  };
-
-  if (bwd === undefined) {
-    return Signal.install(Cls, getter);
-  }
-
-  const stateful = bwd.length >= 2;
-
-  if (!stateful) {
-    const sBwd = bwd as (target: unknown) => readonly unknown[];
-    const setter = (v: unknown): void => {
-      const updates = sBwd(v);
-      batch(() => {
-        for (let i = 0; i < n; i++) {
-          const u = updates[i];
-          if (u === undefined) continue;
-          (parents[i] as Signal<unknown>).value = u;
-        }
-      });
-    };
-    return Signal.install(Cls, getter, setter);
-  }
-
-  const sBwd = bwd as (target: unknown, vals: unknown[]) => readonly unknown[];
-  const setter = (v: unknown): void => {
-    for (let i = 0; i < n; i++) vals[i] = (parents[i] as Signal<unknown>).peek();
-    const updates = sBwd(v, vals);
-    batch(() => {
-      for (let i = 0; i < n; i++) {
-        const u = updates[i];
-        if (u === undefined) continue;
-        (parents[i] as Signal<unknown>).value = u;
-      }
-    });
-  };
-  return Signal.install(Cls, getter, setter);
-}
+// N-input dispatch: delegates to the existing `fanin`. Same engine
+// path, same setter shape, perf parity. The new lens API is just
+// a different NAME and SHAPE for the same primitive.

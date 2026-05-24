@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { num, vec } from "../../signals";
-import { clamp, distance, gap, geq, inside, leq, Cluster, Strength, spring } from "../index";
+import { Cluster, clamp, distance, gap, geq, inside, leq, Strength, spring } from "../index";
 
 describe("API — Strength constants", () => {
   it("constants ordered low → high; HARD = ∞", () => {
@@ -63,7 +63,9 @@ describe("API — inequality factories", () => {
     gap(s, a, b, 5);
     s.pin(a);
     a.value = { x: 0.0001, y: 0 };
-    expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeGreaterThanOrEqual(5 - 1e-2);
+    expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeGreaterThanOrEqual(
+      5 - 1e-2,
+    );
   });
 
   it("gap(a, b, d): no force when already far apart", () => {
@@ -106,7 +108,9 @@ describe("API — inequality factories", () => {
     gap(s, a, b, 4);
     s.pin(a);
     a.value = { x: 2.0001, y: 5 };
-    expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeGreaterThanOrEqual(4 - 1e-2);
+    expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeGreaterThanOrEqual(
+      4 - 1e-2,
+    );
     expect(b.value.x).toBeLessThanOrEqual(10 + 1e-2);
   });
 });

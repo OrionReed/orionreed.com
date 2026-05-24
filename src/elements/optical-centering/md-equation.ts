@@ -8,6 +8,7 @@
 // surface closest to the current values, which feels like
 // "redistribute the violation among the un-pinned cells."
 
+import { Cluster, clamp, generic } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -21,7 +22,6 @@ import {
   signal,
   Vec,
 } from "../../minim";
-import { clamp, Cluster, generic } from "@minim/constraints";
 
 type V = { x: number; y: number };
 
@@ -65,9 +65,7 @@ export class MdEquation extends Diagram {
 
     for (const t of tracks) {
       s(line(fixedV(trackX0, t.y), fixedV(trackX1, t.y), { thin: true, opacity: 0.4 }));
-      s(
-        line(fixedV(trackX0, t.y - 6), fixedV(trackX0, t.y + 6), { thin: true, opacity: 0.5 }),
-      );
+      s(line(fixedV(trackX0, t.y - 6), fixedV(trackX0, t.y + 6), { thin: true, opacity: 0.5 }));
 
       const handlePos = Vec.lens(
         () => ({ x: trackX0 + (t.sig.value / t.max) * TRACK_LEN, y: t.y }),
@@ -100,11 +98,15 @@ export class MdEquation extends Diagram {
     }
 
     s(
-      label(view.top.down(20), "drag any handle — the other two redistribute to keep a² + b² = c²", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(
+        view.top.down(20),
+        "drag any handle — the other two redistribute to keep a² + b² = c²",
+        {
+          size: 12,
+          align: Anchor.Center,
+          opacity: 0.7,
+        },
+      ),
       label(view.bottom.up(16), "three Num cells · one generic constraint · no geometry", {
         size: 10,
         align: Anchor.Center,

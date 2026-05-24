@@ -336,4 +336,3 @@ export class GenericForce extends Force {
     }
   }
 }
-

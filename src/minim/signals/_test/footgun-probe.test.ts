@@ -5,7 +5,7 @@
 // optimisation has a hole.
 
 import { describe, expect, it } from "vitest";
-import { batch, effect, num, Num, vec, Vec } from "../index";
+import { batch, effect, Num, num, Vec, vec } from "../index";
 import { relate } from "../relate";
 import { Signal } from "../signal";
 import { field } from "../writable";

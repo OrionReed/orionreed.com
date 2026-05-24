@@ -6,6 +6,7 @@
 // over four DOF (A, B), the mechanism has one internal degree of
 // freedom — drag a joint anywhere and the rest of the loop follows.
 
+import { Cluster, distance } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -15,11 +16,10 @@ import {
   label,
   line,
   Mount,
-  vec,
   type Vec,
+  vec,
   type Writable,
 } from "../../minim";
-import { Cluster, distance } from "@minim/constraints";
 
 type WVec = Writable<Vec>;
 
@@ -61,11 +61,15 @@ export class MdFourbar extends Diagram {
     }
 
     s(
-      label(view.top.down(20), "drag the blue or red joint — the loop articulates through its one DOF", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(
+        view.top.down(20),
+        "drag the blue or red joint — the loop articulates through its one DOF",
+        {
+          size: 12,
+          align: Anchor.Center,
+          opacity: 0.7,
+        },
+      ),
       label(
         view.bottom.up(16),
         "3 distance constraints + 2 pinned grounds — 1 internal degree of freedom",

@@ -130,11 +130,7 @@ function unlink(l: Link, sub: ReactiveNode = l.sub): Link | undefined {
   return nextDep;
 }
 
-function propagate(
-  start: Link,
-  innerWrite: boolean,
-  excluding?: ReactiveNode,
-): void {
+function propagate(start: Link, innerWrite: boolean, excluding?: ReactiveNode): void {
   let l: Link | undefined = start;
   let next: Link | undefined = start.nextSub;
   let stack: Stack<Link | undefined> | undefined;
@@ -764,13 +760,17 @@ export class Signal<T = unknown> implements ReactiveNode {
     if (this._fusedOf !== undefined && this._fusedOf.bwd === undefined) {
       return Signal._fuse(
         this as Signal<unknown>,
-        Cls as new (...args: never[]) => Signal<unknown>,
+        Cls as new (
+          ...args: never[]
+        ) => Signal<unknown>,
         fwd as (s: unknown) => unknown,
       ) as unknown as this;
     }
     return Signal._fuse(
       this as Signal<unknown>,
-      Cls as new (...args: never[]) => Signal<unknown>,
+      Cls as new (
+        ...args: never[]
+      ) => Signal<unknown>,
       fwd as (s: unknown) => unknown,
       bwd as (v: unknown, s: unknown) => unknown,
     ) as unknown as this;
@@ -949,8 +949,7 @@ export class Signal<T = unknown> implements ReactiveNode {
       ) => Signal<Of<InstanceType<C>>>,
       s => (s as Record<string | number | symbol, unknown>)[key] as Of<InstanceType<C>>,
       // 2-arg bwd → arity-detected as stateful.
-      (v, s) =>
-        ({ ...(s as object), [key]: v }) as unknown,
+      (v, s) => ({ ...(s as object), [key]: v }) as unknown,
       key,
     ) as InstanceType<C>;
   }

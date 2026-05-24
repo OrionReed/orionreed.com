@@ -24,8 +24,8 @@
 
 import { type Body, RigidWorld } from "@minim/constraints";
 import {
-  type AnyShape,
   Anchor,
+  type AnyShape,
   circle,
   Diagram,
   drive,
@@ -116,10 +116,7 @@ export class MdChain extends Diagram {
       maxAngularSpeed: 100,
     });
 
-    const anchor = world.add(
-      { size: { w: 8, h: 8 }, density: 0 },
-      { x: anchorX, y: anchorY },
-    );
+    const anchor = world.add({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY });
     s(circle(anchor.position, 5, { fill: true }));
 
     const links: Body[] = [];
@@ -131,12 +128,10 @@ export class MdChain extends Diagram {
         { x: cx, y: anchorY },
       );
       links.push(link);
-      world.joint(
-        prev,
-        link,
-        i === 0 ? { x: 0, y: 0 } : { x: LINK_W / 2, y: 0 },
-        { x: -LINK_W / 2, y: 0 },
-      );
+      world.joint(prev, link, i === 0 ? { x: 0, y: 0 } : { x: LINK_W / 2, y: 0 }, {
+        x: -LINK_W / 2,
+        y: 0,
+      });
       prev = link;
     }
 

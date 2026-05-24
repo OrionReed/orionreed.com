@@ -40,22 +40,36 @@ type Updates<P extends readonly Signal<unknown>[]> = {
 
 /** Multi-input lens: reads from N parents. RO overload (no bwd). */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo / mix
-export function fanin<P extends readonly Signal<any>[], R, C extends new (...args: never[]) => Signal<any>>(
-  Cls: C,
-  parents: P,
-  fwd: (vals: Vals<P>) => R,
-): InstanceType<C>;
+export function fanin<
+  P extends readonly Signal<any>[],
+  R,
+  C extends new (
+    ...args: never[]
+  ) => Signal<any>,
+>(Cls: C, parents: P, fwd: (vals: Vals<P>) => R): InstanceType<C>;
 /** Multi-input lens: reads from N parents, writes back via `bwd`.
  *  Brand-typed return — `mix`'s overload pattern. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo / mix
-export function fanin<P extends readonly Signal<any>[], R, C extends new (...args: never[]) => Signal<any>>(
+export function fanin<
+  P extends readonly Signal<any>[],
+  R,
+  C extends new (
+    ...args: never[]
+  ) => Signal<any>,
+>(
   Cls: C,
   parents: P,
   fwd: (vals: Vals<P>) => R,
   bwd: ((target: R) => Updates<P>) | ((target: R, vals: Vals<P>) => Updates<P>),
 ): Writable<InstanceType<C>>;
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
-export function fanin<P extends readonly Signal<any>[], R, C extends new (...args: never[]) => Signal<any>>(
+export function fanin<
+  P extends readonly Signal<any>[],
+  R,
+  C extends new (
+    ...args: never[]
+  ) => Signal<any>,
+>(
   Cls: C,
   parents: P,
   fwd: (vals: Vals<P>) => R,

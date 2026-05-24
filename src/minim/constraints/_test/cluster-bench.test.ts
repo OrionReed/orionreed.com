@@ -40,7 +40,9 @@ describe("relate3 perf sanity", () => {
     const t0 = performance.now();
     for (let f = 0; f < 60; f++) world.step(1 / 60);
     const ms = (performance.now() - t0) / 60;
-    console.log(`  rigid rope (${N} links + ${N} joints) iter=14 postStab: ${ms.toFixed(3)}ms / frame`);
+    console.log(
+      `  rigid rope (${N} links + ${N} joints) iter=14 postStab: ${ms.toFixed(3)}ms / frame`,
+    );
     expect(Number.isFinite(ms)).toBe(true);
   });
 
@@ -60,7 +62,10 @@ describe("relate3 perf sanity", () => {
       for (let col = 0; col < cols; col++) {
         const x = -((cols - 1) * SIZE) / 2 + col * SIZE;
         const y = 200 - 8 - SIZE / 2 - row * (SIZE + 1);
-        world.add({ size: { w: SIZE - 2, h: SIZE - 2 }, density: 1, friction: 0.5 }, { x, y, theta: 0 });
+        world.add(
+          { size: { w: SIZE - 2, h: SIZE - 2 }, density: 1, friction: 0.5 },
+          { x, y, theta: 0 },
+        );
         n++;
       }
     }
@@ -70,7 +75,6 @@ describe("relate3 perf sanity", () => {
     console.log(`  rigid pyramid (${n} boxes) iter=14 postStab: ${ms.toFixed(3)}ms / frame`);
     expect(Number.isFinite(ms)).toBe(true);
   });
-
 
   it("cloth 14×10 — drag a corner 30 times", async () => {
     const { spring, Strength } = await import("../index");
@@ -118,14 +122,34 @@ describe("relate3 perf sanity", () => {
       nodes.push(vec(Math.cos(a) * 100, Math.sin(a) * 100));
     }
     const edges: [number, number][] = [
-      [0, 1], [0, 2], [0, 3], [1, 4], [1, 5], [2, 6], [2, 7],
-      [3, 8], [3, 9], [4, 10], [5, 10], [6, 11], [7, 11],
-      [8, 12], [9, 12], [10, 13], [11, 13], [12, 13], [13, 14], [14, 15],
-      [4, 6], [5, 7], [8, 9],
+      [0, 1],
+      [0, 2],
+      [0, 3],
+      [1, 4],
+      [1, 5],
+      [2, 6],
+      [2, 7],
+      [3, 8],
+      [3, 9],
+      [4, 10],
+      [5, 10],
+      [6, 11],
+      [7, 11],
+      [8, 12],
+      [9, 12],
+      [10, 13],
+      [11, 13],
+      [12, 13],
+      [13, 14],
+      [14, 15],
+      [4, 6],
+      [5, 7],
+      [8, 9],
     ];
     const c = new Cluster({ iterations: 12 });
     for (const [a, b] of edges) spring(c, nodes[a]!, nodes[b]!, REST, STIFFNESS);
-    for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) gap(c, nodes[i]!, nodes[j]!, MIN_GAP);
+    for (let i = 0; i < N; i++)
+      for (let j = i + 1; j < N; j++) gap(c, nodes[i]!, nodes[j]!, MIN_GAP);
     c.pin(nodes[0]!);
     c.pin(nodes[1]!);
 
@@ -138,10 +162,11 @@ describe("relate3 perf sanity", () => {
       nodes[1]!.value = { x: 30 + 50 * Math.cos(t), y: 50 * Math.sin(t) };
     }
     const ms = (performance.now() - t0) / drags;
-    console.log(`  graph N=${N} E=${edges.length} all-pairs gap iter=12: ${ms.toFixed(3)}ms / drag`);
+    console.log(
+      `  graph N=${N} E=${edges.length} all-pairs gap iter=12: ${ms.toFixed(3)}ms / drag`,
+    );
     expect(Number.isFinite(ms)).toBe(true);
   });
-
 
   it("chain N=256 iter=5 — drag a free endpoint 50 times", () => {
     const N = 256;

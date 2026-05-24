@@ -5,6 +5,7 @@
 // engine re-solves on every write and the rest of the figure
 // reflows to keep all four constraints satisfied.
 
+import { Cluster, distance, rightAngle } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -14,11 +15,10 @@ import {
   label,
   line,
   Mount,
-  vec,
   type Vec,
+  vec,
   type Writable,
 } from "../../minim";
-import { Cluster, distance, rightAngle } from "@minim/constraints";
 
 type WVec = Writable<Vec>;
 
@@ -60,11 +60,11 @@ export class MdSketchpad extends Diagram {
         align: Anchor.Center,
         opacity: 0.7,
       }),
-      label(
-        view.bottom.up(16),
-        "3 distance + 1 perpendicular constraints in a Cluster",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
-      ),
+      label(view.bottom.up(16), "3 distance + 1 perpendicular constraints in a Cluster", {
+        size: 10,
+        align: Anchor.Center,
+        opacity: 0.5,
+      }),
     );
   }
 }

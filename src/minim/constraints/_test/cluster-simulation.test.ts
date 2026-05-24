@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import type { Tick } from "../../core/anim";
 import { vec } from "../../signals";
-import { distance, Simulation, Cluster, spring } from "../index";
+import { Cluster, distance, Simulation, spring } from "../index";
 
 describe("Simulation — composes solver + time-stepping", () => {
   it("velocity is per-cell, lazily allocated; mass=0 cells skip update", () => {

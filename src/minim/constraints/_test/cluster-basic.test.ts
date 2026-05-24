@@ -1,8 +1,8 @@
 // cluster-basic.test.ts — verify the write-attribution model.
 
 import { describe, expect, it, vi } from "vitest";
-import { batch, effect, num, vec, type Vec, type Writable } from "../../signals";
-import { Cluster, distance, eq, leq, lensNum } from "../index";
+import { batch, effect, num, type Vec, vec, type Writable } from "../../signals";
+import { Cluster, distance, eq, lensNum, leq } from "../index";
 
 type WVec = Writable<Vec>;
 

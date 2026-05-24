@@ -15,9 +15,10 @@
 // the SVG root's CTM gives stable world-frame coords regardless
 // of how the rect is transformed.
 
+import { type Body, RigidWorld } from "@minim/constraints";
 import {
-  type AnyShape,
   Anchor,
+  type AnyShape,
   Diagram,
   drive,
   effect,
@@ -29,7 +30,6 @@ import {
   type Vec,
   type Writable,
 } from "../../minim";
-import { type Body, RigidWorld } from "@minim/constraints";
 
 function findSvgRoot(el: Element | null): SVGSVGElement | null {
   let walker: Element | null = el;
@@ -114,9 +114,18 @@ export class MdRigidStack extends Diagram {
     });
 
     // Static walls and ground.
-    const ground = world.add({ size: { w: wallR - wallL + 80, h: 16 }, density: 0, friction: 0.7 }, { x: cx, y: floorY + 8 });
-    const leftWall = world.add({ size: { w: 16, h: 320 }, density: 0, friction: 0.5 }, { x: wallL - 8, y: floorY - 160 });
-    const rightWall = world.add({ size: { w: 16, h: 320 }, density: 0, friction: 0.5 }, { x: wallR + 8, y: floorY - 160 });
+    const ground = world.add(
+      { size: { w: wallR - wallL + 80, h: 16 }, density: 0, friction: 0.7 },
+      { x: cx, y: floorY + 8 },
+    );
+    const leftWall = world.add(
+      { size: { w: 16, h: 320 }, density: 0, friction: 0.5 },
+      { x: wallL - 8, y: floorY - 160 },
+    );
+    const rightWall = world.add(
+      { size: { w: 16, h: 320 }, density: 0, friction: 0.5 },
+      { x: wallR + 8, y: floorY - 160 },
+    );
 
     // A small pyramid: row 0 has 4 boxes, row 1 has 3, row 2 has 2, row 3 has 1.
     const SIZE = 44;
@@ -136,11 +145,19 @@ export class MdRigidStack extends Diagram {
     }
 
     // One taller free body for variety.
-    const slab = world.add({ size: { w: 90, h: 18 }, density: 0.8, friction: 0.4 }, { x: cx, y: floorY - 320 });
+    const slab = world.add(
+      { size: { w: 90, h: 18 }, density: 0.8, friction: 0.4 },
+      { x: cx, y: floorY - 320 },
+    );
     dynamicBoxes.push(slab);
 
     // Render walls/ground (static — non-reactive position is fine).
-    s(rect(wallL - 16, floorY, wallR - wallL + 32, 16, { fill: "rgba(120, 120, 120, 0.5)", thin: true }));
+    s(
+      rect(wallL - 16, floorY, wallR - wallL + 32, 16, {
+        fill: "rgba(120, 120, 120, 0.5)",
+        thin: true,
+      }),
+    );
     s(rect(wallL - 16, floorY - 320, 16, 320, { fill: "rgba(120, 120, 120, 0.3)", thin: true }));
     s(rect(wallR, floorY - 320, 16, 320, { fill: "rgba(120, 120, 120, 0.3)", thin: true }));
     void ground;

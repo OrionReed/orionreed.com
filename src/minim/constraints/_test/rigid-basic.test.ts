@@ -172,12 +172,11 @@ describe("RigidWorld — basics", () => {
     // Settle.
     for (let f = 0; f < 240; f++) w.step(1 / 60);
     const restY = boxes.map(b => b.pose().y);
-    // Sideways tap on the bottom box. With fixed-dt sub-stepping
-    // the stack should weather a moderate kick without collapsing.
-    // Stronger kicks (> ~3× box-width per second) topple the tower
-    // — that's expected at this iteration count and stack height.
+    // Sideways kick on the bottom box. With fixed-dt sub-stepping
+    // and λ warm-start decay restored, the stack should weather a
+    // ~2.5× box-width per second kick without collapsing.
     const off = w.cluster.solver.offsets[boxes[0]!.cellId]!;
-    w.simulation.velocities[off]! += 100;
+    w.simulation.velocities[off]! += 250;
     for (let f = 0; f < 600; f++) w.step(1 / 60);
     for (let i = 1; i < boxes.length; i++) {
       const here = boxes[i]!.pose().y;
@@ -221,7 +220,9 @@ describe("RigidWorld — basics", () => {
       maxLinearV = Math.max(maxLinearV, Math.hypot(vx, vy));
       maxAngularV = Math.max(maxAngularV, Math.abs(va));
     }
-    console.log(`  demo-scale residual: linear=${maxLinearV.toFixed(4)}px/s, angular=${maxAngularV.toFixed(4)}rad/s`);
+    console.log(
+      `  demo-scale residual: linear=${maxLinearV.toFixed(4)}px/s, angular=${maxAngularV.toFixed(4)}rad/s`,
+    );
     expect(maxLinearV).toBeLessThan(5);
     expect(maxAngularV).toBeLessThan(0.5);
   });

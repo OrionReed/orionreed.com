@@ -1,7 +1,7 @@
 // fanin.test.ts — multi-input lens primitive.
 
 import { describe, expect, it } from "vitest";
-import { effect, fanin, num, Num, vec, Vec } from "../index";
+import { effect, fanin, Num, num, Vec, vec } from "../index";
 
 describe("fanin: read-only (no bwd)", () => {
   it("sum of two nums", () => {

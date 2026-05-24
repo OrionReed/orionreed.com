@@ -397,8 +397,7 @@ describe(".through() fusion", () => {
 const TAU = 2 * Math.PI;
 const wrapDelta = (delta: number, period: number): number =>
   delta - period * Math.round(delta / period);
-const clampFn = (lo: number, hi: number) => (v: number) =>
-  v < lo ? lo : v > hi ? hi : v;
+const clampFn = (lo: number, hi: number) => (v: number) => (v < lo ? lo : v > hi ? hi : v);
 const quantizeFn = (step: number) => (v: number) => Math.round(v / step) * step;
 
 describe(".through() fusion: non-Iso compositions match unfused reference", () => {

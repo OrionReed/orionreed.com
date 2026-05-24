@@ -42,8 +42,8 @@ export {
   generic,
   geq,
   inside,
-  leq,
   lensNum,
+  leq,
   midpoint,
   onCircle,
   parallel,
@@ -55,15 +55,6 @@ export {
 } from "./factories";
 export { Force, LAMBDA_MAX, PENALTY_MAX, PENALTY_MIN } from "./force";
 export {
-  Body,
-  type BodyOpts,
-  BoxContact,
-  Joint,
-  type JointStiffness,
-  RigidWorld,
-  type RigidWorldOpts,
-} from "./rigid";
-export {
   BoundsForce,
   DistanceForce,
   EqForce,
@@ -73,5 +64,14 @@ export {
   SoftTargetForce,
   Strength,
 } from "./forces";
+export {
+  Body,
+  type BodyOpts,
+  BoxContact,
+  Joint,
+  type JointStiffness,
+  RigidWorld,
+  type RigidWorldOpts,
+} from "./rigid";
 export { Simulation, type SimulationOpts } from "./simulation";
 export { Solver, type SolverOpts } from "./solver";

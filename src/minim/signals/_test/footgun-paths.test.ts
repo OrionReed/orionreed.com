@@ -16,13 +16,19 @@ describe("footgun: deep field paths (4+)", () => {
           Signal.fieldOf(
             Signal.fieldOf(root, "a", Signal as new (...args: never[]) => Signal<S["a"]>),
             "b",
-            Signal as new (...args: never[]) => Signal<S["a"]["b"]>,
+            Signal as new (
+              ...args: never[]
+            ) => Signal<S["a"]["b"]>,
           ),
           "c",
-          Signal as new (...args: never[]) => Signal<S["a"]["b"]["c"]>,
+          Signal as new (
+            ...args: never[]
+          ) => Signal<S["a"]["b"]["c"]>,
         ),
         "d",
-        Signal as new (...args: never[]) => Signal<S["a"]["b"]["c"]["d"]>,
+        Signal as new (
+          ...args: never[]
+        ) => Signal<S["a"]["b"]["c"]["d"]>,
       ),
       "e",
       Num,
@@ -61,7 +67,9 @@ describe("footgun: numeric / symbol keys", () => {
     const itemsLens = Signal.fieldOf(
       root,
       "items",
-      Signal as new (...args: never[]) => Signal<number[]>,
+      Signal as new (
+        ...args: never[]
+      ) => Signal<number[]>,
     );
     const idx0 = Signal.fieldOf(itemsLens, 0, Num);
 
@@ -105,7 +113,9 @@ describe("footgun: spread on arrays (semantic difference)", () => {
     const itemsLens = Signal.fieldOf(
       root,
       "items",
-      Signal as new (...args: never[]) => Signal<number[]>,
+      Signal as new (
+        ...args: never[]
+      ) => Signal<number[]>,
     );
     const idx0 = Signal.fieldOf(itemsLens, 0, Num);
 

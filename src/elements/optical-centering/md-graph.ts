@@ -27,8 +27,8 @@ import {
   label,
   line,
   Mount,
-  vec,
   type Vec,
+  vec,
   type Writable,
 } from "../../minim";
 
@@ -66,11 +66,11 @@ const EDGES: readonly Edge[] = [
 ];
 const N = 16;
 const REST = 70; // edge spring rest length
-const SPRING_K = 80; // edge attraction stiffness
+const SPRING_K = 600; // edge attraction stiffness — stiff enough to feel taut
 const MIN_GAP = 22; // hard non-overlap distance
 const REPEL_RANGE = 160; // soft repulsion range — beyond this, no force
-const REPEL_K = 6; // soft repulsion stiffness
-const CENTER_K = 4;
+const REPEL_K = 30; // soft repulsion stiffness — drives node spread
+const CENTER_K = 12;
 
 export class MdGraph extends Diagram {
   protected scene(s: Mount): void {
@@ -103,8 +103,10 @@ export class MdGraph extends Diagram {
     }
     for (let i = 0; i < N; i++) softTarget(cluster, nodes[i]!, [cx, cy], CENTER_K);
 
-    // Heavy damping — layouts want to settle, not orbit.
-    const sim = new Simulation(cluster, { damping: 0.7 });
+    // Mild damping — enough energy bleed to settle, not so much
+    // that node motion feels viscous. With fast springs and
+    // long-range repulsion doing real work, ~5%/frame is plenty.
+    const sim = new Simulation(cluster, { damping: 0.95 });
     this.anim.start(drive(tick => sim.tick(tick.dt)));
 
     for (const e of EDGES) s(line(nodes[e.a]!, nodes[e.b]!, { thin: true, opacity: 0.5 }));

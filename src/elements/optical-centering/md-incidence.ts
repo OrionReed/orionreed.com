@@ -7,6 +7,7 @@
 // inner vertex and the bracket articulates while keeping its
 // vertices on their respective loci.
 
+import { Cluster, collinear, distance, equalDist, onCircle, rightAngle } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -16,11 +17,10 @@ import {
   label,
   line,
   Mount,
-  vec,
   type Vec,
+  vec,
   type Writable,
 } from "../../minim";
-import { Cluster, collinear, distance, equalDist, onCircle, rightAngle } from "@minim/constraints";
 
 type WVec = Writable<Vec>;
 
@@ -39,9 +39,9 @@ export class MdIncidence extends Diagram {
     const L2 = vec(cx + 220, cy - 110);
 
     // Bracket vertices.
-    const P = vec(cx - 140 + RADIUS, cy);     // on the circle
-    const Q = vec(cx + 145, cy);                 // on the line
-    const M = vec(cx - 30, cy);                  // free inner vertex
+    const P = vec(cx - 140 + RADIUS, cy); // on the circle
+    const Q = vec(cx + 145, cy); // on the line
+    const M = vec(cx - 30, cy); // free inner vertex
 
     const cluster = new Cluster({ iterations: 24 });
     onCircle(cluster, P, center, RADIUS);
@@ -75,11 +75,15 @@ export class MdIncidence extends Diagram {
     }
 
     s(
-      label(view.top.down(20), "P stays on the circle, Q stays on the line, |PM| = |MQ| at a right angle", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(
+        view.top.down(20),
+        "P stays on the circle, Q stays on the line, |PM| = |MQ| at a right angle",
+        {
+          size: 12,
+          align: Anchor.Center,
+          opacity: 0.7,
+        },
+      ),
       label(
         view.bottom.up(16),
         "onCircle · collinear · distance · equalDist · rightAngle — six constraints, one cluster",

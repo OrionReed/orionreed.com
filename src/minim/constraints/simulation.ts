@@ -122,7 +122,10 @@ export class Simulation {
     const N = solver.cellCount;
     // Cluster's _bindings is structurally compatible.
     // biome-ignore lint/suspicious/noExplicitAny: heterogeneous binding registry
-    const bindings = (this.cluster as any)._bindings as readonly ({ sig: Signal<any>; pack: Pack<any> } | undefined)[];
+    const bindings = (this.cluster as any)._bindings as readonly (
+      | { sig: Signal<any>; pack: Pack<any> }
+      | undefined
+    )[];
 
     // Snapshot signal values into solver positions.
     for (let id = 0; id < N; id++) {

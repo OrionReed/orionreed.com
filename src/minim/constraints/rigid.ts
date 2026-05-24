@@ -15,7 +15,7 @@
 // AVBD reference 2D demo uses. See:
 // https://github.com/savant117/avbd-demo2d/blob/main/source/collide.cpp
 
-import { num, type Num, vec, type Vec, type Writable } from "../signals";
+import { type Num, num, type Vec, vec, type Writable } from "../signals";
 import { Cluster } from "./cluster";
 import { Force } from "./force";
 import { Simulation, type SimulationOpts } from "./simulation";
@@ -491,10 +491,7 @@ export class BoxContact extends Force {
     this.friction = Math.sqrt(this.bodyA.friction * this.bodyB.friction);
 
     // Stash old contact state for warm-starting.
-    const oldContacts: Contact[] = [
-      { ...this.contacts[0]! },
-      { ...this.contacts[1]! },
-    ];
+    const oldContacts: Contact[] = [{ ...this.contacts[0]! }, { ...this.contacts[1]! }];
     const oldNumContacts = this.numContacts;
     const oldPenalty = [this.penalty[0]!, this.penalty[1]!, this.penalty[2]!, this.penalty[3]!];
     const oldLambda = [this.lambda[0]!, this.lambda[1]!, this.lambda[2]!, this.lambda[3]!];
@@ -505,7 +502,13 @@ export class BoxContact extends Force {
     // a brief separation (RigidWorld's broadphase still tracks the
     // pair). When `numContacts == 0` the rows are zeroed in
     // `computeConstraint`, so the inactive manifold contributes nothing.
-    const numNew = collideBoxes(SCRATCH_CONTACTS, this.bodyA.pose(), this.bodyA, this.bodyB.pose(), this.bodyB);
+    const numNew = collideBoxes(
+      SCRATCH_CONTACTS,
+      this.bodyA.pose(),
+      this.bodyA,
+      this.bodyB.pose(),
+      this.bodyB,
+    );
     this.numContacts = numNew;
     if (numNew === 0) {
       for (let r = 0; r < 4; r++) {
@@ -607,18 +610,20 @@ export class BoxContact extends Force {
     const dBpt = positions[offB + 2]! - initials[offB + 2]!;
 
     for (let i = 0; i < this.numContacts; i++) {
-      const dn = this.JAn[i * 3 + 0]! * dApx
-        + this.JAn[i * 3 + 1]! * dApy
-        + this.JAn[i * 3 + 2]! * dApt
-        + this.JBn[i * 3 + 0]! * dBpx
-        + this.JBn[i * 3 + 1]! * dBpy
-        + this.JBn[i * 3 + 2]! * dBpt;
-      const dt = this.JAt[i * 3 + 0]! * dApx
-        + this.JAt[i * 3 + 1]! * dApy
-        + this.JAt[i * 3 + 2]! * dApt
-        + this.JBt[i * 3 + 0]! * dBpx
-        + this.JBt[i * 3 + 1]! * dBpy
-        + this.JBt[i * 3 + 2]! * dBpt;
+      const dn =
+        this.JAn[i * 3 + 0]! * dApx +
+        this.JAn[i * 3 + 1]! * dApy +
+        this.JAn[i * 3 + 2]! * dApt +
+        this.JBn[i * 3 + 0]! * dBpx +
+        this.JBn[i * 3 + 1]! * dBpy +
+        this.JBn[i * 3 + 2]! * dBpt;
+      const dt =
+        this.JAt[i * 3 + 0]! * dApx +
+        this.JAt[i * 3 + 1]! * dApy +
+        this.JAt[i * 3 + 2]! * dApt +
+        this.JBt[i * 3 + 0]! * dBpx +
+        this.JBt[i * 3 + 1]! * dBpy +
+        this.JBt[i * 3 + 2]! * dBpt;
 
       this.C[i * 2 + 0]! = this.C0n[i]! * (1 - alpha) + dn;
       this.C[i * 2 + 1]! = this.C0t[i]! * (1 - alpha) + dt;
@@ -630,7 +635,8 @@ export class BoxContact extends Force {
 
       // Sticking detection for static friction next frame.
       const con = this.contacts[i]!;
-      con.stick = Math.abs(this.lambda[i * 2 + 1]!) < bound && Math.abs(this.C0t[i]!) < STICK_THRESH;
+      con.stick =
+        Math.abs(this.lambda[i * 2 + 1]!) < bound && Math.abs(this.C0t[i]!) < STICK_THRESH;
     }
 
     // Zero out unused rows so they contribute nothing to the dual update.

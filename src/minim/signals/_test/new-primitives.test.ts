@@ -1,6 +1,7 @@
 // new-primitives.test.ts — primitives that become natural with `fanin`.
 
 import { describe, expect, it } from "vitest";
+import { num, signal, vec } from "../index";
 import {
   angleLens,
   bezier2,
@@ -12,7 +13,6 @@ import {
   reflectionLens,
   vecLerp,
 } from "../new-primitives";
-import { num, signal, vec } from "../index";
 
 describe("distanceLens", () => {
   it("computes Euclidean distance", () => {

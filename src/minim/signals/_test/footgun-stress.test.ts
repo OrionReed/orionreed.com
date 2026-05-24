@@ -3,7 +3,7 @@
 // and other "this looks too fast, something must be wrong" probes.
 
 import { describe, expect, it } from "vitest";
-import { batch, computed, effect, num, Num, signal, transform, vec } from "../index";
+import { batch, computed, effect, Num, num, signal, transform, vec } from "../index";
 import { relate } from "../relate";
 import { Signal } from "../signal";
 import { field } from "../writable";

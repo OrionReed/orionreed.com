@@ -45,7 +45,9 @@ describe("footgun: field on top of manual Signal.install lens", () => {
     const root = signal({ vals: { x: 1, y: 2 } });
     let setterCalls = 0;
     const mLens = Signal.install(
-      Signal as new (...args: never[]) => Signal<{ x: number; y: number }>,
+      Signal as new (
+        ...args: never[]
+      ) => Signal<{ x: number; y: number }>,
       () => root.value.vals,
       (v: { x: number; y: number }) => {
         setterCalls++;

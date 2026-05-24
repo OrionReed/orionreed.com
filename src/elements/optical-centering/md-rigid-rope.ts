@@ -9,8 +9,8 @@
 
 import { type Body, RigidWorld } from "@minim/constraints";
 import {
-  type AnyShape,
   Anchor,
+  type AnyShape,
   circle,
   Diagram,
   drive,
@@ -102,10 +102,7 @@ export class MdRigidRope extends Diagram {
     });
 
     // Static anchor block.
-    const anchor = world.add(
-      { size: { w: 8, h: 8 }, density: 0 },
-      { x: anchorX, y: anchorY },
-    );
+    const anchor = world.add({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY });
     s(rect(anchor.position, 10, 10, { fill: "#222" }));
 
     // Link bodies, one after another.
@@ -128,10 +125,12 @@ export class MdRigidRope extends Diagram {
     const PALETTE = ["#5b8def", "#e25c5c", "#f5a623", "#7ed321"];
     for (let i = 0; i < links.length; i++) {
       const link = links[i]!;
-      const r = s(rect(link.position, LINK_W - 1, LINK_H, {
-        fill: PALETTE[i % PALETTE.length]!,
-        corner: 1,
-      }));
+      const r = s(
+        rect(link.position, LINK_W - 1, LINK_H, {
+          fill: PALETTE[i % PALETTE.length]!,
+          corner: 1,
+        }),
+      );
       effect(() => {
         r.rotate.value = link.angle.value;
       });
@@ -176,11 +175,15 @@ export class MdRigidRope extends Diagram {
     this.anim.start(drive(tick => world.step(tick.dt)));
 
     s(
-      label(view.top.down(20), "drag any link — rigid bars + revolute joints, full rotation per link", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(
+        view.top.down(20),
+        "drag any link — rigid bars + revolute joints, full rotation per link",
+        {
+          size: 12,
+          align: Anchor.Center,
+          opacity: 0.7,
+        },
+      ),
       label(
         view.bottom.up(16),
         `${N} rigid bars · ${N} joints · diag(m, m, I) per body · postStabilize`,

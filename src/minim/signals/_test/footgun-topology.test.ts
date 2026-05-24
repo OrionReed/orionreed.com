@@ -3,7 +3,7 @@
 // a parent with a relate, etc.
 
 import { describe, expect, it } from "vitest";
-import { batch, effect, fanin, num, Num, vec } from "../index";
+import { batch, effect, fanin, Num, num, vec } from "../index";
 import { relate } from "../relate";
 
 void Num;

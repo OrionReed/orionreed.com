@@ -18,13 +18,17 @@ type V = { x: number; y: number };
  *  semantic (where would you push the points to achieve a given
  *  distance? Not unique). For a writable variant see `radialLens`. */
 export function distanceLens(a: Signal<V>, b: Signal<V>): Num {
-  return fanin(Num, [a, b] as const, vals => Math.hypot(vals[0].x - vals[1].x, vals[0].y - vals[1].y));
+  return fanin(Num, [a, b] as const, vals =>
+    Math.hypot(vals[0].x - vals[1].x, vals[0].y - vals[1].y),
+  );
 }
 
 /** Angle from `a` to `b`, in radians. RO. Useful as a derived
  *  rotation for shapes pointing from one point to another. */
 export function angleLens(a: Signal<V>, b: Signal<V>): Num {
-  return fanin(Num, [a, b] as const, vals => Math.atan2(vals[1].y - vals[0].y, vals[1].x - vals[0].x));
+  return fanin(Num, [a, b] as const, vals =>
+    Math.atan2(vals[1].y - vals[0].y, vals[1].x - vals[0].x),
+  );
 }
 
 /** Reflect `point` across the line through `axisStart` and `axisEnd`.

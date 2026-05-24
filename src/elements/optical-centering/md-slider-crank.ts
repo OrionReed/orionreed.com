@@ -12,8 +12,8 @@
 // hard-distance penalty dominating the mass term in the local
 // Newton, the shape "slips" along the closest valid configuration.
 
-import { Anchor, circle, Diagram, drag, label, line, Mount, rect, vec } from "../../minim";
 import { Cluster, collinear, distance } from "@minim/constraints";
+import { Anchor, circle, Diagram, drag, label, line, Mount, rect, vec } from "../../minim";
 
 const CRANK = 50;
 const ROD = 130;

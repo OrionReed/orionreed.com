@@ -5,7 +5,7 @@
 // verify each pattern works correctly under the new design.
 
 import { describe, expect, it } from "vitest";
-import { batch, computed, effect, num, Num, Signal, signal, vec, Vec } from "../index";
+import { batch, computed, effect, Num, num, Signal, signal, Vec, vec } from "../index";
 import { relate } from "../relate";
 
 describe("real-user pattern: live unit conversion (Celsius ↔ Fahrenheit)", () => {
@@ -155,7 +155,9 @@ describe("real-user pattern: tween-like animation of a fused field", () => {
       Signal.fieldOf(
         tr,
         "translate",
-        Signal as new (...args: never[]) => Signal<{ x: number; y: number }>,
+        Signal as new (
+          ...args: never[]
+        ) => Signal<{ x: number; y: number }>,
       ),
       "x",
       Num,
@@ -210,7 +212,9 @@ describe("real-user pattern: mutation-vs-replacement footgun", () => {
       Signal.fieldOf(
         tr,
         "translate",
-        Signal as new (...args: never[]) => Signal<{ x: number; y: number }>,
+        Signal as new (
+          ...args: never[]
+        ) => Signal<{ x: number; y: number }>,
       ),
       "x",
       Num,

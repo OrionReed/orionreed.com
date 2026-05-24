@@ -1,7 +1,7 @@
 // footgun-fanin.test.ts — adversarial probes for `fanin`.
 
 import { describe, expect, it } from "vitest";
-import { effect, fanin, num, Num, signal } from "../index";
+import { effect, fanin, Num, num, signal } from "../index";
 
 describe("fanin: reactive args inside fwd", () => {
   it("fwd reads an external signal: tracked, re-fires on its change", () => {

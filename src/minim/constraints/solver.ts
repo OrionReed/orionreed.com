@@ -21,13 +21,13 @@ export interface SolverOpts {
   /** Number of primal+dual iterations per solve. Default 10. */
   iterations?: number;
   /** Stabilisation parameter α ∈ [0, 1]. With `postStabilize`
-   *  off, used for every iteration as `C(x) − α·C(x⁻)` and
-   *  defaults to `0` (full error correction; right for static
-   *  editing). With `postStabilize` on, the regular iters use
-   *  `α = 1` (don't fight existing violation, just keep the dual
-   *  step from growing it) and the post-stab iter uses `α = 0`;
-   *  the `α` field then only matters in the lambda warm-start
-   *  decay path. AVBD paper recommends `0.99` for physics. */
+   *  off, used for every iteration as `C(x) − α·C(x⁻)` and as the
+   *  per-frame λ warm-start factor `α·γ`. With `postStabilize`
+   *  on, the regular iters override α to 1 (don't fight existing
+   *  violation; let the dual step accumulate λ) and the post-stab
+   *  iter uses α = 0 to zero residual exactly; the field still
+   *  controls the inter-frame λ decay. AVBD paper recommends
+   *  `0.99` for physics, `0` for static editing. */
   alpha?: number;
   /** Penalty ramp parameter β. Default 1e5 (paper recommends
    *  [1, 1000]; 1e5 worked for the reference 2D demo). */
@@ -264,23 +264,17 @@ export class Solver {
       }
       f.computeConstraint(0);
       for (let r = 0; r < f.rows; r++) f.C0[r]! = f.C[r]!;
-      // Lambda warm-start path differs by stabilization mode (AVBD §3.7):
-      // with postStabilize on we keep the full lambda and only decay
-      // penalty; without, we decay both by `α·γ` and `γ` respectively.
-      if (this.postStabilize) {
-        for (let r = 0; r < f.rows; r++) {
-          f.penalty[r]! = clamp(f.penalty[r]! * this.gamma, PENALTY_MIN, PENALTY_MAX);
-          const k = f.stiffness[r]!;
-          if (Number.isFinite(k) && f.penalty[r]! > k) f.penalty[r]! = k;
-        }
-      } else {
-        const ag = this.alpha * this.gamma;
-        for (let r = 0; r < f.rows; r++) {
-          f.lambda[r]! *= ag;
-          f.penalty[r]! = clamp(f.penalty[r]! * this.gamma, PENALTY_MIN, PENALTY_MAX);
-          const k = f.stiffness[r]!;
-          if (Number.isFinite(k) && f.penalty[r]! > k) f.penalty[r]! = k;
-        }
+      // Lambda + penalty warm-start: AVBD §3.7 "forgetting factor" γ.
+      // Both decay each frame regardless of stabilization mode —
+      // failing to decay λ lets stacked / sliding contacts accumulate
+      // dual impulse forever, which manifests as stack jitter at rest
+      // and oscillation under perturbation.
+      const ag = this.alpha * this.gamma;
+      for (let r = 0; r < f.rows; r++) {
+        f.lambda[r]! *= ag;
+        f.penalty[r]! = clamp(f.penalty[r]! * this.gamma, PENALTY_MIN, PENALTY_MAX);
+        const k = f.stiffness[r]!;
+        if (Number.isFinite(k) && f.penalty[r]! > k) f.penalty[r]! = k;
       }
     }
     // Cell warm-start: y = x⁻ by default.
@@ -589,4 +583,3 @@ export class Solver {
     this._capacity = cap;
   }
 }
-

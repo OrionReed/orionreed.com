@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { type Num, num, type Vec, vec, type Writable } from "../../signals";
-import { distance, eq, leq, Cluster } from "../index";
+import { Cluster, distance, eq, leq } from "../index";
 import { forAll } from "./_fuzz";
 
 type WVec = Writable<Vec>;

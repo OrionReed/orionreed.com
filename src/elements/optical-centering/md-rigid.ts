@@ -7,6 +7,7 @@
 // and the quad becomes a rigid body that only translates and
 // rotates as a whole.
 
+import { Cluster, distance } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -17,11 +18,10 @@ import {
   line,
   Mount,
   signal,
-  vec,
   type Vec,
+  vec,
   type Writable,
 } from "../../minim";
-import { Cluster, distance } from "@minim/constraints";
 
 type WVec = Writable<Vec>;
 
@@ -74,11 +74,15 @@ export class MdRigid extends Diagram {
 
     // Click-to-toggle on the diagonal label.
     const toggle = s(
-      label(view.bottom.up(38), () => (braced.value ? "rigid (diagonal on)" : "flexible (diagonal off)"), {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.85,
-      }),
+      label(
+        view.bottom.up(38),
+        () => (braced.value ? "rigid (diagonal on)" : "flexible (diagonal off)"),
+        {
+          size: 12,
+          align: Anchor.Center,
+          opacity: 0.85,
+        },
+      ),
     );
     toggle.el.style.cursor = "pointer";
     toggle.el.addEventListener("click", () => {

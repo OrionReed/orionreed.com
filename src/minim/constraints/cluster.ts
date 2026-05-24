@@ -32,7 +32,14 @@
 // pre-flush guarantee is needed later, that's a separate generic
 // feature (effect priority) that can be added orthogonally.
 
-import { type Pack, requirePack, effect, signal, type Signal, type WritableBrand } from "../signals";
+import {
+  effect,
+  type Pack,
+  requirePack,
+  type Signal,
+  signal,
+  type WritableBrand,
+} from "../signals";
 import { Solver, type SolverOpts } from "./solver";
 
 interface Binding {
