@@ -19,10 +19,11 @@
 //     COM of an off-center bar produces a moment). The chain
 //     rotates segment by segment with realistic angular momentum.
 //
-// Both render fine as a single line. Same `Joint` force; same
-// `Simulation`; same Cluster. The 3-DOF cell is the difference.
+// Both render fine as a single line. Same `Joint` term; same
+// AVBD substrate; same `world()` driver. The 3-DOF cell is the
+// difference.
 
-import { type Body, body, joint, RigidWorld } from "@minim/constraints";
+import { animate, type Body, body, joint, world } from "@minim/constraints";
 import {
   Anchor,
   type AnyShape,
@@ -106,7 +107,7 @@ export class MdChain extends Diagram {
     const anchorX = view.left.right(60).value.x;
     const anchorY = view.top.down(40).value.y;
 
-    const world = new RigidWorld({
+    const w = world({
       gravity: [0, 1500],
       iterations: 14,
       postStabilize: true,
@@ -114,7 +115,7 @@ export class MdChain extends Diagram {
       maxAngularSpeed: 100,
     });
 
-    const anchor = world.add(
+    const anchor = w.add(
       body({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY }),
     );
     s(circle(anchor.position, 5, { fill: true }));
@@ -123,14 +124,14 @@ export class MdChain extends Diagram {
     let prev = anchor;
     for (let i = 0; i < N; i++) {
       const cx = anchorX + LINK_W / 2 + i * LINK_W;
-      const link = world.add(
+      const link = w.add(
         body(
           { size: { w: LINK_W - 0.5, h: LINK_H }, density: 1, friction: 0.4 },
           { x: cx, y: anchorY },
         ),
       );
       links.push(link);
-      world.add(
+      w.add(
         joint(prev, link, i === 0 ? { x: 0, y: 0 } : { x: LINK_W / 2, y: 0 }, {
           x: -LINK_W / 2,
           y: 0,
@@ -175,7 +176,7 @@ export class MdChain extends Diagram {
     tipHandle.el.style.cursor = "grab";
     const dragging = signal(false);
     dragWorld(tipHandle, tipBody.position as Writable<Vec>, dragging);
-    world.addWhile(dragging, tipBody.pin());
+    w.addWhile(dragging, tipBody.pin());
 
     // Mid-rope handle so the user can grab the rope by the middle too.
     const midIdx = (links.length / 2) | 0;
@@ -184,9 +185,9 @@ export class MdChain extends Diagram {
     midHandle.el.style.cursor = "grab";
     const midDragging = signal(false);
     dragWorld(midHandle, midBody.position as Writable<Vec>, midDragging);
-    world.addWhile(midDragging, midBody.pin());
+    w.addWhile(midDragging, midBody.pin());
 
-    this.anim.start(world.animate());
+    this.anim.start(animate(w));
 
     s(
       label(view.top.down(20), "drag the blue tip or the red mid-link — gravity carries the rest", {

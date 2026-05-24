@@ -1,6 +1,6 @@
 // md-rigid-stack.ts — rigid-body playground.
 //
-// Three things share one `RigidWorld`:
+// Three things share one `World`:
 //
 //   1. A 4-3-2-1 pyramid of boxes — full 3-DOF pose `(x, y, θ)`,
 //      diagonal mass `(m, m, I)`, per-frame SAT broadphase,
@@ -25,12 +25,14 @@
 // so a rotating rect's drag still returns stable world coords.
 
 import {
+  animate,
   type Body,
   body,
   type BodyAnchor,
   bodyAnchor,
   joint,
-  RigidWorld,
+  type World,
+  world,
 } from "@minim/constraints";
 import {
   Anchor,
@@ -60,7 +62,7 @@ function findSvgRoot(el: Element | null): SVGSVGElement | null {
  *  works correctly even when the body's render rect is rotated. */
 function dragBody(
   shape: AnyShape,
-  world: RigidWorld,
+  world: World,
   body: Body,
   dragging: Signal<boolean>,
   stiffness = 5e4,
@@ -80,10 +82,10 @@ function dragBody(
   let anchor: BodyAnchor | undefined;
   const offDown = shape.on("pointerdown", e => {
     const pe = e as PointerEvent;
-    const w = toWorld(pe.clientX, pe.clientY);
+    const wp = toWorld(pe.clientX, pe.clientY);
     const p = body.pose.value;
-    dx = w.x - p.x;
-    dy = w.y - p.y;
+    dx = wp.x - p.x;
+    dy = wp.y - p.y;
     pointerId = pe.pointerId;
     shape.el.setPointerCapture(pointerId);
     (dragging as Writable<typeof dragging>).value = true;
@@ -132,7 +134,7 @@ export class MdRigidStack extends Diagram {
     const wallR = view.right.left(20).value.x;
     const ceilingY = view.top.down(20).value.y;
 
-    const world = new RigidWorld({
+    const w = world({
       gravity: [0, 1500],
       iterations: 24,
       postStabilize: true,
@@ -142,7 +144,7 @@ export class MdRigidStack extends Diagram {
     });
 
     // ─── Static walls, ground, and ceiling ──────────────────────
-    world.add(
+    w.add(
       body(
         { size: { w: wallR - wallL + 80, h: 16 }, density: 0, friction: 0.7 },
         { x: cx, y: floorY + 8 },
@@ -166,7 +168,7 @@ export class MdRigidStack extends Diagram {
       for (let col = 0; col < cols; col++) {
         const x = cx - ((cols - 1) * SIZE) / 2 + col * SIZE;
         const y = floorY - 8 - SIZE / 2 - row * (SIZE + 1);
-        const b = world.add(
+        const b = w.add(
           body(
             { size: { w: SIZE - 2, h: SIZE - 2 }, density: 1, friction: 0.7 },
             { x, y, theta: 0 },
@@ -177,7 +179,7 @@ export class MdRigidStack extends Diagram {
     }
     // A slab plopped on top of the stack — heavy enough to compress
     // it slightly, light enough that the wrecking ball can knock it.
-    const slab = world.add(
+    const slab = w.add(
       body(
         { size: { w: 84, h: 16 }, density: 0.8, friction: 0.5 },
         { x: cx, y: floorY - 8 - SIZE * PYRAMID_BASE - 20 },
@@ -194,13 +196,13 @@ export class MdRigidStack extends Diagram {
     const armY = ceilingY + 30;
     const ARM_SEG_LEN = 80;
     const ARM_SEG_H = 12;
-    const armAnchor = world.add(
+    const armAnchor = w.add(
       body({ size: { w: 10, h: 10 }, density: 0 }, { x: armX, y: armY }),
     );
     const arm: Body[] = [];
     let prev: Body = armAnchor;
     for (let i = 0; i < 3; i++) {
-      const seg = world.add(
+      const seg = w.add(
         body(
           { size: { w: ARM_SEG_LEN - 1, h: ARM_SEG_H }, density: 1.2, friction: 0.5 },
           // theta=π/2 orients the segment's local +x downward, so the
@@ -211,7 +213,7 @@ export class MdRigidStack extends Diagram {
         ),
       );
       arm.push(seg);
-      world.add(
+      w.add(
         joint(
           prev,
           seg,
@@ -231,7 +233,7 @@ export class MdRigidStack extends Diagram {
     const CHAIN_SEG = 22;
     const CHAIN_W = 5;
     const CHAIN_N = 5;
-    const ballAnchor = world.add(
+    const ballAnchor = w.add(
       body({ size: { w: 10, h: 10 }, density: 0 }, { x: ballX, y: ballY }),
     );
     const chain: Body[] = [];
@@ -240,7 +242,7 @@ export class MdRigidStack extends Diagram {
     // some swing energy when the scene starts.
     const tilt = 0.15;
     for (let i = 0; i < CHAIN_N; i++) {
-      const link = world.add(
+      const link = w.add(
         body(
           { size: { w: CHAIN_SEG, h: CHAIN_W }, density: 0.6, friction: 0.3 },
           {
@@ -251,7 +253,7 @@ export class MdRigidStack extends Diagram {
         ),
       );
       chain.push(link);
-      world.add(
+      w.add(
         joint(
           prev2,
           link,
@@ -261,7 +263,7 @@ export class MdRigidStack extends Diagram {
       );
       prev2 = link;
     }
-    const ball = world.add(
+    const ball = w.add(
       body(
         { size: { w: 40, h: 40 }, density: 4, friction: 0.6 },
         {
@@ -271,7 +273,7 @@ export class MdRigidStack extends Diagram {
         },
       ),
     );
-    world.add(
+    w.add(
       joint(chain[chain.length - 1]!, ball, { x: CHAIN_SEG / 2, y: 0 }, { x: 0, y: -22 }),
     );
 
@@ -293,7 +295,7 @@ export class MdRigidStack extends Diagram {
       const r = s(rect(b.position, b.w, b.h, { fill, corner: 2, thin: true, rotate: b.angle }));
       r.el.style.cursor = cursor;
       const dragging = signal(false);
-      dragBody(r, world, b, dragging);
+      dragBody(r, w, b, dragging);
       return r;
     };
 
@@ -305,7 +307,7 @@ export class MdRigidStack extends Diagram {
     for (const link of chain) renderBody(link, "#665");
     renderBody(ball, "#3a3a3a");
 
-    this.anim.start(world.animate());
+    this.anim.start(animate(w));
 
     s(
       label(

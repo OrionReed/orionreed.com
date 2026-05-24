@@ -1,16 +1,21 @@
-// force.ts — abstract Force base class for AVBD constraints.
+// term.ts — abstract Term base class for AVBD constraints.
 //
-// A Force represents a single constraint binding one or more cells.
+// A Term represents a single term in the augmented Lagrangian — i.e. a
+// constraint binding one or more cells with a residual `C(x)`, a
+// Jacobian `J = ∂C/∂x`, a dual variable `λ`, and a penalty parameter.
+// In the physics reading these are forces; in IK / layout / sketchpad
+// they're just constraints. Solver doesn't pick a side.
+//
 // Cells are referenced by integer id (`number`) into the solver's
-// SOA buffers. Force methods read positions via
+// SOA buffers. Term methods read positions via
 // `this.solver.positions[this.solver.offsets[id] + k]` and write
 // derivatives into per-cell `J` / `HCols` buffers.
 //
-// The AVBD inner loop calls three things on each force:
+// The AVBD inner loop calls three things on each term:
 //
 //   1. `initialize()` — once per `prepare()`. Cache anything that
 //      doesn't change within the step. Returns `false` if the
-//      force should be removed (zero-stiffness, fractured, …).
+//      term should be removed (zero-stiffness, fractured, …).
 //
 //   2. `computeConstraint(alpha)` — at every primal/dual update.
 //      Writes the m-vector `C` based on current cell positions.
@@ -24,9 +29,9 @@
 //      is the L2 norm of column k of the per-row Hessian block —
 //      used in the diagonally-lumped geometric stiffness term.
 //
-// `cellIdx` here means "this cell's index within `force.cells`",
+// `cellIdx` here means "this cell's index within `term.cells`",
 // not the integer cell id. The Solver caches that index per
-// (cell, force) at adjacency construction.
+// (cell, term) at adjacency construction.
 
 import type { Solver } from "./solver";
 
@@ -45,18 +50,18 @@ export const PENALTY_MAX = 1e9;
  *  positions to infinity within a handful of frames.
  *
  *  Capping at `1e9` (matching `PENALTY_MAX`) bounds the maximum
- *  "force" the constraint can apply, turning unsatisfiable
+ *  contribution the constraint can apply, turning unsatisfiable
  *  constraints into a saturation rather than an explosion. The
  *  cap is symmetric (`±LAMBDA_MAX`) so equality constraints stay
  *  reachable from either side. */
 export const LAMBDA_MAX = 1e9;
 
-export abstract class Force {
-  /** Solver this force belongs to. Subclasses read positions via
+export abstract class Term {
+  /** Solver this term belongs to. Subclasses read positions via
    *  `solver.positions[off + k]`, with `off` taken from
    *  `cellOffsets[ci]` (cached at construction). */
   readonly solver: Solver;
-  /** Cell ids this force binds, in the order subclasses expect.
+  /** Cell ids this term binds, in the order subclasses expect.
    *  `cells[ci]` is the cell-index-`ci` cell. */
   readonly cells: readonly number[];
   /** Per-cell-index starting offset into `solver.positions`,
@@ -78,17 +83,20 @@ export abstract class Force {
   /** Material stiffness per row. Use `Infinity` for a hard
    *  constraint (uses augmented-Lagrangian path). */
   readonly stiffness: Float64Array;
-  /** Force lower bound per row (default `-Infinity`). */
-  readonly fmin: Float64Array;
-  /** Force upper bound per row (default `+Infinity`). */
-  readonly fmax: Float64Array;
-  /** Fracture threshold: `|λ| > fracture` disables the force. */
+  /** Lower bound on the dual variable λ for each row (default
+   *  `-Infinity`). Used to express one-sided constraints
+   *  (`λ ≥ 0` ↔ `lambdaMin = 0`) and friction-cone clamps. */
+  readonly lambdaMin: Float64Array;
+  /** Upper bound on the dual variable λ for each row (default
+   *  `+Infinity`). */
+  readonly lambdaMax: Float64Array;
+  /** Fracture threshold: `|λ| > fracture` disables the term. */
   readonly fracture: Float64Array;
   /** Current penalty parameter (warm-started, ramped via β). */
   readonly penalty: Float64Array;
   /** Lagrange multiplier for hard constraints (soft uses 0). */
   readonly lambda: Float64Array;
-  /** Marks the force for removal at the next `solver.prepare()`.
+  /** Marks the term for removal at the next `solver.prepare()`.
    *  Set by `dispose()` (user) or by `_dualPass` (fracture). */
   disabled = false;
 
@@ -107,8 +115,8 @@ export abstract class Force {
     this.C = new Float64Array(rows);
     this.C0 = new Float64Array(rows);
     this.stiffness = new Float64Array(rows).fill(Infinity);
-    this.fmin = new Float64Array(rows).fill(-Infinity);
-    this.fmax = new Float64Array(rows).fill(Infinity);
+    this.lambdaMin = new Float64Array(rows).fill(-Infinity);
+    this.lambdaMax = new Float64Array(rows).fill(Infinity);
     this.fracture = new Float64Array(rows).fill(Infinity);
     this.penalty = new Float64Array(rows).fill(PENALTY_MIN);
     this.lambda = new Float64Array(rows);
@@ -116,7 +124,7 @@ export abstract class Force {
     this.HCols = this.cellDims.map(d => new Float64Array(rows * d));
     // Wire adjacency.
     for (let ci = 0; ci < cells.length; ci++) {
-      solver._connectForce(this, cells[ci]!, ci);
+      solver._connectTerm(this, cells[ci]!, ci);
     }
   }
 
@@ -124,10 +132,8 @@ export abstract class Force {
   abstract computeConstraint(alpha: number): void;
   abstract computeDerivatives(cellIdx: number): void;
 
-  /** Mark this force for removal. Takes effect on the next solver
-   *  pass (the cluster's effect, or an explicit `solver.step()`).
-   *  In a reactive `Cluster`, calling `cluster.update()` after
-   *  `dispose()` materialises the change immediately. */
+  /** Mark this term for removal. Takes effect on the next solver
+   *  pass (the constraints' settle, or an explicit `solver.solve()`). */
   dispose(): void {
     this.disabled = true;
   }

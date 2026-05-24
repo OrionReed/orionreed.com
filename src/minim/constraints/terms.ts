@@ -1,4 +1,4 @@
-// forces.ts — concrete `Force` subclasses (numerical kernel).
+// terms.ts — concrete `Term` subclasses (numerical kernel).
 //
 // Each subclass operates on cell ids into the solver's SOA buffers.
 // Subclasses read positions via `solver.positions` / `solver.offsets`,
@@ -7,7 +7,7 @@
 // **Mutable parameters via signals.** Numeric parameters that the
 // user might want to mutate (rest lengths, bounds, target stiffness,
 // …) are stored as `Signal<number>` and *cached* in `initialize()`
-// — which the AVBD outer loop calls once per `solver.step()`. The
+// — which the AVBD outer loop calls once per `solver.solve()`. The
 // inner per-iteration computeConstraint/computeDerivatives methods
 // use the cached primitive, so the inner loop stays signal-free
 // (no `.value` reads, no subscription bookkeeping, identical perf
@@ -15,14 +15,14 @@
 //
 // Subscription happens at the cluster layer: `Constraints`'s settle
 // body reads each relation's members (including param signals) so
-// mutating `restSignal.value = 50` triggers a re-solve via the
-// normal reactive flow. The force then peeks the new value when
+// mutating `r.rest.value = 50` triggers a re-solve via the normal
+// reactive flow. The term then peeks the new value when
 // `initialize()` runs.
 
 import { type Signal } from "../signals";
 import { param } from "../signals/settle-utils";
-import { Force } from "./force";
 import { Solver } from "./solver";
+import { Term } from "./term";
 
 // ─── Strength constants ──────────────────────────────────────────────
 
@@ -33,13 +33,13 @@ export const Strength = {
   REQUIRED: 1e9,
   /** True hard constraint: solved via the augmented Lagrangian
    *  path rather than penalty weighting. The default for the
-   *  `*Force` constructors. */
+   *  `*Term` constructors. */
   HARD: Infinity,
 } as const;
 
 // ─── Equality between two same-dim cells ─────────────────────────────
 
-export class EqForce extends Force {
+export class EqTerm extends Term {
   constructor(solver: Solver, a: number, b: number, hard = true) {
     if (solver.dims[a]! !== solver.dims[b]!) {
       throw new Error("eq: cell dims must match");
@@ -74,7 +74,7 @@ export class EqForce extends Force {
 
 // ─── Generic invertible lens (Num→Num) ───────────────────────────────
 
-export class LensNumForce extends Force {
+export class LensNumTerm extends Term {
   fwd: (a: number) => number;
   private readonly fdStep: number;
   private _cachedFwdA = 0;
@@ -121,8 +121,8 @@ export class LensNumForce extends Force {
 
 // ─── Distance constraint (Vec ↔ Vec) ─────────────────────────────────
 
-export class DistanceForce extends Force {
-  /** Rest-length signal. Cached once per `solver.step()` in
+export class DistanceTerm extends Term {
+  /** Rest-length signal. Cached once per `solver.solve()` in
    *  `initialize()` — the inner loop reads only the primitive. */
   readonly rest: Signal<number>;
   /** Optional mutable stiffness signal (only set when `hard=false`). */
@@ -218,7 +218,7 @@ export class DistanceForce extends Force {
 
 // ─── 1D bounds (clamp) ───────────────────────────────────────────────
 
-export class BoundsForce extends Force {
+export class BoundsTerm extends Term {
   readonly lo: Signal<number>;
   readonly hi: Signal<number>;
   private _loCached = 0;
@@ -231,12 +231,12 @@ export class BoundsForce extends Force {
     this.hi = param(hi);
     this._loCached = this.lo.peek();
     this._hiCached = this.hi.peek();
-    this.fmax[0]! = 0;
-    this.fmax[1]! = 0;
+    this.lambdaMax[0]! = 0;
+    this.lambdaMax[1]! = 0;
   }
 
   initialize(): boolean {
-    // `.value` to subscribe + refresh cache; see DistanceForce note.
+    // `.value` to subscribe + refresh cache; see DistanceTerm note.
     this._loCached = this.lo.value;
     this._hiCached = this.hi.value;
     return true;
@@ -262,7 +262,7 @@ export class BoundsForce extends Force {
 
 // ─── Soft pull / target (any cell) ───────────────────────────────────
 
-export class SoftTargetForce extends Force {
+export class SoftTargetTerm extends Term {
   target: Float64Array;
 
   constructor(solver: Solver, cell: number, target: ArrayLike<number>, stiffness: number) {
@@ -312,7 +312,7 @@ export type ResidualFn = (
   out: Float64Array,
 ) => void;
 
-export class GenericForce extends Force {
+export class GenericTerm extends Term {
   private fn: ResidualFn;
   private fdStep: number;
   private _fdPositions: Float64Array[];
@@ -342,7 +342,6 @@ export class GenericForce extends Force {
   }
 
   computeConstraint(alpha: number): void {
-    // Snapshot cell positions into our scratch.
     const positions = this.solver.positions;
     const offsets = this.cellOffsets;
     const dims = this.cellDims;

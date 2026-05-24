@@ -305,7 +305,7 @@ Mix shape constraints with locus constraints and you get classic mechanisms more
 
 <md-slider-crank></md-slider-crank>
 
-The same path scales up to physics. `Simulation(cluster, { gravity })` wraps the cluster in a velocity-and-extrapolation time-stepper that calls `tick(dt)` per frame. The cloth below is a 14×10 grid of point masses linked by ~250 hard distance constraints — every horizontal and vertical neighbour gets its own length constraint, top corners are pinned, the rest swings under gravity. Each frame the solver projects the whole net back onto the constraint manifold, in well under a millisecond.
+The same path scales up to physics. `physics({ gravity })` builds a Constraints with a velocity-and-extrapolation time-stepper baked into its pipeline; `step(dt)` per frame advances the whole scene. The cloth below is a 14×10 grid of point masses linked by ~250 hard distance constraints — every horizontal and vertical neighbour gets its own length constraint, top corners are pinned, the rest swings under gravity. Each frame the solver projects the whole net back onto the constraint manifold, in well under a millisecond.
 
 <md-cloth></md-cloth>
 
@@ -325,7 +325,7 @@ The same engine handles **proper** rigid bodies just as well — boxes with full
 
 <md-rigid-stack></md-rigid-stack>
 
-The same `Constraints` + `Simulation` that runs the cloth, the chain, and the algebraic equation solver runs this — only the constraint shapes and the cell dimension differ. The solver's `dim = 3` primal-sweep specialization (one hand-unrolled local Newton per body) means the rigid path doesn't pay any "generality tax" relative to a hand-rolled physics engine.
+The same Constraints substrate that runs the cloth, the chain, and the algebraic equation solver runs this — only the pipeline (`world()` adds broadphase + contact manifold lifecycle on top of `physics()`'s velocity loop), the constraint shapes, and the cell dimension differ. The solver's `dim = 3` primal-sweep specialization (one hand-unrolled local Newton per body) means the rigid path doesn't pay any "generality tax" relative to a hand-rolled physics engine.
 
 Joints between rigid bodies turn the same machinery into a chain of bars — AVBD's `sceneRope` setup. Each link is its own rigid body with rotational inertia, hinged to the next via a `Joint` force whose position rows are hard and angle row is free. Drag any link and the rest swings; the bars rotate the way bars do, not the way beads on a string do.
 

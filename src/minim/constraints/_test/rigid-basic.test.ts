@@ -1,33 +1,33 @@
 // rigid-basic.test.ts — sanity tests for the 2D rigid-body extension.
 
 import { describe, expect, it } from "vitest";
-import { Body, body, bodyAnchor, BoxContact, joint, RigidWorld } from "../index";
+import { Body, body, bodyAnchor, BoxContact, joint, world } from "../index";
 
 describe("box-box SAT collide", () => {
   it("box overlapping ground produces contacts", () => {
-    const w = new RigidWorld({ gravity: [0, -10] });
+    const w = world({ gravity: [0, -10] });
     const ground = w.add(body({ size: { w: 50, h: 1 }, density: 0 }, { x: 0, y: 0 }));
     const box = w.add(body({ size: { w: 1, h: 1 } }, { x: 0, y: 0.5 })); // overlapping
-    const m = new BoxContact(w.constraints.solver, ground as Body, box as Body);
-    w.constraints.solver.addForce(m);
+    const m = new BoxContact(w.solver, ground as Body, box as Body);
+    w.solver.addTerm(m);
     const ok = m.initialize();
     expect(ok).toBe(true);
     expect(m.numContacts).toBeGreaterThan(0);
   });
 
   it("box well above ground produces no contacts", () => {
-    const w = new RigidWorld({ gravity: [0, -10] });
+    const w = world({ gravity: [0, -10] });
     const ground = w.add(body({ size: { w: 50, h: 1 }, density: 0 }, { x: 0, y: 0 }));
     const box = w.add(body({ size: { w: 1, h: 1 } }, { x: 0, y: 10 }));
-    const m = new BoxContact(w.constraints.solver, ground as Body, box as Body);
+    const m = new BoxContact(w.solver, ground as Body, box as Body);
     m.initialize();
     expect(m.numContacts).toBe(0);
   });
 });
 
-describe("RigidWorld — basics", () => {
+describe("world — basics", () => {
   it("box falls under gravity", () => {
-    const w = new RigidWorld({ gravity: [0, -10], iterations: 10, postStabilize: true });
+    const w = world({ gravity: [0, -10], iterations: 10, postStabilize: true });
     const box = w.add(body({ size: { w: 1, h: 1 } }, { x: 0, y: 10 }));
     const y0 = box.pose.value.y;
     for (let f = 0; f < 30; f++) w.step(1 / 60);
@@ -38,7 +38,7 @@ describe("RigidWorld — basics", () => {
   });
 
   it("box rests on a static ground", () => {
-    const w = new RigidWorld({ gravity: [0, -10], iterations: 10, postStabilize: true });
+    const w = world({ gravity: [0, -10], iterations: 10, postStabilize: true });
     const ground = w.add(body({ size: { w: 50, h: 1 }, density: 0 }, { x: 0, y: 0 }));
     const box = w.add(body({ size: { w: 1, h: 1 } }, { x: 0, y: 5 }));
     for (let f = 0; f < 240; f++) w.step(1 / 60);
@@ -51,24 +51,24 @@ describe("RigidWorld — basics", () => {
   });
 
   it("static body has zero mass", () => {
-    const w = new RigidWorld({ gravity: [0, -10] });
+    const w = world({ gravity: [0, -10] });
     const ground = w.add(body({ size: { w: 50, h: 1 }, density: 0 }, { x: 0, y: 0 }));
     expect(ground.mass).toBe(0);
-    expect(w.constraints.solver.massOf(ground.cellId)).toBe(0);
+    expect(w.solver.massOf(ground.cellId)).toBe(0);
   });
 
   it("body's mass matrix is diag(m, m, I)", () => {
-    const w = new RigidWorld();
+    const w = world();
     const box = w.add(body({ size: { w: 2, h: 1 }, density: 1 }, { x: 0, y: 0 }));
-    const off = w.constraints.solver.offsets[box.cellId]!;
-    const masses = w.constraints.solver.masses;
+    const off = w.solver.offsets[box.cellId]!;
+    const masses = w.solver.masses;
     expect(masses[off]!).toBeCloseTo(2); // m = 2*1*1
     expect(masses[off + 1]!).toBeCloseTo(2);
     expect(masses[off + 2]!).toBeCloseTo((2 * (4 + 1)) / 12); // I = m*(w² + h²)/12
   });
 
   it("two stacked boxes settle", () => {
-    const w = new RigidWorld({ gravity: [0, -10], iterations: 12, postStabilize: true });
+    const w = world({ gravity: [0, -10], iterations: 12, postStabilize: true });
     w.add(body({ size: { w: 50, h: 1 }, density: 0 }, { x: 0, y: 0 }));
     const b1 = w.add(body({ size: { w: 1, h: 1 } }, { x: 0, y: 5 }));
     const b2 = w.add(body({ size: { w: 1, h: 1 } }, { x: 0, y: 7 }));
@@ -85,7 +85,7 @@ describe("RigidWorld — basics", () => {
   });
 
   it("settled stack has near-zero residual velocity (no perpetual jitter)", () => {
-    const w = new RigidWorld({ gravity: [0, -10], iterations: 14, postStabilize: true });
+    const w = world({ gravity: [0, -10], iterations: 14, postStabilize: true });
     w.add(body({ size: { w: 50, h: 1 }, density: 0, friction: 0.6 }, { x: 0, y: 0 }));
     const boxes = [];
     for (let i = 0; i < 5; i++) {
@@ -94,18 +94,15 @@ describe("RigidWorld — basics", () => {
     for (let f = 0; f < 600; f++) w.step(1 / 60);
     let maxV = 0;
     for (const b of boxes) {
-      const off = w.constraints.solver.offsets[b.cellId]!;
-      const vx = w.simulation.velocities[off]!;
-      const vy = w.simulation.velocities[off + 1]!;
-      const va = w.simulation.velocities[off + 2]!;
-      const speed = Math.hypot(vx, vy) + Math.abs(va);
+      const v = w.velocity(b.cellId);
+      const speed = Math.hypot(v[0]!, v[1]!) + Math.abs(v[2]!);
       if (speed > maxV) maxV = speed;
     }
     expect(maxV).toBeLessThan(0.5);
   });
 
   it("joint: pendulum swings under gravity", () => {
-    const w = new RigidWorld({ gravity: [0, -10], iterations: 12, postStabilize: true });
+    const w = world({ gravity: [0, -10], iterations: 12, postStabilize: true });
     const anchor = w.add(body({ size: { w: 0.2, h: 0.2 }, density: 0 }, { x: 0, y: 5 }));
     // Bob is a 1m bar; joint connects anchor's local (0,0) to bob's
     // left-end local (-0.5, 0). Pendulum length = 0.5m (anchor to bob center).
@@ -128,7 +125,7 @@ describe("RigidWorld — basics", () => {
   });
 
   it("joint: 8-link rope stays bounded under gravity", () => {
-    const w = new RigidWorld({ gravity: [0, -10], iterations: 14, postStabilize: true });
+    const w = world({ gravity: [0, -10], iterations: 14, postStabilize: true });
     const anchor = w.add(body({ size: { w: 0.2, h: 0.2 }, density: 0 }, { x: 0, y: 5 }));
     const link = 0.5;
     const bodies = [anchor];
@@ -153,7 +150,7 @@ describe("RigidWorld — basics", () => {
     // Mirrors the demo: pixel coordinates, gravity ≈ 1500, friction 0.5,
     // 44px boxes, 5-tall stack. Tap the tower with a sideways impulse on
     // the bottom box.
-    const w = new RigidWorld({
+    const w = world({
       gravity: [0, 1500],
       iterations: 14,
       postStabilize: true,
@@ -172,8 +169,9 @@ describe("RigidWorld — basics", () => {
     // Sideways kick on the bottom box. With fixed-dt sub-stepping
     // and λ warm-start decay restored, the stack should weather a
     // ~2.5× box-width per second kick without collapsing.
-    const off = w.constraints.solver.offsets[boxes[0]!.cellId]!;
-    w.simulation.velocities[off]! += 250;
+    const v0 = w.velocity(boxes[0]!.cellId);
+    v0[0]! += 250;
+    w.setVelocity(boxes[0]!.cellId, v0);
     for (let f = 0; f < 600; f++) w.step(1 / 60);
     for (let i = 1; i < boxes.length; i++) {
       const here = boxes[i]!.pose.value.y;
@@ -194,7 +192,7 @@ describe("RigidWorld — basics", () => {
     // accelerations land in the "looks like physics on a screen"
     // regime. Same algorithm; this test pins jitter at the demo's
     // scale rather than the canonical 1m/g=10 one.
-    const w = new RigidWorld({ gravity: [0, 1500], iterations: 14, postStabilize: true });
+    const w = world({ gravity: [0, 1500], iterations: 14, postStabilize: true });
     w.add(body({ size: { w: 800, h: 16 }, density: 0, friction: 0.7 }, { x: 0, y: 200 }));
     const boxes = [];
     const SIZE = 44;
@@ -207,12 +205,9 @@ describe("RigidWorld — basics", () => {
     let maxLinearV = 0;
     let maxAngularV = 0;
     for (const b of boxes) {
-      const off = w.constraints.solver.offsets[b.cellId]!;
-      const vx = w.simulation.velocities[off]!;
-      const vy = w.simulation.velocities[off + 1]!;
-      const va = w.simulation.velocities[off + 2]!;
-      maxLinearV = Math.max(maxLinearV, Math.hypot(vx, vy));
-      maxAngularV = Math.max(maxAngularV, Math.abs(va));
+      const v = w.velocity(b.cellId);
+      maxLinearV = Math.max(maxLinearV, Math.hypot(v[0]!, v[1]!));
+      maxAngularV = Math.max(maxAngularV, Math.abs(v[2]!));
     }
     console.log(
       `  demo-scale residual: linear=${maxLinearV.toFixed(4)}px/s, angular=${maxAngularV.toFixed(4)}rad/s`,
@@ -224,7 +219,7 @@ describe("RigidWorld — basics", () => {
 
 describe("BodyAnchor — soft drag", () => {
   it("pulls a free body toward the target", () => {
-    const w = new RigidWorld({ gravity: [0, 0], damping: 0.95 });
+    const w = world({ gravity: [0, 0], damping: 0.95 });
     const b = w.add(body({ size: { w: 10, h: 10 } }, { x: 0, y: 0 }));
     const a = w.add(bodyAnchor(b, { x: 100, y: 0 }, 1e5));
     for (let f = 0; f < 240; f++) w.step(1 / 60);
@@ -239,7 +234,7 @@ describe("BodyAnchor — soft drag", () => {
     // Wall to the right of the box; drag the box hard right. With
     // soft-anchor drag the box piles up against the wall instead of
     // teleporting through (which is what a position-write pin does).
-    const w = new RigidWorld({ gravity: [0, 0], iterations: 20, postStabilize: true });
+    const w = world({ gravity: [0, 0], iterations: 20, postStabilize: true });
     w.add(body({ size: { w: 4, h: 100 }, density: 0, friction: 0.4 }, { x: 50, y: 0 }));
     const b = w.add(body({ size: { w: 20, h: 20 }, density: 1, friction: 0.4 }, { x: 0, y: 0 }));
     const a = w.add(bodyAnchor(b, { x: 200, y: 0 }, 5e4));

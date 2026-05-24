@@ -12,7 +12,7 @@
 // by their constraints, killing the residual jitter that
 // supported bodies otherwise produce.
 
-import { Simulation, Strength, bend, constraints, pin, spring } from "@minim/constraints";
+import { Strength, animate, bend, physics, pin, spring } from "@minim/constraints";
 import {
   Anchor,
   Diagram,
@@ -46,7 +46,15 @@ export class MdCloth extends Diagram {
       grid.push(row);
     }
 
-    const cluster = constraints({ iterations: 12, postStabilize: true });
+    // post-stabilization + adaptive warm-start absorb most of the
+    // energy through constraint drift, so we can run with very
+    // light damping — the cloth feels alive instead of underwater.
+    const cluster = physics({
+      iterations: 12,
+      postStabilize: true,
+      gravity: [0, 90],
+      damping: 0.997,
+    });
 
     // Edge springs — resist stretching.
     for (let j = 0; j < H; j++) {
@@ -89,11 +97,7 @@ export class MdCloth extends Diagram {
       cluster.addWhile(h.dragging, pin(sig));
     }
 
-    // post-stabilization + adaptive warm-start absorb most of the
-    // energy through constraint drift, so we can run with very
-    // light damping — the cloth feels alive instead of underwater.
-    const sim = new Simulation(cluster, { gravity: [0, 90], damping: 0.997 });
-    this.anim.start(sim.animate());
+    this.anim.start(animate(cluster));
 
     s(
       label(

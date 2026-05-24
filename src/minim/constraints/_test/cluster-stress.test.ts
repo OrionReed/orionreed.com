@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import { type Vec, vec, type Writable } from "../../signals";
-import { Simulation, constraints, distance, pin, spring } from "../index";
+import { constraints, distance, physics, pin, spring } from "../index";
 
 type WVec = Writable<Vec>;
 
@@ -20,12 +20,11 @@ describe("AVBD stress — high stiffness ratios (paper §3.4)", () => {
     const top = vec(0, 0);
     const A = vec(0, -1);
     const B = vec(0, -2);
-    const s = constraints({ iterations: 5, alpha: 0.99 });
+    const s = physics({ iterations: 5, alpha: 0.99, gravity: [0, -10] });
     s.add(spring(top, A, 1, 1e4));
     s.add(spring(A, B, 1, 1));
     s.add(pin(top));
-    const sim = new Simulation(s, { gravity: [0, -10] });
-    for (let step = 0; step < 60; step++) sim.tick(1 / 60);
+    for (let step = 0; step < 60; step++) s.step(1 / 60);
     const dTopA = Math.hypot(A.value.x - top.value.x, A.value.y - top.value.y);
     expect(dTopA).toBeGreaterThan(0.95);
     expect(dTopA).toBeLessThan(1.5);

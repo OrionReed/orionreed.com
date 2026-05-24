@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { type Vec, vec, type Writable } from "../../signals";
-import { body, constraints, distance, joint, pin, RigidWorld } from "../index";
+import { body, constraints, distance, joint, pin, world } from "../index";
 
 type WVec = Writable<Vec>;
 
@@ -20,25 +20,24 @@ function buildChain(N: number, iters: number) {
 
 describe("relate3 perf sanity", () => {
   it("rigid rope: 18-link chain swinging, 60 frames", async () => {
-    const { RigidWorld } = await import("../index");
-    const world = new RigidWorld({
+    const w = world({
       gravity: [0, 1500],
       iterations: 14,
       postStabilize: true,
     });
     const N = 18;
-    const W = 18;
-    const H = 6;
-    const anchor = world.add(body({ size: { w: 8, h: 8 }, density: 0 }, { x: 0, y: 0 }));
+    const LW = 18;
+    const LH = 6;
+    const anchor = w.add(body({ size: { w: 8, h: 8 }, density: 0 }, { x: 0, y: 0 }));
     let prev = anchor;
     for (let i = 0; i < N; i++) {
-      const cx = W / 2 + i * W;
-      const link = world.add(body({ size: { w: W - 1, h: H }, density: 1 }, { x: cx, y: 0 }));
-      world.add(joint(prev, link, i === 0 ? { x: 0, y: 0 } : { x: W / 2, y: 0 }, { x: -W / 2, y: 0 }));
+      const cx = LW / 2 + i * LW;
+      const link = w.add(body({ size: { w: LW - 1, h: LH }, density: 1 }, { x: cx, y: 0 }));
+      w.add(joint(prev, link, i === 0 ? { x: 0, y: 0 } : { x: LW / 2, y: 0 }, { x: -LW / 2, y: 0 }));
       prev = link;
     }
     const t0 = performance.now();
-    for (let f = 0; f < 60; f++) world.step(1 / 60);
+    for (let f = 0; f < 60; f++) w.step(1 / 60);
     const ms = (performance.now() - t0) / 60;
     console.log(
       `  rigid rope (${N} links + ${N} joints) iter=14 postStab: ${ms.toFixed(3)}ms / frame`,
@@ -47,14 +46,13 @@ describe("relate3 perf sanity", () => {
   });
 
   it("rigid stack: pyramid of 10 boxes settling, 60 frames", async () => {
-    const { RigidWorld } = await import("../index");
-    const world = new RigidWorld({
+    const w = world({
       gravity: [0, 1500],
       iterations: 14,
       postStabilize: true,
       damping: 0.995,
     });
-    world.add(body({ size: { w: 800, h: 16 }, density: 0, friction: 0.7 }, { x: 0, y: 200 }));
+    w.add(body({ size: { w: 800, h: 16 }, density: 0, friction: 0.7 }, { x: 0, y: 200 }));
     let n = 0;
     const SIZE = 44;
     for (let row = 0; row < 4; row++) {
@@ -62,12 +60,12 @@ describe("relate3 perf sanity", () => {
       for (let col = 0; col < cols; col++) {
         const x = -((cols - 1) * SIZE) / 2 + col * SIZE;
         const y = 200 - 8 - SIZE / 2 - row * (SIZE + 1);
-        world.add(body({ size: { w: SIZE - 2, h: SIZE - 2 }, density: 1, friction: 0.5 }, { x, y, theta: 0 }));
+        w.add(body({ size: { w: SIZE - 2, h: SIZE - 2 }, density: 1, friction: 0.5 }, { x, y, theta: 0 }));
         n++;
       }
     }
     const t0 = performance.now();
-    for (let f = 0; f < 60; f++) world.step(1 / 60);
+    for (let f = 0; f < 60; f++) w.step(1 / 60);
     const ms = (performance.now() - t0) / 60;
     console.log(`  rigid pyramid (${n} boxes) iter=14 postStab: ${ms.toFixed(3)}ms / frame`);
     expect(Number.isFinite(ms)).toBe(true);

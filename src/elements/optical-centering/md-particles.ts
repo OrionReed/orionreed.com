@@ -4,13 +4,13 @@
 //   - `inside(P, …)` keeps every particle inside the AABB walls.
 //   - `gap(a, b, 2r)` keeps every pair from overlapping.
 //
-// With mild gravity and a `Simulation`, the box settles into a
+// With mild gravity, the box settles into a
 // roughly hexagonal packing. Drag any circle and the rest cascade
 // out of the way; release and gravity packs them again. The
 // solver is doing 24 wall constraints + 276 pairwise gap
 // constraints every frame.
 
-import { Simulation, constraints, gap, inside, pin } from "@minim/constraints";
+import { animate, gap, inside, physics, pin } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -55,7 +55,7 @@ export class MdParticles extends Diagram {
       particles.push(vec(xLo + R + rand() * (W - 2 * R), yLo + R + rand() * (H * 0.4)));
     }
 
-    const cluster = constraints({ iterations: 14 });
+    const cluster = physics({ iterations: 14, gravity: [0, 320], damping: 0.99 });
     for (const p of particles) cluster.add(inside(p, xLo + R, yLo + R, xHi - R, yHi - R));
     for (let i = 0; i < N; i++) {
       for (let j = i + 1; j < N; j++) cluster.add(gap(particles[i]!, particles[j]!, 2 * R));
@@ -72,8 +72,7 @@ export class MdParticles extends Diagram {
       cluster.addWhile(dragging, pin(particles[i]!));
     }
 
-    const sim = new Simulation(cluster, { gravity: [0, 320], damping: 0.99 });
-    this.anim.start(sim.animate());
+    this.anim.start(animate(cluster));
 
     s(
       label(view.top.down(20), "drag any circle — non-overlap is enforced, walls contain", {

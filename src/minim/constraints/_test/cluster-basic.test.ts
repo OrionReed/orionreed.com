@@ -57,7 +57,7 @@ describe("Cluster (writeBack) — structural single-fire", () => {
     c.add(pin(a));
     // Trigger initial run via a write.
     a.value = 1;
-    const stepSpy = vi.spyOn(c.solver, "step");
+    const stepSpy = vi.spyOn(c.solver, "solve");
 
     a.value = 5;
     // Single solve. The cluster's writeBack to b excludes the
@@ -75,7 +75,7 @@ describe("Cluster (writeBack) — structural single-fire", () => {
     c.add(eq(a, b));
     c.add(pin(a));
     a.value = 1; // initial run
-    const stepSpy = vi.spyOn(c.solver, "step");
+    const stepSpy = vi.spyOn(c.solver, "solve");
 
     batch(() => {
       a.value = 2;
@@ -139,24 +139,23 @@ describe("Cluster (writeBack) — lens composition", () => {
   });
 });
 
-describe("Simulation — numerical robustness", () => {
-  it("Simulation.tick(0) is a no-op (would otherwise divide by zero)", async () => {
-    const { distance, Simulation } = await import("../index");
+describe("physics() — numerical robustness", () => {
+  it("step(0) is a no-op (would otherwise divide by zero)", async () => {
+    const { distance, physics } = await import("../index");
     const a = vec(0, 0);
     const b = vec(10, 0);
-    const c = constraints();
+    const c = physics({ gravity: [0, 100] });
     c.add(distance(a, b, 10));
     c.add(pin(a));
-    const sim = new Simulation(c, { gravity: [0, 100] });
-    sim.tick(0);
-    sim.tick(0);
-    sim.tick(1 / 60);
+    c.step(0);
+    c.step(0);
+    c.step(1 / 60);
     expect(Number.isFinite(b.value.x)).toBe(true);
     expect(Number.isFinite(b.value.y)).toBe(true);
   });
 
   it("cloth grid under gravity settles (low residual velocity at end)", async () => {
-    const { bend, Simulation, spring, Strength } = await import("../index");
+    const { bend, physics, spring, Strength } = await import("../index");
     const W = 8;
     const H = 6;
     const SP = 20;
@@ -168,7 +167,7 @@ describe("Simulation — numerical robustness", () => {
     }
     // `postStabilize` + adaptive warm-start (default-on under gravity)
     // are the AVBD physics defaults; this test pins them in.
-    const c = constraints({ iterations: 12, postStabilize: true });
+    const c = physics({ iterations: 12, postStabilize: true, gravity: [0, 90], damping: 0.99 });
     for (let j = 0; j < H; j++)
       for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM));
     for (let i = 0; i < W; i++)
@@ -180,12 +179,11 @@ describe("Simulation — numerical robustness", () => {
     c.add(pin(grid[0]![0]!));
     c.add(pin(grid[0]![W - 1]!));
 
-    const sim = new Simulation(c, { gravity: [0, 90], damping: 0.99 });
-    for (let f = 0; f < 600; f++) sim.tick(1 / 60);
+    for (let f = 0; f < 600; f++) c.step(1 / 60);
 
     let maxV = 0;
     for (let id = 0; id < c.solver.cellCount; id++) {
-      const v = sim.velocity(id);
+      const v = c.velocity(id);
       maxV = Math.max(maxV, Math.hypot(v[0]!, v[1]!));
     }
     expect(maxV).toBeLessThan(2);
@@ -199,7 +197,7 @@ describe("Simulation — numerical robustness", () => {
   });
 
   it("cloth recovers after aggressive drag (no compression / no jitter)", async () => {
-    const { Simulation, spring, Strength } = await import("../index");
+    const { physics, spring, Strength } = await import("../index");
     const W = 14;
     const H = 10;
     const SP = 26;
@@ -210,7 +208,7 @@ describe("Simulation — numerical robustness", () => {
       grid.push(row);
     }
     // Mirrors the `<md-cloth>` demo's actual config.
-    const c = constraints({ iterations: 10 });
+    const c = physics({ iterations: 10, gravity: [0, 90], damping: 0.94 });
     for (let j = 0; j < H; j++)
       for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM));
     for (let i = 0; i < W; i++)
@@ -218,8 +216,7 @@ describe("Simulation — numerical robustness", () => {
     c.add(pin(grid[0]![0]!));
     c.add(pin(grid[0]![W - 1]!));
 
-    const sim = new Simulation(c, { gravity: [0, 90], damping: 0.94 });
-    for (let f = 0; f < 60; f++) sim.tick(1 / 60);
+    for (let f = 0; f < 60; f++) c.step(1 / 60);
 
     const drag = grid[H - 1]![W - 1]!;
     c.add(pin(drag));
@@ -233,16 +230,16 @@ describe("Simulation — numerical robustness", () => {
         x: (W - 1) * SP + (rand() - 0.5) * 200,
         y: (H - 1) * SP + (rand() - 0.5) * 200,
       };
-      sim.tick(1 / 60);
+      c.step(1 / 60);
     }
     const dragId = c._bind(drag);
     c.solver.setMass(dragId, 1);
 
-    for (let f = 0; f < 600; f++) sim.tick(1 / 60);
+    for (let f = 0; f < 600; f++) c.step(1 / 60);
 
     let maxV = 0;
     for (let id = 0; id < c.solver.cellCount; id++) {
-      const v = sim.velocity(id);
+      const v = c.velocity(id);
       maxV = Math.max(maxV, Math.hypot(v[0]!, v[1]!));
     }
     // Empirically: across drag-seed sweeps this lands in the 1–5 px/sec
@@ -268,21 +265,20 @@ describe("Simulation — numerical robustness", () => {
   });
 
   it("hanging chain settles (low residual velocity at end)", async () => {
-    const { distance, Simulation } = await import("../index");
+    const { distance, physics } = await import("../index");
     const N = 20;
     const LINK = 12;
     const links: WVec[] = [];
     for (let i = 0; i < N; i++) links.push(vec(i * LINK, 0));
-    const c = constraints({ iterations: 12, alpha: 0.99 });
+    const c = physics({ iterations: 12, alpha: 0.99, gravity: [0, 220], damping: 0.985 });
     for (let i = 1; i < N; i++) c.add(distance(links[i - 1]!, links[i]!, LINK));
     c.add(pin(links[0]!));
 
-    const sim = new Simulation(c, { gravity: [0, 220], damping: 0.985 });
-    for (let f = 0; f < 600; f++) sim.tick(1 / 60);
+    for (let f = 0; f < 600; f++) c.step(1 / 60);
 
     let maxV = 0;
     for (let id = 0; id < c.solver.cellCount; id++) {
-      const v = sim.velocity(id);
+      const v = c.velocity(id);
       maxV = Math.max(maxV, Math.hypot(v[0]!, v[1]!));
     }
     expect(maxV).toBeLessThan(5);
@@ -382,6 +378,6 @@ describe("Cluster — constraint lifecycle", () => {
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(3, 1);
 
     c.remove(link);
-    expect(c.solver.forces.length).toBe(0);
+    expect(c.solver.terms.length).toBe(0);
   });
 });

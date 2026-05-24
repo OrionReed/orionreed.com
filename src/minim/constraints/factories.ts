@@ -35,15 +35,15 @@ import { type Signal } from "../signals";
 import { param } from "../signals/settle-utils";
 import { type Constraints, type Relation } from "./cluster";
 import {
-  BoundsForce,
-  DistanceForce,
-  EqForce,
-  GenericForce,
-  LensNumForce,
+  BoundsTerm,
+  DistanceTerm,
+  EqTerm,
+  GenericTerm,
+  LensNumTerm,
   type ResidualFn,
-  SoftTargetForce,
+  SoftTargetTerm,
   Strength,
-} from "./forces";
+} from "./terms";
 
 export { Strength };
 
@@ -74,9 +74,9 @@ export function pin(sig: S): Relation {
 export function eq(a: S, b: S): Relation {
   return {
     bind(c) {
-      const f = new EqForce(c.solver, c._bind(a), c._bind(b));
-      c.solver.addForce(f);
-      return () => c.solver.removeForce(f);
+      const f = new EqTerm(c.solver, c._bind(a), c._bind(b));
+      c.solver.addTerm(f);
+      return () => c.solver.removeTerm(f);
     },
   };
 }
@@ -112,9 +112,9 @@ export function distance(
     rest: rest_,
     stiffness: stiff_,
     bind(c) {
-      const f = new DistanceForce(c.solver, c._bind(a), c._bind(b), rest_, hard, stiff_);
-      c.solver.addForce(f);
-      return () => c.solver.removeForce(f);
+      const f = new DistanceTerm(c.solver, c._bind(a), c._bind(b), rest_, hard, stiff_);
+      c.solver.addTerm(f);
+      return () => c.solver.removeTerm(f);
     },
   };
 }
@@ -133,9 +133,9 @@ export function spring(
 export function lensNum(a: S, b: S, fwd: (x: number) => number): Relation {
   return {
     bind(c) {
-      const f = new LensNumForce(c.solver, c._bind(a), c._bind(b), fwd);
-      c.solver.addForce(f);
-      return () => c.solver.removeForce(f);
+      const f = new LensNumTerm(c.solver, c._bind(a), c._bind(b), fwd);
+      c.solver.addTerm(f);
+      return () => c.solver.removeTerm(f);
     },
   };
 }
@@ -154,9 +154,9 @@ export function clamp(
     lo: lo_,
     hi: hi_,
     bind(c) {
-      const f = new BoundsForce(c.solver, c._bind(x), lo_, hi_);
-      c.solver.addForce(f);
-      return () => c.solver.removeForce(f);
+      const f = new BoundsTerm(c.solver, c._bind(x), lo_, hi_);
+      c.solver.addTerm(f);
+      return () => c.solver.removeTerm(f);
     },
   };
 }
@@ -171,7 +171,7 @@ export function gap(a: S, b: S, minDist: number): Relation {
       const dy = pos[1]![1]! - pos[0]![1]!;
       out[0]! = Math.hypot(dx, dy) - minDist;
     },
-    { fmax: [0] },
+    { lambdaMax: [0] },
   );
 }
 
@@ -187,7 +187,7 @@ export function repel(a: S, b: S, range: number, stiffness: number): Relation {
       const dy = pos[1]![1]! - pos[0]![1]!;
       out[0]! = Math.hypot(dx, dy) - range;
     },
-    { hard: false, stiffness, fmax: [0] },
+    { hard: false, stiffness, lambdaMax: [0] },
   );
 }
 
@@ -204,7 +204,7 @@ export function inside(P: S, xLo: number, yLo: number, xHi: number, yHi: number)
       out[2]! = p[1]! - yLo;
       out[3]! = yHi - p[1]!;
     },
-    { fmax: [0, 0, 0, 0] },
+    { lambdaMax: [0, 0, 0, 0] },
   );
 }
 
@@ -216,7 +216,7 @@ export function leq(a: S, b: S): Relation {
     (pos, out) => {
       out[0]! = pos[1]![0]! - pos[0]![0]!;
     },
-    { fmax: [0] },
+    { lambdaMax: [0] },
   );
 }
 
@@ -231,9 +231,9 @@ export function geq(a: S, b: S): Relation {
 export function softTarget(cell: S, target: ArrayLike<number>, stiffness: number): Relation {
   return {
     bind(c) {
-      const f = new SoftTargetForce(c.solver, c._bind(cell), target, stiffness);
-      c.solver.addForce(f);
-      return () => c.solver.removeForce(f);
+      const f = new SoftTargetTerm(c.solver, c._bind(cell), target, stiffness);
+      c.solver.addTerm(f);
+      return () => c.solver.removeTerm(f);
     },
   };
 }
@@ -245,24 +245,24 @@ export function generic(
   cells: readonly S[],
   rows: number,
   fn: ResidualFn,
-  opts?: { fdStep?: number; hard?: boolean; stiffness?: number; fmax?: readonly number[] },
+  opts?: { fdStep?: number; hard?: boolean; stiffness?: number; lambdaMax?: readonly number[] },
 ): Relation {
   return {
     bind(c) {
-      const f = new GenericForce(
+      const f = new GenericTerm(
         c.solver,
         cells.map(s => c._bind(s)),
         rows,
         fn,
         opts,
       );
-      c.solver.addForce(f);
-      if (opts?.fmax) {
-        for (let i = 0; i < opts.fmax.length && i < rows; i++) {
-          f.fmax[i]! = opts.fmax[i]!;
+      c.solver.addTerm(f);
+      if (opts?.lambdaMax) {
+        for (let i = 0; i < opts.lambdaMax.length && i < rows; i++) {
+          f.lambdaMax[i]! = opts.lambdaMax[i]!;
         }
       }
-      return () => c.solver.removeForce(f);
+      return () => c.solver.removeTerm(f);
     },
   };
 }

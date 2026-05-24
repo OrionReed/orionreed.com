@@ -1,14 +1,15 @@
-// rigid.ts — 2D rigid-body extension on top of the AVBD constraint solver.
+// rigid.ts — 2D rigid-body relations + box-box collision.
 //
 // A rigid body is a single 3-DOF cell `(x, y, θ)` with diagonal mass
 // `(m, m, I)` written via `Solver.setMassDiag`. Geometry (size,
 // friction) and bookkeeping (bounding radius for broadphase) live on
 // a `Body` wrapper. Collisions between two boxes generate a
-// `BoxContact` force — a `Force` subclass whose rows encode normal
-// and tangential constraints with feature-pair tracking for static
-// friction. A `RigidWorld` ties it all together: each step does an
-// O(n²) broadphase, creates / updates / disposes contact forces,
-// and runs the underlying `Simulation.tick`.
+// `BoxContact` term whose rows encode normal and tangential
+// constraints with feature-pair tracking for static friction.
+//
+// `Body`, `Joint`, and `BodyAnchor` are `Relation`s — add them via
+// `c.add(...)` (typically inside a `world()` factory which sets up
+// the broadphase + manifold lifecycle and contact-skip set).
 //
 // SAT collision detection is a translation of Box2D-Lite's
 // box-box collide (MIT licensed, Erin Catto), the same one the
@@ -25,10 +26,9 @@ import {
   vec,
   type Writable,
 } from "../signals";
-import { Constraints, constraints, type Relation } from "./cluster";
-import { Force } from "./force";
-import { Simulation, type SimulationOpts } from "./simulation";
-import type { Solver, SolverOpts } from "./solver";
+import type { Constraints, Relation } from "./cluster";
+import { Term } from "./term";
+import type { Solver } from "./solver";
 
 const COLLISION_MARGIN = 0.0005;
 const STICK_THRESH = 0.01;
@@ -544,7 +544,7 @@ const SCRATCH_CONTACTS: Contact[] = [makeContact(), makeContact()];
  *  expansion at `x⁻` (no second-order term — paper §4) so the
  *  derivatives `J` are precomputed in `initialize` and just copied
  *  out by `computeDerivatives`. */
-export class BoxContact extends Force {
+export class BoxContact extends Term {
   bodyA: Body;
   bodyB: Body;
   numContacts = 0;
@@ -573,8 +573,8 @@ export class BoxContact extends Force {
     this.C0n = new Float64Array(2);
     this.C0t = new Float64Array(2);
     // Normal rows: lambda ≤ 0 (push apart). fmin = -∞, fmax = 0.
-    this.fmax[0]! = 0;
-    this.fmax[2]! = 0;
+    this.lambdaMax[0]! = 0;
+    this.lambdaMax[2]! = 0;
     // Tangential rows: friction cone is set per-iteration in computeConstraint.
   }
 
@@ -590,7 +590,7 @@ export class BoxContact extends Force {
 
     // Re-collide. Returning `true` even with zero contacts keeps the
     // manifold registered with the solver so warm-start state survives
-    // a brief separation (RigidWorld's broadphase still tracks the
+    // a brief separation (the world's broadphase still tracks the
     // pair). When `numContacts == 0` the rows are zeroed in
     // `computeConstraint`, so the inactive manifold contributes nothing.
     readPose(this.solver, this.bodyA.cellId, this._poseA);
@@ -724,8 +724,8 @@ export class BoxContact extends Force {
 
       // Update friction cone from current normal lambda.
       const bound = Math.abs(this.lambda[i * 2 + 0]!) * this.friction;
-      this.fmax[i * 2 + 1]! = bound;
-      this.fmin[i * 2 + 1]! = -bound;
+      this.lambdaMax[i * 2 + 1]! = bound;
+      this.lambdaMin[i * 2 + 1]! = -bound;
 
       // Sticking detection for static friction next frame.
       const con = this.contacts[i]!;
@@ -789,7 +789,7 @@ export interface JointStiffness {
  *
  *  This is the internal Force; user code adds the `Joint` Relation
  *  via `world.add(joint(a, b, rA, rB))`. */
-export class JointForce extends Force {
+export class JointTerm extends Term {
   readonly bodyA: Body;
   readonly bodyB: Body;
   rAx: number;
@@ -927,7 +927,7 @@ export class JointForce extends Force {
  *  pointermove; call `dispose()` on pointerup. */
 /** @internal — BodyAnchor's underlying Force. User code uses
  *  `bodyAnchor(body, target, stiffness?)` and adds via `world.add`. */
-export class BodyAnchorForce extends Force {
+export class BodyAnchorTerm extends Term {
   readonly body: Body;
   /** World-space target signal (mutable). */
   readonly target: Writable<Vec>;
@@ -1006,15 +1006,9 @@ export class Joint implements Relation {
     if (this.bodyA.cellId < 0 || this.bodyB.cellId < 0) {
       throw new Error("joint: add both bodies before the joint");
     }
-    const world = (c as Constraints & { _world?: RigidWorld })._world;
-    const f = new JointForce(c.solver, this.bodyA, this.bodyB, this.rA, this.rB, this.opts);
-    c.solver.addForce(f);
-    let unregister: (() => void) | undefined;
-    if (world) unregister = world._registerJointPair(this.bodyA, this.bodyB);
-    return () => {
-      c.solver.removeForce(f);
-      if (unregister) unregister();
-    };
+    const f = new JointTerm(c.solver, this.bodyA, this.bodyB, this.rA, this.rB, this.opts);
+    c.solver.addTerm(f);
+    return () => c.solver.removeTerm(f);
   }
 }
 
@@ -1068,9 +1062,9 @@ export class BodyAnchor implements Relation {
 
   bind(c: Constraints): () => void {
     if (this.body.cellId < 0) throw new Error("bodyAnchor: add the body first");
-    const f = new BodyAnchorForce(c.solver, this.body, this.target, this.stiffness);
-    c.solver.addForce(f);
-    return () => c.solver.removeForce(f);
+    const f = new BodyAnchorTerm(c.solver, this.body, this.target, this.stiffness);
+    c.solver.addTerm(f);
+    return () => c.solver.removeTerm(f);
   }
 }
 
@@ -1082,216 +1076,3 @@ export function bodyAnchor(
   return new BodyAnchor(body, target, stiffness);
 }
 
-// ─── World ──────────────────────────────────────────────────────────
-
-export interface RigidWorldOpts extends SolverOpts, SimulationOpts {
-  /** Hard cap on angular speed (rad/s) — matches the reference 2D
-   *  AVBD demo's `±50` rad/s clamp, applied each step before the
-   *  inertial extrapolation. Prevents a body that picked up spurious
-   *  angular impulse during drag or contact transition from spinning
-   *  out of control. Default `50`. */
-  maxAngularSpeed?: number;
-}
-
-/** A 2D rigid-body world. Wraps a `Constraints` holder and a
- *  `Simulation`, plus the broadphase / contact-manifold lifecycle
- *  that's specific to rigid bodies.
- *
- *  Compose with `world.add(...)` (variadic, supports any
- *  `Relation`):
- *
- *    const a = world.add(body({ size: { w: 40, h: 40 } }, { x: 100, y: 100 }));
- *    const b = world.add(body({ size: { w: 40, h: 40 }, density: 0 }, { x: 200, y: 200 }));
- *    world.add(joint(a, b, { x: 0, y: 0 }, { x: 0, y: 0 }));
- *
- *  RigidWorld also forwards `addWhile`, `remove`, and `dispose` to
- *  its inner `Constraints`. */
-export class RigidWorld {
-  readonly constraints: Constraints;
-  readonly simulation: Simulation;
-  readonly bodies: Body[] = [];
-  /** Active manifolds keyed by `(cellA, cellB)` pair (cellA < cellB). */
-  private readonly _manifolds = new Map<string, BoxContact>();
-  /** Body-pairs explicitly linked by a `Joint`. The broadphase skips
-   *  contact generation between linked pairs — otherwise the joint
-   *  and the box-box contact fight each other. */
-  private readonly _jointed = new Map<string, number>();
-  private readonly maxAngularSpeed: number;
-  /** Sub-step accumulator (only used if `simulation.fixedDt` is set).
-   *  Lives on `RigidWorld` rather than on `Simulation` because the
-   *  pre-/post-tick hooks (angular clamp, contact refresh) run
-   *  per-sub-step here, so we need direct control over the loop. */
-  private _acc = 0;
-
-  constructor(opts: RigidWorldOpts = {}) {
-    this.constraints = constraints({
-      iterations: opts.iterations ?? 10,
-      alpha: opts.alpha ?? 0.99,
-      beta: opts.beta ?? 1e5,
-      gamma: opts.gamma ?? 0.99,
-      postStabilize: opts.postStabilize ?? true,
-    });
-    // Stash a back-reference so Joint/BodyAnchor relations can find
-    // the world from their `bind(c)` callback (see `Joint.bind`).
-    (this.constraints as Constraints & { _world: RigidWorld })._world = this;
-    this.simulation = new Simulation(this.constraints, {
-      gravity: opts.gravity,
-      damping: opts.damping ?? 1,
-      adaptiveWarmstart: opts.adaptiveWarmstart,
-      // Fixed-dt sub-stepping is the AVBD default for physics —
-      // production engines (Box2D, Bullet, Rapier) all do this.
-      // Override via `RigidWorldOpts.fixedDt` if needed.
-      fixedDt: opts.fixedDt ?? 1 / 60,
-      maxSubSteps: opts.maxSubSteps ?? 4,
-    });
-    this.maxAngularSpeed = opts.maxAngularSpeed ?? 50;
-  }
-
-  // ─── Variadic add / remove / addWhile (forwarders + body tracking) ──
-
-  add<R extends Relation>(rel: R): R;
-  add<R extends Relation>(rel1: R, rel2: R, ...rest: R[]): R[];
-  add(...rels: Relation[]): Relation | Relation[] {
-    for (const rel of rels) {
-      if (rel instanceof Body) this.bodies.push(rel);
-    }
-    // biome-ignore lint/suspicious/noExplicitAny: variadic forward
-    return (this.constraints.add as any)(...rels);
-  }
-
-  remove(rel: Relation): void {
-    if (rel instanceof Body) {
-      const idx = this.bodies.indexOf(rel);
-      if (idx >= 0) this.bodies.splice(idx, 1);
-    }
-    this.constraints.remove(rel);
-  }
-
-  addWhile(cond: Parameters<Constraints["addWhile"]>[0], ...rels: Relation[]) {
-    return this.constraints.addWhile(cond, ...rels);
-  }
-
-  /** Tear down the world: dispose the constraints driver (no-op
-   *  here since `Simulation` already disposed it). Leaves bodies'
-   *  pose signals intact. */
-  dispose(): void {
-    this.constraints.dispose();
-  }
-
-  // ─── Joint pair registry (used by Joint.bind) ────────────────────
-
-  /** @internal — register a joint-linked body pair so the broadphase
-   *  skips contact generation between them. Joint relations call this
-   *  from their `bind`. Returns an unregister thunk. Multiple joints
-   *  on the same pair are reference-counted. */
-  _registerJointPair(a: Body, b: Body): () => void {
-    const lo = Math.min(a.cellId, b.cellId);
-    const hi = Math.max(a.cellId, b.cellId);
-    const key = `${lo}_${hi}`;
-    this._jointed.set(key, (this._jointed.get(key) ?? 0) + 1);
-    return () => {
-      const n = (this._jointed.get(key) ?? 0) - 1;
-      if (n <= 0) this._jointed.delete(key);
-      else this._jointed.set(key, n);
-    };
-  }
-
-  // ─── Per-frame step ──────────────────────────────────────────────
-
-  step(realDt: number): void {
-    if (!(realDt > 0) || !Number.isFinite(realDt)) return;
-    const fixed = this.simulation.fixedDt;
-    if (fixed === undefined) {
-      this._preTick();
-      this.simulation.tick(realDt);
-      this._postTick();
-      return;
-    }
-    // Accumulator-based fixed-dt sub-stepping with per-sub-step
-    // pre-/post-tick hooks (angular speed clamp, contact manifold
-    // refresh). We can't delegate to `sim.step` directly because we
-    // need to interleave hooks between sub-steps.
-    const sim = this.simulation;
-    this._acc += Math.min(realDt, fixed * sim.maxSubSteps);
-    let steps = 0;
-    while (this._acc >= fixed && steps < sim.maxSubSteps) {
-      this._preTick();
-      sim.tick(fixed);
-      this._acc -= fixed;
-      steps++;
-    }
-    this._postTick();
-  }
-
-  /** Generator for `Anim.start(world.animate())`. */
-  *animate(): Generator<undefined, never, { dt: number }> {
-    for (;;) {
-      const tick: { dt: number } = yield;
-      this.step(tick.dt);
-    }
-  }
-
-  // ─── Sub-step hooks ──────────────────────────────────────────────
-
-  /** Pre-tick: clamp angular speed, refresh broadphase. */
-  private _preTick(): void {
-    const cap = this.maxAngularSpeed;
-    const v = this.simulation.velocities;
-    const offsets = this.constraints.solver.offsets;
-    const dims = this.constraints.solver.dims;
-    for (const body of this.bodies) {
-      const off = offsets[body.cellId]!;
-      if (dims[body.cellId]! >= 3) {
-        const w = v[off + 2]!;
-        if (w > cap) v[off + 2]! = cap;
-        else if (w < -cap) v[off + 2]! = -cap;
-      }
-    }
-    this._updateContacts();
-  }
-
-  /** Post-tick — currently a no-op. Body pose signals are written
-   *  back by the `Simulation` writeback, so no manual sync is
-   *  needed (this is the win from making `pose` the cell signal). */
-  private _postTick(): void {}
-
-  /** O(n²) broadphase + manifold lifecycle. Called from `_preTick`. */
-  private _updateContacts(): void {
-    const N = this.bodies.length;
-    const seen = new Set<string>();
-    const solver = this.constraints.solver;
-    const positions = solver.positions;
-    const offsets = solver.offsets;
-    for (let i = 0; i < N; i++) {
-      const A = this.bodies[i]!;
-      const aOff = offsets[A.cellId]!;
-      const ax = positions[aOff]!;
-      const ay = positions[aOff + 1]!;
-      for (let j = i + 1; j < N; j++) {
-        const B = this.bodies[j]!;
-        if (A.mass === 0 && B.mass === 0) continue;
-        const ca = Math.min(A.cellId, B.cellId);
-        const cb = Math.max(A.cellId, B.cellId);
-        if (this._jointed.has(`${ca}_${cb}`)) continue;
-        const bOff = offsets[B.cellId]!;
-        const dx = ax - positions[bOff]!;
-        const dy = ay - positions[bOff + 1]!;
-        const r = A.radius + B.radius;
-        if (dx * dx + dy * dy > r * r) continue;
-        const key = `${ca}_${cb}`;
-        seen.add(key);
-        if (!this._manifolds.has(key)) {
-          const m = new BoxContact(solver, A, B);
-          solver.addForce(m);
-          this._manifolds.set(key, m);
-        }
-      }
-    }
-    for (const [key, m] of this._manifolds) {
-      if (!seen.has(key)) {
-        m.dispose();
-        this._manifolds.delete(key);
-      }
-    }
-  }
-}

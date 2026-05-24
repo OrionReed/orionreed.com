@@ -7,7 +7,7 @@
 // Compared to the point-mass + distance-constraint chain, this one
 // has rotational inertia per link — bars feel like bars, not beads.
 
-import { type Body, body, joint, RigidWorld } from "@minim/constraints";
+import { animate, type Body, body, joint, world } from "@minim/constraints";
 import {
   Anchor,
   type AnyShape,
@@ -91,7 +91,7 @@ export class MdRigidRope extends Diagram {
     const anchorX = view.center.value.x;
     const anchorY = view.top.down(40).value.y;
 
-    const world = new RigidWorld({
+    const w = world({
       gravity: [0, 1500],
       iterations: 14,
       postStabilize: true,
@@ -100,7 +100,7 @@ export class MdRigidRope extends Diagram {
     });
 
     // Static anchor block.
-    const anchor = world.add(
+    const anchor = w.add(
       body({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY }),
     );
     s(rect(anchor.position, 10, 10, { fill: "#222" }));
@@ -110,7 +110,7 @@ export class MdRigidRope extends Diagram {
     let prev = anchor;
     for (let i = 0; i < N; i++) {
       const cx = anchorX + LINK_W / 2 + i * LINK_W;
-      const link = world.add(
+      const link = w.add(
         body(
           { size: { w: LINK_W - 1, h: LINK_H }, density: 1, friction: 0.5 },
           { x: cx, y: anchorY, theta: 0 },
@@ -119,7 +119,7 @@ export class MdRigidRope extends Diagram {
       links.push(link);
       const rA = i === 0 ? { x: 0, y: 0 } : { x: LINK_W / 2, y: 0 };
       const rB = { x: -LINK_W / 2, y: 0 };
-      world.add(joint(prev, link, rA, rB));
+      w.add(joint(prev, link, rA, rB));
       prev = link;
     }
 
@@ -141,7 +141,7 @@ export class MdRigidRope extends Diagram {
 
       const dragging = signal(false);
       dragWorld(r, link.position as Writable<Vec>, dragging);
-      world.addWhile(dragging, link.pin());
+      w.addWhile(dragging, link.pin());
     }
 
     // Show joint pivots as small dots.
@@ -159,7 +159,7 @@ export class MdRigidRope extends Diagram {
       s(circle(pivot, 1.6, { fill: "#fff", thin: true }));
     }
 
-    this.anim.start(world.animate());
+    this.anim.start(animate(w));
 
     s(
       label(

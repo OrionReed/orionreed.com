@@ -146,7 +146,7 @@ describe("API — solver state introspection", () => {
     const a = vec(0, 0);
     const b = vec(1, 0);
     s.add(distance(a, b, 1));
-    expect(s.solver.forces.length).toBe(1);
+    expect(s.solver.terms.length).toBe(1);
   });
 });
 
@@ -156,7 +156,7 @@ describe("API — variadic add", () => {
     const a = vec(0, 0);
     const b = vec(1, 0);
     const r = s.add(distance(a, b, 1));
-    expect(s.solver.forces.length).toBe(1);
+    expect(s.solver.terms.length).toBe(1);
     expect(typeof r.bind).toBe("function");
   });
 
@@ -166,7 +166,7 @@ describe("API — variadic add", () => {
     const b = vec(1, 0);
     const c = vec(2, 0);
     const [r1, r2] = s.add(distance(a, b, 1), distance(b, c, 1));
-    expect(s.solver.forces.length).toBe(2);
+    expect(s.solver.terms.length).toBe(2);
     expect(typeof r1.bind).toBe("function");
     expect(typeof r2.bind).toBe("function");
   });

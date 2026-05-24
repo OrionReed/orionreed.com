@@ -6,16 +6,31 @@
 // keeps hidden classes stable.
 //
 // Signal-free. Cells are integer handles returned by `addCell`.
-// Forces store cell ids and read positions via
+// Terms store cell ids and read positions via
 // `positions[offsets[id] + k]`. Reactive integration is layered
-// on top in `cluster.ts`; time-stepping in `simulation.ts`.
+// on top in `cluster.ts`; time evolution and physics-flavored
+// extensions live in factories (`physics`, `world`) that mutate
+// `anchors` between `prepare()` and `solve(dt)`.
 //
-// Solver answers: "given an inertial anchor `y` and a set of
-// constraints, find `x` near `y` that satisfies them."
+// Solver answers: "given an anchor `y` and a set of constraints,
+// find `x` near `y` (weighted by `M/dt²`) that satisfies them."
+//
+// The math is deliberately not specialized to physics:
+//   - `y` (anchors): the regularizer's reference point.
+//     Physics: `x⁻ + dt·v + dt²·g` (inertial extrapolation).
+//     Sketchpad / IK: `x⁻` (just stay where you were).
+//     Adam-flavored opt: `x − lr · m̂ / √v̂`.
+//     Annealing: `x + noise(T)`.
+//   - `M` (masses): per-DOF anchor weight.
+//     Physics: linear + rotational inertia.
+//     Layout: stickiness.
+//     Adam: `1 / √v̂` preconditioner.
+//   - `dt`: scale parameter on the regularizer vs constraints.
+//     dt → 0: hard projection (constraints dominate).
+//     dt → ∞: stay-put (regularizer dominates).
 
-import type { Force } from "./force";
-import { LAMBDA_MAX, PENALTY_MAX, PENALTY_MIN } from "./force";
 import { clamp, solveSPD } from "./linalg";
+import { LAMBDA_MAX, PENALTY_MAX, PENALTY_MIN, type Term } from "./term";
 
 export interface SolverOpts {
   /** Number of primal+dual iterations per solve. Default 10. */
@@ -40,9 +55,9 @@ export interface SolverOpts {
    *  but the primal step doesn't actively unwind the existing
    *  residual), and the post-stab iter zeros the residual exactly.
    *  This is the AVBD paper's default for physics — strongly
-   *  recommended whenever `Simulation` is in the picture. Default
-   *  `false` so static `Cluster.step()` retains its iter-N Newton
-   *  behavior. */
+   *  recommended whenever a physics-flavored factory is in use.
+   *  Default `false` so static `solver.solve()` retains its iter-N
+   *  Newton behaviour. */
   postStabilize?: boolean;
   /** Initial buffer capacity in scalar slots. Buffers grow by
    *  doubling when needed; seeding a generous capacity avoids
@@ -74,18 +89,19 @@ export class Solver {
   positions: Float64Array;
   /** Packed cell positions at start of step (`x⁻`). */
   initials: Float64Array;
-  /** Packed warm-start anchors (`y`). Defaults to `initials`;
-   *  `Simulation` overwrites for physics. */
-  inertials: Float64Array;
-  /** Inertia-term weight per scalar slot — same length as
-   *  `positions`. For uniform-mass cells (the common case), all
-   *  `dim` slots of a cell carry the same value (`setMass(id, m)`
-   *  writes that). For non-uniform cells (e.g. a 2D rigid body
-   *  with diagonal `(m, m, I)` where `I` is moment of inertia),
-   *  use `setMassDiag(id, [m0, m1, ...])`. The hot loop reads per
-   *  slot. `0` on the first slot means "pinned" (primal update is
-   *  skipped, value stays put); other slots are ignored when slot 0
-   *  is zero. */
+  /** Packed anchor positions (`y`) — the point the regularizer
+   *  pulls `x` toward. Defaults to `initials` after `prepare()`;
+   *  factories (physics, Adam, …) overwrite between `prepare()`
+   *  and `solve(dt)` to install their own warm-start. */
+  anchors: Float64Array;
+  /** Anchor weight per scalar slot — same length as `positions`.
+   *  In physics this is mass / inertia; in layout it's stickiness;
+   *  in Adam it's the preconditioner. The hot loop reads per slot.
+   *  `0` on the first slot means "pinned" (primal update is
+   *  skipped, value stays put); other slots are ignored when slot
+   *  0 is zero. For uniform-mass cells use `setMass(id, m)`; for
+   *  non-uniform (e.g. a 2D rigid body's `(m, m, I)`) use
+   *  `setMassDiag`. */
   masses: Float64Array;
   /** Per-cell dim. Stored as Uint8 since dims are small. */
   dims: Uint8Array;
@@ -94,19 +110,19 @@ export class Solver {
   offsets: Uint32Array;
 
   // ─── Adjacency ───────────────────────────────────────────────────
-  /** Per-cell list of incident forces. Order doesn't matter
+  /** Per-cell list of incident terms. Order doesn't matter
    *  (solver iterates all). */
-  cellForces: Force[][] = [];
-  /** Parallel array: `cellForceCellIdx[id][k]` is this cell's
-   *  index within `cellForces[id][k].cells`. Avoids an O(n)
-   *  `indexOf` per cell-visit-per-iteration. */
-  cellForceCellIdx: number[][] = [];
+  cellTerms: Term[][] = [];
+  /** Parallel array: `cellTermIdx[id][k]` is this cell's index
+   *  within `cellTerms[id][k].cells`. Avoids an O(n) `indexOf`
+   *  per cell-visit-per-iteration. */
+  cellTermIdx: number[][] = [];
 
-  // ─── Forces ──────────────────────────────────────────────────────
-  private readonly _forces: Force[] = [];
-  /** Read-only view of registered forces. */
-  get forces(): readonly Force[] {
-    return this._forces;
+  // ─── Terms ───────────────────────────────────────────────────────
+  private readonly _terms: Term[] = [];
+  /** Read-only view of registered terms. */
+  get terms(): readonly Term[] {
+    return this._terms;
   }
 
   // ─── Internal ────────────────────────────────────────────────────
@@ -132,8 +148,8 @@ export class Solver {
     this._capacity = cap;
     this.positions = new Float64Array(cap);
     this.initials = new Float64Array(cap);
-    this.inertials = new Float64Array(cap);
-    // Per-DOF mass — same length as positions/initials/inertials.
+    this.anchors = new Float64Array(cap);
+    // Per-DOF mass — same length as positions/initials/anchors.
     this.masses = new Float64Array(cap);
     // dims/offsets are per-cell.
     this.dims = new Uint8Array(16);
@@ -156,13 +172,13 @@ export class Solver {
       const v = init?.[k] ?? 0;
       this.positions[off + k] = v;
       this.initials[off + k] = v;
-      this.inertials[off + k] = v;
+      this.anchors[off + k] = v;
       this.masses[off + k] = 1;
     }
     this._totalDof += dim;
     this._cellCount++;
-    this.cellForces.push([]);
-    this.cellForceCellIdx.push([]);
+    this.cellTerms.push([]);
+    this.cellTermIdx.push([]);
 
     if (dim > this._maxDim) {
       this._maxDim = dim;
@@ -172,29 +188,29 @@ export class Solver {
     return id;
   }
 
-  addForce(force: Force): void {
-    this._forces.push(force);
+  addTerm(term: Term): void {
+    this._terms.push(term);
   }
 
-  removeForce(force: Force): void {
-    swapPop(this._forces, this._forces.indexOf(force));
-    const cells = force.cells;
+  removeTerm(term: Term): void {
+    swapPop(this._terms, this._terms.indexOf(term));
+    const cells = term.cells;
     for (let ci = 0; ci < cells.length; ci++) {
       const cid = cells[ci]!;
-      const list = this.cellForces[cid]!;
-      const idxList = this.cellForceCellIdx[cid]!;
-      const k = list.indexOf(force);
+      const list = this.cellTerms[cid]!;
+      const idxList = this.cellTermIdx[cid]!;
+      const k = list.indexOf(term);
       if (k < 0) continue;
       swapPop(list, k);
       swapPop(idxList, k);
     }
   }
 
-  /** @internal — for `Force` constructors to wire the cell ↔ force
+  /** @internal — for `Term` constructors to wire the cell ↔ term
    *  adjacency. Subclasses should not call this directly. */
-  _connectForce(force: Force, cellId: number, cellIndex: number): void {
-    this.cellForces[cellId]!.push(force);
-    this.cellForceCellIdx[cellId]!.push(cellIndex);
+  _connectTerm(term: Term, cellId: number, cellIndex: number): void {
+    this.cellTerms[cellId]!.push(term);
+    this.cellTermIdx[cellId]!.push(cellIndex);
   }
 
   /** Read cell `id`'s position into `out` (or a fresh array). */
@@ -239,54 +255,48 @@ export class Solver {
     for (let k = 0; k < dim; k++) this.masses[off + k] = m[k] ?? 0;
   }
 
-  /** Convenience: `prepare()` + `solve(1)`. The default static-
-   *  editing step. For physics, drive via `Simulation.tick(dt)`. */
-  step(): void {
-    this.prepare();
-    this.solve(1);
-  }
-
-  /** Snapshot positions (initials = positions), set inertial =
-   *  positions, and warm-start each force. After this, callers may
-   *  overwrite `inertials` (e.g. `Simulation` adds extrapolation)
+  /** Snapshot positions (initials = positions), set anchor =
+   *  positions, and warm-start each term. After this, callers may
+   *  overwrite `anchors` (e.g. physics adds inertial extrapolation)
    *  before invoking `solve(dt)`. */
   prepare(): void {
-    // Force initialisation + warm-start.
-    for (let fi = this._forces.length - 1; fi >= 0; fi--) {
-      const f = this._forces[fi]!;
-      if (f.disabled) {
-        this.removeForce(f);
+    // Term initialisation + warm-start.
+    for (let fi = this._terms.length - 1; fi >= 0; fi--) {
+      const t = this._terms[fi]!;
+      if (t.disabled) {
+        this.removeTerm(t);
         continue;
       }
-      if (!f.initialize()) {
-        this.removeForce(f);
+      if (!t.initialize()) {
+        this.removeTerm(t);
         continue;
       }
-      f.computeConstraint(0);
-      for (let r = 0; r < f.rows; r++) f.C0[r]! = f.C[r]!;
+      t.computeConstraint(0);
+      for (let r = 0; r < t.rows; r++) t.C0[r]! = t.C[r]!;
       // Lambda + penalty warm-start: AVBD §3.7 "forgetting factor" γ.
       // Both decay each frame regardless of stabilization mode —
       // failing to decay λ lets stacked / sliding contacts accumulate
       // dual impulse forever, which manifests as stack jitter at rest
       // and oscillation under perturbation.
       const ag = this.alpha * this.gamma;
-      for (let r = 0; r < f.rows; r++) {
-        f.lambda[r]! *= ag;
-        f.penalty[r]! = clamp(f.penalty[r]! * this.gamma, PENALTY_MIN, PENALTY_MAX);
-        const k = f.stiffness[r]!;
-        if (Number.isFinite(k) && f.penalty[r]! > k) f.penalty[r]! = k;
+      for (let r = 0; r < t.rows; r++) {
+        t.lambda[r]! *= ag;
+        t.penalty[r]! = clamp(t.penalty[r]! * this.gamma, PENALTY_MIN, PENALTY_MAX);
+        const k = t.stiffness[r]!;
+        if (Number.isFinite(k) && t.penalty[r]! > k) t.penalty[r]! = k;
       }
     }
     // Cell warm-start: y = x⁻ by default.
     const N = this._totalDof;
     for (let i = 0; i < N; i++) {
       this.initials[i] = this.positions[i]!;
-      this.inertials[i] = this.positions[i]!;
+      this.anchors[i] = this.positions[i]!;
     }
   }
 
-  /** Run the iteration loop using the current `inertials` as the
-   *  warm-start anchor. `dt` scales the inertia term `m / dt²`.
+  /** Run the iteration loop using the current `anchors` as the
+   *  warm-start anchor. `dt` scales the regularizer term `M / dt²`
+   *  vs the constraint terms. Default `dt = 1` (static editing).
    *
    *  With `postStabilize`, regular iterations use `α = 1`
    *  (the dual update accumulates λ for any growth in residual,
@@ -296,12 +306,12 @@ export class Solver {
    *  `this.alpha`.
    *
    *  `beforePostStab` runs once at the boundary between the regular
-   *  iterations and the post-stabilization iter — `Simulation` uses
-   *  this hook to compute velocity from the *physical* trajectory
-   *  rather than from positions after the post-stab projection
-   *  (matching the AVBD reference; see solver.cpp's
-   *  `if (it == iterations - 1)` block). With `postStabilize`
-   *  off, the hook fires once after the final iteration. */
+   *  iterations and the post-stabilization iter — physics uses this
+   *  hook to compute velocity from the *physical* trajectory rather
+   *  than from positions after the post-stab projection (matching
+   *  the AVBD reference; see solver.cpp's `if (it == iterations - 1)`
+   *  block). With `postStabilize` off, the hook fires once after
+   *  the final iteration. */
   solve(dt: number = 1, beforePostStab?: () => void): void {
     const inv_dt2 = 1 / (dt * dt);
     if (this.postStabilize) {
@@ -324,10 +334,10 @@ export class Solver {
   /** Compute `‖C‖` for diagnostics. */
   residualNorm(): number {
     let s = 0;
-    for (const f of this._forces) {
-      if (f.disabled) continue;
-      f.computeConstraint(0);
-      for (let r = 0; r < f.rows; r++) s += f.C[r]! * f.C[r]!;
+    for (const t of this._terms) {
+      if (t.disabled) continue;
+      t.computeConstraint(0);
+      for (let r = 0; r < t.rows; r++) s += t.C[r]! * t.C[r]!;
     }
     return Math.sqrt(s);
   }
@@ -339,12 +349,12 @@ export class Solver {
     const lhs = this._lhs;
     const rhs = this._rhs;
     const positions = this.positions;
-    const inertials = this.inertials;
+    const anchors = this.anchors;
     const masses = this.masses;
     const dims = this.dims;
     const offsets = this.offsets;
-    const cellForces = this.cellForces;
-    const cellForceCellIdx = this.cellForceCellIdx;
+    const cellTerms = this.cellTerms;
+    const cellTermIdx = this.cellTermIdx;
     const N = this._cellCount;
 
     for (let cellI = 0; cellI < N; cellI++) {
@@ -364,8 +374,8 @@ export class Solver {
         lhs[1]! = 0;
         lhs[2]! = 0;
         lhs[3]! = m1Dt2;
-        rhs[0]! = m0Dt2 * (positions[off]! - inertials[off]!);
-        rhs[1]! = m1Dt2 * (positions[off + 1]! - inertials[off + 1]!);
+        rhs[0]! = m0Dt2 * (positions[off]! - anchors[off]!);
+        rhs[1]! = m1Dt2 * (positions[off + 1]! - anchors[off + 1]!);
       } else if (dim === 3) {
         const m1 = masses[off + 1]!;
         const m2 = masses[off + 2]!;
@@ -381,38 +391,38 @@ export class Solver {
         lhs[6]! = 0;
         lhs[7]! = 0;
         lhs[8]! = m2Dt2;
-        rhs[0]! = m0Dt2 * (positions[off]! - inertials[off]!);
-        rhs[1]! = m1Dt2 * (positions[off + 1]! - inertials[off + 1]!);
-        rhs[2]! = m2Dt2 * (positions[off + 2]! - inertials[off + 2]!);
+        rhs[0]! = m0Dt2 * (positions[off]! - anchors[off]!);
+        rhs[1]! = m1Dt2 * (positions[off + 1]! - anchors[off + 1]!);
+        rhs[2]! = m2Dt2 * (positions[off + 2]! - anchors[off + 2]!);
       } else {
         for (let i = 0; i < dim * dim; i++) lhs[i]! = 0;
         for (let k = 0; k < dim; k++) {
           const mk = masses[off + k]!;
           const mkDt2 = mk * inv_dt2;
           lhs[k * dim + k]! = mkDt2;
-          rhs[k]! = mkDt2 * (positions[off + k]! - inertials[off + k]!);
+          rhs[k]! = mkDt2 * (positions[off + k]! - anchors[off + k]!);
         }
       }
 
-      // Accumulate force contributions.
-      const forceList = cellForces[cellI]!;
-      const forceCiList = cellForceCellIdx[cellI]!;
-      const flen = forceList.length;
+      // Accumulate term contributions.
+      const termList = cellTerms[cellI]!;
+      const termCiList = cellTermIdx[cellI]!;
+      const flen = termList.length;
       for (let fi = 0; fi < flen; fi++) {
-        const f = forceList[fi]!;
-        if (f.disabled) continue;
-        const ci = forceCiList[fi]!;
-        f.computeConstraint(currentAlpha);
-        f.computeDerivatives(ci);
-        const Jblock = f.J[ci]!;
-        const Hcols = f.HCols[ci]!;
-        const fStiff = f.stiffness;
-        const fLambda = f.lambda;
-        const fPenalty = f.penalty;
-        const fC = f.C;
-        const fMin = f.fmin;
-        const fMax = f.fmax;
-        const rows = f.rows;
+        const t = termList[fi]!;
+        if (t.disabled) continue;
+        const ci = termCiList[fi]!;
+        t.computeConstraint(currentAlpha);
+        t.computeDerivatives(ci);
+        const Jblock = t.J[ci]!;
+        const Hcols = t.HCols[ci]!;
+        const fStiff = t.stiffness;
+        const fLambda = t.lambda;
+        const fPenalty = t.penalty;
+        const fC = t.C;
+        const fMin = t.lambdaMin;
+        const fMax = t.lambdaMax;
+        const rows = t.rows;
         for (let r = 0; r < rows; r++) {
           const lambda = fStiff[r]! === Infinity ? fLambda[r]! : 0;
           const kC = fPenalty[r]! * fC[r]! + lambda;
@@ -509,37 +519,37 @@ export class Solver {
     }
   }
 
-  /** Dual update over all forces. */
+  /** Dual update over all terms. */
   private _dualPass(currentAlpha: number): void {
     const beta = this.beta;
-    const allForces = this._forces;
-    for (let fi = 0; fi < allForces.length; fi++) {
-      const f = allForces[fi]!;
-      if (f.disabled) continue;
-      f.computeConstraint(currentAlpha);
-      const fLambda = f.lambda;
-      const fPenalty = f.penalty;
-      const fC = f.C;
-      const fMin = f.fmin;
-      const fMax = f.fmax;
-      const fStiff = f.stiffness;
-      const fFracture = f.fracture;
-      const rows = f.rows;
+    const allTerms = this._terms;
+    for (let fi = 0; fi < allTerms.length; fi++) {
+      const t = allTerms[fi]!;
+      if (t.disabled) continue;
+      t.computeConstraint(currentAlpha);
+      const fLambda = t.lambda;
+      const fPenalty = t.penalty;
+      const fC = t.C;
+      const fMin = t.lambdaMin;
+      const fMax = t.lambdaMax;
+      const fStiff = t.stiffness;
+      const fFracture = t.fracture;
+      const rows = t.rows;
       for (let r = 0; r < rows; r++) {
         const lambda = fStiff[r]! === Infinity ? fLambda[r]! : 0;
         const kC = fPenalty[r]! * fC[r]! + lambda;
         const lo = fMin[r]!;
         const hi = fMax[r]!;
-        // Two clamps: user-supplied `[fmin, fmax]` (one-sided for
-        // inequalities), and the unconditional `±LAMBDA_MAX` to
-        // prevent runaway under infeasibility — see force.ts header.
+        // Two clamps: user-supplied `[lambdaMin, lambdaMax]` (one-sided
+        // for inequalities), and the unconditional `±LAMBDA_MAX` to
+        // prevent runaway under infeasibility — see term.ts header.
         let newLambda = kC < lo ? lo : kC > hi ? hi : kC;
         if (newLambda > LAMBDA_MAX) newLambda = LAMBDA_MAX;
         else if (newLambda < -LAMBDA_MAX) newLambda = -LAMBDA_MAX;
         fLambda[r]! = newLambda;
         const absLambda = newLambda < 0 ? -newLambda : newLambda;
         if (absLambda >= fFracture[r]!) {
-          f.dispose();
+          t.dispose();
           break;
         }
         if (newLambda > lo && newLambda < hi) {
@@ -570,15 +580,15 @@ export class Solver {
     while (cap < this._totalDof + needed) cap *= 2;
     const newPositions = new Float64Array(cap);
     const newInitials = new Float64Array(cap);
-    const newInertials = new Float64Array(cap);
+    const newAnchors = new Float64Array(cap);
     const newMasses = new Float64Array(cap);
     newPositions.set(this.positions);
     newInitials.set(this.initials);
-    newInertials.set(this.inertials);
+    newAnchors.set(this.anchors);
     newMasses.set(this.masses);
     this.positions = newPositions;
     this.initials = newInitials;
-    this.inertials = newInertials;
+    this.anchors = newAnchors;
     this.masses = newMasses;
     this._capacity = cap;
   }

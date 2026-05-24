@@ -16,7 +16,7 @@
 //     the rotational degree of freedom that a single pin otherwise
 //     leaves behind, and centers the layout in the viewport.
 
-import { Simulation, constraints, gap, pin, repel, softTarget, spring } from "@minim/constraints";
+import { animate, gap, physics, pin, repel, softTarget, spring } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -89,7 +89,7 @@ export class MdGraph extends Diagram {
       nodes.push(vec(cx + r * Math.cos(a), cy + r * Math.sin(a)));
     }
 
-    const cluster = constraints({ iterations: 12, postStabilize: true });
+    const cluster = physics({ iterations: 12, postStabilize: true, damping: 0.95 });
 
     for (const e of EDGES) cluster.add(spring(nodes[e.a]!, nodes[e.b]!, REST, SPRING_K));
     for (let i = 0; i < N; i++) {
@@ -104,8 +104,7 @@ export class MdGraph extends Diagram {
     // Mild damping — enough energy bleed to settle, not so much
     // that node motion feels viscous. With fast springs and
     // long-range repulsion doing real work, ~5%/frame is plenty.
-    const sim = new Simulation(cluster, { damping: 0.95 });
-    this.anim.start(sim.animate());
+    this.anim.start(animate(cluster));
 
     for (const e of EDGES) s(line(nodes[e.a]!, nodes[e.b]!, { thin: true, opacity: 0.5 }));
     for (let i = 0; i < N; i++)
