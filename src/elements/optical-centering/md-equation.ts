@@ -9,18 +9,7 @@
 // "redistribute the violation among the un-pinned cells."
 
 import { clamp, constraints, generic, pin } from "@minim/constraints";
-import {
-  Anchor,
-  circle,
-  Diagram,
-  drag,
-  label,
-  line,
-  Mount,
-  num,
-  signal,
-  Vec,
-} from "../../minim";
+import { Anchor, circle, Diagram, drag, label, line, Mount, num, signal, Vec } from "../../minim";
 
 type V = { x: number; y: number };
 

@@ -1,7 +1,7 @@
 // settle-utils.test.ts — `each`, `when`, `param`.
 
 import { describe, expect, it } from "vitest";
-import { each, param, signal, type Signal } from "../index";
+import { each, param, type Signal, signal } from "../index";
 import { when as whenLifecycle } from "../settle-utils";
 
 describe("each — reactive collection lifecycle", () => {

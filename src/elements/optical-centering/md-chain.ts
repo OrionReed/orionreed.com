@@ -115,9 +115,7 @@ export class MdChain extends Diagram {
       maxAngularSpeed: 100,
     });
 
-    const anchor = w.add(
-      body({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY }),
-    );
+    const anchor = w.add(body({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY }));
     s(circle(anchor.position, 5, { fill: true }));
 
     const links: Body[] = [];

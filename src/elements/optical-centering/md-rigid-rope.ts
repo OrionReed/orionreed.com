@@ -100,9 +100,7 @@ export class MdRigidRope extends Diagram {
     });
 
     // Static anchor block.
-    const anchor = w.add(
-      body({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY }),
-    );
+    const anchor = w.add(body({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY }));
     s(rect(anchor.position, 10, 10, { fill: "#222" }));
 
     // Link bodies, one after another.

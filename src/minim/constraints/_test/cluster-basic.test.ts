@@ -169,13 +169,17 @@ describe("physics() — numerical robustness", () => {
     // are the AVBD physics defaults; this test pins them in.
     const c = physics({ iterations: 12, postStabilize: true, gravity: [0, 90], damping: 0.99 });
     for (let j = 0; j < H; j++)
-      for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM));
+      for (let i = 1; i < W; i++)
+        c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM));
     for (let i = 0; i < W; i++)
-      for (let j = 1; j < H; j++) c.add(spring(grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM));
+      for (let j = 1; j < H; j++)
+        c.add(spring(grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM));
     for (let j = 0; j < H; j++)
-      for (let i = 2; i < W; i++) c.add(bend(grid[j]![i - 2]!, grid[j]![i - 1]!, grid[j]![i]!, 0.5));
+      for (let i = 2; i < W; i++)
+        c.add(bend(grid[j]![i - 2]!, grid[j]![i - 1]!, grid[j]![i]!, 0.5));
     for (let i = 0; i < W; i++)
-      for (let j = 2; j < H; j++) c.add(bend(grid[j - 2]![i]!, grid[j - 1]![i]!, grid[j]![i]!, 0.5));
+      for (let j = 2; j < H; j++)
+        c.add(bend(grid[j - 2]![i]!, grid[j - 1]![i]!, grid[j]![i]!, 0.5));
     c.add(pin(grid[0]![0]!));
     c.add(pin(grid[0]![W - 1]!));
 
@@ -210,9 +214,11 @@ describe("physics() — numerical robustness", () => {
     // Mirrors the `<md-cloth>` demo's actual config.
     const c = physics({ iterations: 10, gravity: [0, 90], damping: 0.94 });
     for (let j = 0; j < H; j++)
-      for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM));
+      for (let i = 1; i < W; i++)
+        c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM));
     for (let i = 0; i < W; i++)
-      for (let j = 1; j < H; j++) c.add(spring(grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM));
+      for (let j = 1; j < H; j++)
+        c.add(spring(grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM));
     c.add(pin(grid[0]![0]!));
     c.add(pin(grid[0]![W - 1]!));
 

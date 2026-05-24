@@ -12,7 +12,7 @@
 // Conclusion at the end of file documents the choice.
 
 import { describe, expect, it } from "vitest";
-import { batch, settle, signal, type Signal } from "../index";
+import { batch, type Signal, settle, signal } from "../index";
 
 // ─── 1. Dynamic relations ──────────────────────────────────────────
 //

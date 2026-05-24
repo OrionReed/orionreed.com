@@ -10,10 +10,10 @@ import {
   effect,
   isSignal,
   lens,
+  type Settle,
   Signal,
   settle,
   signal,
-  type Settle,
 } from "../index";
 
 // ─── 1. Errors during body ─────────────────────────────────────────

@@ -75,15 +75,15 @@ export {
   Body,
   BodyAnchor,
   BodyAnchorTerm,
-  bodyAnchor,
-  body,
   type BodyInit,
   type BodyOpts,
   BoxContact,
+  body,
+  bodyAnchor,
   Joint,
+  type JointStiffness,
   JointTerm,
   joint,
-  type JointStiffness,
   weld,
 } from "./rigid";
 export { Solver, type SolverOpts } from "./solver";

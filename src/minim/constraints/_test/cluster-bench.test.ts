@@ -33,7 +33,9 @@ describe("relate3 perf sanity", () => {
     for (let i = 0; i < N; i++) {
       const cx = LW / 2 + i * LW;
       const link = w.add(body({ size: { w: LW - 1, h: LH }, density: 1 }, { x: cx, y: 0 }));
-      w.add(joint(prev, link, i === 0 ? { x: 0, y: 0 } : { x: LW / 2, y: 0 }, { x: -LW / 2, y: 0 }));
+      w.add(
+        joint(prev, link, i === 0 ? { x: 0, y: 0 } : { x: LW / 2, y: 0 }, { x: -LW / 2, y: 0 }),
+      );
       prev = link;
     }
     const t0 = performance.now();
@@ -60,7 +62,12 @@ describe("relate3 perf sanity", () => {
       for (let col = 0; col < cols; col++) {
         const x = -((cols - 1) * SIZE) / 2 + col * SIZE;
         const y = 200 - 8 - SIZE / 2 - row * (SIZE + 1);
-        w.add(body({ size: { w: SIZE - 2, h: SIZE - 2 }, density: 1, friction: 0.5 }, { x, y, theta: 0 }));
+        w.add(
+          body(
+            { size: { w: SIZE - 2, h: SIZE - 2 }, density: 1, friction: 0.5 },
+            { x, y, theta: 0 },
+          ),
+        );
         n++;
       }
     }
@@ -84,9 +91,11 @@ describe("relate3 perf sanity", () => {
     }
     const c = constraints({ iterations: 16 });
     for (let j = 0; j < H; j++)
-      for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.STRONG));
+      for (let i = 1; i < W; i++)
+        c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.STRONG));
     for (let i = 0; i < W; i++)
-      for (let j = 1; j < H; j++) c.add(spring(grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.STRONG));
+      for (let j = 1; j < H; j++)
+        c.add(spring(grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.STRONG));
     c.add(pin(grid[0]![0]!));
     c.add(pin(grid[0]![W - 1]!));
     c.add(pin(grid[H - 1]![W - 1]!));

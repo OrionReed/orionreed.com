@@ -7,7 +7,15 @@
 // inner vertex and the bracket articulates while keeping its
 // vertices on their respective loci.
 
-import { collinear, constraints, distance, equalDist, onCircle, pin, rightAngle } from "@minim/constraints";
+import {
+  collinear,
+  constraints,
+  distance,
+  equalDist,
+  onCircle,
+  pin,
+  rightAngle,
+} from "@minim/constraints";
 import {
   Anchor,
   circle,

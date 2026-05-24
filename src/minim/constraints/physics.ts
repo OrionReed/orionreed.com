@@ -9,9 +9,9 @@
 // "subsystem registration"): it's exactly what runs on each
 // `step(dt)`, top-to-bottom.
 
+import { Constraints } from "./cluster";
 import type { Phase } from "./phases";
 import { ensureCapacity, prepare, snapshot, writeback } from "./phases";
-import { Constraints } from "./cluster";
 import type { SolverOpts } from "./solver";
 
 export interface PhysicsOpts extends SolverOpts {

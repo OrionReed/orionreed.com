@@ -34,8 +34,7 @@ export const lerp = (a: V, b: V, t: number): V => ({
   y: a.y + (b.y - a.y) * t,
   theta: a.theta + (b.theta - a.theta) * t,
 });
-export const metric = (a: V, b: V) =>
-  Math.hypot(a.x - b.x, a.y - b.y, a.theta - b.theta);
+export const metric = (a: V, b: V) => Math.hypot(a.x - b.x, a.y - b.y, a.theta - b.theta);
 export const equals = (a: V, b: V) =>
   a === b || (a.x === b.x && a.y === b.y && a.theta === b.theta);
 

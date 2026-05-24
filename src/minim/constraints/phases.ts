@@ -30,7 +30,7 @@ interface Binding {
 /** Read each bound signal into the solver's `positions` buffer.
  *  When called from inside a settle body, `.value` reads subscribe
  *  the settler — that's what makes the reactive driver react. */
-export const snapshot: Phase = (c) => {
+export const snapshot: Phase = c => {
   const solver = c.solver;
   // biome-ignore lint/suspicious/noExplicitAny: heterogeneous binding registry
   const bindings = (c as any)._bindings as readonly (Binding | undefined)[];
@@ -46,7 +46,7 @@ export const snapshot: Phase = (c) => {
  *  into `initials`, and reset `anchors = positions`. Factories
  *  that integrate (physics, Adam, …) overwrite `anchors` after
  *  this phase but before `solve`. */
-export const prepare: Phase = (c) => {
+export const prepare: Phase = c => {
   c.solver.prepare();
 };
 
@@ -58,7 +58,7 @@ export const solve: Phase = (c, dt) => {
 /** Write solved positions back into bound signals. The auto-self-
  *  exclusion of the running settle keeps these writes from re-firing
  *  the body; the auto-batch keeps them atomic for downstream observers. */
-export const writeback: Phase = (c) => {
+export const writeback: Phase = c => {
   const solver = c.solver;
   // biome-ignore lint/suspicious/noExplicitAny: heterogeneous binding registry
   const bindings = (c as any)._bindings as readonly (Binding | undefined)[];
@@ -80,7 +80,10 @@ export const reactivePipeline: readonly Phase[] = [snapshot, prepare, solve, wri
 /** Helper: grow a Float64Array buffer to at least `n` slots. Used
  *  by subsystems with per-cell state (velocity, gradient EMAs, etc.)
  *  that need to track cell additions. */
-export function ensureCapacity(buf: Float64Array<ArrayBuffer>, n: number): Float64Array<ArrayBuffer> {
+export function ensureCapacity(
+  buf: Float64Array<ArrayBuffer>,
+  n: number,
+): Float64Array<ArrayBuffer> {
   if (buf.length >= n) return buf;
   const next = new Float64Array(Math.max(n, buf.length * 2));
   next.set(buf);

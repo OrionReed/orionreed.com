@@ -27,8 +27,8 @@ import {
   type Writable,
 } from "../signals";
 import type { Constraints, Relation } from "./cluster";
-import { Term } from "./term";
 import type { Solver } from "./solver";
+import { Term } from "./term";
 
 const COLLISION_MARGIN = 0.0005;
 const STICK_THRESH = 0.01;
@@ -595,13 +595,7 @@ export class BoxContact extends Term {
     // `computeConstraint`, so the inactive manifold contributes nothing.
     readPose(this.solver, this.bodyA.cellId, this._poseA);
     readPose(this.solver, this.bodyB.cellId, this._poseB);
-    const numNew = collideBoxes(
-      SCRATCH_CONTACTS,
-      this._poseA,
-      this.bodyA,
-      this._poseB,
-      this.bodyB,
-    );
+    const numNew = collideBoxes(SCRATCH_CONTACTS, this._poseA, this.bodyA, this._poseB, this.bodyB);
     this.numContacts = numNew;
     if (numNew === 0) {
       for (let r = 0; r < 4; r++) {
@@ -934,12 +928,7 @@ export class BodyAnchorTerm extends Term {
   /** Mutable stiffness signal — refreshed each `initialize()`. */
   readonly stiffnessSig: Writable<Num>;
 
-  constructor(
-    solver: Solver,
-    body: Body,
-    target: Writable<Vec>,
-    stiffness: Writable<Num>,
-  ) {
+  constructor(solver: Solver, body: Body, target: Writable<Vec>, stiffness: Writable<Num>) {
     super(solver, [body.cellId], 2);
     this.body = body;
     this.target = target;
@@ -1056,8 +1045,12 @@ export class BodyAnchor implements Relation {
     target: Writable<Vec> | { x: number; y: number },
     stiffness: Writable<Num> | number,
   ) {
-    this.target = isSignal(target) ? (target as Writable<Vec>) : (vec(target.x, target.y) as Writable<Vec>);
-    this.stiffness = isSignal(stiffness) ? (stiffness as Writable<Num>) : (numSig(stiffness) as Writable<Num>);
+    this.target = isSignal(target)
+      ? (target as Writable<Vec>)
+      : (vec(target.x, target.y) as Writable<Vec>);
+    this.stiffness = isSignal(stiffness)
+      ? (stiffness as Writable<Num>)
+      : (numSig(stiffness) as Writable<Num>);
   }
 
   bind(c: Constraints): () => void {
@@ -1075,4 +1068,3 @@ export function bodyAnchor(
 ): BodyAnchor {
   return new BodyAnchor(body, target, stiffness);
 }
-

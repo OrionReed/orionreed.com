@@ -71,7 +71,10 @@ describe("deriveTo chains (RO fusion)", () => {
 
   it("writing to a derive-fused cell throws (it's a computed)", () => {
     const a = num(0);
-    const c = Num.derive(Num.derive(a, v => v * 2), v => v + 1);
+    const c = Num.derive(
+      Num.derive(a, v => v * 2),
+      v => v + 1,
+    );
     expect(() => {
       (c as unknown as { value: number }).value = 99;
     }).toThrow(/Cannot write to a Computed/);
@@ -253,7 +256,10 @@ describe("class identity preservation", () => {
 describe("cleanup across fused chains", () => {
   it("effect on fused leaf cleans up its dep on root", () => {
     const a = num(0);
-    const c = Num.derive(Num.derive(a, v => v * 2), v => v + 10);
+    const c = Num.derive(
+      Num.derive(a, v => v * 2),
+      v => v + 10,
+    );
     const stop = effect(() => {
       void c.value;
     });

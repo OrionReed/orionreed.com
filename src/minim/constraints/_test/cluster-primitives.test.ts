@@ -5,16 +5,16 @@ import { describe, expect, it } from "vitest";
 import { vec } from "../../signals";
 import {
   angle,
-  constraints,
   collinear,
+  constraints,
   distance,
   equalDist,
   generic,
   midpoint,
   onCircle,
   parallel,
-  pin,
   perpendicular,
+  pin,
 } from "../index";
 
 describe("AVBD sketchpad primitives via FD", () => {

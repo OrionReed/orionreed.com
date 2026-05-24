@@ -35,7 +35,10 @@ function timed(label: string, fn: () => void): number {
 describe("bench: derive chain fusion vs hand-nested computed cells", () => {
   it("2-deep derive chain — read", () => {
     const a = num(1);
-    const fused = Num.derive(Num.derive(a, v => v * 2), v => v + 10);
+    const fused = Num.derive(
+      Num.derive(a, v => v * 2),
+      v => v + 10,
+    );
 
     // Un-fused equivalent via direct installs (two cells).
     const b = num(1);

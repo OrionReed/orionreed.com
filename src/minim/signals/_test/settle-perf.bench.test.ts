@@ -17,7 +17,9 @@ function bench(label: string, runs: number, fn: () => void): number {
   for (let i = 0; i < runs; i++) fn();
   const elapsed = performance.now() - start;
   const perRun = (elapsed / runs) * 1e6; // ns
-  console.log(`  ${label}: ${perRun.toFixed(1)} ns/run (${runs} runs, ${elapsed.toFixed(1)} ms total)`);
+  console.log(
+    `  ${label}: ${perRun.toFixed(1)} ns/run (${runs} runs, ${elapsed.toFixed(1)} ms total)`,
+  );
   return perRun;
 }
 

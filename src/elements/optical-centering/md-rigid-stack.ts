@@ -27,8 +27,8 @@
 import {
   animate,
   type Body,
-  body,
   type BodyAnchor,
+  body,
   bodyAnchor,
   joint,
   type World,
@@ -196,9 +196,7 @@ export class MdRigidStack extends Diagram {
     const armY = ceilingY + 30;
     const ARM_SEG_LEN = 80;
     const ARM_SEG_H = 12;
-    const armAnchor = w.add(
-      body({ size: { w: 10, h: 10 }, density: 0 }, { x: armX, y: armY }),
-    );
+    const armAnchor = w.add(body({ size: { w: 10, h: 10 }, density: 0 }, { x: armX, y: armY }));
     const arm: Body[] = [];
     let prev: Body = armAnchor;
     for (let i = 0; i < 3; i++) {
@@ -214,12 +212,10 @@ export class MdRigidStack extends Diagram {
       );
       arm.push(seg);
       w.add(
-        joint(
-          prev,
-          seg,
-          i === 0 ? { x: 0, y: 0 } : { x: ARM_SEG_LEN / 2, y: 0 },
-          { x: -ARM_SEG_LEN / 2, y: 0 },
-        ),
+        joint(prev, seg, i === 0 ? { x: 0, y: 0 } : { x: ARM_SEG_LEN / 2, y: 0 }, {
+          x: -ARM_SEG_LEN / 2,
+          y: 0,
+        }),
       );
       prev = seg;
     }
@@ -233,9 +229,7 @@ export class MdRigidStack extends Diagram {
     const CHAIN_SEG = 22;
     const CHAIN_W = 5;
     const CHAIN_N = 5;
-    const ballAnchor = w.add(
-      body({ size: { w: 10, h: 10 }, density: 0 }, { x: ballX, y: ballY }),
-    );
+    const ballAnchor = w.add(body({ size: { w: 10, h: 10 }, density: 0 }, { x: ballX, y: ballY }));
     const chain: Body[] = [];
     let prev2: Body = ballAnchor;
     // Initial pendulum offset: hang slightly to the right so it has
@@ -254,12 +248,10 @@ export class MdRigidStack extends Diagram {
       );
       chain.push(link);
       w.add(
-        joint(
-          prev2,
-          link,
-          i === 0 ? { x: 0, y: 0 } : { x: CHAIN_SEG / 2, y: 0 },
-          { x: -CHAIN_SEG / 2, y: 0 },
-        ),
+        joint(prev2, link, i === 0 ? { x: 0, y: 0 } : { x: CHAIN_SEG / 2, y: 0 }, {
+          x: -CHAIN_SEG / 2,
+          y: 0,
+        }),
       );
       prev2 = link;
     }
@@ -273,9 +265,7 @@ export class MdRigidStack extends Diagram {
         },
       ),
     );
-    w.add(
-      joint(chain[chain.length - 1]!, ball, { x: CHAIN_SEG / 2, y: 0 }, { x: 0, y: -22 }),
-    );
+    w.add(joint(chain[chain.length - 1]!, ball, { x: CHAIN_SEG / 2, y: 0 }, { x: 0, y: -22 }));
 
     // ─── Render statics ─────────────────────────────────────────
     s(

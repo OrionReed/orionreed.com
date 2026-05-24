@@ -24,8 +24,8 @@ import {
   type Read,
   requirePack,
   type Settle,
-  settle,
   type Signal,
+  settle,
   signal,
   type WritableBrand,
 } from "../signals";

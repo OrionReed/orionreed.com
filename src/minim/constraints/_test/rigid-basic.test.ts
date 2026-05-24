@@ -1,7 +1,7 @@
 // rigid-basic.test.ts — sanity tests for the 2D rigid-body extension.
 
 import { describe, expect, it } from "vitest";
-import { Body, body, bodyAnchor, BoxContact, joint, world } from "../index";
+import { Body, BoxContact, body, bodyAnchor, joint, world } from "../index";
 
 describe("box-box SAT collide", () => {
   it("box overlapping ground produces contacts", () => {
@@ -160,7 +160,12 @@ describe("world — basics", () => {
     const boxes = [];
     for (let i = 0; i < 5; i++) {
       boxes.push(
-        w.add(body({ size: { w: SIZE - 2, h: SIZE - 2 }, friction: 0.5 }, { x: 0, y: 200 - 8 - SIZE / 2 - i * (SIZE + 1) })),
+        w.add(
+          body(
+            { size: { w: SIZE - 2, h: SIZE - 2 }, friction: 0.5 },
+            { x: 0, y: 200 - 8 - SIZE / 2 - i * (SIZE + 1) },
+          ),
+        ),
       );
     }
     // Settle.
@@ -198,7 +203,12 @@ describe("world — basics", () => {
     const SIZE = 44;
     for (let i = 0; i < 5; i++) {
       boxes.push(
-        w.add(body({ size: { w: SIZE - 2, h: SIZE - 2 }, friction: 0.5 }, { x: 0, y: 200 - 8 - SIZE / 2 - i * (SIZE + 1) })),
+        w.add(
+          body(
+            { size: { w: SIZE - 2, h: SIZE - 2 }, friction: 0.5 },
+            { x: 0, y: 200 - 8 - SIZE / 2 - i * (SIZE + 1) },
+          ),
+        ),
       );
     }
     for (let f = 0; f < 600; f++) w.step(1 / 60);

@@ -128,7 +128,7 @@ export function world(opts: WorldOpts = {}): World {
   // O(n²) bounding-radius sweep; creates a `BoxContact` term for
   // each newly-overlapping body pair, disposes manifolds whose
   // pairs no longer overlap. Joint-linked pairs are skipped.
-  const broadphase: Phase = (c) => {
+  const broadphase: Phase = c => {
     const N = bodies.length;
     const positions = c.solver.positions;
     const offsets = c.solver.offsets;
@@ -231,7 +231,15 @@ export function world(opts: WorldOpts = {}): World {
     });
   };
 
-  c.pipeline = [angularClamp, broadphase, snapshot, prepare, integrate, solveWithVelocity, writeback];
+  c.pipeline = [
+    angularClamp,
+    broadphase,
+    snapshot,
+    prepare,
+    integrate,
+    solveWithVelocity,
+    writeback,
+  ];
 
   // Take over the time loop.
   c.dispose();

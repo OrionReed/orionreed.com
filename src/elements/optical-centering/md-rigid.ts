@@ -35,12 +35,7 @@ export class MdRigid extends Diagram {
     const D = vec(cx - 80, cy + 60);
 
     const cluster = constraints({ iterations: 16 });
-    cluster.add(
-      distance(A, B, 160),
-      distance(B, C, 120),
-      distance(C, D, 160),
-      distance(D, A, 120),
-    );
+    cluster.add(distance(A, B, 160), distance(B, C, 120), distance(C, D, 160), distance(D, A, 120));
 
     // Diagonal toggle: bracing is a unary `addWhile` with the
     // diagonal distance relation — flips reactively with the signal.

@@ -53,10 +53,7 @@ export function* fixedStep(
 /** Time-dilated driver: scale the wall-clock dt by `factor()` each
  *  frame. `factor` is a thunk so callers can flip it live (slow-mo
  *  toggles, pause via `factor: () => 0`, scrubbing, etc.). */
-export function* dilated(
-  c: Constraints,
-  factor: () => number,
-): Generator<undefined, never, Tick> {
+export function* dilated(c: Constraints, factor: () => number): Generator<undefined, never, Tick> {
   for (;;) {
     const tick: Tick = yield;
     c.step(tick.dt * factor());

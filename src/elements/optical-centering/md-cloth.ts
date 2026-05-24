@@ -12,7 +12,7 @@
 // by their constraints, killing the residual jitter that
 // supported bodies otherwise produce.
 
-import { Strength, animate, bend, physics, pin, spring } from "@minim/constraints";
+import { animate, bend, physics, pin, Strength, spring } from "@minim/constraints";
 import {
   Anchor,
   Diagram,

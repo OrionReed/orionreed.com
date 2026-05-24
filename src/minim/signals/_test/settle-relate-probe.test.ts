@@ -10,7 +10,7 @@
 // design intent (one-shot vs fixpoint) maps onto framework choices.
 
 import { describe, expect, it } from "vitest";
-import { settle, signal, type Signal, type WritableBrand } from "../index";
+import { type Signal, settle, signal, type WritableBrand } from "../index";
 
 interface Handle {
   dispose(): void;
@@ -300,7 +300,12 @@ describe("relate probe — what variant for what use case", () => {
     // Both writers commit; the solver is symmetric.
     const x = signal(2);
     const y = signal(0);
-    relateTwo(x, y, vx => 10 - vx, vy => 10 - vy);
+    relateTwo(
+      x,
+      y,
+      vx => 10 - vx,
+      vy => 10 - vy,
+    );
     expect(y.value).toBe(8);
     x.value = 3;
     expect(y.value).toBe(7);
@@ -313,7 +318,12 @@ describe("relate probe — what variant for what use case", () => {
     // updates. We DON'T want feedback to round-trip back.
     const m = signal(100);
     const f = signal(0);
-    relateSingle(m, f, x => x * 3.281, y => y / 3.281);
+    relateSingle(
+      m,
+      f,
+      x => x * 3.281,
+      y => y / 3.281,
+    );
     expect(f.value).toBe(328.1);
     f.value = 100;
     // One-shot: writes m = bwd(100) ≈ 30.479..., then stops.
@@ -329,7 +339,13 @@ describe("relate probe — what variant for what use case", () => {
     // shaped — fixpoint iteration in a single body run.
     const a = signal(0);
     const b = signal(0);
-    relateLoop(a, b, x => x, y => (y + 5) / 2, 64);
+    relateLoop(
+      a,
+      b,
+      x => x,
+      y => (y + 5) / 2,
+      64,
+    );
     a.value = 7;
     // After the loop: a, b converge to ~5 within 64 iters.
     expect(Math.abs(a.value - 5) < 0.001).toBe(true);

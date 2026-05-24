@@ -15,14 +15,7 @@
 // the surface composes cleanly and the primitive's invariants hold.
 
 import { describe, expect, it } from "vitest";
-import {
-  each,
-  param,
-  settle,
-  signal,
-  type Signal,
-  type WritableBrand,
-} from "../index";
+import { each, param, type Signal, settle, signal, type WritableBrand } from "../index";
 
 // ─── 1. `relate` rebuilt on `settle` ────────────────────────────────
 
@@ -61,7 +54,12 @@ describe("validation: relate(a, b) rebuilt on settle", () => {
   it("Iso: writes from either side propagate", () => {
     const a = signal(0);
     const b = signal(0);
-    const r = relateOnSettle(a, b, x => x + 100, y => y - 100);
+    const r = relateOnSettle(
+      a,
+      b,
+      x => x + 100,
+      y => y - 100,
+    );
     expect(b.value).toBe(100); // initial fwd kick
 
     a.value = 5;
@@ -78,7 +76,12 @@ describe("validation: relate(a, b) rebuilt on settle", () => {
   it("non-Iso lossy: writes terminate via direction selection", () => {
     const a = signal(0);
     const b = signal(0);
-    const r = relateOnSettle(a, b, x => x * 2, y => Math.floor(y / 2));
+    const r = relateOnSettle(
+      a,
+      b,
+      x => x * 2,
+      y => Math.floor(y / 2),
+    );
     a.value = 5;
     expect(b.value).toBe(10);
     b.value = 7;

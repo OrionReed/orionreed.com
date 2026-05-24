@@ -224,7 +224,12 @@ export class BoundsTerm extends Term {
   private _loCached = 0;
   private _hiCached = 0;
 
-  constructor(solver: Solver, cell: number, lo: number | Signal<number>, hi: number | Signal<number>) {
+  constructor(
+    solver: Solver,
+    cell: number,
+    lo: number | Signal<number>,
+    hi: number | Signal<number>,
+  ) {
     if (solver.dims[cell]! !== 1) throw new Error("clamp: cell must be Num (dim=1)");
     super(solver, [cell], 2);
     this.lo = param(lo);

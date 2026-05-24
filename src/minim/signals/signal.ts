@@ -681,7 +681,12 @@ export class Signal<T = unknown> implements ReactiveNode {
     fn: (v: P) => Of<InstanceType<C>>,
   ): InstanceType<C>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static derive<C extends new (...args: never[]) => Signal<any>, P extends readonly Read<unknown>[]>(
+  static derive<
+    C extends new (
+      ...args: never[]
+    ) => Signal<any>,
+    P extends readonly Read<unknown>[],
+  >(
     this: C,
     parents: P,
     fn: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => Of<InstanceType<C>>,
@@ -776,13 +781,17 @@ export class Signal<T = unknown> implements ReactiveNode {
     if (this._fusedOf !== undefined && this._fusedOf.bwd === undefined) {
       return Signal._fuse(
         this as Signal<unknown>,
-        Cls as new (...args: never[]) => Signal<unknown>,
+        Cls as new (
+          ...args: never[]
+        ) => Signal<unknown>,
         fwd as (s: unknown) => unknown,
       ) as unknown as this;
     }
     return Signal._fuse(
       this as Signal<unknown>,
-      Cls as new (...args: never[]) => Signal<unknown>,
+      Cls as new (
+        ...args: never[]
+      ) => Signal<unknown>,
       fwd as (s: unknown) => unknown,
       bwd as (v: unknown, s: unknown) => unknown,
     ) as unknown as this;
@@ -1480,12 +1489,7 @@ export function lens(parent: any, fwd: any, bwd: any): any {
   if (Array.isArray(parent)) {
     return _fanin(Signal as new (...args: never[]) => Signal<unknown>, parent, fwd, bwd);
   }
-  return Signal._fuse(
-    parent,
-    Signal as new (...args: never[]) => Signal<unknown>,
-    fwd,
-    bwd,
-  );
+  return Signal._fuse(parent, Signal as new (...args: never[]) => Signal<unknown>, fwd, bwd);
 }
 
 // ─── _fanin: private N-input lens helper ─────────────────────────

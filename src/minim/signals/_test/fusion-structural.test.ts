@@ -145,7 +145,10 @@ describe("structural: only root + effect-subscribed leaves carry subs", () => {
 
   it("multiple effects on the same fused leaf: all on the leaf, none on intermediates", () => {
     const a = num(0);
-    const leaf = Num.derive(Num.derive(a, v => v + 1), v => v * 2);
+    const leaf = Num.derive(
+      Num.derive(a, v => v + 1),
+      v => v * 2,
+    );
     const intermediate = (leaf as unknown as { _fusedOf: { parent: unknown } })._fusedOf.parent;
     // The intermediate cell IS the leaf's parent — which IS the root a.
     // (Fusion collapsed the chain, so there's no "real" intermediate cell.)
