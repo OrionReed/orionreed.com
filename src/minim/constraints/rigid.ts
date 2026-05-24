@@ -15,8 +15,17 @@
 // AVBD reference 2D demo uses. See:
 // https://github.com/savant117/avbd-demo2d/blob/main/source/collide.cpp
 
-import { type Num, num, type Vec, vec, type Writable } from "../signals";
-import { Constraints, constraints } from "./cluster";
+import {
+  isSignal,
+  Num,
+  num as numSig,
+  type Pose,
+  pose as poseSig,
+  Vec,
+  vec,
+  type Writable,
+} from "../signals";
+import { Constraints, constraints, type Relation } from "./cluster";
 import { Force } from "./force";
 import { Simulation, type SimulationOpts } from "./simulation";
 import type { Solver, SolverOpts } from "./solver";
@@ -35,25 +44,46 @@ export interface BodyOpts {
   friction?: number;
 }
 
-export class Body {
-  readonly solver: Solver;
-  readonly cellId: number;
+export interface BodyInit {
+  x: number;
+  y: number;
+  theta?: number;
+}
+
+/** A 2D rigid body. Implements `Relation`: add via `world.add(body)`.
+ *
+ *  Pose lives in a single `Pose` signal (`{ x, y, theta }`).
+ *  `position` (Vec) and `angle` (Num) are lenses on that pose, so
+ *  renderers / drag handlers / IK targets that only care about
+ *  translation or rotation can subscribe to a narrower view. After
+ *  `bind`, `cellId` reflects the solver cell this body occupies (-1
+ *  before bind). */
+export class Body implements Relation {
   readonly w: number;
   readonly h: number;
   readonly mass: number;
   readonly moment: number;
   readonly friction: number;
-  readonly radius: number; // bounding radius for broadphase
+  /** Bounding radius for the broadphase. */
+  readonly radius: number;
 
-  /** Reactive position; written each `RigidWorld.step()` after solve.
-   *  Drag this to apply a kinematic override (the world's drag-pin
-   *  helper handles that). */
+  /** Reactive pose — single source of truth. Sim updates this at the
+   *  end of every tick; renderers, drag handlers, and IK targets all
+   *  read it. */
+  readonly pose: Writable<Pose>;
+  /** `Vec`-shaped lens on `pose` (xy only). Useful for renderers
+   *  that bind translation, drag handlers that mutate it, etc.
+   *  Writes propagate back through `pose`. */
   readonly position: Writable<Vec>;
-  /** Reactive rotation in radians. */
+  /** `Num`-shaped lens on `pose` (theta only). */
   readonly angle: Writable<Num>;
 
-  constructor(solver: Solver, opts: BodyOpts, init: { x: number; y: number; theta?: number }) {
-    this.solver = solver;
+  /** Solver cell id; -1 until `bind` runs. */
+  cellId = -1;
+  /** @internal — set on bind so internal force code can read solver state. */
+  _solver?: Solver;
+
+  constructor(opts: BodyOpts, init: BodyInit) {
     this.w = opts.size.w;
     this.h = opts.size.h;
     const density = opts.density ?? 1;
@@ -63,39 +93,97 @@ export class Body {
     this.friction = opts.friction ?? 0.5;
     this.radius = Math.hypot(this.w * 0.5, this.h * 0.5);
 
-    const theta = init.theta ?? 0;
-    this.cellId = solver.addCell(3, [init.x, init.y, theta]);
-    if (density === 0) solver.setMass(this.cellId, 0);
-    else solver.setMassDiag(this.cellId, [this.mass, this.mass, this.moment]);
+    this.pose = poseSig({ x: init.x, y: init.y, theta: init.theta ?? 0 });
 
-    this.position = vec(init.x, init.y);
-    this.angle = num(theta);
+    // Position lens — Vec view of (pose.x, pose.y); writes preserve theta.
+    this.position = Vec.lens(
+      this.pose,
+      p => ({ x: p.x, y: p.y }),
+      (v, p) => ({ x: v.x, y: v.y, theta: p.theta }),
+    );
+    // Angle lens — Num view of pose.theta; writes preserve xy.
+    this.angle = Num.lens(
+      this.pose,
+      p => p.theta,
+      (t, p) => ({ x: p.x, y: p.y, theta: t }),
+    );
   }
 
-  /** @internal — push solver state into reactive signals (called by
-   *  `RigidWorld.step()` after `Simulation.tick()`). */
-  _syncSignals(): void {
-    const off = this.solver.offsets[this.cellId]!;
-    const p = this.solver.positions;
-    this.position.value = { x: p[off]!, y: p[off + 1]! };
-    this.angle.value = p[off + 2]!;
-  }
-
-  /** Read the current pose as a tuple (live value from solver). */
-  pose(): { x: number; y: number; theta: number } {
-    const off = this.solver.offsets[this.cellId]!;
-    const p = this.solver.positions;
-    return { x: p[off]!, y: p[off + 1]!, theta: p[off + 2]! };
-  }
-
-  /** Pin the body in place at its current pose (mass → 0). Returns
-   *  an unpin thunk that restores the diagonal mass. */
-  pin(): () => void {
-    this.solver.setMass(this.cellId, 0);
+  bind(c: Constraints): () => void {
+    if (this.cellId >= 0) throw new Error("Body: already bound");
+    this.cellId = c._bind(this.pose);
+    this._solver = c.solver;
+    if (this.mass === 0) c.solver.setMass(this.cellId, 0);
+    else c.solver.setMassDiag(this.cellId, [this.mass, this.mass, this.moment]);
     return () => {
-      if (this.mass > 0) this.solver.setMassDiag(this.cellId, [this.mass, this.mass, this.moment]);
+      // Cells are append-only in the solver; we can't truly free.
+      // On detach, mark kinematic and forget the cellId so the body
+      // could in principle be re-bound to a different cluster.
+      c.solver.setMass(this.cellId, 0);
+      this.cellId = -1;
+      this._solver = undefined;
     };
   }
+
+  /** Returns a Relation that pins this body in place (mass → 0,
+   *  cell becomes kinematic) while attached. Restores the body's
+   *  diagonal mass `(m, m, I)` on detach.
+   *
+   *  Composes with `addWhile` for pointer-drag patterns:
+   *
+   *    world.addWhile(dragging, body.pin());
+   *
+   *  When pinned, the body's pose still updates from `body.position`
+   *  / `body.angle` writes — the cell is kinematic, but its position
+   *  is read from the pose signal each tick. */
+  pin(): Relation {
+    const body = this;
+    return {
+      bind(c: Constraints) {
+        if (body.cellId < 0) throw new Error("body.pin: add the body first");
+        const wasStatic = body.mass === 0;
+        c.solver.setMass(body.cellId, 0);
+        return () => {
+          if (!wasStatic) {
+            c.solver.setMassDiag(body.cellId, [body.mass, body.mass, body.moment]);
+          }
+        };
+      },
+    };
+  }
+}
+
+/** Create a rigid body. Compose with `world.add(...)`:
+ *
+ *    const a = world.add(body({ size: { w: 40, h: 40 } }, { x: 100, y: 100 }));
+ *    const b = world.add(body({ size: { w: 40, h: 40 }, density: 0 }, { x: 200, y: 200 }));
+ *    world.add(joint(a, b, { x: 0, y: 0 }, { x: 0, y: 0 }));
+ *
+ *  `density: 0` produces a static body (mass clamped to 0; cell is
+ *  kinematic). */
+export function body(opts: BodyOpts, init: BodyInit): Body {
+  return new Body(opts, init);
+}
+
+// ─── Pose buffer reads (hot path, alloc-free) ──────────────────────
+
+interface PoseScratch {
+  x: number;
+  y: number;
+  theta: number;
+}
+
+/** @internal — Read live solver buffer state into `out`. The body's
+ *  `pose` signal reflects START-of-tick value (snapshot'd in by
+ *  sim); the LIVE value during iteration lives in `solver.positions`.
+ *  Use this from `Force.computeConstraint` and similar inner-loop
+ *  code that runs many times per tick. */
+function readPose(solver: Solver, cellId: number, out: PoseScratch): void {
+  const off = solver.offsets[cellId]!;
+  const p = solver.positions;
+  out.x = p[off]!;
+  out.y = p[off + 1]!;
+  out.theta = p[off + 2]!;
 }
 
 // ─── SAT box-box collision ──────────────────────────────────────────
@@ -470,6 +558,9 @@ export class BoxContact extends Force {
   private C0n: Float64Array; // normal C0 per contact
   private C0t: Float64Array; // tangential C0 per contact
   private friction: number = 0;
+  // Scratch for live-buffer pose reads (alloc-free hot path).
+  private _poseA: PoseScratch = { x: 0, y: 0, theta: 0 };
+  private _poseB: PoseScratch = { x: 0, y: 0, theta: 0 };
 
   constructor(solver: Solver, bodyA: Body, bodyB: Body) {
     super(solver, [bodyA.cellId, bodyB.cellId], 4);
@@ -502,11 +593,13 @@ export class BoxContact extends Force {
     // a brief separation (RigidWorld's broadphase still tracks the
     // pair). When `numContacts == 0` the rows are zeroed in
     // `computeConstraint`, so the inactive manifold contributes nothing.
+    readPose(this.solver, this.bodyA.cellId, this._poseA);
+    readPose(this.solver, this.bodyB.cellId, this._poseB);
     const numNew = collideBoxes(
       SCRATCH_CONTACTS,
-      this.bodyA.pose(),
+      this._poseA,
       this.bodyA,
-      this.bodyB.pose(),
+      this._poseB,
       this.bodyB,
     );
     this.numContacts = numNew;
@@ -553,9 +646,10 @@ export class BoxContact extends Force {
       }
     }
 
-    // Precompute Jacobians and C0 for each contact row.
-    const poseA = this.bodyA.pose();
-    const poseB = this.bodyB.pose();
+    // Precompute Jacobians and C0 for each contact row. Reuse the
+    // scratch poses we read just above.
+    const poseA = this._poseA;
+    const poseB = this._poseB;
     const cA = Math.cos(poseA.theta);
     const sA = Math.sin(poseA.theta);
     const cB = Math.cos(poseB.theta);
@@ -691,8 +785,11 @@ export interface JointStiffness {
  *  body-local anchor `rB` on `bodyB`. By default the position rows
  *  are hard and the angle row is free (a rope/chain segment hinge);
  *  override with `JointStiffness` for soft springs or rigid welds.
- *  Faithful port of `Joint` from the AVBD 2D reference. */
-export class Joint extends Force {
+ *  Faithful port of `Joint` from the AVBD 2D reference.
+ *
+ *  This is the internal Force; user code adds the `Joint` Relation
+ *  via `world.add(joint(a, b, rA, rB))`. */
+export class JointForce extends Force {
   readonly bodyA: Body;
   readonly bodyB: Body;
   rAx: number;
@@ -704,6 +801,8 @@ export class Joint extends Force {
   // Cached anchor-rotation values per body (refreshed each iter).
   private _Cn = new Float64Array(3);
   private _C0Cache = new Float64Array(3);
+  private _poseA: PoseScratch = { x: 0, y: 0, theta: 0 };
+  private _poseB: PoseScratch = { x: 0, y: 0, theta: 0 };
 
   constructor(
     solver: Solver,
@@ -723,7 +822,7 @@ export class Joint extends Force {
     this.stiffness[0]! = opts.x ?? Infinity;
     this.stiffness[1]! = opts.y ?? Infinity;
     this.stiffness[2]! = opts.angle ?? 0;
-    this.restAngle = bodyA.pose().theta - bodyB.pose().theta;
+    this.restAngle = bodyA.pose.peek().theta - bodyB.pose.peek().theta;
     const sumW = bodyA.w + bodyB.w;
     const sumH = bodyA.h + bodyB.h;
     // AVBD's torqueArm scales the angular row so its units are
@@ -732,8 +831,10 @@ export class Joint extends Force {
   }
 
   initialize(): boolean {
-    const poseA = this.bodyA.pose();
-    const poseB = this.bodyB.pose();
+    readPose(this.solver, this.bodyA.cellId, this._poseA);
+    readPose(this.solver, this.bodyB.cellId, this._poseB);
+    const poseA = this._poseA;
+    const poseB = this._poseB;
     const cA = Math.cos(poseA.theta);
     const sA = Math.sin(poseA.theta);
     const cB = Math.cos(poseB.theta);
@@ -752,8 +853,10 @@ export class Joint extends Force {
   }
 
   computeConstraint(alpha: number): void {
-    const poseA = this.bodyA.pose();
-    const poseB = this.bodyB.pose();
+    readPose(this.solver, this.bodyA.cellId, this._poseA);
+    readPose(this.solver, this.bodyB.cellId, this._poseB);
+    const poseA = this._poseA;
+    const poseB = this._poseB;
     const cA = Math.cos(poseA.theta);
     const sA = Math.sin(poseA.theta);
     const cB = Math.cos(poseB.theta);
@@ -777,8 +880,7 @@ export class Joint extends Force {
   computeDerivatives(cellIdx: number): void {
     const J = this.J[cellIdx]!;
     const Hcols = this.HCols[cellIdx]!;
-    const body = cellIdx === 0 ? this.bodyA : this.bodyB;
-    const pose = body.pose();
+    const pose = cellIdx === 0 ? this._poseA : this._poseB;
     const c = Math.cos(pose.theta);
     const s = Math.sin(pose.theta);
     const rLocalX = cellIdx === 0 ? this.rAx : this.rBx;
@@ -823,28 +925,40 @@ export class Joint extends Force {
  *  Leaves the angle DOF free, so the body still rotates under
  *  gravity / contact torque while you drag it. Update `target` each
  *  pointermove; call `dispose()` on pointerup. */
-export class BodyAnchor extends Force {
+/** @internal — BodyAnchor's underlying Force. User code uses
+ *  `bodyAnchor(body, target, stiffness?)` and adds via `world.add`. */
+export class BodyAnchorForce extends Force {
   readonly body: Body;
-  /** World-space target position. Mutate directly each pointermove. */
-  target: { x: number; y: number };
+  /** World-space target signal (mutable). */
+  readonly target: Writable<Vec>;
+  /** Mutable stiffness signal — refreshed each `initialize()`. */
+  readonly stiffnessSig: Writable<Num>;
 
-  constructor(solver: Solver, body: Body, target: { x: number; y: number }, stiffness: number) {
+  constructor(
+    solver: Solver,
+    body: Body,
+    target: Writable<Vec>,
+    stiffness: Writable<Num>,
+  ) {
     super(solver, [body.cellId], 2);
     this.body = body;
-    this.target = { x: target.x, y: target.y };
-    this.stiffness[0]! = stiffness;
-    this.stiffness[1]! = stiffness;
+    this.target = target;
+    this.stiffnessSig = stiffness;
   }
 
   initialize(): boolean {
-    return this.stiffness[0]! > 0 || this.stiffness[1]! > 0;
+    const k = this.stiffnessSig.value;
+    this.stiffness[0]! = k;
+    this.stiffness[1]! = k;
+    return k > 0;
   }
 
   computeConstraint(_alpha: number): void {
     const off = this.cellOffsets[0]!;
     const p = this.solver.positions;
-    this.C[0]! = p[off]! - this.target.x;
-    this.C[1]! = p[off + 1]! - this.target.y;
+    const t = this.target.value;
+    this.C[0]! = p[off]! - t.x;
+    this.C[1]! = p[off + 1]! - t.y;
   }
 
   computeDerivatives(_cellIdx: number): void {
@@ -868,6 +982,106 @@ export class BodyAnchor extends Force {
   }
 }
 
+// ─── Joint / weld / bodyAnchor Relations ────────────────────────────
+
+/** Revolute or weld joint between two bodies. Add via `world.add(...)`:
+ *
+ *    const j = world.add(joint(armA, armB, { x: L/2, y: 0 }, { x: -L/2, y: 0 }));
+ *
+ *  The default has hard position rows and a free angle row (revolute
+ *  hinge — rope/chain segment). For a rigid weld pass `{ angle: Infinity }`,
+ *  for a soft hinge pass `{ x, y }` finite. Joints register with their
+ *  world's contact-skip set on `bind` (so the broadphase doesn't
+ *  generate redundant box-box contacts between the linked pair). */
+export class Joint implements Relation {
+  constructor(
+    readonly bodyA: Body,
+    readonly bodyB: Body,
+    readonly rA: { x: number; y: number },
+    readonly rB: { x: number; y: number },
+    readonly opts?: JointStiffness,
+  ) {}
+
+  bind(c: Constraints): () => void {
+    if (this.bodyA.cellId < 0 || this.bodyB.cellId < 0) {
+      throw new Error("joint: add both bodies before the joint");
+    }
+    const world = (c as Constraints & { _world?: RigidWorld })._world;
+    const f = new JointForce(c.solver, this.bodyA, this.bodyB, this.rA, this.rB, this.opts);
+    c.solver.addForce(f);
+    let unregister: (() => void) | undefined;
+    if (world) unregister = world._registerJointPair(this.bodyA, this.bodyB);
+    return () => {
+      c.solver.removeForce(f);
+      if (unregister) unregister();
+    };
+  }
+}
+
+export function joint(
+  a: Body,
+  b: Body,
+  rA: { x: number; y: number },
+  rB: { x: number; y: number },
+  opts?: JointStiffness,
+): Joint {
+  return new Joint(a, b, rA, rB, opts);
+}
+
+/** Rigid weld — same as a joint with all rows hard (`x: Infinity,
+ *  y: Infinity, angle: Infinity`). Used to fuse two bodies into one
+ *  rigid composite while keeping their independent inertias. */
+export function weld(
+  a: Body,
+  b: Body,
+  rA: { x: number; y: number },
+  rB: { x: number; y: number },
+): Joint {
+  return new Joint(a, b, rA, rB, { x: Infinity, y: Infinity, angle: Infinity });
+}
+
+/** Soft constraint that pulls a body's translation toward `target`
+ *  with finite stiffness. The canonical "soft drag" handle:
+ *  the body keeps its mass (and thus reacts to contacts), so a
+ *  dragged box lags behind the cursor when blocked rather than
+ *  punching through neighbours. Mutate `r.target.value = {x,y}`
+ *  each pointermove; the constraint re-solves automatically.
+ *
+ *    const a = bodyAnchor(body, body.position.value, 5e4);
+ *    world.addWhile(dragging, a);
+ *    onPointerMove(p => a.target.value = p);
+ *
+ *  Both `target` and `stiffness` are mutable signals; pass plain
+ *  values for the common "construct, never change stiffness" case. */
+export class BodyAnchor implements Relation {
+  readonly target: Writable<Vec>;
+  readonly stiffness: Writable<Num>;
+
+  constructor(
+    readonly body: Body,
+    target: Writable<Vec> | { x: number; y: number },
+    stiffness: Writable<Num> | number,
+  ) {
+    this.target = isSignal(target) ? (target as Writable<Vec>) : (vec(target.x, target.y) as Writable<Vec>);
+    this.stiffness = isSignal(stiffness) ? (stiffness as Writable<Num>) : (numSig(stiffness) as Writable<Num>);
+  }
+
+  bind(c: Constraints): () => void {
+    if (this.body.cellId < 0) throw new Error("bodyAnchor: add the body first");
+    const f = new BodyAnchorForce(c.solver, this.body, this.target, this.stiffness);
+    c.solver.addForce(f);
+    return () => c.solver.removeForce(f);
+  }
+}
+
+export function bodyAnchor(
+  body: Body,
+  target: Writable<Vec> | { x: number; y: number },
+  stiffness: Writable<Num> | number = 1e5,
+): BodyAnchor {
+  return new BodyAnchor(body, target, stiffness);
+}
+
 // ─── World ──────────────────────────────────────────────────────────
 
 export interface RigidWorldOpts extends SolverOpts, SimulationOpts {
@@ -879,17 +1093,29 @@ export interface RigidWorldOpts extends SolverOpts, SimulationOpts {
   maxAngularSpeed?: number;
 }
 
+/** A 2D rigid-body world. Wraps a `Constraints` holder and a
+ *  `Simulation`, plus the broadphase / contact-manifold lifecycle
+ *  that's specific to rigid bodies.
+ *
+ *  Compose with `world.add(...)` (variadic, supports any
+ *  `Relation`):
+ *
+ *    const a = world.add(body({ size: { w: 40, h: 40 } }, { x: 100, y: 100 }));
+ *    const b = world.add(body({ size: { w: 40, h: 40 }, density: 0 }, { x: 200, y: 200 }));
+ *    world.add(joint(a, b, { x: 0, y: 0 }, { x: 0, y: 0 }));
+ *
+ *  RigidWorld also forwards `addWhile`, `remove`, and `dispose` to
+ *  its inner `Constraints`. */
 export class RigidWorld {
   readonly constraints: Constraints;
   readonly simulation: Simulation;
   readonly bodies: Body[] = [];
-  /** Active manifolds keyed by `(idA, idB)` pair (idA < idB). */
+  /** Active manifolds keyed by `(cellA, cellB)` pair (cellA < cellB). */
   private readonly _manifolds = new Map<string, BoxContact>();
   /** Body-pairs explicitly linked by a `Joint`. The broadphase skips
    *  contact generation between linked pairs — otherwise the joint
-   *  and the box-box contact fight each other. AVBD calls this
-   *  `constrainedTo`; we precompute the set when joints are added. */
-  private readonly _jointed = new Set<string>();
+   *  and the box-box contact fight each other. */
+  private readonly _jointed = new Map<string, number>();
   private readonly maxAngularSpeed: number;
   /** Sub-step accumulator (only used if `simulation.fixedDt` is set).
    *  Lives on `RigidWorld` rather than on `Simulation` because the
@@ -905,6 +1131,9 @@ export class RigidWorld {
       gamma: opts.gamma ?? 0.99,
       postStabilize: opts.postStabilize ?? true,
     });
+    // Stash a back-reference so Joint/BodyAnchor relations can find
+    // the world from their `bind(c)` callback (see `Joint.bind`).
+    (this.constraints as Constraints & { _world: RigidWorld })._world = this;
     this.simulation = new Simulation(this.constraints, {
       gravity: opts.gravity,
       damping: opts.damping ?? 1,
@@ -918,47 +1147,61 @@ export class RigidWorld {
     this.maxAngularSpeed = opts.maxAngularSpeed ?? 50;
   }
 
-  add(opts: BodyOpts, init: { x: number; y: number; theta?: number }): Body {
-    const body = new Body(this.constraints.solver, opts, init);
-    this.bodies.push(body);
-    return body;
+  // ─── Variadic add / remove / addWhile (forwarders + body tracking) ──
+
+  add<R extends Relation>(rel: R): R;
+  add<R extends Relation>(rel1: R, rel2: R, ...rest: R[]): R[];
+  add(...rels: Relation[]): Relation | Relation[] {
+    for (const rel of rels) {
+      if (rel instanceof Body) this.bodies.push(rel);
+    }
+    // biome-ignore lint/suspicious/noExplicitAny: variadic forward
+    return (this.constraints.add as any)(...rels);
   }
 
-  /** Add a revolute joint between two bodies. World-anchor joints
-   *  are achieved by passing a static (`density: 0`) body for `bodyA`.
-   *  Joint-linked pairs are excluded from contact generation so the
-   *  joint and a stray box-box contact don't fight each other. */
-  joint(
-    bodyA: Body,
-    bodyB: Body,
-    rA: { x: number; y: number },
-    rB: { x: number; y: number },
-    opts?: JointStiffness,
-  ): Joint {
-    const j = new Joint(this.constraints.solver, bodyA, bodyB, rA, rB, opts);
-    this.constraints.solver.addForce(j);
-    const a = Math.min(bodyA.cellId, bodyB.cellId);
-    const b = Math.max(bodyA.cellId, bodyB.cellId);
-    this._jointed.add(`${a}_${b}`);
-    return j;
+  remove(rel: Relation): void {
+    if (rel instanceof Body) {
+      const idx = this.bodies.indexOf(rel);
+      if (idx >= 0) this.bodies.splice(idx, 1);
+    }
+    this.constraints.remove(rel);
   }
 
-  /** Soft drag anchor: pulls `body`'s translation toward `target`
-   *  with finite `stiffness`. Use this instead of `body.pin()` for
-   *  pointer drag — the body keeps its mass and resists penetrating
-   *  neighbours when blocked. Mutate the returned anchor's `target`
-   *  field on each `pointermove`; call `dispose()` on `pointerup`. */
-  dragAnchor(body: Body, target: { x: number; y: number }, stiffness = 1e5): BodyAnchor {
-    const a = new BodyAnchor(this.constraints.solver, body, target, stiffness);
-    this.constraints.solver.addForce(a);
-    return a;
+  addWhile(cond: Parameters<Constraints["addWhile"]>[0], ...rels: Relation[]) {
+    return this.constraints.addWhile(cond, ...rels);
   }
+
+  /** Tear down the world: dispose the constraints driver (no-op
+   *  here since `Simulation` already disposed it). Leaves bodies'
+   *  pose signals intact. */
+  dispose(): void {
+    this.constraints.dispose();
+  }
+
+  // ─── Joint pair registry (used by Joint.bind) ────────────────────
+
+  /** @internal — register a joint-linked body pair so the broadphase
+   *  skips contact generation between them. Joint relations call this
+   *  from their `bind`. Returns an unregister thunk. Multiple joints
+   *  on the same pair are reference-counted. */
+  _registerJointPair(a: Body, b: Body): () => void {
+    const lo = Math.min(a.cellId, b.cellId);
+    const hi = Math.max(a.cellId, b.cellId);
+    const key = `${lo}_${hi}`;
+    this._jointed.set(key, (this._jointed.get(key) ?? 0) + 1);
+    return () => {
+      const n = (this._jointed.get(key) ?? 0) - 1;
+      if (n <= 0) this._jointed.delete(key);
+      else this._jointed.set(key, n);
+    };
+  }
+
+  // ─── Per-frame step ──────────────────────────────────────────────
 
   step(realDt: number): void {
     if (!(realDt > 0) || !Number.isFinite(realDt)) return;
     const fixed = this.simulation.fixedDt;
     if (fixed === undefined) {
-      // No sub-stepping configured; single-tick semantics.
       this._preTick();
       this.simulation.tick(realDt);
       this._postTick();
@@ -966,8 +1209,8 @@ export class RigidWorld {
     }
     // Accumulator-based fixed-dt sub-stepping with per-sub-step
     // pre-/post-tick hooks (angular speed clamp, contact manifold
-    // refresh, body signal sync). We can't call `sim.step` directly
-    // because we need to interleave hooks between sub-steps.
+    // refresh). We can't delegate to `sim.step` directly because we
+    // need to interleave hooks between sub-steps.
     const sim = this.simulation;
     this._acc += Math.min(realDt, fixed * sim.maxSubSteps);
     let steps = 0;
@@ -980,8 +1223,17 @@ export class RigidWorld {
     this._postTick();
   }
 
-  /** Per-sub-step preamble: angular-speed clamp + contact manifold
-   *  refresh. Runs before each `simulation.tick`. */
+  /** Generator for `Anim.start(world.animate())`. */
+  *animate(): Generator<undefined, never, { dt: number }> {
+    for (;;) {
+      const tick: { dt: number } = yield;
+      this.step(tick.dt);
+    }
+  }
+
+  // ─── Sub-step hooks ──────────────────────────────────────────────
+
+  /** Pre-tick: clamp angular speed, refresh broadphase. */
   private _preTick(): void {
     const cap = this.maxAngularSpeed;
     const v = this.simulation.velocities;
@@ -998,41 +1250,43 @@ export class RigidWorld {
     this._updateContacts();
   }
 
-  /** Post-step finalize: push solver state into reactive body signals. */
-  private _postTick(): void {
-    for (const body of this.bodies) body._syncSignals();
-  }
+  /** Post-tick — currently a no-op. Body pose signals are written
+   *  back by the `Simulation` writeback, so no manual sync is
+   *  needed (this is the win from making `pose` the cell signal). */
+  private _postTick(): void {}
 
-  /** O(n²) broadphase + manifold lifecycle. Called from step(). */
+  /** O(n²) broadphase + manifold lifecycle. Called from `_preTick`. */
   private _updateContacts(): void {
     const N = this.bodies.length;
     const seen = new Set<string>();
+    const solver = this.constraints.solver;
+    const positions = solver.positions;
+    const offsets = solver.offsets;
     for (let i = 0; i < N; i++) {
       const A = this.bodies[i]!;
-      const poseA = A.pose();
+      const aOff = offsets[A.cellId]!;
+      const ax = positions[aOff]!;
+      const ay = positions[aOff + 1]!;
       for (let j = i + 1; j < N; j++) {
         const B = this.bodies[j]!;
-        // Skip if both static.
         if (A.mass === 0 && B.mass === 0) continue;
-        // Skip joint-linked pairs (joint already constrains them).
         const ca = Math.min(A.cellId, B.cellId);
         const cb = Math.max(A.cellId, B.cellId);
         if (this._jointed.has(`${ca}_${cb}`)) continue;
-        const poseB = B.pose();
-        const dx = poseA.x - poseB.x;
-        const dy = poseA.y - poseB.y;
+        const bOff = offsets[B.cellId]!;
+        const dx = ax - positions[bOff]!;
+        const dy = ay - positions[bOff + 1]!;
         const r = A.radius + B.radius;
         if (dx * dx + dy * dy > r * r) continue;
-        const key = `${i}_${j}`;
+        const key = `${ca}_${cb}`;
         seen.add(key);
         if (!this._manifolds.has(key)) {
-          const m = new BoxContact(this.constraints.solver, A, B);
-          this.constraints.solver.addForce(m);
+          const m = new BoxContact(solver, A, B);
+          solver.addForce(m);
           this._manifolds.set(key, m);
         }
       }
     }
-    // Drop manifolds whose body pairs no longer overlap in broadphase.
     for (const [key, m] of this._manifolds) {
       if (!seen.has(key)) {
         m.dispose();

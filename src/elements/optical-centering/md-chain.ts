@@ -22,14 +22,12 @@
 // Both render fine as a single line. Same `Joint` force; same
 // `Simulation`; same Cluster. The 3-DOF cell is the difference.
 
-import { type Body, RigidWorld } from "@minim/constraints";
+import { type Body, body, joint, RigidWorld } from "@minim/constraints";
 import {
   Anchor,
   type AnyShape,
   circle,
   Diagram,
-  drive,
-  effect,
   label,
   Mount,
   Path,
@@ -116,7 +114,9 @@ export class MdChain extends Diagram {
       maxAngularSpeed: 100,
     });
 
-    const anchor = world.add({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY });
+    const anchor = world.add(
+      body({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY }),
+    );
     s(circle(anchor.position, 5, { fill: true }));
 
     const links: Body[] = [];
@@ -124,14 +124,18 @@ export class MdChain extends Diagram {
     for (let i = 0; i < N; i++) {
       const cx = anchorX + LINK_W / 2 + i * LINK_W;
       const link = world.add(
-        { size: { w: LINK_W - 0.5, h: LINK_H }, density: 1, friction: 0.4 },
-        { x: cx, y: anchorY },
+        body(
+          { size: { w: LINK_W - 0.5, h: LINK_H }, density: 1, friction: 0.4 },
+          { x: cx, y: anchorY },
+        ),
       );
       links.push(link);
-      world.joint(prev, link, i === 0 ? { x: 0, y: 0 } : { x: LINK_W / 2, y: 0 }, {
-        x: -LINK_W / 2,
-        y: 0,
-      });
+      world.add(
+        joint(prev, link, i === 0 ? { x: 0, y: 0 } : { x: LINK_W / 2, y: 0 }, {
+          x: -LINK_W / 2,
+          y: 0,
+        }),
+      );
       prev = link;
     }
 
@@ -171,22 +175,7 @@ export class MdChain extends Diagram {
     tipHandle.el.style.cursor = "grab";
     const dragging = signal(false);
     dragWorld(tipHandle, tipBody.position as Writable<Vec>, dragging);
-    let release: (() => void) | undefined;
-    effect(() => {
-      if (dragging.value) {
-        release = tipBody.pin();
-      } else if (release) {
-        release();
-        release = undefined;
-      }
-    });
-    effect(() => {
-      if (!dragging.value) return;
-      const p = tipBody.position.value;
-      const off = world.constraints.solver.offsets[tipBody.cellId]!;
-      world.constraints.solver.positions[off]! = p.x;
-      world.constraints.solver.positions[off + 1]! = p.y;
-    });
+    world.addWhile(dragging, tipBody.pin());
 
     // Mid-rope handle so the user can grab the rope by the middle too.
     const midIdx = (links.length / 2) | 0;
@@ -195,24 +184,9 @@ export class MdChain extends Diagram {
     midHandle.el.style.cursor = "grab";
     const midDragging = signal(false);
     dragWorld(midHandle, midBody.position as Writable<Vec>, midDragging);
-    let midRelease: (() => void) | undefined;
-    effect(() => {
-      if (midDragging.value) {
-        midRelease = midBody.pin();
-      } else if (midRelease) {
-        midRelease();
-        midRelease = undefined;
-      }
-    });
-    effect(() => {
-      if (!midDragging.value) return;
-      const p = midBody.position.value;
-      const off = world.constraints.solver.offsets[midBody.cellId]!;
-      world.constraints.solver.positions[off]! = p.x;
-      world.constraints.solver.positions[off + 1]! = p.y;
-    });
+    world.addWhile(midDragging, midBody.pin());
 
-    this.anim.start(drive(tick => world.step(tick.dt)));
+    this.anim.start(world.animate());
 
     s(
       label(view.top.down(20), "drag the blue tip or the red mid-link — gravity carries the rest", {

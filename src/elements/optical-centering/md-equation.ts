@@ -14,7 +14,6 @@ import {
   circle,
   Diagram,
   drag,
-  effect,
   label,
   line,
   Mount,

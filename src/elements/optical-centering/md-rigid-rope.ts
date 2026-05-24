@@ -7,14 +7,12 @@
 // Compared to the point-mass + distance-constraint chain, this one
 // has rotational inertia per link — bars feel like bars, not beads.
 
-import { type Body, RigidWorld } from "@minim/constraints";
+import { type Body, body, joint, RigidWorld } from "@minim/constraints";
 import {
   Anchor,
   type AnyShape,
   circle,
   Diagram,
-  drive,
-  effect,
   label,
   Mount,
   rect,
@@ -102,7 +100,9 @@ export class MdRigidRope extends Diagram {
     });
 
     // Static anchor block.
-    const anchor = world.add({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY });
+    const anchor = world.add(
+      body({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY }),
+    );
     s(rect(anchor.position, 10, 10, { fill: "#222" }));
 
     // Link bodies, one after another.
@@ -111,17 +111,22 @@ export class MdRigidRope extends Diagram {
     for (let i = 0; i < N; i++) {
       const cx = anchorX + LINK_W / 2 + i * LINK_W;
       const link = world.add(
-        { size: { w: LINK_W - 1, h: LINK_H }, density: 1, friction: 0.5 },
-        { x: cx, y: anchorY, theta: 0 },
+        body(
+          { size: { w: LINK_W - 1, h: LINK_H }, density: 1, friction: 0.5 },
+          { x: cx, y: anchorY, theta: 0 },
+        ),
       );
       links.push(link);
       const rA = i === 0 ? { x: 0, y: 0 } : { x: LINK_W / 2, y: 0 };
       const rB = { x: -LINK_W / 2, y: 0 };
-      world.joint(prev, link, rA, rB);
+      world.add(joint(prev, link, rA, rB));
       prev = link;
     }
 
-    // Render each link as a rotated rect bound to the body's pose.
+    // Render each link as a rotated rect bound to the body's pose,
+    // with hard-pin drag: while dragged, the body is pinned (mass 0,
+    // kinematic) and its position lens is driven directly by the
+    // cursor. The next sim tick reads the new pose, no buffer hacks.
     const PALETTE = ["#5b8def", "#e25c5c", "#f5a623", "#7ed321"];
     for (let i = 0; i < links.length; i++) {
       const link = links[i]!;
@@ -129,32 +134,14 @@ export class MdRigidRope extends Diagram {
         rect(link.position, LINK_W - 1, LINK_H, {
           fill: PALETTE[i % PALETTE.length]!,
           corner: 1,
+          rotate: link.angle,
         }),
       );
-      effect(() => {
-        r.rotate.value = link.angle.value;
-      });
       r.el.style.cursor = "grab";
 
-      // World-frame drag → pin during drag → push user value into solver.
       const dragging = signal(false);
       dragWorld(r, link.position as Writable<Vec>, dragging);
-      let release: (() => void) | undefined;
-      effect(() => {
-        if (dragging.value) {
-          release = link.pin();
-        } else if (release) {
-          release();
-          release = undefined;
-        }
-      });
-      effect(() => {
-        if (!dragging.value) return;
-        const p = link.position.value;
-        const off = world.constraints.solver.offsets[link.cellId]!;
-        world.constraints.solver.positions[off]! = p.x;
-        world.constraints.solver.positions[off + 1]! = p.y;
-      });
+      world.addWhile(dragging, link.pin());
     }
 
     // Show joint pivots as small dots.
@@ -172,7 +159,7 @@ export class MdRigidRope extends Diagram {
       s(circle(pivot, 1.6, { fill: "#fff", thin: true }));
     }
 
-    this.anim.start(drive(tick => world.step(tick.dt)));
+    this.anim.start(world.animate());
 
     s(
       label(

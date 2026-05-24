@@ -11,7 +11,6 @@ import {
   Anchor,
   circle,
   Diagram,
-  effect,
   handle,
   label,
   line,

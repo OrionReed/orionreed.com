@@ -10,7 +10,6 @@
 import { constraints, distance, pin } from "@minim/constraints";
 import {
   Anchor,
-  circle,
   Diagram,
   handle,
   label,

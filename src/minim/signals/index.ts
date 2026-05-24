@@ -81,6 +81,14 @@ export {
 // used to live here is now an engine-internal `_fanin` invoked by
 // these surfaces — same hot path, cleaner public API.
 export { type RelateHandle, relate } from "./relate";
+// ─── Settle utilities (reactive-collection lifecycle helpers) ────
+//
+// `when` collides with the existing animator-flavoured `when` from
+// `./anim`; consumers that need the settle-flavoured lifecycle helper
+// import it explicitly from "./settle-utils" rather than the
+// top-level index. `each` and `param` have no collisions and
+// re-export from here is fine.
+export { each, type Lifecycle, param } from "./settle-utils";
 // ─── Engine ───────────────────────────────────────────────────────
 export {
   batch,
@@ -95,10 +103,10 @@ export {
   type Of,
   type Read,
   type Settle,
-  settle,
   Signal,
   type SignalOptions,
   setSignalWriteHook,
+  settle,
   signal,
   untracked,
   type Val,
@@ -106,14 +114,6 @@ export {
   value,
   type WritableBrand,
 } from "./signal";
-// ─── Settle utilities (reactive-collection lifecycle helpers) ────
-//
-// `when` collides with the existing animator-flavoured `when` from
-// `./anim`; consumers that need the settle-flavoured lifecycle helper
-// import it explicitly from "./settle-utils" rather than the
-// top-level index. `each` and `param` have no collisions and
-// re-export from here is fine.
-export { each, type Lifecycle, param } from "./settle-utils";
 // ─── Traits ───────────────────────────────────────────────────────
 export {
   type Equals,
@@ -139,6 +139,19 @@ export {
   edgeFrom,
   union as boxUnion,
 } from "./values/box";
+// ─── Codec lenses (text ↔ typed-value bidirectional) ──────────────
+// Bridges between `Signal<string>` (form input / URL param / label)
+// and the typed value classes. No new value types — these are
+// 1-input cross-class lenses on top of `Cls.lens`.
+export {
+  colorFromHex,
+  hexFromColor,
+  type NumCodecOpts,
+  numFromText,
+  secondsFromText,
+  textFromNum,
+  textFromSeconds,
+} from "./values/codecs";
 export * as ColorMath from "./values/color";
 export { Color, rgb, rgba } from "./values/color";
 export * as MatrixMath from "./values/matrix";
@@ -164,25 +177,14 @@ export {
 export * as NumMath from "./values/num";
 // ─── Value classes ────────────────────────────────────────────────
 export { Num, num } from "./values/num";
+export * as PoseMath from "./values/pose";
+export { Pose, pose } from "./values/pose";
 export * as RangeMath from "./values/range";
 export { ends, Range, range, span } from "./values/range";
 export * as TransformMath from "./values/transform";
 export { Transform, type TransformInit, transform } from "./values/transform";
 export * as VecMath from "./values/vec";
 export { axes, type PolarPolicy, polar, tangentPoint, Vec, vec } from "./values/vec";
-// ─── Codec lenses (text ↔ typed-value bidirectional) ──────────────
-// Bridges between `Signal<string>` (form input / URL param / label)
-// and the typed value classes. No new value types — these are
-// 1-input cross-class lenses on top of `Cls.lens`.
-export {
-  colorFromHex,
-  hexFromColor,
-  type NumCodecOpts,
-  numFromText,
-  secondsFromText,
-  textFromNum,
-  textFromSeconds,
-} from "./values/codecs";
 // ─── Writable modifier + authoring helpers ───────────────────────
 export {
   derived,

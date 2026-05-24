@@ -73,12 +73,19 @@ export {
 export {
   Body,
   BodyAnchor,
+  BodyAnchorForce,
+  bodyAnchor,
+  body,
+  type BodyInit,
   type BodyOpts,
   BoxContact,
   Joint,
+  JointForce,
+  joint,
   type JointStiffness,
   RigidWorld,
   type RigidWorldOpts,
+  weld,
 } from "./rigid";
 export { Simulation, type SimulationOpts } from "./simulation";
 export { Solver, type SolverOpts } from "./solver";

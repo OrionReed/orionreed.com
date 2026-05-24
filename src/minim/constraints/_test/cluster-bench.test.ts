@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { type Vec, vec, type Writable } from "../../signals";
-import { constraints, distance, pin } from "../index";
+import { body, constraints, distance, joint, pin, RigidWorld } from "../index";
 
 type WVec = Writable<Vec>;
 
@@ -29,12 +29,12 @@ describe("relate3 perf sanity", () => {
     const N = 18;
     const W = 18;
     const H = 6;
-    const anchor = world.add({ size: { w: 8, h: 8 }, density: 0 }, { x: 0, y: 0 });
+    const anchor = world.add(body({ size: { w: 8, h: 8 }, density: 0 }, { x: 0, y: 0 }));
     let prev = anchor;
     for (let i = 0; i < N; i++) {
       const cx = W / 2 + i * W;
-      const link = world.add({ size: { w: W - 1, h: H }, density: 1 }, { x: cx, y: 0 });
-      world.joint(prev, link, i === 0 ? { x: 0, y: 0 } : { x: W / 2, y: 0 }, { x: -W / 2, y: 0 });
+      const link = world.add(body({ size: { w: W - 1, h: H }, density: 1 }, { x: cx, y: 0 }));
+      world.add(joint(prev, link, i === 0 ? { x: 0, y: 0 } : { x: W / 2, y: 0 }, { x: -W / 2, y: 0 }));
       prev = link;
     }
     const t0 = performance.now();
@@ -54,7 +54,7 @@ describe("relate3 perf sanity", () => {
       postStabilize: true,
       damping: 0.995,
     });
-    world.add({ size: { w: 800, h: 16 }, density: 0, friction: 0.7 }, { x: 0, y: 200 });
+    world.add(body({ size: { w: 800, h: 16 }, density: 0, friction: 0.7 }, { x: 0, y: 200 }));
     let n = 0;
     const SIZE = 44;
     for (let row = 0; row < 4; row++) {
@@ -62,10 +62,7 @@ describe("relate3 perf sanity", () => {
       for (let col = 0; col < cols; col++) {
         const x = -((cols - 1) * SIZE) / 2 + col * SIZE;
         const y = 200 - 8 - SIZE / 2 - row * (SIZE + 1);
-        world.add(
-          { size: { w: SIZE - 2, h: SIZE - 2 }, density: 1, friction: 0.5 },
-          { x, y, theta: 0 },
-        );
+        world.add(body({ size: { w: SIZE - 2, h: SIZE - 2 }, density: 1, friction: 0.5 }, { x, y, theta: 0 }));
         n++;
       }
     }
