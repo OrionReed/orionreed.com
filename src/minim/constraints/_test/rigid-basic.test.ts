@@ -149,6 +149,50 @@ describe("RigidWorld — basics", () => {
     }
   });
 
+  it("perturbed stack at demo scale: sideways tap keeps tower standing", () => {
+    // Mirrors the demo: pixel coordinates, gravity ≈ 1500, friction 0.5,
+    // 44px boxes, 5-tall stack. Tap the tower with a sideways impulse on
+    // the bottom box.
+    const w = new RigidWorld({
+      gravity: [0, 1500],
+      iterations: 14,
+      postStabilize: true,
+    });
+    w.add({ size: { w: 800, h: 16 }, density: 0, friction: 0.7 }, { x: 0, y: 200 });
+    const SIZE = 44;
+    const boxes = [];
+    for (let i = 0; i < 5; i++) {
+      boxes.push(
+        w.add(
+          { size: { w: SIZE - 2, h: SIZE - 2 }, friction: 0.5 },
+          { x: 0, y: 200 - 8 - SIZE / 2 - i * (SIZE + 1) },
+        ),
+      );
+    }
+    // Settle.
+    for (let f = 0; f < 240; f++) w.step(1 / 60);
+    const restY = boxes.map(b => b.pose().y);
+    // Sideways tap on the bottom box. With fixed-dt sub-stepping
+    // the stack should weather a moderate kick without collapsing.
+    // Stronger kicks (> ~3× box-width per second) topple the tower
+    // — that's expected at this iteration count and stack height.
+    const off = w.cluster.solver.offsets[boxes[0]!.cellId]!;
+    w.simulation.velocities[off]! += 100;
+    for (let f = 0; f < 600; f++) w.step(1 / 60);
+    for (let i = 1; i < boxes.length; i++) {
+      const here = boxes[i]!.pose().y;
+      const below = boxes[i - 1]!.pose().y;
+      // Each box still above the one below — allow ~5px slack
+      // for compaction / micro-rearrangement (settled stacks
+      // grind down a tiny amount under steady gravity).
+      expect(here).toBeLessThan(below + 5);
+    }
+    const topRest = restY[restY.length - 1]!;
+    const topNow = boxes[boxes.length - 1]!.pose().y;
+    // Top shouldn't have dropped more than one box height from rest.
+    expect(topNow).toBeLessThan(topRest + SIZE);
+  });
+
   it("settled stack at demo scale (44px boxes, g=1500) is at rest", () => {
     // The demo uses pixel coordinates with much larger gravity so
     // accelerations land in the "looks like physics on a screen"

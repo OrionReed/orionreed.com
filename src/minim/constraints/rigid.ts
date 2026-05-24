@@ -814,9 +814,19 @@ export interface RigidWorldOpts extends SolverOpts, SimulationOpts {
    *  angular impulse during drag or contact transition from spinning
    *  out of control. Default `50`. */
   maxAngularSpeed?: number;
-  /** Cap on `dt` per step — frame-rate spikes (debugger paused, tab
-   *  unbacked) shouldn't deliver one giant frame. Default `1/30`. */
-  maxDt?: number;
+  /** Internal physics step size in seconds. The world's `step(dt)`
+   *  accumulates real time and runs as many fixed-dt sub-steps as
+   *  fit. Production physics engines do this (Box2D, Bullet, Rapier)
+   *  because variable `dt` amplifies jitter — penalty / λ warm-start,
+   *  inertial extrapolation, and velocity all scale non-uniformly
+   *  in `dt`, and small frame-time variations turn into stack-shaking
+   *  noise. Default `1/60`. */
+  fixedDt?: number;
+  /** Maximum number of fixed-dt sub-steps per `step(realDt)` call.
+   *  Prevents the spiral-of-death where a slow frame accumulates
+   *  more sub-steps than can be processed in the next real frame.
+   *  Real time beyond `fixedDt × maxSubSteps` is dropped. Default 4. */
+  maxSubSteps?: number;
 }
 
 export class RigidWorld {
@@ -831,7 +841,9 @@ export class RigidWorld {
    *  `constrainedTo`; we precompute the set when joints are added. */
   private readonly _jointed = new Set<string>();
   private readonly maxAngularSpeed: number;
-  private readonly maxDt: number;
+  private readonly fixedDt: number;
+  private readonly maxSubSteps: number;
+  private accumulator = 0;
 
   constructor(opts: RigidWorldOpts = {}) {
     this.cluster = new Cluster({
@@ -847,7 +859,8 @@ export class RigidWorld {
       adaptiveWarmstart: opts.adaptiveWarmstart,
     });
     this.maxAngularSpeed = opts.maxAngularSpeed ?? 50;
-    this.maxDt = opts.maxDt ?? 1 / 30;
+    this.fixedDt = opts.fixedDt ?? 1 / 60;
+    this.maxSubSteps = opts.maxSubSteps ?? 4;
   }
 
   add(opts: BodyOpts, init: { x: number; y: number; theta?: number }): Body {
@@ -875,28 +888,35 @@ export class RigidWorld {
     return j;
   }
 
-  step(dt: number): void {
-    // Cap dt so a single jumbo frame can't punch a body through
-    // contacts (and so the inertial extrapolation stays bounded).
-    const dtClamped = Math.min(dt, this.maxDt);
-    // Clamp angular velocity before the next step's inertial
-    // extrapolation. AVBD ref does this each frame; in our setup it
-    // belongs in `RigidWorld` since only rigid bodies have a
-    // rotational DOF.
+  step(realDt: number): void {
+    if (!(realDt > 0) || !Number.isFinite(realDt)) return;
+    // Accumulator-based fixed-dt sub-stepping. Real frame time can
+    // wobble; physics needs steady `dt` for `λ` and `penalty`
+    // warm-start to stay stable.
+    this.accumulator += Math.min(realDt, this.fixedDt * this.maxSubSteps);
     const cap = this.maxAngularSpeed;
     const v = this.simulation.velocities;
     const offsets = this.cluster.solver.offsets;
     const dims = this.cluster.solver.dims;
-    for (const body of this.bodies) {
-      const off = offsets[body.cellId]!;
-      if (dims[body.cellId]! >= 3) {
-        const w = v[off + 2]!;
-        if (w > cap) v[off + 2]! = cap;
-        else if (w < -cap) v[off + 2]! = -cap;
+    let steps = 0;
+    while (this.accumulator >= this.fixedDt && steps < this.maxSubSteps) {
+      // Clamp angular velocity before each sub-step's inertial
+      // extrapolation. AVBD ref does this every frame; in our setup
+      // it belongs to `RigidWorld` since only rigid bodies have a
+      // rotational DOF.
+      for (const body of this.bodies) {
+        const off = offsets[body.cellId]!;
+        if (dims[body.cellId]! >= 3) {
+          const w = v[off + 2]!;
+          if (w > cap) v[off + 2]! = cap;
+          else if (w < -cap) v[off + 2]! = -cap;
+        }
       }
+      this._updateContacts();
+      this.simulation.tick(this.fixedDt);
+      this.accumulator -= this.fixedDt;
+      steps++;
     }
-    this._updateContacts();
-    this.simulation.tick(dtClamped);
     for (const body of this.bodies) body._syncSignals();
   }
 

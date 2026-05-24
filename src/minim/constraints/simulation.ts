@@ -164,18 +164,24 @@ export class Simulation {
       }
     }
 
-    solver.solve(dt);
-
+    // Compute velocity from the position at the end of the *regular*
+    // iterations (before post-stabilization). The AVBD reference does
+    // this in the inner loop at `it == iterations - 1`; we match by
+    // hooking `solver.solve`'s `beforePostStab` callback. Counting
+    // post-stab into velocity bakes the "free" projection back into
+    // momentum and visibly amplifies stack jitter under perturbation.
     const damp = this.damping;
-    for (let id = 0; id < N; id++) {
-      const off = offsets[id]!;
-      if (masses[off]! <= 0) continue;
-      const dim = dims[id]!;
-      for (let k = 0; k < dim; k++) {
-        prevVelocities[off + k] = velocities[off + k]!;
-        velocities[off + k] = ((positions[off + k]! - initials[off + k]!) / dt) * damp;
+    solver.solve(dt, () => {
+      for (let id = 0; id < N; id++) {
+        const off = offsets[id]!;
+        if (masses[off]! <= 0) continue;
+        const dim = dims[id]!;
+        for (let k = 0; k < dim; k++) {
+          prevVelocities[off + k] = velocities[off + k]!;
+          velocities[off + k] = ((positions[off + k]! - initials[off + k]!) / dt) * damp;
+        }
       }
-    }
+    });
 
     // Write solved positions back into bound signals.
     for (let id = 0; id < N; id++) {

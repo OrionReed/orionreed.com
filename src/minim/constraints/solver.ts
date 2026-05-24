@@ -299,14 +299,23 @@ export class Solver {
    *  but the primal step doesn't actively unwind existing
    *  violation), and one final iteration with `α = 0` zeros the
    *  residual at frame end. Without it, every iteration uses
-   *  `this.alpha`. */
-  solve(dt: number = 1): void {
+   *  `this.alpha`.
+   *
+   *  `beforePostStab` runs once at the boundary between the regular
+   *  iterations and the post-stabilization iter — `Simulation` uses
+   *  this hook to compute velocity from the *physical* trajectory
+   *  rather than from positions after the post-stab projection
+   *  (matching the AVBD reference; see solver.cpp's
+   *  `if (it == iterations - 1)` block). With `postStabilize`
+   *  off, the hook fires once after the final iteration. */
+  solve(dt: number = 1, beforePostStab?: () => void): void {
     const inv_dt2 = 1 / (dt * dt);
     if (this.postStabilize) {
       for (let it = 0; it < this.iterations; it++) {
         this._primalSweep(1, inv_dt2);
         this._dualPass(1);
       }
+      if (beforePostStab) beforePostStab();
       this._primalSweep(0, inv_dt2);
     } else {
       const a = this.alpha;
@@ -314,6 +323,7 @@ export class Solver {
         this._primalSweep(a, inv_dt2);
         this._dualPass(a);
       }
+      if (beforePostStab) beforePostStab();
     }
   }
 

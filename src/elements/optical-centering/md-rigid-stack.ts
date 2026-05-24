@@ -106,12 +106,11 @@ export class MdRigidStack extends Diagram {
 
     const world = new RigidWorld({
       gravity: [0, 1500],
-      iterations: 14,
+      iterations: 20,
       postStabilize: true,
-      // The augmented Lagrangian with post-stabilization absorbs
-      // enough energy through constraint drift that no explicit
-      // velocity damping is needed for a stable stack.
-      damping: 1,
+      // Mild damping rather than fully energy-conserving — small
+      // perturbations bleed off rather than ringing through the stack.
+      damping: 0.99,
     });
 
     // Static walls and ground.
@@ -129,7 +128,7 @@ export class MdRigidStack extends Diagram {
         const x = cx - ((cols - 1) * SIZE) / 2 + col * SIZE;
         const y = floorY - 8 - SIZE / 2 - row * (SIZE + 1);
         const b = world.add(
-          { size: { w: SIZE - 2, h: SIZE - 2 }, density: 1, friction: 0.5 },
+          { size: { w: SIZE - 2, h: SIZE - 2 }, density: 1, friction: 0.7 },
           { x, y, theta: 0 },
         );
         dynamicBoxes.push(b);

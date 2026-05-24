@@ -48,6 +48,7 @@ export {
   onCircle,
   parallel,
   perpendicular,
+  repel,
   rightAngle,
   softTarget,
   spring,

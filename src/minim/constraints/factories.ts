@@ -106,6 +106,31 @@ export function gap(c: Cluster, a: S, b: S, minDist: number): GenericForce {
   return f;
 }
 
+/** Soft long-range repulsion: pushes two points apart with force
+ *  `stiffness · (range − ‖b − a‖)` while they're closer than
+ *  `range`, dropping to zero outside. Inspired by Fruchterman–
+ *  Reingold's `F_rep ∝ k²/d` term — the missing ingredient for
+ *  graph-layout-style force-directed scenes, where `gap` only
+ *  enforces a hard collision distance and leaves nothing to
+ *  spread non-touching pairs apart. Use a large `range` (e.g.
+ *  the canvas extent) and a small `stiffness` so the repulsion
+ *  is gentle far away and ramps up as nodes crowd. */
+export function repel(c: Cluster, a: S, b: S, range: number, stiffness: number): GenericForce {
+  const f = generic(
+    c,
+    [a, b],
+    1,
+    (pos, out) => {
+      const dx = pos[1]![0]! - pos[0]![0]!;
+      const dy = pos[1]![1]! - pos[0]![1]!;
+      out[0]! = Math.hypot(dx, dy) - range;
+    },
+    { hard: false, stiffness },
+  );
+  f.fmax[0]! = 0;
+  return f;
+}
+
 /** Hard rectangular containment: keep a `Vec` inside the AABB
  *  `[xLo, xHi] × [yLo, yHi]`. Encoded as four one-sided inequalities
  *  so the constraint only acts when `P` is on the wrong side of

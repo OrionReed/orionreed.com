@@ -1,13 +1,22 @@
-// md-graph.ts — force-directed graph layout via constraints.
+// md-graph.ts — Fruchterman–Reingold-style force-directed layout.
 //
-// Edges are soft springs (attraction at rest length). Every pair
-// of nodes gets a hard `gap` constraint (no overlap). The cluster
-// is driven by `Simulation` with zero gravity and moderate
-// damping — that gives the nodes momentum so the layout has a
-// physical "spring it into place" feel rather than the slowly-
-// converging snap of a pure static solve.
+// Four force types per cluster, each pulling its weight from a
+// classic graph-layout algorithm:
+//
+//   - **Spring** along each edge: attraction `F_attr ≈ stiffness·(d − rest)`.
+//   - **Repel** between every pair: long-range soft repulsion that's
+//     active out to a `RANGE` of ~the diameter of the desired layout.
+//     This is the Fruchterman–Reingold `F_rep ≈ k²/d` term — without
+//     it, non-edge pairs have nothing pushing them apart and the
+//     graph collapses into a clump.
+//   - **Gap** between every pair: hard non-overlap (kicks in only
+//     when two nodes are about to collide; finishes what the soft
+//     repulsion starts).
+//   - **softTarget** on every node toward the canvas center: kills
+//     the rotational degree of freedom that a single pin otherwise
+//     leaves behind, and centers the layout in the viewport.
 
-import { Cluster, gap, Simulation, spring } from "@minim/constraints";
+import { Cluster, gap, repel, Simulation, softTarget, spring } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -18,8 +27,8 @@ import {
   label,
   line,
   Mount,
-  type Vec,
   vec,
+  type Vec,
   type Writable,
 } from "../../minim";
 
@@ -30,8 +39,6 @@ interface Edge {
   b: number;
 }
 
-// Planar-ish small graph: 16 nodes, ~30 edges, mostly tree-ish with
-// a few cross-links. Hand-laid so the layout untangles cleanly.
 const EDGES: readonly Edge[] = [
   { a: 0, b: 1 },
   { a: 0, b: 2 },
@@ -58,9 +65,12 @@ const EDGES: readonly Edge[] = [
   { a: 8, b: 9 },
 ];
 const N = 16;
-const REST = 60;
-const MIN_GAP = 30;
-const STIFFNESS = 200;
+const REST = 70; // edge spring rest length
+const SPRING_K = 80; // edge attraction stiffness
+const MIN_GAP = 22; // hard non-overlap distance
+const REPEL_RANGE = 160; // soft repulsion range — beyond this, no force
+const REPEL_K = 6; // soft repulsion stiffness
+const CENTER_K = 4;
 
 export class MdGraph extends Diagram {
   protected scene(s: Mount): void {
@@ -68,7 +78,6 @@ export class MdGraph extends Diagram {
     const cx = view.center.value.x;
     const cy = view.center.value.y;
 
-    // Initial positions on a perturbed circle so the layout has work to do.
     const TAU = Math.PI * 2;
     let seed = 7;
     const rand = () => {
@@ -84,18 +93,18 @@ export class MdGraph extends Diagram {
 
     const cluster = new Cluster({ iterations: 12, postStabilize: true });
 
-    for (const e of EDGES) spring(cluster, nodes[e.a]!, nodes[e.b]!, REST, STIFFNESS);
+    for (const e of EDGES) spring(cluster, nodes[e.a]!, nodes[e.b]!, REST, SPRING_K);
     for (let i = 0; i < N; i++) {
-      for (let j = i + 1; j < N; j++) gap(cluster, nodes[i]!, nodes[j]!, MIN_GAP);
+      for (let j = i + 1; j < N; j++) {
+        // Soft long-range repulsion (FR-style) + hard short-range gap.
+        repel(cluster, nodes[i]!, nodes[j]!, REPEL_RANGE, REPEL_K);
+        gap(cluster, nodes[i]!, nodes[j]!, MIN_GAP);
+      }
     }
+    for (let i = 0; i < N; i++) softTarget(cluster, nodes[i]!, [cx, cy], CENTER_K);
 
-    // Lightweight centering pin: anchor node 0.
-    cluster.pin(nodes[0]!);
-
-    // Simulation with zero gravity and moderate damping: the nodes
-    // get momentum (drag and release → it keeps moving briefly) but
-    // the layout still settles in a few seconds.
-    const sim = new Simulation(cluster, { damping: 0.99 });
+    // Heavy damping — layouts want to settle, not orbit.
+    const sim = new Simulation(cluster, { damping: 0.7 });
     this.anim.start(drive(tick => sim.tick(tick.dt)));
 
     for (const e of EDGES) s(line(nodes[e.a]!, nodes[e.b]!, { thin: true, opacity: 0.5 }));
@@ -111,16 +120,12 @@ export class MdGraph extends Diagram {
     s(
       label(
         view.top.down(20),
-        "drag any node — soft springs along edges, hard gap between every pair",
-        {
-          size: 12,
-          align: Anchor.Center,
-          opacity: 0.7,
-        },
+        "drag any node — Fruchterman–Reingold-style: edge springs + long-range repulsion + centering",
+        { size: 12, align: Anchor.Center, opacity: 0.7 },
       ),
       label(
         view.bottom.up(16),
-        `${N} nodes · ${EDGES.length} springs · ${(N * (N - 1)) / 2} pairwise gaps`,
+        `${N} nodes · ${EDGES.length} springs · ${(N * (N - 1)) / 2} pair repulsions + gaps · centering`,
         { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );

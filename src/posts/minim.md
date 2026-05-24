@@ -311,10 +311,6 @@ Pair `gap` with rectangular containment (`inside(P, xLo, yLo, xHi, yHi)` — fou
 
 <md-particles></md-particles>
 
-Stack rigid links inside the same scene and you have rigid bodies. Each body below is three small circles in an equilateral triangle, rigidified by three hard distance constraints — the count works out exactly: 3 cells × 2 DOF − 3 distances = 3 DOF, the translation and rotation of a 2D rigid body. Pairwise `gap` between every cell of *different* bodies handles non-overlap; `inside` keeps everything in the box. Drop them under gravity and they tumble, stack, and shove each other around. Drag any circle and its whole body translates and rotates rigidly.
-
-<md-rigid-bodies></md-rigid-bodies>
-
 The same engine handles **proper** rigid bodies just as well — boxes with full position + rotation, contact constraints with friction, stacking, the whole show. A rigid body in this version is a single 3-DOF cell `(x, y, θ)` with a diagonal mass matrix `(m, m, I)` (linear and rotational inertia). Box-box collisions are detected by SAT (the same algorithm Box2D uses) and turned into `BoxContact` forces with normal and tangential rows; the tangential clamp is set per-iteration to `±μ·|λ_normal|` for Coulomb friction. Edge identifiers carry across frames so penalty and λ warm-start correctly through contact events. Drop a pyramid of dynamic boxes onto a static floor and they stack and settle:
 
 <md-rigid-stack></md-rigid-stack>
