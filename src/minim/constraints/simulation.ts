@@ -35,20 +35,38 @@ export interface SimulationOpts {
    *  inertia anchor; only the position warm-start is dampened.
    *  Default `true` whenever gravity is non-zero. */
   adaptiveWarmstart?: boolean;
+  /** Internal physics step size in seconds. When set, `step(realDt)`
+   *  accumulates real time and runs as many fixed-dt sub-steps as
+   *  fit. Production physics engines do this (Box2D, Bullet, Rapier)
+   *  because variable `dt` amplifies jitter — penalty / λ warm-start,
+   *  inertial extrapolation, and velocity all scale non-uniformly
+   *  in `dt`. Pass `1/60` for typical "physics at a fixed clock"
+   *  feel. When undefined, `step` is equivalent to `tick`. */
+  fixedDt?: number;
+  /** Maximum number of fixed-dt sub-steps per `step(realDt)` call.
+   *  Prevents the spiral-of-death where a slow real frame
+   *  accumulates more sub-steps than can be processed in the next
+   *  real frame. Real time beyond `fixedDt × maxSubSteps` is
+   *  dropped. Default 4. Only used when `fixedDt` is set. */
+  maxSubSteps?: number;
 }
 
 export class Simulation {
-  readonly cluster: Constraints;
+  readonly constraints: Constraints;
   readonly aExt: Float64Array;
   damping: number;
   adaptiveWarmstart: boolean;
   velocities: Float64Array;
   prevVelocities: Float64Array;
+  /** Optional fixed-dt sub-step. See `SimulationOpts.fixedDt`. */
+  readonly fixedDt: number | undefined;
+  readonly maxSubSteps: number;
   private _velocityCapacity: number;
   private _aExtNormSq: number;
+  private _accumulator = 0;
 
-  constructor(cluster: Constraints, opts: SimulationOpts = {}) {
-    this.cluster = cluster;
+  constructor(constraints: Constraints, opts: SimulationOpts = {}) {
+    this.constraints = constraints;
     const grav = opts.gravity;
     if (grav) {
       this.aExt = new Float64Array(grav.length);
@@ -61,17 +79,19 @@ export class Simulation {
     this._aExtNormSq = nsq;
     this.damping = opts.damping ?? 1;
     this.adaptiveWarmstart = opts.adaptiveWarmstart ?? nsq > 0;
-    this._velocityCapacity = cluster.solver.positions.length;
+    this.fixedDt = opts.fixedDt;
+    this.maxSubSteps = opts.maxSubSteps ?? 4;
+    this._velocityCapacity = constraints.solver.positions.length;
     this.velocities = new Float64Array(this._velocityCapacity);
     this.prevVelocities = new Float64Array(this._velocityCapacity);
     // Tear down the cluster's reactive driver — Simulation owns the
     // time loop and does its own signal sync.
-    cluster.dispose();
+    constraints.dispose();
   }
 
   private _ensureVelocityCapacity(): void {
-    if (this.cluster.solver.positions.length > this._velocityCapacity) {
-      this._velocityCapacity = this.cluster.solver.positions.length;
+    if (this.constraints.solver.positions.length > this._velocityCapacity) {
+      this._velocityCapacity = this.constraints.solver.positions.length;
       const grown = new Float64Array(this._velocityCapacity);
       grown.set(this.velocities);
       this.velocities = grown;
@@ -83,8 +103,8 @@ export class Simulation {
 
   velocity(id: number, out: number[] = []): number[] {
     this._ensureVelocityCapacity();
-    const off = this.cluster.solver.offsets[id]!;
-    const dim = this.cluster.solver.dims[id]!;
+    const off = this.constraints.solver.offsets[id]!;
+    const dim = this.constraints.solver.dims[id]!;
     for (let k = 0; k < dim; k++) out[k] = this.velocities[off + k]!;
     out.length = dim;
     return out;
@@ -92,8 +112,8 @@ export class Simulation {
 
   setVelocity(id: number, value: ArrayLike<number>): void {
     this._ensureVelocityCapacity();
-    const off = this.cluster.solver.offsets[id]!;
-    const dim = this.cluster.solver.dims[id]!;
+    const off = this.constraints.solver.offsets[id]!;
+    const dim = this.constraints.solver.dims[id]!;
     for (let k = 0; k < dim; k++) this.velocities[off + k] = value[k] ?? 0;
   }
 
@@ -105,7 +125,7 @@ export class Simulation {
   tick(dt: number): void {
     if (!(dt > 0) || !Number.isFinite(dt)) return;
     this._ensureVelocityCapacity();
-    const solver = this.cluster.solver;
+    const solver = this.constraints.solver;
     const dt2 = dt * dt;
     const aExt = this.aExt;
     const aExtLen = aExt.length;
@@ -122,7 +142,7 @@ export class Simulation {
     const N = solver.cellCount;
     // Constraints's _bindings is structurally compatible.
     // biome-ignore lint/suspicious/noExplicitAny: heterogeneous binding registry
-    const bindings = (this.cluster as any)._bindings as readonly (
+    const bindings = (this.constraints as any)._bindings as readonly (
       | { sig: Signal<any>; pack: Pack<any> }
       | undefined
     )[];
@@ -195,10 +215,34 @@ export class Simulation {
     }
   }
 
+  /** Advance simulation time by `realDt` real seconds. If `fixedDt`
+   *  is configured, runs as many fixed-dt sub-steps as fit (capped
+   *  at `maxSubSteps`); otherwise dispatches a single `tick(realDt)`
+   *  with variable dt.
+   *
+   *  Prefer `step(dt)` over `tick(dt)` in animation drivers — fixed-
+   *  dt sub-stepping makes physics much more stable under variable
+   *  frame times. */
+  step(realDt: number): void {
+    if (!(realDt > 0) || !Number.isFinite(realDt)) return;
+    const fixed = this.fixedDt;
+    if (fixed === undefined) {
+      this.tick(realDt);
+      return;
+    }
+    this._accumulator += Math.min(realDt, fixed * this.maxSubSteps);
+    let steps = 0;
+    while (this._accumulator >= fixed && steps < this.maxSubSteps) {
+      this.tick(fixed);
+      this._accumulator -= fixed;
+      steps++;
+    }
+  }
+
   *animate(): Generator<undefined, never, Tick> {
     for (;;) {
       const tick: Tick = yield;
-      this.tick(tick.dt);
+      this.step(tick.dt);
     }
   }
 }

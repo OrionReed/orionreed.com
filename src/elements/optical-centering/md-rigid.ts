@@ -7,7 +7,7 @@
 // and the quad becomes a rigid body that only translates and
 // rotates as a whole.
 
-import { constraints, distance, type Relation } from "@minim/constraints";
+import { attachWhile, constraints, distance, pin, type Relation } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -68,7 +68,7 @@ export class MdRigid extends Diagram {
       [D, s(handle(D))],
     ];
     for (const [sig, h] of handles) {
-      effect(() => (h.dragging.value ? cluster.pin(sig) : undefined));
+      attachWhile(cluster, h.dragging, pin(sig));
     }
 
     // Click-to-toggle on the diagonal label.

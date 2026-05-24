@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { type Vec, vec, type Writable } from "../../signals";
-import { constraints, distance } from "../index";
+import { constraints, distance, pin } from "../index";
 
 type WVec = Writable<Vec>;
 
@@ -13,8 +13,8 @@ function buildChain(N: number, iters: number) {
   for (let i = 0; i < N; i++) cells.push(vec(i, 0));
   const c = constraints({ iterations: iters });
   for (let i = 1; i < N; i++) c.add(distance(cells[i - 1]!, cells[i]!, 1));
-  c.pin(cells[0]!);
-  c.pin(cells[N - 1]!);
+  c.add(pin(cells[0]!));
+  c.add(pin(cells[N - 1]!));
   return { c, cells };
 }
 
@@ -92,9 +92,9 @@ describe("relate3 perf sanity", () => {
       for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.STRONG));
     for (let i = 0; i < W; i++)
       for (let j = 1; j < H; j++) c.add(spring(grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.STRONG));
-    c.pin(grid[0]![0]!);
-    c.pin(grid[0]![W - 1]!);
-    c.pin(grid[H - 1]![W - 1]!);
+    c.add(pin(grid[0]![0]!));
+    c.add(pin(grid[0]![W - 1]!));
+    c.add(pin(grid[H - 1]![W - 1]!));
 
     grid[H - 1]![W - 1]!.value = { x: (W - 1) * SP + 1, y: (H - 1) * SP + 1 };
     const drags = 30;
@@ -150,8 +150,8 @@ describe("relate3 perf sanity", () => {
     for (const [a, b] of edges) c.add(spring(nodes[a]!, nodes[b]!, REST, STIFFNESS));
     for (let i = 0; i < N; i++)
       for (let j = i + 1; j < N; j++) c.add(gap(nodes[i]!, nodes[j]!, MIN_GAP));
-    c.pin(nodes[0]!);
-    c.pin(nodes[1]!);
+    c.add(pin(nodes[0]!));
+    c.add(pin(nodes[1]!));
 
     nodes[1]!.value = { x: 30, y: 1 };
     const drags = 30;
@@ -199,8 +199,8 @@ describe("relate3 perf sanity", () => {
       for (let i = 1; i < W; i++) c.add(distance(cells[j]![i - 1]!, cells[j]![i]!, 1));
     for (let i = 0; i < W; i++)
       for (let j = 1; j < H; j++) c.add(distance(cells[j - 1]![i]!, cells[j]![i]!, 1));
-    c.pin(cells[0]![0]!);
-    c.pin(cells[0]![W - 1]!);
+    c.add(pin(cells[0]![0]!));
+    c.add(pin(cells[0]![W - 1]!));
 
     cells[H - 1]![W - 1]!.value = { x: W - 0.5, y: H - 0.5 };
     let dy = 0.5;

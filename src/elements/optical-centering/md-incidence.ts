@@ -7,7 +7,7 @@
 // inner vertex and the bracket articulates while keeping its
 // vertices on their respective loci.
 
-import { constraints, collinear, distance, equalDist, onCircle, rightAngle } from "@minim/constraints";
+import { attachWhile, collinear, constraints, distance, equalDist, onCircle, pin, rightAngle } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -71,7 +71,7 @@ export class MdIncidence extends Diagram {
       [M, s(handle(M, { fill: "#f5a623", r: 7 })), "M"],
     ];
     for (const [sig, h] of handles) {
-      effect(() => (h.dragging.value ? cluster.pin(sig) : undefined));
+      attachWhile(cluster, h.dragging, pin(sig));
     }
 
     s(

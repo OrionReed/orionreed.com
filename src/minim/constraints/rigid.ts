@@ -877,23 +877,10 @@ export interface RigidWorldOpts extends SolverOpts, SimulationOpts {
    *  angular impulse during drag or contact transition from spinning
    *  out of control. Default `50`. */
   maxAngularSpeed?: number;
-  /** Internal physics step size in seconds. The world's `step(dt)`
-   *  accumulates real time and runs as many fixed-dt sub-steps as
-   *  fit. Production physics engines do this (Box2D, Bullet, Rapier)
-   *  because variable `dt` amplifies jitter — penalty / λ warm-start,
-   *  inertial extrapolation, and velocity all scale non-uniformly
-   *  in `dt`, and small frame-time variations turn into stack-shaking
-   *  noise. Default `1/60`. */
-  fixedDt?: number;
-  /** Maximum number of fixed-dt sub-steps per `step(realDt)` call.
-   *  Prevents the spiral-of-death where a slow frame accumulates
-   *  more sub-steps than can be processed in the next real frame.
-   *  Real time beyond `fixedDt × maxSubSteps` is dropped. Default 4. */
-  maxSubSteps?: number;
 }
 
 export class RigidWorld {
-  readonly cluster: Constraints;
+  readonly constraints: Constraints;
   readonly simulation: Simulation;
   readonly bodies: Body[] = [];
   /** Active manifolds keyed by `(idA, idB)` pair (idA < idB). */
@@ -904,30 +891,35 @@ export class RigidWorld {
    *  `constrainedTo`; we precompute the set when joints are added. */
   private readonly _jointed = new Set<string>();
   private readonly maxAngularSpeed: number;
-  private readonly fixedDt: number;
-  private readonly maxSubSteps: number;
-  private accumulator = 0;
+  /** Sub-step accumulator (only used if `simulation.fixedDt` is set).
+   *  Lives on `RigidWorld` rather than on `Simulation` because the
+   *  pre-/post-tick hooks (angular clamp, contact refresh) run
+   *  per-sub-step here, so we need direct control over the loop. */
+  private _acc = 0;
 
   constructor(opts: RigidWorldOpts = {}) {
-    this.cluster = constraints({
+    this.constraints = constraints({
       iterations: opts.iterations ?? 10,
       alpha: opts.alpha ?? 0.99,
       beta: opts.beta ?? 1e5,
       gamma: opts.gamma ?? 0.99,
       postStabilize: opts.postStabilize ?? true,
     });
-    this.simulation = new Simulation(this.cluster, {
+    this.simulation = new Simulation(this.constraints, {
       gravity: opts.gravity,
       damping: opts.damping ?? 1,
       adaptiveWarmstart: opts.adaptiveWarmstart,
+      // Fixed-dt sub-stepping is the AVBD default for physics —
+      // production engines (Box2D, Bullet, Rapier) all do this.
+      // Override via `RigidWorldOpts.fixedDt` if needed.
+      fixedDt: opts.fixedDt ?? 1 / 60,
+      maxSubSteps: opts.maxSubSteps ?? 4,
     });
     this.maxAngularSpeed = opts.maxAngularSpeed ?? 50;
-    this.fixedDt = opts.fixedDt ?? 1 / 60;
-    this.maxSubSteps = opts.maxSubSteps ?? 4;
   }
 
   add(opts: BodyOpts, init: { x: number; y: number; theta?: number }): Body {
-    const body = new Body(this.cluster.solver, opts, init);
+    const body = new Body(this.constraints.solver, opts, init);
     this.bodies.push(body);
     return body;
   }
@@ -943,8 +935,8 @@ export class RigidWorld {
     rB: { x: number; y: number },
     opts?: JointStiffness,
   ): Joint {
-    const j = new Joint(this.cluster.solver, bodyA, bodyB, rA, rB, opts);
-    this.cluster.solver.addForce(j);
+    const j = new Joint(this.constraints.solver, bodyA, bodyB, rA, rB, opts);
+    this.constraints.solver.addForce(j);
     const a = Math.min(bodyA.cellId, bodyB.cellId);
     const b = Math.max(bodyA.cellId, bodyB.cellId);
     this._jointed.add(`${a}_${b}`);
@@ -957,40 +949,57 @@ export class RigidWorld {
    *  neighbours when blocked. Mutate the returned anchor's `target`
    *  field on each `pointermove`; call `dispose()` on `pointerup`. */
   dragAnchor(body: Body, target: { x: number; y: number }, stiffness = 1e5): BodyAnchor {
-    const a = new BodyAnchor(this.cluster.solver, body, target, stiffness);
-    this.cluster.solver.addForce(a);
+    const a = new BodyAnchor(this.constraints.solver, body, target, stiffness);
+    this.constraints.solver.addForce(a);
     return a;
   }
 
   step(realDt: number): void {
     if (!(realDt > 0) || !Number.isFinite(realDt)) return;
-    // Accumulator-based fixed-dt sub-stepping. Real frame time can
-    // wobble; physics needs steady `dt` for `λ` and `penalty`
-    // warm-start to stay stable.
-    this.accumulator += Math.min(realDt, this.fixedDt * this.maxSubSteps);
-    const cap = this.maxAngularSpeed;
-    const v = this.simulation.velocities;
-    const offsets = this.cluster.solver.offsets;
-    const dims = this.cluster.solver.dims;
+    const fixed = this.simulation.fixedDt;
+    if (fixed === undefined) {
+      // No sub-stepping configured; single-tick semantics.
+      this._preTick();
+      this.simulation.tick(realDt);
+      this._postTick();
+      return;
+    }
+    // Accumulator-based fixed-dt sub-stepping with per-sub-step
+    // pre-/post-tick hooks (angular speed clamp, contact manifold
+    // refresh, body signal sync). We can't call `sim.step` directly
+    // because we need to interleave hooks between sub-steps.
+    const sim = this.simulation;
+    this._acc += Math.min(realDt, fixed * sim.maxSubSteps);
     let steps = 0;
-    while (this.accumulator >= this.fixedDt && steps < this.maxSubSteps) {
-      // Clamp angular velocity before each sub-step's inertial
-      // extrapolation. AVBD ref does this every frame; in our setup
-      // it belongs to `RigidWorld` since only rigid bodies have a
-      // rotational DOF.
-      for (const body of this.bodies) {
-        const off = offsets[body.cellId]!;
-        if (dims[body.cellId]! >= 3) {
-          const w = v[off + 2]!;
-          if (w > cap) v[off + 2]! = cap;
-          else if (w < -cap) v[off + 2]! = -cap;
-        }
-      }
-      this._updateContacts();
-      this.simulation.tick(this.fixedDt);
-      this.accumulator -= this.fixedDt;
+    while (this._acc >= fixed && steps < sim.maxSubSteps) {
+      this._preTick();
+      sim.tick(fixed);
+      this._acc -= fixed;
       steps++;
     }
+    this._postTick();
+  }
+
+  /** Per-sub-step preamble: angular-speed clamp + contact manifold
+   *  refresh. Runs before each `simulation.tick`. */
+  private _preTick(): void {
+    const cap = this.maxAngularSpeed;
+    const v = this.simulation.velocities;
+    const offsets = this.constraints.solver.offsets;
+    const dims = this.constraints.solver.dims;
+    for (const body of this.bodies) {
+      const off = offsets[body.cellId]!;
+      if (dims[body.cellId]! >= 3) {
+        const w = v[off + 2]!;
+        if (w > cap) v[off + 2]! = cap;
+        else if (w < -cap) v[off + 2]! = -cap;
+      }
+    }
+    this._updateContacts();
+  }
+
+  /** Post-step finalize: push solver state into reactive body signals. */
+  private _postTick(): void {
     for (const body of this.bodies) body._syncSignals();
   }
 
@@ -1017,8 +1026,8 @@ export class RigidWorld {
         const key = `${i}_${j}`;
         seen.add(key);
         if (!this._manifolds.has(key)) {
-          const m = new BoxContact(this.cluster.solver, A, B);
-          this.cluster.solver.addForce(m);
+          const m = new BoxContact(this.constraints.solver, A, B);
+          this.constraints.solver.addForce(m);
           this._manifolds.set(key, m);
         }
       }

@@ -1,29 +1,25 @@
 // factories.ts — free constraint factories that return `Relation` values.
 //
-// Each factory is a free function that constructs a `Relation` —
-// plain data + an attach/detach lifecycle. Pass them to a cluster
-// via `c.add(rel)`:
+// Each factory returns a plain object with a `bind(c)` method (returns
+// a disposer) and any number of `Signal` fields exposing mutable
+// parameters. Pass them to a cluster via `c.add(rel)`:
 //
 //   const c = constraints({ iterations: 24 });
 //   c.add(distance(a, b, 100));
 //   const [r1, r2] = c.add(spring(b, c, 60, 200), gap(a, c, 30));
 //
-// Mutable parameters: factories that take a numeric arg also accept
-// a `Signal<number>`. Either form gives a relation whose underlying
-// param can be mutated reactively — the cluster's settle re-fires
-// on parameter changes and the inner solve picks up the new value:
+// Mutable parameters are exposed as `Signal<number>` fields directly
+// (e.g. `r.rest.value = 50`). Either pass a number (wrapped in a
+// fresh signal) or your own signal (used directly so external
+// mutations and UI bindings flow through):
 //
 //   const len = signal(100);
 //   const r = c.add(distance(a, b, len));
 //   len.value = 50;        // ← re-solves with new rest length
-//   r.rest = 75;           // ← also works (writes to the same signal)
+//   r.rest.value = 75;     // ← also works (same underlying signal)
 //
 // The runtime contract on every cell-signal arg is "value class
-// declares the `pack` trait"; this is checked by `c._bind` when the
-// relation is attached. We accept `Signal<any>` rather than a more
-// typed `Signal<unknown>` because TS treats the `setter` slot as
-// contravariant, which makes `Writable<Num>` unassignable to
-// `Signal<unknown>`.
+// declares the `pack` trait"; checked by `c._bind` when bind runs.
 //
 // Solver caveats:
 //
@@ -35,13 +31,9 @@
 //   the FD path treats duplicated slots as independent. Use
 //   `rightAngle(A, B, C)` instead of `perpendicular(A, B, B, C)`.
 
-import { type Signal } from "../signals";
-import { param } from "../signals/settle-utils";
-import {
-  type Constraints,
-  defineRelation,
-  type Relation,
-} from "./cluster";
+import { type Read, type Signal } from "../signals";
+import { type Lifecycle, param, when } from "../signals/settle-utils";
+import { type Constraints, type Relation } from "./cluster";
 import {
   BoundsForce,
   DistanceForce,
@@ -58,147 +50,128 @@ export { Strength };
 // biome-ignore lint/suspicious/noExplicitAny: Signal value type is checked at runtime via the pack trait
 type S = Signal<any>;
 
+// ─── Pin (the only "structural" relation) ────────────────────────────
+
+/** Pin a signal in place: while attached, its solver cell has mass 0
+ *  (kinematic). Removing the relation restores the prior mass.
+ *
+ *    c.add(pin(O1));                          // static pin
+ *    attachWhile(c, dragging, pin(sig));      // conditional pin */
+export function pin(sig: S): Relation {
+  return {
+    bind(c: Constraints) {
+      const id = c._bind(sig);
+      const prev = c.solver.massOf(id);
+      c.solver.setMass(id, 0);
+      return () => c.solver.setMass(id, prev);
+    },
+  };
+}
+
+/** Add `rel` to `c` while `cond` is truthy; remove it when falsy.
+ *  Disposes itself (calling `c.remove` if currently attached) when
+ *  the returned `Lifecycle.dispose()` is called. */
+export function attachWhile(c: Constraints, cond: Read<unknown>, rel: Relation): Lifecycle {
+  return when(cond, () => {
+    c.add(rel);
+    return () => c.remove(rel);
+  });
+}
+
 // ─── Equalities, distances, springs ──────────────────────────────────
 
 /** Hard equality `a = b`. Cell dims must match. */
 export function eq(a: S, b: S): Relation {
-  return defineRelation([a, b], c => {
-    const f = new EqForce(c.solver, c._bind(a), c._bind(b));
-    c.solver.addForce(f);
-    return f;
-  });
-}
-
-/** Hard distance constraint `‖b − a‖ = rest`. The returned relation
- *  exposes a mutable `rest` (number or signal) — write `r.rest = 50`
- *  or pass a `Signal<number>` and mutate that. */
-export interface DistanceRelation extends Relation {
-  /** Current rest length. Writes propagate to the underlying signal,
-   *  triggering the next solve in the normal reactive flow. */
-  rest: number;
-  /** The underlying rest-length signal — for binding to UI controls
-   *  or composing with derived signals. */
-  readonly restSignal: Signal<number>;
-}
-
-export function distance(a: S, b: S, rest: number | Signal<number>): DistanceRelation {
-  const restSig = param(rest);
-  let force: DistanceForce | undefined;
   return {
-    members: [a as S, b as S, restSig as S],
-    get rest() {
-      return restSig.value;
-    },
-    set rest(v: number) {
-      restSig.value = v;
-    },
-    restSignal: restSig,
-    attach(c) {
-      force = new DistanceForce(c.solver, c._bind(a), c._bind(b), restSig);
-      c.solver.addForce(force);
-    },
-    detach(c) {
-      if (force !== undefined) {
-        c.solver.removeForce(force);
-        force = undefined;
-      }
+    bind(c) {
+      const f = new EqForce(c.solver, c._bind(a), c._bind(b));
+      c.solver.addForce(f);
+      return () => c.solver.removeForce(f);
     },
   };
 }
 
-/** Soft distance constraint with finite stiffness (Hooke spring).
- *  Same mutable-`rest` shape as `distance`. */
-export interface SpringRelation extends DistanceRelation {}
+/** Distance constraint `‖b − a‖ = rest`.
+ *
+ *  Default is HARD (augmented-Lagrangian); pass `stiffness` for a
+ *  soft variant — the constraint becomes a Hooke spring with finite
+ *  stiffness. Both `rest` and `stiffness` are mutable signals on
+ *  the returned relation:
+ *
+ *    c.add(distance(a, b, 100));                           // hard
+ *    const r = c.add(distance(a, b, 100, { stiffness: 200 })); // spring
+ *    r.rest.value = 80;                                    // mutate length
+ *    r.stiffness?.value = 500;                             // mutate stiffness */
+export interface DistanceRelation extends Relation {
+  readonly rest: Signal<number>;
+  /** Only present when the constraint was created with finite
+   *  stiffness (i.e., as a spring). */
+  readonly stiffness?: Signal<number>;
+}
 
+export function distance(
+  a: S,
+  b: S,
+  rest: number | Signal<number>,
+  opts?: { stiffness?: number | Signal<number> },
+): DistanceRelation {
+  const rest_ = param(rest);
+  const hard = opts?.stiffness === undefined;
+  const stiff_ = hard ? undefined : param(opts.stiffness!);
+  return {
+    rest: rest_,
+    stiffness: stiff_,
+    bind(c) {
+      const f = new DistanceForce(c.solver, c._bind(a), c._bind(b), rest_, hard, stiff_);
+      c.solver.addForce(f);
+      return () => c.solver.removeForce(f);
+    },
+  };
+}
+
+/** Soft distance constraint — alias for `distance(a, b, rest, { stiffness })`. */
 export function spring(
   a: S,
   b: S,
   rest: number | Signal<number>,
-  stiffness: number,
-): SpringRelation {
-  const restSig = param(rest);
-  let force: DistanceForce | undefined;
-  return {
-    members: [a as S, b as S, restSig as S],
-    get rest() {
-      return restSig.value;
-    },
-    set rest(v: number) {
-      restSig.value = v;
-    },
-    restSignal: restSig,
-    attach(c) {
-      force = new DistanceForce(c.solver, c._bind(a), c._bind(b), restSig, false, stiffness);
-      c.solver.addForce(force);
-    },
-    detach(c) {
-      if (force !== undefined) {
-        c.solver.removeForce(force);
-        force = undefined;
-      }
-    },
-  };
+  stiffness: number | Signal<number>,
+): DistanceRelation {
+  return distance(a, b, rest, { stiffness });
 }
 
 /** Scalar relation `b = fwd(a)` between two `Num` signals. */
 export function lensNum(a: S, b: S, fwd: (x: number) => number): Relation {
-  return defineRelation([a, b], c => {
-    const f = new LensNumForce(c.solver, c._bind(a), c._bind(b), fwd);
-    c.solver.addForce(f);
-    return f;
-  });
-}
-
-// ─── Inequalities ────────────────────────────────────────────────────
-
-/** Hard 1D range `lo ≤ x ≤ hi`. Both bounds are mutable via the
- *  returned relation's `lo` / `hi` setters or via passed signals. */
-export interface BoundsRelation extends Relation {
-  lo: number;
-  hi: number;
-  readonly loSignal: Signal<number>;
-  readonly hiSignal: Signal<number>;
-}
-
-export function clamp(
-  x: S,
-  lo: number | Signal<number>,
-  hi: number | Signal<number>,
-): BoundsRelation {
-  const loSig = param(lo);
-  const hiSig = param(hi);
-  let force: BoundsForce | undefined;
   return {
-    members: [x as S, loSig as S, hiSig as S],
-    get lo() {
-      return loSig.value;
-    },
-    set lo(v: number) {
-      loSig.value = v;
-    },
-    get hi() {
-      return hiSig.value;
-    },
-    set hi(v: number) {
-      hiSig.value = v;
-    },
-    loSignal: loSig,
-    hiSignal: hiSig,
-    attach(c) {
-      force = new BoundsForce(c.solver, c._bind(x), loSig, hiSig);
-      c.solver.addForce(force);
-    },
-    detach(c) {
-      if (force !== undefined) {
-        c.solver.removeForce(force);
-        force = undefined;
-      }
+    bind(c) {
+      const f = new LensNumForce(c.solver, c._bind(a), c._bind(b), fwd);
+      c.solver.addForce(f);
+      return () => c.solver.removeForce(f);
     },
   };
 }
 
-/** Hard minimum distance: `‖b − a‖ ≥ minDist`. Used for non-overlapping
- *  circles, body-body separation, etc. */
+// ─── Inequalities ────────────────────────────────────────────────────
+
+/** Hard 1D range `lo ≤ x ≤ hi`. `r.lo` / `r.hi` are mutable signals. */
+export function clamp(
+  x: S,
+  lo: number | Signal<number>,
+  hi: number | Signal<number>,
+): Relation & { lo: Signal<number>; hi: Signal<number> } {
+  const lo_ = param(lo);
+  const hi_ = param(hi);
+  return {
+    lo: lo_,
+    hi: hi_,
+    bind(c) {
+      const f = new BoundsForce(c.solver, c._bind(x), lo_, hi_);
+      c.solver.addForce(f);
+      return () => c.solver.removeForce(f);
+    },
+  };
+}
+
+/** Hard minimum distance: `‖b − a‖ ≥ minDist`. */
 export function gap(a: S, b: S, minDist: number): Relation {
   return generic(
     [a, b],
@@ -245,7 +218,7 @@ export function inside(P: S, xLo: number, yLo: number, xHi: number, yHi: number)
   );
 }
 
-/** Hard inequality `a ≤ b` between two scalar cells. */
+/** Hard inequality `a ≤ b`. */
 export function leq(a: S, b: S): Relation {
   return generic(
     [a, b],
@@ -266,11 +239,13 @@ export function geq(a: S, b: S): Relation {
 
 /** Pull `cell` toward `target` with finite stiffness. */
 export function softTarget(cell: S, target: ArrayLike<number>, stiffness: number): Relation {
-  return defineRelation([cell], c => {
-    const f = new SoftTargetForce(c.solver, c._bind(cell), target, stiffness);
-    c.solver.addForce(f);
-    return f;
-  });
+  return {
+    bind(c) {
+      const f = new SoftTargetForce(c.solver, c._bind(cell), target, stiffness);
+      c.solver.addForce(f);
+      return () => c.solver.removeForce(f);
+    },
+  };
 }
 
 // ─── General-purpose FD constraint ───────────────────────────────────
@@ -282,22 +257,24 @@ export function generic(
   fn: ResidualFn,
   opts?: { fdStep?: number; hard?: boolean; stiffness?: number; fmax?: readonly number[] },
 ): Relation {
-  return defineRelation(cells, c => {
-    const f = new GenericForce(
-      c.solver,
-      cells.map(s => c._bind(s)),
-      rows,
-      fn,
-      opts,
-    );
-    c.solver.addForce(f);
-    if (opts?.fmax) {
-      for (let i = 0; i < opts.fmax.length && i < rows; i++) {
-        f.fmax[i]! = opts.fmax[i]!;
+  return {
+    bind(c) {
+      const f = new GenericForce(
+        c.solver,
+        cells.map(s => c._bind(s)),
+        rows,
+        fn,
+        opts,
+      );
+      c.solver.addForce(f);
+      if (opts?.fmax) {
+        for (let i = 0; i < opts.fmax.length && i < rows; i++) {
+          f.fmax[i]! = opts.fmax[i]!;
+        }
       }
-    }
-    return f;
-  });
+      return () => c.solver.removeForce(f);
+    },
+  };
 }
 
 // ─── Sketchpad primitives via `generic` ──────────────────────────────
@@ -368,8 +345,7 @@ export function rightAngle(A: S, B: S, C: S): Relation {
   });
 }
 
-/** Soft 3-point bending resistance at vertex B (cross product
- *  toward zero ⇒ A, B, C collinear). */
+/** Soft 3-point bending resistance at vertex B. */
 export function bend(A: S, B: S, C: S, stiffness: number = Strength.MEDIUM): Relation {
   return generic(
     [A, B, C],

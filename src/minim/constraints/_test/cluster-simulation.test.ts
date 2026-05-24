@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import type { Tick } from "../../core/anim";
 import { vec } from "../../signals";
-import { constraints, distance, Simulation, spring } from "../index";
+import { Simulation, constraints, distance, pin, spring } from "../index";
 
 describe("Simulation — composes solver + time-stepping", () => {
   it("velocity is per-cell, lazily allocated; mass=0 cells skip update", () => {
@@ -11,7 +11,7 @@ describe("Simulation — composes solver + time-stepping", () => {
     const b = vec(1, 0);
     const s = constraints();
     s.add(distance(a, b, 1)); // forces them both bound
-    s.pin(a);
+    s.add(pin(a));
     const sim = new Simulation(s, { gravity: [0, -10] });
     const aId = s._bind(a);
     const bId = s._bind(b);
@@ -28,7 +28,7 @@ describe("Simulation — composes solver + time-stepping", () => {
     const bob = vec(1, 0);
     const s = constraints({ iterations: 8, alpha: 0.99 });
     s.add(distance(anchor, bob, 1));
-    s.pin(anchor);
+    s.add(pin(anchor));
 
     const sim = new Simulation(s, { gravity: [0, -10] });
     let maxOffset = 0;
@@ -45,7 +45,7 @@ describe("Simulation — composes solver + time-stepping", () => {
     const b = vec(0, 0);
     const s = constraints({ iterations: 4, alpha: 0.99 });
     s.add(spring(a, b, 0, 1e3));
-    s.pin(a);
+    s.add(pin(a));
     const sim = new Simulation(s, { gravity: [0, -10] });
     const gen = sim.animate();
     gen.next(); // first park
@@ -62,7 +62,7 @@ describe("Simulation — composes solver + time-stepping", () => {
       const bob = vec(0, -1);
       const s = constraints({ iterations: 6, alpha: 0.99 });
       s.add(distance(top, bob, 1));
-      s.pin(top);
+      s.add(pin(top));
       const sim = new Simulation(s, { gravity: [0.5, 0] });
       return { sim, bob };
     };

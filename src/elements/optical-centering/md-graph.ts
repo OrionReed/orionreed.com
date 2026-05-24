@@ -16,7 +16,7 @@
 //     the rotational degree of freedom that a single pin otherwise
 //     leaves behind, and centers the layout in the viewport.
 
-import { constraints, gap, repel, Simulation, softTarget, spring } from "@minim/constraints";
+import { Simulation, attachWhile, constraints, gap, pin, repel, softTarget, spring } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -116,7 +116,7 @@ export class MdGraph extends Diagram {
     for (let i = 0; i < N; i++) {
       const sig = nodes[i]!;
       const h = s(handle(sig, { r: 6 }));
-      effect(() => (h.dragging.value ? cluster.pin(sig) : undefined));
+      attachWhile(cluster, h.dragging, pin(sig));
     }
 
     s(

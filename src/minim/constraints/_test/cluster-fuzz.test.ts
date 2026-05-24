@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { type Num, num, type Vec, vec, type Writable } from "../../signals";
-import { constraints, distance, eq, leq } from "../index";
+import { constraints, distance, eq, leq, pin } from "../index";
 import { forAll } from "./_fuzz";
 
 type WVec = Writable<Vec>;
@@ -25,8 +25,8 @@ describe("AVBD fuzz — invariants over random scenes", () => {
 
       const s = constraints({ iterations: 30 });
       for (let i = 1; i < N; i++) s.add(distance(cells[i - 1]!, cells[i]!, 1));
-      s.pin(cells[0]!);
-      s.pin(cells[N - 1]!);
+      s.add(pin(cells[0]!));
+      s.add(pin(cells[N - 1]!));
       // Multi-step warm-start to help long chains converge.
       cells[N - 1]!.value = { x: tailX, y: tailY };
       for (let k = 0; k < 10; k++) {
@@ -52,7 +52,7 @@ describe("AVBD fuzz — invariants over random scenes", () => {
       const b = num(bInit);
       const s = constraints({ iterations: 20 });
       s.add(leq(a, b));
-      s.pin(b);
+      s.add(pin(b));
       b.value = bInit + 1e-9; // trigger
       expect(a.value).toBeLessThanOrEqual(b.value + 1e-2);
     });
@@ -67,7 +67,7 @@ describe("AVBD fuzz — invariants over random scenes", () => {
 
       const s = constraints({ iterations: 30 });
       for (let i = 1; i < N; i++) s.add(eq(cells[i - 1]!, cells[i]!));
-      s.pin(cells[0]!);
+      s.add(pin(cells[0]!));
       cells[0]!.value = target;
       // Re-trigger to propagate down the chain (each iteration only
       // moves info one Gauss-Seidel hop).

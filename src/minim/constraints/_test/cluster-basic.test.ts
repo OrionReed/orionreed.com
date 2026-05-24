@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { batch, effect, num, type Vec, vec, type Writable } from "../../signals";
-import { constraints, distance, eq, lensNum, leq } from "../index";
+import { constraints, distance, eq, lensNum, leq, pin } from "../index";
 
 type WVec = Writable<Vec>;
 
@@ -12,7 +12,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
     const a = num(3);
     const b = num(7);
     c.add(eq(a, b));
-    c.pin(a);
+    c.add(pin(a));
     a.value = 5;
     expect(b.value).toBeCloseTo(5, 2);
   });
@@ -22,7 +22,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
     const a = vec(0, 0);
     const b = vec(1, 0);
     c.add(distance(a, b, 5));
-    c.pin(a);
+    c.add(pin(a));
     a.value = { x: 0.001, y: 0 };
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(5, 1);
   });
@@ -32,7 +32,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
     const a = num(0);
     const b = num(10);
     c.add(lensNum(a, b, x => 2 * x));
-    c.pin(b);
+    c.add(pin(b));
     b.value = 10.0001;
     expect(a.value).toBeCloseTo(5, 1);
   });
@@ -42,7 +42,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
     const a = num(5);
     const b = num(3);
     c.add(leq(a, b));
-    c.pin(b);
+    c.add(pin(b));
     b.value = 3.0001;
     expect(a.value).toBeLessThanOrEqual(b.value + 1e-2);
   });
@@ -54,7 +54,7 @@ describe("Cluster (writeBack) — structural single-fire", () => {
     const a = num(0);
     const b = num(0);
     c.add(eq(a, b));
-    c.pin(a);
+    c.add(pin(a));
     // Trigger initial run via a write.
     a.value = 1;
     const stepSpy = vi.spyOn(c.solver, "step");
@@ -73,7 +73,7 @@ describe("Cluster (writeBack) — structural single-fire", () => {
     const a = num(0);
     const b = num(0);
     c.add(eq(a, b));
-    c.pin(a);
+    c.add(pin(a));
     a.value = 1; // initial run
     const stepSpy = vi.spyOn(c.solver, "step");
 
@@ -93,7 +93,7 @@ describe("Cluster (writeBack) — structural single-fire", () => {
     const a = num(3);
     const b = num(7);
     c.add(eq(a, b));
-    c.pin(a);
+    c.add(pin(a));
 
     const observed: number[] = [];
     const dispose = effect(() => {
@@ -121,7 +121,7 @@ describe("Cluster (writeBack) — lens composition", () => {
     const a = vec(0, 0);
     const b = vec(5, 5);
     c.add(eq(a.x, b.x));
-    c.pin(a.x);
+    c.add(pin(a.x));
     a.value = { x: 3, y: 0 };
     expect(b.value.x).toBeCloseTo(3, 1);
     expect(b.value.y).toBeCloseTo(5, 1); // y untouched
@@ -132,7 +132,7 @@ describe("Cluster (writeBack) — lens composition", () => {
     const a = vec(0, 0);
     const b = vec(5, 5);
     c.add(eq(a.x, b.x));
-    c.pin(a.x);
+    c.add(pin(a.x));
     a.x.value = 7;
     expect(a.value.x).toBeCloseTo(7, 1);
     expect(b.value.x).toBeCloseTo(7, 1);
@@ -146,7 +146,7 @@ describe("Simulation — numerical robustness", () => {
     const b = vec(10, 0);
     const c = constraints();
     c.add(distance(a, b, 10));
-    c.pin(a);
+    c.add(pin(a));
     const sim = new Simulation(c, { gravity: [0, 100] });
     sim.tick(0);
     sim.tick(0);
@@ -177,8 +177,8 @@ describe("Simulation — numerical robustness", () => {
       for (let i = 2; i < W; i++) c.add(bend(grid[j]![i - 2]!, grid[j]![i - 1]!, grid[j]![i]!, 0.5));
     for (let i = 0; i < W; i++)
       for (let j = 2; j < H; j++) c.add(bend(grid[j - 2]![i]!, grid[j - 1]![i]!, grid[j]![i]!, 0.5));
-    c.pin(grid[0]![0]!);
-    c.pin(grid[0]![W - 1]!);
+    c.add(pin(grid[0]![0]!));
+    c.add(pin(grid[0]![W - 1]!));
 
     const sim = new Simulation(c, { gravity: [0, 90], damping: 0.99 });
     for (let f = 0; f < 600; f++) sim.tick(1 / 60);
@@ -215,14 +215,14 @@ describe("Simulation — numerical robustness", () => {
       for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM));
     for (let i = 0; i < W; i++)
       for (let j = 1; j < H; j++) c.add(spring(grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM));
-    c.pin(grid[0]![0]!);
-    c.pin(grid[0]![W - 1]!);
+    c.add(pin(grid[0]![0]!));
+    c.add(pin(grid[0]![W - 1]!));
 
     const sim = new Simulation(c, { gravity: [0, 90], damping: 0.94 });
     for (let f = 0; f < 60; f++) sim.tick(1 / 60);
 
     const drag = grid[H - 1]![W - 1]!;
-    c.pin(drag);
+    c.add(pin(drag));
     let seed = 31;
     const rand = () => {
       seed = (seed * 1664525 + 1013904223) >>> 0;
@@ -275,7 +275,7 @@ describe("Simulation — numerical robustness", () => {
     for (let i = 0; i < N; i++) links.push(vec(i * LINK, 0));
     const c = constraints({ iterations: 12, alpha: 0.99 });
     for (let i = 1; i < N; i++) c.add(distance(links[i - 1]!, links[i]!, LINK));
-    c.pin(links[0]!);
+    c.add(pin(links[0]!));
 
     const sim = new Simulation(c, { gravity: [0, 220], damping: 0.985 });
     for (let f = 0; f < 600; f++) sim.tick(1 / 60);
@@ -300,9 +300,9 @@ describe("Cluster — numerical robustness", () => {
     c.add(distance(O1, A, 80));
     c.add(distance(A, B, 220));
     c.add(distance(B, O2, 50));
-    c.pin(O1);
-    c.pin(O2);
-    c.pin(B);
+    c.add(pin(O1));
+    c.add(pin(O2));
+    c.add(pin(B));
 
     let seed = 999;
     const rand = () => {
@@ -337,7 +337,7 @@ describe("Cluster — numerical robustness", () => {
     // deficient. The guard in `_primalSweep` should keep positions
     // finite regardless.
     c.add(perpendicular(A, B, B, C));
-    c.pin(A);
+    c.add(pin(A));
 
     let seed = 12345;
     const rand = () => {
@@ -363,7 +363,7 @@ describe("Cluster — constraint lifecycle", () => {
     const a = num(0);
     const b = num(0);
     const link = c.add(eq(a, b));
-    c.pin(a);
+    c.add(pin(a));
     a.value = 5;
     expect(b.value).toBeCloseTo(5, 2);
 
@@ -377,7 +377,7 @@ describe("Cluster — constraint lifecycle", () => {
     const a = vec(0, 0);
     const b = vec(1, 0);
     const link = c.add(distance(a, b, 3));
-    c.pin(a);
+    c.add(pin(a));
     a.value = { x: 0.0001, y: 0 };
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(3, 1);
 

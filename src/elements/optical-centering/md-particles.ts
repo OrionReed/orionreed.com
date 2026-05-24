@@ -10,7 +10,7 @@
 // solver is doing 24 wall constraints + 276 pairwise gap
 // constraints every frame.
 
-import { constraints, gap, inside, Simulation } from "@minim/constraints";
+import { Simulation, attachWhile, constraints, gap, inside, pin } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -71,7 +71,7 @@ export class MdParticles extends Diagram {
       dot.el.style.cursor = "grab";
       const dragging = signal(false);
       drag(dot, particles[i]!, dragging);
-      effect(() => (dragging.value ? cluster.pin(particles[i]!) : undefined));
+      attachWhile(cluster, dragging, pin(particles[i]!));
     }
 
     const sim = new Simulation(cluster, { gravity: [0, 320], damping: 0.99 });

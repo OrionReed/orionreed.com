@@ -151,9 +151,9 @@ export class MdRigidRope extends Diagram {
       effect(() => {
         if (!dragging.value) return;
         const p = link.position.value;
-        const off = world.cluster.solver.offsets[link.cellId]!;
-        world.cluster.solver.positions[off]! = p.x;
-        world.cluster.solver.positions[off + 1]! = p.y;
+        const off = world.constraints.solver.offsets[link.cellId]!;
+        world.constraints.solver.positions[off]! = p.x;
+        world.constraints.solver.positions[off + 1]! = p.y;
       });
     }
 

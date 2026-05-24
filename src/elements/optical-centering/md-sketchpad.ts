@@ -5,7 +5,7 @@
 // engine re-solves on every write and the rest of the figure
 // reflows to keep all four constraints satisfied.
 
-import { constraints, distance, rightAngle } from "@minim/constraints";
+import { attachWhile, constraints, distance, pin, rightAngle } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -51,7 +51,7 @@ export class MdSketchpad extends Diagram {
       [D, s(handle(D))],
     ];
     for (const [sig, h] of handles) {
-      effect(() => (h.dragging.value ? cluster.pin(sig) : undefined));
+      attachWhile(cluster, h.dragging, pin(sig));
     }
 
     s(

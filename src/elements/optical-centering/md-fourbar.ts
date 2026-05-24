@@ -6,7 +6,7 @@
 // over four DOF (A, B), the mechanism has one internal degree of
 // freedom — drag a joint anywhere and the rest of the loop follows.
 
-import { constraints, distance } from "@minim/constraints";
+import { attachWhile, constraints, distance, pin } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -40,8 +40,8 @@ export class MdFourbar extends Diagram {
 
     const cluster = constraints({ iterations: 24 });
     cluster.add(distance(O1, A, crank), distance(A, B, coupler), distance(B, O2, rocker));
-    cluster.pin(O1);
-    cluster.pin(O2);
+    cluster.add(pin(O1));
+    cluster.add(pin(O2));
 
     s(
       line(O1, O2, { thin: true, opacity: 0.18 }),
@@ -57,7 +57,7 @@ export class MdFourbar extends Diagram {
       [B, s(handle(B, { fill: "#e25c5c", r: 7 }))],
     ];
     for (const [sig, h] of handles) {
-      effect(() => (h.dragging.value ? cluster.pin(sig) : undefined));
+      attachWhile(cluster, h.dragging, pin(sig));
     }
 
     s(

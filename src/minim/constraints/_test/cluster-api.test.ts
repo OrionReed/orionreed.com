@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { num, vec } from "../../signals";
-import { constraints, clamp, distance, gap, geq, inside, leq, Strength, spring } from "../index";
+import { Strength, clamp, constraints, distance, gap, geq, inside, leq, pin, spring } from "../index";
 
 describe("API — Strength constants", () => {
   it("constants ordered low → high; HARD = ∞", () => {
@@ -20,7 +20,7 @@ describe("API — Strength constants", () => {
     const b = vec(5, 0);
     const s = constraints({ iterations: 30 });
     s.add(spring(a, b, 1, Strength.STRONG));
-    s.pin(a);
+    s.add(pin(a));
     a.value = { x: 0.0001, y: 0 };
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(1, 1);
   });
@@ -41,7 +41,7 @@ describe("API — inequality factories", () => {
     const b = num(3);
     const s = constraints({ iterations: 30 });
     s.add(leq(a, b));
-    s.pin(b);
+    s.add(pin(b));
     b.value = 3.0001;
     expect(a.value).toBeLessThanOrEqual(b.value + 1e-2);
   });
@@ -51,7 +51,7 @@ describe("API — inequality factories", () => {
     const b = num(5);
     const s = constraints({ iterations: 30 });
     s.add(geq(a, b));
-    s.pin(b);
+    s.add(pin(b));
     b.value = 5.0001;
     expect(a.value).toBeGreaterThanOrEqual(5 - 1e-2);
   });
@@ -61,7 +61,7 @@ describe("API — inequality factories", () => {
     const b = vec(0.5, 0);
     const s = constraints({ iterations: 30 });
     s.add(gap(a, b, 5));
-    s.pin(a);
+    s.add(pin(a));
     a.value = { x: 0.0001, y: 0 };
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeGreaterThanOrEqual(
       5 - 1e-2,
@@ -73,7 +73,7 @@ describe("API — inequality factories", () => {
     const b = vec(20, 0);
     const s = constraints({ iterations: 10 });
     s.add(gap(a, b, 5));
-    s.pin(a);
+    s.add(pin(a));
     a.value = { x: 0.0001, y: 0 };
     expect(b.value.x).toBeCloseTo(20, 1);
     expect(b.value.y).toBeCloseTo(0, 1);
@@ -106,7 +106,7 @@ describe("API — inequality factories", () => {
     s.add(inside(a, 0, 0, 10, 10));
     s.add(inside(b, 0, 0, 10, 10));
     s.add(gap(a, b, 4));
-    s.pin(a);
+    s.add(pin(a));
     a.value = { x: 2.0001, y: 5 };
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeGreaterThanOrEqual(
       4 - 1e-2,
@@ -121,21 +121,21 @@ describe("API — `pin()` is the canonical drag mechanism", () => {
     const b = vec(0, 0);
     const s = constraints({ iterations: 30 });
     s.add(distance(a, b, 1));
-    s.pin(a);
+    s.add(pin(a));
     a.value = { x: 7.0001, y: 11 };
     expect(a.value.x).toBeCloseTo(7, 1);
     expect(a.value.y).toBeCloseTo(11, 1);
     expect(Math.hypot(b.value.x - 7, b.value.y - 11)).toBeCloseTo(1, 1);
   });
 
-  it("unpinning restores prior mass", () => {
+  it("removing a pin relation restores prior mass", () => {
     const a = num(0);
     const b = num(0);
     const s = constraints({ iterations: 20 });
     s.add(leq(a, b));
-    const release = s.pin(a);
+    const r = s.add(pin(a));
     expect(s.solver.massOf(s._bind(a))).toBe(0);
-    release();
+    s.remove(r);
     expect(s.solver.massOf(s._bind(a))).toBe(1);
   });
 });
@@ -157,7 +157,7 @@ describe("API — variadic add", () => {
     const b = vec(1, 0);
     const r = s.add(distance(a, b, 1));
     expect(s.solver.forces.length).toBe(1);
-    expect(typeof r.attach).toBe("function");
+    expect(typeof r.bind).toBe("function");
   });
 
   it("multiple relations returns an array (destructure-friendly)", () => {
@@ -167,8 +167,8 @@ describe("API — variadic add", () => {
     const c = vec(2, 0);
     const [r1, r2] = s.add(distance(a, b, 1), distance(b, c, 1));
     expect(s.solver.forces.length).toBe(2);
-    expect(typeof r1.attach).toBe("function");
-    expect(typeof r2.attach).toBe("function");
+    expect(typeof r1.bind).toBe("function");
+    expect(typeof r2.bind).toBe("function");
   });
 });
 
@@ -197,35 +197,34 @@ describe("API — settable solver opts", () => {
 });
 
 describe("API — mutable parameters", () => {
-  it("distance.rest setter mutates the underlying signal and re-solves", () => {
+  it("distance.rest mutation re-solves", () => {
     const s = constraints({ iterations: 30 });
     const a = vec(0, 0);
     const b = vec(5, 0);
     const r = s.add(distance(a, b, 5));
-    s.pin(a);
+    s.add(pin(a));
     a.value = { x: 0.0001, y: 0 };
     // Verify initial rest distance
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(5, 1);
 
-    // Mutate rest length via the relation's setter — should re-solve.
-    r.rest = 10;
+    // Mutate rest length — `r.rest` is a Signal<number>.
+    r.rest.value = 10;
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(10, 1);
 
-    // Or via the underlying signal — same effect.
-    r.restSignal.value = 3;
+    r.rest.value = 3;
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(3, 1);
   });
 
-  it("clamp.lo/hi setters mutate via the underlying signals", () => {
+  it("clamp.lo / clamp.hi mutation via signal `.value`", () => {
     const s = constraints({ iterations: 30 });
     const x = num(5);
     const r = s.add(clamp(x, 0, 10));
-    expect(r.lo).toBe(0);
-    expect(r.hi).toBe(10);
+    expect(r.lo.value).toBe(0);
+    expect(r.hi.value).toBe(10);
 
     // Tighten the upper bound.
-    r.hi = 3;
-    expect(r.hiSignal.value).toBe(3);
+    r.hi.value = 3;
+    expect(r.hi.value).toBe(3);
     // Trigger a solve by writing x.
     x.value = 100;
     expect(x.value).toBeLessThanOrEqual(3 + 0.1);

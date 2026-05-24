@@ -8,8 +8,8 @@ describe("box-box SAT collide", () => {
     const w = new RigidWorld({ gravity: [0, -10] });
     const ground = w.add({ size: { w: 50, h: 1 }, density: 0 }, { x: 0, y: 0 });
     const box = w.add({ size: { w: 1, h: 1 } }, { x: 0, y: 0.5 }); // overlapping
-    const m = new BoxContact(w.cluster.solver, ground as Body, box as Body);
-    w.cluster.solver.addForce(m);
+    const m = new BoxContact(w.constraints.solver, ground as Body, box as Body);
+    w.constraints.solver.addForce(m);
     const ok = m.initialize();
     expect(ok).toBe(true);
     expect(m.numContacts).toBeGreaterThan(0);
@@ -19,7 +19,7 @@ describe("box-box SAT collide", () => {
     const w = new RigidWorld({ gravity: [0, -10] });
     const ground = w.add({ size: { w: 50, h: 1 }, density: 0 }, { x: 0, y: 0 });
     const box = w.add({ size: { w: 1, h: 1 } }, { x: 0, y: 10 });
-    const m = new BoxContact(w.cluster.solver, ground as Body, box as Body);
+    const m = new BoxContact(w.constraints.solver, ground as Body, box as Body);
     m.initialize();
     expect(m.numContacts).toBe(0);
   });
@@ -54,14 +54,14 @@ describe("RigidWorld — basics", () => {
     const w = new RigidWorld({ gravity: [0, -10] });
     const ground = w.add({ size: { w: 50, h: 1 }, density: 0 }, { x: 0, y: 0 });
     expect(ground.mass).toBe(0);
-    expect(w.cluster.solver.massOf(ground.cellId)).toBe(0);
+    expect(w.constraints.solver.massOf(ground.cellId)).toBe(0);
   });
 
   it("body's mass matrix is diag(m, m, I)", () => {
     const w = new RigidWorld();
     const box = w.add({ size: { w: 2, h: 1 }, density: 1 }, { x: 0, y: 0 });
-    const off = w.cluster.solver.offsets[box.cellId]!;
-    const masses = w.cluster.solver.masses;
+    const off = w.constraints.solver.offsets[box.cellId]!;
+    const masses = w.constraints.solver.masses;
     expect(masses[off]!).toBeCloseTo(2); // m = 2*1*1
     expect(masses[off + 1]!).toBeCloseTo(2);
     expect(masses[off + 2]!).toBeCloseTo((2 * (4 + 1)) / 12); // I = m*(w² + h²)/12
@@ -94,7 +94,7 @@ describe("RigidWorld — basics", () => {
     for (let f = 0; f < 600; f++) w.step(1 / 60);
     let maxV = 0;
     for (const b of boxes) {
-      const off = w.cluster.solver.offsets[b.cellId]!;
+      const off = w.constraints.solver.offsets[b.cellId]!;
       const vx = w.simulation.velocities[off]!;
       const vy = w.simulation.velocities[off + 1]!;
       const va = w.simulation.velocities[off + 2]!;
@@ -175,7 +175,7 @@ describe("RigidWorld — basics", () => {
     // Sideways kick on the bottom box. With fixed-dt sub-stepping
     // and λ warm-start decay restored, the stack should weather a
     // ~2.5× box-width per second kick without collapsing.
-    const off = w.cluster.solver.offsets[boxes[0]!.cellId]!;
+    const off = w.constraints.solver.offsets[boxes[0]!.cellId]!;
     w.simulation.velocities[off]! += 250;
     for (let f = 0; f < 600; f++) w.step(1 / 60);
     for (let i = 1; i < boxes.length; i++) {
@@ -213,7 +213,7 @@ describe("RigidWorld — basics", () => {
     let maxLinearV = 0;
     let maxAngularV = 0;
     for (const b of boxes) {
-      const off = w.cluster.solver.offsets[b.cellId]!;
+      const off = w.constraints.solver.offsets[b.cellId]!;
       const vx = w.simulation.velocities[off]!;
       const vy = w.simulation.velocities[off + 1]!;
       const va = w.simulation.velocities[off + 2]!;

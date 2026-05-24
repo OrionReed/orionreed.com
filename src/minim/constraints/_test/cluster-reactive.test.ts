@@ -17,7 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 import { batch, effect, Num, num as numSig, Vec, vec as vecSig } from "../../signals";
-import { constraints, distance, eq, leq } from "../index";
+import { constraints, distance, eq, leq, pin } from "../index";
 
 describe("AVBD reactive — basic signal binding", () => {
   it("eq(sigA, sigB) settles to a common value when both are free", () => {
@@ -37,11 +37,11 @@ describe("AVBD reactive — basic signal binding", () => {
     const b = numSig(7);
     s.add(eq(a, b));
 
-    const release = s.pin(a);
+    const r = s.add(pin(a));
     a.value = 5;
     expect(a.value).toBeCloseTo(5, 2);
     expect(b.value).toBeCloseTo(5, 2);
-    release();
+    s.remove(r);
   });
 
   it("distance(vecA, vecB) on Vec signals", () => {
@@ -51,7 +51,7 @@ describe("AVBD reactive — basic signal binding", () => {
     s.add(distance(a, b, 5));
 
     // Pin a so the constraint pulls b out, not both toward each other.
-    s.pin(a);
+    s.add(pin(a));
     // Write a fresh value to a (different from initial) to trigger the solver.
     a.value = { x: 0.1, y: 0 };
     const av = a.value;
@@ -64,7 +64,7 @@ describe("AVBD reactive — basic signal binding", () => {
     const a = numSig(3);
     const b = numSig(7);
     s.add(eq(a, b));
-    s.pin(a);
+    s.add(pin(a));
 
     let observed = -1;
     const dispose = effect(() => {
@@ -88,7 +88,7 @@ describe("AVBD reactive — basic signal binding", () => {
     const a = numSig(0);
     const b = numSig(0);
     s.add(eq(a, b));
-    s.pin(a);
+    s.add(pin(a));
 
     let bWrites = 0;
     const dispose = effect(() => {
@@ -111,7 +111,7 @@ describe("AVBD reactive — basic signal binding", () => {
     const c = numSig(0);
     s.add(eq(a, b));
     s.add(eq(b, c));
-    s.pin(a);
+    s.add(pin(a));
 
     let cWrites = 0;
     const dispose = effect(() => {
@@ -144,7 +144,7 @@ describe("AVBD reactive — lens composition", () => {
     const b = vecSig(5, 5);
 
     s.add(eq(a.x, b.x));
-    s.pin(a.x);
+    s.add(pin(a.x));
     a.value = { x: 3, y: 0 };
 
     expect(b.value.x).toBeCloseTo(3, 2);
@@ -156,7 +156,7 @@ describe("AVBD reactive — lens composition", () => {
     const a = vecSig(0, 0);
     const b = vecSig(5, 5);
     s.add(eq(a.x, b.x));
-    s.pin(a.x);
+    s.add(pin(a.x));
 
     a.x.value = 7;
     expect(a.value.x).toBeCloseTo(7, 2);
@@ -170,7 +170,7 @@ describe("AVBD reactive — inequalities", () => {
     const a = numSig(3);
     const b = numSig(3);
     s.add(leq(a, b));
-    s.pin(b);
+    s.add(pin(b));
 
     // Push a above b; constraint should saturate.
     a.value = 10; // expect to be pulled back to ≤ b

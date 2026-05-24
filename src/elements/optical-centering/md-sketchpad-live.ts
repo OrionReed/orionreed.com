@@ -18,10 +18,12 @@
 // does. Drags are universal — every point is always draggable.
 
 import {
+  attachWhile,
   type Constraints,
   constraints,
   distance,
   eq,
+  pin,
   type Relation,
   rightAngle,
 } from "@minim/constraints";
@@ -385,8 +387,8 @@ function renderPoint(
   // drag is the explicit override (matches md-graph's idiom).
   dot.track(drag(dot, p.pos));
 
-  // Cluster pin while pinned. Effect cleanup unpins on toggle-off.
-  dot.effect(() => (p.pinned.value ? cluster.pin(p.pos) : undefined));
+  // Cluster pin while pinned.
+  attachWhile(cluster, p.pinned, pin(p.pos));
 
   dot.el.style.cursor = "grab";
 

@@ -183,9 +183,9 @@ export class MdChain extends Diagram {
     effect(() => {
       if (!dragging.value) return;
       const p = tipBody.position.value;
-      const off = world.cluster.solver.offsets[tipBody.cellId]!;
-      world.cluster.solver.positions[off]! = p.x;
-      world.cluster.solver.positions[off + 1]! = p.y;
+      const off = world.constraints.solver.offsets[tipBody.cellId]!;
+      world.constraints.solver.positions[off]! = p.x;
+      world.constraints.solver.positions[off + 1]! = p.y;
     });
 
     // Mid-rope handle so the user can grab the rope by the middle too.
@@ -207,9 +207,9 @@ export class MdChain extends Diagram {
     effect(() => {
       if (!midDragging.value) return;
       const p = midBody.position.value;
-      const off = world.cluster.solver.offsets[midBody.cellId]!;
-      world.cluster.solver.positions[off]! = p.x;
-      world.cluster.solver.positions[off + 1]! = p.y;
+      const off = world.constraints.solver.offsets[midBody.cellId]!;
+      world.constraints.solver.positions[off]! = p.x;
+      world.constraints.solver.positions[off + 1]! = p.y;
     });
 
     this.anim.start(drive(tick => world.step(tick.dt)));

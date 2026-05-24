@@ -18,7 +18,6 @@ import { describe, expect, it } from "vitest";
 import {
   each,
   param,
-  type Relation,
   settle,
   signal,
   type Signal,
@@ -103,8 +102,8 @@ describe("validation: relate(a, b) rebuilt on settle", () => {
 //   - mutable params via getter/setter (none needed for eq, but the
 //     class shape is the same)
 
-interface EqRelation extends Relation {
-  // No mutable params for eq; just the two members.
+interface EqRelation {
+  members: readonly Signal<unknown>[];
 }
 
 function eq(a: Signal<number>, b: Signal<number>): EqRelation {
@@ -348,13 +347,13 @@ describe("validation: manual-mode settle as time-stepped primitive", () => {
   });
 });
 
-// ─── 4. param() + Relation interface composing in a fake-AVBD ───────
+// ─── 4. param() composing in a fake-AVBD ────────────────────────────
 //
-// Demonstrates that a relation class with mutable params (Signal-backed)
-// works under settle: mutating `dist.distance` re-fires the cluster
-// without a structural rebuild.
+// Demonstrates that a relation-shaped class with mutable params
+// (Signal-backed) works under settle: mutating `dist.distance`
+// re-fires the cluster without a structural rebuild.
 
-class MockDistance implements Relation {
+class MockDistance {
   readonly members: readonly Signal<unknown>[];
   private readonly _d: Signal<number>;
 

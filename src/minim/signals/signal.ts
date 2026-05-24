@@ -1254,14 +1254,6 @@ class Effect implements ReactiveNode {
 // happens on construction. Use case: per-frame physics where you
 // want to coalesce all sub-frame mutations into a single tick.
 
-/** A relation is something that ties signals together. The framework
- *  only cares about `members` — the signals the relation touches.
- *  Each kernel (AVBD, Cassowary, propagator, …) extends this with its
- *  own attach/detach contract; the framework imposes no further shape. */
-export interface Relation {
-  readonly members: readonly Signal<unknown>[];
-}
-
 /** Handle to a `settle` invocation. */
 export interface Settle {
   /** Tear down: unsubscribe from every signal, drop internal state. */

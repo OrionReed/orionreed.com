@@ -122,12 +122,11 @@ export class LensNumForce extends Force {
 // ─── Distance constraint (Vec ↔ Vec) ─────────────────────────────────
 
 export class DistanceForce extends Force {
-  /** The mutable rest-length signal (writable). Reading or writing
-   *  `.value` participates in normal reactivity — set it from a
-   *  Relation wrapper's setter for ergonomic mutation. */
+  /** Rest-length signal. Cached once per `solver.step()` in
+   *  `initialize()` — the inner loop reads only the primitive. */
   readonly rest: Signal<number>;
-  /** Snapshot of `rest.value` at the start of each `solver.step()`,
-   *  used in the inner loop to keep the hot path signal-free. */
+  /** Optional mutable stiffness signal (only set when `hard=false`). */
+  readonly stiffnessSig?: Signal<number>;
   private _restCached = 0;
   private _cachedNx = 0;
   private _cachedNy = 0;
@@ -140,7 +139,7 @@ export class DistanceForce extends Force {
     b: number,
     rest: number | Signal<number>,
     hard = true,
-    stiffness = 1e6,
+    stiffness?: number | Signal<number>,
   ) {
     if (solver.dims[a]! !== 2 || solver.dims[b]! !== 2) {
       throw new Error("distance: both cells must be Vec (dim=2)");
@@ -148,7 +147,10 @@ export class DistanceForce extends Force {
     super(solver, [a, b], 1);
     this.rest = param(rest);
     this._restCached = this.rest.peek();
-    if (!hard) this.stiffness.fill(stiffness);
+    if (!hard) {
+      this.stiffnessSig = param(stiffness ?? 1e6);
+      this.stiffness.fill(this.stiffnessSig.peek());
+    }
   }
 
   initialize(): boolean {
@@ -159,6 +161,10 @@ export class DistanceForce extends Force {
     // signal DAG. The inner per-iteration loop reads the cached
     // primitive only — no signals on the hot path.
     this._restCached = this.rest.value;
+    if (this.stiffnessSig !== undefined) {
+      const k = this.stiffnessSig.value;
+      this.stiffness[0]! = k;
+    }
     return true;
   }
 

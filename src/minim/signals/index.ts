@@ -94,7 +94,6 @@ export {
   lens,
   type Of,
   type Read,
-  type Relation,
   type Settle,
   settle,
   Signal,
