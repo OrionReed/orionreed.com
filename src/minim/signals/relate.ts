@@ -23,8 +23,8 @@
 
 import { effect, type Signal, type WritableBrand } from "./signal";
 
-export interface Relation {
-  /** Tear down the relation. */
+/** Handle returned by `relate` — disposable bidirectional binding. */
+export interface RelateHandle {
   dispose(): void;
 }
 
@@ -35,7 +35,7 @@ export function relate<A, B>(
   b: Signal<B> & WritableBrand,
   fwd: (a: A) => B,
   bwd: (b: B) => A,
-): Relation {
+): RelateHandle {
   const aSig = a as Signal<A>;
   const bSig = b as Signal<B>;
   const e1 = effect(() => {

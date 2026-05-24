@@ -80,7 +80,7 @@ export {
 // `Cls.derive([p1, p2, ...], fn)` for RO. The `fanin` helper that
 // used to live here is now an engine-internal `_fanin` invoked by
 // these surfaces — same hot path, cleaner public API.
-export { type Relation, relate } from "./relate";
+export { type RelateHandle, relate } from "./relate";
 // ─── Engine ───────────────────────────────────────────────────────
 export {
   batch,
@@ -94,6 +94,9 @@ export {
   lens,
   type Of,
   type Read,
+  type Relation,
+  type Settle,
+  settle,
   Signal,
   type SignalOptions,
   setSignalWriteHook,
@@ -104,6 +107,14 @@ export {
   value,
   type WritableBrand,
 } from "./signal";
+// ─── Settle utilities (reactive-collection lifecycle helpers) ────
+//
+// `when` collides with the existing animator-flavoured `when` from
+// `./anim`; consumers that need the settle-flavoured lifecycle helper
+// import it explicitly from "./settle-utils" rather than the
+// top-level index. `each` and `param` have no collisions and
+// re-export from here is fine.
+export { each, type Lifecycle, param } from "./settle-utils";
 // ─── Traits ───────────────────────────────────────────────────────
 export {
   type Equals,
