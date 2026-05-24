@@ -7,12 +7,11 @@
 // and the quad becomes a rigid body that only translates and
 // rotates as a whole.
 
-import { attachWhile, constraints, distance, pin, type Relation } from "@minim/constraints";
+import { constraints, distance, pin } from "@minim/constraints";
 import {
   Anchor,
   circle,
   Diagram,
-  effect,
   handle,
   label,
   line,
@@ -37,23 +36,17 @@ export class MdRigid extends Diagram {
     const D = vec(cx - 80, cy + 60);
 
     const cluster = constraints({ iterations: 16 });
-    cluster.add(distance(A, B, 160));
-    cluster.add(distance(B, C, 120));
-    cluster.add(distance(C, D, 160));
-    cluster.add(distance(D, A, 120));
-    const diag = cluster.add(distance(A, C, Math.hypot(160, 120)));
+    cluster.add(
+      distance(A, B, 160),
+      distance(B, C, 120),
+      distance(C, D, 160),
+      distance(D, A, 120),
+    );
 
-    // Diagonal toggle: add / remove the brace relation.
+    // Diagonal toggle: bracing is a unary `addWhile` with the
+    // diagonal distance relation — flips reactively with the signal.
     const braced = signal(true);
-    let current: Relation | undefined = diag;
-    effect(() => {
-      if (braced.value && current === undefined) {
-        current = cluster.add(distance(A, C, Math.hypot(160, 120)));
-      } else if (!braced.value && current !== undefined) {
-        cluster.remove(current);
-        current = undefined;
-      }
-    });
+    cluster.addWhile(braced, distance(A, C, Math.hypot(160, 120)));
 
     s(line(A, B));
     s(line(B, C));
@@ -68,7 +61,7 @@ export class MdRigid extends Diagram {
       [D, s(handle(D))],
     ];
     for (const [sig, h] of handles) {
-      attachWhile(cluster, h.dragging, pin(sig));
+      cluster.addWhile(h.dragging, pin(sig));
     }
 
     // Click-to-toggle on the diagonal label.

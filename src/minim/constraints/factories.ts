@@ -31,8 +31,8 @@
 //   the FD path treats duplicated slots as independent. Use
 //   `rightAngle(A, B, C)` instead of `perpendicular(A, B, B, C)`.
 
-import { type Read, type Signal } from "../signals";
-import { type Lifecycle, param, when } from "../signals/settle-utils";
+import { type Signal } from "../signals";
+import { param } from "../signals/settle-utils";
 import { type Constraints, type Relation } from "./cluster";
 import {
   BoundsForce,
@@ -55,8 +55,8 @@ type S = Signal<any>;
 /** Pin a signal in place: while attached, its solver cell has mass 0
  *  (kinematic). Removing the relation restores the prior mass.
  *
- *    c.add(pin(O1));                          // static pin
- *    attachWhile(c, dragging, pin(sig));      // conditional pin */
+ *    c.add(pin(O1));                       // static pin
+ *    c.addWhile(h.dragging, pin(sig));     // conditional pin */
 export function pin(sig: S): Relation {
   return {
     bind(c: Constraints) {
@@ -66,16 +66,6 @@ export function pin(sig: S): Relation {
       return () => c.solver.setMass(id, prev);
     },
   };
-}
-
-/** Add `rel` to `c` while `cond` is truthy; remove it when falsy.
- *  Disposes itself (calling `c.remove` if currently attached) when
- *  the returned `Lifecycle.dispose()` is called. */
-export function attachWhile(c: Constraints, cond: Read<unknown>, rel: Relation): Lifecycle {
-  return when(cond, () => {
-    c.add(rel);
-    return () => c.remove(rel);
-  });
 }
 
 // ─── Equalities, distances, springs ──────────────────────────────────

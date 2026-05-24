@@ -7,12 +7,11 @@
 // inner vertex and the bracket articulates while keeping its
 // vertices on their respective loci.
 
-import { attachWhile, collinear, constraints, distance, equalDist, onCircle, pin, rightAngle } from "@minim/constraints";
+import { collinear, constraints, distance, equalDist, onCircle, pin, rightAngle } from "@minim/constraints";
 import {
   Anchor,
   circle,
   Diagram,
-  effect,
   handle,
   label,
   line,
@@ -44,12 +43,14 @@ export class MdIncidence extends Diagram {
     const M = vec(cx - 30, cy); // free inner vertex
 
     const cluster = constraints({ iterations: 24 });
-    cluster.add(onCircle(P, center, RADIUS));
-    cluster.add(collinear(Q, L1, L2));
-    cluster.add(distance(P, M, BAR));
-    cluster.add(distance(M, Q, BAR));
-    cluster.add(equalDist(P, M, M, Q));
-    cluster.add(rightAngle(P, M, Q));
+    cluster.add(
+      onCircle(P, center, RADIUS),
+      collinear(Q, L1, L2),
+      distance(P, M, BAR),
+      distance(M, Q, BAR),
+      equalDist(P, M, M, Q),
+      rightAngle(P, M, Q),
+    );
 
     // Render the loci behind everything else.
     s(circle(center, RADIUS, { thin: true, opacity: 0.4 }));
@@ -71,7 +72,7 @@ export class MdIncidence extends Diagram {
       [M, s(handle(M, { fill: "#f5a623", r: 7 })), "M"],
     ];
     for (const [sig, h] of handles) {
-      attachWhile(cluster, h.dragging, pin(sig));
+      cluster.addWhile(h.dragging, pin(sig));
     }
 
     s(

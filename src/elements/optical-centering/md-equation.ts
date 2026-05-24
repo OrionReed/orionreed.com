@@ -8,7 +8,7 @@
 // surface closest to the current values, which feels like
 // "redistribute the violation among the un-pinned cells."
 
-import { attachWhile, clamp, constraints, generic, pin } from "@minim/constraints";
+import { clamp, constraints, generic, pin } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -81,7 +81,7 @@ export class MdEquation extends Diagram {
       dot.el.style.cursor = "ew-resize";
       const dragging = signal(false);
       drag(dot, handlePos, dragging);
-      attachWhile(cluster, dragging, pin(t.sig));
+      cluster.addWhile(dragging, pin(t.sig));
 
       s(
         label(fixedV(trackX0 - 30, t.y + 4), t.label, {

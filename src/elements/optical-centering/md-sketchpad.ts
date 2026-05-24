@@ -5,12 +5,11 @@
 // engine re-solves on every write and the rest of the figure
 // reflows to keep all four constraints satisfied.
 
-import { attachWhile, constraints, distance, pin, rightAngle } from "@minim/constraints";
+import { constraints, distance, pin, rightAngle } from "@minim/constraints";
 import {
   Anchor,
   circle,
   Diagram,
-  effect,
   handle,
   label,
   line,
@@ -34,10 +33,12 @@ export class MdSketchpad extends Diagram {
     const D = vec(cx + 140, cy + 60);
 
     const cluster = constraints({ iterations: 24 });
-    cluster.add(distance(A, B, 160));
-    cluster.add(distance(B, C, 120));
-    cluster.add(distance(C, D, 80));
-    cluster.add(rightAngle(A, B, C));
+    cluster.add(
+      distance(A, B, 160),
+      distance(B, C, 120),
+      distance(C, D, 80),
+      rightAngle(A, B, C),
+    );
 
     s(line(A, B));
     s(line(B, C));
@@ -51,7 +52,7 @@ export class MdSketchpad extends Diagram {
       [D, s(handle(D))],
     ];
     for (const [sig, h] of handles) {
-      attachWhile(cluster, h.dragging, pin(sig));
+      cluster.addWhile(h.dragging, pin(sig));
     }
 
     s(

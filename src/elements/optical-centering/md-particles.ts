@@ -10,14 +10,12 @@
 // solver is doing 24 wall constraints + 276 pairwise gap
 // constraints every frame.
 
-import { Simulation, attachWhile, constraints, gap, inside, pin } from "@minim/constraints";
+import { Simulation, constraints, gap, inside, pin } from "@minim/constraints";
 import {
   Anchor,
   circle,
   Diagram,
   drag,
-  drive,
-  effect,
   label,
   Mount,
   rect,
@@ -71,11 +69,11 @@ export class MdParticles extends Diagram {
       dot.el.style.cursor = "grab";
       const dragging = signal(false);
       drag(dot, particles[i]!, dragging);
-      attachWhile(cluster, dragging, pin(particles[i]!));
+      cluster.addWhile(dragging, pin(particles[i]!));
     }
 
     const sim = new Simulation(cluster, { gravity: [0, 320], damping: 0.99 });
-    this.anim.start(drive(tick => sim.tick(tick.dt)));
+    this.anim.start(sim.animate());
 
     s(
       label(view.top.down(20), "drag any circle — non-overlap is enforced, walls contain", {

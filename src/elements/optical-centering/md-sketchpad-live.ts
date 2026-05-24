@@ -18,8 +18,7 @@
 // does. Drags are universal — every point is always draggable.
 
 import {
-  attachWhile,
-  type Constraints,
+    type Constraints,
   constraints,
   distance,
   eq,
@@ -388,7 +387,7 @@ function renderPoint(
   dot.track(drag(dot, p.pos));
 
   // Cluster pin while pinned.
-  attachWhile(cluster, p.pinned, pin(p.pos));
+  cluster.addWhile(p.pinned, pin(p.pos));
 
   dot.el.style.cursor = "grab";
 

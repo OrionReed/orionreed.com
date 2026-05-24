@@ -12,12 +12,10 @@
 // by their constraints, killing the residual jitter that
 // supported bodies otherwise produce.
 
-import { Simulation, Strength, attachWhile, bend, constraints, pin, spring } from "@minim/constraints";
+import { Simulation, Strength, bend, constraints, pin, spring } from "@minim/constraints";
 import {
   Anchor,
   Diagram,
-  drive,
-  effect,
   handle,
   label,
   line,
@@ -70,8 +68,7 @@ export class MdCloth extends Diagram {
         cluster.add(bend(grid[j - 2]![i]!, grid[j - 1]![i]!, grid[j]![i]!, 0.5));
     }
 
-    cluster.add(pin(grid[0]![0]!));
-    cluster.add(pin(grid[0]![W - 1]!));
+    cluster.add(pin(grid[0]![0]!), pin(grid[0]![W - 1]!));
 
     // Render edges as Lines (cheap reactive bindings) so the cloth
     // updates whenever the underlying signals change.
@@ -89,14 +86,14 @@ export class MdCloth extends Diagram {
       .flat()
       .map(sig => [sig, s(handle(sig, { r: 3 }))] as const);
     for (const [sig, h] of handles) {
-      attachWhile(cluster, h.dragging, pin(sig));
+      cluster.addWhile(h.dragging, pin(sig));
     }
 
     // post-stabilization + adaptive warm-start absorb most of the
     // energy through constraint drift, so we can run with very
     // light damping — the cloth feels alive instead of underwater.
     const sim = new Simulation(cluster, { gravity: [0, 90], damping: 0.997 });
-    this.anim.start(drive(tick => sim.tick(tick.dt)));
+    this.anim.start(sim.animate());
 
     s(
       label(

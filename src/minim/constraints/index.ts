@@ -37,7 +37,6 @@
 export { Constraints, constraints, type Relation } from "./cluster";
 export {
   angle,
-  attachWhile,
   bend,
   clamp,
   collinear,

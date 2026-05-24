@@ -20,7 +20,9 @@
 // the relation object — read them, write them, bind them to UI.
 
 import {
+  type Lifecycle,
   type Pack,
+  type Read,
   requirePack,
   type Settle,
   settle,
@@ -28,6 +30,7 @@ import {
   signal,
   type WritableBrand,
 } from "../signals";
+import { when } from "../signals/settle-utils";
 import { Solver, type SolverOpts } from "./solver";
 
 // ─── Relation interface ────────────────────────────────────────────
@@ -131,6 +134,30 @@ export class Constraints {
     // calls `dispose()` to take over the time loop, and adding a
     // new relation while sim owns the loop should NOT resurrect
     // the cluster's settle.
+  }
+
+  /** Add `rels` while `cond` is truthy; remove them when falsy.
+   *  Returns a `Lifecycle` whose `dispose()` tears down the watcher
+   *  (and removes the relations if currently attached). Idiomatic
+   *  shorthand for the conditional-pin / conditional-constraint
+   *  patterns:
+   *
+   *    c.addWhile(h.dragging, pin(sig));
+   *    c.addWhile(showBrace, distance(A, C, len), distance(B, D, len));
+   */
+  addWhile(cond: Read<unknown>, ...rels: Relation[]): Lifecycle {
+    return when(cond, () => {
+      for (const r of rels) this._addOne(r);
+      return () => {
+        for (const r of rels) {
+          const dispose = this._disposers.get(r);
+          if (dispose === undefined) continue;
+          dispose();
+          this._disposers.delete(r);
+        }
+        this._gen.value = this._gen.value + 1;
+      };
+    });
   }
 
   /** Remove a relation. No-op if not previously added. */
