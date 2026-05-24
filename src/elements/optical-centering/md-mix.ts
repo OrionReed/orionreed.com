@@ -7,9 +7,7 @@ import {
   easeInOut,
   label,
   loop,
-  Mix,
   Mount,
-  mix,
   num,
   rect,
   tween,
@@ -17,20 +15,21 @@ import {
   vec,
 } from "../../minim";
 
-/** Two independent animation sequences blended via `mix(Vec, parts, Mix.mean)`.
+/** Two independent animation sequences blended via a weighted-mean
+ *  3-input lens.
  *
  *  Sequence A is a continuous orbit (signal-driven). Sequence B is a
  *  discrete pose-pose-pose tween loop visiting four star-points
  *  (generator-driven). Both run forever and write their own `Vec`
- *  cell. The mix's weighted mean is what the black square renders at.
+ *  cell. The blend's weighted mean is what the black square renders at.
  *  The blend ratio cycles between fully-A and fully-B over ~10s, so
  *  the same scene morphs smoothly from "pure orbit" through "weighted
  *  hybrid" to "pure star-path" and back.
  *
  *  Importantly: the two contributors don't know about each other or
- *  about the mix. They write to ordinary signals; the mix combines
+ *  about the blend. They write to ordinary signals; the lens combines
  *  them. Compare to today's "last write wins" — these two could not
- *  share a single signal at all, but the mix lets them share a
+ *  share a single signal at all, but the lens lets them share a
  *  *result* without colliding. */
 export class MdMix extends Diagram {
   protected scene(s: Mount): void {
@@ -75,18 +74,18 @@ export class MdMix extends Diagram {
       }),
     );
 
-    // ── The mix ──────────────────────────────────────────────────
-    // `Mix.mean` is the weighted-mean merge value; the parts list
-    // pairs each contributor with a reactive weight. Compose with
-    // combinators if needed (e.g. `Mix.top(2, Mix.mean)`).
-    const blend = mix(
-      Vec,
-      [
-        { src: seqA, weight: computed(() => 1 - w.value) },
-        { src: seqB, weight: w },
-      ],
-      Mix.mean,
-    );
+    // ── The blend ────────────────────────────────────────────────
+    // 3-input lens over [seqA, seqB, w]: weighted mean with `w`
+    // controlling the per-frame ratio. RO — no canonical inverse for
+    // "drag the blended dot toward where?". Either contributor or `w`
+    // can be the driver.
+    const blend = Vec.derive([seqA, seqB, w] as const, vals => {
+      const [a, b, wv] = vals;
+      return {
+        x: a.x * (1 - wv) + b.x * wv,
+        y: a.y * (1 - wv) + b.y * wv,
+      };
+    });
 
     // ── Render ───────────────────────────────────────────────────
     // Each contributor's current position, opacity tracking weight.
@@ -134,7 +133,7 @@ export class MdMix extends Diagram {
     s(
       label(
         view.top.down(20),
-        "two looping sequences (orbit · star-tween) blended via mix(Vec, parts, Mix.mean)",
+        "two looping sequences (orbit · star-tween) blended via Vec.derive([a, b, w], weightedMean)",
         { size: 12, align: Anchor.Center, opacity: 0.7 },
       ),
       label(

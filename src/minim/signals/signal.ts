@@ -1253,13 +1253,14 @@ export function derive(parent: any, fn: any): any {
   return Signal._fuse(parent, Signal as new (...args: never[]) => Signal<unknown>, fn);
 }
 
-/** Read-write lens. Three shapes:
+/** Read-write lens (untyped, free function). Two shapes:
  *
  *    lens(parent, fwd, bwd)    — 1-input. Fuses with parent's chain.
  *    lens(parents, fwd, bwd)   — N-input. Aggregates over the array.
- *    lens(g, s)                — closure-style getter/setter (legacy).
  *
- *  For typed returns prefer `Cls.lens(...)`. */
+ *  For typed returns prefer `Cls.lens(...)`. For closure-style
+ *  getter/setter, use `Cls.lens(g, s)` (typed) — the closure overload
+ *  has no untyped equivalent. */
 export function lens<P, R>(
   parent: Read<P>,
   fwd: (v: P) => R,
@@ -1273,13 +1274,8 @@ export function lens<P extends readonly Read<unknown>[], R>(
     vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
   ) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
 ): Writable<Signal<R>>;
-export function lens<T>(getter: () => T, setter: (v: T) => void): Writable<Signal<T>>;
 // biome-ignore lint/suspicious/noExplicitAny: dispatch
-export function lens(parent: any, fwd: any, bwd?: any): any {
-  if (bwd === undefined) {
-    // Closure-style: `lens(getter, setter)`.
-    return Signal.install(Signal as new (...args: never[]) => Signal<unknown>, parent, fwd);
-  }
+export function lens(parent: any, fwd: any, bwd: any): any {
   if (Array.isArray(parent)) {
     return _fanin(Signal as new (...args: never[]) => Signal<unknown>, parent, fwd, bwd);
   }

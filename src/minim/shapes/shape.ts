@@ -393,9 +393,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
 // Shape-specific sugar over the N-input lens aggregate primitives —
 // reads return the equal-weight mean, writes distribute the delta
-// evenly to all members. Migrated from `mix(Cls, parts, mean,
-// deltaEven)`; the N-input lens versions are 1.4–1.93× faster on
-// reads/writes due to per-cell scratch buffer.
+// evenly to all members.
 
 /** Writable centroid of shapes' translates. */
 export function centroid(...shapes: { translate: Writable<Vec> }[]): Writable<Vec> {

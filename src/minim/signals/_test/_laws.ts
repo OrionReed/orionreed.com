@@ -1,6 +1,8 @@
-// laws.ts — runtime law checkers for lenses.
+// _laws.ts — runtime law checkers for lenses (test-only helper).
 //
-// The classical asymmetric-lens laws, adapted for our reactive setting:
+// Lives in `_test/` because it's only consumed by `laws.test.ts`;
+// there's no production caller. The classical asymmetric-lens laws,
+// adapted for our reactive setting:
 //
 //   GetPut : set(s, get(s)) ≈ s        (writing back what you read is a no-op)
 //   PutGet : get(set(s, v)) ≈ v        (read what you just wrote)

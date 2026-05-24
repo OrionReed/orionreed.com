@@ -7,7 +7,7 @@
 
 import { describe, it } from "vitest";
 import { Box, box, Color, Num, num, rgb, Vec, vec } from "../index";
-import { approxNumber, approxVec, verifyLensLaws, verifyLensLawsLossy } from "../laws";
+import { approxNumber, approxVec, verifyLensLaws, verifyLensLawsLossy } from "./_laws";
 
 const EPS = 1e-9;
 const rng = (a: number, b: number) => a + Math.random() * (b - a);

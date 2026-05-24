@@ -8,7 +8,7 @@
 //   - isSignal brand: prototype-based, not structural
 //   - value() unwraps reactives without footgunning plain {value: …}
 
-import { bind, computed, effect, isSignal, lens, Signal, signal, value } from "@minim/signals";
+import { bind, computed, effect, isSignal, Num, Signal, signal, value } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 
@@ -68,7 +68,7 @@ describe("engine", () => {
       check(
         "isSignal(lens)",
         isSignal(
-          lens(
+          Num.lens(
             () => 0,
             () => {},
           ),

@@ -16,9 +16,13 @@
 // `axes()` and `polar()` in `./values/vec.ts` remain the canonical
 // surface for those — they win on 1-write polymorphic cases.
 export {
-  argminNumLens,
+  type ArgminOpts,
+  type ArgminVecOpts,
+  argminNum,
+  argminVec,
   axesLens,
   centroidLens,
+  clampToDisc,
   maxLens,
   meanLens,
   midpointLens,
@@ -46,22 +50,8 @@ export {
   wave,
   when,
 } from "./anim";
-export {
-  type ArgminOpts,
-  type ArgminVecOpts,
-  argminNum,
-  argminVec,
-  clampToDisc,
-} from "./argmin";
 // ─── Clock bridge ─────────────────────────────────────────────────
 export { bind } from "./lateral";
-export * as Mix from "./mix";
-// Merges, writebacks, and the `Part`/`Contribution` types live in
-// the `Mix` namespace to avoid flat-export clashes (e.g. `above` is
-// also a predicate in `./assert`; `Part` is also a class in
-// `./tex/parts` and `./code/code`). The factory `mix(...)` is exported
-// flat as the canonical entry point.
-export { type Merge, mix, type Writeback } from "./mix";
 // New primitives natural under N-input lenses. `vecLerp` / `pulleySum`
 // / `diffLens` give bidirectional drag on derived values; `bezier2`/3,
 // `clampedMean`, `distanceLens`, `angleLens`, `reflectionLens` are

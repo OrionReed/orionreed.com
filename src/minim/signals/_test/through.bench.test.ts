@@ -9,7 +9,7 @@
 //                 should all converge since they share the path.
 
 import { describe, it } from "vitest";
-import { lens, Num, num } from "../index";
+import { Num, num } from "../index";
 
 const N = 10_000;
 
@@ -367,12 +367,12 @@ describe("bench: eager-op equivalence (all ride on .through)", () => {
 });
 
 describe("bench: clamp/quantize re-implementation parity", () => {
-  it("clamp via .through (current) vs equivalent untyped lens", () => {
+  it("clamp via .lens (current) vs equivalent typed Num.lens(g, s)", () => {
     const a = num(0);
-    const c = a.clamp(0, 1); // now uses .through internally
+    const c = a.clamp(0, 1); // now uses .lens internally
 
     const a2 = num(0);
-    const c2 = lens<number>(
+    const c2 = Num.lens(
       () => {
         const v = a2.value;
         return v < 0 ? 0 : v > 1 ? 1 : v;
@@ -382,16 +382,16 @@ describe("bench: clamp/quantize re-implementation parity", () => {
       },
     );
 
-    timed("Num.clamp (.through) write within range", () => {
+    timed("Num.clamp (.lens) write within range", () => {
       for (let i = 0; i < N; i++) c.value = (i / N) * 0.9 + 0.05;
     });
-    timed("untyped lens(g,s) write within range", () => {
+    timed("Num.lens(g,s) write within range", () => {
       for (let i = 0; i < N; i++) c2.value = (i / N) * 0.9 + 0.05;
     });
-    timed("Num.clamp (.through) write clipped", () => {
+    timed("Num.clamp (.lens) write clipped", () => {
       for (let i = 0; i < N; i++) c.value = (i / N) * 2 - 0.5;
     });
-    timed("untyped lens(g,s) write clipped", () => {
+    timed("Num.lens(g,s) write clipped", () => {
       for (let i = 0; i < N; i++) c2.value = (i / N) * 2 - 0.5;
     });
   });

@@ -16,13 +16,11 @@ import {
   every,
   forEach,
   label,
-  lens,
   loop,
-  Mix,
-  Mount,
+  meanLens,
   meanRotation,
   meanScale,
-  mix,
+  Mount,
   Num,
   num,
   play,
@@ -676,7 +674,7 @@ const TESTS: TestCase[] = [
     name: "signal.lens reads through and writes back",
     run: assert => {
       const parent = signal({ a: 1, b: 2 });
-      const lensA = lens(
+      const lensA = Num.lens(
         () => parent.value.a,
         n => {
           parent.value = { ...parent.peek(), a: n };
@@ -694,7 +692,7 @@ const TESTS: TestCase[] = [
     run: assert => {
       const a = signal(0);
       const b = signal(10);
-      const avg = lens(
+      const avg = Num.lens(
         () => (a.value + b.value) / 2,
         n => {
           const delta = n - (a.peek() + b.peek()) / 2;
@@ -806,14 +804,14 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "mix(Num, mean, deltaEven): read avg, write distributes",
+    name: "meanLens(Num, ...): read avg, write distributes (delta-even)",
     run: assert => {
       const a = num(0);
       const b = num(10);
       const c = num(20);
-      const m = mix(Num, [a, b, c], Mix.mean, Mix.deltaEven);
+      const m = meanLens(Num, [a, b, c]);
       assert(m.value === 10, `initial mean: ${m.value}`);
-      (m as unknown as { value: number }).value = 13; // delta = 3 → each += 3
+      m.value = 13; // delta = 3 → each += 3
       assert(a.peek() === 3, `a after: ${a.peek()}`);
       assert(b.peek() === 13, `b after: ${b.peek()}`);
       assert(c.peek() === 23, `c after: ${c.peek()}`);
@@ -821,14 +819,14 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "mix(Vec, mean, deltaEven): drop-in centroid for raw Vec signals",
+    name: "meanLens(Vec, ...): drop-in centroid for raw Vec signals",
     run: assert => {
       const a = vec(0, 0);
       const b = vec(100, 50);
-      const m = mix(Vec, [a, b], Mix.mean, Mix.deltaEven);
-      assert(m instanceof Vec, `mix of Vecs should return a writable Vec`);
+      const m = meanLens(Vec, [a, b]);
+      assert(m instanceof Vec, `meanLens of Vecs should return a writable Vec`);
       assert(m.value.x === 50 && m.value.y === 25, `initial mean off`);
-      (m as unknown as { value: { x: number; y: number } }).value = { x: 60, y: 35 }; // delta (10, 10)
+      m.value = { x: 60, y: 35 }; // delta (10, 10)
       assert(a.peek().x === 10 && a.peek().y === 10, `a not shifted: ${JSON.stringify(a.peek())}`);
       assert(b.peek().x === 110 && b.peek().y === 60, `b not shifted: ${JSON.stringify(b.peek())}`);
     },
