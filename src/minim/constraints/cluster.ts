@@ -162,11 +162,6 @@ export class Constraints {
     return this._sigToCell.size;
   }
 
-  /** Number of active relations. */
-  get relationCount(): number {
-    return this._disposers.size;
-  }
-
   // ─── Internals (used by Relation implementations) ────────────────
 
   /** @internal — bind a signal as a cell. Idempotent: same signal
@@ -185,13 +180,6 @@ export class Constraints {
     if (this._settle === undefined && !this._settleDisposed) this._installSettle();
     this._gen.value = this._gen.value + 1;
     return id;
-  }
-
-  /** @internal — read the cell id of an already-bound signal.
-   *  Returns `undefined` if not bound. Used by `pin` and similar. */
-  // biome-ignore lint/suspicious/noExplicitAny: see header
-  _cellOf(sig: Signal<any>): number | undefined {
-    return this._sigToCell.get(sig);
   }
 
   // ─── Settle wiring ───────────────────────────────────────────────

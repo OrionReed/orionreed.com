@@ -269,17 +269,19 @@ When the mechanism is a single closed loop, _vector-loop_ is the textbook angle-
 
 <md-loop></md-loop>
 
-Each of the above is a hand-rolled approach to a specific constraint shape — a closed-form inverse, a single Newton step, Gauss–Seidel projections, or a vector loop. The general path lives in `constraints/`: a `Cluster` binds any number of `Signal`s and runs an [Augmented Vertex Block Descent](https://graphics.cs.utah.edu/research/projects/avbd/) solve on every write. Constraints are ordinary factory calls — `distance`, `perpendicular`, `parallel`, `angle`, `onCircle`, `equalDist`, `lensNum`, `clamp`, `leq`, plus `generic` for anything you can write a residual for — and they all compose in the same cluster:
+Each of the above is a hand-rolled approach to a specific constraint shape — a closed-form inverse, a single Newton step, Gauss–Seidel projections, or a vector loop. The general path lives in `constraints/`: a `Constraints` holder binds any number of `Signal`s and runs an [Augmented Vertex Block Descent](https://graphics.cs.utah.edu/research/projects/avbd/) solve on every write. Constraints are ordinary factory calls — `distance`, `perpendicular`, `parallel`, `angle`, `onCircle`, `equalDist`, `lensNum`, `clamp`, `leq`, plus `generic` for anything you can write a residual for — and they all compose:
 
 ```ts
-const c = new Cluster({ iterations: 12 });
-distance(c, A, B, 160);
-distance(c, B, C, 120);
-distance(c, C, D, 80);
-perpendicular(c, A, B, B, C);
+const c = constraints({ iterations: 12 });
+c.add(
+  distance(A, B, 160),
+  distance(B, C, 120),
+  distance(C, D, 80),
+  perpendicular(A, B, B, C),
+);
 ```
 
-Drag any handle; the cluster's effect re-fires, runs the solver, and writes the new positions back through `writeBack` — so the writes propagate to the rendering effects but don't re-trigger the solver itself. Single solve per write, no convergence loop, no fragile self-mute.
+Drag any handle; the cluster's settle re-fires, runs the solver, and writes the new positions back via the settle's auto-self-exclusion — so the writes propagate to the rendering effects but don't re-trigger the solver itself. Single solve per write, no convergence loop, no fragile self-mute.
 
 <md-sketchpad></md-sketchpad>
 
@@ -323,7 +325,7 @@ The same engine handles **proper** rigid bodies just as well — boxes with full
 
 <md-rigid-stack></md-rigid-stack>
 
-The same `Cluster` + `Simulation` that runs the cloth, the chain, and the algebraic equation solver runs this — only the constraint shapes and the cell dimension differ. The solver's `dim = 3` primal-sweep specialization (one hand-unrolled local Newton per body) means the rigid path doesn't pay any "generality tax" relative to a hand-rolled physics engine.
+The same `Constraints` + `Simulation` that runs the cloth, the chain, and the algebraic equation solver runs this — only the constraint shapes and the cell dimension differ. The solver's `dim = 3` primal-sweep specialization (one hand-unrolled local Newton per body) means the rigid path doesn't pay any "generality tax" relative to a hand-rolled physics engine.
 
 Joints between rigid bodies turn the same machinery into a chain of bars — AVBD's `sceneRope` setup. Each link is its own rigid body with rotational inertia, hinged to the next via a `Joint` force whose position rows are hard and angle row is free. Drag any link and the rest swings; the bars rotate the way bars do, not the way beads on a string do.
 
