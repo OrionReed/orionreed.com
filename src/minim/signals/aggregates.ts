@@ -1,13 +1,12 @@
-// aggregates.ts — N→1 aggregate lens primitives, all built on `fanin`.
+// aggregates.ts — N→1 aggregate lens primitives, built on
+// `Cls.lens([...], ...)` / `Cls.derive([...], ...)`.
 //
-// A/B comparison: re-implements every aggregate primitive from
-// `signals/mix.ts`, `signals/argmin.ts`, and the `axes`/`polar`
-// factories in `signals/values/vec.ts`. Goal: show that one primitive
-// (`fanin`) subsumes them all — fewer LOC, no special-cased scratch
-// buffer machinery, no two-stage trait resolution, same or better
-// perf via fanin's stateless-bwd fast path.
+// All entries route through the engine's N-input lens path
+// (per-cell scratch buffer, arity-based bwd dispatch, batched
+// writes). Stateless-bwd (`(target) => updates`) skips the peek
+// loop on the hot path; stateful-bwd (`(target, vals) => updates`)
+// reads the scratch.
 
-import { fanin } from "./fanin";
 import type { Signal } from "./signal";
 import { type Linear } from "./traits";
 import { Num } from "./values/num";
@@ -19,9 +18,8 @@ type V = { x: number; y: number };
 // ─── Linear-aggregate merges (Num + Vec, etc.) ──────────────────────
 
 /** Equal-weight mean of N Linear-trait values, with delta-even
- *  distribution on writes. Subsumes `mix(Cls, parts, mean, deltaEven)`.
- *  Returns `Writable<C>` since the bwd is always present. */
-// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors fanin's signature
+ *  distribution on writes. Subsumes `mix(Cls, parts, mean, deltaEven)`. */
+// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors Cls.lens
 export function meanLens<T, C extends new (...args: never[]) => Signal<any>>(
   Cls: C,
   parents: readonly Signal<T>[],
@@ -33,8 +31,8 @@ export function meanLens<T, C extends new (...args: never[]) => Signal<any>>(
   const n = parents.length;
   const inv = 1 / n;
 
-  return fanin(
-    Cls,
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.lens
+  return (Cls as any).lens(
     parents as never,
     // biome-ignore lint/suspicious/noExplicitAny: tuple-vs-array variance
     (vals: any) => {
@@ -55,8 +53,8 @@ export function meanLens<T, C extends new (...args: never[]) => Signal<any>>(
   );
 }
 
-/** Weighted sum of N Linear-trait values. RO (no canonical bwd). */
-// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors fanin's signature
+/** Weighted sum of N Linear-trait values. RO. */
+// biome-ignore lint/suspicious/noExplicitAny: variance escape
 export function sumLens<T, C extends new (...args: never[]) => Signal<any>>(
   Cls: C,
   parents: readonly Signal<T>[],
@@ -66,10 +64,10 @@ export function sumLens<T, C extends new (...args: never[]) => Signal<any>>(
       throw new Error("sumLens: value class has no 'linear' trait");
     })()) as Linear<T>;
   const n = parents.length;
-  return fanin(
-    Cls,
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.derive
+  return (Cls as any).derive(
     parents as never,
-    // biome-ignore lint/suspicious/noExplicitAny: tuple-vs-array variance
+    // biome-ignore lint/suspicious/noExplicitAny: tuple variance
     (vals: any) => {
       let acc = vals[0] as T;
       for (let i = 1; i < n; i++) acc = lin.add(acc, vals[i]);
@@ -80,9 +78,9 @@ export function sumLens<T, C extends new (...args: never[]) => Signal<any>>(
 
 // ─── Numeric aggregates (min/max) ────────────────────────────────────
 
-/** Min of N nums. RO. Subsumes `mix(Num, parts, min)`. */
+/** Min of N nums. RO. */
 export function minLens(parents: readonly Signal<number>[]): Num {
-  return fanin(Num, parents as never, vals => {
+  return Num.derive(parents as never, vals => {
     const arr = vals as readonly number[];
     let m = arr[0]!;
     for (let i = 1; i < arr.length; i++) if (arr[i]! < m) m = arr[i]!;
@@ -90,9 +88,9 @@ export function minLens(parents: readonly Signal<number>[]): Num {
   });
 }
 
-/** Max of N nums. RO. Subsumes `mix(Num, parts, max)`. */
+/** Max of N nums. RO. */
 export function maxLens(parents: readonly Signal<number>[]): Num {
-  return fanin(Num, parents as never, vals => {
+  return Num.derive(parents as never, vals => {
     const arr = vals as readonly number[];
     let m = arr[0]!;
     for (let i = 1; i < arr.length; i++) if (arr[i]! > m) m = arr[i]!;
@@ -102,11 +100,9 @@ export function maxLens(parents: readonly Signal<number>[]): Num {
 
 // ─── Vec aggregates (geometric helpers) ─────────────────────────────
 
-/** Midpoint of two writable Vecs. Drag updates both endpoints by the
- *  same delta so the segment translates rigidly. */
+/** Midpoint of two writable Vecs. Drag-translates both endpoints. */
 export function midpointLens(a: Signal<V>, b: Signal<V>): Writable<Vec> {
-  return fanin(
-    Vec,
+  return Vec.lens(
     [a, b] as const,
     vals => {
       const [av, bv] = vals;
@@ -124,13 +120,11 @@ export function midpointLens(a: Signal<V>, b: Signal<V>): Writable<Vec> {
   );
 }
 
-/** Centroid of N writable Vecs. Drag-translates all members by the
- *  same delta. */
+/** Centroid of N writable Vecs. Drag-translates all members. */
 export function centroidLens(parents: readonly Signal<V>[]): Writable<Vec> {
   const n = parents.length;
   const inv = 1 / n;
-  return fanin(
-    Vec,
+  return Vec.lens(
     parents as never,
     vals => {
       const arr = vals as readonly V[];
@@ -163,12 +157,9 @@ export function centroidLens(parents: readonly Signal<V>[]): Writable<Vec> {
 
 // ─── Geometric: axes + polar (specializations of Vec multi-input) ───
 
-/** Vec from two writable Num axes. Subsumes `axes(x, y)`. The bwd is
- *  stateless (doesn't read parent values), so fanin skips the peek
- *  loop — matches the perf of the hand-rolled original. */
+/** Vec from two writable Num axes. Stateless bwd → fast-path. */
 export function axesLens(x: Num, y: Num): Writable<Vec> {
-  return fanin(
-    Vec,
+  return Vec.lens(
     [x, y] as const,
     (vals): V => ({ x: vals[0], y: vals[1] }),
     (target: V) => [target.x, target.y] as never,
@@ -176,11 +167,9 @@ export function axesLens(x: Num, y: Num): Writable<Vec> {
 }
 
 /** Polar Vec at `(c.x + r·cos a, c.y + r·sin a)`. Bidirectional under
- *  the `circular` policy: writes update only `a`. Other policies in
- *  `signals/values/vec.ts` are similar small variations on the bwd. */
+ *  the `circular` policy: writes update only `a`. */
 export function polarCircular(c: Signal<V>, r: Num, a: Num): Writable<Vec> {
-  return fanin(
-    Vec,
+  return Vec.lens(
     [c, r, a] as const,
     vals => {
       const [cv, rv, av] = vals;
@@ -198,12 +187,12 @@ export function polarCircular(c: Signal<V>, r: Num, a: Num): Writable<Vec> {
   );
 }
 
-// ─── Argmin via fanin (numerical pseudoinverse, scalar output) ──────
+// ─── Argmin via the lens primitive (numerical pseudoinverse, scalar output) ──
 
 /** Scalar argmin lens. One Newton step per write, weight-controlled
  *  distribution into inputs. Subsumes `argminNum`. The bwd mutates
- *  fanin's `vals` scratch in place via save/restore (matching the
- *  original's allocation profile — no `slice` copy). */
+ *  the engine's `vals` scratch in place via save/restore (no `slice`
+ *  copy). */
 export function argminNumLens(
   inputs: readonly Num[],
   forward: (xs: readonly number[]) => number,
@@ -218,8 +207,7 @@ export function argminNumLens(
   // Pre-allocate J + out to avoid per-write allocations.
   const J = new Array<number>(n);
   const out = new Array<number | undefined>(n);
-  return fanin(
-    Num,
+  return Num.lens(
     inputs as never,
     vals => forward(vals as readonly number[]),
     (target, vals) => {

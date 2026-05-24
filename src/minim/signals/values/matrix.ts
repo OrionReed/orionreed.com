@@ -116,13 +116,13 @@ export class Matrix extends Signal<V> {
 
   multiply(b: Val<V>): this {
     const bf = valFn(b);
-    return this.through(
+    return this.lens(
       v => multiply(v, bf()),
       n => multiply(n, invert(bf())),
     );
   }
   invert(): this {
-    return this.through(invert, invert);
+    return this.lens(invert, invert);
   }
 
   get a() {

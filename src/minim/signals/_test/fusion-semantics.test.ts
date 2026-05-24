@@ -1,5 +1,5 @@
 // fusion-semantics.test.ts — semantic probes for subtle correctness
-// questions raised by extending fusion beyond `.through()`.
+// questions raised by extending fusion beyond `.lens()`.
 //
 // These are not regression tests — they document observable behaviour
 // that the generalisation either preserves or changes compared to a
@@ -31,9 +31,10 @@ describe("intermediate-cell equality filter is bypassed under fusion", () => {
   it("c's leaf equality catches duplicates the same way un-fused would", () => {
     const a = num(0);
     // b is non-injective (always projects to constant). c reads x of b.
-    const c = a
-      .deriveTo(Vec, n => ({ x: n * 0, y: 0 })) // always (0, 0)
-      .deriveTo(Num, v => v.x); // always 0
+    const c = Num.derive(
+      Vec.derive(a, n => ({ x: n * 0, y: 0 })), // always (0, 0)
+      v => v.x, // always 0
+    );
     let fires = 0;
     const stop = effect(() => {
       void c.value;
@@ -53,14 +54,14 @@ describe("intermediate-cell equality filter is bypassed under fusion", () => {
     // subscribes to it) and applies its own equality filter.
     const a = num(0);
     // Construct b explicitly so we can subscribe to it.
-    const b = a.deriveTo(Vec, n => ({ x: n * 0, y: 0 }));
+    const b = Vec.derive(a, n => ({ x: n * 0, y: 0 }));
     let bFires = 0;
     const stopB = effect(() => {
       void b.value;
       bFires++;
     });
     // Now build c on top of b.
-    const c = b.deriveTo(Num, v => v.x);
+    const c = Num.derive(b, v => v.x);
     let cFires = 0;
     const stopC = effect(() => {
       void c.value;
@@ -95,11 +96,11 @@ describe("fused setter calls priorFwd even when bwd is stateless", () => {
   it("fused through chain produces correct result regardless of stateless-bwd waste", () => {
     const a = num(0);
     const c = a
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       )
-      .through(
+      .lens(
         v => v + 10,
         v => v - 10,
       );
@@ -113,24 +114,24 @@ describe("fused setter calls priorFwd even when bwd is stateless", () => {
 });
 
 describe("writable-on-RO chain throws eagerly at construction", () => {
-  // `.deriveTo(...).lensTo(...)` asks for a writable view on top of an
-  // RO computed. TS rejects this at the type level (deriveTo returns
-  // bare RO `Num`, so calling `.lensTo()` would only typecheck with an
-  // escape-hatch cast). The runtime check in `Signal._fuse` is a
-  // defense against such casts: the error fires at construction, with
-  // a stack trace that points to the offending `.lensTo()` call.
+  // `Cls.lens(<RO chain>, ...)` asks for a writable view on top of
+  // an RO computed. TS rejects this at the type level (Cls.derive
+  // returns bare RO `Num`). The runtime check in `Signal._fuse` is
+  // a defense against escape-hatch casts: the error fires at
+  // construction, with a stack trace that points to the call.
   //
-  // `.through()` and `field()` *don't* throw on RO receivers — they
-  // smart-dispatch to a RO computed instead, matching the conditional
-  // return type and preserving the legitimate read-only pattern
-  // (`box.center.x.value`, `vec.magnitude`, etc.).
+  // `.lens()` (instance, endo) and `field()` *don't* throw on RO
+  // receivers — they smart-dispatch to a RO computed instead,
+  // matching the conditional return type and preserving the
+  // legitimate read-only pattern (`box.center.x.value`,
+  // `vec.magnitude`, etc.).
 
-  it("explicit .lensTo() on a fused-RO receiver throws at construction", () => {
+  it("explicit Cls.lens(<RO>, …) throws at construction", () => {
     const a = num(0);
-    const ro = a.deriveTo(Num, v => v * 2);
+    const ro = Num.derive(a, v => v * 2);
     expect(() =>
-      ro.lensTo(
-        Num,
+      Num.lens(
+        ro,
         n => n + 1,
         v => v - 1,
       ),
@@ -139,31 +140,31 @@ describe("writable-on-RO chain throws eagerly at construction", () => {
 
   it("error stack trace points at the user's call site, not a later write", () => {
     const a = num(0);
-    const ro = a.deriveTo(Num, v => v * 2);
+    const ro = Num.derive(a, v => v * 2);
     try {
-      ro.lensTo(
-        Num,
+      Num.lens(
+        ro,
         n => n + 1,
         v => v - 1,
       );
       expect.unreachable("should have thrown");
     } catch (e) {
       // The TypeError's stack should reference this test file —
-      // proving the error fires where the user wrote `.lensTo()`,
+      // proving the error fires where the user wrote the lens,
       // not deep in the engine at a later write call.
       expect(e).toBeInstanceOf(TypeError);
       expect((e as Error).stack ?? "").toContain("fusion-semantics.test.ts");
     }
   });
 
-  it(".through() on RO receiver smart-dispatches to a RO computed (bwd dropped)", () => {
+  it(".lens() on RO receiver smart-dispatches to a RO computed (bwd dropped)", () => {
     // Construction succeeds; reads compose normally; writes throw at
     // the *result* cell (it's a computed, "Cannot write to a Computed"),
     // not at construction. This preserves patterns like `.scale(2)` on
     // a derived view.
     const a = num(3);
-    const ro = a.deriveTo(Num, v => v * 2);
-    const scaled = ro.through(
+    const ro = Num.derive(a, v => v * 2);
+    const scaled = ro.lens(
       v => v + 100,
       v => v - 100, // discarded — receiver is RO
     );
@@ -268,11 +269,11 @@ describe("axes() and other multi-source factories remain fusion barriers", () =>
     expect(yN.value).toBe(20);
   });
 
-  it("subsequent .lensTo() on a non-fused cell points at it, not its sources", () => {
+  it("subsequent Cls.lens on a non-fused cell points at it, not its sources", () => {
     const xN = num(1);
     const yN = num(2);
     const v = vec(xN, yN);
-    // .x on the axes-vec is field(v, "x", Num) → v.lensTo(...).
+    // .x on the axes-vec is field(v, "x", Num) → Num.lens(v, …).
     // Since v has no _fusedOf, .x's parent = v (NOT xN directly).
     // This is correct: writing v.x.value = 5 should round-trip through
     // axes' setter, which writes to BOTH source signals (the batch is

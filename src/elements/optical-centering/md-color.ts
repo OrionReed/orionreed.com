@@ -4,7 +4,6 @@ import {
   computed,
   Diagram,
   drag,
-  fanin,
   label,
   line,
   Mount,
@@ -71,14 +70,13 @@ export class MdColor extends Diagram {
         `hsl(${hue.value.toFixed(0)}deg, ${(sat.value * 100).toFixed(0)}%, ${(lit.value * 100).toFixed(0)}%)`,
     );
 
-    // R, G, B are 3-input fanin lenses through the bijection. Reading
+    // R, G, B are 3-input lenses through the bijection. Reading
     // converts HSL → RGB; writing converts the new RGB back and
-    // updates all three HSL signals atomically (fanin's batch).
+    // updates all three HSL signals atomically (the engine batches).
     // `vals` arrives pre-peeked; the bwd returns the new (h, s, l)
-    // tuple; fanin handles the batched writeback.
+    // tuple; the engine handles the batched writeback.
     const rgbChannel = (idx: "r" | "g" | "b"): Writable<Num> =>
-      fanin(
-        Num,
+      Num.lens(
         [hue, sat, lit] as const,
         vals => hslToRgb(vals[0], vals[1], vals[2])[idx],
         (target, vals) => {
@@ -166,7 +164,7 @@ export class MdColor extends Diagram {
       }),
       label(
         view.bottom.up(16),
-        "R/G/B = fanin([h, s, l], hslToRgb, rgbToHsl) · drag any view; every other view updates through the bijection",
+        "R/G/B = Num.lens([h, s, l], hslToRgb, rgbToHsl) · drag any view; every other view updates through the bijection",
         { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );

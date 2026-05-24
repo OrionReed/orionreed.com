@@ -20,7 +20,7 @@ export class MdMirror extends Diagram {
 
     // Reflection is an involution — `reflectionLens` reads `reflect(src,
     // mA, mB)` and on writes applies the same formula to land back in
-    // src. The lens is itself a 3-input fanin; only `src` is updated
+    // src. The lens is itself a 3-input N-input lens; only `src` is updated
     // on writes (the axis stays put).
     const mirrorOf = (src: Writable<Vec>): Writable<Vec> => reflectionLens(src, mA, mB);
 

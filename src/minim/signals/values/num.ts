@@ -42,21 +42,21 @@ export class Num extends Signal<V> {
 
   add(b: Val<V>): this {
     const bf = valFn(b);
-    return this.through(
+    return this.lens(
       v => v + bf(),
       n => n - bf(),
     );
   }
   sub(b: Val<V>): this {
     const bf = valFn(b);
-    return this.through(
+    return this.lens(
       v => v - bf(),
       n => n + bf(),
     );
   }
   scale(k: Val<number>): this {
     const kf = valFn(k);
-    return this.through(
+    return this.lens(
       v => v * kf(),
       n => n / kf(),
     );
@@ -68,7 +68,7 @@ export class Num extends Signal<V> {
   affine(k: Val<number>, off: Val<number>): this {
     const kf = valFn(k);
     const of = valFn(off);
-    return this.through(
+    return this.lens(
       v => v * kf() + of(),
       n => (n - of()) / kf(),
     );
@@ -87,7 +87,7 @@ export class Num extends Signal<V> {
         h = hf();
       return v < l ? l : v > h ? h : v;
     };
-    return this.through(c, c);
+    return this.lens(c, c);
   }
 
   /** Lossy lens that snaps reads and writes to the nearest multiple
@@ -98,7 +98,7 @@ export class Num extends Signal<V> {
       const s = sf();
       return Math.round(v / s) * s;
     };
-    return this.through(q, q);
+    return this.lens(q, q);
   }
 
   /** Cyclic-coordinate lens. Reads pass through (the source's
@@ -113,7 +113,7 @@ export class Num extends Signal<V> {
    *  composed chains. No `this.peek()` side-channel needed. */
   cyclic(period: Val<number>): this {
     const pf = valFn(period);
-    return this.through(
+    return this.lens(
       v => v,
       (v, s) => {
         const p = pf();

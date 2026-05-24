@@ -1,8 +1,8 @@
-// through.bench.test.ts — perf comparisons for `.through()`.
+// through.bench.test.ts — perf comparisons for `.lens()`.
 //
 // Three axes:
-//   1. Parity:    .through(f, g) vs hand-rolled Num.lens(...).
-//   2. Fusion:    N consecutive .through()s vs N nested Num.lens(...).
+//   1. Parity:    .lens(f, g) vs hand-rolled Num.lens(...).
+//   2. Fusion:    N consecutive .lens()s vs N nested Num.lens(...).
 //                 Fused should win on read & write.
 //   3. Equivalence: .scale(k).add(off) (now uses .through internally),
 //                 vs hand-written `.through ∘ .through`, vs .affine —
@@ -27,7 +27,7 @@ function timed(label: string, fn: () => void): number {
   return ms;
 }
 
-describe("bench: .through() parity vs hand-rolled lens", () => {
+describe("bench: .lens() parity vs hand-rolled lens", () => {
   it("single-layer read", () => {
     const a = num(0.5);
 
@@ -42,9 +42,9 @@ describe("bench: .through() parity vs hand-rolled lens", () => {
     );
 
     const a2 = num(0.5);
-    const viaThrough = a2.through(f, g);
+    const viaThrough = a2.lens(f, g);
 
-    timed(".through(f,g) read", () => {
+    timed(".lens(f,g) read", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         a2.value = i / N;
@@ -74,9 +74,9 @@ describe("bench: .through() parity vs hand-rolled lens", () => {
     );
 
     const a2 = num(0.5);
-    const viaThrough = a2.through(f, g);
+    const viaThrough = a2.lens(f, g);
 
-    timed(".through(f,g) write", () => {
+    timed(".lens(f,g) write", () => {
       for (let i = 0; i < N; i++) viaThrough.value = 30 + i * 0.02;
     });
     timed("Num.lens(...) write (hand-rolled)", () => {
@@ -85,16 +85,16 @@ describe("bench: .through() parity vs hand-rolled lens", () => {
   });
 });
 
-describe("bench: .through() fusion vs nested lenses", () => {
+describe("bench: .lens() fusion vs nested lenses", () => {
   it("2-deep chain — read", () => {
-    // Fused: `.through(f1,g1).through(f2,g2)` collapses to one lens.
+    // Fused: `.lens(f1,g1).lens(f2,g2)` collapses to one lens.
     const a = num(1);
     const fused = a
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       )
-      .through(
+      .lens(
         v => v + 10,
         v => v - 10,
       );
@@ -135,11 +135,11 @@ describe("bench: .through() fusion vs nested lenses", () => {
   it("2-deep chain — write", () => {
     const a = num(1);
     const fused = a
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       )
-      .through(
+      .lens(
         v => v + 10,
         v => v - 10,
       );
@@ -170,19 +170,19 @@ describe("bench: .through() fusion vs nested lenses", () => {
     // Stress-test fusion depth.
     const a = num(1);
     const fused = a
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       )
-      .through(
+      .lens(
         v => v + 10,
         v => v - 10,
       )
-      .through(
+      .lens(
         v => v * 3,
         v => v / 3,
       )
-      .through(
+      .lens(
         v => v - 5,
         v => v + 5,
       );
@@ -234,19 +234,19 @@ describe("bench: .through() fusion vs nested lenses", () => {
   it("4-deep chain — write", () => {
     const a = num(1);
     const fused = a
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       )
-      .through(
+      .lens(
         v => v + 10,
         v => v - 10,
       )
-      .through(
+      .lens(
         v => v * 3,
         v => v / 3,
       )
-      .through(
+      .lens(
         v => v - 5,
         v => v + 5,
       );
@@ -287,7 +287,7 @@ describe("bench: .through() fusion vs nested lenses", () => {
 });
 
 describe("bench: eager-op equivalence (all ride on .through)", () => {
-  // After the rewrite, .add/.scale/.affine all call .through() internally,
+  // After the rewrite, .add/.scale/.affine all call .lens() internally,
   // so .scale(k).add(off) auto-fuses to one lens cell — same path as a
   // hand-written `.through ∘ .through`. These should produce ~identical
   // numbers; if they diverge we've regressed.
@@ -298,11 +298,11 @@ describe("bench: eager-op equivalence (all ride on .through)", () => {
 
     const a2 = num(0.5);
     const fused = a2
-      .through(
+      .lens(
         v => v * 200,
         v => v / 200,
       )
-      .through(
+      .lens(
         v => v + 30,
         v => v - 30,
       );
@@ -342,11 +342,11 @@ describe("bench: eager-op equivalence (all ride on .through)", () => {
 
     const a2 = num(0.5);
     const fused = a2
-      .through(
+      .lens(
         v => v * 200,
         v => v / 200,
       )
-      .through(
+      .lens(
         v => v + 30,
         v => v - 30,
       );

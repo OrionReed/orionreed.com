@@ -83,7 +83,7 @@ export class Vec extends Signal<V> {
   // ── invertibles: return `: this`, propagating writability ──────────
   add(b: Val<V>): this {
     const bf = valFn(b);
-    return this.through(
+    return this.lens(
       v => {
         const o = bf();
         return { x: v.x + o.x, y: v.y + o.y };
@@ -96,7 +96,7 @@ export class Vec extends Signal<V> {
   }
   sub(b: Val<V>): this {
     const bf = valFn(b);
-    return this.through(
+    return this.lens(
       v => {
         const o = bf();
         return { x: v.x - o.x, y: v.y - o.y };
@@ -109,7 +109,7 @@ export class Vec extends Signal<V> {
   }
   scale(k: Val<number>): this {
     const kf = valFn(k);
-    return this.through(
+    return this.lens(
       v => {
         const k = kf();
         return { x: v.x * k, y: v.y * k };
@@ -123,7 +123,7 @@ export class Vec extends Signal<V> {
   offset(dx: Val<number>, dy: Val<number>): this {
     const xf = valFn(dx);
     const yf = valFn(dy);
-    return this.through(
+    return this.lens(
       v => ({ x: v.x + xf(), y: v.y + yf() }),
       n => ({ x: n.x - xf(), y: n.y - yf() }),
     );
@@ -131,28 +131,28 @@ export class Vec extends Signal<V> {
   // Axis-aligned offset sugar — same fwd/bwd shape as offset.
   up(n: Val<number>): this {
     const f = valFn(n);
-    return this.through(
+    return this.lens(
       v => ({ x: v.x, y: v.y - f() }),
       o => ({ x: o.x, y: o.y + f() }),
     );
   }
   down(n: Val<number>): this {
     const f = valFn(n);
-    return this.through(
+    return this.lens(
       v => ({ x: v.x, y: v.y + f() }),
       o => ({ x: o.x, y: o.y - f() }),
     );
   }
   left(n: Val<number>): this {
     const f = valFn(n);
-    return this.through(
+    return this.lens(
       v => ({ x: v.x - f(), y: v.y }),
       o => ({ x: o.x + f(), y: o.y }),
     );
   }
   right(n: Val<number>): this {
     const f = valFn(n);
-    return this.through(
+    return this.lens(
       v => ({ x: v.x + f(), y: v.y }),
       o => ({ x: o.x - f(), y: o.y }),
     );
@@ -169,7 +169,7 @@ export class Vec extends Signal<V> {
     return Vec.derive(() => lerp(this.value, value(b), value(t)));
   }
   distance(other: Val<V>): Num {
-    return this.deriveTo(Num, v => metric(v, value(other)));
+    return Num.derive(this, v => metric(v, value(other)));
   }
 
   // ── field lenses & derived views ───────────────────────────────────

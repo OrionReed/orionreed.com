@@ -7,7 +7,6 @@ import {
   compose,
   computed,
   effect,
-  fanin,
   lazy,
   Matrix,
   meanLens,
@@ -212,12 +211,11 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   }
 
   #makeAnchor(u: number, v: number): Writable<Vec> {
-    // 3-input fanin: reads `box`, `localFrame`, `transform.translate`;
+    // 3-input lens: reads `box`, `localFrame`, `transform.translate`;
     // writes only `transform.translate` (other slots `undefined`).
     // The bwd shifts the translate by the world-space drag delta so
     // the anchor lands at the target — anchor-drag = body-translate.
-    return fanin(
-      Vec,
+    return Vec.lens(
       [this.box, this.localFrame, this.transform.translate] as const,
       vals => {
         const [b, m] = vals;
@@ -393,11 +391,11 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   }
 }
 
-// Shape-specific sugar over the fanin-built aggregate primitives —
+// Shape-specific sugar over the N-input lens aggregate primitives —
 // reads return the equal-weight mean, writes distribute the delta
 // evenly to all members. Migrated from `mix(Cls, parts, mean,
-// deltaEven)`; the fanin-based versions are 1.4–1.93× faster on
-// reads/writes due to fanin's per-cell scratch buffer.
+// deltaEven)`; the N-input lens versions are 1.4–1.93× faster on
+// reads/writes due to per-cell scratch buffer.
 
 /** Writable centroid of shapes' translates. */
 export function centroid(...shapes: { translate: Writable<Vec> }[]): Writable<Vec> {

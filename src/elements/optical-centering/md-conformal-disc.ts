@@ -162,11 +162,11 @@ export class MdConformalDisc extends Diagram {
 
     // Screen-space lens onto a world-space vertex. Drag in screen
     // coords; the inverse maps back to world and clamps into the
-    // open disc. `.through()` carries this as a chained pipeline,
+    // open disc. `.lens()` carries this as a chained pipeline,
     // so subsequent fusion (field/lens layers above) sees the chain
     // and composes through it cleanly.
     const screenLens = (worldVec: Writable<Vec>): Writable<Vec> =>
-      worldVec.through(toScreen, target => clampOpen(fromScreen(target)));
+      worldVec.lens(toScreen, (target: { x: number; y: number }) => clampOpen(fromScreen(target)));
 
     // Curve segment for the geodesic arc from Pw to Qw (world coords),
     // rendered in screen coords. Diameter case falls back to a line.

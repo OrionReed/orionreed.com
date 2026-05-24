@@ -27,19 +27,19 @@ const fusedParent = (s: unknown): unknown =>
 describe("structural: only root + effect-subscribed leaves carry subs", () => {
   it("4-deep through chain: only root has subs when effect on leaf", () => {
     const a = num(0);
-    const l1 = a.through(
+    const l1 = a.lens(
       v => v + 1,
       v => v - 1,
     );
-    const l2 = l1.through(
+    const l2 = l1.lens(
       v => v * 2,
       v => v / 2,
     );
-    const l3 = l2.through(
+    const l3 = l2.lens(
       v => v - 3,
       v => v + 3,
     );
-    const leaf = l3.through(
+    const leaf = l3.lens(
       v => v * 5,
       v => v / 5,
     );
@@ -72,9 +72,9 @@ describe("structural: only root + effect-subscribed leaves carry subs", () => {
 
   it("3-deep deriveTo chain: only root + leaf have subs under effect", () => {
     const a = num(0);
-    const l1 = a.deriveTo(Num, v => v + 1);
-    const l2 = l1.deriveTo(Num, v => v * 2);
-    const leaf = l2.deriveTo(Num, v => v - 3);
+    const l1 = Num.derive(a, v => v + 1);
+    const l2 = Num.derive(l1, v => v * 2);
+    const leaf = Num.derive(l2, v => v - 3);
 
     const stop = effect(() => {
       void leaf.value;
@@ -112,9 +112,9 @@ describe("structural: only root + effect-subscribed leaves carry subs", () => {
 
   it("4-deep deriveTo chain with mixed types (Num→Vec→Num→Vec): only root has subs", () => {
     const a = num(2);
-    const l1 = a.deriveTo(Vec, n => ({ x: n, y: n * 2 }));
-    const l2 = l1.deriveTo(Num, v => v.x + v.y);
-    const leaf = l2.deriveTo(Vec, n => ({ x: n, y: 0 }));
+    const l1 = Vec.derive(a, n => ({ x: n, y: n * 2 }));
+    const l2 = Num.derive(l1, v => v.x + v.y);
+    const leaf = Vec.derive(l2, n => ({ x: n, y: 0 }));
 
     expect(fusedParent(leaf)).toBe(a);
 
@@ -145,7 +145,7 @@ describe("structural: only root + effect-subscribed leaves carry subs", () => {
 
   it("multiple effects on the same fused leaf: all on the leaf, none on intermediates", () => {
     const a = num(0);
-    const leaf = a.deriveTo(Num, v => v + 1).deriveTo(Num, v => v * 2);
+    const leaf = Num.derive(Num.derive(a, v => v + 1), v => v * 2);
     const intermediate = (leaf as unknown as { _fusedOf: { parent: unknown } })._fusedOf.parent;
     // The intermediate cell IS the leaf's parent — which IS the root a.
     // (Fusion collapsed the chain, so there's no "real" intermediate cell.)
@@ -169,8 +169,8 @@ describe("structural: only root + effect-subscribed leaves carry subs", () => {
     // fused-chain's path. If something subscribes to the intermediate
     // independently, it materialises as expected.
     const a = num(0);
-    const intermediate = a.deriveTo(Num, v => v * 2);
-    const leaf = intermediate.deriveTo(Num, v => v + 1);
+    const intermediate = Num.derive(a, v => v * 2);
+    const leaf = Num.derive(intermediate, v => v + 1);
 
     const stopLeaf = effect(() => void leaf.value);
     expect(hasSubscribers(intermediate)).toBe(false); // bypassed by leaf
@@ -196,15 +196,15 @@ describe("structural: stateful-flag propagation (arity-inferred)", () => {
   it("pure 1-arg-bwd through chain is stateless", () => {
     const a = num(0);
     const c = a
-      .through(
+      .lens(
         v => v + 1,
         v => v - 1,
       )
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       )
-      .through(
+      .lens(
         v => v - 3,
         v => v + 3,
       );
@@ -219,7 +219,7 @@ describe("structural: stateful-flag propagation (arity-inferred)", () => {
 
   it("through-iso after stateful stays stateful (any layer poisons upward)", () => {
     const tr = transform({ translate: { x: 0, y: 0 } });
-    const scaled = tr.translate.x.through(
+    const scaled = tr.translate.x.lens(
       v => v * 10,
       v => v / 10,
     );
@@ -228,7 +228,7 @@ describe("structural: stateful-flag propagation (arity-inferred)", () => {
 
   it("deriveTo chain inherits prior's stateful flag (here: false)", () => {
     const a = num(0);
-    const ro = a.deriveTo(Num, v => v * 2);
+    const ro = Num.derive(a, v => v * 2);
     expect(stateful(ro)).toBe(false);
   });
 });

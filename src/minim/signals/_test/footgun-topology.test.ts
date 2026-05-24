@@ -1,21 +1,21 @@
 // footgun-topology.test.ts — graph topology adversarial probes.
-// Diamond shapes, cycles, transitive cycles via relate, fanin sharing
+// Diamond shapes, cycles, transitive cycles via relate, N-input lens sharing
 // a parent with a relate, etc.
 
 import { describe, expect, it } from "vitest";
-import { batch, effect, fanin, Num, num, vec } from "../index";
+import { batch, effect, Num, num, vec } from "../index";
 import { relate } from "../relate";
 
 void Num;
 
-describe("topology: diamond through fanin", () => {
+describe("topology: diamond through N-input lens", () => {
   it("two fanins sharing a parent: glitch-free under upstream write", () => {
     // a is the shared parent. sumA = a + 10, sumB = a + 100.
     // Effect reads both → consistent snapshot.
     const a = num(0);
     const b = num(0);
-    const sumA = fanin(Num, [a, b] as const, vals => vals[0] + vals[1] + 10);
-    const sumB = fanin(Num, [a, b] as const, vals => vals[0] + vals[1] + 100);
+    const sumA = Num.derive([a, b] as const, vals => vals[0] + vals[1] + 10);
+    const sumB = Num.derive([a, b] as const, vals => vals[0] + vals[1] + 100);
 
     let observed: { a: number; b: number; diff: number }[] = [];
     effect(() => {
@@ -99,8 +99,8 @@ describe("topology: cyclic relates (a → b → c → a)", () => {
   });
 });
 
-describe("topology: relate sharing a cell with a fanin", () => {
-  it("relate(a, b) + fanin([a, c]) = sum: write a, both update consistently", () => {
+describe("topology: relate sharing a cell with an N-input lens", () => {
+  it("relate(a, b) + Num.derive([a, c]) = sum: write a, both update consistently", () => {
     const a = num(0);
     const b = num(0);
     const c = num(0);
@@ -110,7 +110,7 @@ describe("topology: relate sharing a cell with a fanin", () => {
       x => x * 2,
       y => y / 2,
     );
-    const sum = fanin(Num, [a, c] as const, vals => vals[0] + vals[1]);
+    const sum = Num.derive([a, c] as const, vals => vals[0] + vals[1]);
 
     let observed: { a: number; b: number; sum: number }[] = [];
     effect(() => {

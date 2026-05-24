@@ -19,11 +19,11 @@
 //                                        Conditional return: writable
 //                                        on writable parent, bare on
 //                                        RO parent. Combines `lazy` +
-//                                        `lensTo` + spread-replace.
+//                                        `Cls.lens` + spread-replace.
 //
 //   derived(this, "k", Cls, fn)        — read-only derived view via
-//                                        `deriveTo`. Always returns
-//                                        bare `Cls` (RO).
+//                                        `Cls.derive(parent, fn)`.
+//                                        Always returns bare `Cls` (RO).
 //
 // Authors don't import the brand-conditional type directly — the
 // helpers encapsulate it. The author's choice between `field()`
@@ -99,27 +99,28 @@ export function field<
   return lazy(parent, key as string | symbol, () => {
     const fused = (parent as unknown as { _fusedOf?: { bwd?: unknown } })._fusedOf;
     if (fused !== undefined && fused.bwd === undefined) {
-      return (parent as Signal<Of<S>>).deriveTo(Cls, s => s[key] as Of<InstanceType<C>>);
+      // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.derive
+      return (Cls as any).derive(parent, (s: Of<S>) => s[key] as Of<InstanceType<C>>);
     }
     return Signal.fieldOf(parent as unknown as Signal<unknown>, key as string | symbol, Cls);
   }) as never;
 }
 
-/** Read-only derived view via `deriveTo`. Cached per (instance, key).
- *  Always returns bare `Cls` (RO) regardless of parent writability —
- *  derived views are RO at runtime, so this is the honest type
- *  (today's recursive `LiftField` over-eagerly typed these as
- *  writable on writable receivers).
+/** Read-only derived view via `Cls.derive(parent, fn)`. Cached per
+ *  (instance, key). Always returns bare `Cls` (RO) regardless of
+ *  parent writability — derived views are RO at runtime, so this is
+ *  the honest type.
  *
  *      get magnitude() {
  *        return derived(this, "magnitude", Num, v => Math.hypot(v.x, v.y));
  *      } */
-// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors deriveTo
+// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors Cls.derive
 export function derived<S extends Signal<any>, C extends new (...args: never[]) => Signal<any>>(
   parent: S,
   key: string | symbol,
   Cls: C,
   fn: (v: Of<S>) => Of<InstanceType<C>>,
 ): InstanceType<C> {
-  return lazy(parent, key, () => (parent as Signal<Of<S>>).deriveTo(Cls, fn)) as InstanceType<C>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.derive
+  return lazy(parent, key, () => (Cls as any).derive(parent, fn)) as InstanceType<C>;
 }

@@ -2,7 +2,6 @@
 
 import {
   centroidLens,
-  fanin,
   midpointLens,
   polar as polarLens,
   Signal,
@@ -98,9 +97,8 @@ const rotate = (shape: AnyShape & Has<"rotate">, radius = 40, opts?: HandleOpts)
 /** Uniform-scale knob — sits along +x from the shape's center at
  *  `radius * scale.x`. Drag x-distance writes both scale axes. */
 const scaleHandle = (shape: AnyShape & Has<"scale">, radius = 40, opts?: HandleOpts): Handle => {
-  // 2-input fanin: reads `center` and `scale`; writes only `scale`.
-  const pos = fanin(
-    Vec,
+  // 2-input lens: reads `center` and `scale`; writes only `scale`.
+  const pos = Vec.lens(
     [shape.center, shape.scale] as const,
     vals => ({ x: vals[0].x + radius * vals[1].x, y: vals[0].y }),
     (target, vals) => {

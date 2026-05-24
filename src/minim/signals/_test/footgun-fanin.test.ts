@@ -1,14 +1,15 @@
-// footgun-fanin.test.ts — adversarial probes for `fanin`.
+// footgun-fanin.test.ts — adversarial probes for the N-input lens
+// surface (`Cls.lens([...], ...)` / `Cls.derive([...], ...)`).
 
 import { describe, expect, it } from "vitest";
-import { effect, fanin, Num, num, signal } from "../index";
+import { effect, Num, num, signal } from "../index";
 
-describe("fanin: reactive args inside fwd", () => {
+describe("N-input lens: reactive args inside fwd", () => {
   it("fwd reads an external signal: tracked, re-fires on its change", () => {
     const a = num(1);
     const b = num(2);
     const k = signal(1);
-    const sum = fanin(Num, [a, b] as const, vals => vals[0] + vals[1] * k.value);
+    const sum = Num.derive([a, b] as const, vals => vals[0] + vals[1] * k.value);
     let observed = -1;
     const stop = effect(() => {
       observed = sum.value;
@@ -24,7 +25,7 @@ describe("fanin: reactive args inside fwd", () => {
   it("FOOTGUN: untracked-read in fwd via .peek skips the dep", () => {
     const a = num(1);
     const k = signal(0);
-    const result = fanin(Num, [a] as const, vals => vals[0] + k.peek());
+    const result = Num.derive([a] as const, vals => vals[0] + k.peek());
     let observed = -1;
     const stop = effect(() => {
       observed = result.value;
@@ -39,15 +40,15 @@ describe("fanin: reactive args inside fwd", () => {
   });
 });
 
-describe("fanin: nested fanin (aggregations of aggregations)", () => {
+describe("N-input lens: nested fanin (aggregations of aggregations)", () => {
   it("fanin of fanins: chain works correctly", () => {
     const a = num(1);
     const b = num(2);
     const c = num(3);
     const d = num(4);
-    const sumAB = fanin(Num, [a, b] as const, vals => vals[0] + vals[1]);
-    const sumCD = fanin(Num, [c, d] as const, vals => vals[0] + vals[1]);
-    const sumAll = fanin(Num, [sumAB, sumCD] as const, vals => vals[0] + vals[1]);
+    const sumAB = Num.derive([a, b] as const, vals => vals[0] + vals[1]);
+    const sumCD = Num.derive([c, d] as const, vals => vals[0] + vals[1]);
+    const sumAll = Num.derive([sumAB, sumCD] as const, vals => vals[0] + vals[1]);
     expect(sumAll.value).toBe(10);
     a.value = 10;
     expect(sumAll.value).toBe(19);
@@ -56,11 +57,11 @@ describe("fanin: nested fanin (aggregations of aggregations)", () => {
   });
 });
 
-describe("fanin: side effects in fwd (caller error pattern)", () => {
+describe("N-input lens: side effects in fwd (caller error pattern)", () => {
   it("FOOTGUN: side effects in fwd re-fire on every read", () => {
     const a = num(0);
     let sideEffectCount = 0;
-    const result = fanin(Num, [a] as const, vals => {
+    const result = Num.derive([a] as const, vals => {
       sideEffectCount++;
       return vals[0] * 2;
     });
@@ -75,12 +76,11 @@ describe("fanin: side effects in fwd (caller error pattern)", () => {
   });
 });
 
-describe("fanin: writable bwd with writeable parent that's itself a lens", () => {
+describe("N-input lens: writable bwd with writeable parent that's itself a lens", () => {
   it("fanin([num.scale(2)]) — write target writes through the scale lens", () => {
     const n = num(0);
     const scaled = n.scale(2);
-    const result = fanin(
-      Num,
+    const result = Num.lens(
       [scaled as Num] as const,
       vals => vals[0] + 100,
       (target, _vals) => [target - 100],
@@ -96,12 +96,11 @@ describe("fanin: writable bwd with writeable parent that's itself a lens", () =>
   });
 });
 
-describe("fanin: bwd that returns wrong-length array", () => {
+describe("N-input lens: bwd that returns wrong-length array", () => {
   it("FOOTGUN: bwd returning fewer elements: missing parents stay unchanged", () => {
     const a = num(1);
     const b = num(2);
-    const sum = fanin(
-      Num,
+    const sum = Num.lens(
       [a, b] as const,
       vals => vals[0] + vals[1],
       // biome-ignore lint/suspicious/noExplicitAny: testing bad usage
@@ -114,14 +113,14 @@ describe("fanin: bwd that returns wrong-length array", () => {
   });
 });
 
-describe("fanin: very deep aggregation tree", () => {
+describe("N-input lens: very deep aggregation tree", () => {
   it("16 leaves aggregated through 4 levels: write-read works", () => {
     const leaves = Array.from({ length: 16 }, (_, i) => num(i));
     let level: ReadonlyArray<Num> = leaves;
     while (level.length > 1) {
       const next: Num[] = [];
       for (let i = 0; i < level.length; i += 2) {
-        next.push(fanin(Num, [level[i]!, level[i + 1]!] as const, vals => vals[0] + vals[1]));
+        next.push(Num.derive([level[i]!, level[i + 1]!] as const, vals => vals[0] + vals[1]));
       }
       level = next;
     }

@@ -1,4 +1,4 @@
-// new-primitives.test.ts — primitives that become natural with `fanin`.
+// new-primitives.test.ts — primitives natural under N-input lenses.
 
 import { describe, expect, it } from "vitest";
 import { num, signal, vec } from "../index";

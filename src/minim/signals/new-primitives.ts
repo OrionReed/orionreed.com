@@ -1,10 +1,10 @@
-// new-primitives.ts — building blocks that become natural with `fanin`.
+// new-primitives.ts — building blocks built on `Cls.lens([...], ...)`
+// / `Cls.derive([...], ...)` (the N-input forms).
 //
-// These are primitives that either weren't expressible cleanly in the
-// old framework, or required hand-rolled `Signal.install` boilerplate.
-// All are 5-15 lines on top of `fanin`.
+// These are primitives that either weren't expressible cleanly in
+// the old framework, or required hand-rolled `Signal.install`
+// boilerplate. All are 5-15 lines on top of the engine.
 
-import { fanin } from "./fanin";
 import type { Signal } from "./signal";
 import { Num } from "./values/num";
 import { Vec } from "./values/vec";
@@ -18,7 +18,7 @@ type V = { x: number; y: number };
  *  semantic (where would you push the points to achieve a given
  *  distance? Not unique). For a writable variant see `radialLens`. */
 export function distanceLens(a: Signal<V>, b: Signal<V>): Num {
-  return fanin(Num, [a, b] as const, vals =>
+  return Num.derive([a, b] as const, vals =>
     Math.hypot(vals[0].x - vals[1].x, vals[0].y - vals[1].y),
   );
 }
@@ -26,7 +26,7 @@ export function distanceLens(a: Signal<V>, b: Signal<V>): Num {
 /** Angle from `a` to `b`, in radians. RO. Useful as a derived
  *  rotation for shapes pointing from one point to another. */
 export function angleLens(a: Signal<V>, b: Signal<V>): Num {
-  return fanin(Num, [a, b] as const, vals =>
+  return Num.derive([a, b] as const, vals =>
     Math.atan2(vals[1].y - vals[0].y, vals[1].x - vals[0].x),
   );
 }
@@ -50,8 +50,7 @@ export function reflectionLens(
     const projY = a.y + t * dy;
     return { x: 2 * projX - p.x, y: 2 * projY - p.y };
   };
-  return fanin(
-    Vec,
+  return Vec.lens(
     [point, axisStart, axisEnd] as const,
     vals => reflect(vals[0], vals[1], vals[2]),
     (target, vals) => [reflect(target, vals[1], vals[2]), undefined, undefined] as never,
@@ -62,8 +61,7 @@ export function reflectionLens(
  *  endpoints are writable: write the interpolated point, both move
  *  rigidly along the interpolation direction (preserving t). */
 export function vecLerp(a: Signal<V>, b: Signal<V>, t: Signal<number>): Writable<Vec> {
-  return fanin(
-    Vec,
+  return Vec.lens(
     [a, b, t] as const,
     vals => {
       const [av, bv, tv] = vals;
@@ -90,8 +88,7 @@ export function vecLerp(a: Signal<V>, b: Signal<V>, t: Signal<number>): Writable
  *  the delta equally between a and b. The "pulley" pattern from the
  *  argmin docstring, made first-class. */
 export function pulleySum(a: Num, b: Num): Writable<Num> {
-  return fanin(
-    Num,
+  return Num.lens(
     [a, b] as const,
     vals => vals[0] + vals[1],
     (target, vals) => {
@@ -106,8 +103,7 @@ export function pulleySum(a: Num, b: Num): Writable<Num> {
 /** Difference of two nums: `a - b`. Writing the difference shifts
  *  both inputs symmetrically by ±half-delta. */
 export function diffLens(a: Num, b: Num): Writable<Num> {
-  return fanin(
-    Num,
+  return Num.lens(
     [a, b] as const,
     vals => vals[0] - vals[1],
     (target, vals) => {
@@ -127,8 +123,7 @@ export function diffLens(a: Num, b: Num): Writable<Num> {
 export function clampedMean(parents: readonly Num[], lo: number, hi: number): Writable<Num> {
   const n = parents.length;
   const inv = 1 / n;
-  return fanin(
-    Num,
+  return Num.lens(
     parents as never,
     vals => {
       const arr = vals as readonly number[];
@@ -155,7 +150,7 @@ export function clampedMean(parents: readonly Num[], lo: number, hi: number): Wr
 
 /** Quadratic Bézier point at parameter `t`. RO. */
 export function bezier2(p0: Signal<V>, p1: Signal<V>, p2: Signal<V>, t: Signal<number>): Vec {
-  return fanin(Vec, [p0, p1, p2, t] as const, vals => {
+  return Vec.derive([p0, p1, p2, t] as const, vals => {
     const [a, b, c, tv] = vals;
     const u = 1 - tv;
     return {
@@ -173,7 +168,7 @@ export function bezier3(
   p3: Signal<V>,
   t: Signal<number>,
 ): Vec {
-  return fanin(Vec, [p0, p1, p2, p3, t] as const, vals => {
+  return Vec.derive([p0, p1, p2, p3, t] as const, vals => {
     const [a, b, c, d, tv] = vals;
     const u = 1 - tv;
     const u2 = u * u;

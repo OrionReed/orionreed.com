@@ -46,7 +46,7 @@ describe("glitch-free: diamond shapes", () => {
 
   it("equality short-circuit: re-fires only on actual change", () => {
     const a = num(5);
-    const sq = a.deriveTo(Num, v => v * v);
+    const sq = Num.derive(a, v => v * v);
     let fires = 0;
     effect(() => {
       void sq.value;

@@ -199,7 +199,7 @@ const v = c.derive((c) => c.add(offset).scale(2).perp());
 //                  ^ one Computed; mutating Chain inside the closure
 ```
 
-`lensTo(Cls, get, set)` is the underlying machinery. `vec.x` and `vec.y` are lazy getters that build `this.lensTo(Num, s => s.x, (v, s) => ({ ...s, x: v }))` — so they're full `Num` signals, and `vec.x.to(50, 0.3)` is a one-axis tween. Per-axis writes don't fire neighbouring effects.
+`Cls.lens(parent, get, set)` is the underlying machinery. `vec.x` and `vec.y` are lazy getters that build `Num.lens(this, s => s.x, (v, s) => ({ ...s, x: v }))` — so they're full `Num` signals, and `vec.x.to(50, 0.3)` is a one-axis tween. Per-axis writes don't fire neighbouring effects.
 
 Aggregates aren't a feature, they're lenses. `Cls.lens(getter, setter)` returns a writable computed view that's also an instance of `Cls` — `Vec.lens(get, set)` is a Vec. `mix(Cls, parts, merge, writeback)` is the N-ary form, parameterised by a *merge* (how reads aggregate) and a *writeback* (how writes distribute). `Mix.mean` + `Mix.deltaEven` gives you the rigid-body centroid: reading returns the mean, writing distributes the delta evenly. `centroid(a, b, c, d)` is one line of that pattern. Tweening it is a rigid group translate:
 
@@ -239,11 +239,11 @@ The bidirectional story extends to `vec(num, num)` (writes propagate to both axe
 
 <md-gears></md-gears>
 
-The lenses don't care what the values *mean*. A colour has two natural coordinate systems — HSL and RGB — and the conversion between them is a bijection. Make HSL canonical, expose each R/G/B as `fanin([h, s, l], hslToRgb, rgbToHsl)` — a 3-input lens that reads through the bijection on the way out and back through it on the way in — render the picker on a polar wheel and three RGB sliders, and you get five draggable inputs all manipulating the same state from different coordinate systems. Drag the wheel, the RGB sliders move. Drag a slider, the wheel picker moves. *Same colour, two views.*
+The lenses don't care what the values *mean*. A colour has two natural coordinate systems — HSL and RGB — and the conversion between them is a bijection. Make HSL canonical, expose each R/G/B as `Num.lens([h, s, l], hslToRgb, rgbToHsl)` — a 3-input lens that reads through the bijection on the way out and back through it on the way in — render the picker on a polar wheel and three RGB sliders, and you get five draggable inputs all manipulating the same state from different coordinate systems. Drag the wheel, the RGB sliders move. Drag a slider, the wheel picker moves. *Same colour, two views.*
 
 <md-color></md-color>
 
-Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. When the relation needs to read multiple sources or distribute writes across them, `fanin(Cls, parents, fwd, bwd)` is the n-input generalisation: read aggregates through `fwd`, writes split via `bwd` and apply atomically. The escape hatch for everything else is the explicit `Cls.lens(get, set)` form, or `relate(a, b, fwd, bwd)` for re-orientable bidirectional bindings between two existing signals (either side can be the driver).
+Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. When the relation needs to read multiple sources or distribute writes across them, `Cls.lens([parents], fwd, bwd)` is the n-input generalisation: read aggregates through `fwd`, writes split via `bwd` and apply atomically. The escape hatch for everything else is the closure form `Cls.lens(get, set)`, or `relate(a, b, fwd, bwd)` for re-orientable bidirectional bindings between two existing signals (either side can be the driver).
 
 <md-pulley></md-pulley>
 

@@ -59,14 +59,14 @@ class Hsl extends Signal<V> {
 
   add(b: Val<V>): this {
     const bf = valFn(b);
-    return this.through(
+    return this.lens(
       v => hslAdd(v, bf()),
       n => hslSub(n, bf()),
     );
   }
   scale(k: Val<number>): this {
     const kf = valFn(k);
-    return this.through(
+    return this.lens(
       v => hslScale(v, kf()),
       n => hslScale(n, 1 / kf()),
     );

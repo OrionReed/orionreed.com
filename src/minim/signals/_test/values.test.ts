@@ -32,9 +32,9 @@ describe("Num", () => {
     expect(sq.value).toBe(16);
   });
 
-  it("parent.deriveTo(Cls, fwd) — cross-type RO lens", () => {
+  it("Cls.derive(parent, fwd) — cross-type RO lens", () => {
     const v = vec(3, 4);
-    const m = v.deriveTo(Num, p => Math.hypot(p.x, p.y));
+    const m = Num.derive(v, p => Math.hypot(p.x, p.y));
     expect(m).toBeInstanceOf(Num);
     expect(isComputed(m)).toBe(true);
     expect(m.value).toBe(5);
@@ -45,10 +45,10 @@ describe("Num", () => {
     }).toThrow();
   });
 
-  it("parent.lensTo(Cls, fwd, bwd) — cross-type RW lens, write propagates", () => {
+  it("Cls.lens(parent, fwd, bwd) — cross-type RW lens, write propagates", () => {
     const v = vec(1, 2);
-    const sum = v.lensTo(
-      Num,
+    const sum = Num.lens(
+      v,
       p => p.x + p.y,
       (s, p) => {
         const cur = p.x + p.y;

@@ -11,7 +11,7 @@
 // All bench cases construct the comparator (un-fused) via direct
 // `Signal.install` so each layer materialises a separate cell, which
 // is what the dep-graph used to look like before fusion was extended
-// beyond `.through()`.
+// beyond `.lens()`.
 
 import { describe, it } from "vitest";
 import { Num, num, Signal, Transform, transform, Vec } from "../index";
@@ -32,17 +32,17 @@ function timed(label: string, fn: () => void): number {
   return ms;
 }
 
-describe("bench: deriveTo chain fusion vs hand-nested computed cells", () => {
-  it("2-deep deriveTo chain — read", () => {
+describe("bench: derive chain fusion vs hand-nested computed cells", () => {
+  it("2-deep derive chain — read", () => {
     const a = num(1);
-    const fused = a.deriveTo(Num, v => v * 2).deriveTo(Num, v => v + 10);
+    const fused = Num.derive(Num.derive(a, v => v * 2), v => v + 10);
 
     // Un-fused equivalent via direct installs (two cells).
     const b = num(1);
     const inner = Signal.install(Num, () => b.value * 2);
     const outer = Signal.install(Num, () => inner.value + 10);
 
-    timed("deriveTo fused (1 cell) read", () => {
+    timed("derive fused (1 cell) read", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         a.value = i;
@@ -50,7 +50,7 @@ describe("bench: deriveTo chain fusion vs hand-nested computed cells", () => {
       }
       if (s < -1e30) throw new Error("");
     });
-    timed("hand-nested deriveTo (2 cells) read", () => {
+    timed("hand-nested derive (2 cells) read", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         b.value = i;
@@ -60,21 +60,20 @@ describe("bench: deriveTo chain fusion vs hand-nested computed cells", () => {
     });
   });
 
-  it("4-deep deriveTo chain — read (stress)", () => {
+  it("4-deep derive chain — read (stress)", () => {
     const a = num(1);
-    const fused = a
-      .deriveTo(Num, v => v * 2)
-      .deriveTo(Num, v => v + 10)
-      .deriveTo(Num, v => v * 3)
-      .deriveTo(Num, v => v - 5);
+    const l1 = Num.derive(a, v => v * 2);
+    const l2 = Num.derive(l1, v => v + 10);
+    const l3 = Num.derive(l2, v => v * 3);
+    const fused = Num.derive(l3, v => v - 5);
 
     const b = num(1);
-    const l1 = Signal.install(Num, () => b.value * 2);
-    const l2 = Signal.install(Num, () => l1.value + 10);
-    const l3 = Signal.install(Num, () => l2.value * 3);
-    const l4 = Signal.install(Num, () => l3.value - 5);
+    const u1 = Signal.install(Num, () => b.value * 2);
+    const u2 = Signal.install(Num, () => u1.value + 10);
+    const u3 = Signal.install(Num, () => u2.value * 3);
+    const l4 = Signal.install(Num, () => u3.value - 5);
 
-    timed("deriveTo fused (1 cell) read (4-deep)", () => {
+    timed("derive fused (1 cell) read (4-deep)", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         a.value = i;
@@ -82,7 +81,7 @@ describe("bench: deriveTo chain fusion vs hand-nested computed cells", () => {
       }
       if (s < -1e30) throw new Error("");
     });
-    timed("hand-nested deriveTo (4 cells) read", () => {
+    timed("hand-nested derive (4 cells) read", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         b.value = i;
@@ -93,21 +92,20 @@ describe("bench: deriveTo chain fusion vs hand-nested computed cells", () => {
   });
 });
 
-describe("bench: lensTo chain fusion vs hand-nested lens cells", () => {
-  it("2-deep lensTo chain — read+write", () => {
+describe("bench: lens chain fusion vs hand-nested lens cells", () => {
+  it("2-deep lens chain — read+write", () => {
     type S = { a: number };
     const root = new Signal<S>({ a: 0 });
-    // Fused: lensTo to a.a (Num), then through to Num.
-    const fused = root
-      .lensTo(
-        Num,
-        s => s.a,
-        (v, s) => ({ ...s, a: v }),
-      )
-      .through(
-        v => v + 100,
-        v => v - 100,
-      ) as Num & { value: number };
+    // Fused: Num.lens to a.a, then endo lens to Num.
+    const inner1 = Num.lens(
+      root,
+      s => s.a,
+      (v, s) => ({ ...s, a: v }),
+    );
+    const fused = inner1.lens(
+      v => v + 100,
+      v => v - 100,
+    ) as Num & { value: number };
 
     const root2 = new Signal<S>({ a: 0 });
     // Un-fused equivalent via two raw lens installs.
@@ -126,7 +124,7 @@ describe("bench: lensTo chain fusion vs hand-nested lens cells", () => {
       },
     );
 
-    timed("lensTo fused (1 cell) read", () => {
+    timed("lens fused (1 cell) read", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         root.value = { a: i };
@@ -134,7 +132,7 @@ describe("bench: lensTo chain fusion vs hand-nested lens cells", () => {
       }
       if (s < -1e30) throw new Error("");
     });
-    timed("hand-nested lensTo (2 cells) read", () => {
+    timed("hand-nested lens (2 cells) read", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         root2.value = { a: i };
@@ -143,10 +141,10 @@ describe("bench: lensTo chain fusion vs hand-nested lens cells", () => {
       if (s < -1e30) throw new Error("");
     });
 
-    timed("lensTo fused (1 cell) write", () => {
+    timed("lens fused (1 cell) write", () => {
       for (let i = 0; i < N; i++) fused.value = i + 100;
     });
-    timed("hand-nested lensTo (2 cells) write", () => {
+    timed("hand-nested lens (2 cells) write", () => {
       for (let i = 0; i < N; i++) outer.value = i + 100;
     });
   });
@@ -278,17 +276,17 @@ describe("bench: 3-deep field chain (the worst case in real UI code)", () => {
     type Outer = { inner: { translate: { x: number; y: number } } };
     const root = new Signal<Outer>({ inner: { translate: { x: 0, y: 0 } } });
 
-    // Fused: 3 lensTo calls fuse into one cell onto root.
-    const innerLens = root.lensTo(
-      Vec,
+    // Fused: 2 Cls.lens calls fuse into one cell onto root.
+    const innerLens = Vec.lens(
+      root,
       o => o.inner.translate,
       (v: { x: number; y: number }, o) => ({
         ...o,
         inner: { ...o.inner, translate: v },
       }),
     );
-    const fusedX = innerLens.lensTo(
-      Num,
+    const fusedX = Num.lens(
+      innerLens,
       v => v.x,
       (n: number, v) => ({ ...v, x: n }),
     );

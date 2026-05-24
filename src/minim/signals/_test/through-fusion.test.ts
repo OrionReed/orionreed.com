@@ -1,6 +1,6 @@
-// through-fusion.test.ts — fusion-specific semantics of `.through()`.
+// through-fusion.test.ts — fusion-specific semantics of `.lens()`.
 //
-// .through() fuses with a prior .through() so N consecutive calls
+// .lens() fuses with a prior .lens() so N consecutive calls
 // collapse to one lens cell on one dep-graph node. This file asserts
 // the soundness of that fold across reads, writes, intermediates,
 // reactive args, equality, and cleanup.
@@ -8,15 +8,15 @@
 import { describe, expect, it } from "vitest";
 import { effect, Num, num, signal } from "../index";
 
-describe(".through() fusion", () => {
+describe(".lens() fusion", () => {
   it("2-deep chain: reads compose correctly", () => {
     const a = num(3);
     const c = a
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       )
-      .through(
+      .lens(
         v => v + 10,
         v => v - 10,
       );
@@ -28,11 +28,11 @@ describe(".through() fusion", () => {
   it("2-deep chain: writes invert in correct order", () => {
     const a = num(0);
     const c = a
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       )
-      .through(
+      .lens(
         v => v + 10,
         v => v - 10,
       );
@@ -44,19 +44,19 @@ describe(".through() fusion", () => {
   it("4-deep chain: reads & writes both compose", () => {
     const a = num(1);
     const c = a
-      .through(
+      .lens(
         v => v + 1,
         v => v - 1,
       )
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       )
-      .through(
+      .lens(
         v => v - 3,
         v => v + 3,
       )
-      .through(
+      .lens(
         v => v * 5,
         v => v / 5,
       );
@@ -71,11 +71,11 @@ describe(".through() fusion", () => {
 
   it("intermediate lens stays usable after fusion built on top of it", () => {
     const a = num(2);
-    const m = a.through(
+    const m = a.lens(
       v => v * 3,
       v => v / 3,
     ); // intermediate
-    const c = m.through(
+    const c = m.lens(
       v => v + 1,
       v => v - 1,
     ); // fused over m
@@ -89,11 +89,11 @@ describe(".through() fusion", () => {
 
   it("write to intermediate propagates to root AND fused sees the update", () => {
     const a = num(1);
-    const m = a.through(
+    const m = a.lens(
       v => v * 2,
       v => v / 2,
     );
-    const c = m.through(
+    const c = m.lens(
       v => v + 10,
       v => v - 10,
     );
@@ -116,8 +116,8 @@ describe(".through() fusion", () => {
         a.value = v / 2;
       },
     );
-    // .through() on a non-through lens does NOT fuse across the boundary.
-    const c = m.through(
+    // .lens() on a non-through lens does NOT fuse across the boundary.
+    const c = m.lens(
       v => v + 10,
       v => v - 10,
     );
@@ -128,11 +128,11 @@ describe(".through() fusion", () => {
     // Now stack two through() calls on a plain source — these *do* fuse.
     const b = num(0);
     const fused = b
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       )
-      .through(
+      .lens(
         v => v + 10,
         v => v - 10,
       );
@@ -145,11 +145,11 @@ describe(".through() fusion", () => {
     const k = signal(2);
     const off = signal(10);
     const c = a
-      .through(
+      .lens(
         v => v * k.value,
         v => v / k.value,
       )
-      .through(
+      .lens(
         v => v + off.value,
         v => v - off.value,
       );
@@ -163,11 +163,11 @@ describe(".through() fusion", () => {
   it("effect on fused fires when root changes via fusion path", () => {
     const a = num(1);
     const c = a
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       )
-      .through(
+      .lens(
         v => v + 1,
         v => v - 1,
       );
@@ -190,11 +190,11 @@ describe(".through() fusion", () => {
     // floating-point.
     const a = num(0);
     const c = a
-      .through(
+      .lens(
         v => v * Math.PI,
         v => v / Math.PI,
       )
-      .through(
+      .lens(
         v => Math.round(Math.sin(v) * 1e9) / 1e9,
         v => Math.asin(v) || 0,
       );
@@ -220,7 +220,7 @@ describe(".through() fusion", () => {
     // run on reads of the fused.
     let intermediateFwdCalls = 0;
     const a = num(2);
-    const m = a.through(
+    const m = a.lens(
       v => {
         intermediateFwdCalls++;
         return v * 2;
@@ -228,7 +228,7 @@ describe(".through() fusion", () => {
       v => v / 2,
     );
     intermediateFwdCalls = 0;
-    const c = m.through(
+    const c = m.lens(
       v => v + 1,
       v => v - 1,
     );
@@ -257,11 +257,11 @@ describe(".through() fusion", () => {
   it("fused lens cleans up its dep on root after _unwatched", () => {
     const a = num(0);
     const c = a
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       )
-      .through(
+      .lens(
         v => v + 1,
         v => v - 1,
       );
@@ -278,11 +278,11 @@ describe(".through() fusion", () => {
   it("fusion preserves class identity (Num.through → Num)", () => {
     const a = num(0);
     const c = a
-      .through(
+      .lens(
         v => v + 1,
         v => v - 1,
       )
-      .through(
+      .lens(
         v => v * 2,
         v => v / 2,
       );
@@ -291,7 +291,7 @@ describe(".through() fusion", () => {
 
   it("fusion does NOT cross non-through boundaries (manual lens)", () => {
     // A manual Num.lens is not tagged with _fusedOf, so a subsequent
-    // .through() starts a fresh fusion-chain over the manual lens.
+    // .lens() starts a fresh fusion-chain over the manual lens.
     const a = num(0);
     const manual = Num.lens(
       () => a.value * 2,
@@ -299,7 +299,7 @@ describe(".through() fusion", () => {
         a.value = v / 2;
       },
     );
-    const c = manual.through(
+    const c = manual.lens(
       v => v + 1,
       v => v - 1,
     );
@@ -313,20 +313,20 @@ describe(".through() fusion", () => {
   it("fusion across many siblings on the same root: independent", () => {
     const a = num(2);
     const c1 = a
-      .through(
+      .lens(
         v => v + 1,
         v => v - 1,
       )
-      .through(
+      .lens(
         v => v * 10,
         v => v / 10,
       );
     const c2 = a
-      .through(
+      .lens(
         v => v * 5,
         v => v / 5,
       )
-      .through(
+      .lens(
         v => v - 3,
         v => v + 3,
       );
@@ -342,15 +342,15 @@ describe(".through() fusion", () => {
   it("write-then-read round-trip on deeply fused chain is exact", () => {
     const a = num(0);
     const c = a
-      .through(
+      .lens(
         v => v + 7,
         v => v - 7,
       )
-      .through(
+      .lens(
         v => v * 3,
         v => v / 3,
       )
-      .through(
+      .lens(
         v => v - 11,
         v => v + 11,
       );
@@ -400,7 +400,7 @@ const wrapDelta = (delta: number, period: number): number =>
 const clampFn = (lo: number, hi: number) => (v: number) => (v < lo ? lo : v > hi ? hi : v);
 const quantizeFn = (step: number) => (v: number) => Math.round(v / step) * step;
 
-describe(".through() fusion: non-Iso compositions match unfused reference", () => {
+describe(".lens() fusion: non-Iso compositions match unfused reference", () => {
   it("scale then cyclic (Iso then Stateful): fused ≡ unfused", () => {
     const a1 = num(0);
     const fused = a1.scale(2).cyclic(TAU);

@@ -149,7 +149,7 @@ describe("footgun: reactive args in field chains", () => {
   it("through(f, g) with reactive arg inside f tracks the arg correctly", () => {
     const a = num(1);
     const k = signal(2);
-    const c = a.through(
+    const c = a.lens(
       v => v * k.value,
       v => v / k.value,
     );
@@ -168,7 +168,7 @@ describe("footgun: reactive args in field chains", () => {
   it("write to reactive-arg-using through inverts using current arg", () => {
     const a = num(1);
     const k = signal(2);
-    const c = a.through(
+    const c = a.lens(
       v => v * k.value,
       v => v / k.value,
     );

@@ -12,16 +12,16 @@ import { field } from "../writable";
 
 describe("footgun: field path on top of non-field stateful lens", () => {
   it("lensTo (non-field bwd shape) then field: write must traverse lensTo's bwd", () => {
-    // The bwd of `lensTo(Vec, s => s.foo, (v, s) => ({ ...s, foo: v }))`
-    // happens to be a field-set in shape, but lensTo doesn't tag it
+    // The bwd of `Vec.lens(root, s => s.foo, (v, s) => ({ ...s, foo: v }))`
+    // happens to be a field-set in shape, but Cls.lens doesn't tag it
     // with a `fieldKey`. The field-path optimisation MUST detect that
     // the prior chain is not field-tagged and fall back to the generic
-    // composition — otherwise the write bypasses the lensTo entirely
+    // composition — otherwise the write bypasses the lens entirely
     // and lands directly on the root with the wrong key.
     type S = { foo: { x: number; y: number } };
     const root = new Signal<S>({ foo: { x: 1, y: 2 } });
-    const fooLens = root.lensTo(
-      Vec,
+    const fooLens = Vec.lens(
+      root,
       s => s.foo,
       (v, s) => ({ ...s, foo: v }),
     );
@@ -43,8 +43,8 @@ describe("footgun: field path on top of non-field stateful lens", () => {
     // the `scale(2)` layer would be bypassed.
     type S = { translate: { x: number; y: number } };
     const root = new Signal<S>({ translate: { x: 4, y: 6 } });
-    const translateLens = root.lensTo(
-      Vec,
+    const translateLens = Vec.lens(
+      root,
       s => s.translate,
       (vv, s) => ({ ...s, translate: vv }),
     );
@@ -67,7 +67,7 @@ describe("statefulness: arity-inferred (no explicit law tag needed)", () => {
     // The engine doesn't compute or pass s.
     const a = num(10);
     let bwdCalled = false;
-    const c = a.through(
+    const c = a.lens(
       v => v + 1,
       v => {
         bwdCalled = true;
@@ -83,7 +83,7 @@ describe("statefulness: arity-inferred (no explicit law tag needed)", () => {
   it("2-arg bwd → engine treats as stateful; s is the prior-fwd value", () => {
     const a = num(10);
     let receivedS: unknown = "unset";
-    const c = a.through(
+    const c = a.lens(
       v => v + 100,
       (v, s) => {
         receivedS = s;
@@ -103,7 +103,7 @@ describe("statefulness: arity-inferred (no explicit law tag needed)", () => {
     // need real receiver state.
     const a = num(10);
     let observedS = -1;
-    const c = a.through(
+    const c = a.lens(
       v => v,
       (v, s = 0) => {
         observedS = s;

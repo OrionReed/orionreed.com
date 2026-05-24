@@ -386,12 +386,12 @@ export interface SignalOptions<T = unknown> {
 //
 // A bwd is "stateful" iff it reads the receiver's input-position value
 // to compute the new root state — `cyclic`'s nearest-representative,
-// `lensTo`'s spread-replace, etc. The engine detects this from the
+// `Cls.lens`'s spread-replace, etc. The engine detects this from the
 // bwd's declared arity (`bwd.length >= 2`), so users don't pass an
 // explicit law tag:
 //
-//   through(v => v + 1, v => v - 1)         // 1-arg → stateless
-//   through(v => v, (v, s) => stateful_fn)  // 2-arg → stateful
+//   .lens(v => v + 1, v => v - 1)         // 1-arg → stateless
+//   .lens(v => v, (v, s) => stateful_fn)  // 2-arg → stateful
 //
 // Composition rule: a chain is stateful iff any layer in it is
 // stateful. The setter dispatch branches on this — stateless setters
@@ -561,10 +561,11 @@ export class Signal<T = unknown> implements ReactiveNode {
   _watched?: () => void;
   _unwatchedHook?: () => void;
   /** Fusion tag. Marks this cell as a value-space pipeline (fwd, bwd?)
-   *  on top of a root `parent`. Subsequent `.through()`, `.lensTo()`,
-   *  `.deriveTo()`, or `field()` calls on this cell collapse the chain
-   *  into a single cell pointing at the same root, composing fwd/bwd
-   *  in value-space. Internal.
+   *  on top of a root `parent`. Subsequent `.lens()` (endo),
+   *  `Cls.lens(this, ...)`, `Cls.derive(this, ...)`, or `field()`
+   *  calls on this cell collapse the chain into a single cell
+   *  pointing at the same root, composing fwd/bwd in value-space.
+   *  Internal.
    *
    *  `stateful` is true iff any layer's `bwd` declares `(v, s) => …`
    *  (arity ≥ 2). The setter dispatch branches on this — stateless
@@ -609,7 +610,7 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  its declared arity (incl. `Signal` itself whose ctor takes T).
    *
    *  This is the lower-level typed factory: for parent-based lenses,
-   *  prefer `parent.lensTo(Cls, fwd, bwd)` / `parent.deriveTo(Cls, fwd)`.
+   *  prefer `Cls.lens(parent, fwd, bwd)` / `Cls.derive(parent, fn)`.
    *
    *  Overload: with a setter, returns `Writable<C>` (registry-resolved
    *  to the per-class writable form, e.g. `Wr<Vec>` for Vec). Without,
@@ -639,36 +640,6 @@ export class Signal<T = unknown> implements ReactiveNode {
     return v.setter === undefined ? "computed" : "lens";
   }
 
-  /** Read-only derived view of the same class. Polymorphic-`this`
-   *  static: `Vec.derive(fn)` → `Vec`, `Box.derive(fn)` → `Box`, etc.
-   *  Inherited by every `Signal` subclass — user value classes get it
-   *  for free without redeclaring it.
-   *
-   *  Signature follows the `lensTo`/`deriveTo` shape (`Signal<any>`
-   *  upper bound, `InstanceType<C>` for the value type) — same
-   *  variance-escape pattern. The inner cast bridges the gap between
-   *  `Signal.install`'s `Signal<T>`-anchored return and the recovered
-   *  instance type; runtime is correct because `this` is a Signal
-   *  subclass constructor. */
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo
-  static derive<C extends new (...args: never[]) => Signal<any>>(
-    this: C,
-    fn: () => Of<InstanceType<C>>,
-  ): InstanceType<C> {
-    return Signal.install(this, fn) as InstanceType<C>;
-  }
-
-  /** Writable lens of the same class. Polymorphic-`this` static:
-   *  `Vec.lens(g, s)` → `Writable<Vec>`. Inherited by every subclass. */
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo
-  static lens<C extends new (...args: never[]) => Signal<any>>(
-    this: C,
-    g: () => Of<InstanceType<C>>,
-    s: (v: Of<InstanceType<C>>) => void,
-  ): Writable<InstanceType<C>> {
-    return Signal.install(this, g, s) as Writable<InstanceType<C>>;
-  }
-
   /** Type predicate against this class. `Vec.is(x)` narrows `x` to
    *  `Vec`. Inherited static; works for any subclass via the
    *  polymorphic `this` constructor type. */
@@ -680,105 +651,135 @@ export class Signal<T = unknown> implements ReactiveNode {
     return v instanceof this;
   }
 
-  /** Cross-type lens: produce a typed `Cls`-instance lens that reads
-   *  `fwd(this.value)` and writes via `this.value = bwd(u, this.peek())`.
+  /** Read-only typed view. Three call shapes:
    *
-   *  Field-lens getters (`vec.x`, `box.w`, …) compose this with `lazy`:
-   *  `lazy(this, "x", () => this.lensTo(Num, s => s.x, (v, s) => ({...s, x: v})))`.
-   *  For arbitrary-shape typed lenses without a parent, use
-   *  `Signal.install(Cls, g, s)` directly.
+   *    Cls.derive(parent, fn)        — 1-input. Goes through `_fuse`,
+   *                                    inherits fusion + field-path
+   *                                    fast paths.
+   *    Cls.derive(parents, fn)       — N-input. Aggregates over an
+   *                                    array of signals (subsumes the
+   *                                    old `fanin(Cls, parents, fn)`).
+   *    Cls.derive(fn)                — closure-style. Deps captured
+   *                                    by reading inside `fn`.
    *
-   *  Fuses with the receiver's prior fusion tag: chained `lensTo`s on
-   *  fused parents collapse to one cell pointing at the chain's root.
-   *  In particular, nested `field()` access (`transform.translate.x`)
-   *  is a single fused lens onto `transform`.
-   *
-   *  Signature note: `Cls` is typed as a constructor returning
-   *  `Signal<any>` (so subclasses with invariant setters fit) and `U`
-   *  is recovered from `InstanceType<C>` via `ValueOf<>`. The fwd/bwd
-   *  closures are typed against the recovered U — this dodges the
-   *  contravariant-setter incompatibility you'd hit with the naive
-   *  `C extends Signal<U>` formulation. */
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape hatch
-  lensTo<C extends new (...args: never[]) => Signal<any>>(
-    this: Signal<T>,
-    Cls: C,
-    fwd: (s: T) => Of<InstanceType<C>>,
-    bwd: (u: Of<InstanceType<C>>, s: T) => T,
-  ): InstanceType<C> {
-    return Signal._fuse(
-      this as Signal<unknown>,
-      Cls as unknown as new (
-        ...args: never[]
-      ) => Signal<Of<InstanceType<C>>>,
-      fwd as (s: unknown) => Of<InstanceType<C>>,
-      // Adapter takes (v, s); arity 2 → engine treats as stateful.
-      (u, s) => bwd(u, s as T),
-    ) as InstanceType<C>;
+   *  Polymorphic-`this` static: `Vec.derive(...)` → `Vec`, etc. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static derive<C extends new (...args: never[]) => Signal<any>, P>(
+    this: C,
+    parent: Read<P>,
+    fn: (v: P) => Of<InstanceType<C>>,
+  ): InstanceType<C>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static derive<C extends new (...args: never[]) => Signal<any>, P extends readonly Read<unknown>[]>(
+    this: C,
+    parents: P,
+    fn: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => Of<InstanceType<C>>,
+  ): InstanceType<C>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static derive<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    fn: () => Of<InstanceType<C>>,
+  ): InstanceType<C>;
+  // biome-ignore lint/suspicious/noExplicitAny: dispatch
+  static derive(this: any, ...args: any[]): any {
+    if (args.length === 1) {
+      // Closure-style: deps captured by reading inside `fn`.
+      return Signal.install(this, args[0]);
+    }
+    const [parent, fn] = args;
+    if (Array.isArray(parent)) {
+      // N-input: delegate to `fanin` (engine-internal helper).
+      return _fanin(this, parent, fn);
+    }
+    // 1-input: fuse with parent's chain.
+    return Signal._fuse(parent, this, fn);
   }
 
-  /** Cross-type computed: read-only `Cls`-instance derived from
-   *  `fwd(this.value)`. The one-way analog of `lensTo`. Fuses with
-   *  the receiver's prior fusion tag (any chain of derive/lens/through
-   *  collapses to a single computed pointing at the root). */
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape hatch
-  deriveTo<C extends new (...args: never[]) => Signal<any>>(
-    this: Signal<T>,
-    Cls: C,
-    fwd: (s: T) => Of<InstanceType<C>>,
-  ): InstanceType<C> {
-    return Signal._fuse(
-      this as Signal<unknown>,
-      Cls as unknown as new (
-        ...args: never[]
-      ) => Signal<Of<InstanceType<C>>>,
-      fwd as (s: unknown) => Of<InstanceType<C>>,
-    ) as InstanceType<C>;
+  /** Read-write typed lens. Three call shapes:
+   *
+   *    Cls.lens(parent, fwd, bwd)     — 1-input. Goes through `_fuse`.
+   *    Cls.lens(parents, fwd, bwd)    — N-input (subsumes `fanin` RW).
+   *    Cls.lens(g, s)                 — closure-style getter/setter.
+   *
+   *  bwd is typed `(target, v) => P`; engine arity-detects
+   *  statefulness via `bwd.length`. Polymorphic-`this`: `Vec.lens(...)`
+   *  returns `Writable<Vec>`. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static lens<C extends new (...args: never[]) => Signal<any>, P>(
+    this: C,
+    parent: Read<P>,
+    fwd: (v: P) => Of<InstanceType<C>>,
+    bwd: (target: Of<InstanceType<C>>, v: P) => P,
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static lens<C extends new (...args: never[]) => Signal<any>, P extends readonly Read<unknown>[]>(
+    this: C,
+    parents: P,
+    fwd: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => Of<InstanceType<C>>,
+    bwd: (
+      target: Of<InstanceType<C>>,
+      vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
+    ) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static lens<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    g: () => Of<InstanceType<C>>,
+    s: (v: Of<InstanceType<C>>) => void,
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: dispatch
+  static lens(this: any, ...args: any[]): any {
+    if (args.length === 2) {
+      // Closure-style: getter + setter.
+      return Signal.install(this, args[0], args[1]);
+    }
+    const [parent, fwd, bwd] = args;
+    if (Array.isArray(parent)) {
+      // N-input: delegate to `fanin`.
+      return _fanin(this, parent, fwd, bwd);
+    }
+    // 1-input: fuse with parent's chain.
+    return Signal._fuse(parent, this, fwd, bwd);
   }
 
-  /** Endo-lens: wrap this cell with a `(fwd, bwd)` pair in value-space.
-   *  Returns a lens of the same class. Auto-fuses: `.through(F, B)`
-   *  after `.through(f, b)` collapses to one cell with composed fns.
+  /** Endo-lens: same-class lens via `(fwd, bwd)` in value-space.
+   *  Auto-fuses: `.lens(F, B)` after `.lens(f, b)` collapses to one
+   *  cell with composed fns.
    *
-   *  Statefulness is inferred from `bwd`'s declared arity:
+   *  Statefulness inferred from `bwd.length`:
    *    - `bwd: v => …`       — stateless. Iso/projection chains fuse
    *                            to a fast setter that skips `parent.peek()`.
-   *    - `bwd: (v, s) => …`  — stateful. Engine threads the genuine
-   *                            receiver-input value through `s`.
-   *  See `cyclic` for an example of the stateful pattern.
+   *    - `bwd: (v, s) => …`  — stateful. Engine threads the receiver
+   *                            value through `s`. See `cyclic`.
    *
-   *  TS inference note: declaring the param as `(v: T, s: T) => T`
-   *  lets unary lambdas (`v => …`) infer `v: T` cleanly via
-   *  contextual typing while still accepting binary `(v, s) => …`.
-   *  JS's parameter-arity tolerance does the rest at runtime.
+   *  TS inference: declaring the param as `(v: T, s: T) => T` lets
+   *  unary lambdas (`v => …`) infer `v: T` cleanly via contextual
+   *  typing while still accepting binary `(v, s) => …` forms. JS's
+   *  parameter-arity tolerance handles the rest at runtime.
    *
    *  Smart-dispatch on RO receivers: if `this` is a fused-RO chain,
    *  the bwd has no place to land — drop it and build a computed
    *  via `fwd` only. */
-  through(this: Signal<T>, fwd: (v: T) => T, bwd: (v: T, s: T) => T): this {
+  lens(this: Signal<T>, fwd: (v: T) => T, bwd: (v: T, s: T) => T): this {
     const Cls = this.constructor as new (...args: never[]) => Signal<T>;
     if (this._fusedOf !== undefined && this._fusedOf.bwd === undefined) {
       return Signal._fuse(
         this as Signal<unknown>,
-        Cls as new (
-          ...args: never[]
-        ) => Signal<unknown>,
+        Cls as new (...args: never[]) => Signal<unknown>,
         fwd as (s: unknown) => unknown,
       ) as unknown as this;
     }
     return Signal._fuse(
       this as Signal<unknown>,
-      Cls as new (
-        ...args: never[]
-      ) => Signal<unknown>,
+      Cls as new (...args: never[]) => Signal<unknown>,
       fwd as (s: unknown) => unknown,
       bwd as (v: unknown, s: unknown) => unknown,
     ) as unknown as this;
   }
 
-  /** Internal fusion helper used by `.through()` / `.lensTo()` /
-   *  `.deriveTo()` / `field()`. Collapses receiver-anchored chains
-   *  in value-space.
+  /** Internal fusion helper used by the instance `.lens()` (endo),
+   *  `Cls.lens(parent, ...)`, `Cls.derive(parent, ...)`, and `field()`.
+   *  Collapses receiver-anchored chains in value-space.
    *
    *  Statefulness is inferred from `bwdLocal.length` (≥ 2 → stateful).
    *  The composite chain is stateful iff any layer is. The setter
@@ -791,7 +792,7 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  dispatch entirely. ~3.5× faster than the generic stateful setter.
    *
    *  Error: a writable view on top of a fused-RO receiver (e.g.
-   *  `.deriveTo(...).lensTo(...)`) has no bwd path. We throw a
+   *  `Cls.lens(<RO chain>, ...)`) has no bwd path. We throw a
    *  `TypeError` at construction. */
   static _fuse<U>(
     receiver: Signal<unknown>,
@@ -814,7 +815,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     if (bwdLocal !== undefined && prior !== undefined && prior.bwd === undefined) {
       throw new TypeError(
         "Signal: cannot install a writable view on top of a read-only fused chain. " +
-          "The receiver is a computed (no bwd path); .lensTo()/.through() require a writable parent.",
+          "The receiver is a computed (no bwd path); Cls.lens / .lens require a writable parent.",
       );
     }
 
@@ -840,10 +841,10 @@ export class Signal<T = unknown> implements ReactiveNode {
     //
     // Critical correctness condition: the fast path can only run when
     // every layer in the chain is a field edge. If prior has a non-
-    // field stateful bwd (e.g., a custom `lensTo` or a `through`-iso
-    // layer), we MUST fall back to the generic composition — the fast
-    // path's setter writes directly to root with the path, bypassing
-    // any non-field bwd in between.
+    // field stateful bwd (e.g., a custom `Cls.lens` cross-class lens
+    // or an endo `.lens` iso layer), we MUST fall back to the generic
+    // composition — the fast path's setter writes directly to root
+    // with the path, bypassing any non-field bwd in between.
     let composedPath: readonly (string | number | symbol)[] | undefined;
     if (fieldKey !== undefined) {
       if (prior === undefined) {
@@ -907,7 +908,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     }
 
     // composedBwd: stored on `_fusedOf` for downstream fusion to
-    // compose against (when subsequent .through()/.lensTo() lands on
+    // compose against (when subsequent .lens()/Cls.lens lands on
     // this cell).
     const composedBwd: ((v: U, s: unknown) => unknown) | undefined =
       bwdLocal === undefined
@@ -935,7 +936,7 @@ export class Signal<T = unknown> implements ReactiveNode {
    *
    *  Use via `field(parent, "key", Cls)` from `./writable.ts`; this
    *  static is the engine entry point. */
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors Cls.lens
   static fieldOf<C extends new (...args: never[]) => Signal<any>>(
     // biome-ignore lint/suspicious/noExplicitAny: variance escape — concrete Signal<T> contravariant on setter
     parent: Signal<any>,
@@ -1226,16 +1227,133 @@ export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> & Writ
   return new Signal(initial, opts) as Signal<T> & WritableBrand;
 }
 
-/** Untyped read-only derived view. For typed views, prefer the
- *  per-class static `Cls.derive(fn)` (e.g. `Vec.derive(...)`). */
+/** Untyped read-only derived view. Closure-captured deps. For typed
+ *  views, prefer `Cls.derive(parent, fn)` or `Cls.derive(parents, fn)`.
+ *  Same shape as the closure form of `Cls.derive(fn)`. */
 export function computed<T>(getter: () => T): Signal<T> {
   return Signal.install(Signal as new (...args: never[]) => Signal<T>, getter);
 }
 
-/** Untyped read-write derived view. For typed lenses, prefer the
- *  per-class static `Cls.lens(get, set)` (e.g. `Vec.lens(...)`). */
-export function lens<T>(getter: () => T, setter: (v: T) => void): Writable<Signal<T>> {
-  return Signal.install(Signal as new (...args: never[]) => Signal<T>, getter, setter);
+/** Untyped read-only derived view from explicit parents.
+ *
+ *    derive(parent, fn)        — 1-input. Fuses with parent's chain.
+ *    derive(parents, fn)       — N-input. Aggregates over the array.
+ *
+ *  For typed returns prefer `Cls.derive(...)`. */
+export function derive<P, R>(parent: Read<P>, fn: (v: P) => R): Signal<R>;
+export function derive<P extends readonly Read<unknown>[], R>(
+  parents: P,
+  fn: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => R,
+): Signal<R>;
+// biome-ignore lint/suspicious/noExplicitAny: dispatch
+export function derive(parent: any, fn: any): any {
+  if (Array.isArray(parent)) {
+    return _fanin(Signal as new (...args: never[]) => Signal<unknown>, parent, fn);
+  }
+  return Signal._fuse(parent, Signal as new (...args: never[]) => Signal<unknown>, fn);
+}
+
+/** Read-write lens. Three shapes:
+ *
+ *    lens(parent, fwd, bwd)    — 1-input. Fuses with parent's chain.
+ *    lens(parents, fwd, bwd)   — N-input. Aggregates over the array.
+ *    lens(g, s)                — closure-style getter/setter (legacy).
+ *
+ *  For typed returns prefer `Cls.lens(...)`. */
+export function lens<P, R>(
+  parent: Read<P>,
+  fwd: (v: P) => R,
+  bwd: (target: R, v: P) => P,
+): Writable<Signal<R>>;
+export function lens<P extends readonly Read<unknown>[], R>(
+  parents: P,
+  fwd: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => R,
+  bwd: (
+    target: R,
+    vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
+  ) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
+): Writable<Signal<R>>;
+export function lens<T>(getter: () => T, setter: (v: T) => void): Writable<Signal<T>>;
+// biome-ignore lint/suspicious/noExplicitAny: dispatch
+export function lens(parent: any, fwd: any, bwd?: any): any {
+  if (bwd === undefined) {
+    // Closure-style: `lens(getter, setter)`.
+    return Signal.install(Signal as new (...args: never[]) => Signal<unknown>, parent, fwd);
+  }
+  if (Array.isArray(parent)) {
+    return _fanin(Signal as new (...args: never[]) => Signal<unknown>, parent, fwd, bwd);
+  }
+  return Signal._fuse(
+    parent,
+    Signal as new (...args: never[]) => Signal<unknown>,
+    fwd,
+    bwd,
+  );
+}
+
+// ─── _fanin: private N-input lens helper ─────────────────────────
+//
+// Engine-internal helper used by `Cls.lens([...], ...)` / `Cls.derive([...], ...)`
+// and the top-level `lens([...], ...)` / `derive([...], ...)`. Pre-allocated
+// scratch buffer + arity-based bwd dispatch. Public API is the named
+// surfaces; this function is not re-exported.
+//
+// Subsumes the public `fanin` that used to live in `./fanin`.
+
+/** N-input lens: read aggregate via `fwd(vals)`, write distributes
+ *  via `bwd(target, vals?)`. Allocation: one scratch `vals` array
+ *  mutated in place. Subscribers downstream of multiple parents
+ *  fire once per write (batched). */
+function _fanin(
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  Cls: new (...args: never[]) => Signal<any>,
+  parents: readonly Signal<unknown>[],
+  fwd: (vals: unknown[]) => unknown,
+  // biome-ignore lint/suspicious/noExplicitAny: dispatch
+  bwd?: (...args: any[]) => unknown,
+): Signal<unknown> {
+  const n = parents.length;
+  const vals = new Array(n) as unknown[];
+
+  const getter = (): unknown => {
+    for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
+    return fwd(vals);
+  };
+
+  if (bwd === undefined) {
+    return Signal.install(Cls, getter);
+  }
+
+  const stateful = bwd.length >= 2;
+
+  if (!stateful) {
+    const sBwd = bwd as (target: unknown) => readonly unknown[];
+    const setter = (v: unknown): void => {
+      const updates = sBwd(v);
+      batch(() => {
+        for (let i = 0; i < n; i++) {
+          const u = updates[i];
+          if (u === undefined) continue;
+          parents[i]!.value = u;
+        }
+      });
+    };
+    return Signal.install(Cls, getter, setter);
+  }
+
+  const sBwd = bwd as (target: unknown, vals: unknown[]) => readonly unknown[];
+  const setter = (v: unknown): void => {
+    for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+    const updates = sBwd(v, vals);
+    batch(() => {
+      for (let i = 0; i < n; i++) {
+        const u = updates[i];
+        if (u === undefined) continue;
+        parents[i]!.value = u;
+      }
+    });
+  };
+  return Signal.install(Cls, getter, setter);
 }
 
 export function effect(fn: () => void | (() => void)): () => void {

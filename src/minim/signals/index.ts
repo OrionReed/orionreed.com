@@ -8,14 +8,13 @@
 // time. Lateral binding lives in the free `bind(target, source)`
 // function rather than as a method.
 
-// Aggregate primitives built on `fanin`. The fanin-based versions
-// are 1.4–1.93× faster than the equivalent `mix(..., mean, deltaEven)`
-// on aggregations (the higher the arity, the bigger the win) because
-// the scratch buffer is per-cell and the bwd is invoked directly
-// without two-stage trait dispatch. `axesLens` and `polarCircular`
-// are *also* available, but the hand-tuned `axes()` and `polar()`
-// in `./values/vec.ts` remain the canonical surface for those —
-// they win on 1-write polymorphic cases.
+// Aggregate primitives built on `Cls.lens([...], ...)` /
+// `Cls.derive([...], ...)`. ~1.4–1.93× faster than the equivalent
+// `mix(..., mean, deltaEven)` on aggregations (per-cell scratch,
+// direct bwd invocation, no two-stage trait dispatch). `axesLens`
+// and `polarCircular` are available here, but the hand-tuned
+// `axes()` and `polar()` in `./values/vec.ts` remain the canonical
+// surface for those — they win on 1-write polymorphic cases.
 export {
   argminNumLens,
   axesLens,
@@ -54,7 +53,6 @@ export {
   argminVec,
   clampToDisc,
 } from "./argmin";
-export { fanin } from "./fanin";
 // ─── Clock bridge ─────────────────────────────────────────────────
 export { bind } from "./lateral";
 export * as Mix from "./mix";
@@ -64,8 +62,8 @@ export * as Mix from "./mix";
 // `./tex/parts` and `./code/code`). The factory `mix(...)` is exported
 // flat as the canonical entry point.
 export { type Merge, mix, type Writeback } from "./mix";
-// New primitives that fanin makes natural. `vecLerp` / `pulleySum` /
-// `diffLens` give bidirectional drag on derived values; `bezier2`/3,
+// New primitives natural under N-input lenses. `vecLerp` / `pulleySum`
+// / `diffLens` give bidirectional drag on derived values; `bezier2`/3,
 // `clampedMean`, `distanceLens`, `angleLens`, `reflectionLens` are
 // RO geometric helpers.
 export {
@@ -79,7 +77,7 @@ export {
   reflectionLens,
   vecLerp,
 } from "./new-primitives";
-// ─── Bidirectional relations + multi-input lenses ─────────────────
+// ─── Bidirectional relations ──────────────────────────────────────
 //
 // `relate(a, b, fwd, bwd)` is a re-orientable bidirectional binding
 // between two existing writable signals — either side can be the
@@ -87,16 +85,17 @@ export {
 // (writeBack-based exclusion + the engine's `===` short-circuit)
 // for any Iso or contractive pair.
 //
-// `fanin(Cls, parents, fwd, bwd?)` is the n-to-1 lens generalisation
-// of `lensTo` — read aggregates over N parents, write distributes
-// the new value back via a bwd. Subsumes the patterns previously
-// hand-rolled via `Signal.install` (axes/polar) or assembled via
-// `mix` (mean+deltaEven for centroid/midpoint/etc.).
+// N-input multi-parent lenses are now expressed via the engine
+// surface: `Cls.lens([p1, p2, ...], fwd, bwd)` for RW, or
+// `Cls.derive([p1, p2, ...], fn)` for RO. The `fanin` helper that
+// used to live here is now an engine-internal `_fanin` invoked by
+// these surfaces — same hot path, cleaner public API.
 export { type Relation, relate } from "./relate";
 // ─── Engine ───────────────────────────────────────────────────────
 export {
   batch,
   computed,
+  derive,
   effect,
   isComputed,
   isLens,

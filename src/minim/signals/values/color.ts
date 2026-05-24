@@ -48,21 +48,21 @@ export class Color extends Signal<V> {
 
   add(b: Val<V>): this {
     const bf = valFn(b);
-    return this.through(
+    return this.lens(
       v => add(v, bf()),
       n => sub(n, bf()),
     );
   }
   sub(b: Val<V>): this {
     const bf = valFn(b);
-    return this.through(
+    return this.lens(
       v => sub(v, bf()),
       n => add(n, bf()),
     );
   }
   scale(k: Val<number>): this {
     const kf = valFn(k);
-    return this.through(
+    return this.lens(
       v => scale(v, kf()),
       n => scale(n, 1 / kf()),
     );
