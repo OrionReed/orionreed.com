@@ -201,7 +201,7 @@ const v = c.derive((c) => c.add(offset).scale(2).perp());
 
 `Cls.lens(parent, get, set)` is the underlying machinery. `vec.x` and `vec.y` are lazy getters that build `Num.lens(this, s => s.x, (v, s) => ({ ...s, x: v }))` — so they're full `Num` signals, and `vec.x.to(50, 0.3)` is a one-axis tween. Per-axis writes don't fire neighbouring effects.
 
-Aggregates aren't a feature, they're lenses. `Cls.lens(getter, setter)` returns a writable computed view that's also an instance of `Cls` — `Vec.lens(get, set)` is a Vec. `mix(Cls, parts, merge, writeback)` is the N-ary form, parameterised by a *merge* (how reads aggregate) and a *writeback* (how writes distribute). `Mix.mean` + `Mix.deltaEven` gives you the rigid-body centroid: reading returns the mean, writing distributes the delta evenly. `centroid(a, b, c, d)` is one line of that pattern. Tweening it is a rigid group translate:
+Aggregates aren't a feature, they're lenses. `Cls.lens(getter, setter)` returns a writable computed view that's also an instance of `Cls` — `Vec.lens(get, set)` is a Vec. `Cls.lens([parents], fwd, bwd)` is the N-ary form: reads aggregate through `fwd`, writes split via `bwd` and apply atomically. The rigid-body centroid is one line of that pattern — read returns the mean, write distributes the delta evenly. `centroid(a, b, c, d)` packages it; tweening it is a rigid group translate:
 
 ```ts
 const c = centroid(a, b, c, d);
@@ -210,7 +210,7 @@ yield* c.to({ x: 200, y: 100 }, 1);
 
 <md-aggregates></md-aggregates>
 
-Merges and writebacks are first-class composable values. `Mix.mean`, `Mix.sum`, `Mix.priority`, `Mix.latest`, `Mix.firstNonNull` compose through combinators like `top(n, base)` and `above(threshold, base)`; `Mix.deltaEven`, `Mix.replaceFirst`, `Mix.proportional` do the dual job for writebacks. Two independent animation sequences sharing one position via `mix(Vec, [seqA, seqB], Mix.mean)` — neither knows about the other, and the visible motion is the per-frame weighted mean:
+Two independent animation sequences sharing one position via `Vec.derive([seqA, seqB, w], weightedMean)` — neither knows about the other, and the visible motion is the per-frame weighted mean:
 
 <md-mix></md-mix>
 
@@ -243,7 +243,7 @@ The lenses don't care what the values *mean*. A colour has two natural coordinat
 
 <md-color></md-color>
 
-Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. When the relation needs to read multiple sources or distribute writes across them, `Cls.lens([parents], fwd, bwd)` is the n-input generalisation: read aggregates through `fwd`, writes split via `bwd` and apply atomically. The escape hatch for everything else is the closure form `Cls.lens(get, set)`, or `relate(a, b, fwd, bwd)` for re-orientable bidirectional bindings between two existing signals (either side can be the driver).
+Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. When the relation needs to read multiple sources or distribute writes across them, the same N-input `Cls.lens([parents], fwd, bwd)` from above is the generalisation. The escape hatch for everything else is the closure form `Cls.lens(get, set)`, or `relate(a, b, fwd, bwd)` for re-orientable bidirectional bindings between two existing signals (either side can be the driver).
 
 <md-pulley></md-pulley>
 
