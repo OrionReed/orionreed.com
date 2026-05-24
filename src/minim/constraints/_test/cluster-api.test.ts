@@ -19,7 +19,7 @@ describe("API — Strength constants", () => {
     const a = vec(0, 0);
     const b = vec(5, 0);
     const s = new Cluster({ iterations: 30 });
-    spring(s, a, b, 1, Strength.STRONG);
+    s.add(spring(a, b, 1, Strength.STRONG));
     s.pin(a);
     a.value = { x: 0.0001, y: 0 };
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(1, 1);
@@ -30,7 +30,7 @@ describe("API — inequality factories", () => {
   it("clamp(x, 0, 10) pins a far-above x to 10", () => {
     const x = num(50);
     const s = new Cluster({ iterations: 10 });
-    clamp(s, x, 0, 10);
+    s.add(clamp(x, 0, 10));
     x.value = 50.0001;
     expect(x.value).toBeLessThanOrEqual(10 + 1e-3);
     expect(x.value).toBeGreaterThanOrEqual(0);
@@ -40,7 +40,7 @@ describe("API — inequality factories", () => {
     const a = num(5);
     const b = num(3);
     const s = new Cluster({ iterations: 30 });
-    leq(s, a, b);
+    s.add(leq(a, b));
     s.pin(b);
     b.value = 3.0001;
     expect(a.value).toBeLessThanOrEqual(b.value + 1e-2);
@@ -50,7 +50,7 @@ describe("API — inequality factories", () => {
     const a = num(0);
     const b = num(5);
     const s = new Cluster({ iterations: 30 });
-    geq(s, a, b);
+    s.add(geq(a, b));
     s.pin(b);
     b.value = 5.0001;
     expect(a.value).toBeGreaterThanOrEqual(5 - 1e-2);
@@ -60,7 +60,7 @@ describe("API — inequality factories", () => {
     const a = vec(0, 0);
     const b = vec(0.5, 0);
     const s = new Cluster({ iterations: 30 });
-    gap(s, a, b, 5);
+    s.add(gap(a, b, 5));
     s.pin(a);
     a.value = { x: 0.0001, y: 0 };
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeGreaterThanOrEqual(
@@ -72,7 +72,7 @@ describe("API — inequality factories", () => {
     const a = vec(0, 0);
     const b = vec(20, 0);
     const s = new Cluster({ iterations: 10 });
-    gap(s, a, b, 5);
+    s.add(gap(a, b, 5));
     s.pin(a);
     a.value = { x: 0.0001, y: 0 };
     expect(b.value.x).toBeCloseTo(20, 1);
@@ -82,7 +82,7 @@ describe("API — inequality factories", () => {
   it("inside(P, xLo, yLo, xHi, yHi): pulls P inside the AABB", () => {
     const P = vec(50, 50);
     const s = new Cluster({ iterations: 20 });
-    inside(s, P, 0, 0, 10, 10);
+    s.add(inside(P, 0, 0, 10, 10));
     P.value = { x: 50.0001, y: 50 };
     expect(P.value.x).toBeLessThanOrEqual(10 + 1e-2);
     expect(P.value.y).toBeLessThanOrEqual(10 + 1e-2);
@@ -93,7 +93,7 @@ describe("API — inequality factories", () => {
   it("inside is dormant when P is already inside", () => {
     const P = vec(5, 5);
     const s = new Cluster({ iterations: 10 });
-    inside(s, P, 0, 0, 10, 10);
+    s.add(inside(P, 0, 0, 10, 10));
     P.value = { x: 5.0001, y: 5 };
     expect(P.value.x).toBeCloseTo(5, 1);
     expect(P.value.y).toBeCloseTo(5, 1);
@@ -103,9 +103,9 @@ describe("API — inequality factories", () => {
     const a = vec(2, 5);
     const b = vec(8, 5);
     const s = new Cluster({ iterations: 30 });
-    inside(s, a, 0, 0, 10, 10);
-    inside(s, b, 0, 0, 10, 10);
-    gap(s, a, b, 4);
+    s.add(inside(a, 0, 0, 10, 10));
+    s.add(inside(b, 0, 0, 10, 10));
+    s.add(gap(a, b, 4));
     s.pin(a);
     a.value = { x: 2.0001, y: 5 };
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeGreaterThanOrEqual(
@@ -120,7 +120,7 @@ describe("API — `pin()` is the canonical drag mechanism", () => {
     const a = vec(7, 11);
     const b = vec(0, 0);
     const s = new Cluster({ iterations: 30 });
-    distance(s, a, b, 1);
+    s.add(distance(a, b, 1));
     s.pin(a);
     a.value = { x: 7.0001, y: 11 };
     expect(a.value.x).toBeCloseTo(7, 1);
@@ -132,7 +132,7 @@ describe("API — `pin()` is the canonical drag mechanism", () => {
     const a = num(0);
     const b = num(0);
     const s = new Cluster({ iterations: 20 });
-    leq(s, a, b);
+    s.add(leq(a, b));
     const release = s.pin(a);
     expect(s.solver.massOf(s.bind(a))).toBe(0);
     release();
@@ -145,7 +145,7 @@ describe("API — solver state introspection", () => {
     const s = new Cluster();
     const a = vec(0, 0);
     const b = vec(1, 0);
-    distance(s, a, b, 1);
+    s.add(distance(a, b, 1));
     expect(s.solver.forces.length).toBe(1);
   });
 });

@@ -63,15 +63,17 @@ export class MdFigure8 extends Diagram {
       positions.push(P);
       params.push(t);
 
-      generic(cluster, [t, P], 2, (pos, out) => {
-        const tt = pos[0]![0]!;
-        const want = curve(tt);
-        out[0]! = pos[1]![0]! - want.x;
-        out[1]! = pos[1]![1]! - want.y;
-      });
+      cluster.add(
+        generic([t, P], 2, (pos, out) => {
+          const tt = pos[0]![0]!;
+          const want = curve(tt);
+          out[0]! = pos[1]![0]! - want.x;
+          out[1]! = pos[1]![1]! - want.y;
+        }),
+      );
     }
     for (let i = 0; i < N; i++) {
-      for (let j = i + 1; j < N; j++) gap(cluster, positions[i]!, positions[j]!, 2 * R);
+      for (let j = i + 1; j < N; j++) cluster.add(gap(positions[i]!, positions[j]!, 2 * R));
     }
 
     for (let i = 0; i < N; i++) {

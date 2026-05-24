@@ -1,8 +1,8 @@
 // constraints/ — reactive constraint engine.
 //
-// AVBD-based solver tightly integrated with the signals layer.
-// Scales from "make two values equal" to sketchpad-style scenes
-// (thousands of points, lines, joints, springs).
+// AVBD-based solver tightly integrated with the signals layer via
+// `settle`. Scales from "make two values equal" to sketchpad-style
+// scenes (thousands of points, lines, joints, springs).
 //
 // Layered as:
 //
@@ -13,23 +13,28 @@
 //     linalg.ts     Sparse SPD solve helpers.
 //
 //   Reactive integration:
-//     cluster.ts    `Cluster`: binds `Signal`s to a `Solver`,
-//                   solves on writes, writes back without re-firing
-//                   (via `signal.writeBack`).
-//     factories.ts  Signal-aware constraint constructors (`eq`,
-//                   `distance`, `spring`, `lensNum`, `clamp`, `leq`,
-//                   `geq`, `softTarget`, `generic`, plus sketchpad
-//                   primitives: `angle`, `parallel`, `perpendicular`,
-//                   `collinear`, `onCircle`, `equalDist`, `midpoint`).
-//     simulation.ts `Simulation`: velocity + gravity time-stepper,
-//                   integrates with `core/anim`.
+//     cluster.ts    `Cluster`: holds a `Solver` + a `settle` node.
+//                   Free factories return `Relation` values; pass
+//                   them to `cluster.add(rel)` / `cluster.remove(rel)`.
+//                   The settle's body reads bound signals, runs
+//                   `solver.step()`, and writes back — all auto-
+//                   self-excluded (settle's contract) and atomic
+//                   (settle's auto-batch) for glitch-free downstream.
+//     factories.ts  Free constraint factories returning Relations
+//                   (`eq`, `distance`, `spring`, `lensNum`, `clamp`,
+//                   `leq`, `geq`, `softTarget`, `generic`, sketchpad
+//                   primitives, `pin`).
+//     simulation.ts `Simulation`: velocity + gravity time-stepper.
+//                   Disposes the cluster's settle and runs its own
+//                   tick loop (signals are mutated directly each
+//                   frame; the cluster's reactivity is preempted).
 //
 // Reference: Giles, Diaz, Yuksel (2025). Augmented Vertex Block
 // Descent. ACM TOG 44(4) — SIGGRAPH 2025. Extends Chen et al.
 // (2024) "Vertex Block Descent". 2D demo at
 // https://github.com/savant117/avbd-demo2d.
 
-export { Cluster } from "./cluster";
+export { Cluster, defineRelation, type Relation } from "./cluster";
 export {
   angle,
   bend,
@@ -48,6 +53,7 @@ export {
   onCircle,
   parallel,
   perpendicular,
+  pin,
   repel,
   rightAngle,
   softTarget,

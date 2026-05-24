@@ -93,15 +93,15 @@ export class MdGraph extends Diagram {
 
     const cluster = new Cluster({ iterations: 12, postStabilize: true });
 
-    for (const e of EDGES) spring(cluster, nodes[e.a]!, nodes[e.b]!, REST, SPRING_K);
+    for (const e of EDGES) cluster.add(spring(nodes[e.a]!, nodes[e.b]!, REST, SPRING_K));
     for (let i = 0; i < N; i++) {
       for (let j = i + 1; j < N; j++) {
         // Soft long-range repulsion (FR-style) + hard short-range gap.
-        repel(cluster, nodes[i]!, nodes[j]!, REPEL_RANGE, REPEL_K);
-        gap(cluster, nodes[i]!, nodes[j]!, MIN_GAP);
+        cluster.add(repel(nodes[i]!, nodes[j]!, REPEL_RANGE, REPEL_K));
+        cluster.add(gap(nodes[i]!, nodes[j]!, MIN_GAP));
       }
     }
-    for (let i = 0; i < N; i++) softTarget(cluster, nodes[i]!, [cx, cy], CENTER_K);
+    for (let i = 0; i < N; i++) cluster.add(softTarget(nodes[i]!, [cx, cy], CENTER_K));
 
     // Mild damping — enough energy bleed to settle, not so much
     // that node motion feels viscous. With fast springs and

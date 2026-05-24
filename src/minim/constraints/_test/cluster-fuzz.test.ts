@@ -24,7 +24,7 @@ describe("AVBD fuzz — invariants over random scenes", () => {
       if (headTailDist > N - 1) return;
 
       const s = new Cluster({ iterations: 30 });
-      for (let i = 1; i < N; i++) distance(s, cells[i - 1]!, cells[i]!, 1);
+      for (let i = 1; i < N; i++) s.add(distance(cells[i - 1]!, cells[i]!, 1));
       s.pin(cells[0]!);
       s.pin(cells[N - 1]!);
       // Multi-step warm-start to help long chains converge.
@@ -51,7 +51,7 @@ describe("AVBD fuzz — invariants over random scenes", () => {
       const a = num(aInit);
       const b = num(bInit);
       const s = new Cluster({ iterations: 20 });
-      leq(s, a, b);
+      s.add(leq(a, b));
       s.pin(b);
       b.value = bInit + 1e-9; // trigger
       expect(a.value).toBeLessThanOrEqual(b.value + 1e-2);
@@ -66,7 +66,7 @@ describe("AVBD fuzz — invariants over random scenes", () => {
       const target = rng.float(-10, 10);
 
       const s = new Cluster({ iterations: 30 });
-      for (let i = 1; i < N; i++) eq(s, cells[i - 1]!, cells[i]!);
+      for (let i = 1; i < N; i++) s.add(eq(cells[i - 1]!, cells[i]!));
       s.pin(cells[0]!);
       cells[0]!.value = target;
       // Re-trigger to propagate down the chain (each iteration only

@@ -88,9 +88,9 @@ describe("dirty semantic — dynamic relations", () => {
     // Remove r1 — a is now orphaned. Phase 1 deletes its slot. b stays (in r2).
     active.delete(r1);
     handle.flush();
-    expect(slots.has(a)).toBe(false);
-    expect(slots.has(b)).toBe(true);
-    expect(slots.has(c)).toBe(true);
+    expect(slots.has(a as Signal<unknown>)).toBe(false);
+    expect(slots.has(b as Signal<unknown>)).toBe(true);
+    expect(slots.has(c as Signal<unknown>)).toBe(true);
 
     handle.dispose();
   });

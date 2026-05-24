@@ -260,7 +260,7 @@ describe("stress: re-entrancy and nesting", () => {
 describe("stress: custom equality + dirty", () => {
   it("a near-equal write that the signal's equality treats as equal does not notify", () => {
     const eqApprox = (a: number, b: number) => Math.abs(a - b) < 0.01;
-    const a = signal(1.0, { equals: eqApprox });
+    const a = signal<number>(1.0, { equals: eqApprox });
     let runs = 0;
     const handle = settle(() => {
       a.value;
@@ -283,7 +283,7 @@ describe("stress: custom equality + dirty", () => {
     // surface in `dirty`, matching the fact that the body wasn't
     // notified about it. Good.
     const eqApprox = (a: number, b: number) => Math.abs(a - b) < 0.01;
-    const a = signal(1.0, { equals: eqApprox });
+    const a = signal<number>(1.0, { equals: eqApprox });
     let lastDirty: ReadonlySet<Signal<unknown>> | undefined;
     const handle = settle(
       dirty => {

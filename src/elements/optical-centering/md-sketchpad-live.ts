@@ -17,7 +17,7 @@
 // Tool-mode dispatch: the active `tool` signal decides what each click
 // does. Drags are universal — every point is always draggable.
 
-import { Cluster, distance, eq, type Force, rightAngle } from "@minim/constraints";
+import { Cluster, distance, eq, type Relation, rightAngle } from "@minim/constraints";
 import {
   Anchor,
   type AnyShape,
@@ -53,7 +53,7 @@ interface PointInst {
 interface ConstraintInst {
   readonly id: number;
   readonly kind: "distance" | "right-angle" | "horizontal" | "vertical";
-  readonly force: Force;
+  readonly force: Relation;
   readonly points: readonly PointInst[];
   readonly meta?: { rest?: number };
 }
@@ -153,18 +153,16 @@ export class MdSketchpadLive extends Diagram {
     const removePoint = (p: PointInst): void => {
       const survivors: ConstraintInst[] = [];
       for (const c of constraints.peek()) {
-        if (c.points.includes(p)) c.force.dispose();
+        if (c.points.includes(p)) cluster.remove(c.force);
         else survivors.push(c);
       }
       constraints.value = survivors;
       points.value = points.peek().filter(q => q !== p);
-      cluster.update();
     };
 
     const removeConstraint = (c: ConstraintInst): void => {
-      c.force.dispose();
+      cluster.remove(c.force);
       constraints.value = constraints.peek().filter(x => x !== c);
-      cluster.update();
     };
 
     /** Build a constraint of the given kind from `picks`, taking the
@@ -182,22 +180,22 @@ export class MdSketchpadLive extends Diagram {
           const bv = b.pos.peek();
           const rest = Math.hypot(bv.x - av.x, bv.y - av.y);
           if (rest < 1) return undefined;
-          const force = distance(cluster, a.pos, b.pos, rest);
+          const force = cluster.add(distance(a.pos, b.pos, rest));
           return { id, kind, force, points: picks, meta: { rest } };
         }
         case "right-angle": {
           const [a, b, c] = picks;
-          const force = rightAngle(cluster, a.pos, b.pos, c.pos);
+          const force = cluster.add(rightAngle(a.pos, b.pos, c.pos));
           return { id, kind, force, points: picks };
         }
         case "horizontal": {
           const [a, b] = picks;
-          const force = eq(cluster, (a.pos as Writable<Vec>).y, (b.pos as Writable<Vec>).y);
+          const force = cluster.add(eq((a.pos as Writable<Vec>).y, (b.pos as Writable<Vec>).y));
           return { id, kind, force, points: picks };
         }
         case "vertical": {
           const [a, b] = picks;
-          const force = eq(cluster, (a.pos as Writable<Vec>).x, (b.pos as Writable<Vec>).x);
+          const force = cluster.add(eq((a.pos as Writable<Vec>).x, (b.pos as Writable<Vec>).x));
           return { id, kind, force, points: picks };
         }
       }

@@ -22,8 +22,8 @@ describe("AVBD sketchpad primitives via FD", () => {
     const B = vec(0, 0);
     const C = vec(0, 1.5);
     const s = new Cluster({ iterations: 30 });
-    angle(s, A, B, C, Math.PI / 2);
-    distance(s, B, C, 1);
+    s.add(angle(A, B, C, Math.PI / 2));
+    s.add(distance(B, C, 1));
     s.pin(A);
     s.pin(B);
     A.value = { x: 1.0001, y: 0 };
@@ -38,7 +38,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const C = vec(0, 1);
     const D = vec(3, 2);
     const s = new Cluster({ iterations: 30 });
-    parallel(s, A, B, C, D);
+    s.add(parallel(A, B, C, D));
     s.pin(A);
     s.pin(B);
     s.pin(C);
@@ -51,7 +51,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const B = vec(10, 5);
     const P = vec(3, 5);
     const s = new Cluster({ iterations: 50 });
-    collinear(s, P, A, B);
+    s.add(collinear(P, A, B));
     s.pin(A);
     s.pin(B);
     A.value = { x: 0.0001, y: 0 };
@@ -64,7 +64,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const center = vec(0, 0);
     const P = vec(2, 0);
     const s = new Cluster({ iterations: 30 });
-    onCircle(s, P, center, 1);
+    s.add(onCircle(P, center, 1));
     s.pin(center);
     center.value = { x: 0.0001, y: 0 };
     expect(Math.hypot(P.value.x, P.value.y)).toBeCloseTo(1, 1);
@@ -76,7 +76,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const C = vec(0, 0);
     const D = vec(5, 0);
     const s = new Cluster({ iterations: 30 });
-    equalDist(s, A, B, C, D);
+    s.add(equalDist(A, B, C, D));
     s.pin(A);
     s.pin(B);
     s.pin(C);
@@ -89,7 +89,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const B = vec(4, 6);
     const M = vec(0, 0);
     const s = new Cluster({ iterations: 20 });
-    midpoint(s, M, A, B);
+    s.add(midpoint(M, A, B));
     s.pin(A);
     s.pin(B);
     A.value = { x: 0.0001, y: 0 };
@@ -102,13 +102,15 @@ describe("AVBD sketchpad primitives via FD", () => {
     const B = vec(5, 0);
     const C = vec(10, 0);
     const s = new Cluster({ iterations: 20 });
-    generic(s, [A, B, C], 2, (pos, out) => {
-      const a = pos[0]!,
-        b = pos[1]!,
-        c = pos[2]!;
-      out[0]! = b[0]! - 0.5 * (a[0]! + c[0]!);
-      out[1]! = b[1]! - Math.sin(b[0]!);
-    });
+    s.add(
+      generic([A, B, C], 2, (pos, out) => {
+        const a = pos[0]!,
+          b = pos[1]!,
+          c = pos[2]!;
+        out[0]! = b[0]! - 0.5 * (a[0]! + c[0]!);
+        out[1]! = b[1]! - Math.sin(b[0]!);
+      }),
+    );
     s.pin(A);
     s.pin(C);
     A.value = { x: 0.0001, y: 0 };
@@ -122,7 +124,7 @@ describe("AVBD sketchpad primitives via FD", () => {
     const C = vec(0, 0.5);
     const D = vec(2, 1);
     const s = new Cluster({ iterations: 30 });
-    perpendicular(s, A, B, C, D);
+    s.add(perpendicular(A, B, C, D));
     s.pin(A);
     s.pin(B);
     s.pin(C);

@@ -7,7 +7,7 @@
 // and the quad becomes a rigid body that only translates and
 // rotates as a whole.
 
-import { Cluster, distance } from "@minim/constraints";
+import { Cluster, distance, type Relation } from "@minim/constraints";
 import {
   Anchor,
   circle,
@@ -37,22 +37,21 @@ export class MdRigid extends Diagram {
     const D = vec(cx - 80, cy + 60);
 
     const cluster = new Cluster({ iterations: 16 });
-    distance(cluster, A, B, 160);
-    distance(cluster, B, C, 120);
-    distance(cluster, C, D, 160);
-    distance(cluster, D, A, 120);
-    const diag = distance(cluster, A, C, Math.hypot(160, 120));
+    cluster.add(distance(A, B, 160));
+    cluster.add(distance(B, C, 120));
+    cluster.add(distance(C, D, 160));
+    cluster.add(distance(D, A, 120));
+    const diag = cluster.add(distance(A, C, Math.hypot(160, 120)));
 
-    // Diagonal toggle: dispose / recreate the brace constraint.
+    // Diagonal toggle: add / remove the brace relation.
     const braced = signal(true);
-    let current: ReturnType<typeof distance> | undefined = diag;
+    let current: Relation | undefined = diag;
     effect(() => {
       if (braced.value && current === undefined) {
-        current = distance(cluster, A, C, Math.hypot(160, 120));
+        current = cluster.add(distance(A, C, Math.hypot(160, 120)));
       } else if (!braced.value && current !== undefined) {
-        current.dispose();
+        cluster.remove(current);
         current = undefined;
-        cluster.update();
       }
     });
 

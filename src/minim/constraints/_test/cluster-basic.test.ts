@@ -11,7 +11,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
     const c = new Cluster({ iterations: 10 });
     const a = num(3);
     const b = num(7);
-    eq(c, a, b);
+    c.add(eq(a, b));
     c.pin(a);
     a.value = 5;
     expect(b.value).toBeCloseTo(5, 2);
@@ -21,7 +21,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
     const c = new Cluster({ iterations: 20 });
     const a = vec(0, 0);
     const b = vec(1, 0);
-    distance(c, a, b, 5);
+    c.add(distance(a, b, 5));
     c.pin(a);
     a.value = { x: 0.001, y: 0 };
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(5, 1);
@@ -31,7 +31,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
     const c = new Cluster({ iterations: 30 });
     const a = num(0);
     const b = num(10);
-    lensNum(c, a, b, x => 2 * x);
+    c.add(lensNum(a, b, x => 2 * x));
     c.pin(b);
     b.value = 10.0001;
     expect(a.value).toBeCloseTo(5, 1);
@@ -41,7 +41,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
     const c = new Cluster({ iterations: 30 });
     const a = num(5);
     const b = num(3);
-    leq(c, a, b);
+    c.add(leq(a, b));
     c.pin(b);
     b.value = 3.0001;
     expect(a.value).toBeLessThanOrEqual(b.value + 1e-2);
@@ -53,7 +53,7 @@ describe("Cluster (writeBack) — structural single-fire", () => {
     const c = new Cluster({ iterations: 20 });
     const a = num(0);
     const b = num(0);
-    eq(c, a, b);
+    c.add(eq(a, b));
     c.pin(a);
     // Trigger initial run via a write.
     a.value = 1;
@@ -72,7 +72,7 @@ describe("Cluster (writeBack) — structural single-fire", () => {
     const c = new Cluster({ iterations: 20 });
     const a = num(0);
     const b = num(0);
-    eq(c, a, b);
+    c.add(eq(a, b));
     c.pin(a);
     a.value = 1; // initial run
     const stepSpy = vi.spyOn(c.solver, "step");
@@ -92,7 +92,7 @@ describe("Cluster (writeBack) — structural single-fire", () => {
     const c = new Cluster({ iterations: 20 });
     const a = num(3);
     const b = num(7);
-    eq(c, a, b);
+    c.add(eq(a, b));
     c.pin(a);
 
     const observed: number[] = [];
@@ -120,7 +120,7 @@ describe("Cluster (writeBack) — lens composition", () => {
     const c = new Cluster({ iterations: 30 });
     const a = vec(0, 0);
     const b = vec(5, 5);
-    eq(c, a.x, b.x);
+    c.add(eq(a.x, b.x));
     c.pin(a.x);
     a.value = { x: 3, y: 0 };
     expect(b.value.x).toBeCloseTo(3, 1);
@@ -131,7 +131,7 @@ describe("Cluster (writeBack) — lens composition", () => {
     const c = new Cluster({ iterations: 30 });
     const a = vec(0, 0);
     const b = vec(5, 5);
-    eq(c, a.x, b.x);
+    c.add(eq(a.x, b.x));
     c.pin(a.x);
     a.x.value = 7;
     expect(a.value.x).toBeCloseTo(7, 1);
@@ -145,7 +145,7 @@ describe("Simulation — numerical robustness", () => {
     const a = vec(0, 0);
     const b = vec(10, 0);
     const c = new Cluster();
-    distance(c, a, b, 10);
+    c.add(distance(a, b, 10));
     c.pin(a);
     const sim = new Simulation(c, { gravity: [0, 100] });
     sim.tick(0);
@@ -170,13 +170,13 @@ describe("Simulation — numerical robustness", () => {
     // are the AVBD physics defaults; this test pins them in.
     const c = new Cluster({ iterations: 12, postStabilize: true });
     for (let j = 0; j < H; j++)
-      for (let i = 1; i < W; i++) spring(c, grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM);
+      for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM));
     for (let i = 0; i < W; i++)
-      for (let j = 1; j < H; j++) spring(c, grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM);
+      for (let j = 1; j < H; j++) c.add(spring(grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM));
     for (let j = 0; j < H; j++)
-      for (let i = 2; i < W; i++) bend(c, grid[j]![i - 2]!, grid[j]![i - 1]!, grid[j]![i]!, 0.5);
+      for (let i = 2; i < W; i++) c.add(bend(grid[j]![i - 2]!, grid[j]![i - 1]!, grid[j]![i]!, 0.5));
     for (let i = 0; i < W; i++)
-      for (let j = 2; j < H; j++) bend(c, grid[j - 2]![i]!, grid[j - 1]![i]!, grid[j]![i]!, 0.5);
+      for (let j = 2; j < H; j++) c.add(bend(grid[j - 2]![i]!, grid[j - 1]![i]!, grid[j]![i]!, 0.5));
     c.pin(grid[0]![0]!);
     c.pin(grid[0]![W - 1]!);
 
@@ -212,9 +212,9 @@ describe("Simulation — numerical robustness", () => {
     // Mirrors the `<md-cloth>` demo's actual config.
     const c = new Cluster({ iterations: 10 });
     for (let j = 0; j < H; j++)
-      for (let i = 1; i < W; i++) spring(c, grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM);
+      for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM));
     for (let i = 0; i < W; i++)
-      for (let j = 1; j < H; j++) spring(c, grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM);
+      for (let j = 1; j < H; j++) c.add(spring(grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM));
     c.pin(grid[0]![0]!);
     c.pin(grid[0]![W - 1]!);
 
@@ -274,7 +274,7 @@ describe("Simulation — numerical robustness", () => {
     const links: WVec[] = [];
     for (let i = 0; i < N; i++) links.push(vec(i * LINK, 0));
     const c = new Cluster({ iterations: 12, alpha: 0.99 });
-    for (let i = 1; i < N; i++) distance(c, links[i - 1]!, links[i]!, LINK);
+    for (let i = 1; i < N; i++) c.add(distance(links[i - 1]!, links[i]!, LINK));
     c.pin(links[0]!);
 
     const sim = new Simulation(c, { gravity: [0, 220], damping: 0.985 });
@@ -297,9 +297,9 @@ describe("Cluster — numerical robustness", () => {
     const O2 = vec(100, 0);
     const A = vec(-100, -80);
     const B = vec(100, -50);
-    distance(c, O1, A, 80);
-    distance(c, A, B, 220);
-    distance(c, B, O2, 50);
+    c.add(distance(O1, A, 80));
+    c.add(distance(A, B, 220));
+    c.add(distance(B, O2, 50));
     c.pin(O1);
     c.pin(O2);
     c.pin(B);
@@ -329,14 +329,14 @@ describe("Cluster — numerical robustness", () => {
     const B = vec(100, 0);
     const C = vec(100, 60);
     const D = vec(180, 60);
-    distance(c, A, B, 100);
-    distance(c, B, C, 60);
-    distance(c, C, D, 80);
+    c.add(distance(A, B, 100));
+    c.add(distance(B, C, 60));
+    c.add(distance(C, D, 80));
     // Intentionally use the duplicated-cell form: this used to feed
     // NaN through `solveSPD` whenever the local LHS went rank-
     // deficient. The guard in `_primalSweep` should keep positions
     // finite regardless.
-    perpendicular(c, A, B, B, C);
+    c.add(perpendicular(A, B, B, C));
     c.pin(A);
 
     let seed = 12345;
@@ -358,31 +358,30 @@ describe("Cluster — numerical robustness", () => {
 });
 
 describe("Cluster — constraint lifecycle", () => {
-  it("force.dispose() removes the constraint at the next solve", () => {
+  it("cluster.remove(rel) removes the constraint at the next solve", () => {
     const c = new Cluster({ iterations: 20 });
     const a = num(0);
     const b = num(0);
-    const link = eq(c, a, b);
+    const link = c.add(eq(a, b));
     c.pin(a);
     a.value = 5;
     expect(b.value).toBeCloseTo(5, 2);
 
-    link.dispose();
-    c.update();
+    c.remove(link);
     a.value = 9;
     expect(b.value).toBeCloseTo(5, 1); // b stays put — no longer linked
   });
 
-  it("cluster.update() forces a solve without a signal write", () => {
+  it("cluster.remove(rel) clears the underlying force", () => {
     const c = new Cluster({ iterations: 20 });
     const a = vec(0, 0);
     const b = vec(1, 0);
-    const link = distance(c, a, b, 3);
+    const link = c.add(distance(a, b, 3));
     c.pin(a);
     a.value = { x: 0.0001, y: 0 };
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(3, 1);
 
-    link.dispose();
+    c.remove(link);
     c.update();
     expect(c.solver.forces.length).toBe(0);
   });

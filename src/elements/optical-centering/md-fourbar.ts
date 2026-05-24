@@ -39,9 +39,9 @@ export class MdFourbar extends Diagram {
     const coupler = Math.hypot(B.value.x - A.value.x, B.value.y - A.value.y);
 
     const cluster = new Cluster({ iterations: 24 });
-    distance(cluster, O1, A, crank);
-    distance(cluster, A, B, coupler);
-    distance(cluster, B, O2, rocker);
+    cluster.add(distance(O1, A, crank));
+    cluster.add(distance(A, B, coupler));
+    cluster.add(distance(B, O2, rocker));
     cluster.pin(O1);
     cluster.pin(O2);
 

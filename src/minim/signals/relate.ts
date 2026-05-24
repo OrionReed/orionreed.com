@@ -1,27 +1,26 @@
-// relate.ts — re-orientable bidirectional relation between cells.
+// relate.ts — re-orientable bidirectional relation between two cells.
 //
 // `relate(a, b, fwd, bwd)` declares an invertible relation: writes to
 // `a` propagate to `b` as `fwd(a)`, and writes to `b` propagate to
-// `a` as `bwd(b)`. Either side can be the driver — the engine routes
-// each individual write outward from the kicked cell using
-// `writeBack`, which excludes the currently-active reactive node from
-// propagation, structurally eliminating the self-trigger loop.
+// `a` as `bwd(b)`. Either side can be the driver.
 //
-// This is the propagator-network shape on top of signals. The
-// underlying mechanism is the same alien-signals push/pull DAG; what's
-// new is that *either* cell can be the root of a per-write traversal.
-// Multi-root writes — the alga case — without iterative relaxation,
-// without sacrificing the topological-walk speed.
+// Implemented as two `settle` nodes (one per direction). Each
+// settle's body self-excludes its own writes, so the writer side
+// doesn't re-fire itself. The OTHER settle observes the write and
+// fires (as a separate node) for the reverse roundtrip — this gives
+// fixpoint semantics for lossy contractive pairs (`bwd ∘ fwd ≠ id`)
+// while terminating via the engine's `===` short-circuit when the
+// roundtrip stabilises.
 //
 // Termination contract:
-//   - Iso (`bwd ∘ fwd = id`) and lossy-but-idempotent pairs terminate
-//     in one round-trip via the engine's `===` short-circuit.
-//   - Drift-prone pairs (e.g., `fwd(a) = a * (1 + ε)`) loop
-//     indefinitely, same as today's manual `sync(a, drifty)` pattern.
-//     This is structural; the runtime can't paper over genuine
-//     non-convergence without an iteration budget.
+//   - Iso (`bwd ∘ fwd = id`): one round-trip; the second write is
+//     `===`-equal to the previous and propagation stops.
+//   - Lossy contractive pairs: converge to the fixpoint of bwd∘fwd.
+//   - Drift-prone pairs (`fwd(a) = a + 1`, etc.): would loop
+//     indefinitely. Same caveat as before — the runtime can't paper
+//     over genuine non-convergence without an iteration budget.
 
-import { effect, type Signal, type WritableBrand } from "./signal";
+import { settle, type Signal, type WritableBrand } from "./signal";
 
 /** Handle returned by `relate` — disposable bidirectional binding. */
 export interface RelateHandle {
@@ -38,18 +37,20 @@ export function relate<A, B>(
 ): RelateHandle {
   const aSig = a as Signal<A>;
   const bSig = b as Signal<B>;
-  const e1 = effect(() => {
-    const va = aSig.value;
-    bSig.writeBack(fwd(va));
+  // Forward-only and backward-only settlers. The fwd settler reads a,
+  // writes b; the bwd settler reads b, writes a. Each self-excludes
+  // (settle's auto-self-exclusion); the other observes and ping-pongs
+  // until `===` short-circuits.
+  const fwdHandle = settle(_dirty => {
+    bSig.value = fwd(aSig.value);
   });
-  const e2 = effect(() => {
-    const vb = bSig.value;
-    aSig.writeBack(bwd(vb));
+  const bwdHandle = settle(_dirty => {
+    aSig.value = bwd(bSig.value);
   });
   return {
     dispose() {
-      e1();
-      e2();
+      fwdHandle.dispose();
+      bwdHandle.dispose();
     },
   };
 }

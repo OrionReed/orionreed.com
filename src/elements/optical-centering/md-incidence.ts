@@ -44,12 +44,12 @@ export class MdIncidence extends Diagram {
     const M = vec(cx - 30, cy); // free inner vertex
 
     const cluster = new Cluster({ iterations: 24 });
-    onCircle(cluster, P, center, RADIUS);
-    collinear(cluster, Q, L1, L2);
-    distance(cluster, P, M, BAR);
-    distance(cluster, M, Q, BAR);
-    equalDist(cluster, P, M, M, Q);
-    rightAngle(cluster, P, M, Q);
+    cluster.add(onCircle(P, center, RADIUS));
+    cluster.add(collinear(Q, L1, L2));
+    cluster.add(distance(P, M, BAR));
+    cluster.add(distance(M, Q, BAR));
+    cluster.add(equalDist(P, M, M, Q));
+    cluster.add(rightAngle(P, M, Q));
 
     // Render the loci behind everything else.
     s(circle(center, RADIUS, { thin: true, opacity: 0.4 }));

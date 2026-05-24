@@ -287,7 +287,7 @@ Push that further and the sketchpad is the editor. Two reactive collections — 
 
 <md-sketchpad-live></md-sketchpad-live>
 
-Constraints can be added and disposed at runtime — the factory returns a handle with `.dispose()`, and `cluster.update()` forces an immediate re-solve. The square below is held by four side constraints and one toggleable diagonal: with the brace, the quad is rigid and only translates and rotates; without it, one internal degree of freedom returns and it flexes as a 4-bar linkage.
+Constraints can be added and removed at runtime — `cluster.add(rel)` returns the relation, `cluster.remove(rel)` tears it down. The square below is held by four side constraints and one toggleable diagonal: with the brace, the quad is rigid and only translates and rotates; without it, one internal degree of freedom returns and it flexes as a 4-bar linkage.
 
 <md-rigid></md-rigid>
 

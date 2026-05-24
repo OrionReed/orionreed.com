@@ -12,7 +12,7 @@ function buildChain(N: number, iters: number) {
   const cells: WVec[] = [];
   for (let i = 0; i < N; i++) cells.push(vec(i, 0));
   const c = new Cluster({ iterations: iters });
-  for (let i = 1; i < N; i++) distance(c, cells[i - 1]!, cells[i]!, 1);
+  for (let i = 1; i < N; i++) c.add(distance(cells[i - 1]!, cells[i]!, 1));
   c.pin(cells[0]!);
   c.pin(cells[N - 1]!);
   return { c, cells };
@@ -89,9 +89,9 @@ describe("relate3 perf sanity", () => {
     }
     const c = new Cluster({ iterations: 16 });
     for (let j = 0; j < H; j++)
-      for (let i = 1; i < W; i++) spring(c, grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.STRONG);
+      for (let i = 1; i < W; i++) c.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.STRONG));
     for (let i = 0; i < W; i++)
-      for (let j = 1; j < H; j++) spring(c, grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.STRONG);
+      for (let j = 1; j < H; j++) c.add(spring(grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.STRONG));
     c.pin(grid[0]![0]!);
     c.pin(grid[0]![W - 1]!);
     c.pin(grid[H - 1]![W - 1]!);
@@ -147,9 +147,9 @@ describe("relate3 perf sanity", () => {
       [8, 9],
     ];
     const c = new Cluster({ iterations: 12 });
-    for (const [a, b] of edges) spring(c, nodes[a]!, nodes[b]!, REST, STIFFNESS);
+    for (const [a, b] of edges) c.add(spring(nodes[a]!, nodes[b]!, REST, STIFFNESS));
     for (let i = 0; i < N; i++)
-      for (let j = i + 1; j < N; j++) gap(c, nodes[i]!, nodes[j]!, MIN_GAP);
+      for (let j = i + 1; j < N; j++) c.add(gap(nodes[i]!, nodes[j]!, MIN_GAP));
     c.pin(nodes[0]!);
     c.pin(nodes[1]!);
 
@@ -196,9 +196,9 @@ describe("relate3 perf sanity", () => {
     }
     const c = new Cluster({ iterations: 5 });
     for (let j = 0; j < H; j++)
-      for (let i = 1; i < W; i++) distance(c, cells[j]![i - 1]!, cells[j]![i]!, 1);
+      for (let i = 1; i < W; i++) c.add(distance(cells[j]![i - 1]!, cells[j]![i]!, 1));
     for (let i = 0; i < W; i++)
-      for (let j = 1; j < H; j++) distance(c, cells[j - 1]![i]!, cells[j]![i]!, 1);
+      for (let j = 1; j < H; j++) c.add(distance(cells[j - 1]![i]!, cells[j]![i]!, 1));
     c.pin(cells[0]![0]!);
     c.pin(cells[0]![W - 1]!);
 

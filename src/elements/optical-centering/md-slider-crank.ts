@@ -33,9 +33,9 @@ export class MdSliderCrank extends Diagram {
     const guide2 = vec(cx + 200, cy);
 
     const cluster = new Cluster({ iterations: 24 });
-    distance(cluster, O1, A, CRANK);
-    distance(cluster, A, B, ROD);
-    collinear(cluster, B, guide1, guide2);
+    cluster.add(distance(O1, A, CRANK));
+    cluster.add(distance(A, B, ROD));
+    cluster.add(collinear(B, guide1, guide2));
     cluster.pin(O1);
     cluster.pin(guide1);
     cluster.pin(guide2);

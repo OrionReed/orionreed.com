@@ -12,7 +12,7 @@ describe("AVBD value types — scalars (dim=1)", () => {
     const a = num(3);
     const b = num(0);
     const s = new Cluster({ iterations: 10 });
-    lensNum(s, a, b, x => 2 * x);
+    s.add(lensNum(a, b, x => 2 * x));
     s.pin(a);
     a.value = 3.0001;
     expect(b.value).toBeCloseTo(6, 1);
@@ -28,11 +28,13 @@ describe("AVBD value types — scalars (dim=1)", () => {
     const cells = [];
     for (let i = 0; i < N; i++) cells.push(num(i + 1));
     const s = new Cluster({ iterations: 50 });
-    generic(s, cells, 1, (pos, out) => {
-      let sum = 0;
-      for (const p of pos) sum += p[0]!;
-      out[0]! = sum - 100;
-    });
+    s.add(
+      generic(cells, 1, (pos, out) => {
+        let sum = 0;
+        for (const p of pos) sum += p[0]!;
+        out[0]! = sum - 100;
+      }),
+    );
     cells[0]!.value = 1.0001; // trigger
     let total = 0;
     for (const c of cells) total += c.value;
@@ -48,11 +50,13 @@ describe("AVBD value types — Box (dim=4: x, y, w, h)", () => {
     const A = box(0, 0, 5, 3);
     const B = box(10, 0, 4, 3);
     const s = new Cluster({ iterations: 10 });
-    generic(s, [A, B], 1, (pos, out) => {
-      const a = pos[0]!,
-        b = pos[1]!;
-      out[0]! = b[0]! - (a[0]! + a[2]!);
-    });
+    s.add(
+      generic([A, B], 1, (pos, out) => {
+        const a = pos[0]!,
+          b = pos[1]!;
+        out[0]! = b[0]! - (a[0]! + a[2]!);
+      }),
+    );
     s.pin(A);
     A.value = { x: 0.0001, y: 0, w: 5, h: 3 };
     expect(B.value.x).toBeCloseTo(5, 1);
@@ -64,10 +68,12 @@ describe("AVBD value types — Box (dim=4: x, y, w, h)", () => {
   it("aspect-ratio constraint: w / h = 16/9", () => {
     const b = box(0, 0, 100, 100);
     const s = new Cluster({ iterations: 20 });
-    generic(s, [b], 1, (pos, out) => {
-      const v = pos[0]!;
-      out[0]! = 9 * v[2]! - 16 * v[3]!;
-    });
+    s.add(
+      generic([b], 1, (pos, out) => {
+        const v = pos[0]!;
+        out[0]! = 9 * v[2]! - 16 * v[3]!;
+      }),
+    );
     b.value = { x: 0, y: 0, w: 100.0001, h: 100 };
     expect(b.value.w / b.value.h).toBeCloseTo(16 / 9, 1);
   });
@@ -78,13 +84,15 @@ describe("AVBD value types — cyclic / wraparound angles", () => {
     const a = num(Math.PI / 4);
     const b = num(-Math.PI / 4);
     const s = new Cluster({ iterations: 30 });
-    generic(s, [a, b], 1, (pos, out) => {
-      const x = pos[0]![0]!;
-      const y = pos[1]![0]!;
-      let diff = y - x;
-      diff -= 2 * Math.PI * Math.round(diff / (2 * Math.PI));
-      out[0]! = diff;
-    });
+    s.add(
+      generic([a, b], 1, (pos, out) => {
+        const x = pos[0]![0]!;
+        const y = pos[1]![0]!;
+        let diff = y - x;
+        diff -= 2 * Math.PI * Math.round(diff / (2 * Math.PI));
+        out[0]! = diff;
+      }),
+    );
     s.pin(a);
     a.value = Math.PI / 4 + 0.0001;
     let diff = b.value - a.value;
@@ -98,11 +106,13 @@ describe("AVBD value types — mixed dimensions in same cluster", () => {
     const L = num(3);
     const P = vec(5, 0);
     const s = new Cluster({ iterations: 20 });
-    generic(s, [L, P], 1, (pos, out) => {
-      const l = pos[0]![0]!;
-      const p = pos[1]!;
-      out[0]! = Math.hypot(p[0]!, p[1]!) - l;
-    });
+    s.add(
+      generic([L, P], 1, (pos, out) => {
+        const l = pos[0]![0]!;
+        const p = pos[1]!;
+        out[0]! = Math.hypot(p[0]!, p[1]!) - l;
+      }),
+    );
     s.pin(L);
     L.value = 3.0001;
     expect(Math.hypot(P.value.x, P.value.y)).toBeCloseTo(3, 1);
@@ -113,9 +123,11 @@ describe("AVBD value types — mixed dimensions in same cluster", () => {
     const inp = num(5);
     const out = num(0);
     const s = new Cluster({ iterations: 20 });
-    generic(s, [gain, inp, out], 1, (pos, residual) => {
-      residual[0]! = pos[2]![0]! - pos[0]![0]! * pos[1]![0]!;
-    });
+    s.add(
+      generic([gain, inp, out], 1, (pos, residual) => {
+        residual[0]! = pos[2]![0]! - pos[0]![0]! * pos[1]![0]!;
+      }),
+    );
     s.pin(gain);
     s.pin(inp);
     inp.value = 5.0001;

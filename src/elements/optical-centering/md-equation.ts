@@ -41,15 +41,17 @@ export class MdEquation extends Diagram {
     const c = num(5);
 
     const cluster = new Cluster({ iterations: 24 });
-    generic(cluster, [a, b, c], 1, (pos, out) => {
-      const av = pos[0]![0]!;
-      const bv = pos[1]![0]!;
-      const cv = pos[2]![0]!;
-      out[0]! = av * av + bv * bv - cv * cv;
-    });
-    clamp(cluster, a, 0.5, A_MAX);
-    clamp(cluster, b, 0.5, A_MAX);
-    clamp(cluster, c, 0.5, C_MAX);
+    cluster.add(
+      generic([a, b, c], 1, (pos, out) => {
+        const av = pos[0]![0]!;
+        const bv = pos[1]![0]!;
+        const cv = pos[2]![0]!;
+        out[0]! = av * av + bv * bv - cv * cv;
+      }),
+    );
+    cluster.add(clamp(a, 0.5, A_MAX));
+    cluster.add(clamp(b, 0.5, A_MAX));
+    cluster.add(clamp(c, 0.5, C_MAX));
 
     const tracks = [
       { sig: a, max: A_MAX, color: "#5b8def", label: "a", y: 130 },

@@ -10,7 +10,7 @@ describe("Simulation — composes solver + time-stepping", () => {
     const a = vec(0, 0);
     const b = vec(1, 0);
     const s = new Cluster();
-    distance(s, a, b, 1); // forces them both bound
+    s.add(distance(a, b, 1)); // forces them both bound
     s.pin(a);
     const sim = new Simulation(s, { gravity: [0, -10] });
     const aId = s.bind(a);
@@ -27,7 +27,7 @@ describe("Simulation — composes solver + time-stepping", () => {
     const anchor = vec(0, 0);
     const bob = vec(1, 0);
     const s = new Cluster({ iterations: 8, alpha: 0.99 });
-    distance(s, anchor, bob, 1);
+    s.add(distance(anchor, bob, 1));
     s.pin(anchor);
 
     const sim = new Simulation(s, { gravity: [0, -10] });
@@ -44,7 +44,7 @@ describe("Simulation — composes solver + time-stepping", () => {
     const a = vec(0, 0);
     const b = vec(0, 0);
     const s = new Cluster({ iterations: 4, alpha: 0.99 });
-    spring(s, a, b, 0, 1e3);
+    s.add(spring(a, b, 0, 1e3));
     s.pin(a);
     const sim = new Simulation(s, { gravity: [0, -10] });
     const gen = sim.animate();
@@ -61,7 +61,7 @@ describe("Simulation — composes solver + time-stepping", () => {
       const top = vec(0, 0);
       const bob = vec(0, -1);
       const s = new Cluster({ iterations: 6, alpha: 0.99 });
-      distance(s, top, bob, 1);
+      s.add(distance(top, bob, 1));
       s.pin(top);
       const sim = new Simulation(s, { gravity: [0.5, 0] });
       return { sim, bob };

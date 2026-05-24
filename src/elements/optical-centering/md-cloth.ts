@@ -53,21 +53,21 @@ export class MdCloth extends Diagram {
     // Edge springs — resist stretching.
     for (let j = 0; j < H; j++) {
       for (let i = 1; i < W; i++)
-        spring(cluster, grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM);
+        cluster.add(spring(grid[j]![i - 1]!, grid[j]![i]!, SP, Strength.MEDIUM));
     }
     for (let i = 0; i < W; i++) {
       for (let j = 1; j < H; j++)
-        spring(cluster, grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM);
+        cluster.add(spring(grid[j - 1]![i]!, grid[j]![i]!, SP, Strength.MEDIUM));
     }
 
     // 3-point bends — resist folding (the missing piece for cloth-like drape).
     for (let j = 0; j < H; j++) {
       for (let i = 2; i < W; i++)
-        bend(cluster, grid[j]![i - 2]!, grid[j]![i - 1]!, grid[j]![i]!, 0.5);
+        cluster.add(bend(grid[j]![i - 2]!, grid[j]![i - 1]!, grid[j]![i]!, 0.5));
     }
     for (let i = 0; i < W; i++) {
       for (let j = 2; j < H; j++)
-        bend(cluster, grid[j - 2]![i]!, grid[j - 1]![i]!, grid[j]![i]!, 0.5);
+        cluster.add(bend(grid[j - 2]![i]!, grid[j - 1]![i]!, grid[j]![i]!, 0.5));
     }
 
     cluster.pin(grid[0]![0]!);

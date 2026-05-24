@@ -34,10 +34,10 @@ export class MdSketchpad extends Diagram {
     const D = vec(cx + 140, cy + 60);
 
     const cluster = new Cluster({ iterations: 24 });
-    distance(cluster, A, B, 160);
-    distance(cluster, B, C, 120);
-    distance(cluster, C, D, 80);
-    rightAngle(cluster, A, B, C);
+    cluster.add(distance(A, B, 160));
+    cluster.add(distance(B, C, 120));
+    cluster.add(distance(C, D, 80));
+    cluster.add(rightAngle(A, B, C));
 
     s(line(A, B));
     s(line(B, C));

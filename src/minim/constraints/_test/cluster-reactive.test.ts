@@ -24,7 +24,7 @@ describe("AVBD reactive — basic signal binding", () => {
     const s = new Cluster({ iterations: 20 });
     const a = numSig(3);
     const b = numSig(7);
-    eq(s, a, b);
+    s.add(eq(a, b));
 
     // No pin: triggering a solve drives both toward the midpoint.
     a.value = 5;
@@ -35,7 +35,7 @@ describe("AVBD reactive — basic signal binding", () => {
     const s = new Cluster({ iterations: 20 });
     const a = numSig(3);
     const b = numSig(7);
-    eq(s, a, b);
+    s.add(eq(a, b));
 
     const release = s.pin(a);
     a.value = 5;
@@ -48,7 +48,7 @@ describe("AVBD reactive — basic signal binding", () => {
     const s = new Cluster({ iterations: 30 });
     const a = vecSig(0, 0);
     const b = vecSig(1, 0);
-    distance(s, a, b, 5);
+    s.add(distance(a, b, 5));
 
     // Pin a so the constraint pulls b out, not both toward each other.
     s.pin(a);
@@ -63,7 +63,7 @@ describe("AVBD reactive — basic signal binding", () => {
     const s = new Cluster({ iterations: 20 });
     const a = numSig(3);
     const b = numSig(7);
-    eq(s, a, b);
+    s.add(eq(a, b));
     s.pin(a);
 
     let observed = -1;
@@ -87,7 +87,7 @@ describe("AVBD reactive — basic signal binding", () => {
     const s = new Cluster({ iterations: 10 });
     const a = numSig(0);
     const b = numSig(0);
-    eq(s, a, b);
+    s.add(eq(a, b));
     s.pin(a);
 
     let bWrites = 0;
@@ -109,8 +109,8 @@ describe("AVBD reactive — basic signal binding", () => {
     const a = numSig(0);
     const b = numSig(0);
     const c = numSig(0);
-    eq(s, a, b);
-    eq(s, b, c);
+    s.add(eq(a, b));
+    s.add(eq(b, c));
     s.pin(a);
 
     let cWrites = 0;
@@ -143,7 +143,7 @@ describe("AVBD reactive — lens composition", () => {
     const a = vecSig(0, 0);
     const b = vecSig(5, 5);
 
-    eq(s, a.x, b.x);
+    s.add(eq(a.x, b.x));
     s.pin(a.x);
     a.value = { x: 3, y: 0 };
 
@@ -155,7 +155,7 @@ describe("AVBD reactive — lens composition", () => {
     const s = new Cluster({ iterations: 30 });
     const a = vecSig(0, 0);
     const b = vecSig(5, 5);
-    eq(s, a.x, b.x);
+    s.add(eq(a.x, b.x));
     s.pin(a.x);
 
     a.x.value = 7;
@@ -169,7 +169,7 @@ describe("AVBD reactive — inequalities", () => {
     const s = new Cluster({ iterations: 30 });
     const a = numSig(3);
     const b = numSig(3);
-    leq(s, a, b);
+    s.add(leq(a, b));
     s.pin(b);
 
     // Push a above b; constraint should saturate.

@@ -58,9 +58,9 @@ export class MdParticles extends Diagram {
     }
 
     const cluster = new Cluster({ iterations: 14 });
-    for (const p of particles) inside(cluster, p, xLo + R, yLo + R, xHi - R, yHi - R);
+    for (const p of particles) cluster.add(inside(p, xLo + R, yLo + R, xHi - R, yHi - R));
     for (let i = 0; i < N; i++) {
-      for (let j = i + 1; j < N; j++) gap(cluster, particles[i]!, particles[j]!, 2 * R);
+      for (let j = i + 1; j < N; j++) cluster.add(gap(particles[i]!, particles[j]!, 2 * R));
     }
 
     s(rect(xLo, yLo, W, H, { thin: true, opacity: 0.4, corner: 6 }));
