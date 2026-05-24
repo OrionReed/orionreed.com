@@ -66,6 +66,7 @@ export {
 } from "./forces";
 export {
   Body,
+  BodyAnchor,
   type BodyOpts,
   BoxContact,
   Joint,

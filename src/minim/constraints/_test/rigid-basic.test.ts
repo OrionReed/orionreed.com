@@ -1,7 +1,7 @@
 // rigid-basic.test.ts — sanity tests for the 2D rigid-body extension.
 
 import { describe, expect, it } from "vitest";
-import { Body, BoxContact, RigidWorld } from "../index";
+import { Body, BodyAnchor, BoxContact, RigidWorld } from "../index";
 
 describe("box-box SAT collide", () => {
   it("box overlapping ground produces contacts", () => {
@@ -225,5 +225,36 @@ describe("RigidWorld — basics", () => {
     );
     expect(maxLinearV).toBeLessThan(5);
     expect(maxAngularV).toBeLessThan(0.5);
+  });
+});
+
+describe("BodyAnchor — soft drag", () => {
+  it("pulls a free body toward the target", () => {
+    const w = new RigidWorld({ gravity: [0, 0], damping: 0.95 });
+    const b = w.add({ size: { w: 10, h: 10 } }, { x: 0, y: 0 });
+    const a = w.dragAnchor(b, { x: 100, y: 0 }, 1e5);
+    for (let f = 0; f < 240; f++) w.step(1 / 60);
+    const p = b.pose();
+    // Body settles within a pixel or so of the target.
+    expect(Math.abs(p.x - 100)).toBeLessThan(2);
+    expect(Math.abs(p.y)).toBeLessThan(0.5);
+    a.dispose();
+  });
+
+  it("dragged body cannot mush through a static wall", () => {
+    // Wall to the right of the box; drag the box hard right. With
+    // soft-anchor drag the box piles up against the wall instead of
+    // teleporting through (which is what a position-write pin does).
+    const w = new RigidWorld({ gravity: [0, 0], iterations: 20, postStabilize: true });
+    w.add({ size: { w: 4, h: 100 }, density: 0, friction: 0.4 }, { x: 50, y: 0 });
+    const b = w.add({ size: { w: 20, h: 20 }, density: 1, friction: 0.4 }, { x: 0, y: 0 });
+    const a = w.dragAnchor(b, { x: 200, y: 0 }, 5e4);
+    for (let f = 0; f < 120; f++) w.step(1 / 60);
+    const p = b.pose();
+    // Box should be touching the wall (around x = 50 - 2 - 10 = 38),
+    // not at the cursor (x = 200).
+    expect(p.x).toBeGreaterThan(30);
+    expect(p.x).toBeLessThan(45);
+    a.dispose();
   });
 });

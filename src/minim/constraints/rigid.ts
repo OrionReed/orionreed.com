@@ -811,6 +811,63 @@ export class Joint extends Force {
   }
 }
 
+/** Soft 2-row constraint pulling a body's translation `(x, y)` toward
+ *  a moving world-space `target` with finite `stiffness`. Used as the
+ *  drag handle on rigid bodies: instead of pinning (mass → 0) and
+ *  teleporting positions to the cursor — which makes the dragged box
+ *  punch through neighbours, since a static body can't react to a
+ *  contact — this lets the body keep its mass. The cursor pulls hard
+ *  but contacts can still push back, so the box lags behind the
+ *  cursor when blocked rather than mushing through.
+ *
+ *  Leaves the angle DOF free, so the body still rotates under
+ *  gravity / contact torque while you drag it. Update `target` each
+ *  pointermove; call `dispose()` on pointerup. */
+export class BodyAnchor extends Force {
+  readonly body: Body;
+  /** World-space target position. Mutate directly each pointermove. */
+  target: { x: number; y: number };
+
+  constructor(solver: Solver, body: Body, target: { x: number; y: number }, stiffness: number) {
+    super(solver, [body.cellId], 2);
+    this.body = body;
+    this.target = { x: target.x, y: target.y };
+    this.stiffness[0]! = stiffness;
+    this.stiffness[1]! = stiffness;
+  }
+
+  initialize(): boolean {
+    return this.stiffness[0]! > 0 || this.stiffness[1]! > 0;
+  }
+
+  computeConstraint(_alpha: number): void {
+    const off = this.cellOffsets[0]!;
+    const p = this.solver.positions;
+    this.C[0]! = p[off]! - this.target.x;
+    this.C[1]! = p[off + 1]! - this.target.y;
+  }
+
+  computeDerivatives(_cellIdx: number): void {
+    const J = this.J[0]!;
+    const Hcols = this.HCols[0]!;
+    // ∂C[0]/∂(x, y, θ) = (1, 0, 0)
+    J[0]! = 1;
+    J[1]! = 0;
+    J[2]! = 0;
+    // ∂C[1]/∂(x, y, θ) = (0, 1, 0)
+    J[3]! = 0;
+    J[4]! = 1;
+    J[5]! = 0;
+    // No geometric stiffness (linear constraint).
+    Hcols[0]! = 0;
+    Hcols[1]! = 0;
+    Hcols[2]! = 0;
+    Hcols[3]! = 0;
+    Hcols[4]! = 0;
+    Hcols[5]! = 0;
+  }
+}
+
 // ─── World ──────────────────────────────────────────────────────────
 
 export interface RigidWorldOpts extends SolverOpts, SimulationOpts {
@@ -892,6 +949,17 @@ export class RigidWorld {
     const b = Math.max(bodyA.cellId, bodyB.cellId);
     this._jointed.add(`${a}_${b}`);
     return j;
+  }
+
+  /** Soft drag anchor: pulls `body`'s translation toward `target`
+   *  with finite `stiffness`. Use this instead of `body.pin()` for
+   *  pointer drag — the body keeps its mass and resists penetrating
+   *  neighbours when blocked. Mutate the returned anchor's `target`
+   *  field on each `pointermove`; call `dispose()` on `pointerup`. */
+  dragAnchor(body: Body, target: { x: number; y: number }, stiffness = 1e5): BodyAnchor {
+    const a = new BodyAnchor(this.cluster.solver, body, target, stiffness);
+    this.cluster.solver.addForce(a);
+    return a;
   }
 
   step(realDt: number): void {
