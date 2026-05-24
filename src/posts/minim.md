@@ -243,6 +243,10 @@ The lenses don't care what the values *mean*. A colour has two natural coordinat
 
 <md-color></md-color>
 
+The lenses don't even need to be numeric on both ends. A codec — `parse` and `format` paired up — IS a lens between a typed value and its string representation: read formats, write parses. `hexFromColor(c)` wraps a writable Color as a writable `#rrggbb` text view. `secondsFromText(t)` wraps a writable string as a writable seconds-Num. Drag the handle (numeric end) and the text reformats; click a chip to write a literal string into the text end and the codec parses back through to the typed source. Form inputs and labels are the same primitive as RGB sliders.
+
+<md-codec-lens></md-codec-lens>
+
 Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. When the relation needs to read multiple sources or distribute writes across them, the same N-input `Cls.lens([parents], fwd, bwd)` from above is the generalisation. The escape hatch for everything else is the closure form `Cls.lens(get, set)`, or `relate(a, b, fwd, bwd)` for re-orientable bidirectional bindings between two existing signals (either side can be the driver).
 
 <md-pulley></md-pulley>
@@ -278,6 +282,10 @@ perpendicular(c, A, B, B, C);
 Drag any handle; the cluster's effect re-fires, runs the solver, and writes the new positions back through `writeBack` — so the writes propagate to the rendering effects but don't re-trigger the solver itself. Single solve per write, no convergence loop, no fragile self-mute.
 
 <md-sketchpad></md-sketchpad>
+
+Push that further and the sketchpad is the editor. Two reactive collections — `signal<Point[]>` and `signal<Constraint[]>` — drive `forEach` blocks that mount and unmount visuals as the user clicks; the cluster doesn't care that cells and forces are coming and going, every solver step picks up whatever force set is current.
+
+<md-sketchpad-live></md-sketchpad-live>
 
 Constraints can be added and disposed at runtime — the factory returns a handle with `.dispose()`, and `cluster.update()` forces an immediate re-solve. The square below is held by four side constraints and one toggleable diagonal: with the brace, the quad is rigid and only translates and rotates; without it, one internal degree of freedom returns and it flexes as a 4-bar linkage.
 

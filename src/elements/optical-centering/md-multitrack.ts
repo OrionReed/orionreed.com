@@ -9,7 +9,6 @@ import {
   loop,
   Mount,
   rect,
-  signal,
   snapshot,
   timeline,
   vec,
@@ -21,6 +20,7 @@ const STRIP_PAD = 6;
 const TRACK_H = 26;
 const TRACK_COUNT = 3;
 const STRIP_H_TOTAL = TRACK_H * TRACK_COUNT + STRIP_PAD * 2;
+const MIN_W_PX = 8;
 
 export class MdMultitrack extends Diagram {
   protected scene(s: Mount): void {
@@ -68,25 +68,36 @@ export class MdMultitrack extends Diagram {
       const bodyY = trackY + 2;
       const bodyH = TRACK_H - 4;
 
+      // Time-space clip span (`[at, at + dur]` as a `Range`), chained
+      // into pixel space:
+      //   px = (time-range · SCALE) + STRIP_X
+      // The chain is a single fused lens — writes to `px.lo` / `.hi` /
+      // `.start` round-trip back through to `clip.at` / `clip.dur` with
+      // no conversion math at the call site.
+      const px = clip.span.scale(SCALE).shift(STRIP_X);
+
+      const renderedW = computed(() => Math.max(px.width.value, MIN_W_PX));
+
       const body = s(
-        rect(
-          computed(() => (a => STRIP_X + a * SCALE.value)(clip.at.value)),
-          bodyY,
-          computed(() => (d => Math.max(d * SCALE.value, 8))(clip.dur.value)),
-          bodyH,
-          { fill: color, opacity: 0.78, corner: 3, stroke: "none" },
-        ),
+        rect(px.lo, bodyY, renderedW, bodyH, {
+          fill: color,
+          opacity: 0.78,
+          corner: 3,
+          stroke: "none",
+        }),
       );
 
-      // Click offset in clip-time units — keeps the grab point under the cursor.
-      let clickOffset = 0;
+      // Click offset in pixels — body-drag writes pixels directly via
+      // the chained lens; the underlying time signals follow.
+      let clickOffsetPx = 0;
       body.on("pointerdown", e => {
         const local = body.toLocal(e as PointerEvent);
-        clickOffset = (local.x - STRIP_X) / SCALE.value - clip.at.value;
+        clickOffsetPx = local.x - px.lo.value;
       });
       draggable(body, local => {
-        const cursorTime = (local.x - STRIP_X) / SCALE.value;
-        clip.at.value = Math.max(0, cursorTime - clickOffset);
+        // Clamp to the strip's left edge in pixel space; preserves
+        // duration via Range#start (body-drag handle).
+        px.start.value = Math.max(STRIP_X, local.x - clickOffsetPx);
       });
 
       const startKnob = s(
@@ -96,15 +107,10 @@ export class MdMultitrack extends Diagram {
           strokeWidth: 1.5,
         }),
       );
-      let snapEnd = 0;
-      startKnob.on("pointerdown", () => {
-        snapEnd = clip.at.value + clip.dur.value;
-      });
       draggable(startKnob, local => {
-        const cursorTime = (local.x - STRIP_X) / SCALE.value;
-        const newAt = Math.min(Math.max(0, cursorTime), snapEnd - 0.05);
-        clip.at.value = newAt;
-        clip.dur.value = snapEnd - newAt;
+        // Drag the start in pixel space, end stays put. Range#lo is
+        // the start-knob field lens (preserves hi).
+        px.lo.value = Math.min(local.x, px.hi.value - MIN_W_PX);
       });
 
       const endKnob = s(
@@ -114,13 +120,9 @@ export class MdMultitrack extends Diagram {
           strokeWidth: 1.5,
         }),
       );
-      let snapAt = 0;
-      endKnob.on("pointerdown", () => {
-        snapAt = clip.at.value;
-      });
       draggable(endKnob, local => {
-        const cursorTime = (local.x - STRIP_X) / SCALE.value;
-        clip.dur.value = Math.max(0.05, cursorTime - snapAt);
+        // Drag the end in pixel space, start stays put.
+        px.hi.value = Math.max(local.x, px.lo.value + MIN_W_PX);
       });
 
       s(

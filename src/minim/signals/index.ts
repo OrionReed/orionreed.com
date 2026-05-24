@@ -154,10 +154,25 @@ export {
 export * as NumMath from "./values/num";
 // ─── Value classes ────────────────────────────────────────────────
 export { Num, num } from "./values/num";
+export * as RangeMath from "./values/range";
+export { ends, Range, range, span } from "./values/range";
 export * as TransformMath from "./values/transform";
 export { Transform, type TransformInit, transform } from "./values/transform";
 export * as VecMath from "./values/vec";
 export { axes, type PolarPolicy, polar, tangentPoint, Vec, vec } from "./values/vec";
+// ─── Codec lenses (text ↔ typed-value bidirectional) ──────────────
+// Bridges between `Signal<string>` (form input / URL param / label)
+// and the typed value classes. No new value types — these are
+// 1-input cross-class lenses on top of `Cls.lens`.
+export {
+  colorFromHex,
+  hexFromColor,
+  type NumCodecOpts,
+  numFromText,
+  secondsFromText,
+  textFromNum,
+  textFromSeconds,
+} from "./values/codecs";
 // ─── Writable modifier + authoring helpers ───────────────────────
 export {
   derived,

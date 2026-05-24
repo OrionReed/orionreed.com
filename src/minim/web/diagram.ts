@@ -89,6 +89,11 @@ export class Diagram extends HTMLElement {
       height: auto;
       overflow: visible;
     }
+    ::slotted(details.diagram-source) {
+      margin-top: 0.5rem;
+      font-size: 0.85em;
+      color: var(--text-secondary, #888);
+    }
   `;
 
   constructor() {
@@ -116,6 +121,7 @@ export class Diagram extends HTMLElement {
     this.s = mount(this.root);
     this.scene(this.s);
     if (!this.#viewSet) this.fit();
+    this.#ensureSourcePanel();
     this.#startRaf();
   }
 
@@ -201,6 +207,51 @@ export class Diagram extends HTMLElement {
   private mountSvg(): void {
     this.svg = document.createElementNS(SVG_NS, "svg") as SVGSVGElement;
     this.shadow.appendChild(this.svg);
+    // Named slot lets us project the auto-injected source panel
+    // without picking up incidental light-DOM children (e.g.
+    // `<md-qrtp-protocol>no backchannel</md-qrtp-protocol>` uses
+    // `this.textContent` as data, not display).
+    const slot = document.createElement("slot");
+    slot.name = "source";
+    this.shadow.appendChild(slot);
+  }
+
+  /** Append a `<details>` with the subclass's `scene()` source as a
+   *  light-DOM child, projected through the shadow's `slot[name=source]`.
+   *  No-op for the base class, for `[no-source]`, or when already added. */
+  #ensureSourcePanel(): void {
+    if (this.hasAttribute("no-source")) return;
+    if (this.querySelector(":scope > details[slot='source']")) return;
+    const ctor = this.constructor as typeof Diagram;
+    if (ctor.prototype.scene === Diagram.prototype.scene) return;
+
+    const src = dedent(this.scene.toString());
+
+    const details = document.createElement("details");
+    details.slot = "source";
+    details.className = "diagram-source";
+
+    const summary = document.createElement("summary");
+    summary.textContent = "source";
+
+    const code = document.createElement("md-syntax") as HTMLElement & { update?(): void };
+    code.setAttribute("lang", "ts");
+    code.textContent = src;
+
+    details.append(summary, code);
+
+    // `md-syntax.paint()` reads `innerText`, which is empty while the
+    // element is hidden inside a closed `<details>` in some UAs.
+    // Repaint on first open so tokenization always sees the full text.
+    let painted = false;
+    details.addEventListener("toggle", () => {
+      if (details.open && !painted) {
+        code.update?.();
+        painted = true;
+      }
+    });
+
+    this.appendChild(details);
   }
 
   /** Combine base + subclass styles. Cached per subclass. */
@@ -221,4 +272,17 @@ export class Diagram extends HTMLElement {
 // Helper: a fresh writable Box-valued signal seeded with the zero box.
 function signal0Box() {
   return new Box({ x: 0, y: 0, w: 0, h: 0 }) as unknown as import("@minim/signals").Writable<Box>;
+}
+
+// `Function.prototype.toString()` on a class method leaves the body
+// indented by the class+method nesting; strip the common leading
+// indent of non-empty lines (line 0 has no indent in method form).
+function dedent(s: string): string {
+  const lines = s.split("\n");
+  const indents = lines
+    .slice(1)
+    .filter(l => l.trim().length > 0)
+    .map(l => (l.match(/^ */) ?? [""])[0].length);
+  const min = indents.length ? Math.min(...indents) : 0;
+  return lines.map((l, i) => (i === 0 ? l : l.slice(min))).join("\n");
 }

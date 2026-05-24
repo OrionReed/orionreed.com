@@ -3,17 +3,35 @@
 // `duration`. `sequential({...})` produces cumulative-start specs.
 
 import { type Animator } from "@minim/core";
-import { computed, num, type Signal, signal, type Val } from "@minim/signals";
+import {
+  computed,
+  num,
+  type Range,
+  type Signal,
+  signal,
+  span,
+  type Val,
+  type Writable,
+} from "@minim/signals";
 
 /** A clip on a timeline. `t` extends past the endpoints (0 before,
  *  1 after) so `computed(() => (ease)(clip.t.value))` works without conditional checks.
  *  Generic over input flavor — passing a literal or writable `Signal`
  *  gives a writable `at`/`dur`; passing a `Read` or thunk gives the
- *  read-only flavor. */
+ *  read-only flavor.
+ *
+ *  `span` is the `[at, at + dur]` interval as a writable `Range` —
+ *  the natural surface for clip-strip UIs (drag start knob via
+ *  `span.lo`, end knob via `span.hi`, body via `span.start`). Backed
+ *  by the same `at`/`dur` Nums; for `sequential()` clips where `at`
+ *  is computed-RO, writes that would update `at` (i.e. through `lo`
+ *  or `start`) throw at the source — same semantics as writing
+ *  `clip.at.value` directly in that mode. */
 export type Clip<A = number, D = number> = {
   readonly at: ResolvedField<A>;
   readonly dur: ResolvedField<D>;
   readonly end: Signal<number>;
+  readonly span: Writable<Range>;
   /** Progress: 0 before `at`, 0..1 within, 1 after `end`. */
   readonly t: Signal<number>;
   readonly active: Signal<boolean>;
@@ -82,6 +100,7 @@ class TimelineImpl implements Timeline {
 function makeClip(spec: ClipSpec, clock: Signal<number>): Clip {
   const at = num(spec.at);
   const dur = num(spec.dur);
+  const sp = span(at, dur);
   const end = computed(() => at.value + dur.value);
   const t = computed(() => {
     const c = clock.value;
@@ -95,7 +114,7 @@ function makeClip(spec: ClipSpec, clock: Signal<number>): Clip {
     const c = clock.value;
     return c >= at.value && c < end.value;
   });
-  return { at, dur, end, t, active } as Clip;
+  return { at, dur, span: sp, end, t, active } as Clip;
 }
 
 /** Build a timeline from a record of clip specs. `at` and `dur` accept
