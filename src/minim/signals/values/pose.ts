@@ -49,7 +49,13 @@ const packImpl: Pack<V> = {
 };
 
 export class Pose extends Signal<V> {
-  static traits = { linear: linearImpl, lerp, metric, equals, pack: packImpl } satisfies TraitDict<V>;
+  static traits = {
+    linear: linearImpl,
+    lerp,
+    metric,
+    equals,
+    pack: packImpl,
+  } satisfies TraitDict<V>;
   declare readonly _t: typeof Pose.traits;
 
   constructor(v: V = { x: 0, y: 0, theta: 0 }) {

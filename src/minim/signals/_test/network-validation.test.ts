@@ -15,7 +15,7 @@
 // the surface composes cleanly and the primitive's invariants hold.
 
 import { describe, expect, it } from "vitest";
-import { each, param, type Signal, network, signal, type Writable } from "../index";
+import { each, network, param, type Signal, signal, type Writable } from "../index";
 
 // ─── 1. `relate` rebuilt on `network` ────────────────────────────────
 

@@ -19,15 +19,7 @@ import {
   type Tick,
   type Yieldable,
 } from "../core";
-import {
-  computed,
-  effect,
-  type Read,
-  Signal,
-  type Val,
-  valFn,
-  type WritableOf,
-} from "./signal";
+import { computed, effect, type Read, Signal, type Val, valFn, type WritableOf } from "./signal";
 import { requireLerp, requireLinear, requireMetric, type TraitKey, type Traits } from "./traits";
 
 const defaultEase = easeOut;

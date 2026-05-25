@@ -20,7 +20,7 @@
 //     indefinitely. Same caveat as before — the runtime can't paper
 //     over genuine non-convergence without an iteration budget.
 
-import { type Signal, network, type Writable } from "./signal";
+import { network, type Signal, type Writable } from "./signal";
 
 /** Handle returned by `relate` — disposable bidirectional binding. */
 export interface RelateHandle {

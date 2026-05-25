@@ -1,15 +1,7 @@
 // types.test.ts — compile-time guarantees for Writable<R>.
 
 import { describe, expect, it } from "vitest";
-import {
-  computed,
-  num,
-  type Traits,
-  Vec,
-  vec,
-  type Writable,
-  type WritableOf,
-} from "../index";
+import { computed, num, type Traits, Vec, vec, type Writable, type WritableOf } from "../index";
 
 describe("compile-time guarantees", () => {
   it("placeholder — checks fire at tsc", () => {

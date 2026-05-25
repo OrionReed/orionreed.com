@@ -8,18 +8,7 @@
 // matter how the value type changes layer-to-layer.
 
 import { describe, expect, it } from "vitest";
-import {
-  box,
-  Color,
-  effect,
-  Num,
-  num,
-  rgb,
-  Signal,
-  transform,
-  Vec,
-  vec,
-} from "../index";
+import { box, Color, effect, Num, num, rgb, Signal, transform, Vec, vec } from "../index";
 
 // ─── Helpers: peer into engine internals to assert fusion happened ─
 

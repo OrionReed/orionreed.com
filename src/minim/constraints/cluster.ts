@@ -20,8 +20,8 @@
 
 import {
   type Lifecycle,
-  network,
   type Network,
+  network,
   type Pack,
   type Read,
   requirePack,

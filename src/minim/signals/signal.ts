@@ -525,10 +525,7 @@ function makeFieldSetter<T>(
       const s = parent.peek() as Record<string | number | symbol, unknown>;
       const a = s[k0] as Record<string | number | symbol, unknown>;
       const b = a[k1] as object;
-      parent._setWithExclusion(
-        { ...s, [k0]: { ...a, [k1]: { ...b, [k2]: v } } },
-        activeNetwork,
-      );
+      parent._setWithExclusion({ ...s, [k0]: { ...a, [k1]: { ...b, [k2]: v } } }, activeNetwork);
     };
   }
   return v => {

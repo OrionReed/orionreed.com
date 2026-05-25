@@ -10,7 +10,7 @@
 // design intent (one-shot vs fixpoint) maps onto framework choices.
 
 import { describe, expect, it } from "vitest";
-import { type Signal, network, signal, type Writable } from "../index";
+import { network, type Signal, signal, type Writable } from "../index";
 
 interface Handle {
   dispose(): void;

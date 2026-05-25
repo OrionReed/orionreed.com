@@ -85,10 +85,10 @@ export type Traits<T, K extends TraitKey = never> = {
 
 /** Class-level traits dictionary for any Signal subclass. */
 const dictOf = <T>(s: object): TraitDict<T> =>
-  ((s as { constructor?: { traits?: TraitDict<T> } }).constructor?.traits) ?? {};
+  (s as { constructor?: { traits?: TraitDict<T> } }).constructor?.traits ?? {};
 
 const className = (s: object): string =>
-  ((s as { constructor?: { name?: string } }).constructor?.name) ?? "?";
+  (s as { constructor?: { name?: string } }).constructor?.name ?? "?";
 
 const missing = (s: object, slot: string): Error =>
   new Error(`require${slot}: ${className(s)} has no traits.${slot.toLowerCase()}`);

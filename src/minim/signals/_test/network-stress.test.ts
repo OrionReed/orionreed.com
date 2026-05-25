@@ -4,16 +4,7 @@
 // Each section names a guarantee and tests it with the worst inputs.
 
 import { describe, expect, it } from "vitest";
-import {
-  batch,
-  computed,
-  effect,
-  lens,
-  type Network,
-  Signal,
-  network,
-  signal,
-} from "../index";
+import { batch, computed, effect, lens, type Network, network, Signal, signal } from "../index";
 
 // ─── 1. Errors during body ─────────────────────────────────────────
 //

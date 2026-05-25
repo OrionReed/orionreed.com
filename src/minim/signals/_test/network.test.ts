@@ -9,7 +9,7 @@
 //   6. Disposal: unsubscribes; subsequent dep mutations don't fire.
 
 import { describe, expect, it } from "vitest";
-import { batch, effect, type Signal, network, signal } from "../index";
+import { batch, effect, network, type Signal, signal } from "../index";
 
 describe("network — basic semantics", () => {
   it("body runs once on construction (initial run)", () => {
