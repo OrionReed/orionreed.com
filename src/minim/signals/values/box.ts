@@ -25,6 +25,9 @@ export const lerp = (a: V, b: V, t: number): V => ({
 });
 export const equals = (a: V, b: V) =>
   a === b || (a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h);
+/** L2 distance over the flat (x, y, w, h) representation. */
+export const metric = (a: V, b: V) =>
+  Math.hypot(a.x - b.x, a.y - b.y, a.w - b.w, a.h - b.h);
 export const expand = (b: V, n: number): V => ({
   x: b.x - n,
   y: b.y - n,
@@ -79,7 +82,13 @@ const packImpl: Pack<V> = {
 };
 
 export class Box extends Signal<V> {
-  static traits = { linear: linearImpl, lerp, equals, pack: packImpl } satisfies TraitDict<V>;
+  static traits = {
+    linear: linearImpl,
+    lerp,
+    metric,
+    equals,
+    pack: packImpl,
+  } satisfies TraitDict<V>;
   declare readonly _t: typeof Box.traits;
 
   constructor(v: V = { x: 0, y: 0, w: 0, h: 0 }) {

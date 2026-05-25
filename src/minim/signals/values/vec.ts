@@ -10,7 +10,7 @@ import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
 import { batch, Signal, type Val, valFn, value, type Writable } from "../signal";
-import { type Linear, type Pack, type TraitDict } from "../traits";
+import { type Linear, type Pack, type Pivotal, type TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num } from "./num";
 
@@ -69,6 +69,19 @@ const packImpl: Pack<V> = {
   },
   write: (a, o) => ({ x: a[o]!, y: a[o + 1]! }),
 };
+const pivotalImpl: Pivotal<V> = {
+  rotateAbout: (v, p, dθ) => {
+    const cos = Math.cos(dθ);
+    const sin = Math.sin(dθ);
+    const dx = v.x - p.x;
+    const dy = v.y - p.y;
+    return { x: p.x + cos * dx - sin * dy, y: p.y + sin * dx + cos * dy };
+  },
+  scaleAbout: (v, p, k) => ({
+    x: p.x + k * (v.x - p.x),
+    y: p.y + k * (v.y - p.y),
+  }),
+};
 
 export class Vec extends Signal<V> {
   static traits = {
@@ -77,6 +90,7 @@ export class Vec extends Signal<V> {
     metric,
     equals,
     pack: packImpl,
+    pivotal: pivotalImpl,
   } satisfies TraitDict<V>;
   declare readonly _t: typeof Vec.traits;
 

@@ -46,6 +46,55 @@ export interface Pack<T> {
   write(from: Float64Array, offset: number): T;
 }
 
+/** 2-D group-action structure: rotation + uniform scale about a pivot
+ *  point. Required by closed-form aggregate lenses that need to
+ *  "rotate the cluster about its centroid" / "scale the cluster about
+ *  a handle" etc.
+ *
+ *  Implementation is per-value-class so geometric value types (Vec,
+ *  Pose, …) define their own semantics — e.g., Pose rotates its
+ *  position AND increments its orientation; Vec only rotates its
+ *  position. The pivot is always a 2-D position (any `{x, y}` shape),
+ *  regardless of T's full structure.
+ *
+ *  Caller threads dθ (signed angle delta) and k (signed scalar);
+ *  k < 0 reflects, dθ ∈ ℝ wraps naturally. No constraints. */
+export interface Pivotal<T> {
+  rotateAbout(value: T, pivot: { x: number; y: number }, dθ: number): T;
+  scaleAbout(value: T, pivot: { x: number; y: number }, k: number): T;
+}
+
+// ─── (Sketch) Differentiable trait — future work ────────────────────
+//
+// `Differentiable<I, O>` would declare an analytical Jacobian for a
+// forward map `I → O`. Used by `factor()` to skip FD evaluations
+// (faster + machine-precise).
+//
+// Open design questions:
+//
+//   1. Per-class trait, or per-method? A type-level trait says "Vec
+//      knows how to differentiate operations on itself"; a method-
+//      level one says "this specific `.add(k)` returns a Jacobian
+//      row." The latter integrates better with the value-class
+//      invertible-method pattern (`Num.add(k)` already has a known
+//      analytical inverse — its analytical derivative is also known).
+//
+//   2. Composition: if every invertible returns its Jacobian,
+//      `Num.add(1).scale(2)` composes via the chain rule. That's
+//      effectively forward-mode autodiff over the closed-form
+//      lens algebra. Likely a 50-line library on top of the existing
+//      method-returns-`this` pattern.
+//
+//   3. Storage: where does the Jacobian live? On `_fusedOf` alongside
+//      `fwd`/`bwd`? A separate companion field?
+//
+// Deferred until we have a use case that actively wants it — for now
+// `factor()` accepts a user-supplied `jacobian` callback as opt-in.
+//
+// interface Differentiable<I, O> {
+//   jacobian(input: I): readonly (readonly number[])[];
+// }
+
 // ─── Trait dictionary ────────────────────────────────────────────────
 
 /** Shape of a value class's `static traits` dict. Subclasses fill the
@@ -56,6 +105,7 @@ export interface TraitDict<T> {
   metric?: Metric<T>;
   equals?: Equals<T>;
   pack?: Pack<T>;
+  pivotal?: Pivotal<T>;
 }
 
 /** Valid keys of `TraitDict`. The set of declarable traits. */
@@ -116,5 +166,10 @@ export function requireEquals<T>(s: Traits<T, "equals">): Equals<T> {
 export function requirePack<T>(s: Traits<T, "pack">): Pack<T> {
   const v = dictOf<T>(s).pack;
   if (!v) throw missing(s, "Pack");
+  return v;
+}
+export function requirePivotal<T>(s: Traits<T, "pivotal">): Pivotal<T> {
+  const v = dictOf<T>(s).pivotal;
+  if (!v) throw missing(s, "Pivotal");
   return v;
 }

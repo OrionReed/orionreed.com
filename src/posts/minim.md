@@ -343,6 +343,42 @@ None of this is fundamentally geometric. The cluster operates on cells of arbitr
 
 <md-equation></md-equation>
 
+## Propagators
+
+AVBD's sweet spot is *many soft constraints, approximate solving fast* — cloth, contacts, force-directed graphs. The opposite shape — *few exact relations, instant fixpoint* — wants a different substrate: propagator networks. Same `network()` primitive underneath, different traversal: each propagator declares its read/write topology, the network runs them in a freshness-driven fixpoint until stable. Reads are exact arithmetic; writes are atomic; multi-direction relations let any cell drive any other.
+
+The four-leaf example is the smallest version of the idea. Three `adder` propagators — `a + b = ab`, `c + d = cd`, `ab + cd = Σ` — are enough to let any one of five sliders drive the rest. There's no "input" and no "output"; pull the total and the leaves redistribute, pull a leaf and the total re-derives.
+
+```ts
+const p = propagators();
+p.add(adder(a, b, ab));
+p.add(adder(c, d, cd));
+p.add(adder(ab, cd, total));
+```
+
+<md-prop-net></md-prop-net>
+
+Vec-typed propagators do the same thing for 2D points. `vCentroid(G, A, B, C)` runs both directions: drag any vertex and the centroid follows; drag the centroid and all three vertices translate by its delta. `vMidpoint(A, B, M)` is the two-point version. Stack them and a triangle's medians come out for free — the centroid, the three side-midpoints, and the three medians, six bidirectional propagators total.
+
+```ts
+p.add(vCentroid(G, A, B, C));
+p.add(vMidpoint(A, B, Mab));
+p.add(vMidpoint(B, C, Mbc));
+p.add(vMidpoint(C, A, Mca));
+```
+
+<md-prop-geom></md-prop-geom>
+
+The same substrate is the right tool for layout. `hstack(container, items, opts)` is one big procedural propagator — reads `container.{x,w}`, gap, item widths, plus optional bound metadata; writes item positions and sizes via a single CSS-flex-style algorithm. No bidirectionality, no fixpoint loop, just one fire per drag. 100 items in 50µs; 1000 in 160µs — Yoga territory, on a substrate that composes with everything else in the system.
+
+```ts
+p.add(hstack(container, items, { gap, minSize: 30, align: "stretch" }));
+```
+
+<md-prop-flex></md-prop-flex>
+
+The substrate scales the other way too. Set-narrowing propagators on `Signal<Set<T>>` cells solve a 9×9 sudoku in half a millisecond. Interval-arithmetic propagators on `Signal<[number, number]>` cells let layout reasoning track partial information ("this width is somewhere in [50, 200]") through a network. Same `network()` underneath all of it; what changes is the value type and the merge rule.
+
 Curves matter too. `Path` is a reactive polyline — cheap, fast, plenty for line plots and node-to-node connectors. When ellipses or arcs are needed, the sibling `Curve` carries the same reactive plumbing but with `ellipseArc` segments rendered via SVG's native `A` command. The standalone `ellipse(center, a, b, rotation?)` factory accepts `Val<>` on every parameter, so a family of confocal conics — five ellipses through fixed eccentricities, four hyperbola pairs sampled as polylines — comes from a couple of loops driven by two draggable foci. Drag a focus; the whole grid re-rescales. Drag the probe; the unique ellipse and hyperbola through it track in real time:
 
 ```ts

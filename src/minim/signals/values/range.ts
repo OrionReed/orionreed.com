@@ -30,6 +30,8 @@ export const lerp = (a: V, b: V, t: number): V => ({
   hi: a.hi + (b.hi - a.hi) * t,
 });
 export const equals = (a: V, b: V) => a === b || (a.lo === b.lo && a.hi === b.hi);
+/** L2 distance over (lo, hi). Treats a range as a point in 2-space. */
+export const metric = (a: V, b: V) => Math.hypot(a.lo - b.lo, a.hi - b.hi);
 
 export const width = (r: V) => r.hi - r.lo;
 export const center = (r: V) => (r.lo + r.hi) / 2;
@@ -58,7 +60,13 @@ const packImpl: Pack<V> = {
 };
 
 export class Range extends Signal<V> {
-  static traits = { linear: linearImpl, lerp, equals, pack: packImpl } satisfies TraitDict<V>;
+  static traits = {
+    linear: linearImpl,
+    lerp,
+    metric,
+    equals,
+    pack: packImpl,
+  } satisfies TraitDict<V>;
   declare readonly _t: typeof Range.traits;
 
   constructor(v: V = { lo: 0, hi: 1 }) {

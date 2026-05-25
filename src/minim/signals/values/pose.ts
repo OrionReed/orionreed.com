@@ -9,7 +9,7 @@
 
 import { bind } from "../lateral";
 import { Signal, type Val, type Writable } from "../signal";
-import { type Linear, type Pack, type TraitDict } from "../traits";
+import { type Linear, type Pack, type Pivotal, type TraitDict } from "../traits";
 
 type V = { x: number; y: number; theta: number };
 
@@ -47,6 +47,27 @@ const packImpl: Pack<V> = {
   },
   write: (a, o) => ({ x: a[o]!, y: a[o + 1]!, theta: a[o + 2]! }),
 };
+/** Rotation about a pivot updates the pose's position via the 2-D
+ *  rotation group action AND increments orientation by dθ. Scale-
+ *  about-pivot scales position but leaves orientation untouched. */
+const pivotalImpl: Pivotal<V> = {
+  rotateAbout: (v, p, dθ) => {
+    const cos = Math.cos(dθ);
+    const sin = Math.sin(dθ);
+    const dx = v.x - p.x;
+    const dy = v.y - p.y;
+    return {
+      x: p.x + cos * dx - sin * dy,
+      y: p.y + sin * dx + cos * dy,
+      theta: v.theta + dθ,
+    };
+  },
+  scaleAbout: (v, p, k) => ({
+    x: p.x + k * (v.x - p.x),
+    y: p.y + k * (v.y - p.y),
+    theta: v.theta,
+  }),
+};
 
 export class Pose extends Signal<V> {
   static traits = {
@@ -55,6 +76,7 @@ export class Pose extends Signal<V> {
     metric,
     equals,
     pack: packImpl,
+    pivotal: pivotalImpl,
   } satisfies TraitDict<V>;
   declare readonly _t: typeof Pose.traits;
 

@@ -34,3 +34,45 @@ export {
 } from "./combinators";
 export { type PropagatorsOpts, Propagators, PropagatorDivergedError, propagators } from "./network";
 export { type Propagator, propagator } from "./propagator";
+export {
+  constrain,
+  intervalAdd,
+  intervalAdder,
+  intervalEq,
+  intervalSub,
+  intervalSum,
+  type Range,
+  type RangeCell,
+  rangeCell,
+  RangeContradiction,
+  rangeEq,
+  rangeIsContradiction,
+  rangeIsExact,
+  rangeMeet,
+  rangeMerge,
+  RANGE_TOP,
+  rangeWidth,
+  snap,
+} from "./range";
+export { flexH, type FlexHItem, type FlexHOpts, stack } from "./layout";
+export { type Box, box } from "./box";
+export { grid, type GridOpts, hstack, inset, type StackOpts, vstack } from "./stacks";
+export {
+  attach,
+  centerInside,
+  follow,
+  lockSize,
+  pinEdge,
+  type Side,
+} from "./box-ops";
+export {
+  keepDistance,
+  onLine,
+  vAdd,
+  vBetween,
+  vCentroid,
+  vMidpoint,
+  vOnCircle,
+  vReflect,
+  vSub,
+} from "./vec-ops";

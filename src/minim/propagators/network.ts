@@ -82,15 +82,51 @@ export class Propagators {
 
   private _runFixpoint(initialDirty: ReadonlySet<AnySignal>): void {
     if (this._propagators.length === 0) return;
+    // ─── HACK: stable subscription via "touch all reads" ─────────
+    //
+    // `network()` inherits effect/computed's fine-grained reactivity
+    // model: subs are exactly what the body READ this run, and
+    // `purgeDeps` removes anything not re-read. That's the right
+    // semantic for derived computations — but it's WRONG for a
+    // propagator network whose subs should be the UNION of every
+    // relation's reads, regardless of which fires this iteration.
+    //
+    // Concrete failure without this loop: add adder #1 (reads
+    // a1, b1, c1) and adder #2 (reads a2, b2, c2). Drag a1 → only
+    // adder #1 fires → adder #2's reads aren't touched → next
+    // body run purges them from the dep list → subsequent writes
+    // to a2/b2/c2 silently don't notify. Adder #2 broken.
+    //
+    // The cheap fix is to read all propagators' reads at the top
+    // of every body run, forcing them into the dep list. ~3% perf
+    // overhead in benchmarks. Zero memory overhead vs. principled
+    // alternatives. See `PROTOTYPE3.md` for the full analysis.
+    //
+    // Future options to revisit, if any of them look better in
+    // practice:
+    //
+    //   A. `network(body, { static: true })` opt — skip purgeDeps;
+    //      once subscribed, always subscribed until dispose.
+    //      Cleanest fix, smallest API delta.
+    //
+    //   B. `n.track(...signals)` method on the handle — explicit
+    //      static subscriptions alongside fine-grained body reads.
+    //      Useful for HYBRID networks; chatty for the Propagators
+    //      use-case where every read is static.
+    //
+    //   C. `staticNetwork(deps, body)` sibling primitive — declare
+    //      deps array up front, separate from body reads. Cleanest
+    //      conceptually but doubles primitive count.
+    //
+    // None of these is blocking — the loop below is correct — but
+    // they'd let the Propagators class drop this O(P × R) prelude.
+    for (const p of this._propagators) {
+      for (const s of p.reads) s.value;
+    }
     let fresh: Set<AnySignal> = new Set(initialDirty);
-    // First fire: fresh is empty (initial run had no prior). Treat
-    // every propagator as needing to run once at least, to populate.
+    // First fire: fresh is empty (initial run had no prior). Run
+    // every propagator once to populate the network.
     if (fresh.size === 0) {
-      // Touch all readable cells so the network subscribes.
-      for (const p of this._propagators) {
-        for (const s of p.reads) s.value;
-      }
-      // Run every propagator once and accumulate fresh writes.
       const newFresh = new Set<AnySignal>();
       for (const p of this._propagators) {
         const changed = runPropagator(p);

@@ -60,11 +60,13 @@ export {
   type Linear,
   type Metric,
   type Pack,
+  type Pivotal,
   requireEquals,
   requireLerp,
   requireLinear,
   requireMetric,
   requirePack,
+  requirePivotal,
   type TraitDict,
   type Traits,
 } from "./traits";
