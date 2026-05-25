@@ -247,6 +247,10 @@ The lenses don't even need to be numeric on both ends. A codec — `parse` and `
 
 <md-codec-lens></md-codec-lens>
 
+The lenses don't even need to be bijective. `this.lens(p, p)` — the same projection on both legs — makes the view a constrained image of the source: writes outside the projection's range get projected first, then propagate, so the source picks up the constraint. `Num.clamp(lo, hi)` and `Num.quantize(step)` are one line each, and they chain — `t.clamp(lo, hi).quantize(0.1)` is one fused cell whose writes carry both projections back to the source at once. Both `lo`/`hi` and `step` are `Val<number>`, so the clamp range itself can ride another slider — pinch it live and the source pins to the boundary.
+
+<md-clamp-quantize></md-clamp-quantize>
+
 Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. When the relation needs to read multiple sources or distribute writes across them, the same N-input `Cls.lens([parents], fwd, bwd)` from above is the generalisation. The escape hatch for everything else is the closure form `Cls.lens(get, set)`, or `relate(a, b, fwd, bwd)` for re-orientable bidirectional bindings between two existing signals (either side can be the driver).
 
 <md-pulley></md-pulley>
