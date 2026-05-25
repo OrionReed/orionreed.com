@@ -5,10 +5,9 @@
 // the old framework, or required hand-rolled `Signal.install`
 // boilerplate. All are 5-15 lines on top of the engine.
 
-import type { Signal } from "./signal";
+import type { Signal, Writable } from "./signal";
 import { Num } from "./values/num";
 import { Vec } from "./values/vec";
-import type { Writable } from "./writable";
 
 type V = { x: number; y: number };
 

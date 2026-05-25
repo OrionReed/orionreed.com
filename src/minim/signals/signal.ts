@@ -9,10 +9,17 @@
 // to put it in computed/lens mode. `instanceof Vec` uses the native
 // chain walk.
 //
-// Algorithm: alien-signals v2. Trait dispatch via `./traits`.
+// Algorithm: alien-signals v2.
 //
-// Writability is type-tracked via `WritableBrand` (declared below)
-// and the `Writable<R>` modifier in `./writable`. The class declares
+// This module is self-contained — it imports nothing from peer
+// signals modules. Trait dispatch (`./traits`) and authoring helpers
+// (`./writable`, etc.) are layered ON TOP of Signal; the engine has
+// no knowledge of any trait, including equality. Subclasses thread
+// custom equality through `super(v, { equals })` in their own
+// constructor.
+//
+// Writability is type-tracked via `WritableBrand` and the `Writable<R>`
+// / `WritableOf<T>` modifiers (declared below). The class declares
 // `value` as `declare readonly value: T;` — the runtime accessor is
 // installed on the prototype via `Object.defineProperty` after the
 // class declaration, equivalent to compile output of `get value() { … }`
@@ -20,9 +27,6 @@
 // the brand via cast; bare `Signal<T>` instances and any bare value
 // class (`Vec`, `Num`, `Box`, …) are RO at the type level by default.
 // `Writable<R>` re-adds a settable `value` via intersection.
-
-import { type Equals, type TraitDict } from "./traits";
-import { type Writable } from "./writable";
 
 // ─── Internal types ──────────────────────────────────────────────────
 
@@ -331,9 +335,9 @@ export interface Read<out T> {
 
 /** Brand for writable receivers. Factories (`signal(v)`, `vec(...)`,
  *  `Vec.lens(...)`, invertible methods, etc.) return values carrying
- *  this brand. The brand gates calls to `Signal.set` / `Signal.bind`
- *  and is used by `Writable<R>` / `WritableOf<T>` to surface the
- *  writable API. */
+ *  this brand. The brand is the discriminator for `field()`'s
+ *  conditional return type — without it, TS can't tell RO from RW
+ *  structurally. Drops to a no-op once `--enforceReadonly` ships. */
 declare const WRITABLE: unique symbol;
 export interface WritableBrand {
   readonly [WRITABLE]: never;
@@ -342,6 +346,20 @@ export interface WritableBrand {
 /** Extract the value type carried by any reactive read shape —
  *  `Signal<T>`, `Read<T>`, or any subclass thereof. */
 export type Of<R> = R extends Signal<infer T> ? T : R extends Read<infer T> ? T : never;
+
+/** "The writable form of R." Adds the writable brand and a settable
+ *  `value: Of<R>` to the value class shape. */
+export type Writable<R> = R & WritableBrand & { value: Of<R> };
+
+/** T-anchored constraint for animator-style parameters:
+ *
+ *      function spring<T>(s: WritableOf<T>, target: T)
+ *
+ *  Equivalent to `Writable<Read<T>>` — a writable reactive carrying T.
+ *  Satisfied by `Writable<Num>` / `Writable<Vec>` / any factory-
+ *  returned writable signal. Bare RO value classes are rejected
+ *  because they lack the brand. */
+export type WritableOf<T> = Read<T> & WritableBrand & { value: T };
 
 export function value<T>(v: Val<T>): T {
   if (v instanceof Signal) return v.value;
@@ -391,8 +409,10 @@ export interface SignalOptions<T = unknown> {
   watched?: () => void;
   /** Last subscriber detached. */
   unwatched?: () => void;
-  /** Per-instance equality; shadows class `[EQUALS]`. */
-  equals?: Equals<T>;
+  /** Per-instance equality; falls back to `===` when omitted. Value
+   *  classes thread their own equality through `super(v, { equals })`
+   *  in their constructor — engine never reaches into class statics. */
+  equals?: (a: T, b: T) => boolean;
 }
 
 // ─── Statefulness inference ─────────────────────────────────────────
@@ -571,9 +591,9 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  a predicate. Treated as `@internal`. */
   getter: (() => T) | undefined = undefined;
   setter: ((v: T) => void) | undefined = undefined;
-  /** Per-instance equality override (from `opts.equals`); falls back to
-   *  class-level `traits.equals` then `===`. Hot-read on every write. */
-  _equals: Equals<T> | undefined = undefined;
+  /** Per-instance equality override (from `opts.equals`); falls back
+   *  to `===` when undefined. Hot-read on every write. */
+  _equals: ((a: T, b: T) => boolean) | undefined = undefined;
   _watched?: () => void;
   _unwatchedHook?: () => void;
   /** Fusion tag. Marks this cell as a value-space pipeline (fwd, bwd?)
@@ -602,17 +622,8 @@ export class Signal<T = unknown> implements ReactiveNode {
   constructor(initial: T, opts?: SignalOptions<T>) {
     this.currentValue = initial;
     this.pendingValue = initial;
-    // Resolve equality once at construction: opts.equals wins; else
-    // class-level static `traits.equals` (if the subclass declared one).
-    // This collapses the hot-path equality lookup into a single `_equals`
-    // read per write.
-    if (opts?.equals) {
-      this._equals = opts.equals;
-    } else {
-      const cls = this.constructor as { traits?: TraitDict<T> };
-      if (cls.traits?.equals) this._equals = cls.traits.equals;
-    }
     if (opts) {
+      if (opts.equals) this._equals = opts.equals;
       if (opts.watched) this._watched = opts.watched;
       if (opts.unwatched) this._unwatchedHook = opts.unwatched;
     }

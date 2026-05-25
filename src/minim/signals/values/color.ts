@@ -5,9 +5,9 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { computed, lazy, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
+import { computed, lazy, Signal, type Val, valFn, value, type Writable } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
-import { derived, field, type Writable } from "../writable";
+import { derived, field } from "../writable";
 import { Num } from "./num";
 
 type V = { r: number; g: number; b: number; a: number };
@@ -40,8 +40,8 @@ export class Color extends Signal<V> {
   static traits = { linear: linearImpl, lerp, equals, pack: packImpl } satisfies TraitDict<V>;
   declare readonly _t: typeof Color.traits;
 
-  constructor(v: V = { r: 0, g: 0, b: 0, a: 1 }, opts?: SignalOptions<V>) {
-    super(v, opts);
+  constructor(v: V = { r: 0, g: 0, b: 0, a: 1 }) {
+    super(v, { equals });
   }
 
   add(b: Val<V>): this {

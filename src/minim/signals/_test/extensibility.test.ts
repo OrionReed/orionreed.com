@@ -10,7 +10,6 @@ import {
   type Linear,
   Num,
   Signal,
-  type SignalOptions,
   type TraitDict,
   type Val,
   valFn,
@@ -20,13 +19,15 @@ import {
 // ─── A user-defined value class ──────────────────────────────────
 //
 // Made of three numeric fields (h, s, l). Authoring template:
-//   1. pure value-space functions
+//   1. pure value-space functions (incl. `equals` for change detection)
 //   2. class extends Signal<V>
-//   3. static traits dict
-//   4. invertible methods return `: this` (no list to maintain)
-//   5. field-lens getters call `field(this, "k", Cls)`
-//   6. interface merge for the constructor handle
-//   7. factory casts `as Writable<Hsl>` (one cast)
+//   3. static traits dict (with `satisfies TraitDict<V>`)
+//   4. `declare readonly _t: typeof Cls.traits` (carries the dict at
+//      the type level for trait-constraint checking)
+//   5. constructor: `super(v, { equals })` threads equality to the engine
+//   6. invertible methods return `: this` — chains preserve writability
+//   7. field-lens getters call `field(this, "k", Cls)`
+//   8. factory casts `as Writable<Cls>` (one cast)
 
 type V = { h: number; s: number; l: number };
 
@@ -38,6 +39,7 @@ const hslLerp = (a: V, b: V, t: number): V => ({
   s: a.s + (b.s - a.s) * t,
   l: a.l + (b.l - a.l) * t,
 });
+const hslEquals = (a: V, b: V) => a.h === b.h && a.s === b.s && a.l === b.l;
 
 const linearImpl: Linear<V> = { add: hslAdd, sub: hslSub, scale: hslScale };
 
@@ -46,12 +48,12 @@ class Hsl extends Signal<V> {
     linear: linearImpl,
     lerp: hslLerp,
     metric: (a: V, b: V) => Math.abs(a.h - b.h) + Math.abs(a.s - b.s) + Math.abs(a.l - b.l),
-    equals: (a: V, b: V) => a.h === b.h && a.s === b.s && a.l === b.l,
+    equals: hslEquals,
   } satisfies TraitDict<V>;
   declare readonly _t: typeof Hsl.traits;
 
-  constructor(v: V = { h: 0, s: 0, l: 0 }, opts?: SignalOptions<V>) {
-    super(v, opts);
+  constructor(v: V = { h: 0, s: 0, l: 0 }) {
+    super(v, { equals: hslEquals });
   }
 
   add(b: Val<V>): this {

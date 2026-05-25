@@ -1,12 +1,28 @@
 // Public API for the signals module.
 //
-// Design: writability is a generic modifier (`Writable<R>`) on top of
-// RO-by-default value classes. The brand on factory returns gates
-// `.value =` so untyped consumers can't accidentally mutate a derived
-// (read-only) signal. Animator-style constraints use
-// `WritableOf<T> & Traits<T, K>` and reject bare RO values at compile
-// time. Lateral binding lives in the free `bind(target, source)`
-// function rather than as a method.
+// Design:
+//
+// - `Signal<T>` is the engine — self-contained, no peer imports.
+//   Declares `value` as `declare readonly value: T`; the runtime
+//   accessor is installed once on the prototype via Object.defineProperty
+//   (V8-equivalent to `get value() { … }` syntax). Bare `Signal<T>`
+//   and any bare value class (`Vec`, `Num`, `Box`, …) are RO at the
+//   type level by default.
+//
+// - `Writable<R>` is the type-level modifier that re-adds a settable
+//   `.value` via intersection with `WritableBrand`. Factory returns
+//   (`signal(…)`, `vec(…)`, `Vec.lens(…)`, etc.) cast to it.
+//
+// - `Animatable<T, K>` is the animator-style call-site constraint
+//   (`WritableOf<T> & Traits<T, K>`) — accepts a writable carrying T
+//   whose class declares the listed traits.
+//
+// - Trait dispatch (`./traits`) is layered on top of Signal — the
+//   engine knows nothing about any trait. Subclasses thread custom
+//   equality through `super(v, { equals })` in their constructor.
+//
+// - Lateral binding lives in the free `bind(target, source)` function
+//   rather than as a method.
 
 // Aggregate primitives built on `Cls.lens([...], ...)` /
 // `Cls.derive([...], ...)`. ~1.4–1.93× faster than the equivalent
@@ -32,6 +48,7 @@ export {
 } from "./aggregates";
 // ─── Animators ────────────────────────────────────────────────────
 export {
+  type Animatable,
   attract,
   driven,
   every,
@@ -112,7 +129,9 @@ export {
   type Val,
   valFn,
   value,
+  type Writable,
   type WritableBrand,
+  type WritableOf,
 } from "./signal";
 // ─── Traits ───────────────────────────────────────────────────────
 export {
@@ -127,7 +146,6 @@ export {
   requireMetric,
   requirePack,
   type TraitDict,
-  type TraitKey,
   type Traits,
 } from "./traits";
 export { Anchor, Dir } from "./values/anchor";
@@ -184,5 +202,5 @@ export * as TransformMath from "./values/transform";
 export { Transform, type TransformInit, transform } from "./values/transform";
 export * as VecMath from "./values/vec";
 export { axes, type PolarPolicy, polar, tangentPoint, Vec, vec } from "./values/vec";
-// ─── Writable modifier + authoring helpers ───────────────────────
-export { derived, field, type Writable, type WritableOf } from "./writable";
+// ─── Value-class authoring helpers ───────────────────────────────
+export { derived, field } from "./writable";

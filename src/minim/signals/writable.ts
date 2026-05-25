@@ -1,59 +1,27 @@
-// writable.ts — public types + value-class authoring helpers.
+// writable.ts — value-class authoring helpers.
 //
-// Public types:
+// `field(this, "x", Num)`  — bidirectional field lens. Conditional
+//                            return: writable on writable parent,
+//                            bare on RO parent. Combines `lazy` +
+//                            `Cls.lens` + spread-replace.
 //
-//   Writable<R>      — "the writable form of R": the value class
-//                      shape with the writable brand and a settable
-//                      `.value`. Single intersection, no registry —
-//                      every value class uses the default form.
+// `derived(this, "k", Cls, fn)` — read-only derived view via
+//                                 `Cls.derive(parent, fn)`. Always
+//                                 returns bare `Cls` (RO).
 //
-//   WritableOf<T>    — T-anchored animator constraint.
-//
-// Authoring helpers (call from inside class getters):
-//
-//   field(this, "x", Num)              — bidirectional field lens.
-//                                        Conditional return: writable
-//                                        on writable parent, bare on
-//                                        RO parent. Combines `lazy` +
-//                                        `Cls.lens` + spread-replace.
-//
-//   derived(this, "k", Cls, fn)        — read-only derived view via
-//                                        `Cls.derive(parent, fn)`.
-//                                        Always returns bare `Cls` (RO).
-//
-// Authors don't import the brand-conditional type directly — the
-// helpers encapsulate it. The author's choice between `field()`
-// (bidirectional) and `derived()` (RO) IS the local declaration of
-// writability behaviour at each getter site, mirroring the locality
-// of `: this` invertible method returns.
+// The author's choice between `field()` (bidirectional) and
+// `derived()` (RO) IS the local declaration of writability behaviour
+// at each getter site, mirroring the locality of `: this` invertible
+// method returns.
 //
 // For escape-hatch caching of arbitrary computed views (e.g.
 // `Color.css` building a CSS string), use `lazy()` from "../signal"
 // directly with whatever `make()` body you want.
+//
+// Public types `Writable<R>` / `WritableOf<T>` live in `./signal`
+// alongside the brand they ride on.
 
-import { lazy, type Of, type Read, Signal, type WritableBrand } from "./signal";
-
-// ─── Public types ────────────────────────────────────────────────────
-
-/** "The writable form of R." Adds the writable brand and a settable
- *  `value: Of<R>` to the value class shape. */
-export type Writable<R> = R & WritableBrand & { value: Of<R> };
-
-/** T-anchored constraint for animator-style parameters:
- *
- *      function spring<T>(s: WritableOf<T>, target: T)
- *
- *  Equivalent to `Writable<Read<T>>` — a writable reactive carrying T.
- *  Satisfied by `Writable<Num>` / `Writable<Vec>` / any factory-
- *  returned writable signal. Bare RO value classes are rejected
- *  because they lack the brand. Trait presence (linear/lerp/metric)
- *  is checked at runtime via `requireLinear`/etc. inside the
- *  animator body. */
-export type WritableOf<T> = Read<T> & WritableBrand & { value: T };
-
-export type { WritableBrand };
-
-// ─── Authoring helpers ───────────────────────────────────────────────
+import { lazy, type Of, Signal, type Writable, type WritableBrand } from "./signal";
 
 /** Bidirectional field lens onto `parent.value[key]`. Read returns
  *  the field; write spread-replaces the composite. Cached per

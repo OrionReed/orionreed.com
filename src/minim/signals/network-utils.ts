@@ -11,8 +11,7 @@
 //   `when(source, body)` — body runs while truthy; cleanup on falsy.
 //   `param(v)`           — coalesce `T | Signal<T>` to `Signal<T>`.
 
-import { effect, isSignal, type Read, type Signal, signal } from "./signal";
-import { type Writable } from "./writable";
+import { effect, isSignal, type Read, type Signal, signal, type Writable } from "./signal";
 
 /** Disposable handle. */
 export interface Lifecycle {

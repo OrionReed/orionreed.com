@@ -21,11 +21,27 @@ import {
   type Tick,
   type Yieldable,
 } from "../core";
-import { computed, effect, type Read, Signal, type Val, valFn } from "./signal";
-import { requireLerp, requireLinear, requireMetric, type Traits } from "./traits";
-import { type WritableOf } from "./writable";
+import {
+  computed,
+  effect,
+  type Read,
+  Signal,
+  type Val,
+  valFn,
+  type WritableOf,
+} from "./signal";
+import { requireLerp, requireLinear, requireMetric, type TraitKey, type Traits } from "./traits";
 
 const defaultEase = easeOut;
+
+/** Animator-style constraint: a writable reactive carrying `T` whose
+ *  class declares the listed traits. Reads as a sentence:
+ *
+ *      function spring<T>(s: Animatable<T, "linear" | "metric">, …)
+ *
+ *  The two axes — writability (`WritableOf<T>`) and trait presence
+ *  (`Traits<T, K>`) — are intersected here so call sites stay short. */
+export type Animatable<T, K extends TraitKey = never> = WritableOf<T> & Traits<T, K>;
 
 // ─── Tween chainable builder ────────────────────────────────────────
 
@@ -37,12 +53,12 @@ type Seg<T> =
  *  reads naturally. `.to`/`.from` are pure data — segments accumulate at
  *  construction; the executor generator runs them in order on iteration. */
 export class Tween<T> implements Animator<void> {
-  readonly #sig: WritableOf<T> & Traits<T, "lerp">;
+  readonly #sig: Animatable<T, "lerp">;
   readonly #segs: readonly Seg<T>[];
   readonly #gen: Animator<void>;
 
   /** @internal — use `tween(...)` or `sig.to(...)` to construct. */
-  constructor(sig: WritableOf<T> & Traits<T, "lerp">, segs: readonly Seg<T>[] = []) {
+  constructor(sig: Animatable<T, "lerp">, segs: readonly Seg<T>[] = []) {
     this.#sig = sig;
     this.#segs = segs;
     this.#gen = (function* () {
@@ -84,7 +100,7 @@ export class Tween<T> implements Animator<void> {
 
 /** Append-only tween segment over a writable reactive target. */
 export function* tweenStep<T>(
-  sig: WritableOf<T> & Traits<T, "lerp">,
+  sig: Animatable<T, "lerp">,
   target: T,
   dur: Val<number>,
   ease: Easing = defaultEase,
@@ -104,7 +120,7 @@ export function* tweenStep<T>(
 
 /** Free-fn form of one-shot tween — returns a chainable `Tween<T>`. */
 export function tween<T>(
-  sig: WritableOf<T> & Traits<T, "lerp">,
+  sig: Animatable<T, "lerp">,
   target: T,
   dur: Val<number>,
   ease?: Easing,
@@ -128,7 +144,7 @@ export interface SpringOpts {
 
 /** Second-order damped-spring pull. Math unchanged from prod's `spring`. */
 export function* spring<T>(
-  sig: WritableOf<T> & Traits<T, "linear" | "metric">,
+  sig: Animatable<T, "linear" | "metric">,
   target: Val<T>,
   opts: SpringOpts = {},
 ): Animator<void> {
@@ -195,7 +211,7 @@ export function* spring<T>(
 
 /** Constant-speed approach (units-of-T per second). Needs linear+metric. */
 export function* toward<T>(
-  sig: WritableOf<T> & Traits<T, "linear" | "metric">,
+  sig: Animatable<T, "linear" | "metric">,
   target: Val<T>,
   speed: Val<number>,
 ): Animator<void> {
@@ -219,7 +235,7 @@ export function* toward<T>(
 
 /** Exponential pull toward `target` at rate `k`/s (no overshoot). Needs linear. */
 export function* attract<T>(
-  sig: WritableOf<T> & Traits<T, "linear">,
+  sig: Animatable<T, "linear">,
   target: Val<T>,
   k: Val<number> = 1,
 ): Animator<void> {

@@ -11,13 +11,13 @@ import {
   lazy,
   type Of,
   Signal,
-  type SignalOptions,
   type Val,
   valFn,
   value,
+  type Writable,
 } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
-import { derived, field, type Writable } from "../writable";
+import { derived, field } from "../writable";
 import { Num } from "./num";
 import { Vec } from "./vec";
 
@@ -91,8 +91,8 @@ export class Box extends Signal<V> {
   static traits = { linear: linearImpl, lerp, equals, pack: packImpl } satisfies TraitDict<V>;
   declare readonly _t: typeof Box.traits;
 
-  constructor(v: V = { x: 0, y: 0, w: 0, h: 0 }, opts?: SignalOptions<V>) {
-    super(v, opts);
+  constructor(v: V = { x: 0, y: 0, w: 0, h: 0 }) {
+    super(v, { equals });
   }
 
   add(b: Val<V>): this {

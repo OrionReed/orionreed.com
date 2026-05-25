@@ -9,9 +9,9 @@
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { type Of, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
+import { type Of, Signal, type Val, valFn, value, type Writable } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
-import { field, type Writable } from "../writable";
+import { field } from "../writable";
 import { Num } from "./num";
 import {
   Vec,
@@ -91,8 +91,8 @@ export class Transform extends Signal<V> {
    *  invertible eager method — to scalar-multiply a Transform, use
    *  `Transform.lens(...)` or compose via field writes. */
 
-  constructor(v: V = DEFAULT, opts?: SignalOptions<V>) {
-    super(v, opts);
+  constructor(v: V = DEFAULT) {
+    super(v, { equals });
   }
 
   add(b: Val<V>): this {

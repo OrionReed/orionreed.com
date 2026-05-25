@@ -7,11 +7,10 @@
 // loop on the hot path; stateful-bwd (`(target, vals) => updates`)
 // reads the scratch.
 
-import type { Signal } from "./signal";
+import type { Signal, Writable } from "./signal";
 import { type Linear } from "./traits";
 import { Num } from "./values/num";
 import { Vec } from "./values/vec";
-import type { Writable } from "./writable";
 
 type V = { x: number; y: number };
 

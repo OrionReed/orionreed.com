@@ -8,9 +8,8 @@
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { Signal, type SignalOptions, type Val, valFn } from "../signal";
+import { Signal, type Val, valFn, type Writable } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
-import { type Writable } from "../writable";
 
 type V = number;
 
@@ -34,8 +33,8 @@ export class Num extends Signal<V> {
   static traits = { linear: linearImpl, lerp, metric, equals, pack: packImpl } satisfies TraitDict<V>;
   declare readonly _t: typeof Num.traits;
 
-  constructor(v: V = 0, opts?: SignalOptions<V>) {
-    super(v, opts);
+  constructor(v: V = 0) {
+    super(v, { equals });
   }
 
   add(b: Val<V>): this {

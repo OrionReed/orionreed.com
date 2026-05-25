@@ -9,9 +9,9 @@
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { batch, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
+import { batch, Signal, type Val, valFn, value, type Writable } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
-import { derived, field, type Writable } from "../writable";
+import { derived, field } from "../writable";
 import { Num } from "./num";
 
 type V = { x: number; y: number };
@@ -74,8 +74,8 @@ export class Vec extends Signal<V> {
   static traits = { linear: linearImpl, lerp, metric, equals, pack: packImpl } satisfies TraitDict<V>;
   declare readonly _t: typeof Vec.traits;
 
-  constructor(v: V = { x: 0, y: 0 }, opts?: SignalOptions<V>) {
-    super(v, opts);
+  constructor(v: V = { x: 0, y: 0 }) {
+    super(v, { equals });
   }
 
   // ── invertibles: return `: this`, propagating writability ──────────

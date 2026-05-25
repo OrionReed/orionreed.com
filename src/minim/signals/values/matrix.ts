@@ -10,9 +10,9 @@
 //   - `invert()`    — its own inverse
 
 import { bind } from "../lateral";
-import { type Of, Signal, type SignalOptions, type Val, valFn } from "../signal";
+import { type Of, Signal, type Val, valFn, type Writable } from "../signal";
 import { type TraitDict } from "../traits";
-import { derived, field, type Writable } from "../writable";
+import { derived, field } from "../writable";
 import { Num } from "./num";
 import { Vec } from "./vec";
 
@@ -108,8 +108,8 @@ export class Matrix extends Signal<V> {
   static traits = { equals } satisfies TraitDict<V>;
   declare readonly _t: typeof Matrix.traits;
 
-  constructor(v: V = identity(), opts?: SignalOptions<V>) {
-    super(v, opts);
+  constructor(v: V = identity()) {
+    super(v, { equals });
   }
 
   multiply(b: Val<V>): this {

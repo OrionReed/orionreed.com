@@ -3,12 +3,7 @@
 // construction story once the Signal-is-Lens engine collapse lands;
 // until then it lives here.
 
-import { effect, Signal, type Val, value, type WritableBrand } from "./signal";
-
-interface RW<T> {
-  value: T;
-  peek(): T;
-}
+import { effect, Signal, type Val, value, type WritableOf } from "./signal";
 
 /** Drive `target` from `source` for its lifetime. Returns a stop fn.
  *
@@ -19,7 +14,7 @@ interface RW<T> {
  *  Brand-gated on `target` — bare RO value classes are rejected at
  *  the call site. Multiple `bind(t, …)` calls on the same target
  *  install independent effects; the caller owns each stop fn. */
-export function bind<T>(target: RW<T> & WritableBrand, source: Val<T>): () => void {
+export function bind<T>(target: WritableOf<T>, source: Val<T>): () => void {
   if (source instanceof Signal || typeof source === "function") {
     return effect(() => {
       target.value = value(source);

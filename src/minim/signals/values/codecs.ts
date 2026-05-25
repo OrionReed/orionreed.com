@@ -19,8 +19,7 @@
 // Either direction, both auto-fuse with the rest of the lens graph.
 // Pick based on which side stores authoritative state.
 
-import { lens, type Read, type Signal } from "../signal";
-import { type Writable } from "../writable";
+import { lens, type Read, type Signal, type Writable } from "../signal";
 import { Color } from "./color";
 import { Num } from "./num";
 

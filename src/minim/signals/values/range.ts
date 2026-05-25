@@ -15,9 +15,9 @@
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
-import { computed, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
+import { computed, Signal, type Val, valFn, value, type Writable } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
-import { derived, field, type Writable } from "../writable";
+import { derived, field } from "../writable";
 import { Num } from "./num";
 
 type V = { lo: number; hi: number };
@@ -61,8 +61,8 @@ export class Range extends Signal<V> {
   static traits = { linear: linearImpl, lerp, equals, pack: packImpl } satisfies TraitDict<V>;
   declare readonly _t: typeof Range.traits;
 
-  constructor(v: V = { lo: 0, hi: 1 }, opts?: SignalOptions<V>) {
-    super(v, opts);
+  constructor(v: V = { lo: 0, hi: 1 }) {
+    super(v, { equals });
   }
 
   // ── field lenses (independent endpoints) ───────────────────────────
