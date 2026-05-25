@@ -15,7 +15,7 @@
 // the surface composes cleanly and the primitive's invariants hold.
 
 import { describe, expect, it } from "vitest";
-import { each, param, type Signal, settle, signal, type WritableBrand } from "../index";
+import { each, param, type Signal, settle, signal, type Writable } from "../index";
 
 // ─── 1. `relate` rebuilt on `settle` ────────────────────────────────
 
@@ -24,13 +24,13 @@ interface RelateHandle {
 }
 
 function relateOnSettle<A, B>(
-  a: Signal<A> & WritableBrand,
-  b: Signal<B> & WritableBrand,
+  a: Writable<Signal<A>>,
+  b: Writable<Signal<B>>,
   fwd: (a: A) => B,
   bwd: (b: B) => A,
 ): RelateHandle {
-  const aSig = a as Signal<A>;
-  const bSig = b as Signal<B>;
+  const aSig = a;
+  const bSig = b;
   // Two settles, one per direction (mirrors the existing `relate`
   // shape). Each direction self-excludes its own settler; the other
   // direction's settler is a separate node, so it observes the write
@@ -164,7 +164,7 @@ function equalityCluster(): EqualityCluster {
       const v = values[driverIdx]!;
       for (let i = 0; i < members.length; i++) {
         if (i !== driverIdx && values[i] !== v) {
-          (members[i] as Signal<number>).value = v;
+          (members[i] as Writable<Signal<number>>).value = v;
         }
       }
     }
@@ -358,9 +358,9 @@ describe("validation: manual-mode settle as time-stepped primitive", () => {
 
 class MockDistance {
   readonly members: readonly Signal<unknown>[];
-  private readonly _d: Signal<number>;
+  private readonly _d: Writable<Signal<number>>;
 
-  constructor(a: Signal<number>, b: Signal<number>, d: number | Signal<number>) {
+  constructor(a: Signal<number>, b: Signal<number>, d: number | Writable<Signal<number>>) {
     this.members = [a as Signal<unknown>, b as Signal<unknown>];
     this._d = param(d);
   }

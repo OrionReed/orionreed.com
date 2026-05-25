@@ -31,7 +31,7 @@
 //   the FD path treats duplicated slots as independent. Use
 //   `rightAngle(A, B, C)` instead of `perpendicular(A, B, B, C)`.
 
-import { type Signal } from "../signals";
+import { type Signal, type Writable } from "../signals";
 import { param } from "../signals/settle-utils";
 import { type Constraints, type Relation } from "./cluster";
 import {
@@ -93,17 +93,17 @@ export function eq(a: S, b: S): Relation {
  *    r.rest.value = 80;                                    // mutate length
  *    r.stiffness?.value = 500;                             // mutate stiffness */
 export interface DistanceRelation extends Relation {
-  readonly rest: Signal<number>;
+  readonly rest: Writable<Signal<number>>;
   /** Only present when the constraint was created with finite
    *  stiffness (i.e., as a spring). */
-  readonly stiffness?: Signal<number>;
+  readonly stiffness?: Writable<Signal<number>>;
 }
 
 export function distance(
   a: S,
   b: S,
-  rest: number | Signal<number>,
-  opts?: { stiffness?: number | Signal<number> },
+  rest: number | Writable<Signal<number>>,
+  opts?: { stiffness?: number | Writable<Signal<number>> },
 ): DistanceRelation {
   const rest_ = param(rest);
   const hard = opts?.stiffness === undefined;
@@ -123,8 +123,8 @@ export function distance(
 export function spring(
   a: S,
   b: S,
-  rest: number | Signal<number>,
-  stiffness: number | Signal<number>,
+  rest: number | Writable<Signal<number>>,
+  stiffness: number | Writable<Signal<number>>,
 ): DistanceRelation {
   return distance(a, b, rest, { stiffness });
 }
@@ -145,9 +145,9 @@ export function lensNum(a: S, b: S, fwd: (x: number) => number): Relation {
 /** Hard 1D range `lo ≤ x ≤ hi`. `r.lo` / `r.hi` are mutable signals. */
 export function clamp(
   x: S,
-  lo: number | Signal<number>,
-  hi: number | Signal<number>,
-): Relation & { lo: Signal<number>; hi: Signal<number> } {
+  lo: number | Writable<Signal<number>>,
+  hi: number | Writable<Signal<number>>,
+): Relation & { lo: Writable<Signal<number>>; hi: Writable<Signal<number>> } {
   const lo_ = param(lo);
   const hi_ = param(hi);
   return {

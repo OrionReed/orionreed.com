@@ -14,7 +14,7 @@
 // no return value, no middleware. The pipeline is just an array
 // you can read top-to-bottom.
 
-import type { Pack, Signal } from "../signals";
+import type { Pack, Signal, Writable } from "../signals";
 import type { Constraints } from "./cluster";
 
 /** A single step in the `Constraints` pipeline. */
@@ -67,7 +67,7 @@ export const writeback: Phase = c => {
     const b = bindings[id];
     if (!b) continue;
     // biome-ignore lint/suspicious/noExplicitAny: dynamic pack
-    (b.sig as Signal<any>).value = b.pack.write(solver.positions, solver.offsets[id]!);
+    (b.sig as Writable<Signal<any>>).value = b.pack.write(solver.positions, solver.offsets[id]!);
   }
 };
 

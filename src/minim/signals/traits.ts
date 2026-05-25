@@ -5,24 +5,21 @@
 //
 //   function spring<T>(sig: Traits<T, "linear" | "metric">, target: Val<T>) …
 //   function tween<T>(sig: Traits<T, "lerp">, target: T, dur: Val<number>) …
-//   function mean<R extends Read<unknown>>(
-//     first: R & Traits<Of<R>, "linear">, …) …
 //
-// The inline form reads as a sentence and there's only one type to
-// learn. Naming note: the *dictionary shape* (what subclasses fill
-// into their `static traits = {…}`) is `TraitDict<T>` to free up the
+// Naming note: the *dictionary shape* (what subclasses fill into
+// their `static traits = {…}`) is `TraitDict<T>` to free up the
 // public `Traits<T, K>` name for the constraint, which is what
 // consumers see far more often.
 //
-// Type-level constraint vs runtime lookup are separate axes:
+// Constraint vs runtime lookup are separate axes:
 //   - At the type level, `Traits<T, K>` requires the instance to
-//     carry a phantom `_t` slot typed against the per-class
-//     `static traits` dict. Each value class adds one line:
-//       `declare readonly _t: typeof Vec.traits;`
+//     carry a phantom `_t` slot typed against the class's static
+//     traits. Each value class declares it co-located with the
+//     dictionary: `declare readonly _t: typeof Vec.traits`.
 //   - At runtime, `requireLinear` (and siblings) walks
-//     `s.constructor.traits.linear` once per animator setup. Equality
-//     is resolved to a per-instance `_equals` slot at construction
-//     so the write hot path stays a single field read.
+//     `s.constructor.traits.linear` once per animator setup.
+//     Equality is resolved to a per-instance `_equals` slot at
+//     construction so the write hot path stays a single field read.
 
 // ─── Primitive trait shapes ──────────────────────────────────────────
 
@@ -70,10 +67,10 @@ export type TraitKey = keyof TraitDict<unknown>;
  *
  *      function spring<T>(sig: Traits<T, "linear" | "metric">, target: Val<T>)
  *      function tween<T>(sig: Traits<T, "lerp">, target: T, dur: Val<number>)
- *      function attract<T>(sig: Traits<T, "linear">, target: Val<T>, k?: number)
  *
- *  Constraint shape: `_t` is a phantom slot per value class, typed
- *  against `typeof Cls.traits`. Listed keys must resolve to non-null
+ *  Constraint shape: `_t` is a phantom slot on each value class,
+ *  typed against `typeof Cls.traits` (declared via the class's
+ *  interface augmentation). Listed keys must resolve to non-null
  *  trait values; unlisted keys may or may not be present.
  *
  *  Pure constraint — does not require `Signal<T>` directly; consumers
@@ -94,9 +91,6 @@ const className = (s: object): string =>
 const missing = (s: object, slot: string): Error =>
   new Error(`require${slot}: ${className(s)} has no traits.${slot.toLowerCase()}`);
 
-// require* helpers — generic over `T` only. The trait constraint lives
-// in the parameter type (`Traits<T, "linear">`) so TS infers T from
-// the argument and the trait presence is checked structurally.
 export function requireLinear<T>(s: Traits<T, "linear">): Linear<T> {
   const v = dictOf<T>(s).linear;
   if (!v) throw missing(s, "Linear");

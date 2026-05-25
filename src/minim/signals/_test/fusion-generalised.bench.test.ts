@@ -14,7 +14,7 @@
 // beyond `.lens()`.
 
 import { describe, it } from "vitest";
-import { Num, num, Signal, Transform, transform, Vec } from "../index";
+import { Num, num, Signal, signal, Transform, transform, Vec } from "../index";
 
 const N = 10_000;
 
@@ -98,7 +98,7 @@ describe("bench: derive chain fusion vs hand-nested computed cells", () => {
 describe("bench: lens chain fusion vs hand-nested lens cells", () => {
   it("2-deep lens chain — read+write", () => {
     type S = { a: number };
-    const root = new Signal<S>({ a: 0 });
+    const root = signal<S>({ a: 0 });
     // Fused: Num.lens to a.a, then endo lens to Num.
     const inner1 = Num.lens(
       root,
@@ -110,7 +110,7 @@ describe("bench: lens chain fusion vs hand-nested lens cells", () => {
       v => v - 100,
     ) as Num & { value: number };
 
-    const root2 = new Signal<S>({ a: 0 });
+    const root2 = signal<S>({ a: 0 });
     // Un-fused equivalent via two raw lens installs.
     const inner = Signal.install(
       Num,
@@ -277,7 +277,7 @@ describe("bench: 3-deep field chain (the worst case in real UI code)", () => {
   // composite types to bench a real-ish 3-deep path.
   it("3-deep nested field chain — read", () => {
     type Outer = { inner: { translate: { x: number; y: number } } };
-    const root = new Signal<Outer>({ inner: { translate: { x: 0, y: 0 } } });
+    const root = signal<Outer>({ inner: { translate: { x: 0, y: 0 } } });
 
     // Fused: 2 Cls.lens calls fuse into one cell onto root.
     const innerLens = Vec.lens(
@@ -295,7 +295,7 @@ describe("bench: 3-deep field chain (the worst case in real UI code)", () => {
     );
 
     // Un-fused: 3-cell manually-installed chain.
-    const root2 = new Signal<Outer>({ inner: { translate: { x: 0, y: 0 } } });
+    const root2 = signal<Outer>({ inner: { translate: { x: 0, y: 0 } } });
     const l1 = Signal.install(
       Vec,
       () => root2.value.inner.translate,

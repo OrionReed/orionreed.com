@@ -13,6 +13,7 @@ import {
   signal,
   stagger,
   vec,
+  type Writable,
   zoomOut,
 } from "../../minim";
 
@@ -23,7 +24,7 @@ export class MdOrbits extends Diagram {
     const sun = s(group({ translate: view.center }, circle(vec(0, 0), 12, { fill: true })));
 
     /** Integrate ω = 2π/period; returns the angle signal (wraps mod 2π). */
-    const angularMotion = (period: number, sig?: Signal<number>) => {
+    const angularMotion = (period: number, sig?: Writable<Signal<number>>) => {
       const a = sig ?? signal(Math.random() * 2 * Math.PI);
       const omega = (2 * Math.PI) / period;
       this.anim.start(

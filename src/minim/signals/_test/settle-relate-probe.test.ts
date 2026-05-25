@@ -10,7 +10,7 @@
 // design intent (one-shot vs fixpoint) maps onto framework choices.
 
 import { describe, expect, it } from "vitest";
-import { type Signal, settle, signal, type WritableBrand } from "../index";
+import { type Signal, settle, signal, type Writable } from "../index";
 
 interface Handle {
   dispose(): void;
@@ -29,13 +29,13 @@ interface Handle {
 //   - Drift-prone: same one-shot, no risk of looping.
 
 function relateSingle<A, B>(
-  a: Signal<A> & WritableBrand,
-  b: Signal<B> & WritableBrand,
+  a: Writable<Signal<A>>,
+  b: Writable<Signal<B>>,
   fwd: (a: A) => B,
   bwd: (b: B) => A,
 ): Handle {
-  const aSig = a as Signal<A>;
-  const bSig = b as Signal<B>;
+  const aSig = a;
+  const bSig = b;
   const handle = settle(dirty => {
     const aHot = dirty.has(aSig as Signal<unknown>);
     const bHot = dirty.has(bSig as Signal<unknown>);
@@ -56,13 +56,13 @@ function relateSingle<A, B>(
 // bwd∘fwd reaches a fixpoint.
 
 function relateTwo<A, B>(
-  a: Signal<A> & WritableBrand,
-  b: Signal<B> & WritableBrand,
+  a: Writable<Signal<A>>,
+  b: Writable<Signal<B>>,
   fwd: (a: A) => B,
   bwd: (b: B) => A,
 ): Handle {
-  const aSig = a as Signal<A>;
-  const bSig = b as Signal<B>;
+  const aSig = a;
+  const bSig = b;
   const fwdHandle = settle(_d => {
     bSig.value = fwd(aSig.value);
   });
@@ -84,14 +84,14 @@ function relateTwo<A, B>(
 // needs to loop manually.
 
 function relateLoop<A, B>(
-  a: Signal<A> & WritableBrand,
-  b: Signal<B> & WritableBrand,
+  a: Writable<Signal<A>>,
+  b: Writable<Signal<B>>,
   fwd: (a: A) => B,
   bwd: (b: B) => A,
   fuel = 32,
 ): Handle {
-  const aSig = a as Signal<A>;
-  const bSig = b as Signal<B>;
+  const aSig = a;
+  const bSig = b;
   const handle = settle(dirty => {
     let aHot = dirty.has(aSig as Signal<unknown>);
     let bHot = dirty.has(bSig as Signal<unknown>);

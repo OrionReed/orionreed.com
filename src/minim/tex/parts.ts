@@ -2,7 +2,16 @@
 // is by marker reference; `with`/`expand` share the root's identity.
 // Color cascades up the `group` chain via `effectiveColor`.
 
-import { Box, computed, effect, num, Signal, signal, type Val } from "@minim/signals";
+import {
+  Box,
+  computed,
+  effect,
+  num,
+  Signal,
+  signal,
+  type Val,
+  type Writable,
+} from "@minim/signals";
 import { highlightTint, hover, type Marker, marker, registerMarker } from "./marker";
 import type { TexShape } from "./tex";
 
@@ -23,7 +32,7 @@ const effectiveColor = (m: PartMarker): string | null => {
  *  Reach into `part.box` for axes/cardinals. */
 export class Part<N extends string = string> {
   /** Background-tint highlight; written by `highlight()` and `bindParts()`. */
-  readonly highlighted: Signal<boolean> = signal(false);
+  readonly highlighted: Writable<Signal<boolean>> = signal(false);
   readonly opacity = num(1);
 
   readonly box: Box;
@@ -77,7 +86,7 @@ export class Part<N extends string = string> {
  *  Group members share one inner `Marker` so they share identity. */
 export class PartMarker<N extends string = string> {
   /** Per-instance color; `null` walks up the group chain. */
-  readonly color: Signal<string | null> = signal<string | null>(null);
+  readonly color: Writable<Signal<string | null>> = signal<string | null>(null);
   readonly content: Signal<string>;
 
   /** Shared inner Marker; all group members alias the root's instance. */
@@ -103,7 +112,7 @@ export class PartMarker<N extends string = string> {
   }
 
   /** Bind a local boolean signal to this marker's identity. */
-  bind(local: Signal<boolean>): () => void {
+  bind(local: Writable<Signal<boolean>>): () => void {
     return this.#m.bind(local);
   }
 
@@ -154,7 +163,7 @@ type NameOf<S> = S extends string ? S : S extends Record<infer K, PartContent> ?
 /** Set the same color on N markers at once. */
 export function tint(
   color: string | null,
-  ...markers: readonly { color: Signal<string | null> }[]
+  ...markers: readonly { color: Writable<Signal<string | null>> }[]
 ): void {
   for (const m of markers) m.color.value = color;
 }

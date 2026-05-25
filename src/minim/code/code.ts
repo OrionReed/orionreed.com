@@ -128,9 +128,9 @@ function measureFont(size: number, family: string): { w: number; h: number } {
 
 /** A Shape rendering monospace source code as a list of `Part`s. */
 export class CodeShape extends Shape {
-  readonly source: Signal<string>;
-  readonly width: Signal<number>;
-  readonly height: Signal<number>;
+  readonly source: Writable<Signal<string>>;
+  readonly width: Writable<Signal<number>>;
+  readonly height: Writable<Signal<number>>;
   readonly language: string;
   /** Wrapper that hosts all parts. `position: relative` so parts'
    *  `position: absolute` resolves against it. */

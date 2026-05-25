@@ -23,7 +23,7 @@ const wrapToPi = (x: number) => x - TAU * Math.round(x / TAU);
  *      // Or just use hover(el, marker) from core/marker for the common case.
  *
  *  Returns a disposer that removes the listeners. */
-export function hoverSignal(shape: AnyShape, sig: Signal<boolean>): () => void {
+export function hoverSignal(shape: AnyShape, sig: Writable<Signal<boolean>>): () => void {
   const off1 = shape.on("mouseenter", () => {
     sig.value = true;
   });
@@ -92,7 +92,7 @@ export function draggable(
 export function drag(
   shape: AnyShape,
   target: Writable<Vec>,
-  dragging?: Signal<boolean>,
+  dragging?: Writable<Signal<boolean>>,
 ): () => void {
   let dx = 0;
   let dy = 0;
@@ -146,7 +146,7 @@ export function dragWithState(
 export function dragRotate(
   shape: AnyShape,
   angle: Writable<Num>,
-  dragging?: Signal<boolean>,
+  dragging?: Writable<Signal<boolean>>,
 ): () => void {
   let grabAngle = 0;
   const offDown = shape.on("pointerdown", e => {

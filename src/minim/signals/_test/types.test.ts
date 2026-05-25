@@ -24,17 +24,21 @@ function _probes(): void {
   v.value = { x: 0, y: 0 };
   v.x.value = 5; // field lens lifted to Writable<Num>
 
+  // Bare-value-class direct writes ERROR at the type level. `Signal`
+  // declares `value` as `readonly` (the runtime accessor is installed
+  // on the prototype after class declaration); `Writable<R>` adds a
+  // settable `value` via intersection.
   const ro: Vec = v.normalize();
-  // @ts-expect-error
+  // @ts-expect-error — bare Vec.value is read-only at the type level
   ro.value = { x: 0, y: 0 };
-  // @ts-expect-error
+  // @ts-expect-error — bare Vec.x → bare Num, also read-only
   ro.x.value = 5;
 
   // Eager invertible chain — Writable<Vec> stays writable
   const chain = v.add({ x: 1, y: 0 }).scale(2);
   chain.value = { x: 0, y: 0 };
 
-  // ─── Buggy fn ───────────────────────────────────────────────────
+  // Buggy fn — declaring a Vec parameter implies "RO surface."
   function _buggy(p: Vec) {
     // @ts-expect-error — RO .value
     p.value = { x: 0, y: 0 };
@@ -44,8 +48,11 @@ function _probes(): void {
   void _buggy;
 
   // ─── Animator constraint ─────────────────────────────────────
-  // Generic over T, requires writable surface (brand) + traits.
-  // Uses `WritableOf<T>` (T-anchored) for the writable shape.
+  // Generic over T, requires writable surface (brand) + listed
+  // traits. The `_t` slot on each value class carries the static
+  // traits dict at the type level, so `Traits<T, "linear" | "metric">`
+  // can verify presence at compile time. Bare RO Vec is rejected
+  // through the brand (separate axis from traits).
   function spring<T>(s: WritableOf<T> & Traits<T, "linear" | "metric">, target: T): void {
     s.value = target;
   }
@@ -55,15 +62,6 @@ function _probes(): void {
   spring(ro, { x: 0, y: 0 });
   // @ts-expect-error — Vec from `new Vec()` has no brand
   spring(new Vec(), { x: 0, y: 0 });
-
-  // Generic accept-any-trait reader: just reads .value, type-anchored to T.
-  function describe<T>(s: Traits<T, "linear"> & { readonly value: T }): T {
-    return s.value;
-  }
-  // Both writable and bare value classes have the trait + readable value.
-  void describe(v);
-  void describe(ro);
-  void describe(new Vec());
 
   // ─── Generic accept-any reader ──────────────────────────────────
   // Use `Read<Of<Vec>>` for "any readable of vec-shape" parameters.
@@ -80,9 +78,11 @@ function _probes(): void {
 
   // ─── Computed factory returns bare Signal — RO ─────────────────
   const c = computed(() => 1);
-  // c is `Signal<number>` (RO). Writes? The class still has writable surface
-  // structurally because we didn't apply interface merge to Signal itself.
-  // For r5 to be fully consistent we'd need to RO-merge Signal too.
+  // @ts-expect-error — bare `Signal<T>` is RO at the type level
+  // (the class declares `readonly value: T`; the runtime accessor is
+  // installed on the prototype). `signal(...)` returns
+  // `Writable<Signal<T>>` for writable sources.
+  c.value = 5;
 
   void chain;
 }

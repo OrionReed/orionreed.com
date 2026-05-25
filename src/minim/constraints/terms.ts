@@ -19,7 +19,7 @@
 // reactive flow. The term then peeks the new value when
 // `initialize()` runs.
 
-import { type Signal } from "../signals";
+import { type Signal, type Writable } from "../signals";
 import { param } from "../signals/settle-utils";
 import { Solver } from "./solver";
 import { Term } from "./term";
@@ -137,9 +137,9 @@ export class DistanceTerm extends Term {
     solver: Solver,
     a: number,
     b: number,
-    rest: number | Signal<number>,
+    rest: number | Writable<Signal<number>>,
     hard = true,
-    stiffness?: number | Signal<number>,
+    stiffness?: number | Writable<Signal<number>>,
   ) {
     if (solver.dims[a]! !== 2 || solver.dims[b]! !== 2) {
       throw new Error("distance: both cells must be Vec (dim=2)");
@@ -227,8 +227,8 @@ export class BoundsTerm extends Term {
   constructor(
     solver: Solver,
     cell: number,
-    lo: number | Signal<number>,
-    hi: number | Signal<number>,
+    lo: number | Writable<Signal<number>>,
+    hi: number | Writable<Signal<number>>,
   ) {
     if (solver.dims[cell]! !== 1) throw new Error("clamp: cell must be Num (dim=1)");
     super(solver, [cell], 2);

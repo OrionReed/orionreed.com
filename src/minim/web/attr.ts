@@ -6,14 +6,14 @@
 //   @attr.num(4)     declare cells: Signal<number>;          // default 4
 //   @attr.bool()     declare flag:  Signal<boolean>;         // default false
 
-import { type Signal, signal } from "@minim/signals";
+import { type Signal, signal, type Writable } from "@minim/signals";
 
 type AttrType = "string" | "number" | "boolean";
 
 const SIGNALS = Symbol("attrSignals");
 
 interface AttrCarrier {
-  [SIGNALS]?: Map<string, Signal<unknown>>;
+  [SIGNALS]?: Map<string, Writable<Signal<unknown>>>;
 }
 
 interface AttrCtor {
@@ -33,7 +33,7 @@ function coerce(raw: string | null, type: AttrType, default_: unknown): unknown 
   return raw === null ? default_ : raw;
 }
 
-function bagOf(instance: object): Map<string, Signal<unknown>> {
+function bagOf(instance: object): Map<string, Writable<Signal<unknown>>> {
   const carrier = instance as AttrCarrier;
   let bag = carrier[SIGNALS];
   if (!bag) {

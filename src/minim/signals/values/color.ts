@@ -102,9 +102,6 @@ export class Color extends Signal<V> {
     return tween(this, target, dur, ease);
   }
 }
-export interface Color {
-  get value(): V;
-}
 
 export const rgb = (r: number, g: number, b: number) =>
   new Color({ r, g, b, a: 1 }) as Writable<Color>;

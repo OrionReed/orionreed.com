@@ -57,9 +57,6 @@ export class Pose extends Signal<V> {
     super(v, opts);
   }
 }
-export interface Pose {
-  get value(): V;
-}
 
 export function pose(v: Val<V> = { x: 0, y: 0, theta: 0 }): Writable<Pose> {
   const p = new Pose() as Writable<Pose>;

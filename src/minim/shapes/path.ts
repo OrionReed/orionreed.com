@@ -1,4 +1,4 @@
-import { computed, num, type Signal, signal, type Val, Vec } from "@minim/signals";
+import { computed, num, type Signal, signal, type Val, Vec, type Writable } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 
 export interface PathOpts extends CommonOpts {
@@ -93,7 +93,7 @@ function sampler(pts: Signal<readonly Vec[]>) {
  *  place and return `this`. The `d` attribute and all sampling methods
  *  react to point changes automatically. */
 export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
-  private readonly _points: Signal<readonly Vec[]>;
+  private readonly _points: Writable<Signal<readonly Vec[]>>;
   readonly closed: boolean;
 
   readonly length: Signal<number>;

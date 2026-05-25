@@ -10,7 +10,14 @@
 // engine itself is unaware of this package.
 
 import type { Anim } from "@minim/core";
-import { computed, type Read, type Signal, setSignalWriteHook, signal } from "@minim/signals";
+import {
+  computed,
+  type Read,
+  type Signal,
+  setSignalWriteHook,
+  signal,
+  type Writable,
+} from "@minim/signals";
 import { bumpTraceVersion } from "./scope";
 import { addSpanListener, currentSpan, type Span } from "./span";
 
@@ -40,7 +47,7 @@ let removeWriteHook: (() => void) | undefined;
 /** Per-signal "current writer" registry. Each Signal that anyone asks
  *  `authorOf` about gets a `Signal<Span | undefined>` that's bumped on
  *  every attributed write. WeakMap keeps it GC-safe. */
-const writerOf = new WeakMap<Signal<unknown>, Signal<Span | undefined>>();
+const writerOf = new WeakMap<Signal<unknown>, Writable<Signal<Span | undefined>>>();
 
 /** Begin recording. Multiple sessions may run concurrently; each
  *  receives every span (filtering by anim, if needed, is the caller's

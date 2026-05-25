@@ -165,9 +165,6 @@ export class Range extends Signal<V> {
     return tween(this, target, dur, ease);
   }
 }
-export interface Range {
-  get value(): V;
-}
 
 /** Range from two writable Num endpoints. Writes propagate to both
  *  source Nums in a single batch — the `axes()` analogue for ranges. */

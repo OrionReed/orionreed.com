@@ -7,7 +7,7 @@ import { field } from "../writable";
 describe("footgun: deep field paths (4+)", () => {
   it("4-deep field chain hits the loop fallback in makeFieldGetter/Setter", () => {
     type S = { a: { b: { c: { d: { e: number } } } } };
-    const root = new Signal<S>({ a: { b: { c: { d: { e: 1 } } } } });
+    const root = signal<S>({ a: { b: { c: { d: { e: 1 } } } } });
     // Build via fieldOf (uses Signal.fieldOf, recognizes field
     // patterns).
     const lens = Signal.fieldOf(

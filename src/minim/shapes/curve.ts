@@ -14,7 +14,17 @@
 // The `ellipse(center, a, b, rotation?)` factory uses the reactive form
 // so all four parameters accept `Val<>`.
 
-import { computed, num, type Of, type Signal, signal, type Val, Vec, value } from "@minim/signals";
+import {
+  computed,
+  num,
+  type Of,
+  type Signal,
+  signal,
+  type Val,
+  Vec,
+  value,
+  type Writable,
+} from "@minim/signals";
 import { type CommonOpts, Shape } from "./shape";
 
 type V = Of<Vec>;
@@ -261,7 +271,10 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
       throw new Error("Curve(builder): fluent .to/.ellipseArc unavailable on reactive curves");
     }
     // _segments is a writable signal in this branch.
-    (this._segments as Signal<readonly CurveSegment[]>).value = [...this._segments.peek(), seg];
+    (this._segments as Writable<Signal<readonly CurveSegment[]>>).value = [
+      ...this._segments.peek(),
+      seg,
+    ];
     return this;
   }
 

@@ -188,9 +188,6 @@ export class Vec extends Signal<V> {
     return tween(this, target, dur, ease);
   }
 }
-export interface Vec {
-  get value(): V;
-}
 
 /** Vec from two writable axes. Writes propagate to both source Nums
  *  in a single batch — the bidirectional sibling of `vec(num, num)`. */

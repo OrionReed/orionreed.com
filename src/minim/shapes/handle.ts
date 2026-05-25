@@ -36,7 +36,7 @@ export interface HandleOpts {
  *      anim.start(spring(target, REST, { rate: () => h.dragging.value ? 0 : 1 }));
  */
 export class Handle extends Circle {
-  readonly dragging: Signal<boolean>;
+  readonly dragging: Writable<Signal<boolean>>;
   constructor(target: Writable<Vec>, opts: HandleOpts = {}) {
     const circleOpts: CircleOpts = {
       fill: opts.fill ?? COLOR,

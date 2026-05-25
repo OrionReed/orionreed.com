@@ -179,9 +179,6 @@ export class Box extends Signal<V> {
     return tween(this, target, dur, ease);
   }
 }
-export interface Box {
-  get value(): V;
-}
 
 export function box(
   x: Val<number> = 0,

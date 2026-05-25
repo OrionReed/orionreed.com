@@ -146,9 +146,6 @@ export class Matrix extends Signal<V> {
     return derived(this, "determinant", Num, determinant);
   }
 }
-export interface Matrix {
-  get value(): V;
-}
 
 export function matrix(
   a: Val<number> = 1,

@@ -20,7 +20,8 @@
 //     indefinitely. Same caveat as before — the runtime can't paper
 //     over genuine non-convergence without an iteration budget.
 
-import { type Signal, settle, type WritableBrand } from "./signal";
+import { type Signal, settle } from "./signal";
+import { type Writable } from "./writable";
 
 /** Handle returned by `relate` — disposable bidirectional binding. */
 export interface RelateHandle {
@@ -30,22 +31,20 @@ export interface RelateHandle {
 /** Declare a bidirectional relation: `b = fwd(a)`, `a = bwd(b)`.
  *  Either side can be written; the other follows. */
 export function relate<A, B>(
-  a: Signal<A> & WritableBrand,
-  b: Signal<B> & WritableBrand,
+  a: Writable<Signal<A>>,
+  b: Writable<Signal<B>>,
   fwd: (a: A) => B,
   bwd: (b: B) => A,
 ): RelateHandle {
-  const aSig = a as Signal<A>;
-  const bSig = b as Signal<B>;
   // Forward-only and backward-only settlers. The fwd settler reads a,
   // writes b; the bwd settler reads b, writes a. Each self-excludes
   // (settle's auto-self-exclusion); the other observes and ping-pongs
   // until `===` short-circuits.
   const fwdHandle = settle(_dirty => {
-    bSig.value = fwd(aSig.value);
+    b.value = fwd(a.value);
   });
   const bwdHandle = settle(_dirty => {
-    aSig.value = bwd(bSig.value);
+    a.value = bwd(b.value);
   });
   return {
     dispose() {

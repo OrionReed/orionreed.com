@@ -1,7 +1,17 @@
 // Labelled, clickable region — group + tinted-rect + label, with
 // hover/click handlers wired.
 
-import { Anchor, computed, num, type Signal, signal, type Val, Vec, vec } from "@minim/signals";
+import {
+  Anchor,
+  computed,
+  num,
+  type Signal,
+  signal,
+  type Val,
+  Vec,
+  vec,
+  type Writable,
+} from "@minim/signals";
 import { group } from "./group";
 import { label } from "./label";
 import { rect } from "./rect";
@@ -14,7 +24,7 @@ export interface ButtonOpts {
   height?: number;
   size?: Val<number>;
   /** Externally-controlled hover signal — share across shapes if needed. */
-  hovered?: Signal<boolean>;
+  hovered?: Writable<Signal<boolean>>;
 }
 
 /** A clickable, labelled region positioned at `pos` (top-left). The

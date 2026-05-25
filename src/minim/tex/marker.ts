@@ -1,7 +1,7 @@
 // Named reactive identity linking diagram parts to prose. Prefer the
 // scoped registration on `Diagram` over the global registry below.
 
-import { computed, type Signal, signal } from "@minim/signals";
+import { computed, type Signal, signal, type Writable } from "@minim/signals";
 
 const registry = new Map<string, Marker>();
 
@@ -15,9 +15,9 @@ export function registerMarker(id: string, m: Marker): void {
 
 /** Identity shared across renderings; `active` is OR over bound locals. */
 export type Marker = {
-  color: Signal<string | null>;
+  color: Writable<Signal<string | null>>;
   active: Signal<boolean>;
-  bind(local: Signal<boolean>): () => void;
+  bind(local: Writable<Signal<boolean>>): () => void;
   register(id: string): Marker;
 };
 

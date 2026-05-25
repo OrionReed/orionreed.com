@@ -12,6 +12,7 @@
 //   `param(v)`           — coalesce `T | Signal<T>` to `Signal<T>`.
 
 import { effect, isSignal, type Read, type Signal, signal } from "./signal";
+import { type Writable } from "./writable";
 
 /** Disposable handle. */
 export interface Lifecycle {
@@ -80,10 +81,11 @@ export function when<T>(source: Read<T>, body: (v: T) => () => void): Lifecycle 
   };
 }
 
-/** Coalesce `T | Signal<T>` to `Signal<T>`. If `v` is already a
- *  signal, returns it untouched (so external mutations propagate);
- *  otherwise wraps a fresh `signal(v)`. Use in factory constructors
- *  that accept either a constant or a reactive source for a param. */
-export function param<T>(v: T | Signal<T>): Signal<T> {
-  return isSignal(v) ? (v as Signal<T>) : signal(v as T);
+/** Coalesce `T | Writable<Signal<T>>` to `Writable<Signal<T>>`. If `v`
+ *  is already a signal, returns it untouched (so external mutations
+ *  propagate); otherwise wraps a fresh `signal(v)`. Use in factory
+ *  constructors that accept either a constant or a writable source
+ *  for a param. */
+export function param<T>(v: T | Writable<Signal<T>>): Writable<Signal<T>> {
+  return isSignal(v) ? (v as unknown as Writable<Signal<T>>) : signal(v as T);
 }

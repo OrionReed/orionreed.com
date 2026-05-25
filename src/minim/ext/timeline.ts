@@ -39,19 +39,19 @@ export type Clip<A = number, D = number> = {
 
 // Inlined per-field flavor narrowing (replaces the dropped `ResolveSig`
 // helper). A writable `Signal<number>` or a literal number gives back a
-// `Signal<number>`; anything that's only readable (or a thunk) gives back
-// `Signal<number>`. The order matters: writable `Signal` is checked
-// before `Read` because `Signal<T>` is structurally a `Read<T>`.
-type ResolvedField<A> = [A] extends [Signal<number>]
-  ? Signal<number>
-  : [A] extends [Signal<number> | (() => number)]
-    ? Signal<number>
+// writable `Signal<number>`; anything that's only readable (or a thunk)
+// gives back the read-only flavor. Order matters: writable check first
+// because `Writable<Signal<number>>` is structurally a `Signal<number>`.
+type ResolvedField<A> = [A] extends [Writable<Signal<number>>]
+  ? Writable<Signal<number>>
+  : [A] extends [number]
+    ? Writable<Signal<number>>
     : Signal<number>;
 
 type ClipSpec = { at: Val<number>; dur: Val<number> };
 
 export interface Timeline {
-  readonly clock: Signal<number>;
+  readonly clock: Writable<Signal<number>>;
   readonly duration: Signal<number>;
   /** `clock / duration`, clamped to `[0, 1]`. */
   readonly t: Signal<number>;
@@ -67,12 +67,12 @@ export type TimelineOf<T extends Record<string, ClipSpec>> = Timeline & {
 };
 
 class TimelineImpl implements Timeline {
-  readonly clock: Signal<number>;
+  readonly clock: Writable<Signal<number>>;
   readonly duration: Signal<number>;
   readonly t: Signal<number>;
   readonly clips: readonly Clip[];
 
-  constructor(clock: Signal<number>, clips: readonly Clip[]) {
+  constructor(clock: Writable<Signal<number>>, clips: readonly Clip[]) {
     this.clock = clock;
     this.clips = clips;
     this.duration = computed(() => {

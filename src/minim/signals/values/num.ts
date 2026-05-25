@@ -128,9 +128,6 @@ export class Num extends Signal<V> {
     return tween(this, target, dur, ease);
   }
 }
-export interface Num {
-  get value(): V;
-}
 
 export function num(v: Val<V> = 0): Writable<Num> {
   const n = new Num() as Writable<Num>;

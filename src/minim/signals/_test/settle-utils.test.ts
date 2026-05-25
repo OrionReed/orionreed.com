@@ -134,7 +134,7 @@ describe("param — coalesce T | Signal<T>", () => {
   });
 
   it("signal is returned untouched", () => {
-    const original: Signal<number> = signal(7);
+    const original = signal(7);
     const p = param(original);
     expect(p).toBe(original); // same reference
     original.value = 8;

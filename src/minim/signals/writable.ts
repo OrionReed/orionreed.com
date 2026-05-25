@@ -36,21 +36,19 @@ import { lazy, type Of, type Read, Signal, type WritableBrand } from "./signal";
 // ─── Public types ────────────────────────────────────────────────────
 
 /** "The writable form of R." Adds the writable brand and a settable
- *  `value: Of<R>` — overrides the readonly getter from the base
- *  Signal class with an assignable property. */
+ *  `value: Of<R>` to the value class shape. */
 export type Writable<R> = R & WritableBrand & { value: Of<R> };
 
 /** T-anchored constraint for animator-style parameters:
  *
- *      function spring<T>(s: WritableOf<T> & Traits<T, "linear" | "metric">, target: T)
+ *      function spring<T>(s: WritableOf<T>, target: T)
  *
  *  Equivalent to `Writable<Read<T>>` — a writable reactive carrying T.
  *  Satisfied by `Writable<Num>` / `Writable<Vec>` / any factory-
  *  returned writable signal. Bare RO value classes are rejected
- *  because they lack the brand. */
-// biome-ignore lint/suspicious/noExplicitAny: variance — Read<T> is invariant in T;
-// any allows callers passing Writable<Vec>/etc. (which carry concrete T) to satisfy
-// the WritableOf<T> constraint without explicit Read<T> type-parameter casts.
+ *  because they lack the brand. Trait presence (linear/lerp/metric)
+ *  is checked at runtime via `requireLinear`/etc. inside the
+ *  animator body. */
 export type WritableOf<T> = Read<T> & WritableBrand & { value: T };
 
 export type { WritableBrand };
@@ -69,13 +67,13 @@ export type { WritableBrand };
  *  no per-getter annotation needed.
  *
  *  Runtime smart-dispatch: when `parent` is a fused-RO chain (e.g.
- *  `box.center` is built from `deriveTo`), the bwd path has no place
- *  to land. Fall through to `deriveTo` to match the conditional
- *  return type at runtime. Without this, `field()` would try to
- *  install a writable lens onto a RO receiver and trip the
+ *  `box.center` is built from `Cls.derive`), the bwd path has no
+ *  place to land. Fall through to `Cls.derive` to match the
+ *  conditional return type at runtime. Without this, `field()` would
+ *  try to install a writable lens onto a RO receiver and trip the
  *  construction-time check in `Signal._fuse`, breaking legitimate
  *  read-only patterns like `box.center.x.value`. */
-// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors lensTo
+// biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.lens
 export function field<
   S extends Signal<any>,
   K extends keyof Of<S>,

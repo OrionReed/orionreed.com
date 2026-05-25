@@ -68,8 +68,8 @@ interface Point {
   readonly kind: "point";
   readonly id: number;
   readonly pos: Writable<Vec>;
-  readonly pinned: Signal<boolean>;
-  readonly dragging: Signal<boolean>;
+  readonly pinned: Writable<Signal<boolean>>;
+  readonly dragging: Writable<Signal<boolean>>;
   /** Disposers fired when the point is removed (currently the pin
    *  `addWhile` lifecycle). Lets us cleanly tear down per-point
    *  cluster bindings on delete. */

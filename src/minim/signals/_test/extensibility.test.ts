@@ -79,10 +79,6 @@ class Hsl extends Signal<V> {
     return field(this, "l", Num);
   }
 }
-interface Hsl {
-  get value(): V;
-}
-
 function hsl(h = 0, s = 0, l = 0): Writable<Hsl> {
   return new Hsl({ h, s, l }) as Writable<Hsl>;
 }
@@ -123,7 +119,7 @@ describe("Extensibility — user-defined value classes work without library chan
 
 // Compile-time probes — gated to never run.
 function _typeProbes(): void {
-  // @ts-expect-error — bare Hsl is RO at the public type level
+  // @ts-expect-error — bare Hsl is RO at the type level
   Hsl.derive(() => ({ h: 0, s: 0, l: 0 })).value = { h: 1, s: 1, l: 1 };
 
   // @ts-expect-error — bare Hsl's .h is RO Num

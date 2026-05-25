@@ -134,9 +134,6 @@ export class Transform extends Signal<V> {
     return tween(this, target, dur, ease);
   }
 }
-export interface Transform {
-  get value(): V;
-}
 
 export type TransformInit = { [K in keyof V]?: Val<V[K]> };
 

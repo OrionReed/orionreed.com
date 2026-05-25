@@ -12,9 +12,14 @@
 // Algorithm: alien-signals v2. Trait dispatch via `./traits`.
 //
 // Writability is type-tracked via `WritableBrand` (declared below)
-// and the `Writable<R>` modifier in `./writable`. Factory returns
-// add the brand via cast; bare `Signal<T>` instances (created via
-// `new Signal(...)`) are RO at the type level.
+// and the `Writable<R>` modifier in `./writable`. The class declares
+// `value` as `declare readonly value: T;` — the runtime accessor is
+// installed on the prototype via `Object.defineProperty` after the
+// class declaration, equivalent to compile output of `get value() { … }`
+// syntax. Factory returns (`vec(…)`, `num(…)`, `signal(…)`, etc.) add
+// the brand via cast; bare `Signal<T>` instances and any bare value
+// class (`Vec`, `Num`, `Box`, …) are RO at the type level by default.
+// `Writable<R>` re-adds a settable `value` via intersection.
 
 import { type Equals, type TraitDict } from "./traits";
 import { type Writable } from "./writable";
@@ -338,10 +343,6 @@ export interface WritableBrand {
  *  `Signal<T>`, `Read<T>`, or any subclass thereof. */
 export type Of<R> = R extends Signal<infer T> ? T : R extends Read<infer T> ? T : never;
 
-/** Per-field reactive init: each axis accepts plain T, signal, or thunk.
- *  Used by composite-value factories like `transform({...})`. */
-export type SignalInit<T> = { [K in keyof T]?: Val<T[K]> };
-
 export function value<T>(v: Val<T>): T {
   if (v instanceof Signal) return v.value;
   if (typeof v === "function") return (v as () => T)();
@@ -484,7 +485,7 @@ function makeFieldSetter<T>(
     const k = path[0]!;
     return v => {
       const s = parent.peek() as object;
-      parent.value = { ...s, [k]: v };
+      parent._setWithExclusion({ ...s, [k]: v }, activeSettler);
     };
   }
   if (path.length === 2) {
@@ -493,7 +494,7 @@ function makeFieldSetter<T>(
     return v => {
       const s = parent.peek() as Record<string | number | symbol, unknown>;
       const a = s[k0] as object;
-      parent.value = { ...s, [k0]: { ...a, [k1]: v } };
+      parent._setWithExclusion({ ...s, [k0]: { ...a, [k1]: v } }, activeSettler);
     };
   }
   if (path.length === 3) {
@@ -504,12 +505,15 @@ function makeFieldSetter<T>(
       const s = parent.peek() as Record<string | number | symbol, unknown>;
       const a = s[k0] as Record<string | number | symbol, unknown>;
       const b = a[k1] as object;
-      parent.value = { ...s, [k0]: { ...a, [k1]: { ...b, [k2]: v } } };
+      parent._setWithExclusion(
+        { ...s, [k0]: { ...a, [k1]: { ...b, [k2]: v } } },
+        activeSettler,
+      );
     };
   }
   return v => {
     const s = parent.peek();
-    parent.value = pathSetN(s, path, 0, v);
+    parent._setWithExclusion(pathSetN(s, path, 0, v), activeSettler);
   };
 }
 
@@ -889,7 +893,7 @@ export class Signal<T = unknown> implements ReactiveNode {
       const setter = makeFieldSetter<U>(parent, path);
       inst = Signal.install(Cls, () => getter(parent.value), setter);
     } else if (bwdLocal === undefined) {
-      // RO cell (deriveTo). No setter.
+      // RO cell (Cls.derive). No setter.
       inst = Signal.install(Cls, () => composedFwd(parent.value));
     } else if (priorBwd === undefined) {
       // 1-level writable.
@@ -898,14 +902,14 @@ export class Signal<T = unknown> implements ReactiveNode {
             Cls,
             () => composedFwd(parent.value),
             v => {
-              parent.value = bwdLocal(v, undefined as never);
+              parent._setWithExclusion(bwdLocal(v, undefined as never), activeSettler);
             },
           )
         : Signal.install(
             Cls,
             () => composedFwd(parent.value),
             v => {
-              parent.value = bwdLocal(v, parent.peek());
+              parent._setWithExclusion(bwdLocal(v, parent.peek()), activeSettler);
             },
           );
     } else {
@@ -915,7 +919,10 @@ export class Signal<T = unknown> implements ReactiveNode {
             Cls,
             () => composedFwd(parent.value),
             v => {
-              parent.value = priorBwd(bwdLocal(v, undefined as never), undefined as never);
+              parent._setWithExclusion(
+                priorBwd(bwdLocal(v, undefined as never), undefined as never),
+                activeSettler,
+              );
             },
           )
         : Signal.install(
@@ -923,7 +930,7 @@ export class Signal<T = unknown> implements ReactiveNode {
             () => composedFwd(parent.value),
             v => {
               const s = parent.peek();
-              parent.value = priorBwd(bwdLocal(v, priorFwd!(s)), s);
+              parent._setWithExclusion(priorBwd(bwdLocal(v, priorFwd!(s)), s), activeSettler);
             },
           );
     }
@@ -976,62 +983,13 @@ export class Signal<T = unknown> implements ReactiveNode {
     ) as InstanceType<C>;
   }
 
-  /** Read with tracking. Branches on signal vs computed mode. */
-  get value(): T {
-    const flags = this.flags;
-    if (this.getter !== undefined) {
-      // ── Computed path ──
-      if (flags & F.RecursedCheck) {
-        throw new RangeError(
-          `Cyclic computed: ${(this.constructor as { name?: string }).name ?? "?"} read its own value`,
-        );
-      }
-      if (
-        flags & F.Dirty ||
-        (flags & F.Pending &&
-          (checkDirty(this.deps!, this) || ((this.flags = flags & ~F.Pending), false)))
-      ) {
-        if (this._update()) {
-          const subs = this.subs;
-          if (subs !== undefined) shallowPropagate(subs);
-        }
-      } else if (!flags) {
-        // First read: lazy init
-        this.flags = F.Mutable | F.RecursedCheck;
-        const prev = activeSub;
-        activeSub = this;
-        let threw = true;
-        try {
-          this.cachedValue = this.getter();
-          threw = false;
-        } finally {
-          activeSub = prev;
-          this.flags = threw ? F.Mutable | F.Dirty : this.flags & ~F.RecursedCheck;
-        }
-      }
-      if (activeSub !== undefined) link(this, activeSub, cycle);
-      return this.cachedValue!;
-    }
-
-    // ── Signal path ──
-    if (flags & F.Dirty) {
-      this.flags = F.Mutable;
-      if (this.currentValue !== (this.currentValue = this.pendingValue)) {
-        const subs = this.subs;
-        if (subs !== undefined) shallowPropagate(subs);
-      }
-    }
-    if (activeSub !== undefined) link(this, activeSub, cycle);
-    return this.currentValue;
-  }
-
-  set value(next: T) {
-    // Inside a `settle` body, bare `value =` writes self-exclude the
-    // running settler so its body doesn't re-fire from its own writes.
-    // Outside a settle (regular effect, no reactive context), this is
-    // `undefined` and behaviour matches the pre-settle engine.
-    this._setWithExclusion(next, activeSettler);
-  }
+  /** Reactive value. Read tracks dependencies; write triggers
+   *  propagation. Type level: RO; widen via `Writable<R>` to gain a
+   *  settable `.value`. Runtime: accessor installed on `Signal.prototype`
+   *  via `Object.defineProperty` after class declaration. (Class
+   *  `get value()`/`set value()` syntax also compiles to a prototype
+   *  defineProperty under the hood — no V8 perf delta.) */
+  declare readonly value: T;
 
   /** Write `next`, propagating to all subscribers EXCEPT the one
    *  currently active (typically an effect calling this from its
@@ -1051,7 +1009,10 @@ export class Signal<T = unknown> implements ReactiveNode {
     this._setWithExclusion(next, activeSub);
   }
 
-  private _setWithExclusion(next: T, excluding: ReactiveNode | undefined): void {
+  /** @internal — write `next`, propagating to all subs except `excluding`.
+   *  Used by `value` setter (excludes activeSettler), `writeBack`
+   *  (excludes activeSub), and engine-internal lens/field setters. */
+  _setWithExclusion(next: T, excluding: ReactiveNode | undefined): void {
     // Computed/lens slow path — same as before, no exclusion concept
     // (writes go through a setter callback the user installed).
     if (this.getter !== undefined) {
@@ -1241,6 +1202,74 @@ class Effect implements ReactiveNode {
     }
   }
 }
+
+// Install `Signal.prototype.value` accessor. Pulled out of the class
+// body so the type-level declaration (`declare readonly value: T`)
+// can mark `value` as RO without TS stripping the runtime setter.
+// Subclasses inherit the accessor; bare `Signal<T>` and `Vec`/`Num`/…
+// are RO at the type level by default. `Writable<R>` re-adds a
+// settable `.value` via intersection.
+//
+// V8: prototype-level Object.defineProperty done once at module load
+// is the same shape class-syntax accessors compile to. No deopt.
+Object.defineProperty(Signal.prototype, "value", {
+  get(this: Signal<unknown>): unknown {
+    const flags = this.flags;
+    if (this.getter !== undefined) {
+      // ── Computed path ──
+      if (flags & F.RecursedCheck) {
+        throw new RangeError(
+          `Cyclic computed: ${(this.constructor as { name?: string }).name ?? "?"} read its own value`,
+        );
+      }
+      if (
+        flags & F.Dirty ||
+        (flags & F.Pending &&
+          (checkDirty(this.deps!, this) || ((this.flags = flags & ~F.Pending), false)))
+      ) {
+        if (this._update()) {
+          const subs = this.subs;
+          if (subs !== undefined) shallowPropagate(subs);
+        }
+      } else if (!flags) {
+        // First read: lazy init
+        this.flags = F.Mutable | F.RecursedCheck;
+        const prev = activeSub;
+        activeSub = this;
+        let threw = true;
+        try {
+          this.cachedValue = this.getter();
+          threw = false;
+        } finally {
+          activeSub = prev;
+          this.flags = threw ? F.Mutable | F.Dirty : this.flags & ~F.RecursedCheck;
+        }
+      }
+      if (activeSub !== undefined) link(this, activeSub, cycle);
+      return this.cachedValue!;
+    }
+
+    // ── Signal path ──
+    if (flags & F.Dirty) {
+      this.flags = F.Mutable;
+      if (this.currentValue !== (this.currentValue = this.pendingValue)) {
+        const subs = this.subs;
+        if (subs !== undefined) shallowPropagate(subs);
+      }
+    }
+    if (activeSub !== undefined) link(this, activeSub, cycle);
+    return this.currentValue;
+  },
+  set(this: Signal<unknown>, next: unknown): void {
+    // Inside a `settle` body, bare `value =` writes self-exclude the
+    // running settler so its body doesn't re-fire from its own writes.
+    // Outside a settle (regular effect, no reactive context), this is
+    // `undefined` and behaviour matches the pre-settle engine.
+    this._setWithExclusion(next, activeSettler);
+  },
+  enumerable: false,
+  configurable: false,
+});
 
 // ─── Settle: reactive sub-DAG with self-excluded writes ─────────────
 //
@@ -1434,8 +1463,8 @@ export function settle(
  *  callable on it. Use `new Vec(...)` for typed value-class signals
  *  (and `vec(x, y)` / `num(v)` / etc. for the factory form). For
  *  reactive driving see the free `bind(target, source)` helper. */
-export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> & WritableBrand {
-  return new Signal(initial, opts) as Signal<T> & WritableBrand;
+export function signal<T>(initial: T, opts?: SignalOptions<T>): Writable<Signal<T>> {
+  return new Signal(initial, opts) as Writable<Signal<T>>;
 }
 
 /** Untyped read-only derived view. Closure-captured deps. For typed
@@ -1536,7 +1565,7 @@ function _fanin(
         for (let i = 0; i < n; i++) {
           const u = updates[i];
           if (u === undefined) continue;
-          parents[i]!.value = u;
+          parents[i]!._setWithExclusion(u, activeSettler);
         }
       });
     };
@@ -1551,7 +1580,7 @@ function _fanin(
       for (let i = 0; i < n; i++) {
         const u = updates[i];
         if (u === undefined) continue;
-        parents[i]!.value = u;
+        parents[i]!._setWithExclusion(u, activeSettler);
       }
     });
   };

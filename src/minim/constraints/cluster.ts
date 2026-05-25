@@ -27,7 +27,7 @@ import {
   type Signal,
   settle,
   signal,
-  type WritableBrand,
+  type Writable,
 } from "../signals";
 import { when } from "../signals/settle-utils";
 import { type Phase, reactivePipeline } from "./phases";
@@ -78,7 +78,7 @@ export class Constraints {
   private readonly _removeHooks: Set<(rel: Relation) => void> = new Set();
   /** Generation counter; bumped on `_bind()`/`remove()` so the
    *  reactive driver re-fires when structural state changes. */
-  private readonly _gen: Signal<number> & WritableBrand;
+  private readonly _gen: Writable<Signal<number>>;
   /** Reactive driver — a settle that calls `step()` on signal
    *  change. Lazy-installed on first `_bind`; once `dispose()`d
    *  (e.g., by `physics()` / `world()` taking over the time loop),
