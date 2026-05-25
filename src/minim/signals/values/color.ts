@@ -6,8 +6,8 @@
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { computed, lazy, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
-import { type Linear, type Pack, traits } from "../traits";
-import { derived, field, type Wr, type Writable } from "../writable";
+import { type Linear, type Pack, type TraitDict } from "../traits";
+import { derived, field, type Writable } from "../writable";
 import { Num } from "./num";
 
 type V = { r: number; g: number; b: number; a: number };
@@ -37,10 +37,8 @@ const packImpl: Pack<V> = {
 };
 
 export class Color extends Signal<V> {
-  static traits = traits<V>()({ linear: linearImpl, lerp, equals, pack: packImpl });
-
-  /** Phantom registry brand — `Writable<Color>` resolves to `Wr<Color>`. */
-  declare readonly _writable: Wr<Color>;
+  static traits = { linear: linearImpl, lerp, equals, pack: packImpl } satisfies TraitDict<V>;
+  declare readonly _t: typeof Color.traits;
 
   constructor(v: V = { r: 0, g: 0, b: 0, a: 1 }, opts?: SignalOptions<V>) {
     super(v, opts);
@@ -105,7 +103,6 @@ export class Color extends Signal<V> {
   }
 }
 export interface Color {
-  readonly constructor: typeof Color;
   get value(): V;
 }
 

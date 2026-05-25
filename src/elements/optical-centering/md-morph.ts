@@ -60,10 +60,7 @@ const polygonLerp = (a: PolygonValue, b: PolygonValue, t: number): PolygonValue 
 };
 
 class Polygon extends Signal<PolygonValue> {
-  static traits: TraitDict<PolygonValue> & {
-    lerp: typeof polygonLerp;
-    equals: typeof polygonEquals;
-  } = {
+  static traits = {
     lerp: polygonLerp,
     equals: polygonEquals,
   };

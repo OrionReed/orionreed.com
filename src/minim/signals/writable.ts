@@ -2,14 +2,10 @@
 //
 // Public types:
 //
-//   Writable<R>      — registry lookup: "the writable form of R".
-//                      Single hop, no recursion. Each value class
-//                      declares `_writable: Wr<Foo>` (a phantom
-//                      registry brand) so this lookup resolves.
-//
-//   Wr<R>            — default writable shape: `R & WritableBrand &
-//                      { value: Of<R> }`. The standard `_writable`
-//                      declaration target on every value class.
+//   Writable<R>      — "the writable form of R": the value class
+//                      shape with the writable brand and a settable
+//                      `.value`. Single intersection, no registry —
+//                      every value class uses the default form.
 //
 //   WritableOf<T>    — T-anchored animator constraint.
 //
@@ -35,32 +31,27 @@
 // `Color.css` building a CSS string), use `lazy()` from "../signal"
 // directly with whatever `make()` body you want.
 
-import { lazy, type Of, Signal, type WritableBrand } from "./signal";
+import { lazy, type Of, type Read, Signal, type WritableBrand } from "./signal";
 
 // ─── Public types ────────────────────────────────────────────────────
 
-/** Default writable shape. Used as the `_writable` declaration target
- *  on every value class — `_writable` is the phantom registry hook. */
-export type Wr<R> = R & WritableBrand & { value: Of<R> };
-
-/** "The writable form of R." Resolves via the per-class `_writable`
- *  registry brand when present (so `Writable<Vec>` returns the
- *  Vec-specific writable shape); falls back to the default `Wr<R>`
- *  for plain `Signal<T>` and other classes that don't declare a
- *  custom writable form. Single hop, no recursion. */
-export type Writable<R> = R extends { readonly _writable: infer W } ? W : Wr<R>;
+/** "The writable form of R." Adds the writable brand and a settable
+ *  `value: Of<R>` — overrides the readonly getter from the base
+ *  Signal class with an assignable property. */
+export type Writable<R> = R & WritableBrand & { value: Of<R> };
 
 /** T-anchored constraint for animator-style parameters:
  *
  *      function spring<T>(s: WritableOf<T> & Traits<T, "linear" | "metric">, target: T)
  *
+ *  Equivalent to `Writable<Read<T>>` — a writable reactive carrying T.
  *  Satisfied by `Writable<Num>` / `Writable<Vec>` / any factory-
  *  returned writable signal. Bare RO value classes are rejected
  *  because they lack the brand. */
-export interface WritableOf<T> extends WritableBrand {
-  value: T;
-  peek(): T;
-}
+// biome-ignore lint/suspicious/noExplicitAny: variance — Read<T> is invariant in T;
+// any allows callers passing Writable<Vec>/etc. (which carry concrete T) to satisfy
+// the WritableOf<T> constraint without explicit Read<T> type-parameter casts.
+export type WritableOf<T> = Read<T> & WritableBrand & { value: T };
 
 export type { WritableBrand };
 

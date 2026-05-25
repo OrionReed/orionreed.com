@@ -9,8 +9,8 @@ import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
 import { Signal, type SignalOptions, type Val, valFn } from "../signal";
-import { type Linear, type Pack, traits } from "../traits";
-import { type Wr, type Writable } from "../writable";
+import { type Linear, type Pack, type TraitDict } from "../traits";
+import { type Writable } from "../writable";
 
 type V = number;
 
@@ -31,10 +31,8 @@ const packImpl: Pack<V> = {
 };
 
 export class Num extends Signal<V> {
-  static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals, pack: packImpl });
-
-  /** Phantom registry brand — `Writable<Num>` resolves to `Wr<Num>`. */
-  declare readonly _writable: Wr<Num>;
+  static traits = { linear: linearImpl, lerp, metric, equals, pack: packImpl } satisfies TraitDict<V>;
+  declare readonly _t: typeof Num.traits;
 
   constructor(v: V = 0, opts?: SignalOptions<V>) {
     super(v, opts);
@@ -131,7 +129,6 @@ export class Num extends Signal<V> {
   }
 }
 export interface Num {
-  readonly constructor: typeof Num;
   get value(): V;
 }
 

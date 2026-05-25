@@ -14,12 +14,15 @@
 // public `Traits<T, K>` name for the constraint, which is what
 // consumers see far more often.
 //
-// Lookup helper `requireLinear` (and siblings) read class-level
-// `s.constructor.traits.linear` once per animator setup; equality is
-// resolved to a per-instance `_equals` slot at construction so the
-// write hot path stays a single field read.
-
-import type { Of, Read, Signal } from "./signal";
+// Type-level constraint vs runtime lookup are separate axes:
+//   - At the type level, `Traits<T, K>` requires the instance to
+//     carry a phantom `_t` slot typed against the per-class
+//     `static traits` dict. Each value class adds one line:
+//       `declare readonly _t: typeof Vec.traits;`
+//   - At runtime, `requireLinear` (and siblings) walks
+//     `s.constructor.traits.linear` once per animator setup. Equality
+//     is resolved to a per-instance `_equals` slot at construction
+//     so the write hot path stays a single field read.
 
 // ─── Primitive trait shapes ──────────────────────────────────────────
 
@@ -59,32 +62,9 @@ export interface TraitDict<T> {
 /** Valid keys of `TraitDict`. The set of declarable traits. */
 export type TraitKey = keyof TraitDict<unknown>;
 
-/** Helper for declaring `static traits = …` with the literal trait
- *  subset preserved. `Traits<T, "linear">` then sees the listed slots
- *  as present (non-nullable). Subclasses pick whichever subset they
- *  implement — no `Required<TraitDict<V>>` vs intersection-form
- *  asymmetry needed at the declaration site.
- *
- *  Curried so `T` is explicit at the outer call (anchoring the trait
- *  function signatures to the right value type) while `D` is inferred
- *  from the dict literal at the inner call (preserving the literal
- *  subset). TS doesn't allow partial type-argument application, hence
- *  the two-step shape.
- *
- *      class Vec extends Signal<V> {
- *        static traits = traits<V>()({ linear, lerp, metric, equals });
- *      }
- *      class Matrix extends Signal<V> {
- *        static traits = traits<V>()({ equals });   // sparse — fine
- *      }
- */
-export function traits<T>(): <D extends TraitDict<T>>(d: D) => D & TraitDict<T> {
-  return d => d;
-}
-
 // ─── The one nominal constraint type ─────────────────────────────────
 
-/** "A `Signal<T>` whose class declares the listed traits."
+/** "A reactive whose class declares the listed traits."
  *
  *  Use inline at call sites:
  *
@@ -92,26 +72,24 @@ export function traits<T>(): <D extends TraitDict<T>>(d: D) => D & TraitDict<T> 
  *      function tween<T>(sig: Traits<T, "lerp">, target: T, dur: Val<number>)
  *      function attract<T>(sig: Traits<T, "linear">, target: Val<T>, k?: number)
  *
- *  Bundles the instance shape (`Signal<T>`) with the class-level
- *  trait constraint (`constructor.traits` contains each listed key).
- *  Replaces per-trait aliases (`HasLinear`, …) AND per-consumer
- *  aliases (`SpringTarget`, …) with a single, composable type. */
-/** "A reactive whose class declares the listed traits."
+ *  Constraint shape: `_t` is a phantom slot per value class, typed
+ *  against `typeof Cls.traits`. Listed keys must resolve to non-null
+ *  trait values; unlisted keys may or may not be present.
+ *
  *  Pure constraint — does not require `Signal<T>` directly; consumers
  *  intersect with `WritableOf<T>` / `Read<T>` / etc. for capability. */
 export type Traits<T, K extends TraitKey = never> = {
-  readonly constructor: {
-    readonly traits: { [P in K]-?: NonNullable<TraitDict<T>[P]> } & TraitDict<T>;
-  };
+  readonly _t: { [P in K]-?: NonNullable<TraitDict<T>[P]> } & TraitDict<T>;
 };
 
 // ─── Runtime lookup helpers ──────────────────────────────────────────
 
 /** Class-level traits dictionary for any Signal subclass. */
-const dictOf = <T>(s: Read<T>): TraitDict<T> =>
-  ((s as object).constructor as { traits?: TraitDict<T> }).traits ?? {};
+const dictOf = <T>(s: object): TraitDict<T> =>
+  ((s as { constructor?: { traits?: TraitDict<T> } }).constructor?.traits) ?? {};
 
-const className = (s: object): string => (s.constructor as { name?: string }).name ?? "?";
+const className = (s: object): string =>
+  ((s as { constructor?: { name?: string } }).constructor?.name) ?? "?";
 
 const missing = (s: object, slot: string): Error =>
   new Error(`require${slot}: ${className(s)} has no traits.${slot.toLowerCase()}`);
@@ -120,27 +98,27 @@ const missing = (s: object, slot: string): Error =>
 // in the parameter type (`Traits<T, "linear">`) so TS infers T from
 // the argument and the trait presence is checked structurally.
 export function requireLinear<T>(s: Traits<T, "linear">): Linear<T> {
-  const v = dictOf<T>(s as unknown as Read<T>).linear;
+  const v = dictOf<T>(s).linear;
   if (!v) throw missing(s, "Linear");
   return v;
 }
 export function requireLerp<T>(s: Traits<T, "lerp">): Lerp<T> {
-  const v = dictOf<T>(s as unknown as Read<T>).lerp;
+  const v = dictOf<T>(s).lerp;
   if (!v) throw missing(s, "Lerp");
   return v;
 }
 export function requireMetric<T>(s: Traits<T, "metric">): Metric<T> {
-  const v = dictOf<T>(s as unknown as Read<T>).metric;
+  const v = dictOf<T>(s).metric;
   if (!v) throw missing(s, "Metric");
   return v;
 }
 export function requireEquals<T>(s: Traits<T, "equals">): Equals<T> {
-  const v = dictOf<T>(s as unknown as Read<T>).equals;
+  const v = dictOf<T>(s).equals;
   if (!v) throw missing(s, "Equals");
   return v;
 }
 export function requirePack<T>(s: Traits<T, "pack">): Pack<T> {
-  const v = dictOf<T>(s as unknown as Read<T>).pack;
+  const v = dictOf<T>(s).pack;
   if (!v) throw missing(s, "Pack");
   return v;
 }

@@ -10,8 +10,8 @@ import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
 import { type Of, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
-import { type Linear, traits } from "../traits";
-import { field, type Wr, type Writable } from "../writable";
+import { type Linear, type TraitDict } from "../traits";
+import { field, type Writable } from "../writable";
 import { Num } from "./num";
 import {
   Vec,
@@ -84,10 +84,8 @@ export const metric = (a: V, b: V) =>
 const linearImpl: Linear<V> = { add, sub, scale };
 
 export class Transform extends Signal<V> {
-  static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals });
-
-  /** Phantom registry brand — `Writable<Transform>` resolves to `Wr<Transform>`. */
-  declare readonly _writable: Wr<Transform>;
+  static traits = { linear: linearImpl, lerp, metric, equals } satisfies TraitDict<V>;
+  declare readonly _t: typeof Transform.traits;
 
   /** Scalar `scale` lives as a Vec field lens (`.scale`), not as an
    *  invertible eager method — to scalar-multiply a Transform, use
@@ -137,7 +135,6 @@ export class Transform extends Signal<V> {
   }
 }
 export interface Transform {
-  readonly constructor: typeof Transform;
   get value(): V;
 }
 

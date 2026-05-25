@@ -11,8 +11,8 @@
 
 import { bind } from "../lateral";
 import { type Of, Signal, type SignalOptions, type Val, valFn } from "../signal";
-import { traits } from "../traits";
-import { derived, field, type Wr, type Writable } from "../writable";
+import { type TraitDict } from "../traits";
+import { derived, field, type Writable } from "../writable";
 import { Num } from "./num";
 import { Vec } from "./vec";
 
@@ -105,10 +105,8 @@ export function compose(t: Of<Vec>, r: number, s: Of<Vec>, pivot: Of<Vec>): V {
 export const toMatrixString = (m: V): string => `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
 
 export class Matrix extends Signal<V> {
-  static traits = traits<V>()({ equals });
-
-  /** Phantom registry brand — `Writable<Matrix>` resolves to `Wr<Matrix>`. */
-  declare readonly _writable: Wr<Matrix>;
+  static traits = { equals } satisfies TraitDict<V>;
+  declare readonly _t: typeof Matrix.traits;
 
   constructor(v: V = identity(), opts?: SignalOptions<V>) {
     super(v, opts);
@@ -149,7 +147,6 @@ export class Matrix extends Signal<V> {
   }
 }
 export interface Matrix {
-  readonly constructor: typeof Matrix;
   get value(): V;
 }
 

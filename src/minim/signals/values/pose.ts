@@ -9,8 +9,8 @@
 
 import { bind } from "../lateral";
 import { Signal, type SignalOptions, type Val } from "../signal";
-import { type Linear, type Pack, traits } from "../traits";
-import { type Wr, type Writable } from "../writable";
+import { type Linear, type Pack, type TraitDict } from "../traits";
+import { type Writable } from "../writable";
 
 type V = { x: number; y: number; theta: number };
 
@@ -50,16 +50,14 @@ const packImpl: Pack<V> = {
 };
 
 export class Pose extends Signal<V> {
-  static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals, pack: packImpl });
-
-  declare readonly _writable: Wr<Pose>;
+  static traits = { linear: linearImpl, lerp, metric, equals, pack: packImpl } satisfies TraitDict<V>;
+  declare readonly _t: typeof Pose.traits;
 
   constructor(v: V = { x: 0, y: 0, theta: 0 }, opts?: SignalOptions<V>) {
     super(v, opts);
   }
 }
 export interface Pose {
-  readonly constructor: typeof Pose;
   get value(): V;
 }
 

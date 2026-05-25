@@ -16,8 +16,8 @@ import {
   valFn,
   value,
 } from "../signal";
-import { type Linear, type Pack, traits } from "../traits";
-import { derived, field, type Wr, type Writable } from "../writable";
+import { type Linear, type Pack, type TraitDict } from "../traits";
+import { derived, field, type Writable } from "../writable";
 import { Num } from "./num";
 import { Vec } from "./vec";
 
@@ -88,10 +88,8 @@ const packImpl: Pack<V> = {
 };
 
 export class Box extends Signal<V> {
-  static traits = traits<V>()({ linear: linearImpl, lerp, equals, pack: packImpl });
-
-  /** Phantom registry brand — `Writable<Box>` resolves to `Wr<Box>`. */
-  declare readonly _writable: Wr<Box>;
+  static traits = { linear: linearImpl, lerp, equals, pack: packImpl } satisfies TraitDict<V>;
+  declare readonly _t: typeof Box.traits;
 
   constructor(v: V = { x: 0, y: 0, w: 0, h: 0 }, opts?: SignalOptions<V>) {
     super(v, opts);
@@ -182,7 +180,6 @@ export class Box extends Signal<V> {
   }
 }
 export interface Box {
-  readonly constructor: typeof Box;
   get value(): V;
 }
 

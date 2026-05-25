@@ -1,8 +1,8 @@
 // extensibility.test.ts — confirm the value-class authoring story
 // works end-to-end for USER-DEFINED classes with ZERO library
-// changes. The pattern: extend Signal<V>, declare `_writable: Wr<R>`
-// for the registry brand, declare invertibles with `: this` returns,
-// and use the `field()` / `derived()` helpers for getter bodies.
+// changes. The pattern: extend Signal<V>, declare invertibles with
+// `: this` returns, and use the `field()` / `derived()` helpers for
+// getter bodies.
 
 import { describe, expect, it } from "vitest";
 import {
@@ -11,10 +11,9 @@ import {
   Num,
   Signal,
   type SignalOptions,
-  traits,
+  type TraitDict,
   type Val,
   valFn,
-  type Wr,
   type Writable,
 } from "../index";
 
@@ -24,11 +23,10 @@ import {
 //   1. pure value-space functions
 //   2. class extends Signal<V>
 //   3. static traits dict
-//   4. declare _writable: Wr<R>  (registry brand, 1 line)
-//   5. invertible methods return `: this` (no list to maintain)
-//   6. field-lens getters call `field(this, "k", Cls)`
-//   7. interface merge for RO `value`
-//   8. factory casts `as Writable<Hsl>` (one cast)
+//   4. invertible methods return `: this` (no list to maintain)
+//   5. field-lens getters call `field(this, "k", Cls)`
+//   6. interface merge for the constructor handle
+//   7. factory casts `as Writable<Hsl>` (one cast)
 
 type V = { h: number; s: number; l: number };
 
@@ -44,14 +42,13 @@ const hslLerp = (a: V, b: V, t: number): V => ({
 const linearImpl: Linear<V> = { add: hslAdd, sub: hslSub, scale: hslScale };
 
 class Hsl extends Signal<V> {
-  static traits = traits<V>()({
+  static traits = {
     linear: linearImpl,
     lerp: hslLerp,
     metric: (a: V, b: V) => Math.abs(a.h - b.h) + Math.abs(a.s - b.s) + Math.abs(a.l - b.l),
     equals: (a: V, b: V) => a.h === b.h && a.s === b.s && a.l === b.l,
-  });
-
-  declare readonly _writable: Wr<Hsl>;
+  } satisfies TraitDict<V>;
+  declare readonly _t: typeof Hsl.traits;
 
   constructor(v: V = { h: 0, s: 0, l: 0 }, opts?: SignalOptions<V>) {
     super(v, opts);
@@ -83,7 +80,6 @@ class Hsl extends Signal<V> {
   }
 }
 interface Hsl {
-  readonly constructor: typeof Hsl;
   get value(): V;
 }
 

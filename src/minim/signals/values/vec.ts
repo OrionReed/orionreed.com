@@ -10,8 +10,8 @@ import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { bind } from "../lateral";
 import { batch, Signal, type SignalOptions, type Val, valFn, value } from "../signal";
-import { type Linear, type Pack, traits } from "../traits";
-import { derived, field, type Wr, type Writable } from "../writable";
+import { type Linear, type Pack, type TraitDict } from "../traits";
+import { derived, field, type Writable } from "../writable";
 import { Num } from "./num";
 
 type V = { x: number; y: number };
@@ -71,10 +71,8 @@ const packImpl: Pack<V> = {
 };
 
 export class Vec extends Signal<V> {
-  static traits = traits<V>()({ linear: linearImpl, lerp, metric, equals, pack: packImpl });
-
-  /** Phantom registry brand — `Writable<Vec>` resolves to `Wr<Vec>`. */
-  declare readonly _writable: Wr<Vec>;
+  static traits = { linear: linearImpl, lerp, metric, equals, pack: packImpl } satisfies TraitDict<V>;
+  declare readonly _t: typeof Vec.traits;
 
   constructor(v: V = { x: 0, y: 0 }, opts?: SignalOptions<V>) {
     super(v, opts);
@@ -191,7 +189,6 @@ export class Vec extends Signal<V> {
   }
 }
 export interface Vec {
-  readonly constructor: typeof Vec;
   get value(): V;
 }
 

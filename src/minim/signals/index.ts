@@ -129,7 +129,6 @@ export {
   type TraitDict,
   type TraitKey,
   type Traits,
-  traits,
 } from "./traits";
 export { Anchor, Dir } from "./values/anchor";
 export * as BoxMath from "./values/box";
@@ -186,10 +185,4 @@ export { Transform, type TransformInit, transform } from "./values/transform";
 export * as VecMath from "./values/vec";
 export { axes, type PolarPolicy, polar, tangentPoint, Vec, vec } from "./values/vec";
 // ─── Writable modifier + authoring helpers ───────────────────────
-export {
-  derived,
-  field,
-  type Wr,
-  type Writable,
-  type WritableOf,
-} from "./writable";
+export { derived, field, type Writable, type WritableOf } from "./writable";

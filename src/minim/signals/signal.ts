@@ -334,8 +334,9 @@ export interface WritableBrand {
   readonly [WRITABLE]: never;
 }
 
-/** Extract the value type carried by a Signal (signal/computed/lens). */
-export type Of<R> = R extends Signal<infer T> ? T : never;
+/** Extract the value type carried by any reactive read shape —
+ *  `Signal<T>`, `Read<T>`, or any subclass thereof. */
+export type Of<R> = R extends Signal<infer T> ? T : R extends Read<infer T> ? T : never;
 
 /** Per-field reactive init: each axis accepts plain T, signal, or thunk.
  *  Used by composite-value factories like `transform({...})`. */
@@ -623,9 +624,9 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  This is the lower-level typed factory: for parent-based lenses,
    *  prefer `Cls.lens(parent, fwd, bwd)` / `Cls.derive(parent, fn)`.
    *
-   *  Overload: with a setter, returns `Writable<C>` (registry-resolved
-   *  to the per-class writable form, e.g. `Wr<Vec>` for Vec). Without,
-   *  returns plain `C` (read-only at the type level). */
+   *  Overload: with a setter, returns `Writable<C>` (the writable
+   *  form: `C & WritableBrand & { value: Of<C> }`). Without, returns
+   *  plain `C` (read-only at the type level). */
   static install<T, C extends Signal<T>>(Cls: new (...args: never[]) => C, getter: () => T): C;
   static install<T, C extends Signal<T>>(
     Cls: new (...args: never[]) => C,
