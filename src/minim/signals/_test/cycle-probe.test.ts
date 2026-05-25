@@ -4,7 +4,7 @@
 // subscriber at most once. The cycle question is at the *event* level:
 // effects fire and spawn new write events. The sequence of events
 // terminates iff each successive write either (a) hits the strict-===
-// equality skip in `Signal.set value` or (b) hits a no-write guard in
+// equality skip in the `value` setter or (b) hits a no-write guard in
 // the effect body (`if (a !== b) ...`).
 //
 // What we test:

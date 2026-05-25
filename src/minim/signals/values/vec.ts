@@ -1,10 +1,10 @@
 // vec.ts — reactive 2D point.
 //
 // Invertibles (`add`, `sub`, `scale`, `offset`, `up`, `down`, `left`,
-// `right`) return `: this` and ride on `Signal#through(fwd, bwd)`.
-// Chained calls auto-fuse. Field-lens getters use the `field()`
-// helper, whose conditional return type propagates writability from
-// the receiver; `derived()` wraps RO views.
+// `right`) return `: this` and ride on `Signal#lens(fwd, bwd)`. Chained
+// calls auto-fuse. Field-lens getters use the `field()` helper, whose
+// conditional return type propagates writability from the receiver;
+// `derived()` wraps RO views.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";

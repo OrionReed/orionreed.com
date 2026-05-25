@@ -40,8 +40,8 @@ describe("N-input lens: reactive args inside fwd", () => {
   });
 });
 
-describe("N-input lens: nested fanin (aggregations of aggregations)", () => {
-  it("fanin of fanins: chain works correctly", () => {
+describe("N-input lens: nested aggregations", () => {
+  it("aggregation of aggregations: chain works correctly", () => {
     const a = num(1);
     const b = num(2);
     const c = num(3);
@@ -77,7 +77,7 @@ describe("N-input lens: side effects in fwd (caller error pattern)", () => {
 });
 
 describe("N-input lens: writable bwd with writeable parent that's itself a lens", () => {
-  it("fanin([num.scale(2)]) — write target writes through the scale lens", () => {
+  it("Num.lens([num.scale(2)]) — write target writes through the scale lens", () => {
     const n = num(0);
     const scaled = n.scale(2);
     const result = Num.lens(

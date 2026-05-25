@@ -18,8 +18,10 @@
 //     dictionary: `declare readonly _t: typeof Vec.traits`.
 //   - At runtime, `requireLinear` (and siblings) walks
 //     `s.constructor.traits.linear` once per animator setup.
-//     Equality is resolved to a per-instance `_equals` slot at
-//     construction so the write hot path stays a single field read.
+//
+// The engine itself (signal.ts) is trait-ignorant: it never reads
+// `traits.equals`. Subclasses thread their equality through
+// `super(v, { equals })` in their own constructor.
 
 // ─── Primitive trait shapes ──────────────────────────────────────────
 

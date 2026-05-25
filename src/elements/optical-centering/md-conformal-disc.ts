@@ -30,7 +30,6 @@ import {
   Diagram,
   handle,
   label,
-  lens,
   Mount,
   type Of,
   Vec,

@@ -275,7 +275,7 @@ describe(".lens() fusion", () => {
     expect((a as unknown as { subs: unknown }).subs).toBeUndefined();
   });
 
-  it("fusion preserves class identity (Num.through → Num)", () => {
+  it("fusion preserves class identity (Num.lens → Num)", () => {
     const a = num(0);
     const c = a
       .lens(
@@ -361,7 +361,7 @@ describe(".lens() fusion", () => {
   });
 
   it("idempotent projection through fusion (clamp ∘ clamp = clamp)", () => {
-    // .clamp uses .through internally; clamp twice should still be
+    // .clamp uses .lens internally; clamp twice should still be
     // PutGet-compliant.
     const a = num(0);
     const c = a.clamp(0, 10).clamp(2, 8);
@@ -387,7 +387,7 @@ describe(".lens() fusion", () => {
 // to floating-point tolerance after every step.
 //
 // The point is to catch a real bug if cyclic's `bwdStateless: true` lie
-// (cyclic uses .through which hardcodes stateless, but cyclic's bwd
+// (cyclic uses .lens which hardcodes stateless, but cyclic's bwd
 // reads `this.peek()`) causes any divergence when stacked with
 // Projection or Iso layers. Spoiler from code-trace analysis: it
 // doesn't — the captured `this` is the receiver cell, which stays

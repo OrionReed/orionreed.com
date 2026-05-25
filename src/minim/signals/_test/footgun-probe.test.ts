@@ -11,7 +11,7 @@ import { Signal } from "../signal";
 import { field } from "../writable";
 
 describe("footgun: field path on top of non-field stateful lens", () => {
-  it("lensTo (non-field bwd shape) then field: write must traverse lensTo's bwd", () => {
+  it("Cls.lens (non-field bwd shape) then field: write must traverse Cls.lens's bwd", () => {
     // The bwd of `Vec.lens(root, s => s.foo, (v, s) => ({ ...s, foo: v }))`
     // happens to be a field-set in shape, but Cls.lens doesn't tag it
     // with a `fieldKey`. The field-path optimisation MUST detect that

@@ -1,7 +1,6 @@
 import {
   Anchor,
   centroid,
-  computed,
   Diagram,
   easeInOut,
   label,

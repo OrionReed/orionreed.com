@@ -4,7 +4,7 @@
 // `centroid(...shapes).to(...)` instead.
 
 import { type Animator, drive, type Easing, type Yieldable } from "@minim/core";
-import { num, type Of, play, type Val, Vec } from "@minim/signals";
+import { num, type Of, type Val, Vec } from "@minim/signals";
 
 type VecValue = Of<Vec>;
 

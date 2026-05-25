@@ -9,7 +9,8 @@
 //   `each(source, body)` — body runs per element keyed by reference
 //                          identity; cleanup on removal.
 //   `when(source, body)` — body runs while truthy; cleanup on falsy.
-//   `param(v)`           — coalesce `T | Signal<T>` to `Signal<T>`.
+//   `param(v)`           — coalesce `T | Writable<Signal<T>>` to
+//                          `Writable<Signal<T>>`.
 
 import { effect, isSignal, type Read, type Signal, signal, type Writable } from "./signal";
 

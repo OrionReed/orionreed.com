@@ -4,9 +4,9 @@
 //   1. Parity:    .lens(f, g) vs hand-rolled Num.lens(...).
 //   2. Fusion:    N consecutive .lens()s vs N nested Num.lens(...).
 //                 Fused should win on read & write.
-//   3. Equivalence: .scale(k).add(off) (now uses .through internally),
-//                 vs hand-written `.through ∘ .through`, vs .affine —
-//                 should all converge since they share the path.
+//   3. Equivalence: .scale(k).add(off) (uses .lens internally), vs
+//                 hand-written `.lens ∘ .lens`, vs .affine — should all
+//                 converge since they share the path.
 
 import { describe, it } from "vitest";
 import { Num, num } from "../index";
@@ -114,7 +114,7 @@ describe("bench: .lens() fusion vs nested lenses", () => {
       },
     );
 
-    timed(".through fused (1 cell) read", () => {
+    timed(".lens fused (1 cell) read", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         a.value = i;
@@ -158,7 +158,7 @@ describe("bench: .lens() fusion vs nested lenses", () => {
       },
     );
 
-    timed(".through fused (1 cell) write", () => {
+    timed(".lens fused (1 cell) write", () => {
       for (let i = 0; i < N; i++) fused.value = i;
     });
     timed("Num.lens nested (2 cells) write", () => {
@@ -213,7 +213,7 @@ describe("bench: .lens() fusion vs nested lenses", () => {
       },
     );
 
-    timed(".through fused (1 cell) read (4-deep)", () => {
+    timed(".lens fused (1 cell) read (4-deep)", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         a.value = i;
@@ -277,7 +277,7 @@ describe("bench: .lens() fusion vs nested lenses", () => {
       },
     );
 
-    timed(".through fused (1 cell) write (4-deep)", () => {
+    timed(".lens fused (1 cell) write (4-deep)", () => {
       for (let i = 0; i < N; i++) fused.value = i;
     });
     timed("Num.lens nested (4 cells) write", () => {
@@ -286,13 +286,13 @@ describe("bench: .lens() fusion vs nested lenses", () => {
   });
 });
 
-describe("bench: eager-op equivalence (all ride on .through)", () => {
+describe("bench: eager-op equivalence (all ride on .lens)", () => {
   // After the rewrite, .add/.scale/.affine all call .lens() internally,
   // so .scale(k).add(off) auto-fuses to one lens cell — same path as a
-  // hand-written `.through ∘ .through`. These should produce ~identical
+  // hand-written `.lens ∘ .lens`. These should produce ~identical
   // numbers; if they diverge we've regressed.
 
-  it("scale.add chain == manual through.through == affine — read", () => {
+  it("scale.add chain == manual lens.lens == affine — read", () => {
     const a = num(0.5);
     const opsChain = a.scale(200).add(30);
 
@@ -318,7 +318,7 @@ describe("bench: eager-op equivalence (all ride on .through)", () => {
       }
       if (s < -1e30) throw new Error("");
     });
-    timed(".through ∘ .through manual fused read", () => {
+    timed(".lens ∘ .lens manual fused read", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         a2.value = i / N;
@@ -326,7 +326,7 @@ describe("bench: eager-op equivalence (all ride on .through)", () => {
       }
       if (s < -1e30) throw new Error("");
     });
-    timed(".affine(200, 30) read (single .through)", () => {
+    timed(".affine(200, 30) read (single .lens)", () => {
       let s = 0;
       for (let i = 0; i < N; i++) {
         a3.value = i / N;
@@ -336,7 +336,7 @@ describe("bench: eager-op equivalence (all ride on .through)", () => {
     });
   });
 
-  it("scale.add chain == manual through.through == affine — write", () => {
+  it("scale.add chain == manual lens.lens == affine — write", () => {
     const a = num(0.5);
     const opsChain = a.scale(200).add(30);
 
@@ -357,10 +357,10 @@ describe("bench: eager-op equivalence (all ride on .through)", () => {
     timed(".scale(200).add(30) write (auto-fused)", () => {
       for (let i = 0; i < N; i++) opsChain.value = 30 + i * 0.02;
     });
-    timed(".through ∘ .through manual fused write", () => {
+    timed(".lens ∘ .lens manual fused write", () => {
       for (let i = 0; i < N; i++) fused.value = 30 + i * 0.02;
     });
-    timed(".affine(200, 30) write (single .through)", () => {
+    timed(".affine(200, 30) write (single .lens)", () => {
       for (let i = 0; i < N; i++) affine.value = 30 + i * 0.02;
     });
   });

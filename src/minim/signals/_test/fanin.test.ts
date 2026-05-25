@@ -1,5 +1,5 @@
-// fanin.test.ts — N-input lens primitive (now via `Cls.lens([...], ...)`
-// and `Cls.derive([...], ...)`; the `fanin` export is gone).
+// fanin.test.ts — N-input lens via `Cls.lens([...], ...)` and
+// `Cls.derive([...], ...)`.
 
 import { describe, expect, it } from "vitest";
 import { effect, Num, num, Vec, vec } from "../index";

@@ -1,11 +1,12 @@
 // fusion-generalised.bench.test.ts — perf for the generalised fusion
-// across `lensTo`, `deriveTo`, and the `field()` helper.
+// across `Cls.lens(parent, …)`, `Cls.derive(parent, …)`, and the
+// `field()` helper.
 //
 // Compares:
-//   1. deriveTo chains — fused (one cell onto root) vs hand-nested
+//   1. Cls.derive chains — fused (one cell onto root) vs hand-nested
 //      (N cells via Signal.install).
-//   2. lensTo chains   — same, writable.
-//   3. field() chains  — transform.translate.x via fused field() vs
+//   2. Cls.lens chains   — same, writable.
+//   3. field() chains    — transform.translate.x via fused field() vs
 //      a manually-installed equivalent chain.
 //
 // All bench cases construct the comparator (un-fused) via direct

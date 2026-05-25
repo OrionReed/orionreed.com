@@ -1,7 +1,7 @@
 // box.ts — reactive axis-aligned rectangle.
 //
-// Invertibles (`add`, `sub`, `scale`, `expand`) return `: this` and
-// ride on `Signal#through(fwd, bwd)`. Chained calls auto-fuse.
+// Invertibles (`add`, `sub`, `scale`, `expand`) return `: this` and ride
+// on `Signal#lens(fwd, bwd)`. Chained calls auto-fuse.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";

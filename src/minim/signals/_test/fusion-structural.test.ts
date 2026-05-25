@@ -1,8 +1,8 @@
 // fusion-structural.test.ts — structural witnesses for fusion.
 //
 // The functional tests in fusion-generalised.test.ts probe individual
-// fusion cases ("does deriveTo ∘ deriveTo collapse?", "does field
-// chain fuse?"). These tests assert a tighter invariant:
+// fusion cases ("does `Cls.derive` ∘ `Cls.derive` collapse?", "does
+// field chain fuse?"). These tests assert a tighter invariant:
 //
 //   For any fused chain a → b → c → … → leaf, when an effect
 //   subscribes to `leaf.value`, the only cells with non-empty `.subs`
@@ -16,7 +16,7 @@
 // available without modifying the engine.
 
 import { describe, expect, it } from "vitest";
-import { box, effect, Num, num, rgb, type Signal, transform, Vec, vec } from "../index";
+import { box, effect, Num, num, type Signal, transform, Vec } from "../index";
 
 // Does `s` have a non-empty `.subs` linked list?
 const hasSubscribers = (s: unknown): boolean => (s as { subs?: unknown }).subs !== undefined;
@@ -70,7 +70,7 @@ describe("structural: only root + effect-subscribed leaves carry subs", () => {
     expect(hasSubscribers(leaf)).toBe(false);
   });
 
-  it("3-deep deriveTo chain: only root + leaf have subs under effect", () => {
+  it("3-deep Cls.derive chain: only root + leaf have subs under effect", () => {
     const a = num(0);
     const l1 = Num.derive(a, v => v + 1);
     const l2 = Num.derive(l1, v => v * 2);
@@ -110,7 +110,7 @@ describe("structural: only root + effect-subscribed leaves carry subs", () => {
     expect(hasSubscribers(tr)).toBe(false);
   });
 
-  it("4-deep deriveTo chain with mixed types (Num→Vec→Num→Vec): only root has subs", () => {
+  it("4-deep Cls.derive chain with mixed types (Num→Vec→Num→Vec): only root has subs", () => {
     const a = num(2);
     const l1 = Vec.derive(a, n => ({ x: n, y: n * 2 }));
     const l2 = Num.derive(l1, v => v.x + v.y);
@@ -229,7 +229,7 @@ describe("structural: stateful-flag propagation (arity-inferred)", () => {
     expect(stateful(scaled as unknown as Signal<unknown>)).toBe(true);
   });
 
-  it("deriveTo chain inherits prior's stateful flag (here: false)", () => {
+  it("Cls.derive chain inherits prior's stateful flag (here: false)", () => {
     const a = num(0);
     const ro = Num.derive(a, v => v * 2);
     expect(stateful(ro)).toBe(false);

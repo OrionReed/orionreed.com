@@ -17,7 +17,6 @@ import {
   timeline,
   Vec,
   vec,
-  when,
 } from "../../minim";
 
 /** Italic letter with optional italic subscript. */

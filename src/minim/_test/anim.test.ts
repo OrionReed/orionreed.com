@@ -2,7 +2,7 @@
 // re-entrancy / sync-resolve / error-isolation guarantees, and the
 // drive() integration. One file because there's one engine.
 
-import { Anim, type Animator, detach, drive, suspend } from "@minim/core";
+import { Anim, detach, drive, suspend } from "@minim/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 describe("yield contract", () => {

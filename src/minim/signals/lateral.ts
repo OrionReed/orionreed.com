@@ -1,7 +1,5 @@
 // lateral.ts — `bind(target, source)` drives target from a `Val<T>`
-// for the source's lifetime. Slated for absorption into the unified
-// construction story once the Signal-is-Lens engine collapse lands;
-// until then it lives here.
+// for the source's lifetime.
 
 import { effect, Signal, type Val, value, type WritableOf } from "./signal";
 

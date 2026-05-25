@@ -13,7 +13,6 @@ import {
   type Signal,
   signal,
   snapshot,
-  when,
 } from "../minim";
 import { grey, ink, stroke } from "./color";
 import * as R from "./rand";

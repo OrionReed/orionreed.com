@@ -3,7 +3,7 @@
 // and other "this looks too fast, something must be wrong" probes.
 
 import { describe, expect, it } from "vitest";
-import { batch, computed, effect, Num, num, signal, transform, vec } from "../index";
+import { batch, computed, effect, Num, num, signal, transform } from "../index";
 import { relate } from "../relate";
 import { Signal } from "../signal";
 import { field } from "../writable";
@@ -36,9 +36,9 @@ describe("stress: many writes in sequence", () => {
 });
 
 describe("stress: deep nesting through field paths", () => {
-  it("3-deep nested struct via lensTo + field works", () => {
-    // a → b → c. Two intermediate lensTo layers (stateful non-field,
-    // since lensTo doesn't pass fieldKey), then field on top. Tests
+  it("3-deep nested struct via Cls.lens + field works", () => {
+    // a → b → c. Two intermediate Cls.lens layers (stateful non-field,
+    // since Cls.lens doesn't pass fieldKey), then field on top. Tests
     // the bug-fix case: field on top of non-field-stateful prior.
     // Use Vec for the inner cells (the actual value classes the
     // engine deals with) instead of a generic `Signal<S>` that the

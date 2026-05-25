@@ -12,7 +12,6 @@ import {
   Num,
   num,
   play,
-  signal,
   spring,
   type Val,
   Vec,
@@ -32,7 +31,6 @@ const drift = (sig: Writable<Num>, v: Val<number>) =>
 
 const sine = (t: number, f: number) => Math.sin(2 * Math.PI * f * t);
 const triangle = (t: number, f: number) => 1 - 4 * Math.abs(((t * f) % 1) - 0.5);
-const sawtooth = (t: number, f: number) => 2 * ((t * f) % 1) - 1;
 
 /** `drift` with walls: flips velocity at bounds. */
 function bounceFlip(x: Writable<Num>, v: Writable<Num>, lo: number, hi: number) {

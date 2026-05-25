@@ -1,7 +1,7 @@
 // network-utils.test.ts — `each`, `when`, `param`.
 
 import { describe, expect, it } from "vitest";
-import { each, param, type Signal, signal } from "../index";
+import { each, param, signal } from "../index";
 import { when as whenLifecycle } from "../network-utils";
 
 describe("each — reactive collection lifecycle", () => {

@@ -8,7 +8,6 @@ import {
   batch,
   computed,
   effect,
-  isSignal,
   lens,
   type Network,
   Signal,

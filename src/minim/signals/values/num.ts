@@ -1,9 +1,9 @@
 // num.ts — reactive scalar.
 //
 // All invertible methods (`add`, `sub`, `scale`, `affine`, `clamp`,
-// `quantize`, `cyclic`) ride on the base `Signal#through(fwd, bwd)`
-// primitive and return `: this` so chains preserve writability of
-// the receiver. Chained calls auto-fuse to a single lens cell.
+// `quantize`, `cyclic`) ride on the base `Signal#lens(fwd, bwd)` primitive
+// and return `: this` so chains preserve writability of the receiver.
+// Chained calls auto-fuse to a single lens cell.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";

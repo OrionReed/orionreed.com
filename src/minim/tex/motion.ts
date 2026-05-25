@@ -2,7 +2,7 @@
 
 import { type Animator, type Easing, easeInOut, easeOut } from "@minim/core";
 import { Shape } from "@minim/shapes";
-import { box, effect, num, signal } from "@minim/signals";
+import { effect, num } from "@minim/signals";
 import { Part, type PartMarker } from "./parts";
 import type { TexShape } from "./tex";
 

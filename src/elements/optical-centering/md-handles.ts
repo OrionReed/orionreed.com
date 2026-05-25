@@ -1,4 +1,4 @@
-import { Anchor, circle, Diagram, debug, handle, label, line, Mount, rect } from "../../minim";
+import { Anchor, circle, Diagram, debug, handle, label, Mount, rect } from "../../minim";
 
 export class MdHandles extends Diagram {
   protected scene(s: Mount): void {

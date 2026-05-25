@@ -35,8 +35,6 @@ import {
   range,
   rect,
   rgb,
-  secondsFromText,
-  signal,
   textFromSeconds,
   vec,
   type Writable,

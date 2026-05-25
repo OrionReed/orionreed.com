@@ -2,7 +2,6 @@
 
 import { describe, expect, it } from "vitest";
 import { Num, Signal, signal } from "../index";
-import { field } from "../writable";
 
 describe("footgun: deep field paths (4+)", () => {
   it("4-deep field chain hits the loop fallback in makeFieldGetter/Setter", () => {

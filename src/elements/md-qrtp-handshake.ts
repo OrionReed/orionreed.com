@@ -13,7 +13,6 @@ import {
   split,
   t,
   vec,
-  when,
 } from "../minim";
 
 import * as R from "./rand";

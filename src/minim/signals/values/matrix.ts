@@ -5,7 +5,7 @@
 // doesn't decompose, so `spring`/`tween`/`mean` etc. reject Matrix at
 // compile time (no linear/lerp/metric).
 //
-// Two clearly-invertible ops, both `: this` via `Signal#through`:
+// Two clearly-invertible ops, both `: this` via `Signal#lens`:
 //   - `multiply(b)` — inverse is multiply by `invert(b)`
 //   - `invert()`    — its own inverse
 

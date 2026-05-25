@@ -281,7 +281,7 @@ function isValidLink(checkLink: Link, sub: ReactiveNode): boolean {
 }
 
 // Re-entrancy guard: effects that write to signals during their run
-// trigger nested flush() via `Signal.set value`. The outer loop here
+// trigger nested flush() via the `value` setter. The outer loop here
 // is designed to drain the queue including entries appended mid-run,
 // so the recursive call is redundant — and at scale (hundreds of
 // cascading bind-effects on field lenses) it blows V8's stack.
@@ -680,14 +680,10 @@ export class Signal<T = unknown> implements ReactiveNode {
 
   /** Read-only typed view. Three call shapes:
    *
-   *    Cls.derive(parent, fn)        — 1-input. Goes through `_fuse`,
-   *                                    inherits fusion + field-path
-   *                                    fast paths.
-   *    Cls.derive(parents, fn)       — N-input. Aggregates over an
-   *                                    array of signals (subsumes the
-   *                                    old `fanin(Cls, parents, fn)`).
-   *    Cls.derive(fn)                — closure-style. Deps captured
-   *                                    by reading inside `fn`.
+   *    Cls.derive(parent, fn)    — 1-input. Goes through `_fuse`,
+   *                                inherits fusion + field-path fast paths.
+   *    Cls.derive(parents, fn)   — N-input. Aggregates over an array.
+   *    Cls.derive(fn)            — closure-style; deps captured inside `fn`.
    *
    *  Polymorphic-`this` static: `Vec.derive(...)` → `Vec`, etc. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
@@ -719,23 +715,18 @@ export class Signal<T = unknown> implements ReactiveNode {
       return Signal.install(this, args[0]);
     }
     const [parent, fn] = args;
-    if (Array.isArray(parent)) {
-      // N-input: delegate to `fanin` (engine-internal helper).
-      return _fanin(this, parent, fn);
-    }
-    // 1-input: fuse with parent's chain.
+    if (Array.isArray(parent)) return _fanin(this, parent, fn);
     return Signal._fuse(parent, this, fn);
   }
 
   /** Read-write typed lens. Three call shapes:
    *
-   *    Cls.lens(parent, fwd, bwd)     — 1-input. Goes through `_fuse`.
-   *    Cls.lens(parents, fwd, bwd)    — N-input (subsumes `fanin` RW).
-   *    Cls.lens(g, s)                 — closure-style getter/setter.
+   *    Cls.lens(parent, fwd, bwd)    — 1-input. Goes through `_fuse`.
+   *    Cls.lens(parents, fwd, bwd)   — N-input.
+   *    Cls.lens(g, s)                — closure-style getter/setter.
    *
-   *  bwd is typed `(target, v) => P`; engine arity-detects
-   *  statefulness via `bwd.length`. Polymorphic-`this`: `Vec.lens(...)`
-   *  returns `Writable<Vec>`. */
+   *  `bwd` is typed `(target, v) => P`; engine arity-detects statefulness
+   *  via `bwd.length`. Polymorphic-`this`: `Vec.lens(...)` → `Writable<Vec>`. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static lens<C extends new (...args: never[]) => Signal<any>, P>(
     this: C,
@@ -766,11 +757,7 @@ export class Signal<T = unknown> implements ReactiveNode {
       return Signal.install(this, args[0], args[1]);
     }
     const [parent, fwd, bwd] = args;
-    if (Array.isArray(parent)) {
-      // N-input: delegate to `fanin`.
-      return _fanin(this, parent, fwd, bwd);
-    }
-    // 1-input: fuse with parent's chain.
+    if (Array.isArray(parent)) return _fanin(this, parent, fwd, bwd);
     return Signal._fuse(parent, this, fwd, bwd);
   }
 
@@ -1534,14 +1521,11 @@ export function lens(parent: any, fwd: any, bwd: any): any {
   return Signal._fuse(parent, Signal as new (...args: never[]) => Signal<unknown>, fwd, bwd);
 }
 
-// ─── _fanin: private N-input lens helper ─────────────────────────
+// ─── _fanin: N-input lens helper ────────────────────────────────────
 //
-// Engine-internal helper used by `Cls.lens([...], ...)` / `Cls.derive([...], ...)`
-// and the top-level `lens([...], ...)` / `derive([...], ...)`. Pre-allocated
-// scratch buffer + arity-based bwd dispatch. Public API is the named
-// surfaces; this function is not re-exported.
-//
-// Subsumes the public `fanin` that used to live in `./fanin`.
+// Used by `Cls.lens([...], ...)` / `Cls.derive([...], ...)` and the
+// top-level `lens([...], ...)` / `derive([...], ...)`. Pre-allocated
+// scratch buffer + arity-based bwd dispatch. Engine-internal.
 
 /** N-input lens: read aggregate via `fwd(vals)`, write distributes
  *  via `bwd(target, vals?)`. Allocation: one scratch `vals` array

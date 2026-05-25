@@ -6,7 +6,7 @@
 // view space they actually preserve.
 
 import { describe, it } from "vitest";
-import { Box, box, Color, Num, num, rgb, Vec, vec } from "../index";
+import { box, Num, num, rgb, Vec, vec } from "../index";
 import { approxNumber, approxVec, verifyLensLaws, verifyLensLawsLossy } from "./_laws";
 
 const EPS = 1e-9;

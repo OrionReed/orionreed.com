@@ -1,8 +1,6 @@
 import {
   Anchor,
-  Box,
   box,
-  Color,
   circle,
   computed,
   Diagram,
@@ -19,7 +17,6 @@ import {
   type Tween,
   tween,
   type Val,
-  Vec,
   vec,
 } from "../../minim";
 

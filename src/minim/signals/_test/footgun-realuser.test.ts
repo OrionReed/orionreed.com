@@ -5,7 +5,7 @@
 // verify each pattern works correctly under the new design.
 
 import { describe, expect, it } from "vitest";
-import { batch, computed, effect, Num, num, Signal, signal, Vec, vec } from "../index";
+import { batch, effect, Num, num, Signal, signal, Vec, vec } from "../index";
 import { relate } from "../relate";
 
 describe("real-user pattern: live unit conversion (Celsius ↔ Fahrenheit)", () => {

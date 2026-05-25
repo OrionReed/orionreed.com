@@ -3,7 +3,6 @@
 import { describe, expect, it } from "vitest";
 import {
   computed,
-  Num,
   num,
   type Traits,
   Vec,

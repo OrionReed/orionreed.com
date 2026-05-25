@@ -3,7 +3,6 @@ import {
   argminVec,
   circle,
   clampToDisc,
-  computed,
   Diagram,
   drag,
   label,

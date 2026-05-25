@@ -1,5 +1,5 @@
-// anim.ts — animator primitives over `WritableOf<T>` + nominal trait
-// constraints, plus the broader signals↔generators bridge.
+// anim.ts — animator primitives over `Animatable<T, K>` (writable +
+// nominal trait constraint), plus the broader signals↔generators bridge.
 //
 // All animator signatures read as a sentence:
 //   "spring takes a writable carrying T that has linear+metric."
@@ -7,8 +7,6 @@
 //   - `spring(box, …)` — Box doesn't declare `metric` trait.
 //   - `spring(roVec, …)` — bare RO Vec doesn't carry `WritableBrand`.
 //   - `spring(num(0), …)` — works (num() returns Writable<Num>).
-//
-// Math is verbatim from prod's lerp.ts.
 
 import {
   type Animator,
@@ -37,10 +35,7 @@ const defaultEase = easeOut;
 /** Animator-style constraint: a writable reactive carrying `T` whose
  *  class declares the listed traits. Reads as a sentence:
  *
- *      function spring<T>(s: Animatable<T, "linear" | "metric">, …)
- *
- *  The two axes — writability (`WritableOf<T>`) and trait presence
- *  (`Traits<T, K>`) — are intersected here so call sites stay short. */
+ *      function spring<T>(s: Animatable<T, "linear" | "metric">, …) */
 export type Animatable<T, K extends TraitKey = never> = WritableOf<T> & Traits<T, K>;
 
 // ─── Tween chainable builder ────────────────────────────────────────
@@ -99,7 +94,7 @@ export class Tween<T> implements Animator<void> {
 // ─── tween ──────────────────────────────────────────────────────────
 
 /** Append-only tween segment over a writable reactive target. */
-export function* tweenStep<T>(
+function* tweenStep<T>(
   sig: Animatable<T, "lerp">,
   target: T,
   dur: Val<number>,
@@ -277,7 +272,7 @@ export function* driven<T>(
 // `Read<unknown>` (covariant) accepts any Signal<T> / value-class signal;
 // `Signal<unknown>` doesn't (invariant in T). `playableGen` narrows back
 // to Signal at runtime.
-export type PlayTrigger = Yieldable | Read<unknown>;
+type PlayTrigger = Yieldable | Read<unknown>;
 
 export interface Play<R = void> extends Animator<R> {
   /** End when `p` fires (truthy signal / animator completion / sleep). */

@@ -1,6 +1,6 @@
-// fusion-generalised.test.ts — fusion across the generalised primitives:
-// `lensTo` (cross-type writable), `deriveTo` (cross-type RO), and the
-// `field()`/`derived()` helpers built on them.
+// fusion-generalised.test.ts — fusion across `Cls.lens(parent, …)` /
+// `Cls.derive(parent, …)` (cross-type) and the `field()` / `derived()`
+// helpers built on them.
 //
 // The original `.lens()` fusion only collapsed endo chains (T → T).
 // After generalisation, any receiver-anchored chain of value-space
@@ -9,7 +9,6 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  Box,
   box,
   Color,
   effect,
@@ -17,7 +16,6 @@ import {
   num,
   rgb,
   Signal,
-  Transform,
   transform,
   Vec,
   vec,
@@ -31,8 +29,8 @@ const subs = (s: any) => (s as { subs: unknown }).subs;
 const fusedParent = (s: any): Signal<unknown> | undefined =>
   (s as { _fusedOf?: { parent: Signal<unknown> } })._fusedOf?.parent;
 
-describe("deriveTo chains (RO fusion)", () => {
-  it("deriveTo ∘ deriveTo fuses to a single computed onto root", () => {
+describe("Cls.derive chains (RO fusion)", () => {
+  it("Cls.derive ∘ Cls.derive fuses to a single computed onto root", () => {
     const a = num(3);
     const b = Num.derive(a, v => v * 2);
     const c = Num.derive(b, v => v + 10);
@@ -48,7 +46,7 @@ describe("deriveTo chains (RO fusion)", () => {
     expect(c.value).toBe(20);
   });
 
-  it("derive chain across different classes (Num → Vec via deriveTo)", () => {
+  it("derive chain across different classes (Num → Vec via Cls.derive)", () => {
     const a = num(3);
     const v = Vec.derive(a, n => ({ x: n, y: n * 2 }));
     const mag = Num.derive(v, p => Math.hypot(p.x, p.y));
@@ -90,8 +88,8 @@ describe("Cls.lens chains (cross-type writable fusion)", () => {
       s => s.a.b,
       (n, s) => ({ ...s, a: { ...s.a, b: n } }),
     );
-    // Two-deep via a generic intermediate (lensTo to a.b is one step;
-    // simulate "deeper" by then through-fusing on the Num).
+    // Two-deep via a generic intermediate (`Num.lens` to a.b is one
+    // step; simulate "deeper" by then through-fusing on the Num).
     // Cast: the chained lens type drops the Writable brand even though
     // runtime is writable; tests use raw value assignment.
     const offset = inner.lens(
@@ -131,7 +129,7 @@ describe("Cls.lens chains (cross-type writable fusion)", () => {
 
   it("field chain box.center is NOT writable but its component .x is also RO", () => {
     // box.center is `lazy(this, "center", () => this.at(0.5, 0.5))` which
-    // uses deriveTo → RO. So box.center.x must also be RO (fused-RO chain).
+    // uses Cls.derive → RO. So box.center.x must also be RO (fused-RO chain).
     const b = box(0, 0, 10, 20);
     const cx = b.center.x;
     expect(cx.value).toBe(5); // 0 + 0.5 * 10
@@ -173,8 +171,8 @@ describe("mixed-flavour fusion (lens ∘ Cls.lens, Cls.lens ∘ Cls.derive, …)
     expect(fused.value).toBe(115);
   });
 
-  it("deriveTo then lensTo: writable view on top of RO chain throws at construction", () => {
-    // The chain upstream has no bwd (deriveTo is RO), so we can't
+  it("Cls.derive then Cls.lens: writable view on top of RO chain throws at construction", () => {
+    // The chain upstream has no bwd (Cls.derive is RO), so we can't
     // compose a writable bwd through it. TS rejects this at the type
     // level (Cls.derive returns bare RO `Num`); the runtime check is
     // a defense against escape-hatch casts. Error fires at the
@@ -202,7 +200,7 @@ describe("mixed-flavour fusion (lens ∘ Cls.lens, Cls.lens ∘ Cls.derive, …)
 });
 
 describe("equality propagation across generalised fusion", () => {
-  it("non-injective deriveTo collapses duplicate root writes to one fire", () => {
+  it("non-injective Cls.derive collapses duplicate root writes to one fire", () => {
     const a = num(0);
     // sin: sin(0) = sin(π).
     const c = Num.derive(a, v => Math.round(Math.sin(v * Math.PI) * 1e9) / 1e9);
@@ -319,7 +317,7 @@ describe("non-fusion barriers (semantics preserved)", () => {
     expect(y.value).toBe(20);
   });
 
-  it("manual Cls.lens(g, s) doesn't tag, so .lensTo on it doesn't fuse", () => {
+  it("manual Cls.lens(g, s) doesn't tag, so Cls.lens on it doesn't fuse", () => {
     const a = num(0);
     const manual = Num.lens(
       () => a.value * 2,
@@ -327,7 +325,7 @@ describe("non-fusion barriers (semantics preserved)", () => {
         a.value = v / 2;
       },
     );
-    // .deriveTo on manual: receiver has no _fusedOf, so parent = manual.
+    // Cls.derive on manual: receiver has no _fusedOf, so parent = manual.
     const c = Num.derive(manual, v => v + 1);
     expect(fusedParent(c)).toBe(manual);
     expect(c.value).toBe(1); // 0*2 + 1
@@ -335,7 +333,7 @@ describe("non-fusion barriers (semantics preserved)", () => {
 });
 
 describe("regression: original endo through still works", () => {
-  it("2-deep .through still fuses to one cell (regression)", () => {
+  it("2-deep .lens still fuses to one cell (regression)", () => {
     const a = num(3);
     const c = a
       .lens(

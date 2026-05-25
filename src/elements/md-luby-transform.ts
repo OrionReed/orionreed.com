@@ -13,11 +13,9 @@ import {
   Mount,
   num,
   rect,
-  signal,
   t,
   vec,
   viewport,
-  when,
 } from "../minim";
 import * as R from "./rand";
 

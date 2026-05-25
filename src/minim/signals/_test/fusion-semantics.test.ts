@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { effect, Num, num, Signal, transform, Vec, vec } from "../index";
 
 describe("intermediate-cell equality filter is bypassed under fusion", () => {
-  // Setup: a → b (via deriveTo with non-injective fwd) → c
+  // Setup: a → b (via Cls.derive with non-injective fwd) → c
   // Today's un-fused engine would: read c.value triggers b.update which
   // checks equality and may stop propagation if b's output didn't change.
   // Under fusion: c reads composedFwd(a.value) directly; b is never
@@ -177,7 +177,7 @@ describe("writable-on-RO chain throws eagerly at construction", () => {
   });
 
   it("field() on RO receiver smart-dispatches to a RO computed", () => {
-    // box.center is RO (built via deriveTo). box.center.x must work
+    // box.center is RO (built via Cls.derive). box.center.x must work
     // as a read-only Num view — without this smart-dispatch, field()
     // would hit the construction-time check and break the pattern.
     // This is the test that motivated the smart-dispatch design.

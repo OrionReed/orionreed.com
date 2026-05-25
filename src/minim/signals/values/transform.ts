@@ -1,10 +1,10 @@
 // transform.ts — reactive 2D transform.
 //
 // Invertibles (`add`, `sub`) return `: this` and ride on
-// `Signal#through(fwd, bwd)`. Chained calls auto-fuse. Field-lens
-// getters use `field()`; `Transform.translate.x.value = 5` works on
-// writable receivers because writability propagates through nested
-// chains via the conditional return.
+// `Signal#lens(fwd, bwd)`. Chained calls auto-fuse. Field-lens getters
+// use `field()`; `Transform.translate.x.value = 5` works on writable
+// receivers because writability propagates through nested chains via
+// the conditional return.
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";

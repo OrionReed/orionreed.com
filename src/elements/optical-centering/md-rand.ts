@@ -87,7 +87,7 @@ const MOVES: Move[] = [
 
 export class MdRand extends Diagram {
   protected scene(s: Mount): void {
-    const view = this.view(600, 280);
+    this.view(600, 280);
 
     const current = signal<Pick | null>(null);
     const currentName = computed<Content>(() => current.value?.name ?? "—");

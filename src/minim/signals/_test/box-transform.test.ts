@@ -7,7 +7,6 @@ import {
   effect,
   isComputed,
   isLens,
-  Num,
   num,
   Transform,
   transform,

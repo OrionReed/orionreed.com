@@ -10,7 +10,6 @@ import {
   num,
   polar,
   tangentPoint,
-  Vec,
   vec,
 } from "../index";
 
