@@ -4,9 +4,9 @@
 // `a` propagate to `b` as `fwd(a)`, and writes to `b` propagate to
 // `a` as `bwd(b)`. Either side can be the driver.
 //
-// Implemented as two `settle` nodes (one per direction). Each
-// settle's body self-excludes its own writes, so the writer side
-// doesn't re-fire itself. The OTHER settle observes the write and
+// Implemented as two `network` nodes (one per direction). Each
+// network's body self-excludes its own writes, so the writer side
+// doesn't re-fire itself. The OTHER network observes the write and
 // fires (as a separate node) for the reverse roundtrip — this gives
 // fixpoint semantics for lossy contractive pairs (`bwd ∘ fwd ≠ id`)
 // while terminating via the engine's `===` short-circuit when the
@@ -20,7 +20,7 @@
 //     indefinitely. Same caveat as before — the runtime can't paper
 //     over genuine non-convergence without an iteration budget.
 
-import { type Signal, settle } from "./signal";
+import { type Signal, network } from "./signal";
 import { type Writable } from "./writable";
 
 /** Handle returned by `relate` — disposable bidirectional binding. */
@@ -36,14 +36,14 @@ export function relate<A, B>(
   fwd: (a: A) => B,
   bwd: (b: B) => A,
 ): RelateHandle {
-  // Forward-only and backward-only settlers. The fwd settler reads a,
-  // writes b; the bwd settler reads b, writes a. Each self-excludes
-  // (settle's auto-self-exclusion); the other observes and ping-pongs
+  // Forward-only and backward-only networks. The fwd network reads a,
+  // writes b; the bwd network reads b, writes a. Each self-excludes
+  // (network's auto-self-exclusion); the other observes and ping-pongs
   // until `===` short-circuits.
-  const fwdHandle = settle(_dirty => {
+  const fwdHandle = network(_dirty => {
     b.value = fwd(a.value);
   });
-  const bwdHandle = settle(_dirty => {
+  const bwdHandle = network(_dirty => {
     a.value = bwd(b.value);
   });
   return {

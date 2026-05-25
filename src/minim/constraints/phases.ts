@@ -28,8 +28,8 @@ interface Binding {
 }
 
 /** Read each bound signal into the solver's `positions` buffer.
- *  When called from inside a settle body, `.value` reads subscribe
- *  the settler — that's what makes the reactive driver react. */
+ *  When called from inside a network body, `.value` reads subscribe
+ *  the network — that's what makes the reactive driver react. */
 export const snapshot: Phase = c => {
   const solver = c.solver;
   // biome-ignore lint/suspicious/noExplicitAny: heterogeneous binding registry
@@ -56,7 +56,7 @@ export const solve: Phase = (c, dt) => {
 };
 
 /** Write solved positions back into bound signals. The auto-self-
- *  exclusion of the running settle keeps these writes from re-firing
+ *  exclusion of the running network keeps these writes from re-firing
  *  the body; the auto-batch keeps them atomic for downstream observers. */
 export const writeback: Phase = c => {
   const solver = c.solver;

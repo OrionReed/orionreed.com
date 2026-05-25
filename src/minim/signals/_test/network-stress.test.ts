@@ -1,4 +1,4 @@
-// settle-stress.test.ts — adversarial probes on the `settle` primitive.
+// network-stress.test.ts — adversarial probes on the `network` primitive.
 //
 // Goal: establish the foundational guarantees by trying to break them.
 // Each section names a guarantee and tests it with the worst inputs.
@@ -10,9 +10,9 @@ import {
   effect,
   isSignal,
   lens,
-  type Settle,
+  type Network,
   Signal,
-  settle,
+  network,
   signal,
 } from "../index";
 
@@ -20,18 +20,18 @@ import {
 //
 // Guarantee: a thrown body leaves the framework in a usable state.
 // Disposal still works, the engine doesn't lock up, no internal
-// activeSub leak, no "ghost-active" settler.
+// activeSub leak, no "ghost-active" network.
 
 describe("stress: errors during body", () => {
   it("throwing on initial run does not lock the engine", () => {
     expect(() => {
-      settle(() => {
+      network(() => {
         throw new Error("initial boom");
       });
     }).toThrow("initial boom");
     // Engine should still work after.
     const a = signal(0);
-    const handle = settle(() => {
+    const handle = network(() => {
       a.value;
     });
     a.value = 1;
@@ -41,14 +41,14 @@ describe("stress: errors during body", () => {
   it("throwing inside body restores activeSub on the way out", () => {
     let observedActive: unknown = "not-set";
     expect(() => {
-      settle(() => {
+      network(() => {
         // Anchor: read a fresh signal during the body to set activeSub.
         signal(0).value;
         throw new Error("mid-body boom");
       });
     }).toThrow();
     // After the throw, a normal effect should run with activeSub === itself,
-    // not the dead settler. We probe by capturing what the effect sees.
+    // not the dead network. We probe by capturing what the effect sees.
     const stop = effect(() => {
       observedActive = "ok";
     });
@@ -56,10 +56,10 @@ describe("stress: errors during body", () => {
     stop();
   });
 
-  it("throwing on subsequent run keeps the settler subscribable", () => {
+  it("throwing on subsequent run keeps the network subscribable", () => {
     const a = signal(0);
     let runs = 0;
-    const handle = settle(() => {
+    const handle = network(() => {
       const v = a.value;
       runs++;
       if (v === 99) throw new Error("specific boom");
@@ -79,13 +79,13 @@ describe("stress: errors during body", () => {
   });
 
   it("body that throws during initial run still leaves a disposable handle", () => {
-    let handle: Settle | undefined;
+    let handle: Network | undefined;
     expect(() => {
-      handle = settle(() => {
+      handle = network(() => {
         throw new Error("boom");
       });
     }).toThrow();
-    // settle() threw, so `handle` was never assigned. Document the
+    // network() threw, so `handle` was never assigned. Document the
     // contract: throwing in initial body does NOT return a handle.
     expect(handle).toBeUndefined();
   });
@@ -99,7 +99,7 @@ describe("stress: errors during body", () => {
 describe("stress: disposal edges", () => {
   it("repeated dispose is idempotent", () => {
     const a = signal(0);
-    const handle = settle(() => {
+    const handle = network(() => {
       a.value;
     });
     handle.dispose();
@@ -110,7 +110,7 @@ describe("stress: disposal edges", () => {
   it("flush after dispose is silent (no body fire)", () => {
     const a = signal(0);
     let runs = 0;
-    const handle = settle(() => {
+    const handle = network(() => {
       a.value;
       runs++;
     });
@@ -118,14 +118,14 @@ describe("stress: disposal edges", () => {
     handle.dispose();
     handle.flush();
     handle.flush();
-    // Body should not fire — settler is unsubscribed and lastValues cleared.
+    // Body should not fire — network is unsubscribed and lastValues cleared.
     expect(runs).toBe(1);
   });
 
   it("dep change after dispose does not fire body", () => {
     const a = signal(0);
     let runs = 0;
-    const handle = settle(() => {
+    const handle = network(() => {
       a.value;
       runs++;
     });
@@ -139,8 +139,8 @@ describe("stress: disposal edges", () => {
   it("dispose during body run cleans up correctly", () => {
     const a = signal(0);
     let runs = 0;
-    let handleRef: Settle | undefined;
-    const handle = settle(() => {
+    let handleRef: Network | undefined;
+    const handle = network(() => {
       a.value;
       runs++;
       if (runs === 2 && handleRef) handleRef.dispose(); // self-dispose mid-body
@@ -156,22 +156,22 @@ describe("stress: disposal edges", () => {
 
 // ─── 3. Re-entrancy and nesting ────────────────────────────────────
 //
-// Guarantee: settles compose. A settle body can construct other
-// settles, call .flush() on others, etc., without corruption.
+// Guarantee: networks compose. A network body can construct other
+// networks, call .flush() on others, etc., without corruption.
 
 describe("stress: re-entrancy and nesting", () => {
-  it("settle inside settle body — both work", () => {
+  it("network inside network body — both work", () => {
     const a = signal(1);
     const b = signal(2);
     let outerRuns = 0;
     let innerRuns = 0;
     const inner = signal(0);
-    const outer = settle(() => {
+    const outer = network(() => {
       a.value;
       outerRuns++;
-      // Construct inner settle once on outer's first run.
+      // Construct inner network once on outer's first run.
       if (outerRuns === 1) {
-        settle(() => {
+        network(() => {
           b.value;
           innerRuns++;
           inner.value = b.value * 10;
@@ -184,21 +184,21 @@ describe("stress: re-entrancy and nesting", () => {
 
     a.value = 99;
     expect(outerRuns).toBe(2);
-    // Inner settle still alive (we didn't dispose it).
+    // Inner network still alive (we didn't dispose it).
     b.value = 5;
     expect(innerRuns).toBe(2);
     expect(inner.value).toBe(50);
     outer.dispose();
   });
 
-  it("settle body that calls another settler's flush", () => {
+  it("network body that calls another network's flush", () => {
     let aRuns = 0;
     let bRuns = 0;
-    let bHandle: Settle | undefined;
-    const a = settle(() => {
+    let bHandle: Network | undefined;
+    const a = network(() => {
       aRuns++;
       if (aRuns === 1) {
-        bHandle = settle(() => {
+        bHandle = network(() => {
           bRuns++;
         });
       }
@@ -213,26 +213,26 @@ describe("stress: re-entrancy and nesting", () => {
     bHandle?.dispose();
   });
 
-  it("settle body that constructs a settle that writes to outer's deps — outer does NOT auto re-fire", () => {
+  it("network body that constructs a network that writes to outer's deps — outer does NOT auto re-fire", () => {
     // Finding (alien-signals algorithm semantics): when outer is mid-
     // body (RecursedCheck flag set), and a separately-active inner
-    // settler writes to a signal outer reads, the propagation walk
+    // network writes to a signal outer reads, the propagation walk
     // marks outer Pending+Recursed but suppresses `_notify`. The
     // engine treats "node currently RecursedCheck'd" as already
     // running for this cycle — so outer doesn't queue a re-run.
     //
-    // Practical implication: a settle body cannot trigger ITSELF via
-    // an inner settle that writes its deps within the same body run.
+    // Practical implication: a network body cannot trigger ITSELF via
+    // an inner network that writes its deps within the same body run.
     // Future external mutations to x WILL re-fire outer (the Pending
     // flag survives and re-activates on the next propagation).
     const x = signal(0);
     let outerRuns = 0;
     const captured: number[] = [];
-    const outer = settle(() => {
+    const outer = network(() => {
       outerRuns++;
       captured.push(x.value);
       if (outerRuns === 1) {
-        settle(() => {
+        network(() => {
           x.value = 42;
         });
       }
@@ -262,7 +262,7 @@ describe("stress: custom equality + dirty", () => {
     const eqApprox = (a: number, b: number) => Math.abs(a - b) < 0.01;
     const a = signal<number>(1.0, { equals: eqApprox });
     let runs = 0;
-    const handle = settle(() => {
+    const handle = network(() => {
       a.value;
       runs++;
     });
@@ -285,7 +285,7 @@ describe("stress: custom equality + dirty", () => {
     const eqApprox = (a: number, b: number) => Math.abs(a - b) < 0.01;
     const a = signal<number>(1.0, { equals: eqApprox });
     let lastDirty: ReadonlySet<Signal<unknown>> | undefined;
-    const handle = settle(
+    const handle = network(
       dirty => {
         a.value;
         lastDirty = dirty;
@@ -300,23 +300,23 @@ describe("stress: custom equality + dirty", () => {
   });
 });
 
-// ─── 5. Two-settler interactions ───────────────────────────────────
+// ─── 5. Two-network interactions ───────────────────────────────────
 //
-// Guarantee: cross-settler propagation works as expected. Each settler
+// Guarantee: cross-network propagation works as expected. Each network
 // excludes only itself; the other observes writes and may fire.
 
-describe("stress: two settlers", () => {
-  it("settler A writes a signal that settler B reads — B fires", () => {
+describe("stress: two networks", () => {
+  it("network A writes a signal that network B reads — B fires", () => {
     const x = signal(0);
     let aRuns = 0;
     let bRuns = 0;
-    const a = settle(() => {
+    const a = network(() => {
       aRuns++;
       // A reads & writes — self-excludes
       const v = x.value;
       if (v < 5) x.value = v + 1;
     });
-    const b = settle(() => {
+    const b = network(() => {
       bRuns++;
       x.value;
     });
@@ -333,11 +333,11 @@ describe("stress: two settlers", () => {
     const y = signal(20);
     let aRuns = 0;
     let bRuns = 0;
-    const aHandle = settle(() => {
+    const aHandle = network(() => {
       aRuns++;
       y.value = x.value + 1;
     });
-    const bHandle = settle(() => {
+    const bHandle = network(() => {
       bRuns++;
       x.value = y.value - 1;
     });
@@ -355,11 +355,11 @@ describe("stress: two settlers", () => {
     const y = signal(0);
     let aRuns = 0;
     let bRuns = 0;
-    const aHandle = settle(() => {
+    const aHandle = network(() => {
       aRuns++;
       y.value = x.value * 2;
     });
-    const bHandle = settle(() => {
+    const bHandle = network(() => {
       bRuns++;
       x.value = Math.floor(y.value / 2);
     });
@@ -378,7 +378,7 @@ describe("stress: two settlers", () => {
 // ─── 6. Lens / computed signals as members ─────────────────────────
 
 describe("stress: lens & computed signals", () => {
-  it("lens signal as settle dep — root mutations propagate", () => {
+  it("lens signal as network dep — root mutations propagate", () => {
     const root = signal({ x: 1, y: 2 });
     const xLens = lens(
       root,
@@ -387,7 +387,7 @@ describe("stress: lens & computed signals", () => {
     );
     let runs = 0;
     let observed = -1;
-    const handle = settle(() => {
+    const handle = network(() => {
       observed = xLens.value;
       runs++;
     });
@@ -398,7 +398,7 @@ describe("stress: lens & computed signals", () => {
     handle.dispose();
   });
 
-  it("writing through a lens inside settle body self-excludes via root", () => {
+  it("writing through a lens inside network body self-excludes via root", () => {
     const root = signal({ x: 1, y: 2 });
     const xLens = lens(
       root,
@@ -406,7 +406,7 @@ describe("stress: lens & computed signals", () => {
       (newX, r) => ({ ...r, x: newX }),
     );
     let runs = 0;
-    const handle = settle(() => {
+    const handle = network(() => {
       const v = xLens.value;
       runs++;
       if (v === 1) {
@@ -424,12 +424,12 @@ describe("stress: lens & computed signals", () => {
     handle.dispose();
   });
 
-  it("computed (RO) as settle dep — works", () => {
+  it("computed (RO) as network dep — works", () => {
     const a = signal(2);
     const sq = computed(() => a.value * a.value);
     let runs = 0;
     let observed = -1;
-    const handle = settle(() => {
+    const handle = network(() => {
       observed = sq.value;
       runs++;
     });
@@ -448,7 +448,7 @@ describe("stress: batch interaction", () => {
     const a = signal(1);
     const b = signal(2);
     const dirtySizes: number[] = [];
-    const handle = settle(dirty => {
+    const handle = network(dirty => {
       a.value;
       b.value;
       dirtySizes.push(dirty.size);
@@ -469,12 +469,12 @@ describe("stress: batch interaction", () => {
       downstream.push(a.value);
     });
     batch(() => {
-      const handle = settle(() => {
+      const handle = network(() => {
         a.value = 99;
       });
       handle.dispose();
     });
-    // Inside the outer batch, settle's body runs; its auto-batch wraps
+    // Inside the outer batch, network's body runs; its auto-batch wraps
     // its own writes; the outer batch then flushes the queue.
     expect(downstream).toEqual([1, 99]);
     stop();
@@ -486,7 +486,7 @@ describe("stress: batch interaction", () => {
 describe("stress: manual mode adversarial", () => {
   it("manual flush 100 times in a row each fires the body", () => {
     let runs = 0;
-    const handle = settle(
+    const handle = network(
       () => {
         runs++;
       },
@@ -501,7 +501,7 @@ describe("stress: manual mode adversarial", () => {
   it("manual mode re-firing on dep change in auto effect downstream", () => {
     const x = signal(0);
     let manualRuns = 0;
-    const m = settle(
+    const m = network(
       _dirty => {
         x.value = manualRuns + 1;
         manualRuns++;
@@ -528,7 +528,7 @@ describe("stress: multi-write body", () => {
   it("body writing the same signal multiple times — last write wins, body still fires once", () => {
     const a = signal(0);
     let runs = 0;
-    const handle = settle(() => {
+    const handle = network(() => {
       a.value;
       runs++;
       if (runs === 1) {
@@ -551,7 +551,7 @@ describe("stress: multi-write body", () => {
       observed.push(sigs.map(s => s.value));
     });
     expect(observed.length).toBe(1);
-    const handle = settle(() => {
+    const handle = network(() => {
       for (let i = 0; i < N; i++) sigs[i]!.value = i + 1;
     });
     // One additional effect fire, with all N values committed atomically.
@@ -562,19 +562,19 @@ describe("stress: multi-write body", () => {
   });
 });
 
-// ─── 10. activeSettler leak guard ──────────────────────────────────
+// ─── 10. activeNetwork leak guard ──────────────────────────────────
 
-describe("stress: activeSettler leak guard", () => {
+describe("stress: activeNetwork leak guard", () => {
   it("regular effects' within-body self-writes do NOT re-fire (alien-signals algorithm)", () => {
     // Finding: the alien-signals propagation algorithm already
     // suppresses notify on a sub that has `RecursedCheck` set. So a
     // regular `effect` writing to a signal it reads does NOT cause
-    // re-fire — the engine handles it without our help. `settle`'s
-    // explicit `activeSettler`-based exclusion is therefore a
+    // re-fire — the engine handles it without our help. `network`'s
+    // explicit `activeNetwork`-based exclusion is therefore a
     // defense-in-depth + clarity measure, not strictly required for
     // the within-body-sync case. It DOES help in async/scheduled
     // cases (where `RecursedCheck` is no longer set) and provides a
-    // nameable contract: settle writes self-exclude.
+    // nameable contract: network writes self-exclude.
     const a = signal(0);
     let runs = 0;
     const stop = effect(() => {
@@ -587,19 +587,19 @@ describe("stress: activeSettler leak guard", () => {
     stop();
   });
 
-  it("nested settles correctly stack and restore activeSettler", () => {
-    // Probe: if activeSettler weren't properly restored, an outer
-    // settle's writes after an inner settle returns would use the
+  it("nested networks correctly stack and restore activeNetwork", () => {
+    // Probe: if activeNetwork weren't properly restored, an outer
+    // network's writes after an inner network returns would use the
     // wrong exclusion. Test by writing through a chain.
     const x = signal(0);
     let outerRuns = 0;
-    const outer = settle(() => {
+    const outer = network(() => {
       outerRuns++;
       x.value;
       if (outerRuns === 1) {
         // Inner's body runs synchronously inside outer's body. After
-        // it returns, activeSettler should be `outer` again.
-        settle(() => {}).dispose();
+        // it returns, activeNetwork should be `outer` again.
+        network(() => {}).dispose();
       }
     });
     // After the nested construction, mutate x to verify outer still works.
@@ -609,18 +609,18 @@ describe("stress: activeSettler leak guard", () => {
     outer.dispose();
   });
 
-  it("nested settles correctly stack activeSettler", () => {
+  it("nested networks correctly stack activeNetwork", () => {
     const x = signal(0);
     const y = signal(0);
     let outerRuns = 0;
     let innerRuns = 0;
-    const outer = settle(() => {
+    const outer = network(() => {
       outerRuns++;
       x.value;
-      // While outer body runs, activeSettler = outer.
-      // Inside inner.flush() below, activeSettler should switch to inner,
+      // While outer body runs, activeNetwork = outer.
+      // Inside inner.flush() below, activeNetwork should switch to inner,
       // then restore to outer.
-      const inner = settle(() => {
+      const inner = network(() => {
         innerRuns++;
         y.value;
       });
@@ -628,11 +628,11 @@ describe("stress: activeSettler leak guard", () => {
     });
     expect(outerRuns).toBe(1);
     expect(innerRuns).toBe(1);
-    // After both complete, activeSettler should be undefined.
-    // Writing y from outside should fire any subscribed settle (none here,
+    // After both complete, activeNetwork should be undefined.
+    // Writing y from outside should fire any subscribed network (none here,
     // since inner was disposed). Verify nothing's stuck:
     let probeRuns = 0;
-    const probe = settle(() => {
+    const probe = network(() => {
       y.value;
       probeRuns++;
     });

@@ -1,13 +1,13 @@
-// settle-validation.test.ts — stress-test the `settle` shape by
+// network-validation.test.ts — stress-test the `network` shape by
 // implementing tiny end-to-end "kernels" that exercise the design.
 //
-//   1. `relateOnSettle`     — relate(a, b, fwd, bwd) on one settle.
+//   1. `relateOnNetwork`     — relate(a, b, fwd, bwd) on one network.
 //                             Direction selection via `dirty`.
 //   2. `equalitySolver`     — multi-relation, multi-signal cluster:
 //                             lazy slot allocation, add/remove with
 //                             `cluster.add` / `cluster.remove`,
 //                             warm-state preserved across mutations.
-//   3. `manualClock`        — manual-mode settle as time-stepped
+//   3. `manualClock`        — manual-mode network as time-stepped
 //                             primitive: gravity-style velocity update
 //                             driven by explicit `flush(dt)`.
 //
@@ -15,15 +15,15 @@
 // the surface composes cleanly and the primitive's invariants hold.
 
 import { describe, expect, it } from "vitest";
-import { each, param, type Signal, settle, signal, type Writable } from "../index";
+import { each, param, type Signal, network, signal, type Writable } from "../index";
 
-// ─── 1. `relate` rebuilt on `settle` ────────────────────────────────
+// ─── 1. `relate` rebuilt on `network` ────────────────────────────────
 
 interface RelateHandle {
   dispose(): void;
 }
 
-function relateOnSettle<A, B>(
+function relateOnNetwork<A, B>(
   a: Writable<Signal<A>>,
   b: Writable<Signal<B>>,
   fwd: (a: A) => B,
@@ -31,30 +31,30 @@ function relateOnSettle<A, B>(
 ): RelateHandle {
   const aSig = a;
   const bSig = b;
-  // Two settles, one per direction (mirrors the existing `relate`
-  // shape). Each direction self-excludes its own settler; the other
-  // direction's settler is a separate node, so it observes the write
+  // Two networks, one per direction (mirrors the existing `relate`
+  // shape). Each direction self-excludes its own network; the other
+  // direction's network is a separate node, so it observes the write
   // and ping-pongs as needed. Termination is structural: the second
   // round-trip's `===` short-circuit stops propagation.
-  const fwdSettle = settle(_dirty => {
+  const fwdNetwork = network(_dirty => {
     bSig.value = fwd(aSig.value);
   });
-  const bwdSettle = settle(_dirty => {
+  const bwdNetwork = network(_dirty => {
     aSig.value = bwd(bSig.value);
   });
   return {
     dispose() {
-      fwdSettle.dispose();
-      bwdSettle.dispose();
+      fwdNetwork.dispose();
+      bwdNetwork.dispose();
     },
   };
 }
 
-describe("validation: relate(a, b) rebuilt on settle", () => {
+describe("validation: relate(a, b) rebuilt on network", () => {
   it("Iso: writes from either side propagate", () => {
     const a = signal(0);
     const b = signal(0);
-    const r = relateOnSettle(
+    const r = relateOnNetwork(
       a,
       b,
       x => x + 100,
@@ -76,7 +76,7 @@ describe("validation: relate(a, b) rebuilt on settle", () => {
   it("non-Iso lossy: writes terminate via direction selection", () => {
     const a = signal(0);
     const b = signal(0);
-    const r = relateOnSettle(
+    const r = relateOnNetwork(
       a,
       b,
       x => x * 2,
@@ -85,8 +85,8 @@ describe("validation: relate(a, b) rebuilt on settle", () => {
     a.value = 5;
     expect(b.value).toBe(10);
     b.value = 7;
-    // bwd(7) = 3 → a := 3. Settle re-runs (dirty: a). aHot && !bHot → b := fwd(3) = 6.
-    // Settle re-runs (dirty: b). bHot && !aHot → a := bwd(6) = 3.
+    // bwd(7) = 3 → a := 3. Network re-runs (dirty: a). aHot && !bHot → b := fwd(3) = 6.
+    // Network re-runs (dirty: b). bHot && !aHot → a := bwd(6) = 3.
     // a's write detects same value (3 === 3), no propagate; loop terminates.
     expect(a.value).toBe(3);
     expect(b.value).toBe(6);
@@ -121,7 +121,7 @@ interface EqualityCluster {
 
 function equalityCluster(): EqualityCluster {
   const active = new Set<EqRelation>();
-  const handle = settle(dirty => {
+  const handle = network(dirty => {
     if (active.size === 0) return;
 
     // For each connected component, pick a representative — the
@@ -272,14 +272,14 @@ describe("validation: equality cluster (multi-relation)", () => {
   });
 });
 
-// ─── 3. Manual-mode settle as a time-driven step loop ───────────────
+// ─── 3. Manual-mode network as a time-driven step loop ───────────────
 
-describe("validation: manual-mode settle as time-stepped primitive", () => {
+describe("validation: manual-mode network as time-stepped primitive", () => {
   it("velocity-update style: dep changes don't fire until step()", () => {
     const x = signal(0);
     const v = signal(10); // velocity
     let stepCount = 0;
-    const handle = settle(
+    const handle = network(
       _dirty => {
         // Apply velocity; pretend dt=1.
         const cur = x.value;
@@ -312,23 +312,23 @@ describe("validation: manual-mode settle as time-stepped primitive", () => {
     handle.dispose();
   });
 
-  it("manual settle composes with auto settle: time loop drives reactivity", () => {
+  it("manual network composes with auto network: time loop drives reactivity", () => {
     const x = signal(0);
     const observed: number[] = [];
-    // Auto-mode settle observes x, mirrors to a side channel.
+    // Auto-mode network observes x, mirrors to a side channel.
     const mirror = signal(0);
-    const auto = settle(_dirty => {
+    const auto = network(_dirty => {
       mirror.value = x.value * 2;
     });
     // Effect on the side channel.
     const side: number[] = [];
-    const _autoEff = settle(_dirty => {
+    const _autoEff = network(_dirty => {
       side.push(mirror.value);
     });
 
     let dt = 1;
     const v = signal(3);
-    const sim = settle(
+    const sim = network(
       _dirty => {
         x.value = x.value + v.value * dt;
         observed.push(x.value);
@@ -353,7 +353,7 @@ describe("validation: manual-mode settle as time-stepped primitive", () => {
 // ─── 4. param() composing in a fake-AVBD ────────────────────────────
 //
 // Demonstrates that a relation-shaped class with mutable params
-// (Signal-backed) works under settle: mutating `dist.distance`
+// (Signal-backed) works under network: mutating `dist.distance`
 // re-fires the cluster without a structural rebuild.
 
 class MockDistance {
@@ -403,12 +403,12 @@ describe("validation: relation with mutable params via param()", () => {
     expect(lengthSig.value).toBe(7); // shared via param's same-ref return
   });
 
-  it("a settle body reading the param re-fires when it changes", () => {
+  it("a network body reading the param re-fires when it changes", () => {
     const a = signal(0);
     const b = signal(10);
     const d = new MockDistance(a, b, 10);
     let lastResidual: number | undefined;
-    const handle = settle(_dirty => {
+    const handle = network(_dirty => {
       lastResidual = d.residual();
     });
     expect(lastResidual).toBe(0); // 10 - 0 - 10

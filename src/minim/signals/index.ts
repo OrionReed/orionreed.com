@@ -52,6 +52,14 @@ export {
 } from "./anim";
 // ─── Clock bridge ─────────────────────────────────────────────────
 export { bind } from "./lateral";
+// ─── Network utilities (reactive-collection lifecycle helpers) ──
+//
+// `when` collides with the existing animator-flavoured `when` from
+// `./anim`; consumers that need the network-flavoured lifecycle
+// helper import it explicitly from "./network-utils" rather than
+// the top-level index. `each` and `param` have no collisions and
+// re-export from here is fine.
+export { each, type Lifecycle, param } from "./network-utils";
 // New primitives natural under N-input lenses. `vecLerp` / `pulleySum`
 // / `diffLens` give bidirectional drag on derived values; `bezier2`/3,
 // `clampedMean`, `distanceLens`, `angleLens`, `reflectionLens` are
@@ -81,14 +89,6 @@ export {
 // used to live here is now an engine-internal `_fanin` invoked by
 // these surfaces — same hot path, cleaner public API.
 export { type RelateHandle, relate } from "./relate";
-// ─── Settle utilities (reactive-collection lifecycle helpers) ────
-//
-// `when` collides with the existing animator-flavoured `when` from
-// `./anim`; consumers that need the settle-flavoured lifecycle helper
-// import it explicitly from "./settle-utils" rather than the
-// top-level index. `each` and `param` have no collisions and
-// re-export from here is fine.
-export { each, type Lifecycle, param } from "./settle-utils";
 // ─── Engine ───────────────────────────────────────────────────────
 export {
   batch,
@@ -100,13 +100,13 @@ export {
   isSignal,
   lazy,
   lens,
+  type Network,
+  network,
   type Of,
   type Read,
-  type Settle,
   Signal,
   type SignalOptions,
   setSignalWriteHook,
-  settle,
   signal,
   untracked,
   type Val,

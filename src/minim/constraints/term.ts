@@ -133,7 +133,7 @@ export abstract class Term {
   abstract computeDerivatives(cellIdx: number): void;
 
   /** Mark this term for removal. Takes effect on the next solver
-   *  pass (the constraints' settle, or an explicit `solver.solve()`). */
+   *  pass (the constraints' network, or an explicit `solver.solve()`). */
   dispose(): void {
     this.disabled = true;
   }

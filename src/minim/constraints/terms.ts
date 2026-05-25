@@ -13,14 +13,14 @@
 // (no `.value` reads, no subscription bookkeeping, identical perf
 // to the previous fixed-number form).
 //
-// Subscription happens at the cluster layer: `Constraints`'s settle
+// Subscription happens at the cluster layer: `Constraints`'s network
 // body reads each relation's members (including param signals) so
 // mutating `r.rest.value = 50` triggers a re-solve via the normal
 // reactive flow. The term then peeks the new value when
 // `initialize()` runs.
 
 import { type Signal, type Writable } from "../signals";
-import { param } from "../signals/settle-utils";
+import { param } from "../signals/network-utils";
 import { Solver } from "./solver";
 import { Term } from "./term";
 
@@ -154,9 +154,9 @@ export class DistanceTerm extends Term {
   }
 
   initialize(): boolean {
-    // `.value` (not `.peek()`) — runs inside the cluster's settle
-    // body where `activeSettler` is set, so the read both refreshes
-    // the cache AND subscribes the settler to this param signal.
+    // `.value` (not `.peek()`) — runs inside the cluster's network
+    // body where `activeNetwork` is set, so the read both refreshes
+    // the cache AND subscribes the network to this param signal.
     // Mutations to `rest` then trigger normal re-fire via the
     // signal DAG. The inner per-iteration loop reads the cached
     // primitive only — no signals on the hot path.

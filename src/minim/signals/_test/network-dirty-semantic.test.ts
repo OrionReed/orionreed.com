@@ -1,4 +1,4 @@
-// settle-dirty-semantic.test.ts — probe whether `dirty` should
+// network-dirty-semantic.test.ts — probe whether `dirty` should
 // include newly-subscribed signals (in addition to value-changed ones).
 //
 // Three concrete kernel shapes show how the current semantic
@@ -7,12 +7,12 @@
 //
 //   1. Dynamic relations: cluster adds/removes relations over time.
 //   2. Conditional reads: body reads different signals based on a flag.
-//   3. Single-settle relate: relies on `dirty.size === 0` for "first run".
+//   3. Single-network relate: relies on `dirty.size === 0` for "first run".
 //
 // Conclusion at the end of file documents the choice.
 
 import { describe, expect, it } from "vitest";
-import { batch, type Signal, settle, signal } from "../index";
+import { batch, type Signal, network, signal } from "../index";
 
 // ─── 1. Dynamic relations ──────────────────────────────────────────
 //
@@ -31,7 +31,7 @@ describe("dirty semantic — dynamic relations", () => {
     const slots = new Map<Signal<unknown>, Slot>();
     let pullsThisFire: Signal<unknown>[] = [];
 
-    const handle = settle(dirty => {
+    const handle = network(dirty => {
       pullsThisFire = [];
 
       // Phase 1: structural — ensure slots for every member of every
@@ -109,7 +109,7 @@ describe("dirty semantic — conditional reads", () => {
     let observed = 0;
     let lastDirtySize: number | undefined;
 
-    const handle = settle(dirty => {
+    const handle = network(dirty => {
       lastDirtySize = dirty.size;
       observed = flag.value === "a" ? sigA.value : sigB.value;
     });
@@ -135,19 +135,19 @@ describe("dirty semantic — conditional reads", () => {
   });
 });
 
-// ─── 3. Single-settle relate (first-run convention) ────────────────
+// ─── 3. Single-network relate (first-run convention) ────────────────
 //
 // `dirty.size === 0` is the natural first-run signal. If dirty
 // included fresh subs, first run would have dirty = {a, b} — ambiguous
 // with "user wrote both in one batch."
 
-describe("dirty semantic — single-settle relate", () => {
+describe("dirty semantic — single-network relate", () => {
   it("dirty.size === 0 cleanly distinguishes 'first run' from 'both sides written'", () => {
     const a = signal(0);
     const b = signal(0);
     const transitions: Array<"first" | "fwd" | "bwd" | "both"> = [];
 
-    const handle = settle(dirty => {
+    const handle = network(dirty => {
       const aHot = dirty.has(a as Signal<unknown>);
       const bHot = dirty.has(b as Signal<unknown>);
       // We MUST read both to subscribe. Reading them after the dirty checks
@@ -189,7 +189,7 @@ describe("dirty semantic — single-settle relate", () => {
 //     would just add noise (sigB appearing in dirty before its first
 //     real value change).
 //
-//   - Single-settle relate: `dirty.size === 0` is a clean first-run
+//   - Single-network relate: `dirty.size === 0` is a clean first-run
 //     signal; if fresh-included, first run = {a, b} = "both written"
 //     ambiguity. Loss.
 //
@@ -200,5 +200,5 @@ describe("dirty semantic — single-settle relate", () => {
 //
 // If a future kernel really needs "what's new" as a separate concern,
 // it can be added as a second arg without breaking existing usage:
-//   settle((dirty, fresh) => ...)
+//   network((dirty, fresh) => ...)
 // But no current need.

@@ -32,7 +32,7 @@
 //   `rightAngle(A, B, C)` instead of `perpendicular(A, B, B, C)`.
 
 import { type Signal, type Writable } from "../signals";
-import { param } from "../signals/settle-utils";
+import { param } from "../signals/network-utils";
 import { type Constraints, type Relation } from "./cluster";
 import {
   BoundsTerm,

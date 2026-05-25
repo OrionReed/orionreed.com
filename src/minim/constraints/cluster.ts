@@ -20,16 +20,16 @@
 
 import {
   type Lifecycle,
+  network,
+  type Network,
   type Pack,
   type Read,
   requirePack,
-  type Settle,
   type Signal,
-  settle,
   signal,
   type Writable,
 } from "../signals";
-import { when } from "../signals/settle-utils";
+import { when } from "../signals/network-utils";
 import { type Phase, reactivePipeline } from "./phases";
 import { Solver, type SolverOpts } from "./solver";
 
@@ -79,12 +79,12 @@ export class Constraints {
   /** Generation counter; bumped on `_bind()`/`remove()` so the
    *  reactive driver re-fires when structural state changes. */
   private readonly _gen: Writable<Signal<number>>;
-  /** Reactive driver — a settle that calls `step()` on signal
+  /** Reactive driver — a network that calls `step()` on signal
    *  change. Lazy-installed on first `_bind`; once `dispose()`d
    *  (e.g., by `physics()` / `world()` taking over the time loop),
    *  permanently silenced. */
-  private _settle?: Settle;
-  private _settleDisposed = false;
+  private _network?: Network;
+  private _networkDisposed = false;
 
   constructor(opts: SolverOpts = {}) {
     this.solver = new Solver(opts);
@@ -200,11 +200,11 @@ export class Constraints {
    *  loop — manual `step(dt)` calls are then the only way to
    *  advance. */
   dispose(): void {
-    if (this._settle !== undefined) {
-      this._settle.dispose();
-      this._settle = undefined;
+    if (this._network !== undefined) {
+      this._network.dispose();
+      this._network = undefined;
     }
-    this._settleDisposed = true;
+    this._networkDisposed = true;
   }
 
   /** Number of bound signal cells (= solver cell count). */
@@ -227,7 +227,7 @@ export class Constraints {
     pack.read(sig.peek(), this.solver.positions, this.solver.offsets[id]!);
     this._sigToCell.set(sig, id);
     this._bindings[id] = { sig, pack };
-    if (this._settle === undefined && !this._settleDisposed) this._installReactiveDriver();
+    if (this._network === undefined && !this._networkDisposed) this._installReactiveDriver();
     this._gen.value = this._gen.value + 1;
     return id;
   }
@@ -236,12 +236,12 @@ export class Constraints {
 
   private _installReactiveDriver(): void {
     const gen = this._gen;
-    this._settle = settle(_dirty => {
+    this._network = network(_dirty => {
       // Subscribe to gen so structural edits force a re-fire.
       gen.value;
       // Run the pipeline — snapshot phase reads cell signals via
-      // `.value` (so the settler subscribes), solve runs, writeback
-      // writes back through settle's auto-self-exclusion + auto-batch.
+      // `.value` (so the network subscribes), solve runs, writeback
+      // writes back through network's auto-self-exclusion + auto-batch.
       this.step();
     });
   }

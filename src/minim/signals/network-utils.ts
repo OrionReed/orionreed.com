@@ -1,10 +1,10 @@
-// settle-utils.ts — small reactive-collection helpers that ride on
-// top of the `settle` model.
+// network-utils.ts — small reactive-collection helpers that ride on
+// top of the `network` model.
 //
 // These aren't framework primitives — they're the patterns that
 // recur whenever you have collection-driven or boolean-driven
 // resource lifecycles. Implemented in terms of `effect` (no special
-// engine support); ship alongside `settle` for convenience.
+// engine support); ship alongside `network` for convenience.
 //
 //   `each(source, body)` — body runs per element keyed by reference
 //                          identity; cleanup on removal.

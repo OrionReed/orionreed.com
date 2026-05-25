@@ -69,17 +69,17 @@ let batchDepth = 0;
 let notifyIndex = 0;
 let queuedLength = 0;
 let activeSub: ReactiveNode | undefined;
-/** Active `Settler` (only while a `settle` body is running). When set,
- *  bare `signal.value =` writes self-exclude this node from the
- *  propagation walk — so a settle body that reads + writes the same
- *  signal doesn't re-fire itself. Distinct from `activeSub` because
- *  regular `effect` bodies should NOT auto-self-exclude. */
-let activeSettler: Settler | undefined;
-const queued: (Effect | Settler | undefined)[] = [];
+/** Active `_NetworkNode` (only while a `network` body is running).
+ *  When set, bare `signal.value =` writes self-exclude this node
+ *  from the propagation walk — so a network body that reads + writes
+ *  the same signal doesn't re-fire itself. Distinct from `activeSub`
+ *  because regular `effect` bodies should NOT auto-self-exclude. */
+let activeNetwork: _NetworkNode | undefined;
+const queued: (Effect | _NetworkNode | undefined)[] = [];
 
 /** Frozen sentinel for the common case of "nothing dirty this run".
  *  Saves a `new Set` per fire when no deps have value-changed (which
- *  is the steady-state for most settles between actual mutations). */
+ *  is the steady-state for most networks between actual mutations). */
 const EMPTY_DIRTY: ReadonlySet<Signal<unknown>> = Object.freeze(new Set<Signal<unknown>>());
 
 // Re-entrancy guard for flush. See the comment block on `flush()` below.
@@ -485,7 +485,7 @@ function makeFieldSetter<T>(
     const k = path[0]!;
     return v => {
       const s = parent.peek() as object;
-      parent._setWithExclusion({ ...s, [k]: v }, activeSettler);
+      parent._setWithExclusion({ ...s, [k]: v }, activeNetwork);
     };
   }
   if (path.length === 2) {
@@ -494,7 +494,7 @@ function makeFieldSetter<T>(
     return v => {
       const s = parent.peek() as Record<string | number | symbol, unknown>;
       const a = s[k0] as object;
-      parent._setWithExclusion({ ...s, [k0]: { ...a, [k1]: v } }, activeSettler);
+      parent._setWithExclusion({ ...s, [k0]: { ...a, [k1]: v } }, activeNetwork);
     };
   }
   if (path.length === 3) {
@@ -507,13 +507,13 @@ function makeFieldSetter<T>(
       const b = a[k1] as object;
       parent._setWithExclusion(
         { ...s, [k0]: { ...a, [k1]: { ...b, [k2]: v } } },
-        activeSettler,
+        activeNetwork,
       );
     };
   }
   return v => {
     const s = parent.peek();
-    parent._setWithExclusion(pathSetN(s, path, 0, v), activeSettler);
+    parent._setWithExclusion(pathSetN(s, path, 0, v), activeNetwork);
   };
 }
 
@@ -902,14 +902,14 @@ export class Signal<T = unknown> implements ReactiveNode {
             Cls,
             () => composedFwd(parent.value),
             v => {
-              parent._setWithExclusion(bwdLocal(v, undefined as never), activeSettler);
+              parent._setWithExclusion(bwdLocal(v, undefined as never), activeNetwork);
             },
           )
         : Signal.install(
             Cls,
             () => composedFwd(parent.value),
             v => {
-              parent._setWithExclusion(bwdLocal(v, parent.peek()), activeSettler);
+              parent._setWithExclusion(bwdLocal(v, parent.peek()), activeNetwork);
             },
           );
     } else {
@@ -921,7 +921,7 @@ export class Signal<T = unknown> implements ReactiveNode {
             v => {
               parent._setWithExclusion(
                 priorBwd(bwdLocal(v, undefined as never), undefined as never),
-                activeSettler,
+                activeNetwork,
               );
             },
           )
@@ -930,7 +930,7 @@ export class Signal<T = unknown> implements ReactiveNode {
             () => composedFwd(parent.value),
             v => {
               const s = parent.peek();
-              parent._setWithExclusion(priorBwd(bwdLocal(v, priorFwd!(s)), s), activeSettler);
+              parent._setWithExclusion(priorBwd(bwdLocal(v, priorFwd!(s)), s), activeNetwork);
             },
           );
     }
@@ -1010,7 +1010,7 @@ export class Signal<T = unknown> implements ReactiveNode {
   }
 
   /** @internal — write `next`, propagating to all subs except `excluding`.
-   *  Used by `value` setter (excludes activeSettler), `writeBack`
+   *  Used by `value` setter (excludes activeNetwork), `writeBack`
    *  (excludes activeSub), and engine-internal lens/field setters. */
   _setWithExclusion(next: T, excluding: ReactiveNode | undefined): void {
     // Computed/lens slow path — same as before, no exclusion concept
@@ -1261,26 +1261,27 @@ Object.defineProperty(Signal.prototype, "value", {
     return this.currentValue;
   },
   set(this: Signal<unknown>, next: unknown): void {
-    // Inside a `settle` body, bare `value =` writes self-exclude the
-    // running settler so its body doesn't re-fire from its own writes.
-    // Outside a settle (regular effect, no reactive context), this is
-    // `undefined` and behaviour matches the pre-settle engine.
-    this._setWithExclusion(next, activeSettler);
+    // Inside a `network` body, bare `value =` writes self-exclude the
+    // running network node so its body doesn't re-fire from its own writes.
+    // Outside a network (regular effect, no reactive context), this is
+    // `undefined` and behaviour matches the pre-network engine.
+    this._setWithExclusion(next, activeNetwork);
   },
   enumerable: false,
   configurable: false,
 });
 
-// ─── Settle: reactive sub-DAG with self-excluded writes ─────────────
+// ─── Network: reactive sub-DAG with self-excluded writes ────────────
 //
-// `settle(body)` is the building block for constraint networks,
-// propagators, relations — any "many signals settle together"
-// abstraction that doesn't fit the dep-DAG pipeline shape. Three
-// guarantees the framework provides:
+// `network(body)` is the building block for constraint networks,
+// propagators, bidirectional relations — any "many signals tied
+// together with feedback" abstraction that doesn't fit the dep-DAG
+// pipeline shape. Three guarantees the framework provides:
 //
 //   1. Body re-runs when any signal it reads changes (same as `effect`).
-//   2. Bare `signal.value =` writes inside body self-exclude this
-//      settler — so termination is structural, not convergence-based.
+//   2. Bare `signal.value =` writes inside the body self-exclude
+//      this network — so termination is structural, not convergence-
+//      based.
 //   3. The body runs inside `batch()`, so all writes commit atomically
 //      to downstream observers (glitch-free).
 //
@@ -1288,13 +1289,13 @@ Object.defineProperty(Signal.prototype, "value", {
 // whose value differs from then. Empty on the first run. Kernels that
 // don't care can ignore it.
 //
-// `manual: true` defers auto-firing: dep changes mark the settler
+// `manual: true` defers auto-firing: dep changes mark the network
 // dirty but the body only runs on `flush()`. The initial run still
 // happens on construction. Use case: per-frame physics where you
 // want to coalesce all sub-frame mutations into a single tick.
 
-/** Handle to a `settle` invocation. */
-export interface Settle {
+/** Handle to a `network` invocation. */
+export interface Network {
   /** Tear down: unsubscribe from every signal, drop internal state. */
   dispose(): void;
   /** Run the body now if it's pending. In auto mode, equivalent to a
@@ -1303,7 +1304,7 @@ export interface Settle {
   flush(): void;
 }
 
-class Settler implements ReactiveNode {
+class _NetworkNode implements ReactiveNode {
   subs: Link | undefined = undefined;
   subsTail: Link | undefined = undefined;
   deps: Link | undefined = undefined;
@@ -1322,7 +1323,7 @@ class Settler implements ReactiveNode {
    *  silent no-op. Without this guard, a `flush()` after `dispose()`
    *  would re-run the body (lastValues was cleared so dirty is empty,
    *  but `flush` always runs the body — so it'd re-subscribe and
-   *  resurrect the settler). */
+   *  resurrect the network node). */
   disposed: boolean = false;
 
   constructor(body: (dirty: ReadonlySet<Signal<unknown>>) => void, manual: boolean) {
@@ -1346,7 +1347,7 @@ class Settler implements ReactiveNode {
       return;
     }
     // Auto mode: queue same shape as Effect so the existing flush loop
-    // handles us. We append directly; no chain-walk because settlers
+    // handles us. We append directly; no chain-walk because network nodes
     // don't have a `subs` follow-the-chain shape worth optimizing.
     queued[queuedLength++] = this;
     this.flags &= ~F.Watching;
@@ -1394,9 +1395,9 @@ class Settler implements ReactiveNode {
     this.depsTail = undefined;
     this.flags = F.Watching | F.RecursedCheck;
     const prevSub = activeSub;
-    const prevSettler = activeSettler;
+    const prevSettler = activeNetwork;
     activeSub = this;
-    activeSettler = this;
+    activeNetwork = this;
     try {
       ++cycle;
       ++runDepth;
@@ -1410,7 +1411,7 @@ class Settler implements ReactiveNode {
     } finally {
       --runDepth;
       activeSub = prevSub;
-      activeSettler = prevSettler;
+      activeNetwork = prevSettler;
       this.flags &= ~F.RecursedCheck;
       purgeDeps(this);
       // Snapshot current deps' values for next run's dirty computation.
@@ -1439,18 +1440,18 @@ class Settler implements ReactiveNode {
 /** Build a reactive sub-DAG node. See module header for semantics.
  *
  *  ```ts
- *  const s = settle((dirty) => {
+ *  const s = network((dirty) => {
  *    // read signals (subscribes); write signals (self-excluded);
  *    // dirty contains signals whose value changed since last run.
  *  });
  *  // later:
  *  s.dispose();
  *  ``` */
-export function settle(
+export function network(
   body: (dirty: ReadonlySet<Signal<unknown>>) => void,
   opts?: { manual?: boolean },
-): Settle {
-  const s = new Settler(body, opts?.manual ?? false);
+): Network {
+  const s = new _NetworkNode(body, opts?.manual ?? false);
   return {
     dispose: () => s._unwatched(),
     flush: () => s.flush(),
@@ -1565,7 +1566,7 @@ function _fanin(
         for (let i = 0; i < n; i++) {
           const u = updates[i];
           if (u === undefined) continue;
-          parents[i]!._setWithExclusion(u, activeSettler);
+          parents[i]!._setWithExclusion(u, activeNetwork);
         }
       });
     };
@@ -1580,7 +1581,7 @@ function _fanin(
       for (let i = 0; i < n; i++) {
         const u = updates[i];
         if (u === undefined) continue;
-        parents[i]!._setWithExclusion(u, activeSettler);
+        parents[i]!._setWithExclusion(u, activeNetwork);
       }
     });
   };

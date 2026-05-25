@@ -1,24 +1,24 @@
-// settle-relate-probe.test.ts — lossy-relate counter-example probe.
+// network-relate-probe.test.ts — lossy-relate counter-example probe.
 //
-// Question: is the inability of a single-settle to handle lossy
-// fwd/bwd convergence a counter-example to `settle` being the right
+// Question: is the inability of a single-network to handle lossy
+// fwd/bwd convergence a counter-example to `network` being the right
 // primitive?
 //
 // Approach: build several variants of "relate"-flavoured kernels
-// against `settle` and see what semantics each gives. Document where
-// `settle` falls short, where it's elegant, and where the user's
+// against `network` and see what semantics each gives. Document where
+// `network` falls short, where it's elegant, and where the user's
 // design intent (one-shot vs fixpoint) maps onto framework choices.
 
 import { describe, expect, it } from "vitest";
-import { type Signal, settle, signal, type Writable } from "../index";
+import { type Signal, network, signal, type Writable } from "../index";
 
 interface Handle {
   dispose(): void;
 }
 
-// ─── Variant A: single-settle, direction selection via dirty ────────
+// ─── Variant A: single-network, direction selection via dirty ────────
 //
-// One settle subscribes to both. On dep change, picks a side from
+// One network subscribes to both. On dep change, picks a side from
 // `dirty` and writes the other. Self-excludes — the second roundtrip
 // (bwd → fwd → bwd) never happens.
 //
@@ -36,7 +36,7 @@ function relateSingle<A, B>(
 ): Handle {
   const aSig = a;
   const bSig = b;
-  const handle = settle(dirty => {
+  const handle = network(dirty => {
     const aHot = dirty.has(aSig as Signal<unknown>);
     const bHot = dirty.has(bSig as Signal<unknown>);
     const av = aSig.value;
@@ -48,10 +48,10 @@ function relateSingle<A, B>(
   return { dispose: handle.dispose };
 }
 
-// ─── Variant B: two-settle, one per direction ───────────────────────
+// ─── Variant B: two-network, one per direction ───────────────────────
 //
-// Mirrors the existing `relate` shape: two settles ping-pong via
-// cross-settler propagation. Each direction self-excludes; the other
+// Mirrors the existing `relate` shape: two networks ping-pong via
+// cross-network propagation. Each direction self-excludes; the other
 // observes the write. Converges via `===` short-circuit when
 // bwd∘fwd reaches a fixpoint.
 
@@ -63,10 +63,10 @@ function relateTwo<A, B>(
 ): Handle {
   const aSig = a;
   const bSig = b;
-  const fwdHandle = settle(_d => {
+  const fwdHandle = network(_d => {
     bSig.value = fwd(aSig.value);
   });
-  const bwdHandle = settle(_d => {
+  const bwdHandle = network(_d => {
     aSig.value = bwd(bSig.value);
   });
   return {
@@ -77,10 +77,10 @@ function relateTwo<A, B>(
   };
 }
 
-// ─── Variant C: single-settle with internal fuel loop ───────────────
+// ─── Variant C: single-network with internal fuel loop ───────────────
 //
-// One settle, but body iterates internally to a fixpoint or fuel cap.
-// Demonstrates that single-settle CAN do convergence — kernel just
+// One network, but body iterates internally to a fixpoint or fuel cap.
+// Demonstrates that single-network CAN do convergence — kernel just
 // needs to loop manually.
 
 function relateLoop<A, B>(
@@ -92,7 +92,7 @@ function relateLoop<A, B>(
 ): Handle {
   const aSig = a;
   const bSig = b;
-  const handle = settle(dirty => {
+  const handle = network(dirty => {
     let aHot = dirty.has(aSig as Signal<unknown>);
     let bHot = dirty.has(bSig as Signal<unknown>);
     let av = aSig.value;
@@ -129,7 +129,7 @@ describe("relate probe — Iso pair", () => {
   const fwd = (x: number) => x + 100;
   const bwd = (y: number) => y - 100;
 
-  it("single-settle: Iso converges in one shot", () => {
+  it("single-network: Iso converges in one shot", () => {
     const a = signal(0);
     const b = signal(0);
     const r = relateSingle(a, b, fwd, bwd);
@@ -141,7 +141,7 @@ describe("relate probe — Iso pair", () => {
     r.dispose();
   });
 
-  it("two-settle: Iso converges in one shot via ping-pong", () => {
+  it("two-network: Iso converges in one shot via ping-pong", () => {
     const a = signal(0);
     const b = signal(0);
     const r = relateTwo(a, b, fwd, bwd);
@@ -153,7 +153,7 @@ describe("relate probe — Iso pair", () => {
     r.dispose();
   });
 
-  it("loop-settle: Iso converges in one shot", () => {
+  it("loop-network: Iso converges in one shot", () => {
     const a = signal(0);
     const b = signal(0);
     const r = relateLoop(a, b, fwd, bwd);
@@ -172,7 +172,7 @@ describe("relate probe — lossy contractive pair", () => {
   const fwd = (x: number) => x * 2;
   const bwd = (y: number) => Math.floor(y / 2);
 
-  it("single-settle: lossy WRITE-from-b leaves inconsistent state", () => {
+  it("single-network: lossy WRITE-from-b leaves inconsistent state", () => {
     const a = signal(0);
     const b = signal(0);
     const r = relateSingle(a, b, fwd, bwd);
@@ -180,7 +180,7 @@ describe("relate probe — lossy contractive pair", () => {
     a.value = 5;
     expect(b.value).toBe(10); // fine — fwd direction
     b.value = 7;
-    // Single-settle: dirty = {b}, picks bwd, writes a := 3. Self-exc.
+    // Single-network: dirty = {b}, picks bwd, writes a := 3. Self-exc.
     // No second roundtrip — b stays at 7, a at 3. fwd(a) = 6 ≠ 7.
     expect(a.value).toBe(3);
     expect(b.value).toBe(7);
@@ -188,15 +188,15 @@ describe("relate probe — lossy contractive pair", () => {
     r.dispose();
   });
 
-  it("two-settle: lossy converges to a fixpoint via ping-pong", () => {
+  it("two-network: lossy converges to a fixpoint via ping-pong", () => {
     const a = signal(0);
     const b = signal(0);
     const r = relateTwo(a, b, fwd, bwd);
     a.value = 5;
     expect(b.value).toBe(10);
     b.value = 7;
-    // Two-settle: e2 fires for b's write, writes a = bwd(7) = 3.
-    // e1 (separate settler, not excluded by e2) observes a's write,
+    // Two-network: e2 fires for b's write, writes a = bwd(7) = 3.
+    // e1 (separate network, not excluded by e2) observes a's write,
     // fires, writes b = fwd(3) = 6. Round-trip: a=3 → b=6 (consistent).
     expect(a.value).toBe(3);
     expect(b.value).toBe(6);
@@ -204,7 +204,7 @@ describe("relate probe — lossy contractive pair", () => {
     r.dispose();
   });
 
-  it("loop-settle: lossy converges in one body run via internal fuel", () => {
+  it("loop-network: lossy converges in one body run via internal fuel", () => {
     const a = signal(0);
     const b = signal(0);
     const r = relateLoop(a, b, fwd, bwd);
@@ -224,7 +224,7 @@ describe("relate probe — drifty (non-converging) pair", () => {
   const fwd = (x: number) => x + 1;
   const bwd = (y: number) => y + 1;
 
-  it("single-settle: drifty write completes without looping (one-shot)", () => {
+  it("single-network: drifty write completes without looping (one-shot)", () => {
     const a = signal(0);
     const b = signal(0);
     const r = relateSingle(a, b, fwd, bwd);
@@ -239,7 +239,7 @@ describe("relate probe — drifty (non-converging) pair", () => {
     r.dispose();
   });
 
-  it("loop-settle: drifty terminates via fuel cap (no === short-circuit)", () => {
+  it("loop-network: drifty terminates via fuel cap (no === short-circuit)", () => {
     const a = signal(0);
     const b = signal(0);
     const r = relateLoop(a, b, fwd, bwd, 5);
@@ -260,7 +260,7 @@ describe("relate probe — chain of three (a ↔ b ↔ c)", () => {
   const inc = (x: number) => x + 1;
   const dec = (y: number) => y - 1;
 
-  it("two-settle relate composes: a → b → c", () => {
+  it("two-network relate composes: a → b → c", () => {
     const a = signal(0);
     const b = signal(0);
     const c = signal(0);
@@ -277,7 +277,7 @@ describe("relate probe — chain of three (a ↔ b ↔ c)", () => {
     // Disposes happen via test cleanup.
   });
 
-  it("single-settle relate composes for Iso pairs", () => {
+  it("single-network relate composes for Iso pairs", () => {
     const a = signal(0);
     const b = signal(0);
     const c = signal(0);
@@ -295,7 +295,7 @@ describe("relate probe — chain of three (a ↔ b ↔ c)", () => {
 describe("relate probe — what variant for what use case", () => {
   // This is the take-away test: it documents which kernel choice
   // matches which intent.
-  it("constraint-style 'enforce equation always': two-settle with === termination", () => {
+  it("constraint-style 'enforce equation always': two-network with === termination", () => {
     // Use case: "x + y = 10". fwd(x) = 10 - x, bwd(y) = 10 - y. Iso.
     // Both writers commit; the solver is symmetric.
     const x = signal(2);
@@ -313,7 +313,7 @@ describe("relate probe — what variant for what use case", () => {
     expect(x.value).toBe(6);
   });
 
-  it("UI-style 'reflect and stay there until next write': single-settle one-shot", () => {
+  it("UI-style 'reflect and stay there until next write': single-network one-shot", () => {
     // Use case: meters ↔ feet display. User writes one side; the other
     // updates. We DON'T want feedback to round-trip back.
     const m = signal(100);
@@ -327,14 +327,14 @@ describe("relate probe — what variant for what use case", () => {
     expect(f.value).toBe(328.1);
     f.value = 100;
     // One-shot: writes m = bwd(100) ≈ 30.479..., then stops.
-    // (vs two-settle, which would round-trip back to f = fwd(30.479) ≈ 99.99...)
+    // (vs two-network, which would round-trip back to f = fwd(30.479) ≈ 99.99...)
     expect(Math.abs(m.value - 30.479) < 0.01).toBe(true);
     expect(f.value).toBe(100); // unchanged — one-shot didn't round-trip
   });
 
-  it("solver-style 'iterate to fixpoint': loop-settle finds it within fuel", () => {
+  it("solver-style 'iterate to fixpoint': loop-network finds it within fuel", () => {
     // Contractive map: bwd(y) = (y + 5) / 2 has fixpoint at 5.
-    // fwd is identity. Inside one settle body, loop-settle iterates
+    // fwd is identity. Inside one network body, loop-network iterates
     // bwd∘fwd until it converges (≈ 5). This is genuinely solver-
     // shaped — fixpoint iteration in a single body run.
     const a = signal(0);

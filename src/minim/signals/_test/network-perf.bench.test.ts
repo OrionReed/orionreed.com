@@ -1,4 +1,4 @@
-// settle-perf.bench.test.ts — micro-benchmarks of `settle`'s
+// network-perf.bench.test.ts — micro-benchmarks of `network`'s
 // per-fire allocation cost. Goal: see whether the current
 // implementation has obvious wasteful allocations and whether a
 // "trivially correct" optimization saves measurable time.
@@ -8,7 +8,7 @@
 // cost for inspection.
 
 import { describe, expect, it } from "vitest";
-import { batch, settle, signal } from "../index";
+import { batch, network, signal } from "../index";
 
 function bench(label: string, runs: number, fn: () => void): number {
   // Warm up.
@@ -23,10 +23,10 @@ function bench(label: string, runs: number, fn: () => void): number {
   return perRun;
 }
 
-describe("settle — per-fire allocation cost", () => {
-  it("simple settle, single dep, no value change — flush() roundtrip", () => {
+describe("network — per-fire allocation cost", () => {
+  it("simple network, single dep, no value change — flush() roundtrip", () => {
     const a = signal(0);
-    const handle = settle(() => {
+    const handle = network(() => {
       a.value;
     });
     const ns = bench("flush() with 1 dep, no change", 10_000, () => {
@@ -36,10 +36,10 @@ describe("settle — per-fire allocation cost", () => {
     handle.dispose();
   });
 
-  it("settle with 100 deps, single change per fire", () => {
+  it("network with 100 deps, single change per fire", () => {
     const sigs = Array.from({ length: 100 }, (_, i) => signal(i));
     let driverIdx = 0;
-    const handle = settle(() => {
+    const handle = network(() => {
       for (const s of sigs) s.value;
     });
     const ns = bench("100 deps, 1 changes per fire", 1_000, () => {
@@ -50,9 +50,9 @@ describe("settle — per-fire allocation cost", () => {
     handle.dispose();
   });
 
-  it("settle with 1000 deps, batch update of 10 per fire", () => {
+  it("network with 1000 deps, batch update of 10 per fire", () => {
     const sigs = Array.from({ length: 1000 }, (_, i) => signal(i));
-    const handle = settle(() => {
+    const handle = network(() => {
       for (const s of sigs) s.value;
     });
     let bursts = 0;
@@ -69,9 +69,9 @@ describe("settle — per-fire allocation cost", () => {
     handle.dispose();
   });
 
-  it("manual-mode settle, repeated flush", () => {
+  it("manual-mode network, repeated flush", () => {
     const a = signal(0);
-    const handle = settle(
+    const handle = network(
       () => {
         a.value;
       },
@@ -84,9 +84,9 @@ describe("settle — per-fire allocation cost", () => {
     handle.dispose();
   });
 
-  it("auto-fire chain: 100 signals, settle pulls all on dep change", () => {
+  it("auto-fire chain: 100 signals, network pulls all on dep change", () => {
     const sigs = Array.from({ length: 100 }, (_, i) => signal(i));
-    const handle = settle(() => {
+    const handle = network(() => {
       let sum = 0;
       for (const s of sigs) sum += s.value;
     });

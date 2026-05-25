@@ -281,7 +281,7 @@ c.add(
 );
 ```
 
-Drag any handle; the cluster's settle re-fires, runs the solver, and writes the new positions back via the settle's auto-self-exclusion — so the writes propagate to the rendering effects but don't re-trigger the solver itself. Single solve per write, no convergence loop, no fragile self-mute.
+Drag any handle; the constraint network re-fires, runs the solver, and writes the new positions back via the network's auto-self-exclusion — so the writes propagate to the rendering effects but don't re-trigger the solver itself. Single solve per write, no convergence loop, no fragile self-mute.
 
 <md-sketchpad></md-sketchpad>
 

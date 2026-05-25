@@ -1,7 +1,7 @@
 // constraints/ — reactive constraint engine.
 //
 // AVBD-based primal-dual solver tightly integrated with the signals
-// layer via `settle`. Scales from "make two values equal" to
+// layer via `network`. Scales from "make two values equal" to
 // sketchpad-style scenes (thousands of points, lines, joints,
 // springs) and full rigid-body physics.
 //
