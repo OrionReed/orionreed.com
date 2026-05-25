@@ -578,6 +578,7 @@ function renderPoint(
     stroke: SELECTED,
     opacity: computed(() => (selected.value && !pending.value ? 0.9 : 0)),
   });
+
   // Pin dot.
   const pinDot = circle(p.pos, 2, {
     fill: "white",

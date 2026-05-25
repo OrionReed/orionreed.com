@@ -30,7 +30,12 @@ export function* stagger<S>(
   items: readonly S[],
   fn: (item: S, i: number) => Yieldable,
 ): Animator {
-  yield items.map((item, i) => play(i * stride).then(fn(item, i)));
+  yield items.map((item, i) =>
+    (function* () {
+      yield i * stride;
+      yield fn(item, i);
+    })(),
+  );
 }
 
 /** Distribute shapes radially around `center` at `radius`, evenly

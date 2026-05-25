@@ -92,6 +92,8 @@ export class Diagram extends HTMLElement {
     ::slotted(details.diagram-source) {
       margin-top: 0.5rem;
       font-size: 0.85em;
+      min-width: 90ch;
+      margin: 0 auto;
       color: var(--text-secondary, #888);
     }
   `;

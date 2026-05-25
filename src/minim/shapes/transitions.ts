@@ -17,7 +17,7 @@ export const fadeIn = (
   s: Has<"opacity">,
   sec: Val<number> = 0.3,
   ease: Easing = easeOut,
-): Yieldable => tween(s.opacity, 1, sec, ease).from(0);
+): Yieldable => s.opacity.to(1, sec, ease).from(0);
 
 /** Fade opacity 1 → 0. */
 export const fadeOut = (
