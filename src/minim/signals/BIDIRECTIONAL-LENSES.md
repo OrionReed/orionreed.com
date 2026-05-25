@@ -149,7 +149,25 @@ event.** It exists only as the input to the bwd closure; what lands in
 any signal's state is the post-bwd parent value, and what consumers
 read is the post-fwd projection of that.
 
-### 2.6 Bound on write cost
+### 2.6 Reads are cached
+
+The `value` getter (signal.ts:1210) branches on `getter !== undefined`
+into a single read path that covers BOTH computed and lens modes. That
+path checks the `Dirty` / `Pending` flags, runs `_update` only if the
+cache is stale, and returns `cachedValue!`. A hot read loop on a lens
+cell is one cached-property access plus dep-link bookkeeping — same
+cost as a computed.
+
+The cache is invalidated when the parent changes: `propagate` marks
+the lens `Pending`, and the next `value` read calls `_update`, which
+re-runs `composedFwd(parent.value)` and refreshes `cachedValue`.
+Multiple reads between writes always hit the cache.
+
+This means lens reads do NOT recompute the fwd chain on every access —
+the only recomputation cost is one fwd evaluation per write that
+actually changed the root.
+
+### 2.7 Bound on write cost
 
 A write to a lens with chain depth `D` and `K` total subscribers on the
 root costs:
@@ -253,48 +271,127 @@ construction rather than at first write.
 
 ## 4. Statefulness inference
 
-A bwd is **stateless** if it computes the new source purely from the
-target value:
+### 4.1 Why stateful bwds exist
+
+Some inverses are reconstructible from the target alone. `add(k)`'s
+inverse is `sub(k)` — to recover the source, subtract `k` from the
+target. The source's current value is irrelevant; you'd compute the
+same answer no matter what was there before. This is a **stateless**
+bwd: `bwd : T → T`.
+
+Other inverses fundamentally need the source's current value to do
+anything sensible:
+
+- **`field(parent, "x")`** writes `5` to `.x`. The bwd has to produce
+  a NEW parent object that's `{ ...oldParent, x: 5 }` — it MUST read
+  the parent to preserve the other fields. Without `s`, it'd have to
+  invent values for `y`, `z`, etc.
+
+- **`cyclic(2π)`** writes `π/4` to an accumulated angle of `100π`.
+  The bwd picks the representative of `π/4` nearest to the current
+  source, which means it has to know the current source is `100π` to
+  land at `100π + π/4` rather than jumping back to `π/4`.
+
+- **`pulleySum(a, b)`** writes `20` to a sum that's currently `10`.
+  The bwd distributes the delta `(20 − 10)` evenly: `a += 5`, `b +=
+  5`. To compute the delta, it needs both `a` and `b`'s current
+  values — without them, it can't preserve the conservation invariant.
+
+- **`centroidLens(...points)`** writes a new centroid. The bwd
+  shifts all points by `(target − currentCentroid)` — needs the
+  current centroid (computed from current points) to compute the
+  shift.
+
+Without statefulness, these lenses would be unauthorable. The
+engine's stateful bwd path threads the right state into the bwd
+closure so authors can write them naturally.
+
+The trade-off: stateful bwds require one `parent.peek()` per write
+(an untracked read), which is why the engine bothers to distinguish
+stateless ones — they skip the peek.
+
+### 4.2 What `s` actually represents
+
+Precise rule: **in a stateful bwd `(v, s) => …`, `s` is the current
+value of the cell on which `.lens()` was called — the receiver**, not
+necessarily the root.
+
+For a 1-level lens these coincide (receiver = root). For a multi-
+level fused chain they don't, and the engine threads each layer's
+bwd the value of *its own* receiver:
+
+Walk-through with `b = a.cyclic(2*Math.PI).add(5)`:
+
+- When you wrote `a.cyclic(2*PI)`, the receiver was `a`. So in
+  cyclic's bwd, `s` is `a.value`.
+- When you wrote `.add(5)` on the cyclic cell, the receiver was the
+  cyclic cell. So in add's bwd, `s` would be the cyclic cell's value,
+  which is `cyclic_fwd(a.value)`.
+
+Fusion collapses both into one composed setter (signal.ts:927):
 
 ```ts
-.lens(v => v + k, n => n - k)              // bwd : T → T, length === 1
+v => {
+  const s = parent.peek();                        // s = root value = a.value
+  parent._setWithExclusion(
+    priorBwd(bwdLocal(v, priorFwd!(s)), s),       //         ^^^^^^^^^^^^^   ^
+    activeNetwork,                                // add's s = cyclic_fwd(a) cyclic's s = a
+  );
+}
 ```
 
-A bwd is **stateful** if it reads the current source value to construct
-the new source:
+Two different `s` values get threaded:
 
-```ts
-.lens(v => v, (v, s) => s + (v - s))       // bwd : (T, T) → T, length === 2
-```
+- `s` to **bwdLocal** (add's bwd) = `priorFwd(root)` — the value
+  add SAW as its receiver when authored.
+- `s` to **priorBwd** (cyclic's bwd) = `root` — the value cyclic
+  SAW as its receiver when authored.
 
-The engine infers statefulness from `bwd.length` (signal.ts:446). The
-setter dispatch branches on the inferred class; stateful setters
-include a `parent.peek()` call to get `s`, stateless setters do not.
+Each layer's bwd gets the value of *its own receiver*, computed
+correctly through the prior chain. The author of add's bwd never
+needs to know about cyclic; they just know "`s` is the value of
+whatever I'm a lens on."
 
-### 4.1 Why this matters
+For a 1-level lens this is just `parent.peek()`. For deeper chains,
+fusion's invariant is "the local bwd sees what it would have seen if
+the chain were unfused" — `s` is conceptually "the receiver's value
+at the layer you authored against."
 
-- Stateless bwd is "I can construct the new source given only the
-  target." Iso lenses (`add`, `sub`, `scale`, `affine`) are stateless.
-- Stateful bwd is "I need to know the current source to construct the
-  new source." Field lenses (spread-replace), `cyclic` (nearest
-  representative), and N-input distributive bwds (`pulleySum`,
-  `centroidLens`) are stateful.
-
-A chain mixing both is stateful as a whole (the engine takes the worst
-case).
-
-### 4.2 The arity footgun
+### 4.3 The arity footgun (and how to retire it)
 
 ```ts
 .lens(v => v, (v, s = 0) => …)             // length === 1, treated stateless
 ```
 
-`Function.length` counts parameters before the first default. The user
-intended a stateful bwd; the engine treats it as stateless and passes
-`undefined` for `s`, which the default rewrites to `0`. This surfaces
-as "the stateful logic appears to use a static source value." Tested in
-[`footgun-probe.test.ts`](./_test/footgun-probe.test.ts). The only
-realistic mistake users make in lens authoring.
+`Function.length` counts parameters before the first default. The
+user intended a stateful bwd; the engine treats it as stateless and
+passes `undefined` for `s`, which the default rewrites to `0`. The
+stateful logic appears to use a static source value. Tested in
+[`footgun-probe.test.ts`](./_test/footgun-probe.test.ts).
+
+Three ways to retire it:
+
+- **A. Explicit tag**: `Cls.lens(fwd, bwd, { stateful: true })`.
+  Default stateless; opt-in stateful. Removes arity inference; new
+  failure mode is forgetting to tag, which has the same shape as
+  today's footgun just relocated.
+
+- **B. Two methods**: `Cls.lens(fwd, statelessBwd)` and
+  `Cls.statefulLens(fwd, statefulBwd)`. The bwd types differ
+  (`(v: T) => T` vs `(v: T, s: T) => T`), so TS catches the mismatch
+  at the call site. Minor footgun: picking the wrong method.
+
+- **C. Always pass `s`**: every bwd has signature `(v: T, s: T) => T`;
+  stateless bwds ignore `s`. The engine always reads `parent.peek()`
+  on every write. No inference, no footgun, slight perf cost
+  (one untracked `peek()` per write — cheap for signals, more
+  noticeable for fused chains where it triggers `priorFwd` to run
+  user code).
+
+The current arity inference is clever; (C) is the simplest
+elimination if the perf cost is acceptable, (B) preserves the perf
+optimization while moving the check into the type system. Either is
+strictly safer than the current model.
 
 ---
 
