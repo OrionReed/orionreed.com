@@ -10,7 +10,7 @@
 // `linear` trait, so `add(a, b, c)` works for `Num`, `Vec`, `Box`,
 // `Pose`, anything with `Linear<T>`. The `v` prefix is gone.
 
-import type { Num, Signal, Traits, Vec, Writable } from "../signals";
+import type { Num, Signal, Traits, Val, Vec, Writable } from "../signals";
 import { isSignal, requireLinear, valFn } from "../signals";
 import { type Propagator, propagator } from "./propagator";
 
@@ -257,8 +257,9 @@ export function between(
 }
 
 /** Keep `|a − b| = d`. Drag a → b moves along (b−a) to maintain
- *  distance; drag b → symmetric. `d` may be a number or Num signal. */
-export function keepDistance(a: WVec, b: WVec, d: number | Writable<Num>): Propagator[] {
+ *  distance; drag b → symmetric. `d` may be a number, a Num signal,
+ *  a computed (e.g. `|p − q|` driven by other points), or a closure. */
+export function keepDistance(a: WVec, b: WVec, d: Val<number>): Propagator[] {
   const dRead = valFn(d);
   const dDeps = isSignal(d) ? [d] : [];
   return [
@@ -302,8 +303,9 @@ export function onLine(p: WVec, a: WVec, b: WVec): Propagator {
   });
 }
 
-/** Keep `p` on a circle of radius `r` around `c`. */
-export function onCircle(p: WVec, c: WVec, r: number | Writable<Num>): Propagator {
+/** Keep `p` on a circle of radius `r` around `c`. `r` may be a
+ *  number, a Num signal, a computed, or a closure. */
+export function onCircle(p: WVec, c: WVec, r: Val<number>): Propagator {
   const rRead = valFn(r);
   const rDeps = isSignal(r) ? [r] : [];
   return propagator([p.x, p.y, c.x, c.y, ...rDeps], [p.x as AnyW, p.y as AnyW], () => {

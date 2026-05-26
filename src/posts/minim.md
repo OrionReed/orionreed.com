@@ -395,6 +395,23 @@ The substrate scales the other way too. Set-narrowing propagators on `Signal<Set
 
 <md-prop-sudoku></md-prop-sudoku>
 
+Once you see narrowing-as-substrate, type inference falls out as the same shape applied to a different lattice. Each AST node gets a `SetCell<Tag>` over the possible kinds — `Int`, `Str`, `Bool`, `Fn` — plus child cells for function domain and codomain. Constraints emit propagators: a literal `5` narrows its cell to `{Int}`, a `+` forces both operands and the result to `{Int}`, an application `(f x)` narrows `f` to `{Fn}` and unifies its domain with the argument's type. Hindley-Milner unification is the same intersection-of-sets that drives `allDifferent`, lifted from atoms to structural lattices.
+
+```ts
+function unify(a: TypeNode, b: TypeNode) {
+  return [
+    propagator([a.tag], [b.tag], () => intersectInto(b.tag, a.tag)),
+    propagator([b.tag], [a.tag], () => intersectInto(a.tag, b.tag)),
+    ...(a.dom && b.dom ? unify(a.dom, b.dom) : []),
+    ...(a.cod && b.cod ? unify(a.cod, b.cod) : []),
+  ];
+}
+```
+
+The demo below cycles through four expressions, stepping one fixpoint wave at a time so you can watch each cell narrow. Polymorphism resolves when an unconstrained type variable meets a concrete argument. The fourth expression has no consistent typing — `λx. x + 1` forces `x : Int`, but it's applied to `"hi" : Str`. The propagator network detects this the only way it can: the intersection of `{Int}` and `{Str}` is the empty set. The contradiction is the empty cell.
+
+<md-prop-types></md-prop-types>
+
 Curves matter too. `Path` is a reactive polyline — cheap, fast, plenty for line plots and node-to-node connectors. When ellipses or arcs are needed, the sibling `Curve` carries the same reactive plumbing but with `ellipseArc` segments rendered via SVG's native `A` command. The standalone `ellipse(center, a, b, rotation?)` factory accepts `Val<>` on every parameter, so a family of confocal conics — five ellipses through fixed eccentricities, four hyperbola pairs sampled as polylines — comes from a couple of loops driven by two draggable foci. Drag a focus; the whole grid re-rescales. Drag the probe; the unique ellipse and hyperbola through it track in real time:
 
 ```ts
