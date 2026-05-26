@@ -1,7 +1,5 @@
 import {
-  Anchor,
   type CurveSegment,
-  circle,
   computed,
   curve,
   Diagram,
@@ -158,12 +156,11 @@ export class MdConfocal extends Diagram {
       label(
         view.top.down(20),
         "drag a focus or the blue probe — confocal ellipse + hyperbola track in real time",
-        { size: 12, align: Anchor.Center, opacity: 0.7 },
       ),
       label(
         view.bottom.up(16),
         "5 ellipses (a > c) ⊥ 4 hyperbolas (a < c) · 2a_e = r₁+r₂ · 2a_h = |r₁−r₂|",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

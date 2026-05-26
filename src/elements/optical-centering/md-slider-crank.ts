@@ -13,7 +13,7 @@
 // Newton, the shape "slips" along the closest valid configuration.
 
 import { collinear, constraints, distance, pin } from "@minim/constraints";
-import { Anchor, circle, Diagram, drag, handle, label, line, Mount, rect, vec } from "../../minim";
+import { circle, Diagram, drag, handle, label, line, Mount, rect, vec } from "../../minim";
 
 const CRANK = 50;
 const ROD = 130;
@@ -56,15 +56,11 @@ export class MdSliderCrank extends Diagram {
     drag(piston, B);
 
     s(
-      label(view.top.down(20), "drag the red crank tip — the piston follows on the guide", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "drag the red crank tip — the piston follows on the guide"),
       label(
         view.bottom.up(16),
         "distance(crank) · distance(rod) · collinear(piston, guide₁, guide₂)",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

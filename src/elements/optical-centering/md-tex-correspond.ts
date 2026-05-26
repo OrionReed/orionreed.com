@@ -1,4 +1,4 @@
-import { Anchor, type Content, Diagram, label, loop, Mount, signal, snapshot } from "../../minim";
+import { type Content, Diagram, label, loop, Mount, signal, snapshot } from "../../minim";
 import { highlight, morph, part, parts, tex, tint, write, writeOut } from "../../minim/tex";
 
 const RED = "#e25c5c";
@@ -16,16 +16,8 @@ export class MdTexCorrespond extends Diagram {
     const status = signal<Content>("");
 
     s(
-      label(view.top.down(22), "tex — identity across representations", {
-        size: 12,
-        opacity: 0.55,
-        align: Anchor.Center,
-      }),
-      label(view.bottom.up(22), status, {
-        size: 11,
-        opacity: 0.45,
-        align: Anchor.Center,
-      }),
+      label(view.top.down(22), "tex — identity across representations"),
+      label(view.bottom.up(22), status),
     );
 
     const v = part("v", VEC_V);

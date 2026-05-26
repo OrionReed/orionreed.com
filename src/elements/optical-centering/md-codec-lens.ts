@@ -66,13 +66,7 @@ export class MdCodecLens extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(VIEW_W, VIEW_H);
 
-    s(
-      label(view.top.down(20), "Codec lenses · text ↔ typed value, both ways", {
-        size: 13,
-        align: Anchor.Center,
-        opacity: 0.75,
-      }),
-    );
+    s(label(view.top.down(20), "Codec lenses · text ↔ typed value, both ways"));
 
     this.colorRow(s);
     this.timeRow(s);
@@ -81,7 +75,7 @@ export class MdCodecLens extends Diagram {
       label(
         view.bottom.up(14),
         "drag the handle → format direction · click a chip → parse direction",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }
@@ -123,14 +117,12 @@ export class MdCodecLens extends Diagram {
     // Live hex label — `hex.value` is the codec's format direction.
     s(
       label(vec(COLOR_BOX_X + COLOR_BOX_W + 30, COLOR_BOX_Y + 18), "hex:", {
-        size: 11,
         align: Anchor.Left,
-        opacity: 0.6,
       }),
       label(
         vec(COLOR_BOX_X + COLOR_BOX_W + 70, COLOR_BOX_Y + 18),
         computed(() => hex.value),
-        { size: 14, align: Anchor.Left, opacity: 0.95 },
+        { size: 14, align: Anchor.Left },
       ),
     );
 
@@ -149,10 +141,8 @@ export class MdCodecLens extends Diagram {
       s(
         label(vec(cx + CHIP_W / 2, cy + CHIP_H / 2 + 0.5), name, {
           size: 9,
-          align: Anchor.Center,
           // Black text on light chips, white on dark — quick contrast hack.
           fill: code === "#ffffff" ? "#222" : "white",
-          opacity: 0.9,
         }),
       );
       chip.on("click", () => {
@@ -166,7 +156,6 @@ export class MdCodecLens extends Diagram {
       label(vec(COLOR_BOX_X, COLOR_BOX_Y - 12), "hexFromColor(color)", {
         size: 10,
         align: Anchor.Left,
-        opacity: 0.5,
       }),
     );
   }
@@ -213,15 +202,11 @@ export class MdCodecLens extends Diagram {
     // Live time label. Reads from `time` (the codec view) — equivalent
     // to formatting `seconds.value` as MM:SS.
     s(
-      label(vec(TIME_RAIL_X0, TIME_RAIL_Y + 32), "time:", {
-        size: 11,
-        align: Anchor.Left,
-        opacity: 0.6,
-      }),
+      label(vec(TIME_RAIL_X0, TIME_RAIL_Y + 32), "time:", { align: Anchor.Left }),
       label(
         vec(TIME_RAIL_X0 + 38, TIME_RAIL_Y + 32),
         computed(() => time.value),
-        { size: 14, align: Anchor.Left, opacity: 0.95 },
+        { size: 14, align: Anchor.Left },
       ),
     );
 
@@ -241,13 +226,7 @@ export class MdCodecLens extends Diagram {
           corner: 4,
         }),
       );
-      s(
-        label(vec(bx + BUTTON_W / 2, buttonY + BUTTON_H / 2 + 0.5), presetText, {
-          size: 11,
-          align: Anchor.Center,
-          opacity: 0.85,
-        }),
-      );
+      s(label(vec(bx + BUTTON_W / 2, buttonY + BUTTON_H / 2 + 0.5), presetText));
       button.on("click", () => {
         time.value = presetText;
       });
@@ -260,12 +239,11 @@ export class MdCodecLens extends Diagram {
       label(
         vec(TIME_RAIL_X0, TIME_RAIL_Y - 12),
         computed(() => `seconds: ${seconds.value.toFixed(1)}s`),
-        { size: 10, align: Anchor.Left, opacity: 0.55 },
+        { size: 10, align: Anchor.Left },
       ),
       label(vec(TIME_RAIL_X0, TIME_RAIL_Y - 26), "secondsFromText(text)", {
         size: 10,
         align: Anchor.Left,
-        opacity: 0.5,
       }),
     );
   }

@@ -52,15 +52,12 @@ export class MdReact extends Diagram {
       label(
         vec(PAD, STATS_Y),
         computed(() => `hits: ${hits.value}`),
-        {
-          size: 12,
-          align: Anchor.Left,
-        },
+        { align: Anchor.Left },
       ),
       label(
         vec(W - PAD, STATS_Y),
         computed(() => `misses: ${misses.value}`),
-        { size: 12, align: Anchor.Right },
+        { align: Anchor.Right },
       ),
       label(
         vec(W / 2, STATS_Y),
@@ -71,13 +68,8 @@ export class MdReact extends Diagram {
           if (total === 0) return "—";
           return `${Math.round((h / total) * 100)}%`;
         }),
-        { size: 12, align: Anchor.Center, opacity: 0.6 },
       ),
-      label(vec(W / 2, STATUS_Y), status, {
-        size: 11,
-        align: Anchor.Center,
-        opacity: 0.5,
-      }),
+      label(vec(W / 2, STATUS_Y), status),
     );
 
     const anim = this.anim;

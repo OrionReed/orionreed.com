@@ -1,5 +1,4 @@
 import {
-  Anchor,
   circle,
   Diagram,
   dragRotate,
@@ -107,15 +106,11 @@ export class MdGears extends Diagram {
     }
 
     s(
-      label(view.top.down(20), "drag any blue knob — the meshed chain rotates everything", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "drag any blue knob — the meshed chain rotates everything"),
       label(
         view.bottom.up(16),
         "g[i] = drive.scale(±1 / ratio_i) · invertible chain · drive pauses while dragging",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

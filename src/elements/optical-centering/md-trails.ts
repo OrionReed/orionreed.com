@@ -1,5 +1,4 @@
 import {
-  Anchor,
   type Animatable,
   Diagram,
   easeInOut,
@@ -121,15 +120,9 @@ export class MdTrails extends Diagram {
     );
 
     s(
-      label(view.top.down(22), "per-property springs · pause translate or rotate independently", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(22), "per-property springs · pause translate or rotate independently"),
       label(view.top.down(40), "each rate is a separate signal · master cycles them out of phase", {
         size: 10,
-        align: Anchor.Center,
-        opacity: 0.5,
       }),
     );
   }

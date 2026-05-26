@@ -25,7 +25,7 @@
 // so a rotating rect's drag still returns stable world coords.
 
 import { animate, type Body, body, dragBodyAnchored, joint, world } from "@minim/constraints";
-import { Anchor, Diagram, label, Mount, rect } from "../../minim";
+import { Diagram, label, Mount, rect } from "../../minim";
 
 const PALETTE = ["#5b8def", "#e25c5c", "#f5a623", "#7ed321", "#9b59b6", "#1abc9c"];
 
@@ -205,12 +205,11 @@ export class MdRigidStack extends Diagram {
       label(
         view.top.down(14),
         "drag any body — pyramid stacks, IK arm articulates, wrecking ball swings",
-        { size: 12, align: Anchor.Center, opacity: 0.7 },
       ),
       label(
         view.bottom.up(16),
         `${dynamicBoxes.length} stack · ${arm.length}-bar IK arm · ${chain.length}-link chain + ball · diag(m, m, I) cells · SAT + Coulomb`,
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

@@ -1,5 +1,4 @@
 import {
-  Anchor,
   centroid,
   Diagram,
   easeInOut,
@@ -44,12 +43,11 @@ export class MdAggregates extends Diagram {
         view.top.down(30),
         () =>
           `mean rotation: ${((r.value * 180) / Math.PI).toFixed(0)}°    mean scale: ${k.peek().x.toFixed(2)}`,
-        { size: 11, align: Anchor.Center, opacity: 0.7 },
       ),
       label(
         view.bottom.up(14),
         "centroid + meanRotation + meanScale composed in parallel; targets randomized each cycle",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
 

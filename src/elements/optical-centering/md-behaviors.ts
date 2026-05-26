@@ -1,5 +1,4 @@
 import {
-  Anchor,
   attract,
   circle,
   Diagram,
@@ -152,8 +151,6 @@ export class MdBehaviors extends Diagram {
     s(
       label(view.bottom.up(12), "attract (smooth) · spring (elastic, pauses) · play(rigid-link)", {
         size: 10,
-        align: Anchor.Center,
-        opacity: 0.55,
       }),
     );
   }

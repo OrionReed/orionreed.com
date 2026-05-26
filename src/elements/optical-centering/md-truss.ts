@@ -15,7 +15,6 @@
 // or elbow and the closed-loop redistributes through the whole rig.
 
 import {
-  Anchor,
   circle,
   Diagram,
   drive,
@@ -227,15 +226,10 @@ export class MdTruss extends Diagram {
     );
 
     s(
-      label(view.top.down(20), "drag any platform corner or elbow — all three arms reconfigure", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "drag any platform corner or elbow — all three arms reconfigure"),
       label(
         view.bottom.up(16),
         "3-armed planar Stewart platform · 9 length constraints · solver = position-based dynamics",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
       ),
     );
   }

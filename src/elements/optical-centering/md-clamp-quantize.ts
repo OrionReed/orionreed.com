@@ -54,13 +54,7 @@ export class MdClampQuantize extends Diagram {
     const tC = t.clamp(lo, hi);
     const tQ = tC.quantize(0.1);
 
-    s(
-      label(view.top.down(16), "chained projections — writes flow back through every prior lens", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
-    );
+    s(label(view.top.down(16), "chained projections — writes flow back through every prior lens"));
 
     this.row(s, ROWS.raw, "t", t, "#5b8def", () => t.value.toFixed(3));
 
@@ -122,7 +116,7 @@ export class MdClampQuantize extends Diagram {
       label(
         view.bottom.up(10),
         "drag any rail — writes propagate up the chain through each prior projection",
-        { size: 9.5, align: Anchor.Center, opacity: 0.5 },
+        { size: 9.5 },
       ),
     );
   }
@@ -136,12 +130,8 @@ export class MdClampQuantize extends Diagram {
     readout: () => string,
   ): void {
     s(
-      label(vec(X0, y - 16), name, { size: 11, align: Anchor.Left, opacity: 0.6 }),
-      label(vec(X1, y - 16), computed(readout), {
-        size: 11,
-        align: Anchor.Right,
-        opacity: 0.6,
-      }),
+      label(vec(X0, y - 16), name, { align: Anchor.Left }),
+      label(vec(X1, y - 16), computed(readout), { align: Anchor.Right }),
       line(vec(X0, y), vec(X1, y), { thin: true, opacity: 0.35, cap: "round" }),
     );
     const sliderX = range(X0, X1).slider(t);

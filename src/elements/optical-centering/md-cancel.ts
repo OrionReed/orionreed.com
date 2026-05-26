@@ -1,5 +1,4 @@
 import {
-  Anchor,
   type Animator,
   button,
   type Content,
@@ -36,13 +35,7 @@ export class MdCancel extends Diagram {
     const view = this.view(380, 160);
 
     const status = signal<Content>("running");
-    s(
-      label(view.top.down(STATUS_Y), status, {
-        size: 11,
-        align: Anchor.Center,
-        opacity: 0.55,
-      }),
-    );
+    s(label(view.top.down(STATUS_Y), status));
 
     type Slot = {
       x: number;

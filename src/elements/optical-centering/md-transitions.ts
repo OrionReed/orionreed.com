@@ -78,7 +78,7 @@ export class MdTransitions extends Diagram {
 
     lanes.forEach((lane, laneIdx) => {
       const y = 25 + laneIdx * LANE_GAP;
-      s(label(vec(10, y), lane.name, { size: 12, align: Anchor.Left, opacity: 0.5 }));
+      s(label(vec(10, y), lane.name, { align: Anchor.Left }));
 
       const shapes = Array.from({ length: COUNT }, (_, i) =>
         lane.shape(s, LEFT_PAD + i * stride, y),

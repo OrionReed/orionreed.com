@@ -218,7 +218,7 @@ export class MdLoop extends Diagram {
     const fmt = (sig: { value: number }) => `${((wrap(sig.value) * 180) / Math.PI).toFixed(0)}°`;
     const corner = view.at(0, 1).right(18);
     const labelAt = (yOffset: number, text: () => string) =>
-      label(corner.up(yOffset), text, { size: 11, align: Anchor.Left, opacity: 0.7 });
+      label(corner.up(yOffset), text, { align: Anchor.Left });
     s(
       labelAt(64, () => `θ_OA (input)   = ${fmt(thetaOA)}`),
       labelAt(46, () => `θ_AB (coupler) = ${fmt(thetaAB)}`),
@@ -229,12 +229,11 @@ export class MdLoop extends Diagram {
       label(
         view.top.down(20),
         "drag the blue crank or the red tracer — angles propagate via Newton-Raphson on loop closure",
-        { size: 12, align: Anchor.Center, opacity: 0.7 },
       ),
       label(
         view.bottom.up(10),
         "4-bar · 1 loop · 2 unknown angles solved each frame · seed = last frame's solution",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

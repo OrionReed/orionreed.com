@@ -7,7 +7,6 @@
 
 import { constraints, distance, pin, rightAngle } from "@minim/constraints";
 import {
-  Anchor,
   circle,
   Diagram,
   handle,
@@ -51,15 +50,9 @@ export class MdSketchpad extends Diagram {
     }
 
     s(
-      label(view.top.down(20), "drag any corner — bar lengths and the right angle stay satisfied", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "drag any corner — bar lengths and the right angle stay satisfied"),
       label(view.bottom.up(16), "3 distance + 1 perpendicular constraints in a Cluster", {
         size: 10,
-        align: Anchor.Center,
-        opacity: 0.5,
       }),
     );
   }

@@ -1,5 +1,4 @@
 import {
-  Anchor,
   circle,
   computed,
   Diagram,
@@ -42,7 +41,7 @@ export class MdTimelineEditor extends Diagram {
       label(
         view.top.down(24),
         computed(() => `phase: ${phaseName.value}   ·   taps: ${taps.value}`),
-        { size: 14, opacity: 0.75 },
+        { size: 14 },
       ),
     );
 
@@ -67,7 +66,6 @@ export class MdTimelineEditor extends Diagram {
         label(
           body.center,
           computed(() => `${name} ${c.dur.value.toFixed(2)}s`),
-          { size: 11, opacity: 0.95 },
         ),
       );
     });
@@ -120,13 +118,7 @@ export class MdTimelineEditor extends Diagram {
     });
     s(...actors);
 
-    s(
-      label(view.bottom.up(16), "drag the knobs to retime · click any circle to ping", {
-        size: 11,
-        opacity: 0.5,
-        align: Anchor.Center,
-      }),
-    );
+    s(label(view.bottom.up(16), "drag the knobs to retime · click any circle to ping"));
 
     this.anim.start(
       loop(function* () {

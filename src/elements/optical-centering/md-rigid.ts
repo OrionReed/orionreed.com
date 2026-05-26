@@ -9,7 +9,6 @@
 
 import { constraints, distance, pin } from "@minim/constraints";
 import {
-  Anchor,
   Diagram,
   handle,
   label,
@@ -60,14 +59,8 @@ export class MdRigid extends Diagram {
 
     // Click-to-toggle on the diagonal label.
     const toggle = s(
-      label(
-        view.bottom.up(38),
-        () => (braced.value ? "rigid (diagonal on)" : "flexible (diagonal off)"),
-        {
-          size: 12,
-          align: Anchor.Center,
-          opacity: 0.85,
-        },
+      label(view.bottom.up(38), () =>
+        braced.value ? "rigid (diagonal on)" : "flexible (diagonal off)",
       ),
     );
     toggle.el.style.cursor = "pointer";
@@ -76,15 +69,11 @@ export class MdRigid extends Diagram {
     });
 
     s(
-      label(view.top.down(20), "drag any corner — toggle the diagonal to see the difference", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "drag any corner — toggle the diagonal to see the difference"),
       label(
         view.bottom.up(16),
         "4 side constraints + 1 toggleable diagonal — same constraints, structural change at runtime",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

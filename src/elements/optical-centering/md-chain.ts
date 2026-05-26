@@ -24,7 +24,7 @@
 // difference.
 
 import { animate, type Body, body, dragBody, joint, world } from "@minim/constraints";
-import { Anchor, circle, Diagram, label, Mount, Path, Vec } from "../../minim";
+import { circle, Diagram, label, Mount, Path, Vec } from "../../minim";
 
 const N = 28;
 const LINK_W = 12;
@@ -112,15 +112,11 @@ export class MdChain extends Diagram {
     this.anim.start(animate(w));
 
     s(
-      label(view.top.down(20), "drag the blue tip or the red mid-link — gravity carries the rest", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "drag the blue tip or the red mid-link — gravity carries the rest"),
       label(
         view.bottom.up(16),
         `${N} rigid bars (3-DOF cells) · ${N} revolute joints · rendered as a polyline`,
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

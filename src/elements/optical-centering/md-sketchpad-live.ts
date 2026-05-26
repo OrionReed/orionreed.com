@@ -41,7 +41,6 @@ import {
   rightAngle,
 } from "@minim/constraints";
 import {
-  Anchor,
   type AnyShape,
   type Content,
   circle,
@@ -513,7 +512,7 @@ export class MdSketchpadLive extends Diagram {
         ? `${head} — no constraint matches`
         : `${head} — ${matches.join(" / ")}`;
     });
-    s(label(vec(W / 2, STATUS_Y), status, { size: 12, align: Anchor.Center, opacity: 0.75 }));
+    s(label(vec(W / 2, STATUS_Y), status));
 
     // ─── live primitive rendering (lines first → points on top) ─────
 
@@ -541,7 +540,7 @@ export class MdSketchpadLive extends Diagram {
       label(
         vec(W / 2, FOOTER_Y),
         "two reactive collections (Point[], Line[]) + Constraint[] · forEach renders · cluster reflows",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }
@@ -768,11 +767,7 @@ function badge(
       stroke: "var(--text-color, #222)",
       thin: true,
     }),
-    label(vec(0, 0.5), text, {
-      size: 11,
-      align: Anchor.Center,
-      fill: fg,
-    }),
+    label(vec(0, 0.5), text, { fill: fg }),
   );
   g.el.style.cursor = "pointer";
   g.on("pointerenter", () => {
@@ -818,8 +813,6 @@ function toolBtn(
       corner: 4,
     }),
     label(vec(width / 2, PALETTE_H / 2 + 1), text, {
-      size: 11,
-      align: Anchor.Center,
       fill: computed(() => (active.value ? ACCENT : "var(--text-color, #222)")),
     }),
   );
@@ -848,8 +841,6 @@ function actionBtn(
       opacity: computed(() => (enabled.value ? 1 : 0.35)),
     }),
     label(vec(width / 2, PALETTE_H / 2 + 1), text, {
-      size: 11,
-      align: Anchor.Center,
       fill: computed(() => (enabled.value ? SELECTED : "var(--text-color, #222)")),
       opacity: computed(() => (enabled.value ? 1 : 0.55)),
     }),

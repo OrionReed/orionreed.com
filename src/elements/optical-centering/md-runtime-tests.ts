@@ -1146,20 +1146,8 @@ export class MdRuntimeTests extends Diagram {
     const messages = TESTS.map(() => signal<string>(""));
     const summary = signal<string>("");
 
-    s(
-      label(vec(PAD_X, 18), "minim runtime tests", {
-        size: 14,
-        bold: true,
-        align: Anchor.Left,
-      }),
-    );
-    s(
-      label(vec(W - PAD_X, 18), summary, {
-        size: 12,
-        align: Anchor.Right,
-        opacity: 0.8,
-      }),
-    );
+    s(label(vec(PAD_X, 18), "minim runtime tests", { size: 14, bold: true, align: Anchor.Left }));
+    s(label(vec(W - PAD_X, 18), summary, { align: Anchor.Right }));
 
     forEach(s.root, TESTS, (t, i) => {
       const y = HEADER_H + i * ROW_H + ROW_H / 2;
@@ -1167,25 +1155,15 @@ export class MdRuntimeTests extends Diagram {
         fill: () => COLOR[statuses[i].value],
       });
       const name = label(vec(PAD_X + 22, y), t.name, {
-        size: 12,
         align: Anchor.Left,
+        // Pending tests fade until they're run, then snap to full presence.
         opacity: () => (statuses[i].value === "pending" ? 0.5 : 1),
       });
-      const msg = label(vec(W - PAD_X, y), messages[i], {
-        size: 11,
-        align: Anchor.Right,
-        opacity: 0.65,
-      });
+      const msg = label(vec(W - PAD_X, y), messages[i], { align: Anchor.Right });
       return [dot, name, msg];
     });
 
-    s(
-      label(vec(W / 2, H - 12), "all tests run on a fresh Anim driven by step(dt)", {
-        size: 10,
-        align: Anchor.Center,
-        opacity: 0.5,
-      }),
-    );
+    s(label(vec(W / 2, H - 12), "all tests run on a fresh Anim driven by step(dt)", { size: 10 }));
 
     this.anim.start(
       loop(function* () {

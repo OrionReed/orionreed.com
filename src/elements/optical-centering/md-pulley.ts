@@ -1,5 +1,4 @@
 import {
-  Anchor,
   circle,
   Diagram,
   drag,
@@ -62,12 +61,11 @@ export class MdPulley extends Diagram {
       label(
         view.top.down(20),
         "drag a weight — rope length is conserved, the other follows opposite",
-        { size: 12, align: Anchor.Center, opacity: 0.7 },
       ),
       label(
         view.bottom.up(16),
         "b = a.affine(−1, L) · the invertible chain IS the conservation law",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

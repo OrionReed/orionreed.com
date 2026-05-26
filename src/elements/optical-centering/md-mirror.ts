@@ -1,5 +1,4 @@
 import {
-  Anchor,
   Diagram,
   handle,
   label,
@@ -68,15 +67,11 @@ export class MdMirror extends Diagram {
     );
 
     s(
-      label(view.top.down(20), "drag any handle — original, reflected, or the mirror itself", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "drag any handle — original, reflected, or the mirror itself"),
       label(
         view.bottom.up(16),
         "reflectionLens(p, mA, mB)  ·  one involutive formula, both directions",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

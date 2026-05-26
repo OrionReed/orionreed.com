@@ -1,16 +1,6 @@
 // `tex` reads strings.raw, so use single backslashes (`\frac`, `\dot`, `\cdot`).
 
-import {
-  Anchor,
-  type Content,
-  Diagram,
-  label,
-  loop,
-  Mount,
-  signal,
-  snapshot,
-  stagger,
-} from "../../minim";
+import { type Content, Diagram, label, loop, Mount, signal, snapshot, stagger } from "../../minim";
 import {
   brace,
   frame,
@@ -32,16 +22,8 @@ export class MdTexDemo extends Diagram {
     const status = signal<Content>("");
 
     s(
-      label(view.top.down(22), "tex — derivations, representations, identity", {
-        size: 12,
-        opacity: 0.55,
-        align: Anchor.Center,
-      }),
-      label(view.bottom.up(22), status, {
-        size: 11,
-        opacity: 0.45,
-        align: Anchor.Center,
-      }),
+      label(view.top.down(22), "tex — derivations, representations, identity"),
+      label(view.bottom.up(22), status),
     );
 
     const { a, b, c, cross } = parts("a", "b", "c", { cross: "2ab" });

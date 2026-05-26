@@ -27,7 +27,6 @@ export {
 export { bind } from "./lateral";
 export { each, type Lifecycle, param } from "./network-utils";
 export { reflectionLens } from "./new-primitives";
-export { type RelateHandle, relate } from "./relate";
 export {
   batch,
   computed,

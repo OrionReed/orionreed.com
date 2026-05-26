@@ -8,7 +8,7 @@ export const tokens = {
   /** Stack of fonts with OpenType MATH tables. */
   mathFont:
     "'New CM Math', 'Cambria Math', 'STIXTwoMath-Regular', 'NotoSansMath-Regular', 'New CM', math, serif",
-  fontSize: 14,
+  fontSize: 13,
   /** Approximate glyph aspect (SVG can't measure). */
   charWidth: 0.6,
   subFontSize: "0.75em",

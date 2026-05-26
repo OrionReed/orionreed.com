@@ -1,4 +1,4 @@
-import { Anchor, circle, Diagram, debug, handle, label, line, Mount, vec } from "../../minim";
+import { circle, Diagram, debug, handle, label, line, Mount, vec } from "../../minim";
 
 export class MdInvertible extends Diagram {
   protected scene(s: Mount): void {
@@ -21,15 +21,9 @@ export class MdInvertible extends Diagram {
     s(handle(a), handle(b));
 
     s(
-      label(view.top.down(20), "drag either dot — the invertible chain writes both ways", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "drag either dot — the invertible chain writes both ways"),
       label(view.bottom.up(16), "b = a.right(160).up(80) · same lens read & written", {
         size: 10,
-        align: Anchor.Center,
-        opacity: 0.5,
       }),
     );
   }

@@ -1,5 +1,4 @@
 import {
-  Anchor,
   circle,
   computed,
   Diagram,
@@ -125,13 +124,7 @@ export class MdMultitrack extends Diagram {
         px.hi.value = Math.max(local.x, px.lo.value + MIN_W_PX);
       });
 
-      s(
-        label(body.center, name, {
-          size: 10,
-          opacity: 0.95,
-          align: Anchor.Center,
-        }),
-      );
+      s(label(body.center, name, { size: 10 }));
     });
 
     const playX = computed(() => STRIP_X + tl.t.value * STRIP_W);
@@ -159,12 +152,11 @@ export class MdMultitrack extends Diagram {
       label(
         view.bottom.up(32),
         computed(() => `time: ${tl.clock.value.toFixed(2)}s / ${tl.duration.value.toFixed(2)}s`),
-        { size: 11, opacity: 0.65, align: Anchor.Center },
       ),
       label(
         view.bottom.up(14),
         "drag clip body to shift · drag handles to resize · overlapping clips animate together",
-        { size: 10, opacity: 0.5, align: Anchor.Center },
+        { size: 10 },
       ),
     );
 

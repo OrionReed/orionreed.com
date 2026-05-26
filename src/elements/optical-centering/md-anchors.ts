@@ -1,5 +1,4 @@
 import {
-  Anchor,
   bind,
   circle,
   Diagram,
@@ -68,15 +67,9 @@ export class MdAnchors extends Diagram {
     s(line(sat.center, r.right, { thin: true, opacity: 0.4 }));
 
     s(
-      label(view.top.down(20), "writable anchors — bind tracks rotate × scale", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.6,
-      }),
+      label(view.top.down(20), "writable anchors — bind tracks rotate × scale"),
       label(view.bottom.up(16), "dot.center.bind(r.at(u, v))  ·  line(sat.center, r.right)", {
         size: 10,
-        align: Anchor.Center,
-        opacity: 0.5,
       }),
     );
   }

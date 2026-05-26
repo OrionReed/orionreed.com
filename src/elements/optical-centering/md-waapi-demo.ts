@@ -30,11 +30,7 @@ export class MdWaapiDemo extends Diagram {
             .right(20)
             .down(y + 4),
           name,
-          {
-            size: 11,
-            align: Anchor.Left,
-            opacity: 0.6,
-          },
+          { align: Anchor.Left },
         ),
         rect(X, y, BW, 6, { fill: "rgba(127, 127, 127, 0.18)" }),
         rect(
@@ -50,22 +46,12 @@ export class MdWaapiDemo extends Diagram {
             .left(20)
             .down(y + 4),
           computed(() => p.value.toFixed(2)),
-          {
-            size: 11,
-            align: Anchor.Right,
-            opacity: 0.55,
-          },
+          { align: Anchor.Right },
         ),
       );
     };
 
-    s(
-      label(view.top.down(20), "waapi — scroll-driven signals", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.6,
-      }),
-    );
+    s(label(view.top.down(20), "waapi — scroll-driven signals"));
 
     bar(58, "page", scrollProgress());
     const vp = viewProgress(this);
@@ -85,16 +71,8 @@ export class MdWaapiDemo extends Diagram {
 
     s(
       circle(tracker, 7, { fill: true }),
-      label(view.top.down(195), "↑ loops with view progress — scroll the page", {
-        size: 10,
-        align: Anchor.Center,
-        opacity: 0.5,
-      }),
-      label(view.top.down(217), () => (inView(this).value ? "in view" : "offscreen"), {
-        size: 11,
-        align: Anchor.Center,
-        opacity: 0.6,
-      }),
+      label(view.top.down(195), "↑ loops with view progress — scroll the page", { size: 10 }),
+      label(view.top.down(217), () => (inView(this).value ? "in view" : "offscreen")),
     );
 
     // Raw SVG nodes (not Shapes) so minim's per-frame effects don't fight WAAPI.
@@ -115,15 +93,11 @@ export class MdWaapiDemo extends Diagram {
     }
 
     s(
-      label(view.top.down(248), "native — WAAPI keyframes via `native()`", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.6,
-      }),
+      label(view.top.down(248), "native — WAAPI keyframes via `native()`"),
       label(
         view.top.down(295),
         "transform · opacity · filter — compositor-only, ~0 main-thread cost",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
 

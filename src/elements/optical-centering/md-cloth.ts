@@ -13,17 +13,7 @@
 // supported bodies otherwise produce.
 
 import { animate, bend, physics, pin, Strength, spring } from "@minim/constraints";
-import {
-  Anchor,
-  Diagram,
-  handle,
-  label,
-  line,
-  Mount,
-  type Vec,
-  vec,
-  type Writable,
-} from "../../minim";
+import { Diagram, handle, label, line, Mount, type Vec, vec, type Writable } from "../../minim";
 
 type WVec = Writable<Vec>;
 
@@ -103,11 +93,7 @@ export class MdCloth extends Diagram {
       label(
         view.bottom.up(16),
         `${W}×${H} grid · ${(W - 1) * H + W * (H - 1)} stiff springs · 60 fps`,
-        {
-          size: 10,
-          align: Anchor.Center,
-          opacity: 0.5,
-        },
+        { size: 10 },
       ),
     );
   }

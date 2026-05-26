@@ -94,39 +94,21 @@ export class MdRand extends Diagram {
     const currentColor = computed(() => current.value?.color ?? "#1a1a1a");
 
     s(
-      label(vec(20, 24), "rand", {
-        size: 13,
-        bold: true,
-        align: Anchor.Left,
-        opacity: 0.85,
-      }),
+      label(vec(20, 24), "rand", { bold: true, align: Anchor.Left }),
       label(vec(20, 42), "yield* rand(...gens) — pick one branch each loop", {
         size: 10,
         align: Anchor.Left,
-        opacity: 0.5,
       }),
     );
 
     const subject = s(circle(vec(STAGE_X, STAGE_Y), 22, { fill: currentColor }));
-    s(
-      label(subject.center.up(60), currentName, {
-        size: 18,
-        bold: true,
-        align: Anchor.Center,
-      }),
-    );
+    s(label(subject.center.up(60), currentName, { size: 18, bold: true }));
     const reset = snapshot(subject.translate, subject.rotate, subject.scale, subject.opacity);
 
     const MENU_X = 440;
     const MENU_Y = 70;
     const ROW_H = 22;
-    s(
-      label(vec(MENU_X, MENU_Y - 22), "candidates", {
-        size: 10,
-        align: Anchor.Left,
-        opacity: 0.5,
-      }),
-    );
+    s(label(vec(MENU_X, MENU_Y - 22), "candidates", { size: 10, align: Anchor.Left }));
     MOVES.forEach((m, i) => {
       const isActive = computed(() => current.value?.name === m.name);
       const opacity = computed(() => (isActive.value ? 1 : 0.4));
@@ -135,8 +117,8 @@ export class MdRand extends Diagram {
           fill: m.color,
           opacity,
         }),
+        // `opacity` reactive — pulses to highlight the active candidate.
         label(vec(MENU_X + 14, MENU_Y + i * ROW_H), m.name, {
-          size: 12,
           align: Anchor.Left,
           opacity,
         }),

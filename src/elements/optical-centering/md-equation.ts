@@ -72,19 +72,9 @@ export class MdEquation extends Diagram {
     }
 
     s(
-      label(
-        view.top.down(20),
-        "drag any handle — the other two redistribute to keep a² + b² = c²",
-        {
-          size: 12,
-          align: Anchor.Center,
-          opacity: 0.7,
-        },
-      ),
+      label(view.top.down(20), "drag any handle — the other two redistribute to keep a² + b² = c²"),
       label(view.bottom.up(16), "three Num cells · one generic constraint · no geometry", {
         size: 10,
-        align: Anchor.Center,
-        opacity: 0.5,
       }),
     );
   }

@@ -8,7 +8,7 @@
 // has rotational inertia per link — bars feel like bars, not beads.
 
 import { animate, type Body, body, dragBody, joint, world } from "@minim/constraints";
-import { Anchor, circle, Diagram, label, Mount, rect, Vec } from "../../minim";
+import { circle, Diagram, label, Mount, rect, Vec } from "../../minim";
 
 const N = 18;
 const LINK_W = 18;
@@ -82,16 +82,11 @@ export class MdRigidRope extends Diagram {
       label(
         view.top.down(20),
         "drag any link — rigid bars + revolute joints, full rotation per link",
-        {
-          size: 12,
-          align: Anchor.Center,
-          opacity: 0.7,
-        },
       ),
       label(
         view.bottom.up(16),
         `${N} rigid bars · ${N} joints · diag(m, m, I) per body · postStabilize`,
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

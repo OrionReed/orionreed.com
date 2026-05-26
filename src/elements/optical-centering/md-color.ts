@@ -116,11 +116,7 @@ export class MdColor extends Diagram {
     const slider = (target: Writable<Num>, y: number, letter: string): void => {
       s(
         line(vec(SLIDER_X0, y), vec(SLIDER_X1, y), { thin: true, opacity: 0.35 }),
-        label(vec(SLIDER_X0 - 14, y), letter, {
-          size: 11,
-          align: Anchor.Right,
-          opacity: 0.55,
-        }),
+        label(vec(SLIDER_X0 - 14, y), letter, { align: Anchor.Right }),
       );
       const knobX = range(SLIDER_X0, SLIDER_X1).slider(target.clamp(0, 1));
       s(handle(vec(knobX, y), { r: 6, fill: () => cssColor.value, cursor: "ew-resize" }));
@@ -133,15 +129,11 @@ export class MdColor extends Diagram {
 
     // ── Caption ────────────────────────────────────────────────────
     s(
-      label(view.top.down(20), "five draggable inputs, two coordinate systems, one colour", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "five draggable inputs, two coordinate systems, one colour"),
       label(
         view.bottom.up(16),
         "R/G/B = Num.lens([h, s, l], hslToRgb, rgbToHsl) · drag any view; every other view updates through the bijection",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

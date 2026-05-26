@@ -10,7 +10,6 @@
 
 import { constraints, gap, generic } from "@minim/constraints";
 import {
-  Anchor,
   Diagram,
   handle,
   label,
@@ -82,16 +81,11 @@ export class MdFigure8 extends Diagram {
       label(
         view.top.down(20),
         "drag any circle — it slides along the figure-8, others scoot aside",
-        {
-          size: 12,
-          align: Anchor.Center,
-          opacity: 0.7,
-        },
       ),
       label(
         view.bottom.up(16),
         `${N} circles · per-shape (t, P) coupled via generic · pairwise gap`,
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

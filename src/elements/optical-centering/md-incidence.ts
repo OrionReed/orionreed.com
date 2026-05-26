@@ -17,7 +17,6 @@ import {
   rightAngle,
 } from "@minim/constraints";
 import {
-  Anchor,
   circle,
   Diagram,
   handle,
@@ -87,16 +86,11 @@ export class MdIncidence extends Diagram {
       label(
         view.top.down(20),
         "P stays on the circle, Q stays on the line, |PM| = |MQ| at a right angle",
-        {
-          size: 12,
-          align: Anchor.Center,
-          opacity: 0.7,
-        },
       ),
       label(
         view.bottom.up(16),
         "onCircle · collinear · distance · equalDist · rightAngle — six constraints, one cluster",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

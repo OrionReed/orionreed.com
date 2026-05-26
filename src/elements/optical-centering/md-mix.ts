@@ -1,5 +1,4 @@
 import {
-  Anchor,
   circle,
   computed,
   Diagram,
@@ -134,12 +133,11 @@ export class MdMix extends Diagram {
       label(
         view.top.down(20),
         "two looping sequences (orbit · star-tween) blended via Vec.derive([a, b, w], weightedMean)",
-        { size: 12, align: Anchor.Center, opacity: 0.7 },
       ),
       label(
         view.bottom.up(64),
         "weight cycles 0 ↔ 1 over ~10s; the blend is the per-frame weighted mean",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

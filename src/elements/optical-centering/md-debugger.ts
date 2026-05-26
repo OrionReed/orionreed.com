@@ -223,15 +223,11 @@ export class MdDebugger extends Diagram {
 
     // ─── header + verdict ───────────────────────────────────
     s(
-      label(vec(PAD_X, HEADER_Y), "animation debugger", {
-        size: 13,
-        bold: true,
-        align: Anchor.Left,
-      }),
+      label(vec(PAD_X, HEADER_Y), "animation debugger", { bold: true, align: Anchor.Left }),
       label(
         vec(PAD_X, SUBHEAD_Y),
         "scope tags every factory · α(t) is colored by author · claim strips align with the gantt",
-        { size: 9, align: Anchor.Left, opacity: 0.55 },
+        { size: 9, align: Anchor.Left },
       ),
       // Live verdict (right-aligned).
       label(
@@ -279,6 +275,8 @@ export class MdDebugger extends Diagram {
           size: 9,
           align: Anchor.Left,
           opacity: 0.4,
+          // ↑ track is empty until a span shows up — fade so the lane label
+          // doesn't compete with the populated tracks above.
         }),
       );
     });
@@ -343,7 +341,6 @@ export class MdDebugger extends Diagram {
           size: 9,
           align: Anchor.Left,
           fill: "white",
-          opacity: 0.95,
         });
         return [bar, tagShape];
       },
@@ -355,7 +352,6 @@ export class MdDebugger extends Diagram {
       label(vec(PAD_X, PLOT_TOP - 6), "α(t) — colored by author", {
         size: 9,
         align: Anchor.Left,
-        opacity: 0.55,
       }),
       rect(PAD_X, PLOT_TOP, GANTT_W, PLOT_H, {
         fill: "#fafafa",
@@ -459,7 +455,6 @@ export class MdDebugger extends Diagram {
         label(vec(PAD_X + 4, y + CLAIM_TRACK_H / 2 + 0.5), row.name, {
           size: 9,
           align: Anchor.Left,
-          opacity: 0.5,
         }),
       );
 
@@ -545,7 +540,7 @@ export class MdDebugger extends Diagram {
       label(
         vec(W / 2, FOOTER_Y),
         "intro → fadeIn → nudge (overshoots) → fadeOut · pause and step to inspect the violation",
-        { size: 10, align: Anchor.Center, opacity: 0.55 },
+        { size: 10 },
       ),
     );
 
@@ -607,10 +602,7 @@ function chunkButton(
       thin: true,
       corner: 4,
     }),
-    label(vec(width / 2, BTN_H / 2 + 1), content, {
-      size: 11,
-      align: Anchor.Center,
-    }),
+    label(vec(width / 2, BTN_H / 2 + 1), content),
   );
   g.on("click", onClick);
   g.el.style.cursor = "pointer";

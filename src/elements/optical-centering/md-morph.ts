@@ -1,5 +1,4 @@
 import {
-  Anchor,
   type Content,
   circle,
   Diagram,
@@ -128,15 +127,11 @@ export class MdMorph extends Diagram {
     const cy = H / 2 + 8;
 
     s(
-      label(view.top.down(22), "Polygon — an array-of-Vec value type", {
-        size: 13,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(22), "Polygon — an array-of-Vec value type"),
       label(
         view.bottom.up(20),
         "polygon.to(targetShape, dur) — same one-call tween as Vec / Box / Color, on a value type that's an array of points.",
-        { size: 10, align: Anchor.Center, opacity: 0.45 },
+        { size: 10 },
       ),
     );
 
@@ -169,13 +164,7 @@ export class MdMorph extends Diagram {
     }
 
     const status = signal<Content>(KEYFRAMES[0].name);
-    s(
-      label(view.top.down(46), status, {
-        size: 11,
-        align: Anchor.Center,
-        opacity: 0.55,
-      }),
-    );
+    s(label(view.top.down(46), status));
 
     this.anim.start(
       loop(function* () {

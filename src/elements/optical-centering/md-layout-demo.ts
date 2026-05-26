@@ -1,15 +1,4 @@
-import {
-  Anchor,
-  arrange,
-  Diagram,
-  handle,
-  label,
-  Mount,
-  num,
-  rect,
-  spring,
-  Vec,
-} from "../../minim";
+import { arrange, Diagram, handle, label, Mount, num, rect, spring, Vec } from "../../minim";
 
 const WIDTHS = [72, 68, 80, 60, 76];
 const HEIGHTS = [52, 44, 60, 48, 56];
@@ -68,12 +57,6 @@ export class MdLayoutDemo extends Diagram {
       }),
     );
 
-    s(
-      label(view.bottom.up(14), "drag handles to resize · red card springs back", {
-        size: 10,
-        align: Anchor.Center,
-        opacity: 0.55,
-      }),
-    );
+    s(label(view.bottom.up(14), "drag handles to resize · red card springs back", { size: 10 }));
   }
 }

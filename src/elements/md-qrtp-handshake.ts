@@ -70,9 +70,9 @@ export class MdQrtpHandshake extends Diagram {
             if (c.status === "future") return "";
             return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
           }),
-          label(data.center.down(8), t("data").muted(), { size: 12 }),
+          label(data.center.down(8), t("data").muted()),
           label(ack.center.up(5), () => state[device].value[i].ack),
-          label(ack.center.down(8), t("ack").muted(), { size: 12 }),
+          label(ack.center.down(8), t("ack").muted()),
         );
 
         return { data, ack };

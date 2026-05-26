@@ -1,5 +1,4 @@
 import {
-  Anchor,
   circle,
   Diagram,
   drag,
@@ -67,15 +66,11 @@ export class MdSolarSystem extends Diagram {
     );
 
     s(
-      label(view.top.down(20), "drag any planet or moon — the whole system winds/unwinds in time", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "drag any planet or moon — the whole system winds/unwinds in time"),
       label(
         view.bottom.up(16),
         "one `time: Num` · every body angle = time.affine(τ/period, phase) · circular polar",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

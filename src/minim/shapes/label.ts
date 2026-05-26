@@ -12,6 +12,9 @@ export interface LabelOpts extends ShapeOpts {
    *  (default) = center. See `Anchor` for named consts. */
   align?: VecValue;
   bold?: boolean;
+  /** Text color. Default `tokens.stroke` (i.e. `var(--text-color)`,
+   *  flips with dark mode). Accepts a reactive `Val<string>`. */
+  fill?: Val<string>;
 }
 
 const xAttr = (x: number) => (x <= 0.25 ? "start" : x >= 0.75 ? "end" : "middle");
@@ -49,7 +52,7 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
     this.attr("y", anchor.y);
     this.attr("font-family", tokens.font);
     this.attr("font-size", sizeSig);
-    this.attr("fill", tokens.stroke);
+    this.attr("fill", opts.fill ?? tokens.stroke);
     this.attr("text-anchor", xAttr(a.x));
     this.attr("dominant-baseline", yAttr(a.y));
     if (opts.bold) this.attr("font-weight", 700);

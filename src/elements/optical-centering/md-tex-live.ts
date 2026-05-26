@@ -31,15 +31,9 @@ export class MdTexLive extends Diagram {
     const view = this.view(W, H);
 
     s(
-      label(view.top.down(20), "tex — live data into an equation", {
-        size: 12,
-        opacity: 0.55,
-        align: Anchor.Center,
-      }),
+      label(view.top.down(20), "tex — live data into an equation"),
       label(view.bottom.up(14), "drag the blue handle ↔ both sides re-render reactively", {
         size: 10,
-        opacity: 0.45,
-        align: Anchor.Center,
       }),
     );
 
@@ -68,16 +62,9 @@ export class MdTexLive extends Diagram {
     );
     s(handle(knobPos));
 
-    s(
-      label(vec(TRACK_X0 - 16, TRACK_Y), nStr, {
-        size: 13,
-        align: Anchor.Right,
-        opacity: 0.7,
-      }),
-    );
+    s(label(vec(TRACK_X0 - 16, TRACK_Y), nStr, { align: Anchor.Right }));
     s(
       label(vec(TRACK_X1 + 16, TRACK_Y), `1..${N_MAX}` as Content, {
-        size: 11,
         align: Anchor.Left,
         opacity: 0.4,
       }),

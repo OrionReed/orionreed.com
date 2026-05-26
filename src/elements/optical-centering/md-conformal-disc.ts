@@ -22,7 +22,6 @@
 // pass through the dependency graph.
 
 import {
-  Anchor,
   type CurveSegment,
   circle,
   computed,
@@ -262,24 +261,16 @@ export class MdConformalDisc extends Diagram {
     });
 
     s(
-      label(view.top.down(20), "drag any vertex — sides curve, sister triangles follow", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
+      label(view.top.down(20), "drag any vertex — sides curve, sister triangles follow"),
+      label(view.top.down(40), () => {
+        const sumDeg = ((angleSum.value * 180) / Math.PI).toFixed(1);
+        const area = (Math.PI - angleSum.value).toFixed(3);
+        return `α + β + γ = ${sumDeg}° (Euclidean: 180°) · area = π − sum = ${area}`;
       }),
-      label(
-        view.top.down(40),
-        () => {
-          const sumDeg = ((angleSum.value * 180) / Math.PI).toFixed(1);
-          const area = (Math.PI - angleSum.value).toFixed(3);
-          return `α + β + γ = ${sumDeg}° (Euclidean: 180°) · area = π − sum = ${area}`;
-        },
-        { size: 11, align: Anchor.Center, opacity: 0.55 },
-      ),
       label(
         view.bottom.up(16),
         "Poincaré disc · geodesics are circles ⊥ boundary · reflections are inversions in those circles",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

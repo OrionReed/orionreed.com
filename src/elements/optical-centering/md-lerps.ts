@@ -67,15 +67,11 @@ export class MdLerps extends Diagram {
     const view = this.view(W, H);
 
     s(
-      label(view.top.down(22), "one .to(), every value type", {
-        size: 13,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(22), "one .to(), every value type"),
       label(
         view.bottom.up(20),
         'value classes register `lerp` in their `static traits` dict; `.to(target, dur)` finds it via `Traits<T, "lerp">`. Same call for Num, Vec, Box, Color, Transform, and arbitrary user types.',
-        { size: 10, align: Anchor.Center, opacity: 0.45 },
+        { size: 10 },
       ),
     );
 
@@ -87,17 +83,9 @@ export class MdLerps extends Diagram {
     const txt = new Text("hello");
 
     const rowLabel = (i: number, name: string) =>
-      label(vec(LABEL_X, baseY(i)), name, {
-        size: 11,
-        align: Anchor.Left,
-        opacity: 0.7,
-      });
+      label(vec(LABEL_X, baseY(i)), name, { align: Anchor.Left });
     const readout = (i: number, content: Parameters<typeof label>[1]) =>
-      label(vec(READ_X, baseY(i)), content, {
-        size: 11,
-        align: Anchor.Left,
-        opacity: 0.65,
-      });
+      label(vec(READ_X, baseY(i)), content, { align: Anchor.Left });
     const track = (x: number, y: number, w: number, h: number, alpha: number) =>
       rect(x, y, w, h, {
         stroke: "transparent",
@@ -164,10 +152,7 @@ export class MdLerps extends Diagram {
     s(
       rowLabel(4, "string"),
       track(VIS_X, rowY(4) - 6, VIS_W, 22, 0.08),
-      label(vec(VIS_X + 10, baseY(4)), txt, {
-        size: 13,
-        align: Anchor.Left,
-      }),
+      label(vec(VIS_X + 10, baseY(4)), txt, { align: Anchor.Left }),
       readout(
         4,
         computed(() => `len=${txt.value.length}`),

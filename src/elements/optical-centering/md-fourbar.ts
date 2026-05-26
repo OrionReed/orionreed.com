@@ -8,7 +8,6 @@
 
 import { constraints, distance, pin } from "@minim/constraints";
 import {
-  Anchor,
   circle,
   Diagram,
   handle,
@@ -67,16 +66,11 @@ export class MdFourbar extends Diagram {
       label(
         view.top.down(20),
         "drag the blue or red joint — the loop articulates through its one DOF",
-        {
-          size: 12,
-          align: Anchor.Center,
-          opacity: 0.7,
-        },
       ),
       label(
         view.bottom.up(16),
         "3 distance constraints + 2 pinned grounds — 1 internal degree of freedom",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

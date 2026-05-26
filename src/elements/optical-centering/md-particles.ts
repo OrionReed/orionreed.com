@@ -11,17 +11,7 @@
 // constraints every frame.
 
 import { animate, gap, inside, physics, pin } from "@minim/constraints";
-import {
-  Anchor,
-  Diagram,
-  handle,
-  label,
-  Mount,
-  rect,
-  type Vec,
-  vec,
-  type Writable,
-} from "../../minim";
+import { Diagram, handle, label, Mount, rect, type Vec, vec, type Writable } from "../../minim";
 
 type WVec = Writable<Vec>;
 
@@ -70,15 +60,11 @@ export class MdParticles extends Diagram {
     this.anim.start(animate(cluster));
 
     s(
-      label(view.top.down(20), "drag any circle — non-overlap is enforced, walls contain", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "drag any circle — non-overlap is enforced, walls contain"),
       label(
         view.bottom.up(16),
         `${N} circles · ${(N * (N - 1)) / 2} pair-gaps · ${N} containments — animated`,
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

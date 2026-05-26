@@ -1,5 +1,4 @@
 import {
-  Anchor,
   argminVec,
   circle,
   clampToDisc,
@@ -73,15 +72,11 @@ export class MdIk extends Diagram {
     s(handle(tip, { r: 8, fill: "#5b8def" }));
 
     s(
-      label(view.top.down(20), "drag the blue tip — workspace clamp keeps IK stable at max reach", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "drag the blue tip — workspace clamp keeps IK stable at max reach"),
       label(
         view.bottom.up(16),
         "argminVec(angles, fwd, weights, { clampTarget: clampToDisc(root, N·L) })",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

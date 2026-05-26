@@ -251,7 +251,7 @@ The lenses don't even need to be bijective. `this.lens(p, p)` — the same proje
 
 <md-clamp-quantize></md-clamp-quantize>
 
-Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. When the relation needs to read multiple sources or distribute writes across them, the same N-input `Cls.lens([parents], fwd, bwd)` from above is the generalisation. The escape hatch for everything else is the closure form `Cls.lens(get, set)`, or `relate(a, b, fwd, bwd)` for re-orientable bidirectional bindings between two existing signals (either side can be the driver).
+Constraints fall out of the same primitive. A pulley conserving rope length is just `b = a.affine(−1, L)` — the invertible chain IS the conservation law, written once and read both ways. When the relation needs to read multiple sources or distribute writes across them, the same N-input `Cls.lens([parents], fwd, bwd)` from above is the generalisation. The escape hatch for everything else is the closure form `Cls.lens(get, set)`.
 
 <md-pulley></md-pulley>
 

@@ -1,5 +1,4 @@
 import {
-  Anchor,
   assemble,
   type Content,
   centroid,
@@ -63,16 +62,9 @@ export class MdChoreography extends Diagram {
     const phase = signal<Content>("assemble (row)");
     const c = centroid(...shapes);
     s(
-      label(view.top.down(24), phase, {
-        size: 14,
-        bold: true,
-        align: Anchor.Center,
-        opacity: 0.85,
-      }),
+      label(view.top.down(24), phase, { size: 14, bold: true }),
       label(view.top.down(42), "snapshot · stagger · ramp · centroid · all composing", {
         size: 10,
-        align: Anchor.Center,
-        opacity: 0.45,
       }),
       circle(c, 3, { fill: "#1a1a1a", opacity: 0.7 }),
     );

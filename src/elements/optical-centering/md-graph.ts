@@ -18,7 +18,6 @@
 
 import { animate, gap, physics, pin, repel, softTarget, spring } from "@minim/constraints";
 import {
-  Anchor,
   circle,
   Diagram,
   handle,
@@ -120,12 +119,11 @@ export class MdGraph extends Diagram {
       label(
         view.top.down(20),
         "drag any node — Fruchterman–Reingold-style: edge springs + long-range repulsion + centering",
-        { size: 12, align: Anchor.Center, opacity: 0.7 },
       ),
       label(
         view.bottom.up(16),
         `${N} nodes · ${EDGES.length} springs · ${(N * (N - 1)) / 2} pair repulsions + gaps · centering`,
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

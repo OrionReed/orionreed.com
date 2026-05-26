@@ -31,7 +31,7 @@ export class MdCircuit extends Diagram {
     /** Circle + label that scale-pulses on `ev`. */
     const source = (x: number, y: number, lbl: string, ev: string) => {
       const c = circle(vec(x, y), 18);
-      s(c, label(c.center, lbl, { size: 13, bold: true }));
+      s(c, label(c.center, lbl, { bold: true }));
       anim.start(
         loop(function* () {
           yield bus.until(ev);
@@ -53,9 +53,9 @@ export class MdCircuit extends Diagram {
         label(
           c.center,
           computed(() => String(tick.value)),
-          { size: 13, bold: true },
+          { bold: true },
         ),
-        label(c.center.up(30), lbl, { size: 11, opacity: 0.7 }),
+        label(c.center.up(30), lbl),
       );
       anim.start(
         loop(function* () {
@@ -69,7 +69,7 @@ export class MdCircuit extends Diagram {
     /** Boxed gate; `lblY` offsets the title (negative = up). */
     const box = (x: number, y: number, w: number, h: number, lbl: string, lblY = 0) => {
       const r = rect(vec(x, y), w, h);
-      s(r, label(r.center.offset(0, lblY), lbl, { size: 10, opacity: 0.7 }));
+      s(r, label(r.center.offset(0, lblY), lbl, { size: 10 }));
       return r;
     };
 
@@ -214,7 +214,7 @@ export class MdCircuit extends Diagram {
     const AND = box(200, 120, 60, 48, "AND");
     const DELAY = box(310, 120, 50, 36, "DELAY", -6);
     const SPLIT = node(410, 120);
-    s(label(SPLIT.center.up(24), "split", { size: 9, opacity: 0.6 }));
+    s(label(SPLIT.center.up(24), "split", { size: 9 }));
     const X = sink(560, 70, "X", "arrived:X");
     const Y = sink(560, 170, "Y", "arrived:Y");
 

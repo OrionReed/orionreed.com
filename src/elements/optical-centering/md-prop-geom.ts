@@ -12,7 +12,7 @@
 // case in a single pass with exact arithmetic.
 
 import { propagators, vCentroid, vMidpoint } from "@minim/propagators";
-import { Anchor, Diagram, handle, label, line, Mount, vec } from "../../minim";
+import { Diagram, handle, label, line, Mount, vec } from "../../minim";
 
 const VERT = "#5b8def";
 const CENT = "#f5a623";
@@ -68,12 +68,11 @@ export class MdPropGeom extends Diagram {
       label(
         view.top.down(20),
         "drag any vertex • centroid (orange) follows • drag centroid → triangle translates",
-        { size: 12, align: Anchor.Center, opacity: 0.7 },
       ),
       label(
         view.bottom.up(16),
         "vCentroid · vMidpoint — bidirectional propagators on Vec signals",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
+        { size: 10 },
       ),
     );
   }

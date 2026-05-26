@@ -12,7 +12,6 @@
 
 import { hstack, propagators } from "@minim/propagators";
 import {
-  Anchor,
   box,
   circle,
   Diagram,
@@ -107,15 +106,11 @@ export class MdPropFlex extends Diagram {
     drag(knob, gapPos, signal(false));
 
     s(
-      label(view.top.down(20), "drag the gap slider above • drag the right edge of the container", {
-        size: 12,
-        align: Anchor.Center,
-        opacity: 0.7,
-      }),
+      label(view.top.down(20), "drag the gap slider above • drag the right edge of the container"),
       label(
         view.bottom.up(16),
         "one hstack(...) propagator • items clamp at min-width 30 • bounds invisible to caller",
-        { size: 10, align: Anchor.Center, opacity: 0.55 },
+        { size: 10 },
       ),
     );
   }
