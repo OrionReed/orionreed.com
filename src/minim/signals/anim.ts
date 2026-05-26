@@ -117,7 +117,7 @@ export function tween<T>(
 
 // ─── spring ─────────────────────────────────────────────────────────
 
-export interface SpringOpts {
+export interface SpringOpts<T = unknown> {
   /** Natural angular frequency (rad/s). Default 13 (~0.48 s period). */
   omega?: number;
   /** Damping ratio. <1 underdamped, =1 critical, >1 overdamped. Default 1. */
@@ -127,13 +127,19 @@ export interface SpringOpts {
   /** Per-frame rate multiplier on `tick.dt`. 0 freezes evolution; 2× doubles
    *  speed. Reactive — re-read each frame. Default 1. */
   rate?: () => number;
+  /** Project each frame's next value into an admissible set (clamp to a
+   *  range, snap to a manifold, etc.). If projection moves the value,
+   *  velocity is reset to zero — soft absorbing wall, no integrator
+   *  fighting the boundary. Pair with `precision: 0` when the target
+   *  may lie outside the admissible set (settle never fires there). */
+  project?: (v: T) => T;
 }
 
 /** Second-order damped-spring pull. Math unchanged from prod's `spring`. */
 export function* spring<T>(
   sig: Animatable<T, "linear" | "metric">,
   target: Val<T>,
-  opts: SpringOpts = {},
+  opts: SpringOpts<T> = {},
 ): Animator<void> {
   const lin = requireLinear(sig);
   const met = requireMetric(sig);
@@ -141,6 +147,7 @@ export function* spring<T>(
   const zeta = opts.zeta ?? 1;
   const eps = opts.precision ?? 1e-4;
   const rate = opts.rate;
+  const project = opts.project;
   const T = valFn(target);
 
   const zero: T = lin.scale(sig.peek(), 0);
@@ -184,8 +191,14 @@ export function* spring<T>(
       v1 = lin.sub(lin.scale(B, E), lin.scale(e1, omega));
     }
 
+    const raw = lin.add(t, e1);
+    const next = project ? project(raw) : raw;
+    if (project && met(next, raw) > 0) {
+      e1 = lin.sub(next, t);
+      v1 = zero;
+    }
     vel = v1;
-    sig.value = lin.add(t, e1);
+    sig.value = next;
 
     if (eps > 0 && met(e1, zero) < eps && met(v1, zero) < eps * omega) {
       sig.value = t;

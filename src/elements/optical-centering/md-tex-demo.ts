@@ -6,14 +6,25 @@ import {
   frame,
   highlight,
   morph,
+  part,
   parts,
   pluck,
   tex,
+  tint,
   underline,
   unpluck,
   write,
   writeOut,
 } from "../../minim/tex";
+
+const RED = "#e25c5c";
+const BLUE = "#5b8def";
+const GREEN = "#3aa56b";
+
+const PMATRIX_OPEN = "\\begin{pmatrix}";
+const PMATRIX_CLOSE = "\\end{pmatrix}";
+
+const block = tex({ display: "block" });
 
 export class MdTexDemo extends Diagram {
   protected scene(s: Mount): void {
@@ -35,6 +46,12 @@ export class MdTexDemo extends Diagram {
     const p4 = s(tex`${a}^2 + ${b}^2 = ${c}^2 - ${cross}`);
     const p5 = s(tex`\frac{${a}^2 + ${b}^2}{${c}^2 - ${cross}} = 1`);
 
+    // Substitution sequence — `.with(...)` swaps a part's body while
+    // preserving its identity through morphs.
+    const sub1 = s(tex`${a.with("2")} + ${b} = ${c}`);
+    const sub2 = s(tex`${a.with("2")} + ${b.with("3")} = ${c}`);
+    const sub3 = s(tex`${a.with("2")} + ${b.with("3")} = ${c.with("5")}`);
+
     const m1 = s(tex`${a} \cdot ${b}`);
     const m1r = s(tex`${b} \cdot ${a}`);
     const m2 = s(tex`${a} \times ${b}`);
@@ -45,7 +62,43 @@ export class MdTexDemo extends Diagram {
     const d2 = s(tex`${f}'(${x})`);
     const d3 = s(tex`\dot{${f}}`);
 
-    const eqs = [p1, p2, p3, p4, p5, m1, m1r, m2, m3, m4, d1, d2, d3];
+    // Matrix × vector — `expand` lets x/y appear twice in the evaluated
+    // form while sharing one identity with their compact origin.
+    const mA = part("mA", "a");
+    const mB = part("mB", "b");
+    const mC = part("mC", "c");
+    const mD = part("mD", "d");
+    const vX = part("vX", "x");
+    const vY = part("vY", "y");
+    const { xTop, xBot } = vX.expand({ xTop: "x", xBot: "x" });
+    const { yTop, yBot } = vY.expand({ yTop: "y", yBot: "y" });
+    const mxCompact = s(
+      block`${PMATRIX_OPEN} ${mA} & ${mB} \\ ${mC} & ${mD} ${PMATRIX_CLOSE} ${PMATRIX_OPEN} ${vX} \\ ${vY} ${PMATRIX_CLOSE}`,
+    );
+    const mxEvaluated = s(
+      block`${PMATRIX_OPEN} ${mA}${xTop} + ${mB}${yTop} \\ ${mC}${xBot} + ${mD}${yBot} ${PMATRIX_CLOSE}`,
+    );
+
+    const eqs = [
+      p1,
+      p2,
+      p3,
+      p4,
+      p5,
+      sub1,
+      sub2,
+      sub3,
+      m1,
+      m1r,
+      m2,
+      m3,
+      m4,
+      d1,
+      d2,
+      d3,
+      mxCompact,
+      mxEvaluated,
+    ];
 
     for (const eq of eqs) {
       eq.center.value = view.center.peek();
@@ -65,6 +118,15 @@ export class MdTexDemo extends Diagram {
       aBox.opacity,
       bUnderline.opacity,
       cBrace.opacity,
+      a.color,
+      b.color,
+      c.color,
+      mA.color,
+      mB.color,
+      mC.color,
+      mD.color,
+      vX.color,
+      vY.color,
       status,
     );
 
@@ -116,6 +178,23 @@ export class MdTexDemo extends Diagram {
         status.value = "morph — back to the start";
         yield* morph(p5, p1, 0.8);
         yield 0.5;
+
+        status.value = "tint — colour the substitutable parts";
+        tint(GREEN, a, b, c);
+        yield 0.4;
+
+        status.value = "substitute — a → 2 (via .with)";
+        yield* morph(p1, sub1, 0.55);
+        yield 0.2;
+        status.value = "substitute — b → 3";
+        yield* morph(sub1, sub2, 0.55);
+        yield 0.2;
+        status.value = "substitute — c → 5";
+        yield* morph(sub2, sub3, 0.55);
+        yield 0.6;
+        status.value = "morph — restore symbolic form";
+        yield* morph(sub3, p1, 0.7);
+        yield 0.4;
 
         status.value = "morph — rewrite as a product (cross-cycle)";
         yield* morph(p1, m1, 0.7);
@@ -169,17 +248,42 @@ export class MdTexDemo extends Diagram {
         yield* unpluck(fHandle, undefined, 0.5);
         yield 0.5;
 
-        status.value = "morph — back to a · b for the outro";
+        status.value = "morph — back to a · b";
         yield* morph(d1, m1, 0.7);
         yield 0.4;
 
-        status.value = "stagger — per-part fade-in over a + b";
-        for (const p of m1.parts) p.opacity.value = 0;
-        yield* stagger(0.12, m1.parts, p => p.opacity.to(1, 0.4));
-        yield 0.5;
-
         status.value = "writeOut — sweep back, formula clipped to nothing";
         yield* writeOut(m1, 0.5);
+        yield 0.4;
+
+        // Block-display matrix × vector — `tint` for row/column identity,
+        // `expand` so the same x/y appear in both evaluated rows.
+        status.value = "write — block matrix × vector (compact)";
+        mxCompact.opacity.value = 1;
+        yield* write(mxCompact, 0.7);
+        yield 0.4;
+
+        status.value = "tint — rows red/blue, vector green (used in both rows)";
+        tint(RED, mA, mB);
+        tint(BLUE, mC, mD);
+        tint(GREEN, vX, vY);
+        yield 0.6;
+
+        status.value = "morph — evaluate the product (expand fans x, y in)";
+        yield* morph(mxCompact, mxEvaluated, 1.0);
+        yield 1.0;
+
+        status.value = "morph — back to compact form";
+        yield* morph(mxEvaluated, mxCompact, 1.0);
+        yield 0.4;
+
+        status.value = "stagger — per-part fade-in across the row";
+        for (const p of mxCompact.parts) p.opacity.value = 0;
+        yield* stagger(0.08, mxCompact.parts, p => p.opacity.to(1, 0.35));
+        yield 0.4;
+
+        status.value = "writeOut — sweep back";
+        yield* writeOut(mxCompact, 0.5);
         yield 0.4;
       }),
     );

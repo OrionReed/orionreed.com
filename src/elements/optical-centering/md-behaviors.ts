@@ -4,14 +4,11 @@ import {
   Diagram,
   drive,
   driven,
-  easeInOut,
   label,
-  loop,
   Mount,
   Num,
   num,
   play,
-  spring,
   type Val,
   Vec,
   value,
@@ -29,7 +26,6 @@ const drift = (sig: Writable<Num>, v: Val<number>) =>
   driven(sig, (dt, _t, cur) => cur + value(v) * dt);
 
 const sine = (t: number, f: number) => Math.sin(2 * Math.PI * f * t);
-const triangle = (t: number, f: number) => 1 - 4 * Math.abs(((t * f) % 1) - 0.5);
 
 /** `drift` with walls: flips velocity at bounds. */
 function bounceFlip(x: Writable<Num>, v: Writable<Num>, lo: number, hi: number) {
@@ -41,10 +37,10 @@ function bounceFlip(x: Writable<Num>, v: Writable<Num>, lo: number, hi: number) 
 
 export class MdBehaviors extends Diagram {
   protected scene(s: Mount): void {
-    const view = this.view(600, 360);
+    const view = this.view(600, 280);
     const wall = view.w.value - 40;
     const cx = view.w.value / 2;
-    const laneY = (i: number) => view.h.value * ((i + 1) / 4);
+    const laneY = (i: number) => view.h.value * ((i + 1) / 3);
 
     const trail = (
       seedX: Writable<Num>,
@@ -85,33 +81,7 @@ export class MdBehaviors extends Diagram {
       this.anim.start(attract(sig, target, 9));
     });
 
-    // `byAmp` reactive: pause loop tweens it to 0 so both axes freeze together.
-    const bx = num(cx);
-    const by = num(laneY(1));
-    const bv = num(-150);
-    const byAmp = num(32);
-    this.anim.start(
-      play([
-        drift(bx, bv),
-        wave(by, (t, y0) => y0 + byAmp.peek() * triangle(t, 0.7)),
-        bounceFlip(bx, bv, 40, wall),
-      ]),
-    );
-    this.anim.start(
-      loop(function* () {
-        yield 1.5;
-        yield* play([bv.to(0, 0.4, easeInOut), byAmp.to(0, 0.4, easeInOut)]);
-        yield 0.7;
-        byAmp.value = 32;
-        bv.value = bx.value < cx ? 155 : -155;
-      }),
-    );
-    s(circle(vec(bx, by), 9, { fill: "#1a1a1a" }));
-    trail(bx, by, "#e25c5c", (sig, target) => {
-      this.anim.start(spring(sig, target, { omega: 14, zeta: 0.5 }));
-    });
-
-    const lc = { x: cx, y: laneY(2) };
+    const lc = { x: cx, y: laneY(1) };
     const phase = num(0);
     this.anim.start(drift(phase, 1));
     const headPos = vec(
@@ -148,10 +118,6 @@ export class MdBehaviors extends Diagram {
       );
     }
 
-    s(
-      label(view.bottom.up(12), "attract (smooth) · spring (elastic, pauses) · play(rigid-link)", {
-        size: 10,
-      }),
-    );
+    s(label(view.bottom.up(12), "attract (smooth) · play(rigid-link)", { size: 10 }));
   }
 }

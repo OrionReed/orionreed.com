@@ -5,9 +5,13 @@ import {
   circle,
   Diagram,
   easeInOut,
+  group,
   label,
+  line,
   loop,
   Mount,
+  meanRotation,
+  meanScale,
   num,
   orbit,
   play,
@@ -55,22 +59,36 @@ export class MdChoreography extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(W, H);
 
+    // Each shape carries an orientation tick inside the group so
+    // `rotate`/`scale` are visible on top of the centroid translate.
     const shapes = SCATTER.map((p, i) =>
-      s(circle(vec(0, 0), 18, { translate: p, fill: COLORS[i] })),
+      s(
+        group(
+          { translate: p },
+          circle(vec(0, 0), 18, { fill: COLORS[i] }),
+          line(vec(0, 0), vec(14, 0), { stroke: "white", thin: true, opacity: 0.85 }),
+        ),
+      ),
     );
 
     const phase = signal<Content>("assemble (row)");
     const c = centroid(...shapes);
+    const r = meanRotation(...shapes);
+    const k = meanScale(...shapes);
     s(
       label(view.top.down(24), phase, { size: 14, bold: true }),
-      label(view.top.down(42), "snapshot · stagger · ramp · centroid · all composing", {
+      label(view.top.down(42), "snapshot · stagger · ramp · similarity · all composing", {
         size: 10,
       }),
       circle(c, 3, { fill: "#1a1a1a", opacity: 0.7 }),
     );
 
     // Without this, orbit's frame-time integration drifts positions each cycle.
-    const reset = snapshot(...shapes.map(sh => sh.translate));
+    const reset = snapshot(
+      ...shapes.map(sh => sh.translate),
+      ...shapes.map(sh => sh.rotate),
+      ...shapes.map(sh => sh.scale),
+    );
 
     const orbitRate = num(0);
     const orbitCentre = vec(ORBIT_CENTRE.x, ORBIT_CENTRE.y);
@@ -112,6 +130,16 @@ export class MdChoreography extends Diagram {
         phase.value = "centroid → centre";
         yield* c.to(view.center.value, 0.7, easeInOut);
         yield 0.4;
+
+        // Group similarity transform: centroid + meanRotation + meanScale
+        // — three lensed aggregates animated in parallel, no per-shape math.
+        phase.value = "similarity (centroid + rotation + scale)";
+        yield [r.to(Math.PI * 0.75, 0.9, easeInOut), k.to({ x: 1.25, y: 1.25 }, 0.9, easeInOut)];
+        yield 0.25;
+        yield [r.to(-Math.PI * 0.5, 0.9, easeInOut), k.to({ x: 0.7, y: 0.7 }, 0.9, easeInOut)];
+        yield 0.25;
+        yield [r.to(0, 0.7, easeInOut), k.to({ x: 1, y: 1 }, 0.7, easeInOut)];
+        yield 0.3;
 
         phase.value = "assemble (scatter)";
         yield* assemble(shapes, SCATTER, 0.7, easeInOut);

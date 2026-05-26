@@ -208,7 +208,7 @@ const c = centroid(a, b, c, d);
 yield* c.to({ x: 200, y: 100 }, 1);
 ```
 
-<md-aggregates></md-aggregates>
+The same shape gives `meanRotation` and `meanScale` — the choreography demo above animates all three in parallel for a one-line group similarity transform.
 
 Two independent animation sequences sharing one position via `Vec.derive([seqA, seqB, w], weightedMean)` — neither knows about the other, and the visible motion is the per-frame weighted mean:
 
@@ -233,10 +233,6 @@ Aggregates aren't only N→1. An N→M decomposition gives M coupled writable vi
 
 <md-bbox-handles></md-bbox-handles>
 
-The full similarity transform is {centroid, rotation, scale} — three handles, none of them perturbs the other two:
-
-<md-procrustes></md-procrustes>
-
 Two decompositions over the same cluster share the centroid: `bestFitLineLens` exposes {point, direction}; `bestFitCircleLens` exposes {center, radius}. Three handles, two fitted curves, every write a single group action:
 
 <md-best-fit></md-best-fit>
@@ -259,14 +255,6 @@ The bidirectional story extends to `vec(num, num)` (writes propagate to both axe
 
 <md-gears></md-gears>
 
-The lenses don't care what the values *mean*. A colour has two natural coordinate systems — HSL and RGB — and the conversion between them is a bijection. Make HSL canonical, expose each R/G/B as `Num.lens([h, s, l], hslToRgb, rgbToHsl)` — a 3-input lens that reads through the bijection on the way out and back through it on the way in — render the picker on a polar wheel and three RGB sliders, and you get five draggable inputs all manipulating the same state from different coordinate systems. Drag the wheel, the RGB sliders move. Drag a slider, the wheel picker moves. *Same colour, two views.*
-
-<md-color></md-color>
-
-The lenses don't even need to be numeric on both ends. A codec — `parse` and `format` paired up — IS a lens between a typed value and its string representation: read formats, write parses. `hexFromColor(c)` wraps a writable Color as a writable `#rrggbb` text view. `secondsFromText(t)` wraps a writable string as a writable seconds-Num. Drag the handle (numeric end) and the text reformats; click a chip to write a literal string into the text end and the codec parses back through to the typed source. Form inputs and labels are the same primitive as RGB sliders.
-
-<md-codec-lens></md-codec-lens>
-
 The lenses don't even need to be bijective. `this.lens(p, p)` — the same projection on both legs — makes the view a constrained image of the source: writes outside the projection's range get projected first, then propagate, so the source picks up the constraint. `Num.clamp(lo, hi)` and `Num.quantize(step)` are one line each, and they chain — `t.clamp(lo, hi).quantize(0.1)` is one fused cell whose writes carry both projections back to the source at once. Both `lo`/`hi` and `step` are `Val<number>`, so the clamp range itself can ride another slider — pinch it live and the source pins to the boundary.
 
 <md-clamp-quantize></md-clamp-quantize>
@@ -279,24 +267,22 @@ When the inverse isn't a closed form, the lens's bwd can run a solver. An N-link
 
 <md-ik></md-ik>
 
-Closed kinematic loops are a different beast from the open IK chain — there's no "tip" you can solve forward, just a system of length constraints that all need to satisfy simultaneously. _Position-based dynamics_ takes the simplest line: every joint a writable Vec, every bar a length residual, Gauss–Seidel relaxation projects the graph onto its constraint manifold each frame. Forward and inverse become the same operation — drag any joint, residual propagates through the rest of the rig.
-
-<md-truss></md-truss>
-
 When the mechanism is a single closed loop, _vector-loop_ is the textbook angle-space approach. Parameterise each bar by its angle; the closure equation `Σ rᵢ · u(θᵢ) = 0` is two scalar equations in the unknown angles, solved by Newton-Raphson seeded with last frame's solution. Continuity is invariant in angle space (angles are unique up to 2π), so output angles evolve smoothly through the cycle without any branch-tracking machinery.
 
 <md-loop></md-loop>
 
-Each of the above is a hand-rolled approach to a specific constraint shape — a closed-form inverse, a single Newton step, Gauss–Seidel projections, or a vector loop. The general path lives in `constraints/`: a `Constraints` holder binds any number of `Signal`s and runs an [Augmented Vertex Block Descent](https://graphics.cs.utah.edu/research/projects/avbd/) solve on every write. Constraints are ordinary factory calls — `distance`, `perpendicular`, `parallel`, `angle`, `onCircle`, `equalDist`, `lensNum`, `clamp`, `leq`, plus `generic` for anything you can write a residual for — and they all compose:
+Each of the above is a hand-rolled approach to a specific constraint shape — a closed-form inverse, a single Newton step, or a vector loop. The general path lives in `constraints/`: a `Constraints` holder binds any number of `Signal`s and runs an [Augmented Vertex Block Descent](https://graphics.cs.utah.edu/research/projects/avbd/) solve on every write. Constraints are ordinary factory calls — `distance`, `perpendicular`, `rightAngle`, `parallel`, `angle`, `onCircle`, `equalDist`, `lensNum`, `clamp`, `leq`, plus `generic` for anything you can write a residual for — and they all compose. Cluster membership is reactive too: `cluster.addWhile(flag, rel)` keeps a relation alive only while a signal is truthy, flipping structural shape at runtime. The quad below is held by four side constraints — one internal degree of freedom, the shape flexes when dragged — with a fifth diagonal-distance riding on `addWhile`; click the dot on the diagonal to add or remove the brace and the quad snaps between rigid and flexible:
 
 ```ts
-const c = constraints({ iterations: 12 });
+const braced = signal(true);
+const c = constraints({ iterations: 20 });
 c.add(
   distance(A, B, 160),
   distance(B, C, 120),
-  distance(C, D, 80),
-  perpendicular(A, B, B, C),
+  distance(C, D, 160),
+  distance(D, A, 120),
 );
+c.addWhile(braced, distance(A, C, diag));
 ```
 
 Drag any handle; the constraint network re-fires, runs the solver, and writes the new positions back via the network's auto-self-exclusion — so the writes propagate to the rendering effects but don't re-trigger the solver itself. Single solve per write, no convergence loop, no fragile self-mute.
@@ -307,17 +293,9 @@ Push that further and the sketchpad is the editor. Two reactive collections — 
 
 <md-sketchpad-live></md-sketchpad-live>
 
-Constraints can be added and removed at runtime — `cluster.add(rel)` returns the relation, `cluster.remove(rel)` tears it down. The square below is held by four side constraints and one toggleable diagonal: with the brace, the quad is rigid and only translates and rotates; without it, one internal degree of freedom returns and it flexes as a 4-bar linkage.
-
-<md-rigid></md-rigid>
-
 Constraints describe loci as readily as they describe shapes — and the same cluster handles both at once. `onCircle(P, center, r)` keeps `P` on a circle of fixed radius around a (possibly draggable) center; `collinear(P, A, B)` keeps `P` on the line through two anchors. The bracket below has six constraints stacked in one cluster: two locus incidences, two equal-length bars, an `equalDist` symmetry, and a `rightAngle` at the inner vertex. Drag any anchor and the loci move; drag the bracket and it reconfigures while staying valid.
 
 <md-incidence></md-incidence>
-
-The same primitive scales up to closed kinematic loops. A 4-bar linkage is just three distance constraints and two pinned ground pivots — the fourth side is the (implicit) line between the pinned points. The mechanism's single internal degree of freedom emerges from the constraint count without any branching machinery; drag any free joint and the rocker, coupler and crank coordinate through their shared loop.
-
-<md-fourbar></md-fourbar>
 
 Mix shape constraints with locus constraints and you get classic mechanisms more or less for free. A slider-crank — the heart of every internal-combustion engine — is a rotating crank arm `O1—A`, a rigid connecting rod `A—B`, and a piston `B` that slides along a guide. Three constraints (`distance` × 2 + `collinear`) on six cells, four of which are pinned: the result is a one-DOF mechanism that converts rotation into linear reciprocation. Drag the crank tip and watch the piston track.
 
@@ -326,10 +304,6 @@ Mix shape constraints with locus constraints and you get classic mechanisms more
 The same path scales up to physics. `physics({ gravity })` builds a Constraints with a velocity-and-extrapolation time-stepper baked into its pipeline; `step(dt)` per frame advances the whole scene. The cloth below is a 14×10 grid of point masses linked by ~250 hard distance constraints — every horizontal and vertical neighbour gets its own length constraint, top corners are pinned, the rest swings under gravity. Each frame the solver projects the whole net back onto the constraint manifold, in well under a millisecond.
 
 <md-cloth></md-cloth>
-
-A hanging rope is the 1D special case: 40 point masses, 39 links, one anchor. Drag the blue tip or grab the rope by the middle and physics carries the rest of the chain.
-
-<md-chain></md-chain>
 
 Constraints describe what _shouldn't_ happen as readily as what should. `gap(a, b, d)` keeps two points at least `d` apart — a hard inequality the solver only enforces when violated. With soft `spring`s along edges and a pairwise `gap` on every node pair, a force-directed graph layout falls out in two factory calls. The cluster handles all 120 pair constraints plus the spring forces, every frame.
 
@@ -343,7 +317,7 @@ The same engine handles **proper** rigid bodies just as well — boxes with full
 
 <md-rigid-stack></md-rigid-stack>
 
-The same Constraints substrate that runs the cloth, the chain, and the algebraic equation solver runs this — only the pipeline (`world()` adds broadphase + contact manifold lifecycle on top of `physics()`'s velocity loop), the constraint shapes, and the cell dimension differ. The solver's `dim = 3` primal-sweep specialization (one hand-unrolled local Newton per body) means the rigid path doesn't pay any "generality tax" relative to a hand-rolled physics engine.
+The same Constraints substrate that runs the cloth and the algebraic equation solver runs this — only the pipeline (`world()` adds broadphase + contact manifold lifecycle on top of `physics()`'s velocity loop), the constraint shapes, and the cell dimension differ. The solver's `dim = 3` primal-sweep specialization (one hand-unrolled local Newton per body) means the rigid path doesn't pay any "generality tax" relative to a hand-rolled physics engine.
 
 Joints between rigid bodies turn the same machinery into a chain of bars — AVBD's `sceneRope` setup. Each link is its own rigid body with rotational inertia, hinged to the next via a `Joint` force whose position rows are hard and angle row is free. Drag any link and the rest swings; the bars rotate the way bars do, not the way beads on a string do.
 
@@ -361,20 +335,10 @@ None of this is fundamentally geometric. The cluster operates on cells of arbitr
 
 AVBD's sweet spot is *many soft constraints, approximate solving fast* — cloth, contacts, force-directed graphs. The opposite shape — *few exact relations, instant fixpoint* — wants a different substrate: propagator networks. Same `network()` primitive underneath, different traversal: each propagator declares its read/write topology, the network runs them in a freshness-driven fixpoint until stable. Reads are exact arithmetic; writes are atomic; multi-direction relations let any cell drive any other.
 
-The four-leaf example is the smallest version of the idea. Three `add` propagators — `a + b = ab`, `c + d = cd`, `ab + cd = Σ` — are enough to let any one of five sliders drive the rest. There's no "input" and no "output"; pull the total and the leaves redistribute, pull a leaf and the total re-derives.
+The same combinators dispatch on type — `add(a, b, c)` works on `Num`, `Vec`, or anything with the `Linear` trait. `centroid(G, A, B, C)` runs both directions: drag any vertex and the centroid follows; drag the centroid and all three vertices translate by its delta. `mid(A, B, M)` is the two-point version. Stack them and a triangle's medians come out for free — the centroid, the three side-midpoints, and the three medians, six bidirectional propagators total. There's no "input" and no "output"; pull any cell and the rest redistribute through the same network.
 
 ```ts
 const p = propagators();
-p.add(add(a, b, ab));
-p.add(add(c, d, cd));
-p.add(add(ab, cd, total));
-```
-
-<md-prop-net></md-prop-net>
-
-The same combinators dispatch on type — `add(a, b, c)` works on `Num`, `Vec`, or anything with the `Linear` trait. `centroid(G, A, B, C)` runs both directions: drag any vertex and the centroid follows; drag the centroid and all three vertices translate by its delta. `mid(A, B, M)` is the two-point version. Stack them and a triangle's medians come out for free — the centroid, the three side-midpoints, and the three medians, six bidirectional propagators total.
-
-```ts
 p.add(centroid(G, A, B, C));
 p.add(mid(A, B, Mab));
 p.add(mid(B, C, Mbc));
@@ -463,17 +427,9 @@ yield* eq.parts.M.translate.to({ x: 0, y: -20 }, 0.4);
 
 <md-tex-demo></md-tex-demo>
 
-<md-tex-correspond></md-tex-correspond>
-
-<md-tex-matrix></md-tex-matrix>
-
 <md-tex-live></md-tex-live>
 
 Marker identity extends past the diagram. `marker.register("id")` puts a marker into a global lookup; `<md-marker sym="id">` finds it on connect and subscribes to the same signals. Both ends share one `marker.active` signal — a derived OR over every bound rendering. Because it's a `Signal<boolean>`, the suspension vocabulary applies: `yield* play(marker.active)` pauses a generator until any rendering of the marker is activated — from prose, from the diagram, or from an animation holding the marker.
-
-The <md-marker sym="minim:m">mass</md-marker>, <md-marker sym="minim:v">velocity</md-marker>, and <md-marker sym="minim:h">height</md-marker> terms in the formula below each have their own colour and hover state. Hover any term here.
-
-<md-tex-prose></md-tex-prose>
 
 The demo below uses the suspend-on-marker idiom: hover <md-marker sym="osc:gamma">damping</md-marker> to reveal the decay envelope, <md-marker sym="osc:A">amplitude</md-marker> for the bounds, <md-marker sym="osc:omega">frequency</md-marker> for the period tick marks.
 

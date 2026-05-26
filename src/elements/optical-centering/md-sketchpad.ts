@@ -1,11 +1,15 @@
-// md-sketchpad.ts — sketchpad-style geometric constraints.
+// md-sketchpad.ts — sketchpad-style geometric constraints with a
+// runtime-toggleable brace.
 //
-// Four points wired up with three distance constraints and one
-// perpendicularity constraint. Drag any handle: the constraint
-// engine re-solves on every write and the rest of the figure
-// reflows to keep all four constraints satisfied.
+// Four corners of a quadrilateral with four side constraints. With
+// just those, the figure has one internal degree of freedom and
+// flexes when dragged — a 4-bar linkage. Add a diagonal distance
+// constraint and the remaining DOF is killed: the quad becomes a
+// rigid body that only translates and rotates. `addWhile(braced, …)`
+// flips the diagonal in and out reactively; click the dot riding on
+// the diagonal to toggle.
 
-import { constraints, distance, pin, rightAngle } from "@minim/constraints";
+import { constraints, distance, pin } from "@minim/constraints";
 import {
   circle,
   Diagram,
@@ -13,6 +17,7 @@ import {
   label,
   line,
   Mount,
+  signal,
   type Vec,
   vec,
   type Writable,
@@ -20,24 +25,55 @@ import {
 
 type WVec = Writable<Vec>;
 
+const BRACED_FILL = "#5b8def";
+const UNBRACED_FILL = "#d8dde6";
+
 export class MdSketchpad extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(560, 380);
     const cx = view.center.value.x;
     const cy = view.center.value.y;
 
-    const A = vec(cx - 100, cy - 60);
-    const B = vec(cx + 60, cy - 60);
-    const C = vec(cx + 60, cy + 60);
-    const D = vec(cx + 140, cy + 60);
+    const A = vec(cx - 80, cy - 60);
+    const B = vec(cx + 80, cy - 60);
+    const C = vec(cx + 80, cy + 60);
+    const D = vec(cx - 80, cy + 60);
 
-    const cluster = constraints({ iterations: 24 });
-    cluster.add(distance(A, B, 160), distance(B, C, 120), distance(C, D, 80), rightAngle(A, B, C));
+    const diagLen = Math.hypot(160, 120);
+
+    const cluster = constraints({ iterations: 20 });
+    cluster.add(distance(A, B, 160), distance(B, C, 120), distance(C, D, 160), distance(D, A, 120));
+
+    const braced = signal(true);
+    cluster.addWhile(braced, distance(A, C, diagLen));
 
     s(line(A, B));
     s(line(B, C));
     s(line(C, D));
-    s(circle(B, 8, { thin: true, opacity: 0.45 }));
+    s(line(D, A));
+
+    // The diagonal renders thin-dashed as a ghost when off and at full
+    // opacity when on, so the toggle dot always has a line to ride.
+    s(
+      line(A, C, {
+        thin: true,
+        dashed: true,
+        opacity: () => (braced.value ? 0.65 : 0.2),
+      }),
+    );
+
+    const dotPos = A.lerp(C, 0.5);
+    const dot = s(
+      circle(dotPos, 7, {
+        fill: () => (braced.value ? BRACED_FILL : UNBRACED_FILL),
+        stroke: "#1a1a1a",
+        thin: true,
+      }),
+    );
+    dot.el.style.cursor = "pointer";
+    dot.on("click", () => {
+      braced.value = !braced.value;
+    });
 
     const handles: ReadonlyArray<[WVec, ReturnType<typeof handle>]> = [
       [A, s(handle(A))],
@@ -50,10 +86,12 @@ export class MdSketchpad extends Diagram {
     }
 
     s(
-      label(view.top.down(20), "drag any corner — bar lengths and the right angle stay satisfied"),
-      label(view.bottom.up(16), "3 distance + 1 perpendicular constraints in a Cluster", {
-        size: 10,
-      }),
+      label(view.top.down(20), "drag any corner — click the dot to add or remove the brace"),
+      label(
+        view.bottom.up(16),
+        "4 side constraints + 1 toggleable diagonal · addWhile flips structural shape at runtime",
+        { size: 10 },
+      ),
     );
   }
 }

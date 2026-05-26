@@ -39,6 +39,9 @@ export class MdLayoutDemo extends Diagram {
 
     // Every width springs back to its rest; `rate: 0` freezes the
     // spring on the handle being dragged, others keep evolving.
+    // `project` clamps overshoot at 0 (heavy underdamping would
+    // otherwise dip negative on large drags); velocity zeroes on
+    // contact so the integrator doesn't fight the wall.
     widths.forEach((w, i) => {
       const dragging = handles[i].dragging;
       this.anim.start(
@@ -47,6 +50,7 @@ export class MdLayoutDemo extends Diagram {
           zeta: 0.08,
           precision: 0,
           rate: () => (dragging.value ? 0 : 1),
+          project: v => (v < 0 ? 0 : v),
         }),
       );
     });

@@ -26,6 +26,7 @@ export {
 } from "./anim";
 export { transitiveDeps } from "./introspect";
 export { bind } from "./lateral";
+export * from "./lenses";
 export { each, type Lifecycle, param } from "./network-utils";
 export { reflectionLens } from "./new-primitives";
 export {
@@ -44,10 +45,10 @@ export {
   type Read,
   Signal,
   type SignalOptions,
-  setSignalWriteHook,
-  signal,
   type SymmetricLensSpec1,
   type SymmetricLensSpecN,
+  setSignalWriteHook,
+  signal,
   untracked,
   type Val,
   valFn,
@@ -75,15 +76,6 @@ export {
 export { Anchor, Dir } from "./values/anchor";
 export * as BoxMath from "./values/box";
 export { Box, box, edgeFrom, union as boxUnion } from "./values/box";
-export {
-  colorFromHex,
-  hexFromColor,
-  type NumCodecOpts,
-  numFromText,
-  secondsFromText,
-  textFromNum,
-  textFromSeconds,
-} from "./values/codecs";
 export * as ColorMath from "./values/color";
 export { Color, rgb, rgba } from "./values/color";
 export * as MatrixMath from "./values/matrix";
@@ -114,4 +106,3 @@ export { Transform, type TransformInit, transform } from "./values/transform";
 export * as VecMath from "./values/vec";
 export { axes, type PolarPolicy, polar, tangentPoint, Vec, vec } from "./values/vec";
 export { derived, field } from "./writable";
-export * from "./lenses";
