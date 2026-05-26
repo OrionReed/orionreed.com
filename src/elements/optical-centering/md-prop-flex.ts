@@ -4,52 +4,27 @@
 // Min-width clamps, gap is a draggable signal. Every box's geometry
 // is a Box value-type; the layout is a single `hstack` propagator.
 //
-//   p.add(hstack(c, items.map(it => ({ box: it, min: 30 })), { gap }));
+//   propagate(hstack(c, items.map(b => ({ box: b, min: 30 })), { gap }));
 //
 // Drag the container's right edge to resize. Drag the gap handle
 // (above) to widen / narrow inter-item spacing. Items shrink to
 // their min, then overflow.
 
-import { hstack, propagators } from "@minim/propagators";
-import {
-  box,
-  circle,
-  Diagram,
-  drag,
-  handle,
-  label,
-  line,
-  Mount,
-  num,
-  rect,
-  signal,
-  Vec,
-} from "../../minim";
+import { hstack, propagate } from "@minim/propagators";
+import { box, Diagram, handle, label, line, Mount, num, rect, Vec, vec } from "../../minim";
 
 const ITEM_COLORS = ["#5b8def", "#e25c5c", "#f5a623", "#86b966", "#9c6bce", "#5fb1c6"];
 
 export class MdPropFlex extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(620, 360);
-    const cx = view.center.value.x;
-    const cy = view.center.value.y;
+    const { x: cx, y: cy } = view.center.value;
 
-    // Container box — draggable on the right edge.
-    const containerX = num(cx - 250);
-    const containerY = num(cy - 30);
-    const containerW = num(500);
-    const containerH = num(80);
-    const c = box(containerX, containerY, containerW, containerH);
+    const c = box(cx - 250, cy - 30, 500, 80);
     const gap = num(8);
+    const items = Array.from({ length: 6 }, () => box(0, 0, 60, 80));
 
-    // Six items, each starting at width 60 (will get clamped/grown).
-    const N = 6;
-    const items = Array.from({ length: N }, () => box(0, 0, 60, 80));
-
-    // Single propagator that does the whole layout.
-    // Per-item bounds via tagged item objects.
-    const p = propagators();
-    p.add(
+    propagate(
       hstack(
         c,
         items.map(it => ({ box: it, min: 30, max: 200 })),
@@ -57,62 +32,34 @@ export class MdPropFlex extends Diagram {
       ),
     );
 
-    // Render container outline.
-    s(
-      rect(containerX, containerY, containerW, containerH, {
-        stroke: "#666",
-        fill: "#00000010",
-        thin: true,
-      }),
-    );
-
-    // Render each item rect using its Box's reactive fields.
-    items.forEach((it, i) => {
-      s(rect(it.x, it.y, it.w, it.h, { fill: ITEM_COLORS[i]!, opacity: 0.45, corner: 4 }));
-    });
-
-    // Right-edge handle: drag to resize container width.
-    const rightHandle = Vec.lens(
-      () => ({
-        x: containerX.value + containerW.value,
-        y: containerY.value + containerH.value / 2,
-      }),
+    // Right-edge handle for container width.
+    const rightEdge = Vec.lens(
+      () => ({ x: c.x.value + c.w.value, y: c.y.value + c.h.value / 2 }),
       v => {
-        const newW = v.x - containerX.value;
-        if (newW > 60) (containerW as { value: number }).value = newW;
+        const newW = v.x - c.x.value;
+        if (newW > 60) (c.w as { value: number }).value = newW;
       },
     );
-    s(handle(rightHandle, { r: 6, fill: "#999", cursor: "ew-resize" }));
 
-    // Gap handle: a draggable knob along a track above the container.
-    const trackY = containerY.value - 36;
-    const trackX0 = cx - 100;
-    const trackX1 = cx + 100;
-    const gapMin = 0;
-    const gapMax = 40;
-
-    const fixedV = (x: number, y: number) =>
-      Vec.lens(
-        () => ({ x, y }),
-        () => {},
-      );
-    s(line(fixedV(trackX0, trackY), fixedV(trackX1, trackY), { thin: true, opacity: 0.4 }));
-    const gapPos = Vec.lens(
-      () => ({
-        x: trackX0 + ((gap.value - gapMin) / (gapMax - gapMin)) * (trackX1 - trackX0),
-        y: trackY,
-      }),
-      (v: { x: number; y: number }) => {
-        const v01 = (v.x - trackX0) / (trackX1 - trackX0);
-        const next = gapMin + Math.max(0, Math.min(1, v01)) * (gapMax - gapMin);
-        (gap as { value: number }).value = next;
+    // Gap handle along a horizontal track above the container.
+    const trackY = c.y.value - 36;
+    const [tx0, tx1, gMin, gMax] = [cx - 100, cx + 100, 0, 40];
+    const gapKnob = Vec.lens(
+      () => ({ x: tx0 + ((gap.value - gMin) / (gMax - gMin)) * (tx1 - tx0), y: trackY }),
+      v => {
+        const v01 = (v.x - tx0) / (tx1 - tx0);
+        (gap as { value: number }).value = gMin + Math.max(0, Math.min(1, v01)) * (gMax - gMin);
       },
     );
-    const knob = s(circle(gapPos, 6, { fill: "#444" }));
-    knob.el.style.cursor = "ew-resize";
-    drag(knob, gapPos, signal(false));
 
     s(
+      rect(c.x, c.y, c.w, c.h, { stroke: "#666", fill: "#00000010", thin: true }),
+      ...items.map((it, i) =>
+        rect(it.x, it.y, it.w, it.h, { fill: ITEM_COLORS[i]!, opacity: 0.45, corner: 4 }),
+      ),
+      handle(rightEdge, { r: 6, fill: "#999", cursor: "ew-resize" }),
+      line(vec(tx0, trackY), vec(tx1, trackY), { thin: true, opacity: 0.4 }),
+      handle(gapKnob, { r: 6, fill: "#444", cursor: "ew-resize" }),
       label(view.top.down(20), "drag the gap slider above • drag the right edge of the container"),
       label(
         view.bottom.up(16),

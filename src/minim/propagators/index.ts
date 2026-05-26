@@ -1,4 +1,4 @@
-export { type Box, box } from "./box";
+export { Box, box } from "../signals/values/box";
 export {
   attach,
   centerInside,
@@ -14,7 +14,13 @@ export {
   type StackOpts,
   vstack,
 } from "./layout";
-export { PropagatorDivergedError, Propagators, type PropagatorsOpts, propagators } from "./network";
+export {
+  PropagatorDivergedError,
+  Propagators,
+  type PropagatorsOpts,
+  propagate,
+  propagators,
+} from "./network";
 export { type Propagator, propagator } from "./propagator";
 export {
   constrain,

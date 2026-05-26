@@ -10,38 +10,22 @@
 // `linear` trait, so `add(a, b, c)` works for `Num`, `Vec`, `Box`,
 // `Pose`, anything with `Linear<T>`. The `v` prefix is gone.
 
-import type { Num, Signal, Writable } from "../signals";
-import { type Linear, type Vec } from "../signals";
+import type { Num, Signal, Traits, Vec, Writable } from "../signals";
+import { isSignal, requireLinear, valFn } from "../signals";
 import { type Propagator, propagator } from "./propagator";
 
 type AnyW = Writable<Signal<any>>;
-
-// ─── Trait-dispatch helper ──────────────────────────────────────────
-
-interface LinearClass<T> {
-  traits?: { linear?: Linear<T> };
-}
-
-function linearOf<T>(s: Writable<Signal<T>>): Linear<T> {
-  const lin = (s.constructor as LinearClass<T>).traits?.linear;
-  if (lin === undefined) {
-    const name = (s.constructor as { name?: string }).name ?? "<anonymous>";
-    throw new Error(`relations: ${name} has no Linear trait — required for add/sub/mid/centroid`);
-  }
-  return lin;
-}
+/** Writable carrying T with the `Linear` trait — what arithmetic
+ *  combinators (`add`, `sub`, `mid`, `centroid`) require. */
+type LinearW<T> = Writable<Signal<T>> & Traits<T, "linear">;
 
 // ─── Arithmetic (Num + Vec + anything Linear) ──────────────────────
 
 /** `a + b = c`. Three propagators (any two derive the third).
  *  Trait-dispatched on the value class's `linear` trait, so works
  *  for `Num`, `Vec`, and any Linear value type. */
-export function add<T>(
-  a: Writable<Signal<T>>,
-  b: Writable<Signal<T>>,
-  c: Writable<Signal<T>>,
-): Propagator[] {
-  const L = linearOf(a);
+export function add<T>(a: LinearW<T>, b: LinearW<T>, c: LinearW<T>): Propagator[] {
+  const L = requireLinear(a);
   return [
     propagator([a, b], [c], () => {
       c.value = L.add(a.value, b.value);
@@ -57,12 +41,8 @@ export function add<T>(
 
 /** `a - b = c`. b-deriving propagator listed before a-deriving so
  *  drag-on-c updates b first (matches "c changed because b changed"). */
-export function sub<T>(
-  a: Writable<Signal<T>>,
-  b: Writable<Signal<T>>,
-  c: Writable<Signal<T>>,
-): Propagator[] {
-  const L = linearOf(a);
+export function sub<T>(a: LinearW<T>, b: LinearW<T>, c: LinearW<T>): Propagator[] {
+  const L = requireLinear(a);
   return [
     propagator([a, b], [c], () => {
       c.value = L.sub(a.value, b.value);
@@ -78,12 +58,8 @@ export function sub<T>(
 
 /** `(a + b) / 2 = m` (midpoint). Drag m → both a and b translate
  *  by the delta; drag a or b → m re-derives. */
-export function mid<T>(
-  a: Writable<Signal<T>>,
-  b: Writable<Signal<T>>,
-  m: Writable<Signal<T>>,
-): Propagator[] {
-  const L = linearOf(a);
+export function mid<T>(a: LinearW<T>, b: LinearW<T>, m: LinearW<T>): Propagator[] {
+  const L = requireLinear(a);
   return [
     propagator([a, b], [m], () => {
       m.value = L.scale(L.add(a.value, b.value), 0.5);
@@ -100,9 +76,9 @@ export function mid<T>(
 /** Centroid of N values: `c = mean(...vs)`. Drag any vertex →
  *  centroid follows; drag centroid → all vertices translate by the
  *  delta (rigid translation of the cluster). */
-export function centroid<T>(c: Writable<Signal<T>>, ...vs: Writable<Signal<T>>[]): Propagator[] {
+export function centroid<T>(c: LinearW<T>, ...vs: LinearW<T>[]): Propagator[] {
   if (vs.length === 0) return [];
-  const L = linearOf(c);
+  const L = requireLinear(c);
   const inv = 1 / vs.length;
   const computeMean = (): T => {
     let acc = vs[0]!.value;
@@ -283,8 +259,8 @@ export function between(
 /** Keep `|a − b| = d`. Drag a → b moves along (b−a) to maintain
  *  distance; drag b → symmetric. `d` may be a number or Num signal. */
 export function keepDistance(a: WVec, b: WVec, d: number | Writable<Num>): Propagator[] {
-  const dRead = (): number => (typeof d === "number" ? d : d.value);
-  const dDeps: Signal<unknown>[] = typeof d === "number" ? [] : [d as Signal<unknown>];
+  const dRead = valFn(d);
+  const dDeps = isSignal(d) ? [d] : [];
   return [
     propagator([a.x, a.y, ...dDeps], [b.x as AnyW, b.y as AnyW], () => {
       const dx = b.x.value - a.x.value;
@@ -328,8 +304,8 @@ export function onLine(p: WVec, a: WVec, b: WVec): Propagator {
 
 /** Keep `p` on a circle of radius `r` around `c`. */
 export function onCircle(p: WVec, c: WVec, r: number | Writable<Num>): Propagator {
-  const rRead = (): number => (typeof r === "number" ? r : r.value);
-  const rDeps: Signal<unknown>[] = typeof r === "number" ? [] : [r as Signal<unknown>];
+  const rRead = valFn(r);
+  const rDeps = isSignal(r) ? [r] : [];
   return propagator([p.x, p.y, c.x, c.y, ...rDeps], [p.x as AnyW, p.y as AnyW], () => {
     const dx = p.x.value - c.x.value;
     const dy = p.y.value - c.y.value;

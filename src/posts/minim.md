@@ -399,6 +399,8 @@ p.add(hstack(container, items.map(b => ({ box: b, min: 30 })), { gap, align: "st
 
 The substrate scales the other way too. Set-narrowing propagators on `Signal<Set<T>>` cells solve a 9×9 sudoku in half a millisecond. Interval-arithmetic propagators on `Signal<[number, number]>` cells let layout reasoning track partial information ("this width is somewhere in [50, 200]") through a network. Same `network()` underneath all of it; what changes is the value type and the merge rule.
 
+<md-prop-sudoku></md-prop-sudoku>
+
 Curves matter too. `Path` is a reactive polyline — cheap, fast, plenty for line plots and node-to-node connectors. When ellipses or arcs are needed, the sibling `Curve` carries the same reactive plumbing but with `ellipseArc` segments rendered via SVG's native `A` command. The standalone `ellipse(center, a, b, rotation?)` factory accepts `Val<>` on every parameter, so a family of confocal conics — five ellipses through fixed eccentricities, four hyperbola pairs sampled as polylines — comes from a couple of loops driven by two draggable foci. Drag a focus; the whole grid re-rescales. Drag the probe; the unique ellipse and hyperbola through it track in real time:
 
 ```ts

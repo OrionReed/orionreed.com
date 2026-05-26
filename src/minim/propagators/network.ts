@@ -43,37 +43,72 @@ export interface PropagatorsOpts {
   /** Maximum fixpoint iterations per body run. Default 1000.
    *  Hitting the cap throws — propagators never silently diverge. */
   iterations?: number;
+  /** Manual mode: don't auto-run when reads change. Call `.step()`
+   *  to advance the fixpoint. Use for animated solvers, demos that
+   *  want to visualise narrowing, or batched offline runs. */
+  manual?: boolean;
 }
 
 export class Propagators {
   private readonly _entries: Entry[] = [];
   private readonly _maxIterations: number;
+  private readonly _manual: boolean;
   private _network?: Network;
+  /** Propagators added but not yet given their first fire. The body
+   *  drains this queue on its next run (which we trigger via
+   *  `flush()` after subscribing new deps). */
+  private _firstFireQueue: Propagator[] = [];
+  /** Fresh signal-writes that haven't been drained yet. In auto mode,
+   *  drained inline in the body callback. In manual mode, persists
+   *  between `step()` calls. */
+  private _pendingFresh = new Set<AnySignal>();
 
   constructor(opts: PropagatorsOpts = {}) {
     this._maxIterations = opts.iterations ?? 1000;
+    this._manual = opts.manual ?? false;
   }
 
   /** Add one or more propagators. Multi-direction combinators (e.g.
-   *  `add`) return arrays; spread them. Subscribes new deps and
-   *  flushes the network once per `add()` call regardless of how
-   *  many propagators or cells are added. */
-  add(...props: readonly (Propagator | readonly Propagator[])[]): void {
+   *  `add`) return arrays; spread them. Each new propagator gets one
+   *  "first fire" inside the network body so writes happen atomically;
+   *  subsequent passes are freshness-gated. Returns `this` for
+   *  chaining: `propagators().add(p1, p2, ...)`. */
+  add(...props: readonly (Propagator | readonly Propagator[])[]): this {
+    const startIndex = this._entries.length;
     const newDeps = new Set<AnySignal>();
     for (const p of props) {
       if (Array.isArray(p)) for (const pp of p) this._addOne(pp, newDeps);
       else this._addOne(p as Propagator, newDeps);
     }
+    for (let i = startIndex; i < this._entries.length; i++) {
+      this._firstFireQueue.push(this._entries[i]!.p);
+    }
     if (this._network === undefined) {
+      // Install fires the body once, draining _firstFireQueue.
       this._install();
     } else {
-      // Subscribe before flush so the new deps are in the topology
-      // when the body runs.
       this._network.subscribe(...newDeps);
-      // Flush so newly-added propagators get a chance to run, even
-      // if their reads were already in the dep set.
+      // Trigger body so the queue gets processed. In manual mode we
+      // still flush so first-fire happens at add() time (consistent
+      // with auto mode); the user's `step()` controls subsequent
+      // narrowing.
       this._network.flush();
     }
+    return this;
+  }
+
+  /** Advance the fixpoint loop. By default runs to convergence (up to
+   *  `iterations`); pass a smaller `maxIterations` to advance only
+   *  N waves at a time — useful for animated solvers / demos.
+   *
+   *  Only meaningful in `manual: true` mode; in auto mode the network
+   *  drains inline in `add()` and on every read change. */
+  step(maxIterations: number = this._maxIterations): void {
+    if (this._network === undefined) return;
+    // Pull any external-dirty signals into the body; in manual mode
+    // the network otherwise sits on them.
+    this._network.flush();
+    this._drain(maxIterations);
   }
 
   private _addOne(p: Propagator, newDeps: Set<AnySignal>): void {
@@ -106,40 +141,50 @@ export class Propagators {
     this._network = makeNetwork(
       [...allDeps] as readonly Signal<unknown>[],
       dirty => {
-        this._runFixpoint(dirty as ReadonlySet<AnySignal>);
+        // 1) First-fire any propagators that were just added.
+        for (const p of this._firstFireQueue) {
+          const changed = runPropagator(p);
+          for (const w of changed) this._pendingFresh.add(w);
+        }
+        this._firstFireQueue = [];
+        // 2) Fold external-dirty into pending fresh.
+        for (const s of dirty) this._pendingFresh.add(s);
+        // 3) Auto mode: drain to convergence. Manual: leave for step().
+        if (!this._manual) this._drain(this._maxIterations);
       },
+      { manual: this._manual },
     );
   }
 
-  private _runFixpoint(initialDirty: ReadonlySet<AnySignal>): void {
+  /** Drain `_pendingFresh` wave by wave for up to `maxIterations`
+   *  passes. Each wave consumes the current fresh set and re-fires
+   *  any propagator whose expanded read-set intersects it. */
+  private _drain(maxIterations: number): void {
     if (this._entries.length === 0) return;
-    let fresh: Set<AnySignal> = new Set(initialDirty);
-    // First fire: fresh is empty (initial run had no prior). Run
-    // every propagator once to populate the network.
-    if (fresh.size === 0) {
-      const newFresh = new Set<AnySignal>();
-      for (const { p } of this._entries) {
-        const changed = runPropagator(p);
-        for (const w of changed) newFresh.add(w);
-      }
-      fresh = newFresh;
-    }
     let iters = 0;
-    while (fresh.size > 0 && iters < this._maxIterations) {
+    while (this._pendingFresh.size > 0 && iters < maxIterations) {
       iters++;
-      const newFresh = new Set<AnySignal>();
+      const fresh = this._pendingFresh;
+      this._pendingFresh = new Set<AnySignal>();
       for (const { p, expanded } of this._entries) {
         if (!hasExpandedFreshRead(expanded, fresh)) continue;
         const changed = runPropagator(p);
-        for (const w of changed) newFresh.add(w);
+        for (const w of changed) this._pendingFresh.add(w);
       }
-      fresh = newFresh;
     }
-    if (iters >= this._maxIterations) {
+    // Auto mode: didn't converge → throw. Manual mode: leftover sits
+    // in _pendingFresh until the next step().
+    if (
+      !this._manual &&
+      iters >= this._maxIterations &&
+      this._pendingFresh.size > 0
+    ) {
+      const stuck = this._pendingFresh;
+      this._pendingFresh = new Set<AnySignal>();
       throw new PropagatorDivergedError(
         `Propagators: did not converge after ${this._maxIterations} iterations. ` +
-          `${fresh.size} signal(s) still changing.`,
-        fresh,
+          `${stuck.size} signal(s) still changing.`,
+        stuck,
       );
     }
   }
@@ -198,4 +243,13 @@ function hasExpandedFreshRead(
 
 export function propagators(opts: PropagatorsOpts = {}): Propagators {
   return new Propagators(opts);
+}
+
+/** One-shot sugar: build a network from N propagators with default opts.
+ *  Equivalent to `propagators().add(...props)`. Returns the holder so
+ *  callers can `.dispose()` later. */
+export function propagate(
+  ...props: readonly (Propagator | readonly Propagator[])[]
+): Propagators {
+  return new Propagators().add(...props);
 }

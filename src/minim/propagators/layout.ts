@@ -14,9 +14,7 @@
 // against min/max bounds, slack absorbed by gap, etc. For more
 // rigid edge-to-edge layouts use `attach`, `centerInside`, etc.
 
-import type { Num as NumClass, Read, Writable } from "../signals";
-import { value } from "../signals";
-import { type Box } from "./box";
+import { type Box, isSignal, type Num as NumClass, type Read, value, type Writable } from "../signals";
 import { type Propagator, propagator } from "./propagator";
 
 type Num = NumClass;
@@ -24,7 +22,7 @@ const asW = (n: Num): Writable<NumClass> => n as unknown as Writable<NumClass>;
 type ValOrSig = number | Read<number>;
 
 function readDeps(...vs: ValOrSig[]): Num[] {
-  return vs.filter(v => typeof v !== "number") as Num[];
+  return vs.filter(isSignal) as Num[];
 }
 
 function clamp(v: number, lo: number, hi: number): number {
