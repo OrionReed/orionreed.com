@@ -3,6 +3,10 @@ title: Minim
 description: Generator-driven animated SVG diagrams with reactive primitives.
 ---
 
+<md-coreactive></md-coreactive>
+
+The diagram above is the thesis. Drag any cell on the left; watch the right. Every dependency edge is a *lens* — a forward `get` paired with a backward `put` — so writes flow upstream along the same edges that reads flow downstream. Each lit edge is a real engine fire: red descends the inverse along reverse-capable edges, blue refreshes the forward cone. The graph stays an oriented DAG; bidirectionality is a property *of each edge in isolation*, not of the whole graph. There is no solver and no fixpoint loop; a `put` is one bounded upstream walk down the DAG. The rest of this post is what falls out of that one shape.
+
 Minim is a tiny animation library based on a simple idea: generators yield _control_ upward; _delta-time_ is passed back down.
 
 ```ts
