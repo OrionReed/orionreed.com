@@ -13,6 +13,7 @@ import {
   signal,
   snapshot,
   timeline,
+  Vec,
   vec,
 } from "../../minim";
 
@@ -70,12 +71,8 @@ export class MdTimelineEditor extends Diagram {
       );
     });
 
-    const playX = computed(() => STRIP_X + tl.t.value * STRIP_W);
-    s(
-      line(vec(playX, STRIP_Y - 6), vec(playX, STRIP_Y + STRIP_H + 6), {
-        strokeWidth: 2,
-      }),
-    );
+    const playhead = Vec.derive(() => ({ x: STRIP_X + tl.t.value * STRIP_W, y: STRIP_Y }));
+    s(line(playhead.up(6), playhead.down(STRIP_H + 6), { strokeWidth: 2 }));
 
     const SLIDER_Y = 150;
     const SLIDER_GAP = 24;
@@ -94,11 +91,7 @@ export class MdTimelineEditor extends Diagram {
       );
 
       const knob = s(
-        circle(
-          vec(() => x0 + (dur.value / MAX_DUR) * SLIDER_W, SLIDER_Y),
-          9,
-          { fill: COLORS[i] },
-        ),
+        circle(vec(dur.affine(SLIDER_W / MAX_DUR, x0), SLIDER_Y), 9, { fill: COLORS[i] }),
       );
       draggable(knob, local => {
         const u = Math.min(Math.max((local.x - x0) / SLIDER_W, 0), 1);

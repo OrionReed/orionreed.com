@@ -37,15 +37,10 @@ describe("Semantic probe D: three-way separation", () => {
     // ─── DEFINITION (lens): two equivalent area formulas ───
     //
     // Formula 1: absolute Shoelace.
-    const shoeLace = Num.derive(
-      [a, b, c] as const,
-      vals => {
-        const [av, bv, cv] = vals;
-        return Math.abs(
-          (av.x * (bv.y - cv.y) + bv.x * (cv.y - av.y) + cv.x * (av.y - bv.y)) / 2,
-        );
-      },
-    );
+    const shoeLace = Num.derive([a, b, c] as const, vals => {
+      const [av, bv, cv] = vals;
+      return Math.abs((av.x * (bv.y - cv.y) + bv.x * (cv.y - av.y) + cv.x * (av.y - bv.y)) / 2);
+    });
 
     // Formula 2: ½ × base × height (works only for axis-aligned).
     const baseHeight = Num.derive([a, b, c] as const, vals => {
@@ -123,15 +118,10 @@ describe("Semantic probe D: three-way separation", () => {
     const b = vec(10, 0);
     const c = vec(0, 10);
 
-    const area = Num.derive(
-      [a, b, c] as const,
-      vals => {
-        const [av, bv, cv] = vals;
-        return Math.abs(
-          (av.x * (bv.y - cv.y) + bv.x * (cv.y - av.y) + cv.x * (av.y - bv.y)) / 2,
-        );
-      },
-    );
+    const area = Num.derive([a, b, c] as const, vals => {
+      const [av, bv, cv] = vals;
+      return Math.abs((av.x * (bv.y - cv.y) + bv.x * (cv.y - av.y) + cv.x * (av.y - bv.y)) / 2);
+    });
 
     function makePropagator(residualSig: Signal<number>, targetSig: typeof target1) {
       return propagator([residualSig, a, b, targetSig], [c], () => {
@@ -181,15 +171,10 @@ describe("Semantic probe D: three-way separation", () => {
     const b = vec(10, 0);
     const c = vec(0, 10);
 
-    const area = Num.derive(
-      [a, b, c] as const,
-      vals => {
-        const [av, bv, cv] = vals;
-        return Math.abs(
-          (av.x * (bv.y - cv.y) + bv.x * (cv.y - av.y) + cv.x * (av.y - bv.y)) / 2,
-        );
-      },
-    );
+    const area = Num.derive([a, b, c] as const, vals => {
+      const [av, bv, cv] = vals;
+      return Math.abs((av.x * (bv.y - cv.y) + bv.x * (cv.y - av.y) + cv.x * (av.y - bv.y)) / 2);
+    });
     const target = num(100);
     const residual = area.sub(target);
 

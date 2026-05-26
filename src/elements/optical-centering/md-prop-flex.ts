@@ -11,7 +11,7 @@
 // their min, then overflow.
 
 import { hstack, propagate } from "@minim/propagators";
-import { box, Diagram, handle, label, line, Mount, num, rect, Vec, vec } from "../../minim";
+import { box, Diagram, handle, label, line, Mount, Num, num, rect, Vec, vec } from "../../minim";
 
 const ITEM_COLORS = ["#5b8def", "#e25c5c", "#f5a623", "#86b966", "#9c6bce", "#5fb1c6"];
 
@@ -41,16 +41,12 @@ export class MdPropFlex extends Diagram {
       },
     );
 
-    // Gap handle along a horizontal track above the container.
+    // Gap handle along a horizontal track above the container. Pixel ↔
+    // value via a clamped affine chain; y locked at the track row.
     const trackY = c.y.value - 36;
     const [tx0, tx1, gMin, gMax] = [cx - 100, cx + 100, 0, 40];
-    const gapKnob = Vec.lens(
-      () => ({ x: tx0 + ((gap.value - gMin) / (gMax - gMin)) * (tx1 - tx0), y: trackY }),
-      v => {
-        const v01 = (v.x - tx0) / (tx1 - tx0);
-        (gap as { value: number }).value = gMin + Math.max(0, Math.min(1, v01)) * (gMax - gMin);
-      },
-    );
+    const k = (tx1 - tx0) / (gMax - gMin);
+    const gapKnob = vec(gap.clamp(gMin, gMax).affine(k, tx0 - gMin * k), Num.pin(trackY));
 
     s(
       rect(c.x, c.y, c.w, c.h, { stroke: "#666", fill: "#00000010", thin: true }),

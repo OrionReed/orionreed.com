@@ -7,8 +7,7 @@
 // views built with `Vec.lens` / `Num.lens`) compose naturally for
 // downstream consumers that only care about translation or rotation.
 
-import { bind } from "../lateral";
-import { Signal, type Val, type Writable } from "../signal";
+import { Signal, type Writable } from "../signal";
 import { type Linear, type Pack, type Pivotal, type TraitDict } from "../traits";
 
 type V = { x: number; y: number; theta: number };
@@ -85,8 +84,16 @@ export class Pose extends Signal<V> {
   }
 }
 
-export function pose(v: Val<V> = { x: 0, y: 0, theta: 0 }): Writable<Pose> {
+/** Writable `Pose`.
+ *
+ *  - `pose(literal)` — seeds a fresh `Writable<Pose>` at the value.
+ *  - `pose(existingPose)` — identity passthrough; returns the same cell.
+ *
+ *  RO sources are rejected at the type level — use `Pose.derive(...)`
+ *  for reactive RO tracking, or `signal.value` to snapshot. */
+export function pose(v: V | Writable<Pose> = { x: 0, y: 0, theta: 0 }): Writable<Pose> {
+  if (v instanceof Pose) return v as Writable<Pose>;
   const p = new Pose() as Writable<Pose>;
-  bind(p, v);
+  p.value = v;
   return p;
 }

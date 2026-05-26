@@ -11,7 +11,15 @@
 // reactive `b.x, b.y, b.at(u, v)` field views. No manual coordinate
 // math anywhere.
 
-import { allDifferent, box, grid, inset, propagate, propagators, type SetCell } from "@minim/propagators";
+import {
+  allDifferent,
+  box,
+  grid,
+  inset,
+  propagate,
+  propagators,
+  type SetCell,
+} from "@minim/propagators";
 import { Diagram, label, line, loop, Mount, rect, signal } from "../../minim";
 
 const BASE_PUZZLE =
@@ -66,10 +74,7 @@ export class MdPropSudoku extends Diagram {
     // ─── Layout: grid(view-padded, 81 cell boxes) ───────────────────
     const gridArea = box();
     const cellBoxes = Array.from({ length: 81 }, () => box());
-    propagate(
-      inset(view, gridArea, { padding: 30 }),
-      grid(gridArea, cellBoxes, { cols: 9 }),
-    );
+    propagate(inset(view, gridArea, { padding: 30 }), grid(gridArea, cellBoxes, { cols: 9 }));
 
     // ─── Render ─────────────────────────────────────────────────────
     for (let i = 0; i < 81; i++) {
@@ -84,11 +89,10 @@ export class MdPropSudoku extends Diagram {
           fill: () => (isGiven() ? "#00000008" : "transparent"),
         }),
         // Big digit when narrowed to a singleton.
-        label(
-          b.center,
-          () => (cell.value.size === 1 ? `${[...cell.value][0]}` : ""),
-          { size: 22, fill: () => (isGiven() ? GIVEN : SOLVED) },
-        ),
+        label(b.center, () => (cell.value.size === 1 ? `${[...cell.value][0]}` : ""), {
+          size: 22,
+          fill: () => (isGiven() ? GIVEN : SOLVED),
+        }),
       );
       // 3×3 candidates inside the cell, positions via `b.at(u, v)`.
       for (let gy = 0; gy < 3; gy++) {
@@ -130,8 +134,7 @@ export class MdPropSudoku extends Diagram {
     );
 
     // ─── Animation: reset → step until stable → hold → repeat ──────
-    const totalCands = (): number =>
-      cells.flat().reduce((acc, c) => acc + c.value.size, 0);
+    const totalCands = (): number => cells.flat().reduce((acc, c) => acc + c.value.size, 0);
 
     this.anim.start(
       loop(function* () {

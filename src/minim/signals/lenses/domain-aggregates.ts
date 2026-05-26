@@ -24,15 +24,7 @@
 // `closed-form-policies.ts`, applied beyond points.
 // =====================================================================
 
-import {
-  type Linear,
-  type Metric,
-  Num,
-  Signal,
-  type Traits,
-  Vec,
-  type Writable,
-} from "../index";
+import { type Linear, type Metric, Num, Signal, type Traits, Vec, type Writable } from "../index";
 
 // ─── 1. Generic Linear-trait aggregates ────────────────────────────────
 //
@@ -60,7 +52,8 @@ export function meanOf<S extends Traits<any, "linear">>(
   const Cls = (inputs[0] as any).constructor as new (...args: never[]) => Signal<any>;
   // biome-ignore lint/suspicious/noExplicitAny: dynamic trait lookup
   const lin = (Cls as any).traits?.linear as Linear<any> | undefined;
-  if (!lin) throw new Error(`meanOf: ${(Cls as { name?: string }).name ?? "?"} has no traits.linear`);
+  if (!lin)
+    throw new Error(`meanOf: ${(Cls as { name?: string }).name ?? "?"} has no traits.linear`);
   const n = inputs.length;
   const inv = 1 / n;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.lens
@@ -104,7 +97,9 @@ type ColorV = { r: number; g: number; b: number; a: number };
  *  space). Inherits cross-channel invariance from Linear-trait
  *  `meanOf` via the established framework. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
-export function meanColor(colors: readonly Writable<Traits<ColorV, "linear">>[]): Writable<Traits<ColorV, "linear">> {
+export function meanColor(
+  colors: readonly Writable<Traits<ColorV, "linear">>[],
+): Writable<Traits<ColorV, "linear">> {
   return meanOf(colors);
 }
 
@@ -133,13 +128,16 @@ export function meanColor(colors: readonly Writable<Traits<ColorV, "linear">>[])
  *  current source on every read & write, so an intervening mean
  *  translate works correctly without staleness. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
-export function spreadOf<T extends NonNullable<unknown>, S extends Signal<T> & Traits<T, "linear" | "metric">>(
-  inputs: readonly Writable<S>[],
-): Writable<Num> {
+export function spreadOf<
+  T extends NonNullable<unknown>,
+  S extends Signal<T> & Traits<T, "linear" | "metric">,
+>(inputs: readonly Writable<S>[]): Writable<Num> {
   const K = inputs.length;
   if (K < 1) throw new Error("spreadOf: need ≥ 1 input");
   // biome-ignore lint/suspicious/noExplicitAny: dynamic class lookup
-  const Cls = (inputs[0] as any).constructor as { traits?: { linear?: Linear<T>; metric?: Metric<T> } };
+  const Cls = (inputs[0] as any).constructor as {
+    traits?: { linear?: Linear<T>; metric?: Metric<T> };
+  };
   const lin = Cls.traits?.linear;
   const met = Cls.traits?.metric;
   if (!lin || !met) {
@@ -222,9 +220,10 @@ export function spreadOf<T extends NonNullable<unknown>, S extends Signal<T> & T
  *  This is the "centroid + uniform scale about centroid" decomposition,
  *  generalised across domains via the trait system. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape on value class
-export function paletteLens<T extends NonNullable<unknown>, S extends Signal<T> & Traits<T, "linear" | "metric">>(
-  colors: readonly Writable<S>[],
-): { mean: Writable<S>; spread: Writable<Num> } {
+export function paletteLens<
+  T extends NonNullable<unknown>,
+  S extends Signal<T> & Traits<T, "linear" | "metric">,
+>(colors: readonly Writable<S>[]): { mean: Writable<S>; spread: Writable<Num> } {
   return {
     mean: meanOf(colors as never) as Writable<S>,
     spread: spreadOf(colors as never),

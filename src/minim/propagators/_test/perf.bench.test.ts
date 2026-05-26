@@ -1,9 +1,8 @@
 // perf.bench.test.ts — propagator network performance benchmarks.
 
 import { describe, expect, it } from "vitest";
-import { num } from "../../signals";
+import { num, signal } from "../../signals";
 import { add, align, allDifferent, box, hstack, propagators, type SetCell } from "..";
-import { signal } from "../../signals";
 
 const eqSet = (a: ReadonlySet<number>, b: ReadonlySet<number>): boolean => {
   if (a.size !== b.size) return false;
@@ -36,7 +35,13 @@ describe("propagator perf", () => {
     const c = box(0, 0, 1000, 50);
     const items = Array.from({ length: N }, () => box());
     const p = propagators({ iterations: 100 });
-    p.add(hstack(c, items.map(b => ({ box: b, min: 4, max: 50 })), { gap: 4 }));
+    p.add(
+      hstack(
+        c,
+        items.map(b => ({ box: b, min: 4, max: 50 })),
+        { gap: 4 },
+      ),
+    );
 
     c.w.value = 1001;
     const t0 = performance.now();

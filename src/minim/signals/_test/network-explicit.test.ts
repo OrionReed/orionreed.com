@@ -348,9 +348,13 @@ describe("explicit-deps: manual mode", () => {
   it("body fires on construction even in manual mode", () => {
     const a = num(0);
     let fires = 0;
-    const n = network([a], () => {
-      fires++;
-    }, { manual: true });
+    const n = network(
+      [a],
+      () => {
+        fires++;
+      },
+      { manual: true },
+    );
     expect(fires).toBe(1);
     n.dispose();
   });
@@ -358,9 +362,13 @@ describe("explicit-deps: manual mode", () => {
   it("dep changes don't auto-fire body in manual mode", () => {
     const a = num(0);
     let fires = 0;
-    const n = network([a], () => {
-      fires++;
-    }, { manual: true });
+    const n = network(
+      [a],
+      () => {
+        fires++;
+      },
+      { manual: true },
+    );
     fires = 0;
 
     a.value = 1;
@@ -377,9 +385,13 @@ describe("explicit-deps: manual mode", () => {
     const a = num(0);
     const b = num(0);
     const dirties: number[] = [];
-    const n = network([a, b], dirty => {
-      dirties.push(dirty.size);
-    }, { manual: true });
+    const n = network(
+      [a, b],
+      dirty => {
+        dirties.push(dirty.size);
+      },
+      { manual: true },
+    );
 
     a.value = 1;
     b.value = 2;
@@ -704,8 +716,8 @@ describe("explicit-deps: re-entry & timing", () => {
 
 describe("explicit-deps: Computed reads in body don't leak into network's deps", () => {
   it("body reads a Computed that depends on a non-dep signal — non-dep stays out", () => {
-    const a = num(0);     // dep
-    const b = num(0);     // NOT a dep
+    const a = num(0); // dep
+    const b = num(0); // NOT a dep
     const sum = a.add(b); // Computed
     let fires = 0;
     let lastSum = -1;
@@ -860,12 +872,20 @@ describe("multi-manual: shared deps, varied flush order", () => {
     const seenA: { value: number; dirtyHas: boolean }[] = [];
     const seenB: { value: number; dirtyHas: boolean }[] = [];
     const xAny = x as unknown as import("../signal").Signal<unknown>;
-    const a = network([x], d => {
-      seenA.push({ value: x.value, dirtyHas: d.has(xAny) });
-    }, { manual: true });
-    const b = network([x], d => {
-      seenB.push({ value: x.value, dirtyHas: d.has(xAny) });
-    }, { manual: true });
+    const a = network(
+      [x],
+      d => {
+        seenA.push({ value: x.value, dirtyHas: d.has(xAny) });
+      },
+      { manual: true },
+    );
+    const b = network(
+      [x],
+      d => {
+        seenB.push({ value: x.value, dirtyHas: d.has(xAny) });
+      },
+      { manual: true },
+    );
 
     expect(seenA).toEqual([{ value: 0, dirtyHas: false }]);
     expect(seenB).toEqual([{ value: 0, dirtyHas: false }]);
@@ -890,9 +910,13 @@ describe("multi-manual: shared deps, varied flush order", () => {
   it("flushing the same network twice in a row — second sees empty dirty", () => {
     const x = num(0);
     const dirties: number[] = [];
-    const n = network([x], d => {
-      dirties.push(d.size);
-    }, { manual: true });
+    const n = network(
+      [x],
+      d => {
+        dirties.push(d.size);
+      },
+      { manual: true },
+    );
 
     x.value = 1;
     n.flush(); // dirty = {x}
@@ -908,9 +932,13 @@ describe("multi-manual: shared deps, varied flush order", () => {
     const auto = network([x], () => {
       autoFires++;
     });
-    const manual = network([x], () => {
-      manualFires++;
-    }, { manual: true });
+    const manual = network(
+      [x],
+      () => {
+        manualFires++;
+      },
+      { manual: true },
+    );
 
     autoFires = 0;
     manualFires = 0;

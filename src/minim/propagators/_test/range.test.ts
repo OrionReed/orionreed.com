@@ -14,8 +14,8 @@ import {
   intervalSum,
   propagators,
   type Range,
-  rangeCell,
   RangeContradiction,
+  rangeCell,
   rangeIsExact,
   snap,
 } from "..";

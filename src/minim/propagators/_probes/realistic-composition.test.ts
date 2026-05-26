@@ -60,34 +60,39 @@ describe("Realistic: rigid bar with sliders", () => {
     // The propagator writes A and B (not the lens directly,
     // because they're the underlying cells — both must move
     // symmetrically).
-    p.add(propagator([length], [A, B], () => {
-      const cur = length.value;
-      if (cur >= 50 && cur <= 200) return;
-      const target = Math.max(50, Math.min(200, cur));
-      const m = mid.value; // lens read
-      const factor = target / cur;
-      A.value = {
-        x: m.x + (A.value.x - m.x) * factor,
-        y: m.y + (A.value.y - m.y) * factor,
-      };
-      B.value = {
-        x: m.x + (B.value.x - m.x) * factor,
-        y: m.y + (B.value.y - m.y) * factor,
-      };
-    }));
+    p.add(
+      propagator([length], [A, B], () => {
+        const cur = length.value;
+        if (cur >= 50 && cur <= 200) return;
+        const target = Math.max(50, Math.min(200, cur));
+        const m = mid.value; // lens read
+        const factor = target / cur;
+        A.value = {
+          x: m.x + (A.value.x - m.x) * factor,
+          y: m.y + (A.value.y - m.y) * factor,
+        };
+        B.value = {
+          x: m.x + (B.value.x - m.x) * factor,
+          y: m.y + (B.value.y - m.y) * factor,
+        };
+      }),
+    );
 
     // Constraint 2: midpoint stays in viewport [0, 200] × [0, 100].
     // Strategy: write through the midpoint lens to clamp; the lens
     // distributes delta to A and B (translates the bar).
-    p.add(propagator([mid], [mid], () => {
-      const m = mid.value;
-      let x = m.x, y = m.y;
-      if (x < 0) x = 0;
-      if (x > 200) x = 200;
-      if (y < 0) y = 0;
-      if (y > 100) y = 100;
-      if (x !== m.x || y !== m.y) mid.value = { x, y };
-    }));
+    p.add(
+      propagator([mid], [mid], () => {
+        const m = mid.value;
+        let x = m.x,
+          y = m.y;
+        if (x < 0) x = 0;
+        if (x > 200) x = 200;
+        if (y < 0) y = 0;
+        if (y > 100) y = 100;
+        if (x !== m.x || y !== m.y) mid.value = { x, y };
+      }),
+    );
 
     // ─── User interactions ───
 

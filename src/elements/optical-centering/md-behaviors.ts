@@ -84,10 +84,10 @@ export class MdBehaviors extends Diagram {
     const lc = { x: cx, y: laneY(1) };
     const phase = num(0);
     this.anim.start(drift(phase, 1));
-    const headPos = vec(
-      () => lc.x + 90 * Math.sin(phase.value * 1.6),
-      () => lc.y + 26 * Math.sin(phase.value * 2.3 + 0.6),
-    );
+    const headPos = Vec.derive(() => ({
+      x: lc.x + 90 * Math.sin(phase.value * 1.6),
+      y: lc.y + 26 * Math.sin(phase.value * 2.3 + 0.6),
+    }));
     s(circle(headPos, 9, { fill: "#1a1a1a" }));
 
     const links: Writable<Vec>[] = Array.from({ length: N_CHAIN }, (_, i) =>

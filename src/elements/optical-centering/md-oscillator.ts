@@ -14,6 +14,7 @@ import {
   play,
   signal,
   tokens,
+  Vec,
   vec,
   type Writable,
   wave,
@@ -122,10 +123,7 @@ export class MdOscillator extends Diagram {
 
     const ball = s(
       circle(
-        vec(
-          TR,
-          computed(() => CY - disp.value),
-        ),
+        Vec.derive(() => ({ x: TR, y: CY - disp.value })),
         5.5,
         { fill: true },
       ),

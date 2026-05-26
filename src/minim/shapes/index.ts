@@ -13,7 +13,7 @@ export { dashedPath } from "./dashed";
 export { debug } from "./debug";
 export { group } from "./group";
 export { type HandleOpts, handle } from "./handle";
-export { drag, draggable, dragRotate, dragWithState, hoverSignal } from "./interaction";
+export { cursor, drag, draggable, dragRotate, dragWithState, hoverSignal } from "./interaction";
 export { Label, type LabelOpts, label } from "./label";
 export { type ArrangeOpts, arrange, expand, grid, split } from "./layout";
 export { Line, type LineOpts, line } from "./line";

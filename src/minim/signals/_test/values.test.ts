@@ -1,7 +1,7 @@
 // values.test.ts — Num/Vec runtime + Writable<R> behaviour.
 
 import { describe, expect, it } from "vitest";
-import { axes, effect, isComputed, isLens, Num, num, polar, tangentPoint, vec } from "../index";
+import { effect, isComputed, isLens, Num, num, polar, tangentPoint, Vec, vec } from "../index";
 
 describe("Num", () => {
   it("num(v) writable, .value setter works", () => {
@@ -170,11 +170,11 @@ describe("Vec", () => {
   });
 });
 
-describe("axes(x, y) — bidirectional Vec from two writable Nums", () => {
+describe("vec(num, num) — bidirectional Vec from two writable Nums", () => {
   it("write to composite propagates to both source Nums", () => {
     const x = num(0),
       y = num(0);
-    const v = axes(x, y);
+    const v = vec(x, y);
     v.value = { x: 10, y: 20 };
     expect(x.value).toBe(10);
     expect(y.value).toBe(20);
@@ -183,7 +183,7 @@ describe("axes(x, y) — bidirectional Vec from two writable Nums", () => {
   it("write to .x field-lens propagates to source x only", () => {
     const x = num(0),
       y = num(0);
-    const v = axes(x, y);
+    const v = vec(x, y);
     v.x.value = 7;
     expect(x.value).toBe(7);
     expect(y.value).toBe(0);
@@ -192,34 +192,54 @@ describe("axes(x, y) — bidirectional Vec from two writable Nums", () => {
   it("source write is visible in composite", () => {
     const x = num(0),
       y = num(0);
-    const v = axes(x, y);
+    const v = vec(x, y);
     x.value = 5;
     expect(v.value).toEqual({ x: 5, y: 0 });
   });
 });
 
-describe("vec() — smart-dispatches to bidirectional when both axes are Nums", () => {
-  it("vec(num, num) is bidirectional", () => {
-    const x = num(0),
-      y = num(0);
-    const v = vec(x, y);
-    v.value = { x: 5, y: 7 };
-    expect(x.value).toBe(5);
-    expect(y.value).toBe(7);
-  });
-
-  it("vec(literal, literal) still works as a fresh source", () => {
+describe("vec() — lift literals, identity-passthrough writable Nums", () => {
+  it("vec(literal, literal) seeds two fresh writable axes", () => {
     const v = vec(1, 2);
     v.value = { x: 5, y: 7 };
     expect(v.value).toEqual({ x: 5, y: 7 });
   });
 
-  it("vec(num, literal) — mixed, falls back to bind path", () => {
+  it("vec(num, literal) — literal lifts to a fresh seed, writes propagate to source num", () => {
     const x = num(3);
     const v = vec(x, 5);
     expect(v.value).toEqual({ x: 3, y: 5 });
     x.value = 10;
     expect(v.value.x).toBe(10);
+    // Writing the composite updates the source x and the fresh y seed.
+    v.value = { x: 20, y: 50 };
+    expect(x.value).toBe(20);
+    expect(v.value.y).toBe(50);
+  });
+
+  it("vec(num, Num.pin(c)) — y is structurally locked at c", () => {
+    const x = num(0);
+    const v = vec(x, Num.pin(100));
+    v.value = { x: 5, y: 999 };
+    expect(x.value).toBe(5);
+    // pin absorbs the y write: read still returns the constant.
+    expect(v.value.y).toBe(100);
+  });
+});
+
+describe("Cls.pin — constant-projection lens", () => {
+  it("Num.pin reads return the constant, writes are absorbed", () => {
+    const p = Num.pin(42);
+    expect(p.value).toBe(42);
+    p.value = 7;
+    expect(p.value).toBe(42);
+  });
+
+  it("Vec.pin works for compound value classes", () => {
+    const p = Vec.pin({ x: 1, y: 2 });
+    expect(p.value).toEqual({ x: 1, y: 2 });
+    p.value = { x: 99, y: 99 };
+    expect(p.value).toEqual({ x: 1, y: 2 });
   });
 });
 
@@ -293,14 +313,31 @@ describe("polar(c, r, a) — bidirectional with policies", () => {
     expect(sun.value).toEqual({ x: 0, y: 0 });
   });
 
-  it("non-writable inputs are silently skipped on write", () => {
-    // Const r, const a — write should be a no-op (nothing writable).
+  it("literal r/a are lifted to fresh seeds; rotate writes land on the seeds, not c", () => {
+    // Under the new strict factory rule, literal `r` and `a` lift to
+    // fresh `Writable<Num>` seeds inside polar. The rotate policy
+    // writes those seeds; `c` (also literal-lifted, but rotate
+    // doesn't touch center) stays put.
     const c = vec(0, 0);
-    const p = polar(c, 10, 0); // r and a are literals
+    const p = polar(c, 10, 0); // r and a lifted to fresh seeds
     p.value = { x: 0, y: 5 };
-    // c is writable, but the default rotate policy writes only r and a.
-    // Neither is writable here, so nothing happens.
+    // rotate writes r and a (the lifted seeds, observable via re-read):
+    expect(p.value.x).toBeCloseTo(0);
+    expect(p.value.y).toBeCloseTo(5);
+    // c is untouched by rotate.
     expect(c.value).toEqual({ x: 0, y: 0 });
+  });
+
+  it("Num.pin(c) locks an axis against polar's writes", () => {
+    // Use pin to express "this input is structurally constant" — writes
+    // through polar's bwd get projected back to the constant.
+    const c = vec(0, 0);
+    const r = Num.pin(10);
+    const a = num(0);
+    const p = polar(c, r, a); // rotate writes r and a; r absorbs.
+    p.value = { x: 0, y: 5 };
+    expect(r.value).toBe(10); // pin absorbed the write
+    expect(a.value).toBeCloseTo(Math.PI / 2);
   });
 
   it("circular: shortest-arc inverse — no jumps across revolutions", () => {
@@ -376,10 +413,10 @@ describe("up/down/left/right are invertible (chain stays writable)", () => {
     expect(v.value).toEqual({ x: 20, y: 40 });
   });
 
-  it("axes followed by up chain — writes propagate to source nums", () => {
+  it("vec(num, num) followed by up chain — writes propagate to source nums", () => {
     const x = num(0),
       y = num(0);
-    const v = axes(x, y);
+    const v = vec(x, y);
     const moved = v.right(10);
     moved.value = { x: 15, y: 3 };
     expect(x.value).toBe(5);

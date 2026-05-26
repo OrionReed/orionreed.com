@@ -7,8 +7,7 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { bind } from "../lateral";
-import { Signal, type Val, valFn, type Writable } from "../signal";
+import { Signal, type Val, valFn, value, type Writable } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
 
 type V = number;
@@ -134,8 +133,26 @@ export class Num extends Signal<V> {
   }
 }
 
-export function num(v: Val<V> = 0): Writable<Num> {
-  const n = new Num() as Writable<Num>;
-  bind(n, v);
-  return n;
+/** Writable `Num`.
+ *
+ *  Strict overload — `number | Writable<Num>` in, `Writable<Num>` out.
+ *  Literal seeds a fresh cell; existing `Writable<Num>` passes through
+ *  by identity (same reference, no allocation, no effect). This is the
+ *  shape value-class factories use after lifting their own inputs.
+ *
+ *  Permissive overload — any `Val<number>` in, bare `Num` out. RO
+ *  signals, computed views, and thunks produce a tracking `Num` via
+ *  `Num.derive`. The shape layer and other consumers that accept
+ *  arbitrary `Val<...>` inputs use this overload to get a reactive
+ *  `Num` handle without committing to a writable contract.
+ *
+ *      num(5)                  // Writable<Num>, seeded at 5
+ *      num(existingWritable)   // Writable<Num>, identity passthrough
+ *      num(computed(...))      // Num (RO), tracks the source */
+export function num(v: number | Writable<Num>): Writable<Num>;
+export function num(v: Val<number>): Num;
+export function num(v: Val<number> = 0): Num {
+  if (v instanceof Num) return v;
+  if (typeof v === "number") return new Num(v) as Writable<Num>;
+  return Num.derive(() => value(v));
 }

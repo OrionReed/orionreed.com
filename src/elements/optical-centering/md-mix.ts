@@ -118,16 +118,7 @@ export class MdMix extends Diagram {
         aside: true,
       }),
     );
-    s(
-      circle(
-        vec(
-          computed(() => SLIDER_X0 + SLIDER_W * w.value),
-          SLIDER_Y,
-        ),
-        6,
-        { fill: "#1a1a1a" },
-      ),
-    );
+    s(circle(vec(w.affine(SLIDER_W, SLIDER_X0), SLIDER_Y), 6, { fill: "#1a1a1a" }));
 
     s(
       label(

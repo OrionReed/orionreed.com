@@ -25,8 +25,7 @@ export const equals = (a: V, b: V) =>
   a === b || (a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a);
 /** L2 distance in RGBA-space. Used by `palette.spread` and any
  *  Metric-trait consumer (color animators, kdtrees over palettes…). */
-export const metric = (a: V, b: V) =>
-  Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b, a.a - b.a);
+export const metric = (a: V, b: V) => Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b, a.a - b.a);
 
 const linearImpl: Linear<V> = { add, sub, scale };
 const packImpl: Pack<V> = {

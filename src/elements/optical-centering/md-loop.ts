@@ -102,7 +102,8 @@ export class MdLoop extends Diagram {
     const P = O.right(frame);
 
     const thetaOA = num(0.6).cyclic(TAU);
-    const A = polar(O, r1, thetaOA, "circular");
+    // O is a fixed pivot — snapshot for polar's writable-center contract.
+    const A = polar(O.value, r1, thetaOA, "circular");
 
     // Live solver instance — its closure-captured seeds get refreshed
     // to last frame's solution each time `sol` evaluates. The live

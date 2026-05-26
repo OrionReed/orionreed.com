@@ -13,8 +13,8 @@
 //   - one lens corrupting another lens's complement
 
 import { describe, expect, it } from "vitest";
-import { spreadOf } from "../lenses/domain-aggregates";
 import { bestFitCircleLens, bestFitLineLens, scaleAbout } from "../lenses/closed-form-policies";
+import { spreadOf } from "../lenses/domain-aggregates";
 import { bboxLens } from "../lenses/factor-lens";
 import { effect, network, untracked } from "../signal";
 import { num } from "../values/num";

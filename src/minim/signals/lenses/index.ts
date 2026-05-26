@@ -21,32 +21,6 @@
 // substrate.
 // =====================================================================
 
-// ─── Numerical Jacobian primitive ──────────────────────────────────────
-export {
-  type FactorLensOpts,
-  factorLens,
-  meanDiffLens,
-} from "./factor-lens";
-
-export {
-  type OutputSpec,
-  type FactorOpts,
-  type FactorResult,
-  type PackedInput,
-  bundle,
-  factor,
-  factorTuple,
-  procrustesTyped,
-} from "./typed-factor";
-
-// ─── Closed-form decompositions (Vec-specific monoliths) ───────────────
-export {
-  bboxLens,
-  bundleLens,
-  procrustesLens,
-  procrustesJacobianLens,
-} from "./factor-lens";
-
 // ─── Building-block group actions (trait-dispatched) ───────────────────
 export {
   bestFitCircleLens,
@@ -59,7 +33,6 @@ export {
   scaleAboutXY,
   totalLens,
 } from "./closed-form-policies";
-
 // ─── Trait-driven aggregates + domain primitives ───────────────────────
 export {
   bezierGestaltLens,
@@ -70,3 +43,24 @@ export {
   spreadOf,
   timeSeriesLens,
 } from "./domain-aggregates";
+// ─── Numerical Jacobian primitive ──────────────────────────────────────
+// ─── Closed-form decompositions (Vec-specific monoliths) ───────────────
+export {
+  bboxLens,
+  bundleLens,
+  type FactorLensOpts,
+  factorLens,
+  meanDiffLens,
+  procrustesJacobianLens,
+  procrustesLens,
+} from "./factor-lens";
+export {
+  bundle,
+  type FactorOpts,
+  type FactorResult,
+  factor,
+  factorTuple,
+  type OutputSpec,
+  type PackedInput,
+  procrustesTyped,
+} from "./typed-factor";

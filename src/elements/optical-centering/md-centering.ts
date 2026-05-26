@@ -1,5 +1,6 @@
 import {
   Anchor,
+  Box,
   circle,
   computed,
   Diagram,
@@ -83,10 +84,16 @@ export class MdCentering extends Diagram {
 
     const [xMin, xMid, xMax] = F.map(f => O.lerp(xEnd, f));
     const [yMin, yMid, yMax] = F.map(f => O.lerp(yEnd, f));
-    const c = vec(xMid.x, yMid.y);
+    const c = Vec.derive(() => ({ x: xMid.x.value, y: yMid.y.value }));
 
+    const rectBox = Box.derive(() => ({
+      x: xMin.x.value,
+      y: yMin.y.value,
+      w: xMax.x.value - xMin.x.value,
+      h: yMax.y.value - yMin.y.value,
+    }));
     s(
-      rect(vec(xMin.x, yMax.y), vec(xMax.x, yMin.y), {
+      rect(rectBox, {
         thin: true,
         corner: 4,
         opacity: computed(() => boxT.value * 0.5),

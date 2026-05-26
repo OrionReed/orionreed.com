@@ -14,7 +14,14 @@
 // against min/max bounds, slack absorbed by gap, etc. For more
 // rigid edge-to-edge layouts use `attach`, `centerInside`, etc.
 
-import { type Box, isSignal, type Num as NumClass, type Read, value, type Writable } from "../signals";
+import {
+  type Box,
+  isSignal,
+  type Num as NumClass,
+  type Read,
+  value,
+  type Writable,
+} from "../signals";
 import { type Propagator, propagator } from "./propagator";
 
 type Num = NumClass;
@@ -282,11 +289,7 @@ export function grid(c: Box, items: readonly Box[], opts: GridOpts): Propagator 
 
 /** `inner` fills `outer` minus padding on all sides. Drag outer →
  *  inner follows. Default padding is 0 (inner == outer). */
-export function inset(
-  outer: Box,
-  inner: Box,
-  opts: { padding?: ValOrSig } = {},
-): Propagator {
+export function inset(outer: Box, inner: Box, opts: { padding?: ValOrSig } = {}): Propagator {
   const reads: Num[] = [outer.x, outer.y, outer.w, outer.h, ...readDeps(opts.padding ?? 0)];
   const writes: Writable<NumClass>[] = [asW(inner.x), asW(inner.y), asW(inner.w), asW(inner.h)];
   return propagator(reads, writes, () => {
@@ -320,31 +323,39 @@ export function attach(
 
   const sideValue = (box: Box, side: Side): number => {
     switch (side) {
-      case "left":   return box.x.value;
-      case "right":  return box.x.value + box.w.value;
-      case "top":    return box.y.value;
-      case "bottom": return box.y.value + box.h.value;
+      case "left":
+        return box.x.value;
+      case "right":
+        return box.x.value + box.w.value;
+      case "top":
+        return box.y.value;
+      case "bottom":
+        return box.y.value + box.h.value;
     }
   };
   const writeSide = (box: Box, side: Side, v: number): void => {
     switch (side) {
-      case "left":   asW(box.x).value = v; break;
-      case "right":  asW(box.x).value = v - box.w.value; break;
-      case "top":    asW(box.y).value = v; break;
-      case "bottom": asW(box.y).value = v - box.h.value; break;
+      case "left":
+        asW(box.x).value = v;
+        break;
+      case "right":
+        asW(box.x).value = v - box.w.value;
+        break;
+      case "top":
+        asW(box.y).value = v;
+        break;
+      case "bottom":
+        asW(box.y).value = v - box.h.value;
+        break;
     }
   };
 
   return [
-    propagator(
-      [a.x, a.y, a.w, a.h, b.w, b.h, ...gapDeps],
-      [asW(b.x), asW(b.y)],
-      () => writeSide(b, bSide, sideValue(a, aSide) + gap()),
+    propagator([a.x, a.y, a.w, a.h, b.w, b.h, ...gapDeps], [asW(b.x), asW(b.y)], () =>
+      writeSide(b, bSide, sideValue(a, aSide) + gap()),
     ),
-    propagator(
-      [b.x, b.y, b.w, b.h, a.w, a.h, ...gapDeps],
-      [asW(a.x), asW(a.y)],
-      () => writeSide(a, aSide, sideValue(b, bSide) - gap()),
+    propagator([b.x, b.y, b.w, b.h, a.w, a.h, ...gapDeps], [asW(a.x), asW(a.y)], () =>
+      writeSide(a, aSide, sideValue(b, bSide) - gap()),
     ),
   ];
 }

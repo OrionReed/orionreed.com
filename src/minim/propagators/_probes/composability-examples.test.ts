@@ -65,9 +65,11 @@ describe("Example 1: form validation via residual lenses", () => {
     const r = num(3).sub(usernameLen); // residual: need len >= 3
 
     const p = propagators();
-    p.add(propagator([r], [usernameLen], () => {
-      if (r.value > 0) usernameLen.value = 3; // snap to min
-    }));
+    p.add(
+      propagator([r], [usernameLen], () => {
+        if (r.value > 0) usernameLen.value = 3; // snap to min
+      }),
+    );
 
     expect(usernameLen.value).toBe(3); // corrected on install
     p.dispose();
@@ -104,12 +106,14 @@ describe("Example 2: coordinate-system change (Cartesian ↔ polar)", () => {
     // that adjusts (x, y) so theta = π/4, preserving radius.
     const targetTheta = num(Math.PI / 4);
     const p = propagators();
-    p.add(propagator([targetTheta, radius], [x, y], () => {
-      const r = radius.value;
-      const t = targetTheta.value;
-      x.value = r * Math.cos(t);
-      y.value = r * Math.sin(t);
-    }));
+    p.add(
+      propagator([targetTheta, radius], [x, y], () => {
+        const r = radius.value;
+        const t = targetTheta.value;
+        x.value = r * Math.cos(t);
+        y.value = r * Math.sin(t);
+      }),
+    );
 
     expect(theta.value).toBeCloseTo(Math.PI / 4);
     expect(radius.value).toBeCloseTo(1);
@@ -145,31 +149,35 @@ describe("Example 3: animation × constraint", () => {
     // In real code: const cent = centroidLens([v1, v2]);
 
     const p = propagators();
-    p.add(propagator([targetCentroid], [v1, v2], () => {
-      // Move both v1 and v2 so their midpoint = targetCentroid.
-      const t = targetCentroid.value;
-      const cur = {
-        x: (v1.value.x + v2.value.x) / 2,
-        y: (v1.value.y + v2.value.y) / 2,
-      };
-      const dx = t.x - cur.x;
-      const dy = t.y - cur.y;
-      v1.value = { x: v1.value.x + dx, y: v1.value.y + dy };
-      v2.value = { x: v2.value.x + dx, y: v2.value.y + dy };
-    }));
+    p.add(
+      propagator([targetCentroid], [v1, v2], () => {
+        // Move both v1 and v2 so their midpoint = targetCentroid.
+        const t = targetCentroid.value;
+        const cur = {
+          x: (v1.value.x + v2.value.x) / 2,
+          y: (v1.value.y + v2.value.y) / 2,
+        };
+        const dx = t.x - cur.x;
+        const dy = t.y - cur.y;
+        v1.value = { x: v1.value.x + dx, y: v1.value.y + dy };
+        v2.value = { x: v2.value.x + dx, y: v2.value.y + dy };
+      }),
+    );
 
     // Clamp propagator: if the midpoint goes outside [-100, 100],
     // pin it.
-    p.add(propagator([targetCentroid], [targetCentroid], () => {
-      const v = targetCentroid.value;
-      let x = v.x;
-      let y = v.y;
-      if (x < -100) x = -100;
-      if (x > 100) x = 100;
-      if (y < -100) y = -100;
-      if (y > 100) y = 100;
-      if (x !== v.x || y !== v.y) targetCentroid.value = { x, y };
-    }));
+    p.add(
+      propagator([targetCentroid], [targetCentroid], () => {
+        const v = targetCentroid.value;
+        let x = v.x;
+        let y = v.y;
+        if (x < -100) x = -100;
+        if (x > 100) x = 100;
+        if (y < -100) y = -100;
+        if (y > 100) y = 100;
+        if (x !== v.x || y !== v.y) targetCentroid.value = { x, y };
+      }),
+    );
 
     // Simulate a tween writing target.
     targetCentroid.value = { x: 50, y: 50 };
@@ -214,16 +222,18 @@ describe("Example 4: energy-conserving system", () => {
     // Conservation propagator: when v1 changes, adjust v2 to
     // preserve E.
     const p = propagators();
-    p.add(propagator([v1], [v2], () => {
-      // 0.5·m2·v2² = E - 0.5·m1·v1²
-      // v2² = (2E - m1·v1²) / m2
-      const v1sq = v1.value * v1.value;
-      const target = (2 * initialE - m1 * v1sq) / m2;
-      if (target >= 0) {
-        const sgn = v2.value >= 0 ? 1 : -1;
-        v2.value = sgn * Math.sqrt(target);
-      }
-    }));
+    p.add(
+      propagator([v1], [v2], () => {
+        // 0.5·m2·v2² = E - 0.5·m1·v1²
+        // v2² = (2E - m1·v1²) / m2
+        const v1sq = v1.value * v1.value;
+        const target = (2 * initialE - m1 * v1sq) / m2;
+        if (target >= 0) {
+          const sgn = v2.value >= 0 ? 1 : -1;
+          v2.value = sgn * Math.sqrt(target);
+        }
+      }),
+    );
 
     // Drag v1.
     v1.value = 1;

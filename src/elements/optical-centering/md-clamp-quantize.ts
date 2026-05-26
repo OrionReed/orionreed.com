@@ -15,21 +15,21 @@
 // outside `[lo, hi]` because `q` snaps the already-clamped value to
 // the nearest detent.
 //
-// We drive each knob's x-axis through `range(X0, X1).slider(num)` and
-// use `draggable` (not `drag`) so writes go straight to the x-slider —
-// `vec(num, y_literal)` is forward-only by design.
+// Each knob's x-axis is the writable `range(X0, X1).slider(num)`; the
+// y-axis is `Num.pin(rowY)` — a constant-projection lens that absorbs
+// the y component of any drag write, so standard `drag(knob, vec)`
+// handles the bidirectional contract without a custom helper.
 
 import {
   Anchor,
-  type AnyShape,
   circle,
   computed,
   Diagram,
-  draggable,
+  drag,
   label,
   line,
   type Mount,
-  type Num,
+  Num,
   num,
   range,
   rect,
@@ -88,14 +88,10 @@ export class MdClampQuantize extends Diagram {
       () => `[${lo.value.toFixed(2)}, ${hi.value.toFixed(2)}]`,
     );
     for (const pxX of [loX, hiX]) {
-      const h = s(
-        circle(vec(pxX, ROWS.clamp), 6, {
-          fill: "white",
-          stroke: "#888",
-          strokeWidth: 1.5,
-        }),
-      );
-      dragX(h, pxX);
+      const pos = vec(pxX, Num.pin(ROWS.clamp));
+      const h = s(circle(pos, 6, { fill: "white", stroke: "#888", strokeWidth: 1.5 }));
+      drag(h, pos);
+      h.el.style.cursor = "ew-resize";
     }
 
     // Tick detents; outside [lo, hi] they fade because the row-3 knob
@@ -134,24 +130,9 @@ export class MdClampQuantize extends Diagram {
       label(vec(X1, y - 16), computed(readout), { align: Anchor.Right }),
       line(vec(X0, y), vec(X1, y), { thin: true, opacity: 0.35, cap: "round" }),
     );
-    const sliderX = range(X0, X1).slider(t);
-    const knob = s(circle(vec(sliderX, y), 9, { fill: color, stroke: "white", strokeWidth: 2 }));
-    dragX(knob, sliderX);
+    const pos = vec(range(X0, X1).slider(t), Num.pin(y));
+    const knob = s(circle(pos, 9, { fill: color, stroke: "white", strokeWidth: 2 }));
+    drag(knob, pos);
+    knob.el.style.cursor = "ew-resize";
   }
-}
-
-/** Horizontal drag that writes only to `x` — `vec(x, y_literal)` is
- *  forward-only, so the bidirectional `drag(shape, vec)` shape doesn't
- *  apply here. We track the grab offset in the shape's local frame so
- *  click-anywhere-on-the-knob doesn't teleport. */
-function dragX(shape: AnyShape, x: Writable<Num>): void {
-  let grabDx = 0;
-  shape.on("pointerdown", e => {
-    const local = shape.toLocal(e as PointerEvent);
-    grabDx = local.x - x.value;
-  });
-  draggable(shape, local => {
-    x.value = local.x - grabDx;
-  });
-  shape.el.style.cursor = "ew-resize";
 }

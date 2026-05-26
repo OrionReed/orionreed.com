@@ -333,10 +333,10 @@ export class MdDebugger extends Diagram {
         // changes propagate into the label's box, which propagates into
         // bar's group geometry — alien-signals' Lens-bind machinery can
         // get into a write loop. Use a direct computed position instead.
-        const labelPos = vec(
-          computed(() => xFor(span.start) + 5),
-          y + GANTT_TRACK_H / 2 + 0.5,
-        );
+        const labelPos = Vec.derive(() => ({
+          x: xFor(span.start) + 5,
+          y: y + GANTT_TRACK_H / 2 + 0.5,
+        }));
         const tagShape = label(labelPos, span.name, {
           size: 9,
           align: Anchor.Left,

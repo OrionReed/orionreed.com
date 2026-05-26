@@ -791,7 +791,9 @@ export class Signal<T = unknown> implements ReactiveNode {
   ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static symmetricLens<
-    C extends new (...args: never[]) => Signal<any>,
+    C extends new (
+      ...args: never[]
+    ) => Signal<any>,
     P extends readonly Read<unknown>[],
     COMP,
   >(
@@ -807,6 +809,32 @@ export class Signal<T = unknown> implements ReactiveNode {
   static symmetricLens(this: any, parent: any, spec: any): any {
     if (Array.isArray(parent)) return _symmetric(this, parent, spec);
     return _symmetric(this, [parent], _liftSpec1(spec));
+  }
+
+  /** Constant-projection lens — a `Writable<this>` whose reads always
+   *  return `v` and whose writes are absorbed (projected back to `v`).
+   *  The "writable-shaped constant": fills `Writable<Cls>` slots in APIs
+   *  that demand bidirectionality, while structurally locking the value.
+   *
+   *  Same family as `.clamp(c, c)` — an idempotent projection collapsed
+   *  to a single point. Composes through fusion as a normal lens.
+   *
+   *      const lockedY = Num.pin(100);          // y locked at 100
+   *      vec(slider, Num.pin(100))              // writable Vec, y absorbed
+   *      Vec.pin({ x: 0, y: 0 })                // origin anchor
+   *
+   *  Encapsulated: the underlying constant has no external reference,
+   *  so writes can't accidentally bypass the projection. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static pin<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    v: Of<InstanceType<C>>,
+  ): Writable<InstanceType<C>> {
+    return Signal.install(
+      this,
+      () => v,
+      () => {},
+    ) as unknown as Writable<InstanceType<C>>;
   }
 
   /** Endo-lens: same-class lens via `(fwd, bwd)` in value-space.

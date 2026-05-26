@@ -16,8 +16,20 @@
 // =====================================================================
 
 import { describe, expect, it } from "vitest";
-import { centroidLens, field, meanLens, midpointLens, Num, num, Pose, pose, signal, Vec, vec } from "../../index";
 import type { Writable } from "../../index";
+import {
+  centroidLens,
+  field,
+  meanLens,
+  midpointLens,
+  Num,
+  num,
+  Pose,
+  pose,
+  signal,
+  Vec,
+  vec,
+} from "../../index";
 import { diffLens, pulleySum } from "../../new-primitives";
 import { procrustesLens } from "../factor-lens";
 import { bundle, factor, factorTuple, procrustesTyped } from "../typed-factor";
@@ -25,11 +37,8 @@ import { bundle, factor, factorTuple, procrustesTyped } from "../typed-factor";
 // ─── helpers ───────────────────────────────────────────────────────────
 
 const near = (a: number, b: number, tol = 1e-4): boolean => Math.abs(a - b) < tol;
-const vnear = (
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-  tol = 1e-4,
-): boolean => near(a.x, b.x, tol) && near(a.y, b.y, tol);
+const vnear = (a: { x: number; y: number }, b: { x: number; y: number }, tol = 1e-4): boolean =>
+  near(a.x, b.x, tol) && near(a.y, b.y, tol);
 
 const mkPoints = (...pts: [number, number][]): Writable<Vec>[] => pts.map(([x, y]) => vec(x, y));
 
@@ -190,7 +199,9 @@ describe("§3 Cross-channel invariance (approximate)", () => {
     expect(cLeak).toBeLessThan(3);
     expect(sLeak).toBeLessThan(8);
     // eslint-disable-next-line no-console
-    console.info(`  rotation→centroid leak: ${cLeak.toFixed(3)}, rotation→scale leak: ${sLeak.toFixed(3)}`);
+    console.info(
+      `  rotation→centroid leak: ${cLeak.toFixed(3)}, rotation→scale leak: ${sLeak.toFixed(3)}`,
+    );
   });
 
   it("bundle Pose with independent fields: position and rotation don't leak", () => {
@@ -668,10 +679,10 @@ describe("§10 Broader probe: factor-of-factor composition", () => {
     expect(cMeta.value.x).toBeCloseTo(50, 1);
     expect(cMeta.value.y).toBeCloseTo(50, 1);
     // And the original points in A should have shifted accordingly.
-    const finalCA = (A.reduce((s, p) => ({ x: s.x + p.value.x, y: s.y + p.value.y }), {
+    const finalCA = A.reduce((s, p) => ({ x: s.x + p.value.x, y: s.y + p.value.y }), {
       x: 0,
       y: 0,
-    }) as V);
+    }) as V;
     finalCA.x /= 3;
     finalCA.y /= 3;
     expect(finalCA).toEqual(cA.value);
@@ -781,34 +792,31 @@ describe("§11 Positional API (factorTuple)", () => {
   it("destructures with correct types", () => {
     const pts = mkPoints([0, 0], [10, 0], [0, 6]);
     type V = { x: number; y: number };
-    const [centroid, rotation, scale] = factorTuple(
-      pts,
-      [
-        {
-          Cls: Vec,
-          fwd: (p: readonly V[]) => ({
-            x: (p[0]!.x + p[1]!.x + p[2]!.x) / 3,
-            y: (p[0]!.y + p[1]!.y + p[2]!.y) / 3,
-          }),
+    const [centroid, rotation, scale] = factorTuple(pts, [
+      {
+        Cls: Vec,
+        fwd: (p: readonly V[]) => ({
+          x: (p[0]!.x + p[1]!.x + p[2]!.x) / 3,
+          y: (p[0]!.y + p[1]!.y + p[2]!.y) / 3,
+        }),
+      },
+      {
+        Cls: Num,
+        fwd: (p: readonly V[]) => {
+          const cx = (p[0]!.x + p[1]!.x + p[2]!.x) / 3;
+          const cy = (p[0]!.y + p[1]!.y + p[2]!.y) / 3;
+          return Math.atan2(p[0]!.y - cy, p[0]!.x - cx);
         },
-        {
-          Cls: Num,
-          fwd: (p: readonly V[]) => {
-            const cx = (p[0]!.x + p[1]!.x + p[2]!.x) / 3;
-            const cy = (p[0]!.y + p[1]!.y + p[2]!.y) / 3;
-            return Math.atan2(p[0]!.y - cy, p[0]!.x - cx);
-          },
+      },
+      {
+        Cls: Num,
+        fwd: (p: readonly V[]) => {
+          const cx = (p[0]!.x + p[1]!.x + p[2]!.x) / 3;
+          const cy = (p[0]!.y + p[1]!.y + p[2]!.y) / 3;
+          return Math.hypot(p[0]!.x - cx, p[0]!.y - cy);
         },
-        {
-          Cls: Num,
-          fwd: (p: readonly V[]) => {
-            const cx = (p[0]!.x + p[1]!.x + p[2]!.x) / 3;
-            const cy = (p[0]!.y + p[1]!.y + p[2]!.y) / 3;
-            return Math.hypot(p[0]!.x - cx, p[0]!.y - cy);
-          },
-        },
-      ],
-    );
+      },
+    ]);
     // Compile-time types: centroid: Writable<Vec>, rotation: Writable<Num>, scale: Writable<Num>.
     // Verify runtime values match expectations.
     expect(centroid.value.x).toBeCloseTo(10 / 3, 9);
@@ -924,10 +932,7 @@ describe("§12 Subsumption: factor vs existing aggregates", () => {
       }
       type V = { x: number; y: number };
       const cL = centroidLens(ptsL as never);
-      const jac: number[][] = [
-        new Array(20).fill(0),
-        new Array(20).fill(0),
-      ];
+      const jac: number[][] = [new Array(20).fill(0), new Array(20).fill(0)];
       for (let i = 0; i < 10; i++) {
         jac[0]![2 * i] = 1 / 10;
         jac[1]![2 * i + 1] = 1 / 10;

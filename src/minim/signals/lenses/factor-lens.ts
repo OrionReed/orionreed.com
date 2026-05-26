@@ -201,10 +201,7 @@ function invertMatrix(A: readonly number[], M: number, out: number[]): boolean {
 // any genuine M=2 N→M primitive should match this on the 2-input case.
 // =====================================================================
 
-export function meanDiffLens(
-  a: Num,
-  b: Num,
-): { mean: Writable<Num>; diff: Writable<Num> } {
+export function meanDiffLens(a: Num, b: Num): { mean: Writable<Num>; diff: Writable<Num> } {
   const mean = Num.lens(
     [a, b] as const,
     vals => (vals[0] + vals[1]) / 2,
@@ -346,7 +343,10 @@ export function procrustesLens(points: readonly Writable<Vec>[]): {
   const initVals = points.map(s => s.peek());
   let csx = 0;
   let csy = 0;
-  for (const v of initVals) { csx += v.x; csy += v.y; }
+  for (const v of initVals) {
+    csx += v.x;
+    csy += v.y;
+  }
   const ccx = csx / K;
   const ccy = csy / K;
   const initDevs = initVals.map(v => ({ x: v.x - ccx, y: v.y - ccy }));
@@ -357,7 +357,10 @@ export function procrustesLens(points: readonly Writable<Vec>[]): {
     putr: (vals: readonly V[], c: C) => {
       let sx = 0;
       let sy = 0;
-      for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
+      for (let i = 0; i < K; i++) {
+        sx += vals[i]!.x;
+        sy += vals[i]!.y;
+      }
       const cx = sx / K;
       const cy = sy / K;
       const devs = c.devs;
@@ -375,7 +378,10 @@ export function procrustesLens(points: readonly Writable<Vec>[]): {
     putl: (target: number, vals: readonly V[], c: C) => {
       let sx = 0;
       let sy = 0;
-      for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
+      for (let i = 0; i < K; i++) {
+        sx += vals[i]!.x;
+        sy += vals[i]!.y;
+      }
       const cx = sx / K;
       const cy = sy / K;
       const devs = c.devs;

@@ -8,11 +8,10 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { bind } from "../lateral";
 import { batch, Signal, type Val, valFn, value, type Writable } from "../signal";
 import { type Linear, type Pack, type Pivotal, type TraitDict } from "../traits";
 import { derived, field } from "../writable";
-import { Num } from "./num";
+import { Num, num } from "./num";
 
 type V = { x: number; y: number };
 
@@ -209,9 +208,10 @@ export class Vec extends Signal<V> {
   }
 }
 
-/** Vec from two writable axes. Writes propagate to both source Nums
- *  in a single batch — the bidirectional sibling of `vec(num, num)`. */
-export function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
+/** @internal — bidirectional 2-input lens over two writable `Num`s.
+ *  `vec()` delegates here after lifting literals. Not part of the
+ *  public surface; users always go through `vec()`. */
+function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
   return Signal.install(
     Vec,
     () => ({ x: x.value, y: y.value }),
@@ -224,19 +224,20 @@ export function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
   );
 }
 
-/** Writable Vec at `(x, y)`. Smart-dispatches: when both axes are
- *  `Num` instances, returns a bidirectional 2-input lens that writes
- *  back through to the source axes. Literal / function / computed axes
- *  fall back to a forward-only effect (writes stick locally but don't
- *  propagate — there's nowhere to send them). */
-export function vec(x: Val<number> = 0, y: Val<number> = 0): Writable<Vec> {
-  if (x instanceof Num && y instanceof Num) {
-    return axes(x as Writable<Num>, y as Writable<Num>);
-  }
-  const v = new Vec() as Writable<Vec>;
-  bind(v.x, x);
-  bind(v.y, y);
-  return v;
+/** Writable `Vec` at `(x, y)`. Each axis is either a literal `number`
+ *  (lifted to a fresh `Writable<Num>` seed) or an existing
+ *  `Writable<Num>` (passed through by identity, writes propagate).
+ *
+ *  RO sources (computed views, RO field lenses, thunks) are rejected
+ *  at the type level. Reach for `Vec.derive(...)` to track an RO source
+ *  reactively, or pass `signal.value` to snapshot the current value.
+ *
+ *  To lock a single axis to a constant inside a writable Vec, pair the
+ *  literal axis with the constant-projection primitive:
+ *
+ *      vec(slider, Num.pin(100))   // x writable, y locked at 100 */
+export function vec(x: number | Writable<Num> = 0, y: number | Writable<Num> = 0): Writable<Vec> {
+  return axes(num(x), num(y));
 }
 
 /** Policy for `polar`'s inverse:
@@ -251,27 +252,30 @@ export type PolarPolicy = "rotate" | "translate" | "radial" | "circular";
 
 /** Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`.
  *
- *  Bidirectional. Writes propagate back to the input(s) selected by
- *  `policy` — but only when those inputs are themselves writable
- *  signals (Num / Vec instances). Non-writable inputs (literals,
- *  thunks, computed) are silently skipped on writes. */
+ *  Bidirectional. Each input is either a literal (lifted to a fresh
+ *  writable seed) or an existing writable signal (`Writable<Vec>` for
+ *  `center`, `Writable<Num>` for `r` / `a`). RO inputs are rejected at
+ *  the type level — use `Vec.derive(...)` for reactive RO tracking.
+ *
+ *  `policy` selects which inputs absorb writes. To make an input
+ *  structurally inert under writes (lock-axis), wrap it in the
+ *  constant-projection primitive: `polar(c, Num.pin(100), a)`. */
 export function polar(
-  center: Val<V>,
-  r: Val<number>,
-  a: Val<number>,
+  center: V | Writable<Vec>,
+  r: number | Writable<Num>,
+  a: number | Writable<Num>,
   policy: PolarPolicy = "rotate",
 ): Writable<Vec> {
-  const C = valFn(center);
-  const R = valFn(r);
-  const A = valFn(a);
-  const cSig = center instanceof Vec ? (center as Writable<Vec>) : undefined;
-  const rSig = r instanceof Num ? (r as Writable<Num>) : undefined;
-  const aSig = a instanceof Num ? (a as Writable<Num>) : undefined;
+  // Lift literals — all three inputs become unified `Writable<...>`.
+  // Identity passthrough for already-writable inputs.
+  const cSig: Writable<Vec> = center instanceof Vec ? center : vec(center.x, center.y);
+  const rSig: Writable<Num> = num(r);
+  const aSig: Writable<Num> = num(a);
 
   const fwd = (): V => {
-    const c = C();
-    const rv = R();
-    const av = A();
+    const c = cSig.value;
+    const rv = rSig.value;
+    const av = aSig.value;
     return { x: c.x + rv * Math.cos(av), y: c.y + rv * Math.sin(av) };
   };
 
@@ -285,41 +289,39 @@ export function polar(
   switch (policy) {
     case "rotate":
       bwd = p => {
-        const cv = cSig ? cSig.peek() : C();
+        const cv = cSig.peek();
         const dx = p.x - cv.x;
         const dy = p.y - cv.y;
         const targetA = Math.atan2(dy, dx);
-        const currentA = aSig ? aSig.peek() : A();
+        const currentA = aSig.peek();
         batch(() => {
-          if (rSig) rSig.value = Math.hypot(dx, dy);
-          if (aSig) aSig.value = nearestAngle(targetA, currentA);
+          rSig.value = Math.hypot(dx, dy);
+          aSig.value = nearestAngle(targetA, currentA);
         });
       };
       break;
     case "translate":
       bwd = p => {
         const f = fwd();
-        if (cSig) {
-          const cv = cSig.peek();
-          cSig.value = { x: cv.x + (p.x - f.x), y: cv.y + (p.y - f.y) };
-        }
+        const cv = cSig.peek();
+        cSig.value = { x: cv.x + (p.x - f.x), y: cv.y + (p.y - f.y) };
       };
       break;
     case "radial":
       bwd = p => {
-        const cv = cSig ? cSig.peek() : C();
-        const av = aSig ? aSig.peek() : A();
+        const cv = cSig.peek();
+        const av = aSig.peek();
         const dx = p.x - cv.x;
         const dy = p.y - cv.y;
-        if (rSig) rSig.value = dx * Math.cos(av) + dy * Math.sin(av);
+        rSig.value = dx * Math.cos(av) + dy * Math.sin(av);
       };
       break;
     case "circular":
       bwd = p => {
-        const cv = cSig ? cSig.peek() : C();
+        const cv = cSig.peek();
         const targetA = Math.atan2(p.y - cv.y, p.x - cv.x);
-        const currentA = aSig ? aSig.peek() : A();
-        if (aSig) aSig.value = nearestAngle(targetA, currentA);
+        const currentA = aSig.peek();
+        aSig.value = nearestAngle(targetA, currentA);
       };
       break;
   }

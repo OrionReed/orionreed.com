@@ -102,8 +102,14 @@ export class MdCircuit extends Diagram {
         const m = aRef.lerp(bRef, 0.5);
         const dirX = bRefV.x > aRefV.x ? 1 : -1;
         const halfDy = computed(() => Math.abs(m.y.value - aRef.y.value));
-        const pA = vec(() => aRef.x.value + dirX * halfDy.value, m.y);
-        const pB = vec(() => bRef.x.value - dirX * halfDy.value, m.y);
+        const pA = Vec.derive(() => ({
+          x: aRef.x.value + dirX * halfDy.value,
+          y: m.y.value,
+        }));
+        const pB = Vec.derive(() => ({
+          x: bRef.x.value - dirX * halfDy.value,
+          y: m.y.value,
+        }));
         const start = opts.from ?? a.boundary(pA);
         const end = opts.to ?? b.boundary(pB);
         w = path(start).to(pA).to(pB).to(end);

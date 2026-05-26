@@ -759,16 +759,16 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "vec(literal) and vec(signal) both produce Vec",
+    name: "vec(literal, literal) seeds a fresh writable source",
     run: assert => {
       const lit = vec(1, 2);
       assert(lit instanceof Vec, `vec(num,num) is Vec`);
-      const s = signal(5);
-      const der = vec(s, 10);
-      assert(der instanceof Vec, `vec(sig,num) is Vec (derived flavor)`);
-      assert(der.x.value === 5 && der.y.value === 10, `derived read off`);
-      s.value = 99;
-      assert(der.x.value === 99, `derived didn't follow source: ${der.x.value}`);
+      const n = num(5);
+      const der = vec(n, 10);
+      assert(der instanceof Vec, `vec(num, literal) is Vec`);
+      assert(der.x.value === 5 && der.y.value === 10, `vec read off`);
+      n.value = 99;
+      assert(der.x.value === 99, `writable axis propagates: ${der.x.value}`);
     },
   },
   {

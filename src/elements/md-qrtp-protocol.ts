@@ -88,7 +88,7 @@ export class MdQrtpProtocol extends Diagram {
     for (let i = 0; i < N; i++) {
       const a = start + (i * TAU) / N;
       s(
-        line(polar(center, rIn, a), polar(center, rOut, a), {
+        line(polar(center.value, rIn, a), polar(center.value, rOut, a), {
           thin: true,
         }),
       );

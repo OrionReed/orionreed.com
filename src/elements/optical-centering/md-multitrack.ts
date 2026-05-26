@@ -10,6 +10,7 @@ import {
   rect,
   snapshot,
   timeline,
+  Vec,
   vec,
 } from "../../minim";
 
@@ -127,13 +128,8 @@ export class MdMultitrack extends Diagram {
       s(label(body.center, name, { size: 10 }));
     });
 
-    const playX = computed(() => STRIP_X + tl.t.value * STRIP_W);
-    s(
-      line(vec(playX, STRIP_Y - 4), vec(playX, STRIP_Y + STRIP_H_TOTAL + 4), {
-        strokeWidth: 1.5,
-        aside: true,
-      }),
-    );
+    const playhead = Vec.derive(() => ({ x: STRIP_X + tl.t.value * STRIP_W, y: STRIP_Y }));
+    s(line(playhead.up(4), playhead.down(STRIP_H_TOTAL + 4), { strokeWidth: 1.5, aside: true }));
 
     const STAGE_Y = 210;
 
@@ -142,10 +138,11 @@ export class MdMultitrack extends Diagram {
     const ballOpacity = computed(() => tl.fadeIn.t.value * (1 - tl.fadeOut.t.value));
 
     s(
-      circle(vec(ballX, STAGE_Y), ballR, {
-        fill: "#1a1a1a",
-        opacity: ballOpacity,
-      }),
+      circle(
+        Vec.derive(() => ({ x: ballX.value, y: STAGE_Y })),
+        ballR,
+        { fill: "#1a1a1a", opacity: ballOpacity },
+      ),
     );
 
     s(

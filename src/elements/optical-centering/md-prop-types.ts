@@ -393,11 +393,11 @@ export class MdPropTypes extends Diagram {
         // Edges to children.
         for (const c of n.children) {
           s(
-            line(
-              vec(n.x, n.y + CELL_H / 2),
-              vec(c.x, c.y - CELL_H / 2),
-              { stroke: "#bbb", thin: true, opacity },
-            ),
+            line(vec(n.x, n.y + CELL_H / 2), vec(c.x, c.y - CELL_H / 2), {
+              stroke: "#bbb",
+              thin: true,
+              opacity,
+            }),
           );
         }
       }
@@ -407,35 +407,42 @@ export class MdPropTypes extends Diagram {
 
     // Title bar: expression + inferred result + flavor text.
     s(
-      label(view.top.down(20), () => {
-        const i = current.value;
-        return `${prettyExpr(EXPRESSIONS[i]!)}`;
-      }, { size: 16, bold: true }),
-      label(view.top.down(44), () => {
-        const i = current.value;
-        const root = stages[i]!.inf.rootType;
-        const status = cellStatus(root);
-        if (status === "error") return `▸ type error · cannot infer a consistent type`;
-        if (status === "solved") return `▸ inferred · ${showType(root)}`;
-        return `▸ narrowing · wave ${stepCount.value}`;
-      }, {
-        size: 12,
-        fill: () => {
+      label(
+        view.top.down(20),
+        () => {
           const i = current.value;
-          const status = cellStatus(stages[i]!.inf.rootType);
-          if (status === "error") return ERROR_COLOR;
-          if (status === "solved") return SOLVED_COLOR;
-          return NARROWING_COLOR;
+          return `${prettyExpr(EXPRESSIONS[i]!)}`;
         },
-      }),
+        { size: 16, bold: true },
+      ),
+      label(
+        view.top.down(44),
+        () => {
+          const i = current.value;
+          const root = stages[i]!.inf.rootType;
+          const status = cellStatus(root);
+          if (status === "error") return `▸ type error · cannot infer a consistent type`;
+          if (status === "solved") return `▸ inferred · ${showType(root)}`;
+          return `▸ narrowing · wave ${stepCount.value}`;
+        },
+        {
+          size: 12,
+          fill: () => {
+            const i = current.value;
+            const status = cellStatus(stages[i]!.inf.rootType);
+            if (status === "error") return ERROR_COLOR;
+            if (status === "solved") return SOLVED_COLOR;
+            return NARROWING_COLOR;
+          },
+        },
+      ),
       label(view.bottom.up(14), () => TITLES[current.value]!, { size: 10 }),
     );
 
     // ─── Animation: cycle expressions, animate narrowing ──────────
     const totalTags = (allTypes: TypeNode[]): number =>
       allTypes.reduce((acc, t) => acc + t.tag.value.size, 0);
-    const hasError = (allTypes: TypeNode[]): boolean =>
-      allTypes.some(t => t.tag.value.size === 0);
+    const hasError = (allTypes: TypeNode[]): boolean => allTypes.some(t => t.tag.value.size === 0);
 
     this.anim.start(
       loop(function* () {

@@ -105,14 +105,12 @@ describe("sudoku 9×9", () => {
 
     if (!isSolved(grid)) {
       throw new Error(
-        `Not solved after propagation:\n${showGrid(grid)}\n\nUnsolved cells: ${
-          grid
-            .flat()
-            .filter(c => c.value.size > 1)
-            .map(c => `{${[...c.value].join(",")}}`)
-            .slice(0, 5)
-            .join(" ")
-        }${grid.flat().filter(c => c.value.size > 1).length > 5 ? " …" : ""}`,
+        `Not solved after propagation:\n${showGrid(grid)}\n\nUnsolved cells: ${grid
+          .flat()
+          .filter(c => c.value.size > 1)
+          .map(c => `{${[...c.value].join(",")}}`)
+          .slice(0, 5)
+          .join(" ")}${grid.flat().filter(c => c.value.size > 1).length > 5 ? " …" : ""}`,
       );
     }
 

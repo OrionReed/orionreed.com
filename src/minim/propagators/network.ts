@@ -20,12 +20,7 @@
 // firing the network. External writes (outside the body) re-fire
 // it normally.
 
-import {
-  network as makeNetwork,
-  type Network,
-  type Signal,
-  transitiveDeps,
-} from "../signals";
+import { network as makeNetwork, type Network, type Signal, transitiveDeps } from "../signals";
 import type { Propagator } from "./propagator";
 
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous signal registry
@@ -174,11 +169,7 @@ export class Propagators {
     }
     // Auto mode: didn't converge → throw. Manual mode: leftover sits
     // in _pendingFresh until the next step().
-    if (
-      !this._manual &&
-      iters >= this._maxIterations &&
-      this._pendingFresh.size > 0
-    ) {
+    if (!this._manual && iters >= this._maxIterations && this._pendingFresh.size > 0) {
       const stuck = this._pendingFresh;
       this._pendingFresh = new Set<AnySignal>();
       throw new PropagatorDivergedError(
@@ -248,8 +239,6 @@ export function propagators(opts: PropagatorsOpts = {}): Propagators {
 /** One-shot sugar: build a network from N propagators with default opts.
  *  Equivalent to `propagators().add(...props)`. Returns the holder so
  *  callers can `.dispose()` later. */
-export function propagate(
-  ...props: readonly (Propagator | readonly Propagator[])[]
-): Propagators {
+export function propagate(...props: readonly (Propagator | readonly Propagator[])[]): Propagators {
   return new Propagators().add(...props);
 }

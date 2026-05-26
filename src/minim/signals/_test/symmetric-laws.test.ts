@@ -4,6 +4,11 @@
 // from singular states, continuity).
 
 import { describe, expect, it } from "vitest";
+import { bestFitCircleLens, bestFitLineLens, scaleAbout } from "../lenses/closed-form-policies";
+import { spreadOf } from "../lenses/domain-aggregates";
+import { bboxLens } from "../lenses/factor-lens";
+import { Num } from "../values/num";
+import { Vec, vec } from "../values/vec";
 import {
   approxNumber,
   approxVec,
@@ -15,11 +20,6 @@ import {
   verifyReadStability,
   verifyRecovery,
 } from "./_laws";
-import { bestFitCircleLens, bestFitLineLens, scaleAbout } from "../lenses/closed-form-policies";
-import { bboxLens } from "../lenses/factor-lens";
-import { spreadOf } from "../lenses/domain-aggregates";
-import { Num } from "../values/num";
-import { vec, Vec } from "../values/vec";
 
 type V = { x: number; y: number };
 
@@ -131,10 +131,10 @@ describe("symmetric spreadOf — lens laws", () => {
     // should be preserved. The OLD bug would force all points onto a
     // ring of radius target around the (drifted) centroid.
     const NONSYM = [
-      { x: 5, y: 0 },   // |dev| = 5
-      { x: 0, y: 1 },   // |dev| = 1
-      { x: -1, y: 0 },  // |dev| = 1
-      { x: 0, y: -2 },  // |dev| = 2
+      { x: 5, y: 0 }, // |dev| = 5
+      { x: 0, y: 1 }, // |dev| = 1
+      { x: -1, y: 0 }, // |dev| = 1
+      { x: 0, y: -2 }, // |dev| = 2
     ];
     const { cells, source } = vecCluster(NONSYM);
     const spread = spreadOf(cells as never);
@@ -143,8 +143,8 @@ describe("symmetric spreadOf — lens laws", () => {
     // mean ≈ 2.42. Write spread = 2*mean = 4.84 should DOUBLE each
     // deviation about the centroid.
     const ctrBefore = { x: 1, y: -0.25 };
-    const meanBefore = (Math.hypot(4, 0.25) + Math.hypot(1, 1.25)
-      + Math.hypot(2, 0.25) + Math.hypot(1, 1.75)) / 4;
+    const meanBefore =
+      (Math.hypot(4, 0.25) + Math.hypot(1, 1.25) + Math.hypot(2, 0.25) + Math.hypot(1, 1.75)) / 4;
     spread.value = meanBefore * 2;
     const after = source.peek();
     // Centroid should NOT have moved (scale about centroid preserves it):
@@ -167,13 +167,12 @@ describe("symmetric spreadOf — lens laws", () => {
     const { cells, source } = vecCluster(PTS);
     const spread = spreadOf(cells as never);
     spread.peek(); // realize complement
-    const expectShape = (radius: number) =>
-      [
-        { x: 0, y: radius },
-        { x: 0, y: -radius },
-        { x: radius, y: 0 },
-        { x: -radius, y: 0 },
-      ];
+    const expectShape = (radius: number) => [
+      { x: 0, y: radius },
+      { x: 0, y: -radius },
+      { x: radius, y: 0 },
+      { x: -radius, y: 0 },
+    ];
     spread.value = 0;
     spread.value = 7;
     expect(approxVecArr05(source.peek(), expectShape(7))).toBe(true);
@@ -292,17 +291,17 @@ describe("symmetric bestFitCircleLens.radius — lens laws", () => {
     // Points at varying distances. A radius write should scale them
     // uniformly about the centroid — preserving relative distribution.
     const NONSYM = [
-      { x: 3, y: 0 },     // dist from origin = 3
-      { x: 0, y: 8 },     // dist = 8
-      { x: -1, y: 0 },    // dist = 1
-      { x: 0, y: -4 },    // dist = 4
+      { x: 3, y: 0 }, // dist from origin = 3
+      { x: 0, y: 8 }, // dist = 8
+      { x: -1, y: 0 }, // dist = 1
+      { x: 0, y: -4 }, // dist = 4
     ];
     const { cells, source } = vecCluster(NONSYM);
     const { radius } = bestFitCircleLens(cells as never);
     radius.peek();
     const ctrBefore = { x: 0.5, y: 1 };
-    const meanBefore = (Math.hypot(2.5, 1) + Math.hypot(0.5, 7)
-      + Math.hypot(1.5, 1) + Math.hypot(0.5, 5)) / 4;
+    const meanBefore =
+      (Math.hypot(2.5, 1) + Math.hypot(0.5, 7) + Math.hypot(1.5, 1) + Math.hypot(0.5, 5)) / 4;
     radius.value = meanBefore * 3;
     const after = source.peek();
     // Centroid stable under uniform scale about centroid:
@@ -445,19 +444,17 @@ describe("symmetric bboxLens.size — lens laws", () => {
   });
 
   it("PutGet: writing {x, y} reads back as that size", () => {
-    verifyPutGet(
-      make,
-      () => ({ x: 0.5 + Math.random() * 5, y: 0.5 + Math.random() * 5 }),
-      { viewEq: approxVec05, trials: 20 },
-    );
+    verifyPutGet(make, () => ({ x: 0.5 + Math.random() * 5, y: 0.5 + Math.random() * 5 }), {
+      viewEq: approxVec05,
+      trials: 20,
+    });
   });
 
   it("PutPut", () => {
-    verifyPutPut(
-      make,
-      () => ({ x: 0.5 + Math.random() * 5, y: 0.5 + Math.random() * 5 }),
-      { sourceEq: approxVecArr05, trials: 20 },
-    );
+    verifyPutPut(make, () => ({ x: 0.5 + Math.random() * 5, y: 0.5 + Math.random() * 5 }), {
+      sourceEq: approxVecArr05,
+      trials: 20,
+    });
   });
 
   it("read stability", () => {
@@ -540,7 +537,10 @@ describe("symmetric × plain .scale composition: no eps amplification", () => {
   });
 
   it("scaleAbout(...).scale(1000) at scale=0 is exactly 0", () => {
-    const { cells } = vecCluster([{ x: 4, y: 0 }, { x: 0, y: 4 }]);
+    const { cells } = vecCluster([
+      { x: 4, y: 0 },
+      { x: 0, y: 4 },
+    ]);
     const pivot = vec(0, 0);
     const s = scaleAbout(cells as never, pivot);
     const big = s.scale(1000);

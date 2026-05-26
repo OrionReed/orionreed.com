@@ -9,11 +9,10 @@
 //   - `multiply(b)` — inverse is multiply by `invert(b)`
 //   - `invert()`    — its own inverse
 
-import { bind } from "../lateral";
-import { type Of, Signal, type Val, valFn, type Writable } from "../signal";
+import { batch, type Of, Signal, type Val, valFn, type Writable } from "../signal";
 import { type TraitDict } from "../traits";
 import { derived, field } from "../writable";
-import { Num } from "./num";
+import { Num, num } from "./num";
 import { Vec } from "./vec";
 
 type V = { a: number; b: number; c: number; d: number; e: number; f: number };
@@ -147,20 +146,40 @@ export class Matrix extends Signal<V> {
   }
 }
 
+/** Writable `Matrix` with entries `(a, b, c, d, e, f)` (SVG/Canvas order).
+ *  Each entry is either a literal `number` (lifted to a fresh `Writable<Num>`
+ *  seed) or an existing `Writable<Num>` (passed through by identity, writes
+ *  propagate).
+ *
+ *  RO sources are rejected at the type level — use `Matrix.derive(...)`
+ *  for reactive RO tracking, or `signal.value` to snapshot. Lock an entry
+ *  with `Num.pin(c)`. */
 export function matrix(
-  a: Val<number> = 1,
-  b: Val<number> = 0,
-  c: Val<number> = 0,
-  d: Val<number> = 1,
-  e: Val<number> = 0,
-  f: Val<number> = 0,
+  a: number | Writable<Num> = 1,
+  b: number | Writable<Num> = 0,
+  c: number | Writable<Num> = 0,
+  d: number | Writable<Num> = 1,
+  e: number | Writable<Num> = 0,
+  f: number | Writable<Num> = 0,
 ): Writable<Matrix> {
-  const m = new Matrix() as Writable<Matrix>;
-  bind(m.a, a);
-  bind(m.b, b);
-  bind(m.c, c);
-  bind(m.d, d);
-  bind(m.e, e);
-  bind(m.f, f);
-  return m;
+  const aN = num(a);
+  const bN = num(b);
+  const cN = num(c);
+  const dN = num(d);
+  const eN = num(e);
+  const fN = num(f);
+  return Signal.install(
+    Matrix,
+    () => ({ a: aN.value, b: bN.value, c: cN.value, d: dN.value, e: eN.value, f: fN.value }),
+    v => {
+      batch(() => {
+        aN.value = v.a;
+        bN.value = v.b;
+        cN.value = v.c;
+        dN.value = v.d;
+        eN.value = v.e;
+        fN.value = v.f;
+      });
+    },
+  );
 }

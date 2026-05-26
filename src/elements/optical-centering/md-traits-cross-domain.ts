@@ -24,16 +24,16 @@ import {
   handle,
   label,
   line,
-  meanOf,
   Mount,
+  meanOf,
   Num,
   paletteLens,
   pose,
   rect,
   rgba,
   type Signal,
-  vec,
   Vec,
+  vec,
   type Writable,
 } from "../../minim";
 
@@ -67,9 +67,10 @@ export class MdTraitsCrossDomain extends Diagram {
       rgba(0.9, 0.7, 0.2, 1),
       rgba(0.5, 0.2, 0.8, 1),
     ];
-    const { mean: colorMean, spread: colorSpread } = paletteLens(
-      colors as never,
-    ) as unknown as { mean: Writable<Color>; spread: Writable<Num> };
+    const { mean: colorMean, spread: colorSpread } = paletteLens(colors as never) as unknown as {
+      mean: Writable<Color>;
+      spread: Writable<Num>;
+    };
 
     // ── Domain 3: Poses. ─────────────────────────────────────────────
     const PY = 360;
@@ -90,9 +91,21 @@ export class MdTraitsCrossDomain extends Diagram {
     const c0 = colorSpread.value;
     const p0 = poseSpread.value;
     const SMAX = 2.0;
-    const vecRel = Num.lens([vecSpread] as const, ([sv]) => sv / v0, t => [t * v0] as never);
-    const colorRel = Num.lens([colorSpread] as const, ([sv]) => sv / c0, t => [t * c0] as never);
-    const poseRel = Num.lens([poseSpread] as const, ([sv]) => sv / p0, t => [t * p0] as never);
+    const vecRel = Num.lens(
+      [vecSpread] as const,
+      ([sv]) => sv / v0,
+      t => [t * v0] as never,
+    );
+    const colorRel = Num.lens(
+      [colorSpread] as const,
+      ([sv]) => sv / c0,
+      t => [t * c0] as never,
+    );
+    const poseRel = Num.lens(
+      [poseSpread] as const,
+      ([sv]) => sv / p0,
+      t => [t * p0] as never,
+    );
     const master = meanOf([vecRel, colorRel, poseRel] as never);
 
     // ── Slider layout. ───────────────────────────────────────────────
@@ -142,9 +155,7 @@ export class MdTraitsCrossDomain extends Diagram {
       handle(vecMean, { fill: "#f5a623", r: 11 }),
 
       // ── Row 2: Colors ──
-      ...colors.map((c, i) =>
-        rect(vec(VX + i * VSP, SW_Y), SW_SIZE, SW_SIZE, { fill: c.css }),
-      ),
+      ...colors.map((c, i) => rect(vec(VX + i * VSP, SW_Y), SW_SIZE, SW_SIZE, { fill: c.css })),
       // The picker IS the mean swatch — filled with the live mean
       // colour. Drag the dot inside to translate the palette in RGB.
       rect(vec(PICK_CX, PICK_CY), PICK_SIZE, PICK_SIZE, { fill: colorMean.css }),

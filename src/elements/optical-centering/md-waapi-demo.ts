@@ -6,10 +6,10 @@ import {
   label,
   loop,
   Mount,
-  polar,
   rect,
   type Signal,
   stagger,
+  Vec,
   vec,
 } from "../../minim";
 import { inView, native, scrollProgress, viewProgress } from "../../minim/ext";
@@ -59,15 +59,11 @@ export class MdWaapiDemo extends Diagram {
 
     const LOOPS = 15;
     const R = 15;
-    const center = vec(
-      computed(() => X + BW * vp.value),
-      150,
-    );
-    const tracker = polar(
-      center,
-      R,
-      computed(() => vp.value * 2 * Math.PI * LOOPS),
-    );
+    const tracker = Vec.derive(() => {
+      const cx = X + BW * vp.value;
+      const a = vp.value * 2 * Math.PI * LOOPS;
+      return { x: cx + R * Math.cos(a), y: 150 + R * Math.sin(a) };
+    });
 
     s(
       circle(tracker, 7, { fill: true }),

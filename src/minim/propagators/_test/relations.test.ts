@@ -2,7 +2,7 @@
 // geometric + set narrowing).
 
 import { describe, expect, it } from "vitest";
-import { num, vec } from "../../signals";
+import { num, signal, vec } from "../../signals";
 import {
   add,
   align,
@@ -23,7 +23,6 @@ import {
   sub,
   sum,
 } from "..";
-import { signal } from "../../signals";
 
 // ─── Arithmetic ──────────────────────────────────────────────────
 

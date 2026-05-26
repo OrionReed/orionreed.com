@@ -14,11 +14,10 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { bind } from "../lateral";
 import { computed, Signal, type Val, valFn, value, type Writable } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
 import { derived, field } from "../writable";
-import { Num } from "./num";
+import { Num, num } from "./num";
 
 type V = { lo: number; hi: number };
 
@@ -174,9 +173,10 @@ export class Range extends Signal<V> {
   }
 }
 
-/** Range from two writable Num endpoints. Writes propagate to both
- *  source Nums in a single batch — the `axes()` analogue for ranges. */
-export function ends(lo: Writable<Num>, hi: Writable<Num>): Writable<Range> {
+/** @internal — bidirectional 2-input lens over two writable `Num`s.
+ *  `range()` delegates here after lifting literals. Not part of the
+ *  public surface; users always go through `range()`. */
+function ends(lo: Writable<Num>, hi: Writable<Num>): Writable<Range> {
   return Range.lens(
     [lo, hi] as const,
     (vals): V => ({ lo: vals[0], hi: vals[1] }),
@@ -198,15 +198,16 @@ export function span(at: Writable<Num>, dur: Writable<Num>): Writable<Range> {
   );
 }
 
-/** Writable Range. When both endpoints are `Num` instances, returns
- *  the bidirectional 2-input lens (`ends`); literal / function /
- *  computed endpoints fall back to a fresh source seeded via `bind`. */
-export function range(lo: Val<number> = 0, hi: Val<number> = 1): Writable<Range> {
-  if (lo instanceof Num && hi instanceof Num) {
-    return ends(lo as Writable<Num>, hi as Writable<Num>);
-  }
-  const r = new Range() as Writable<Range>;
-  bind(r.lo, lo);
-  bind(r.hi, hi);
-  return r;
+/** Writable `Range` over `[lo, hi]`. Each endpoint is either a literal
+ *  `number` (lifted to a fresh `Writable<Num>` seed) or an existing
+ *  `Writable<Num>` (passed through by identity, writes propagate).
+ *
+ *  RO sources are rejected at the type level — use `Range.derive(...)`
+ *  for reactive RO tracking, or `signal.value` to snapshot. Lock an
+ *  endpoint with `Num.pin(c)`. */
+export function range(
+  lo: number | Writable<Num> = 0,
+  hi: number | Writable<Num> = 1,
+): Writable<Range> {
+  return ends(num(lo), num(hi));
 }

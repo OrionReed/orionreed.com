@@ -23,7 +23,11 @@ describe("1. lens chain as propagator read", () => {
     const result = num(0);
 
     const p = propagators();
-    p.add(propagator([sum], [result], () => { result.value = sum.value * 10; }));
+    p.add(
+      propagator([sum], [result], () => {
+        result.value = sum.value * 10;
+      }),
+    );
 
     expect(result.value).toBe(50);
     a.value = 5;
@@ -39,10 +43,12 @@ describe("1. lens chain as propagator read", () => {
     const label = num(0);
 
     const p = propagators();
-    p.add(propagator([cent], [label], () => {
-      const c = cent.value;
-      label.value = Math.hypot(c.x, c.y);
-    }));
+    p.add(
+      propagator([cent], [label], () => {
+        const c = cent.value;
+        label.value = Math.hypot(c.x, c.y);
+      }),
+    );
 
     expect(label.value).toBeCloseTo(Math.hypot(5, 10 / 3));
     verts[0]!.value = { x: 30, y: 30 };
@@ -58,7 +64,11 @@ describe("2. propagator step writes through a lens", () => {
     const target = vec(100, 100);
 
     const p = propagators();
-    p.add(propagator([target], [cent], () => { cent.value = target.value; }));
+    p.add(
+      propagator([target], [cent], () => {
+        cent.value = target.value;
+      }),
+    );
 
     // Initial centroid (5, 10/3); delta to (100,100) shifts each vert.
     expect(verts[0]!.value.x).toBeCloseTo(95);
@@ -80,7 +90,11 @@ describe("2. propagator step writes through a lens", () => {
 
     const target = vec(0, 0);
     const p = propagators();
-    p.add(propagator([target], [cent], () => { cent.value = target.value; }));
+    p.add(
+      propagator([target], [cent], () => {
+        cent.value = target.value;
+      }),
+    );
     target.value = { x: 50, y: 50 };
 
     // Coherence: in the latest snapshot, sum_x / 3 = cent.x (post-fire).
@@ -99,7 +113,11 @@ describe("3. mixed bidirectional graph behaviour", () => {
     const tripled = tracker.scale(3); // lens
 
     const p = propagators();
-    p.add(propagator([halfSum], [tracker], () => { tracker.value = halfSum.value; }));
+    p.add(
+      propagator([halfSum], [tracker], () => {
+        tracker.value = halfSum.value;
+      }),
+    );
 
     expect(tracker.value).toBe(1.5);
     expect(tripled.value).toBe(4.5);
@@ -174,10 +192,10 @@ describe("4. cycles through lens AND propagator", () => {
 
     b.value = 1;
     // Constraints are satisfied:
-    expect(a.value).toBeCloseTo(2 * c.value);  // a = 2c ✓
-    expect(c.value).toBeCloseTo(halfA.value + b.value);  // c = a/2 + b ✓
+    expect(a.value).toBeCloseTo(2 * c.value); // a = 2c ✓
+    expect(c.value).toBeCloseTo(halfA.value + b.value); // c = a/2 + b ✓
     // But b was overwritten:
-    expect(b.value).toBe(0);  // user wrote 1; system wrote it back to 0.
+    expect(b.value).toBe(0); // user wrote 1; system wrote it back to 0.
     p.dispose();
   });
 });
@@ -189,7 +207,11 @@ describe("5. freshness propagation through lens chains (post AUTO-EXPAND)", () =
     const out = num(0);
 
     const p = propagators();
-    p.add(propagator([doubled], [out], () => { out.value = doubled.value; }));
+    p.add(
+      propagator([doubled], [out], () => {
+        out.value = doubled.value;
+      }),
+    );
 
     a.value = 5;
     expect(out.value).toBe(10);
@@ -207,8 +229,16 @@ describe("5. freshness propagation through lens chains (post AUTO-EXPAND)", () =
     const out = num(0);
 
     const p = propagators();
-    p.add(propagator([trigger], [a], () => { a.value = trigger.value; }));
-    p.add(propagator([doubled], [out], () => { out.value = doubled.value; }));
+    p.add(
+      propagator([trigger], [a], () => {
+        a.value = trigger.value;
+      }),
+    );
+    p.add(
+      propagator([doubled], [out], () => {
+        out.value = doubled.value;
+      }),
+    );
 
     trigger.value = 5;
     expect(a.value).toBe(5);
@@ -225,8 +255,16 @@ describe("5. freshness propagation through lens chains (post AUTO-EXPAND)", () =
     const out = num(0);
 
     const p = propagators();
-    p.add(propagator([trigger], [a], () => { a.value = trigger.value; }));
-    p.add(propagator([big], [out], () => { out.value = big.value; }));
+    p.add(
+      propagator([trigger], [a], () => {
+        a.value = trigger.value;
+      }),
+    );
+    p.add(
+      propagator([big], [out], () => {
+        out.value = big.value;
+      }),
+    );
 
     trigger.value = 4;
     // big = (4 + 3) * 2 = 14. AUTO-EXPAND included a in reader's

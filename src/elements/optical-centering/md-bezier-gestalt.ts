@@ -25,8 +25,8 @@ import {
   line,
   Mount,
   pathD,
-  vec,
   Vec,
+  vec,
 } from "../../minim";
 
 export class MdBezierGestalt extends Diagram {

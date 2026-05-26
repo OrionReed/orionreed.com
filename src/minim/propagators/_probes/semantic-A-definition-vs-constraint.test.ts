@@ -84,7 +84,11 @@ describe("Semantic probe A: composing definitions and constraints", () => {
     const cent = centroidLens([v1, v2, v3]); // definition
 
     const p = propagators();
-    p.add(propagator([target], [cent], () => { cent.value = target.value; }));
+    p.add(
+      propagator([target], [cent], () => {
+        cent.value = target.value;
+      }),
+    );
 
     target.value = { x: 100, y: 100 };
     // Triangle's centroid was (5, 10/3); now (100, 100). Each vertex
@@ -113,11 +117,13 @@ describe("Semantic probe A: composing definitions and constraints", () => {
 
     // Constraint: avgOfMids must be in [5, 10].
     const p = propagators();
-    p.add(propagator([avgOfMids], [avgOfMids], () => {
-      const v = avgOfMids.value;
-      if (v < 5) (avgOfMids as never as { value: number }).value = 5;
-      else if (v > 10) (avgOfMids as never as { value: number }).value = 10;
-    }));
+    p.add(
+      propagator([avgOfMids], [avgOfMids], () => {
+        const v = avgOfMids.value;
+        if (v < 5) (avgOfMids as never as { value: number }).value = 5;
+        else if (v > 10) (avgOfMids as never as { value: number }).value = 10;
+      }),
+    );
 
     // Currently avgOfMids = ((0+20)/2 + (0+20)/2) / 2 = 10. On boundary.
     expect(avgOfMids.value).toBe(10);

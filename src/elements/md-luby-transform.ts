@@ -14,6 +14,7 @@ import {
   num,
   rect,
   t,
+  Vec,
   vec,
   viewport,
 } from "../minim";
@@ -64,7 +65,10 @@ export class MdLubyTransform extends Diagram {
 
     s(
       label(
-        vec(() => (sources.at(N.value - 1)?.right.x.value ?? 0) + 14, 24 + SIZE / 2),
+        Vec.derive(() => ({
+          x: (sources.at(N.value - 1)?.right.x.value ?? 0) + 14,
+          y: 24 + SIZE / 2,
+        })),
         t("..."),
         { size: 16, aside: true },
       ),

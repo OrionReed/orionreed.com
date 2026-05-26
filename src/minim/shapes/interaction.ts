@@ -3,8 +3,25 @@
 import { Num, type Of, type Signal, signal, Vec, type Writable } from "@minim/signals";
 
 type VecValue = Of<Vec>;
+type ClientPoint = { clientX: number; clientY: number };
 
 import type { AnyShape } from "./shape";
+
+// Shared page-pointer state for `cursor()` — one window listener,
+// one signal, attached lazily on first call. The listener stays
+// alive for the rest of the page's lifetime; nothing to dispose
+// because nothing is per-instance. `null` until the first
+// `pointermove` so consumers can show a sensible fallback.
+let _clientPointer: Signal<ClientPoint | null> | null = null;
+function pageClientPointer(): Signal<ClientPoint | null> {
+  if (_clientPointer) return _clientPointer;
+  const sig = signal<ClientPoint | null>(null);
+  window.addEventListener("pointermove", (e: PointerEvent) => {
+    sig.value = { clientX: e.clientX, clientY: e.clientY };
+  });
+  _clientPointer = sig;
+  return sig;
+}
 
 const TAU = Math.PI * 2;
 const wrapToPi = (x: number) => x - TAU * Math.round(x / TAU);
@@ -34,6 +51,25 @@ export function hoverSignal(shape: AnyShape, sig: Writable<Signal<boolean>>): ()
     off1();
     off2();
   };
+}
+
+/** Reactive `Vec` tracking the page pointer in `shape`'s SVG-root
+ *  frame. Reads from a module-level signal fed by one shared
+ *  `window` pointermove listener (attached lazily on first call),
+ *  so updates fire wherever the cursor goes on the page — no
+ *  capture rect needed — and N callers cost one listener, not N.
+ *
+ *  Cheap to subscribe: consumers (springs, effects, …) only re-run
+ *  while their host Diagram's `Anim` is ticking, and the Diagram's
+ *  visibility-gated rAF freezes the Anim when offscreen.
+ *
+ *  `init` is the value returned before the page has seen its first
+ *  `pointermove`. Useful when a follower (spring, tween) reads on
+ *  the first frame and you don't want a jolt to (0, 0). */
+export function cursor(shape: AnyShape, init?: VecValue): Vec {
+  const cp = pageClientPointer();
+  const fallback: VecValue = init ?? { x: 0, y: 0 };
+  return Vec.derive(cp, p => (p ? shape.toWorld(p) : fallback));
 }
 
 /** Wire `handle` for pointer-drag. Each pointermove while pressed

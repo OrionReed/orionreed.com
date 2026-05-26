@@ -37,18 +37,20 @@ describe("Semantic probe C: lens-as-residual", () => {
     // Solver: a propagator that watches the residual and, when
     // nonzero, projects b along (b - a) to fix it.
     const p = propagators();
-    p.add(propagator([residual, a, targetDist], [b], () => {
-      if (Math.abs(residual.value) < 1e-9) return;
-      const dx = b.value.x - a.value.x;
-      const dy = b.value.y - a.value.y;
-      const cur = Math.hypot(dx, dy);
-      if (cur < 1e-12) return;
-      const k = targetDist.value / cur;
-      (b.value as { x: number; y: number }) = {
-        x: a.value.x + dx * k,
-        y: a.value.y + dy * k,
-      };
-    }));
+    p.add(
+      propagator([residual, a, targetDist], [b], () => {
+        if (Math.abs(residual.value) < 1e-9) return;
+        const dx = b.value.x - a.value.x;
+        const dy = b.value.y - a.value.y;
+        const cur = Math.hypot(dx, dy);
+        if (cur < 1e-12) return;
+        const k = targetDist.value / cur;
+        (b.value as { x: number; y: number }) = {
+          x: a.value.x + dx * k,
+          y: a.value.y + dy * k,
+        };
+      }),
+    );
 
     // Initial: |a-b| = 10, target = 20, residual = -10. Solver fires.
     expect(Math.hypot(b.value.x, b.value.y)).toBeCloseTo(20);
@@ -78,10 +80,12 @@ describe("Semantic probe C: lens-as-residual", () => {
     const underLower = lo.sub(x); // > 0 if x < lo
 
     const p = propagators();
-    p.add(propagator([overUpper, underLower, hi, lo], [x], () => {
-      if (overUpper.value > 0) x.value = hi.value;
-      else if (underLower.value > 0) x.value = lo.value;
-    }));
+    p.add(
+      propagator([overUpper, underLower, hi, lo], [x], () => {
+        if (overUpper.value > 0) x.value = hi.value;
+        else if (underLower.value > 0) x.value = lo.value;
+      }),
+    );
 
     // 50 is inside; no fire.
     expect(x.value).toBe(50);

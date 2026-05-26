@@ -123,11 +123,7 @@ function cumOffsets(dims: readonly number[]): number[] {
 export function factor<
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   O extends Record<string, OutputSpec<any>>,
->(
-  inputs: readonly PackedInput[],
-  outputs: O,
-  opts: FactorOpts = {},
-): FactorResult<O> {
+>(inputs: readonly PackedInput[], outputs: O, opts: FactorOpts = {}): FactorResult<O> {
   const inputCount = inputs.length;
   if (inputCount === 0) {
     throw new Error("typed-factor: need ≥ 1 input");
@@ -159,12 +155,9 @@ export function factor<
   const outputOffsets = cumOffsets(outputDims);
   const M = outputDims.reduce((s, d) => s + d, 0);
 
-  const weights =
-    opts.inputWeights ?? (Array.from({ length: N }, () => 1) as readonly number[]);
+  const weights = opts.inputWeights ?? (Array.from({ length: N }, () => 1) as readonly number[]);
   if (weights.length !== N) {
-    throw new Error(
-      `typed-factor: inputWeights length ${weights.length} ≠ flat input dim ${N}`,
-    );
+    throw new Error(`typed-factor: inputWeights length ${weights.length} ≠ flat input dim ${N}`);
   }
   const eps = opts.eps ?? 1e-5;
   const lambda = opts.damping ?? 1e-6;
@@ -206,11 +199,7 @@ export function factor<
     // 2. Base outputs
     for (let j = 0; j < outputCount; j++) {
       const out = outputSpecs[j]!.fwd(typedScratch);
-      outputPacks[j]!.read(
-        out as never,
-        flatOutBase as unknown as Float64Array,
-        outputOffsets[j]!,
-      );
+      outputPacks[j]!.read(out as never, flatOutBase as unknown as Float64Array, outputOffsets[j]!);
     }
 
     // 3. δy: sparse, only channelIdx's slice is non-zero.
@@ -248,10 +237,7 @@ export function factor<
         const saved = flatIn[i]!;
         flatIn[i] = saved + eps;
         const k = whichInput[i]!;
-        typedScratch[k] = inputPacks[k]!.write(
-          flatIn as unknown as Float64Array,
-          inputOffsets[k]!,
-        );
+        typedScratch[k] = inputPacks[k]!.write(flatIn as unknown as Float64Array, inputOffsets[k]!);
         for (let j = 0; j < outputCount; j++) {
           const o = outputSpecs[j]!.fwd(typedScratch);
           outputPacks[j]!.read(
@@ -268,10 +254,7 @@ export function factor<
         }
         flatIn[i] = saved;
         // Restore the affected typed input to its base value.
-        typedScratch[k] = inputPacks[k]!.write(
-          flatIn as unknown as Float64Array,
-          inputOffsets[k]!,
-        );
+        typedScratch[k] = inputPacks[k]!.write(flatIn as unknown as Float64Array, inputOffsets[k]!);
       }
     }
 
@@ -440,11 +423,7 @@ export function bundle<
         : undefined,
     };
   }
-  return factor(
-    [source] as readonly PackedInput[],
-    wrapped as O,
-    opts,
-  );
+  return factor([source] as readonly PackedInput[], wrapped as O, opts);
 }
 
 // ─── Bundle convenience: bundle a value-class-typed source as field-like
@@ -515,44 +494,48 @@ export function procrustesTyped(points: readonly PackedInput<Of<Vec>>[]): {
   scale: Writable<Num>;
 } {
   const K = points.length;
-  return factor(points, {
-    centroid: {
-      Cls: Vec,
-      fwd: (pts: readonly Of<Vec>[]) => {
-        let sx = 0;
-        let sy = 0;
-        for (let i = 0; i < K; i++) {
-          sx += pts[i]!.x;
-          sy += pts[i]!.y;
-        }
-        return { x: sx / K, y: sy / K };
+  return factor(
+    points,
+    {
+      centroid: {
+        Cls: Vec,
+        fwd: (pts: readonly Of<Vec>[]) => {
+          let sx = 0;
+          let sy = 0;
+          for (let i = 0; i < K; i++) {
+            sx += pts[i]!.x;
+            sy += pts[i]!.y;
+          }
+          return { x: sx / K, y: sy / K };
+        },
       },
-    },
-    rotation: {
-      Cls: Num,
-      fwd: (pts: readonly Of<Vec>[]) => {
-        let sx = 0;
-        let sy = 0;
-        for (let i = 0; i < K; i++) {
-          sx += pts[i]!.x;
-          sy += pts[i]!.y;
-        }
-        return Math.atan2(pts[0]!.y - sy / K, pts[0]!.x - sx / K);
+      rotation: {
+        Cls: Num,
+        fwd: (pts: readonly Of<Vec>[]) => {
+          let sx = 0;
+          let sy = 0;
+          for (let i = 0; i < K; i++) {
+            sx += pts[i]!.x;
+            sy += pts[i]!.y;
+          }
+          return Math.atan2(pts[0]!.y - sy / K, pts[0]!.x - sx / K);
+        },
       },
-    },
-    scale: {
-      Cls: Num,
-      fwd: (pts: readonly Of<Vec>[]) => {
-        let sx = 0;
-        let sy = 0;
-        for (let i = 0; i < K; i++) {
-          sx += pts[i]!.x;
-          sy += pts[i]!.y;
-        }
-        return Math.hypot(pts[0]!.x - sx / K, pts[0]!.y - sy / K);
+      scale: {
+        Cls: Num,
+        fwd: (pts: readonly Of<Vec>[]) => {
+          let sx = 0;
+          let sy = 0;
+          for (let i = 0; i < K; i++) {
+            sx += pts[i]!.x;
+            sy += pts[i]!.y;
+          }
+          return Math.hypot(pts[0]!.x - sx / K, pts[0]!.y - sy / K);
+        },
       },
+      // Damping bumped up — atan2/hypot are non-linear; without damping the
+      // first-Newton-step error compounds at the boundary of well-conditioned.
     },
-    // Damping bumped up — atan2/hypot are non-linear; without damping the
-    // first-Newton-step error compounds at the boundary of well-conditioned.
-  }, { damping: 1e-3 });
+    { damping: 1e-3 },
+  );
 }

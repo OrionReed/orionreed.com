@@ -65,15 +65,17 @@ describe("Decision: 'I want to constrain existing cells'", () => {
     const d = num(10);
 
     const p = propagators();
-    p.add(propagator([a, d], [b], () => {
-      // Project b along (b - a) to distance d.
-      const dx = b.value.x - a.value.x;
-      const dy = b.value.y - a.value.y;
-      const cur = Math.hypot(dx, dy);
-      if (cur < 1e-9) return;
-      const k = d.value / cur;
-      b.value = { x: a.value.x + dx * k, y: a.value.y + dy * k };
-    }));
+    p.add(
+      propagator([a, d], [b], () => {
+        // Project b along (b - a) to distance d.
+        const dx = b.value.x - a.value.x;
+        const dy = b.value.y - a.value.y;
+        const cur = Math.hypot(dx, dy);
+        if (cur < 1e-9) return;
+        const k = d.value / cur;
+        b.value = { x: a.value.x + dx * k, y: a.value.y + dy * k };
+      }),
+    );
 
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(10);
     p.dispose();
@@ -90,15 +92,17 @@ describe("Decision: 'I want multiple outputs'", () => {
     const d = num(3);
 
     const p = propagators();
-    p.add(propagator([a, b, c, d], [c, d], () => {
-      const lhs = a.value + b.value;
-      const rhs = c.value + d.value;
-      const r = lhs - rhs;
-      if (Math.abs(r) > 1e-9) {
-        c.value = c.value + r / 2;
-        d.value = d.value + r / 2;
-      }
-    }));
+    p.add(
+      propagator([a, b, c, d], [c, d], () => {
+        const lhs = a.value + b.value;
+        const rhs = c.value + d.value;
+        const r = lhs - rhs;
+        if (Math.abs(r) > 1e-9) {
+          c.value = c.value + r / 2;
+          d.value = d.value + r / 2;
+        }
+      }),
+    );
 
     expect(c.value + d.value).toBeCloseTo(a.value + b.value);
     p.dispose();
@@ -121,21 +125,23 @@ describe("Decision: 'I want both — derived value with a constraint'", () => {
     const mid = midpointLens(A, B); // LENS
 
     const p = propagators();
-    p.add(propagator([mid, L1, L2], [mid], () => {
-      // Project mid onto line L1-L2.
-      const dx = L2.value.x - L1.value.x;
-      const dy = L2.value.y - L1.value.y;
-      const len2 = dx * dx + dy * dy;
-      if (len2 < 1e-12) return;
-      const px = mid.value.x - L1.value.x;
-      const py = mid.value.y - L1.value.y;
-      const t = (px * dx + py * dy) / len2;
-      const nx = L1.value.x + t * dx;
-      const ny = L1.value.y + t * dy;
-      if (Math.abs(nx - mid.value.x) > 1e-9 || Math.abs(ny - mid.value.y) > 1e-9) {
-        mid.value = { x: nx, y: ny };
-      }
-    }));
+    p.add(
+      propagator([mid, L1, L2], [mid], () => {
+        // Project mid onto line L1-L2.
+        const dx = L2.value.x - L1.value.x;
+        const dy = L2.value.y - L1.value.y;
+        const len2 = dx * dx + dy * dy;
+        if (len2 < 1e-12) return;
+        const px = mid.value.x - L1.value.x;
+        const py = mid.value.y - L1.value.y;
+        const t = (px * dx + py * dy) / len2;
+        const nx = L1.value.x + t * dx;
+        const ny = L1.value.y + t * dy;
+        if (Math.abs(nx - mid.value.x) > 1e-9 || Math.abs(ny - mid.value.y) > 1e-9) {
+          mid.value = { x: nx, y: ny };
+        }
+      }),
+    );
 
     // Mid was (10, 10). Projected onto y=5: (10, 5).
     // Lens distributes delta (0, -5) to A and B:

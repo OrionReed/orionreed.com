@@ -12,10 +12,8 @@
 // =====================================================================
 
 import { describe, expect, it } from "vitest";
-import { centroidLens, num, pose, Pose, Vec, vec } from "../../index";
 import type { Num, Writable } from "../../index";
-import { factor } from "../typed-factor";
-import { procrustesLens } from "../factor-lens";
+import { centroidLens, num, Pose, pose, Vec, vec } from "../../index";
 import {
   bestFitCircleLens,
   bestFitLineLens,
@@ -27,15 +25,14 @@ import {
   scaleAboutXY,
   totalLens,
 } from "../closed-form-policies";
+import { procrustesLens } from "../factor-lens";
+import { factor } from "../typed-factor";
 
 // ─── helpers ───────────────────────────────────────────────────────────
 
 const near = (a: number, b: number, tol = 1e-9): boolean => Math.abs(a - b) < tol;
-const vnear = (
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-  tol = 1e-9,
-): boolean => near(a.x, b.x, tol) && near(a.y, b.y, tol);
+const vnear = (a: { x: number; y: number }, b: { x: number; y: number }, tol = 1e-9): boolean =>
+  near(a.x, b.x, tol) && near(a.y, b.y, tol);
 
 const mkPoints = (...pts: [number, number][]): Writable<Vec>[] => pts.map(([x, y]) => vec(x, y));
 
@@ -607,7 +604,7 @@ describe("§7 Performance: closed-form policies vs alternatives", () => {
       partsB,
       {
         total: {
-          Cls: ((partsA[0]!.constructor as unknown) as new (...args: never[]) => Num),
+          Cls: partsA[0]!.constructor as unknown as new (...args: never[]) => Num,
           fwd: (xs: readonly number[]) => xs.reduce((s, x) => s + x, 0),
           jacobian: () => [ones],
         },

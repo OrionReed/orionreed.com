@@ -32,8 +32,16 @@ describe("(Closed) Footgun 1: in-fixpoint cascade through lens", () => {
     const out = num(0);
 
     const p = propagators();
-    p.add(propagator([trigger], [a], () => { a.value = trigger.value; }));
-    p.add(propagator([doubled], [out], () => { out.value = doubled.value; }));
+    p.add(
+      propagator([trigger], [a], () => {
+        a.value = trigger.value;
+      }),
+    );
+    p.add(
+      propagator([doubled], [out], () => {
+        out.value = doubled.value;
+      }),
+    );
 
     trigger.value = 5;
     expect(out.value).toBe(10); // ✓ AUTO-EXPAND included `a` in reader's effective reads
@@ -123,8 +131,16 @@ describe("Footgun 4: two propagators writing the same lens — last write wins p
     const target2 = vec(0, 20);
 
     const p = propagators();
-    p.add(propagator([target1], [cent], () => { cent.value = target1.value; }));
-    p.add(propagator([target2], [cent], () => { cent.value = target2.value; }));
+    p.add(
+      propagator([target1], [cent], () => {
+        cent.value = target1.value;
+      }),
+    );
+    p.add(
+      propagator([target2], [cent], () => {
+        cent.value = target2.value;
+      }),
+    );
 
     // Both fire on install. The SECOND propagator (target2) wins
     // because it's listed later and runs later.
@@ -141,9 +157,11 @@ describe("Footgun 4: two propagators writing the same lens — last write wins p
     const useTarget = num(1); // 1 = target, 0 = freeze
 
     const p = propagators();
-    p.add(propagator([target, useTarget], [cent], () => {
-      if (useTarget.value > 0) cent.value = target.value;
-    }));
+    p.add(
+      propagator([target, useTarget], [cent], () => {
+        if (useTarget.value > 0) cent.value = target.value;
+      }),
+    );
 
     expect(cent.value).toEqual({ x: 10, y: 0 });
     p.dispose();
@@ -193,7 +211,11 @@ describe("Footgun 6: disposing the propagator doesn't dispose the lens chain", (
     const out = num(0);
 
     const p = propagators();
-    p.add(propagator([sum], [out], () => { out.value = sum.value; }));
+    p.add(
+      propagator([sum], [out], () => {
+        out.value = sum.value;
+      }),
+    );
 
     a.value = 5;
     expect(out.value).toBe(5);
@@ -242,7 +264,11 @@ describe("Footgun 8: lens reads a cell outside the propagator's instance", () =>
     const out = num(0);
 
     const p = propagators();
-    p.add(propagator([lensView], [out], () => { out.value = lensView.value; }));
+    p.add(
+      propagator([lensView], [out], () => {
+        out.value = lensView.value;
+      }),
+    );
 
     // External writes to ownedByOthers fire the network normally.
     ownedByOthers.value = 5;

@@ -2,7 +2,7 @@
 // derived views, codec round-trips.
 
 import { describe, expect, it } from "vitest";
-import { ends, isComputed, isLens, num, Range, range, span } from "../index";
+import { isComputed, isLens, num, Range, range, span } from "../index";
 
 describe("Range — construction", () => {
   it("range(lo, hi) writable", () => {
@@ -13,22 +13,22 @@ describe("Range — construction", () => {
     expect(r.value).toEqual({ lo: 1, hi: 5 });
   });
 
-  it("ends(num, num) — bidirectional Range from two writable Nums", () => {
+  it("range(num, num) — bidirectional Range from two writable Nums", () => {
     const lo = num(0);
     const hi = num(10);
-    const r = ends(lo, hi);
+    const r = range(lo, hi);
     r.value = { lo: 2, hi: 8 };
     expect(lo.value).toBe(2);
     expect(hi.value).toBe(8);
   });
 
-  it("range(num, num) smart-dispatches to ends()", () => {
+  it("range(num, literal) lifts literal to a fresh seed; writes propagate to source num", () => {
     const lo = num(3);
-    const hi = num(7);
-    const r = range(lo, hi);
+    const r = range(lo, 7);
     r.value = { lo: 1, hi: 9 };
     expect(lo.value).toBe(1);
-    expect(hi.value).toBe(9);
+    // hi was a literal seed; writes land on the local seed.
+    expect(r.value.hi).toBe(9);
   });
 });
 

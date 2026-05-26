@@ -3,7 +3,7 @@
 // without modification.
 
 import { describe, expect, it } from "vitest";
-import { effect, num, Num, signal, Vec, vec } from "../../signals";
+import { effect, Num, num, signal, Vec, vec } from "../../signals";
 import { add, eq, propagators } from "..";
 
 describe("composition: non-coloring", () => {

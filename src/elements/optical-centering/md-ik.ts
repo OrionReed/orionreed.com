@@ -19,19 +19,13 @@
 //     16 with a sub-pixel tolerance.
 //
 // The solver lives inside a plain `Vec.lens([joints], fwd, bwd)` —
-// no special primitive. The handle drives the tip; the lens's bwd
-// runs FABRIK on every write.
+// no special primitive. Because the tip is a `Writable<Vec>` like
+// any other, and `Vec` carries the `linear` + `metric` traits that
+// `spring` asks for, `spring(tip, cursor(s.root), …)` is the entire
+// driver: each frame the spring writes the next tip, the lens's bwd
+// runs FABRIK on the commit, and the whole arm whips around for free.
 
-import {
-  circle,
-  Diagram,
-  handle,
-  line,
-  Mount,
-  Vec,
-  vec,
-  type Writable,
-} from "../../minim";
+import { circle, cursor, Diagram, line, Mount, spring, Vec, vec, type Writable } from "../../minim";
 
 const N = 5;
 const L = 56;
@@ -111,8 +105,13 @@ export class MdIk extends Diagram {
       }
     }
     s(circle(root, 6, { fill: true }));
+    s(circle(joints[N - 1]!, 6, { fill: "#5b8def" }));
 
-    // Drag handle on the tip.
-    s(handle(tip, { r: 8, fill: "#5b8def" }));
+    // Global pointer in the SVG-root frame — seeded at the tip so the
+    // first spring frame isn't a jolt to (0, 0). Lazy + overshoot-prone:
+    // low ω (slow), ζ < 1 (underdamped). `precision: 0` keeps the spring
+    // live so it tracks a moving target instead of settling.
+    const target = cursor(s.root, joints[N - 1]!.peek());
+    this.anim.start(spring(tip, target, { omega: 6, zeta: 0.35, precision: 0 }));
   }
 }

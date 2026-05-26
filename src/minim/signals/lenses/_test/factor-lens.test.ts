@@ -16,8 +16,8 @@
 // =====================================================================
 
 import { describe, expect, it } from "vitest";
-import { centroidLens, meanLens, num, Num, signal, Vec, vec } from "../../index";
 import type { Writable } from "../../index";
+import { centroidLens, meanLens, Num, num, signal, Vec, vec } from "../../index";
 import {
   bboxLens,
   bundleLens,
@@ -30,11 +30,8 @@ import {
 // ─── helpers ───────────────────────────────────────────────────────────
 
 const near = (a: number, b: number, tol = 1e-6): boolean => Math.abs(a - b) < tol;
-const vnear = (
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-  tol = 1e-6,
-): boolean => near(a.x, b.x, tol) && near(a.y, b.y, tol);
+const vnear = (a: { x: number; y: number }, b: { x: number; y: number }, tol = 1e-6): boolean =>
+  near(a.x, b.x, tol) && near(a.y, b.y, tol);
 
 const mkPoints = (...pts: [number, number][]): Writable<Vec>[] => pts.map(([x, y]) => vec(x, y));
 
@@ -112,7 +109,9 @@ describe("§2 Round-trip identity", () => {
     const err2 = Math.abs(diff!.value - 7);
     expect(err2).toBeLessThan(1e-3);
     // eslint-disable-next-line no-console
-    console.info(`  FD round-trip error (M=N=2 linear): ${err1.toExponential(2)}, ${err2.toExponential(2)}`);
+    console.info(
+      `  FD round-trip error (M=N=2 linear): ${err1.toExponential(2)}, ${err2.toExponential(2)}`,
+    );
   });
 
   it("meanDiffLens: exact identity (closed-form)", () => {
@@ -300,7 +299,9 @@ describe("§4 Idempotence", () => {
     const cumDrift = Math.hypot(a.value - a1, b.value - b1);
     expect(cumDrift).toBeLessThan(1e-2);
     // eslint-disable-next-line no-console
-    console.info(`  Jacobian idempotence drift: 1 rewrite ${drift.toExponential(2)}, 100 rewrites ${cumDrift.toExponential(2)}`);
+    console.info(
+      `  Jacobian idempotence drift: 1 rewrite ${drift.toExponential(2)}, 100 rewrites ${cumDrift.toExponential(2)}`,
+    );
   });
 });
 
@@ -706,7 +707,9 @@ describe("§13 Scaling with K", () => {
       for (let i = 0; i < ITERS; i++) rotation.value = (i & 31) * 0.05;
       const ms = performance.now() - t0;
       // eslint-disable-next-line no-console
-      console.info(`    K = ${K.toString().padStart(4)} → ${(ms / ITERS).toFixed(3)} ms/write (${((ms * 1000) / ITERS).toFixed(2)} µs)`);
+      console.info(
+        `    K = ${K.toString().padStart(4)} → ${(ms / ITERS).toFixed(3)} ms/write (${((ms * 1000) / ITERS).toFixed(2)} µs)`,
+      );
     }
   });
 
@@ -723,7 +726,9 @@ describe("§13 Scaling with K", () => {
       for (let i = 0; i < ITERS; i++) rotation.value = (i & 31) * 0.05;
       const ms = performance.now() - t0;
       // eslint-disable-next-line no-console
-      console.info(`    K = ${K.toString().padStart(4)} → ${(ms / ITERS).toFixed(3)} ms/write (${((ms * 1000) / ITERS).toFixed(2)} µs)`);
+      console.info(
+        `    K = ${K.toString().padStart(4)} → ${(ms / ITERS).toFixed(3)} ms/write (${((ms * 1000) / ITERS).toFixed(2)} µs)`,
+      );
     }
   });
 });

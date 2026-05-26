@@ -9,7 +9,7 @@
 // "redistribute the violation among the un-pinned cells."
 
 import { clamp, constraints, generic, pin } from "@minim/constraints";
-import { Anchor, Diagram, handle, label, line, Mount, num, range, vec } from "../../minim";
+import { Anchor, Diagram, handle, label, line, Mount, Num, num, range, vec } from "../../minim";
 
 const TRACK_LEN = 360;
 const A_MAX = 10;
@@ -50,9 +50,10 @@ export class MdEquation extends Diagram {
       s(line(vec(trackX0, t.y - 6), vec(trackX0, t.y + 6), { thin: true, opacity: 0.5 }));
 
       // Chained invertible lens: pixel ↔ unit-value via the bidirectional
-      // `range.slider`. Writing the knob's x writes back through to `t.sig`.
+      // `range.slider`. Writing the knob's x writes back through to `t.sig`;
+      // y is locked at the track row via `Num.pin`.
       const knobX = range(trackX0, trackX1).slider(t.sig.scale(1 / t.max));
-      const h = s(handle(vec(knobX, t.y), { r: 9, fill: t.color, cursor: "ew-resize" }));
+      const h = s(handle(vec(knobX, Num.pin(t.y)), { r: 9, fill: t.color, cursor: "ew-resize" }));
       cluster.addWhile(h.dragging, pin(t.sig));
 
       s(

@@ -37,11 +37,17 @@ describe("hstack", () => {
     const b = box();
     const cc = box();
     const p = propagators();
-    p.add(hstack(c, [
-      { box: a, max: 100 },
-      { box: b, max: 100 },
-      { box: cc, max: 100 },
-    ], { gap: 0 }));
+    p.add(
+      hstack(
+        c,
+        [
+          { box: a, max: 100 },
+          { box: b, max: 100 },
+          { box: cc, max: 100 },
+        ],
+        { gap: 0 },
+      ),
+    );
 
     expect(a.w.value).toBe(100);
     expect(b.w.value).toBe(100);
@@ -89,11 +95,17 @@ describe("hstack", () => {
     const b = box();
     const cc = box();
     const p = propagators();
-    p.add(hstack(c, [
-      { box: a, grow: 1 },
-      { box: b, grow: 2 },
-      { box: cc, grow: 1 },
-    ], { gap: 0 }));
+    p.add(
+      hstack(
+        c,
+        [
+          { box: a, grow: 1 },
+          { box: b, grow: 2 },
+          { box: cc, grow: 1 },
+        ],
+        { gap: 0 },
+      ),
+    );
 
     // 400 / 4 weights = 100 per weight unit. a:100, b:200, c:100.
     expect(a.w.value).toBeCloseTo(100);

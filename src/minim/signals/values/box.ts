@@ -5,11 +5,20 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { bind } from "../lateral";
-import { computed, lazy, type Of, Signal, type Val, valFn, value, type Writable } from "../signal";
+import {
+  batch,
+  computed,
+  lazy,
+  type Of,
+  Signal,
+  type Val,
+  valFn,
+  value,
+  type Writable,
+} from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
 import { derived, field } from "../writable";
-import { Num } from "./num";
+import { Num, num } from "./num";
 import { Vec } from "./vec";
 
 type V = { x: number; y: number; w: number; h: number };
@@ -26,8 +35,7 @@ export const lerp = (a: V, b: V, t: number): V => ({
 export const equals = (a: V, b: V) =>
   a === b || (a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h);
 /** L2 distance over the flat (x, y, w, h) representation. */
-export const metric = (a: V, b: V) =>
-  Math.hypot(a.x - b.x, a.y - b.y, a.w - b.w, a.h - b.h);
+export const metric = (a: V, b: V) => Math.hypot(a.x - b.x, a.y - b.y, a.w - b.w, a.h - b.h);
 export const expand = (b: V, n: number): V => ({
   x: b.x - n,
   y: b.y - n,
@@ -180,16 +188,33 @@ export class Box extends Signal<V> {
   }
 }
 
+/** Writable `Box` at `(x, y, w, h)`. Each component is either a literal
+ *  `number` (lifted to a fresh `Writable<Num>` seed) or an existing
+ *  `Writable<Num>` (passed through by identity, writes propagate).
+ *
+ *  RO sources are rejected at the type level — use `Box.derive(...)`
+ *  for reactive RO tracking, or `signal.value` to snapshot. Lock a
+ *  component with `Num.pin(c)`. */
 export function box(
-  x: Val<number> = 0,
-  y: Val<number> = 0,
-  w: Val<number> = 0,
-  h: Val<number> = 0,
+  x: number | Writable<Num> = 0,
+  y: number | Writable<Num> = 0,
+  w: number | Writable<Num> = 0,
+  h: number | Writable<Num> = 0,
 ): Writable<Box> {
-  const b = new Box() as Writable<Box>;
-  bind(b.x, x);
-  bind(b.y, y);
-  bind(b.w, w);
-  bind(b.h, h);
-  return b;
+  const xN = num(x);
+  const yN = num(y);
+  const wN = num(w);
+  const hN = num(h);
+  return Signal.install(
+    Box,
+    () => ({ x: xN.value, y: yN.value, w: wN.value, h: hN.value }),
+    v => {
+      batch(() => {
+        xN.value = v.x;
+        yN.value = v.y;
+        wN.value = v.w;
+        hN.value = v.h;
+      });
+    },
+  );
 }

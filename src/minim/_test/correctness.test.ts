@@ -100,8 +100,8 @@ describe("correctness", () => {
 
     section("4.2 vec(reactiveX, reactiveY) glitch-free under batch");
     {
-      const rx = signal(10);
-      const ry = signal(20);
+      const rx = num(10);
+      const ry = num(20);
       const v = vec(rx, ry);
       const seen: VecValue[] = [];
       effect(() => {

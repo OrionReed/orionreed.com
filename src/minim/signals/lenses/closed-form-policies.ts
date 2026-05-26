@@ -193,10 +193,7 @@ export function scaleAbout<T extends { x: number; y: number }>(
  *  Symmetric: complement carries per-point per-axis fractions of
  *  point 0's offset from pivot, so collapse on either axis is
  *  recoverable (cf. `bboxLens.size`). */
-export function scaleAboutXY(
-  points: readonly Writable<Vec>[],
-  pivot: Read<V>,
-): Writable<Vec> {
+export function scaleAboutXY(points: readonly Writable<Vec>[], pivot: Read<V>): Writable<Vec> {
   const K = points.length;
   if (K < 1) throw new Error("scaleAboutXY: need ≥ 1 point");
 
@@ -347,11 +344,12 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
   const initVals = points.map(s => s.peek());
   let sx0 = 0;
   let sy0 = 0;
-  for (const v of initVals) { sx0 += v.x; sy0 += v.y; }
+  for (const v of initVals) {
+    sx0 += v.x;
+    sy0 += v.y;
+  }
   const cov0 = covariance(initVals, sx0 / K, sy0 / K);
-  const initθ = cov0.cxx + cov0.cyy > 1e-18
-    ? dominantAxisAngle(cov0.cxx, cov0.cxy, cov0.cyy)
-    : 0;
+  const initθ = cov0.cxx + cov0.cyy > 1e-18 ? dominantAxisAngle(cov0.cxx, cov0.cxy, cov0.cyy) : 0;
 
   type C = { θ: number };
   const direction = Num.symmetricLens(points as readonly Writable<Vec>[], {
@@ -359,7 +357,10 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
     putr: (vals: readonly V[], c: C) => {
       let sx = 0;
       let sy = 0;
-      for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
+      for (let i = 0; i < K; i++) {
+        sx += vals[i]!.x;
+        sy += vals[i]!.y;
+      }
       const cx = sx / K;
       const cy = sy / K;
       const { cxx, cxy, cyy } = covariance(vals, cx, cy);
@@ -374,7 +375,10 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
     putl: (target: number, vals: readonly V[], c: C) => {
       let sx = 0;
       let sy = 0;
-      for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
+      for (let i = 0; i < K; i++) {
+        sx += vals[i]!.x;
+        sy += vals[i]!.y;
+      }
       const cx = sx / K;
       const cy = sy / K;
       const { cxx, cxy, cyy } = covariance(vals, cx, cy);
@@ -441,7 +445,10 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
   const initVals = points.map(s => s.peek());
   let sx0 = 0;
   let sy0 = 0;
-  for (const v of initVals) { sx0 += v.x; sy0 += v.y; }
+  for (const v of initVals) {
+    sx0 += v.x;
+    sy0 += v.y;
+  }
   const cx0 = sx0 / K;
   const cy0 = sy0 / K;
   let sumR0 = 0;
@@ -462,7 +469,10 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
     putr: (vals: readonly V[], c: C) => {
       let sx = 0;
       let sy = 0;
-      for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
+      for (let i = 0; i < K; i++) {
+        sx += vals[i]!.x;
+        sy += vals[i]!.y;
+      }
       const cx = sx / K;
       const cy = sy / K;
       let sum = 0;
@@ -484,7 +494,10 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
     putl: (target: number, vals: readonly V[], c: C) => {
       let sx = 0;
       let sy = 0;
-      for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
+      for (let i = 0; i < K; i++) {
+        sx += vals[i]!.x;
+        sy += vals[i]!.y;
+      }
       const cx = sx / K;
       const cy = sy / K;
       let sum = 0;
@@ -644,12 +657,14 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
   const initD = decompose(points.map(s => s.peek()));
   const buildAxisLens = (which: "major" | "minor") => {
     type AxisC = {
-      uX: number; uY: number;   // unit axis of THIS lens
-      vX: number; vY: number;   // unit perpendicular axis
-      lenThis: number;          // last known √λ on THIS axis
-      lenOther: number;         // last known √λ on the other axis
-      projThis: number[];       // dev·u / lenThis, per point
-      projOther: number[];      // dev·v / lenOther, per point
+      uX: number;
+      uY: number; // unit axis of THIS lens
+      vX: number;
+      vY: number; // unit perpendicular axis
+      lenThis: number; // last known √λ on THIS axis
+      lenOther: number; // last known √λ on the other axis
+      projThis: number[]; // dev·u / lenThis, per point
+      projOther: number[]; // dev·v / lenOther, per point
     };
 
     const initVals = points.map(s => s.peek());
@@ -657,8 +672,12 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
     const uy0 = initD ? (which === "major" ? Math.sin(initD.θ) : Math.cos(initD.θ)) : 0;
     const vx0 = -uy0;
     const vy0 = ux0;
-    const lenThis0 = Math.sqrt(Math.max(0, initD ? (which === "major" ? initD.lambdaMajor : initD.lambdaMinor) : 0));
-    const lenOther0 = Math.sqrt(Math.max(0, initD ? (which === "major" ? initD.lambdaMinor : initD.lambdaMajor) : 0));
+    const lenThis0 = Math.sqrt(
+      Math.max(0, initD ? (which === "major" ? initD.lambdaMajor : initD.lambdaMinor) : 0),
+    );
+    const lenOther0 = Math.sqrt(
+      Math.max(0, initD ? (which === "major" ? initD.lambdaMinor : initD.lambdaMajor) : 0),
+    );
     const projThis0: number[] = [];
     const projOther0: number[] = [];
     if (initD) {
@@ -669,14 +688,21 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
         projOther0.push(lenOther0 > 1e-12 ? (dx * vx0 + dy * vy0) / lenOther0 : 0);
       }
     } else {
-      for (let i = 0; i < K; i++) { projThis0.push(0); projOther0.push(0); }
+      for (let i = 0; i < K; i++) {
+        projThis0.push(0);
+        projOther0.push(0);
+      }
     }
 
     const missing: AxisC = {
-      uX: ux0, uY: uy0,
-      vX: vx0, vY: vy0,
-      lenThis: lenThis0, lenOther: lenOther0,
-      projThis: projThis0, projOther: projOther0,
+      uX: ux0,
+      uY: uy0,
+      vX: vx0,
+      vY: vy0,
+      lenThis: lenThis0,
+      lenOther: lenOther0,
+      projThis: projThis0,
+      projOther: projOther0,
     };
 
     const refresh = (c: AxisC, vals: readonly V[]) => {
@@ -688,8 +714,10 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
       const vy = ux;
       const lenThis = Math.sqrt(Math.max(0, which === "major" ? d.lambdaMajor : d.lambdaMinor));
       const lenOther = Math.sqrt(Math.max(0, which === "major" ? d.lambdaMinor : d.lambdaMajor));
-      c.uX = ux; c.uY = uy;
-      c.vX = vx; c.vY = vy;
+      c.uX = ux;
+      c.uY = uy;
+      c.vX = vx;
+      c.vY = vy;
       c.lenThis = lenThis;
       c.lenOther = lenOther;
       // Only refresh projections on axes that aren't collapsed.
@@ -722,7 +750,10 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
         // derivable from current source (mean translates always work).
         let sx = 0;
         let sy = 0;
-        for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
+        for (let i = 0; i < K; i++) {
+          sx += vals[i]!.x;
+          sy += vals[i]!.y;
+        }
         const cx = sx / K;
         const cy = sy / K;
         const out = new Array<V>(K);

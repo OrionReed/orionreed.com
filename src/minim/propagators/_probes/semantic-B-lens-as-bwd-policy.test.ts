@@ -23,7 +23,16 @@
 // WRITE TRIGGER (propagator).
 
 import { describe, expect, it } from "vitest";
-import { centroidLens, midpointLens, num, type Of, signal, Vec, vec, type Writable } from "../../signals";
+import {
+  centroidLens,
+  midpointLens,
+  num,
+  type Of,
+  signal,
+  Vec,
+  vec,
+  type Writable,
+} from "../../signals";
 import { propagator, propagators } from "..";
 
 describe("Semantic probe B: lens encodes WRITE POLICY", () => {
@@ -100,7 +109,11 @@ describe("Semantic probe B: lens encodes WRITE POLICY", () => {
     // Reuse the same propagator body.
     const goal = vec(100, 0);
     const p = propagators();
-    p.add(propagator([goal], [biasedMid], () => { biasedMid.value = goal.value; }));
+    p.add(
+      propagator([goal], [biasedMid], () => {
+        biasedMid.value = goal.value;
+      }),
+    );
 
     // Biased midpoint moved to (100, 0); a got 70% of delta, b got 30%.
     expect(a.value.x).toBeCloseTo(70);
@@ -120,11 +133,10 @@ describe("Semantic probe B: lens encodes WRITE POLICY", () => {
 
     // Mean radius (read-only proxy).
     const meanRadius = signal<number>(
-      (verts.reduce(
-        (acc: number, v: Writable<Vec>) =>
-          acc + Math.hypot(v.value.x - cv.x, v.value.y - cv.y),
+      verts.reduce(
+        (acc: number, v: Writable<Vec>) => acc + Math.hypot(v.value.x - cv.x, v.value.y - cv.y),
         0,
-      )) / verts.length,
+      ) / verts.length,
     );
     void meanRadius;
 
@@ -133,10 +145,8 @@ describe("Semantic probe B: lens encodes WRITE POLICY", () => {
     // SAME propagator body composes with any scale policy.
     const factor = num(1);
     const p = propagators();
-    p.add(propagator(
-      [factor],
-      verts as never[],
-      () => {
+    p.add(
+      propagator([factor], verts as never[], () => {
         const c = cent.value;
         const f = factor.value;
         for (const v of verts) {
@@ -146,8 +156,8 @@ describe("Semantic probe B: lens encodes WRITE POLICY", () => {
             y: c.y + (cur.y - c.y) * f,
           };
         }
-      },
-    ));
+      }),
+    );
 
     factor.value = 2;
     // Each vert is now twice as far from centroid (scaled in place).

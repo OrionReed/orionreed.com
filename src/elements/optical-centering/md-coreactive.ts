@@ -23,10 +23,10 @@
 
 import { propagate, propagator } from "@minim/propagators";
 import {
+  type CurveSegment,
   circle,
   computed,
   curve,
-  type CurveSegment,
   Diagram,
   drag,
   easeIn,
@@ -34,10 +34,10 @@ import {
   effect,
   label,
   line,
-  midpointLens,
   type Mount,
-  num,
+  midpointLens,
   type Num,
+  num,
   path,
   play,
   rect,
@@ -53,12 +53,12 @@ const GREEN = "#86b966";
 const ORANGE = "#f5a623";
 const MUTED = "var(--text-color, #888)";
 
-const SCENE_R = 14;        // Filled cell circle in the scene (drag target).
-const SHAPE_R = 12;        // Filled cell circle in the topology — represents the cell.
-const NODE_R = SHAPE_R;    // Implicit anchor radius for every topology node — lines stop here.
-const LENS_W = 76;         // Structural lens box (midpoint / down).
+const SCENE_R = 14; // Filled cell circle in the scene (drag target).
+const SHAPE_R = 12; // Filled cell circle in the topology — represents the cell.
+const NODE_R = SHAPE_R; // Implicit anchor radius for every topology node — lines stop here.
+const LENS_W = 76; // Structural lens box (midpoint / down).
 const LENS_H = 24;
-const LABEL_SIZE = 15;     // Body font size in the topology.
+const LABEL_SIZE = 15; // Body font size in the topology.
 const LINE_W = 24;
 
 const ARC_BOW = 22;
@@ -68,7 +68,7 @@ const ARC_BOW = 22;
 // up from the current value, so continuous drags hold the line warm.
 // Stroke colour is the only property that changes between rest and
 // fire; width pulses slightly thicker for emphasis.
-const REST_W = 2;          // Default stroke width.
+const REST_W = 2; // Default stroke width.
 const ACTIVE_W = 3.4;
 const FIRE_PEAK_DUR = 0.1;
 const FIRE_FADE_DUR = 0.4;
@@ -237,17 +237,22 @@ export class MdCoreactive extends Diagram {
     // explicit named operator node above their shape: `midpoint(A,B)`
     // produces M, `M.down(95)` produces D.
     const cells = [
-      { cell: A, color: BLUE,   text: "A", shape: vec() },
-      { cell: B, color: GREEN,  text: "B", shape: vec() },
+      { cell: A, color: BLUE, text: "A", shape: vec() },
+      { cell: B, color: GREEN, text: "B", shape: vec() },
       { cell: M, color: ORANGE, text: "M", shape: vec() },
-      { cell: D, color: RED,    text: "D", shape: vec() },
+      { cell: D, color: RED, text: "D", shape: vec() },
     ] as const;
     const [cA, cB, cM, cD] = cells;
 
     // Topology positions for the lens operators and shape leaves.
-    const tMidpoint = vec(), tDown = vec();
-    const tLineAB = vec(), tLineMD = vec();
-    const tLabA = vec(), tLabB = vec(), tLabM = vec(), tLabD = vec();
+    const tMidpoint = vec(),
+      tDown = vec();
+    const tLineAB = vec(),
+      tLineMD = vec();
+    const tLabA = vec(),
+      tLabB = vec(),
+      tLabM = vec(),
+      tLabD = vec();
 
     // Edges: [from, to] forward only, [from, to, true] also reverse.
     //
@@ -263,8 +268,14 @@ export class MdCoreactive extends Diagram {
       [tMidpoint, cM.shape, true],
       [cM.shape, tDown, true],
       [tDown, cD.shape, true],
-      [cA.shape, tLabA],   [cB.shape, tLabB],   [cM.shape, tLabM],   [cD.shape, tLabD],
-      [cA.shape, tLineAB], [cB.shape, tLineAB], [cM.shape, tLineMD], [cD.shape, tLineMD],
+      [cA.shape, tLabA],
+      [cB.shape, tLabB],
+      [cM.shape, tLabM],
+      [cD.shape, tLabD],
+      [cA.shape, tLineAB],
+      [cB.shape, tLineAB],
+      [cM.shape, tLineMD],
+      [cD.shape, tLineMD],
     ];
 
     // Drag origin: the topology Vec being driven (or null).
@@ -300,7 +311,12 @@ export class MdCoreactive extends Diagram {
       ch.on("pointerdown", () => {
         origin.value = c.shape;
       });
-      s(label(c.text === "D" ? c.cell.down(24) : c.cell.up(24), c.text, { size: LABEL_SIZE, bold: true }));
+      s(
+        label(c.text === "D" ? c.cell.down(24) : c.cell.up(24), c.text, {
+          size: LABEL_SIZE,
+          bold: true,
+        }),
+      );
     }
 
     // 3. Topology edges (under topology nodes). Forward = `path`,
