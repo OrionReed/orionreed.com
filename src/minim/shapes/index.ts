@@ -19,7 +19,7 @@ export { type ArrangeOpts, arrange, expand, grid, split } from "./layout";
 export { Line, type LineOpts, line } from "./line";
 export { type ForEachOptions, forEach } from "./list";
 export { type Mount, mount } from "./mount";
-export { Path, type PathOpts, path } from "./path";
+export { Path, type PathDOpts, type PathOpts, path, pathD } from "./path";
 export { Rect, type RectOpts, rect } from "./rect";
 export {
   type AnimatableKey,

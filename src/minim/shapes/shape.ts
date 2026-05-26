@@ -348,6 +348,34 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     };
   }
 
+  /** Map client coords into the SVG root's frame. Stable when this
+   *  shape (or an ancestor) is rotating — `toLocal` goes through the
+   *  local transform, which is the wrong answer for "drop me in world
+   *  coords." Returns `(0, 0)` when no SVG root is present (detached). */
+  toWorld(evt: { clientX: number; clientY: number }): VecValue {
+    const root = this.svgRoot;
+    const ctm = root?.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+    const inv = ctm.inverse();
+    return {
+      x: evt.clientX * inv.a + evt.clientY * inv.c + inv.e,
+      y: evt.clientX * inv.b + evt.clientY * inv.d + inv.f,
+    };
+  }
+
+  /** Nearest enclosing `<svg>` root, or `null` if this shape isn't mounted
+   *  under one. Used by drag helpers that need world-space cursor coords. */
+  get svgRoot(): SVGSVGElement | null {
+    let walker: Element | null = this.el;
+    while (walker) {
+      if (walker.namespaceURI === SVG_NS && walker.tagName === "svg") {
+        return walker as SVGSVGElement;
+      }
+      walker = walker.parentElement;
+    }
+    return null;
+  }
+
   add<T extends AnyShape>(child: T): T;
   add<T extends AnyShape[]>(...children: T): T;
   add(...children: AnyShape[]): AnyShape | AnyShape[] {

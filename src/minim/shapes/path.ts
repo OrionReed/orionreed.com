@@ -1,5 +1,15 @@
-import { computed, num, type Signal, signal, type Val, Vec, type Writable } from "@minim/signals";
+import {
+  computed,
+  num,
+  type Read,
+  type Signal,
+  signal,
+  type Val,
+  Vec,
+  type Writable,
+} from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
+import { tokens } from "./tokens";
 
 export interface PathOpts extends CommonOpts {
   closed?: boolean;
@@ -231,3 +241,48 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
  *  pass to `s(...)` to render. */
 export const path = <const O extends PathOpts>(start: Vec, opts?: O): Path<O> =>
   new Path<O>(start, opts);
+
+export interface PathDOpts {
+  /** Stroke color. Default: `tokens.stroke`. */
+  stroke?: Val<string>;
+  /** Fill color. Default: `"none"`. */
+  fill?: Val<string>;
+  /** Stroke width override; trumps `thin`. */
+  strokeWidth?: Val<number>;
+  /** Use the thin stroke weight (`tokens.thinWeight`). Default: false. */
+  thin?: boolean;
+  /** Stroke line cap. */
+  cap?: "butt" | "round" | "square";
+  /** Stroke line join. */
+  join?: "miter" | "round" | "bevel";
+  /** Stroke dash array (e.g. `"3 5"`). */
+  dasharray?: Val<string>;
+  /** Reactive opacity. */
+  opacity?: Val<number>;
+  /** Reactive bbox for auto-fit. Default: zero box (caller manages view). */
+  box?: () => { x: number; y: number; w: number; h: number };
+}
+
+/** Low-level `<path>` driven by a reactive `d` string. Sibling of
+ *  `path(...)` (Vec-segments) and `curve(...)` (curve-segments) — use
+ *  when you want to construct the `d` attribute directly (dense plots,
+ *  hand-rolled curves, custom samplers). One attr-effect drives the
+ *  whole path, which is far cheaper than N individual `line` / `rect`
+ *  shapes when the geometry is dense.
+ *
+ *  Pass `box` for auto-fit; otherwise the shape contributes a zero box
+ *  and the caller is responsible for the viewBox. */
+export function pathD(d: Read<string>, opts: PathDOpts = {}): Shape {
+  const sh = new Shape("path", opts.box ?? (() => ({ x: 0, y: 0, w: 0, h: 0 })), {
+    opacity: opts.opacity,
+  });
+  sh.attr("d", d);
+  sh.attr("fill", opts.fill ?? "none");
+  sh.attr("stroke", opts.stroke ?? tokens.stroke);
+  sh.attr("stroke-width", opts.strokeWidth ?? (opts.thin ? tokens.thinWeight : tokens.weight));
+  sh.attr("vector-effect", "non-scaling-stroke");
+  if (opts.cap) sh.attr("stroke-linecap", opts.cap);
+  if (opts.join) sh.attr("stroke-linejoin", opts.join);
+  if (opts.dasharray !== undefined) sh.attr("stroke-dasharray", opts.dasharray);
+  return sh;
+}

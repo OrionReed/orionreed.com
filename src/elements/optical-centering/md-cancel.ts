@@ -13,7 +13,6 @@ import {
   Num,
   num,
   play,
-  type Signal,
   signal,
   vec,
   type Writable,
@@ -31,17 +30,6 @@ const BTN_Y = 116;
 const BTN_W = 80;
 const BTN_H = 26;
 const BTN_GAP = 12;
-
-function* lifecycle(
-  shape: Has<"opacity">,
-  y: Writable<Num>,
-  amp: number,
-  freq: number,
-  stop: Signal<boolean>,
-): Animator {
-  yield* play(oscillate(y, amp, freq)).until(stop);
-  yield fadeOut(shape, 0.4);
-}
 
 export class MdCancel extends Diagram {
   protected scene(s: Mount): void {
@@ -107,9 +95,15 @@ export class MdCancel extends Diagram {
         hardStop.value = false;
         status.value = "running";
 
-        yield* play([
-          ...slots.map((slot, i) => lifecycle(slot.shape, slot.y, 14, 0.45 + i * 0.04, stop)),
-        ]).until(hardStop);
+        // Each slot oscillates until `stop`, then fades out. The outer
+        // `.until(hardStop)` interrupts the whole group on the hard exit.
+        const lifecycles: Animator[] = slots.map((slot, i) =>
+          (function* (): Animator {
+            yield* play(oscillate(slot.y, 14, 0.45 + i * 0.04)).until(stop);
+            yield fadeOut(slot.shape, 0.4);
+          })(),
+        );
+        yield* play(lifecycles).until(hardStop);
 
         yield hardStop.peek() ? 1.6 : 1.4;
       }),

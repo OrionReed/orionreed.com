@@ -7,83 +7,12 @@
 // Compared to the point-mass + distance-constraint chain, this one
 // has rotational inertia per link — bars feel like bars, not beads.
 
-import { animate, type Body, body, joint, world } from "@minim/constraints";
-import {
-  Anchor,
-  type AnyShape,
-  circle,
-  Diagram,
-  label,
-  Mount,
-  rect,
-  type Signal,
-  signal,
-  Vec,
-  type Writable,
-} from "../../minim";
+import { animate, type Body, body, dragBody, joint, world } from "@minim/constraints";
+import { Anchor, circle, Diagram, label, Mount, rect, Vec } from "../../minim";
 
 const N = 18;
 const LINK_W = 18;
 const LINK_H = 6;
-
-function findSvgRoot(el: Element | null): SVGSVGElement | null {
-  let walker: Element | null = el;
-  while (walker) {
-    if (walker.tagName === "svg") return walker as SVGSVGElement;
-    walker = walker.parentElement;
-  }
-  return null;
-}
-
-function dragWorld(shape: AnyShape, target: Writable<Vec>, dragging: Signal<boolean>): () => void {
-  const root = findSvgRoot(shape.el);
-  const toWorld = (clientX: number, clientY: number): { x: number; y: number } => {
-    const ctm = root?.getScreenCTM()?.inverse();
-    if (!ctm) return { x: 0, y: 0 };
-    return {
-      x: clientX * ctm.a + clientY * ctm.c + ctm.e,
-      y: clientX * ctm.b + clientY * ctm.d + ctm.f,
-    };
-  };
-  let pid = -1;
-  let dx = 0;
-  let dy = 0;
-  const offDown = shape.on("pointerdown", e => {
-    const pe = e as PointerEvent;
-    const w = toWorld(pe.clientX, pe.clientY);
-    const v = target.value;
-    dx = w.x - v.x;
-    dy = w.y - v.y;
-    pid = pe.pointerId;
-    shape.el.setPointerCapture(pid);
-    (dragging as Writable<typeof dragging>).value = true;
-  });
-  const offMove = shape.on("pointermove", e => {
-    if (pid === -1) return;
-    const pe = e as PointerEvent;
-    const w = toWorld(pe.clientX, pe.clientY);
-    target.value = { x: w.x - dx, y: w.y - dy };
-  });
-  const stop = () => {
-    if (pid !== -1) {
-      try {
-        shape.el.releasePointerCapture(pid);
-      } catch {
-        /* fine */
-      }
-      pid = -1;
-    }
-    (dragging as Writable<typeof dragging>).value = false;
-  };
-  const offUp = shape.on("pointerup", stop);
-  const offCancel = shape.on("pointercancel", stop);
-  return () => {
-    offDown();
-    offMove();
-    offUp();
-    offCancel();
-  };
-}
 
 export class MdRigidRope extends Diagram {
   protected scene(s: Mount): void {
@@ -99,11 +28,9 @@ export class MdRigidRope extends Diagram {
       maxAngularSpeed: 100,
     });
 
-    // Static anchor block.
     const anchor = w.add(body({ size: { w: 8, h: 8 }, density: 0 }, { x: anchorX, y: anchorY }));
     s(rect(anchor.position, 10, 10, { fill: "#222" }));
 
-    // Link bodies, one after another.
     const links: Body[] = [];
     let prev = anchor;
     for (let i = 0; i < N; i++) {
@@ -121,10 +48,6 @@ export class MdRigidRope extends Diagram {
       prev = link;
     }
 
-    // Render each link as a rotated rect bound to the body's pose,
-    // with hard-pin drag: while dragged, the body is pinned (mass 0,
-    // kinematic) and its position lens is driven directly by the
-    // cursor. The next sim tick reads the new pose, no buffer hacks.
     const PALETTE = ["#5b8def", "#e25c5c", "#f5a623", "#7ed321"];
     for (let i = 0; i < links.length; i++) {
       const link = links[i]!;
@@ -135,14 +58,10 @@ export class MdRigidRope extends Diagram {
           rotate: link.angle,
         }),
       );
-      r.el.style.cursor = "grab";
-
-      const dragging = signal(false);
-      dragWorld(r, link.position as Writable<Vec>, dragging);
-      w.addWhile(dragging, link.pin());
+      dragBody(r, w, link);
     }
 
-    // Show joint pivots as small dots.
+    // Joint pivots as small dots — left end of each link in world coords.
     for (let i = 0; i < links.length; i++) {
       const link = links[i]!;
       const pivot = Vec.lens(

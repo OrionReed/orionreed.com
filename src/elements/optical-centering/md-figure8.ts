@@ -11,14 +11,12 @@
 import { constraints, gap, generic } from "@minim/constraints";
 import {
   Anchor,
-  circle,
   Diagram,
-  drag,
+  handle,
   label,
   Mount,
   num,
   Path,
-  signal,
   type Vec,
   vec,
   type Writable,
@@ -77,9 +75,7 @@ export class MdFigure8 extends Diagram {
     }
 
     for (let i = 0; i < N; i++) {
-      const dot = s(circle(positions[i]!, R, { fill: COLORS[i % COLORS.length]! }));
-      dot.el.style.cursor = "grab";
-      drag(dot, positions[i]!, signal(false));
+      s(handle(positions[i]!, { r: R, fill: COLORS[i % COLORS.length]! }));
     }
 
     s(

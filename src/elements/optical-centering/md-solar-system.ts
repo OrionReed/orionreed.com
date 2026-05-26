@@ -46,7 +46,6 @@ export class MdSolarSystem extends Diagram {
       const body = s(circle(pos, size, { fill: color }));
       // Drag the body itself; no separate handle dot.
       drag(body, pos, dragging);
-      body.el.style.cursor = "grab";
       return pos;
     };
 

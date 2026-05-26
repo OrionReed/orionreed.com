@@ -8,7 +8,7 @@
 //   - Lens-derived signals (`Vec.x`, `.y`, …) work transparently —
 //     the signal layer's `_fusedOf` chain dirties them when the
 //     parent is written; the cluster effect fires; solver runs;
-//     writeBack propagates without re-triggering the cluster.
+//     `network()` write propagates without re-triggering the cluster.
 //
 // **Pin model**: the reactive layer does *not* auto-pin user-
 // written signals. To "drag" a signal (force the solver to honor

@@ -24,104 +24,8 @@
 // Reads cursor through the SVG root's CTM rather than `shape.toLocal`
 // so a rotating rect's drag still returns stable world coords.
 
-import {
-  animate,
-  type Body,
-  type BodyAnchor,
-  body,
-  bodyAnchor,
-  joint,
-  type World,
-  world,
-} from "@minim/constraints";
-import {
-  Anchor,
-  type AnyShape,
-  Diagram,
-  label,
-  Mount,
-  rect,
-  type Signal,
-  signal,
-  type Writable,
-} from "../../minim";
-
-function findSvgRoot(el: Element | null): SVGSVGElement | null {
-  let walker: Element | null = el;
-  while (walker) {
-    if (walker.tagName === "svg") return walker as SVGSVGElement;
-    walker = walker.parentElement;
-  }
-  return null;
-}
-
-/** Drag a rigid `body` via a soft `BodyAnchor` constraint that pulls
- *  the body's translation toward the cursor. Mass stays finite so
- *  contacts can push back — no more "mush" through neighbours when
- *  you drag a stack. Reads cursor in the SVG root's frame so it
- *  works correctly even when the body's render rect is rotated. */
-function dragBody(
-  shape: AnyShape,
-  world: World,
-  body: Body,
-  dragging: Signal<boolean>,
-  stiffness = 5e4,
-): () => void {
-  const root = findSvgRoot(shape.el);
-  const toWorld = (clientX: number, clientY: number): { x: number; y: number } => {
-    const ctm = root?.getScreenCTM()?.inverse();
-    if (!ctm) return { x: 0, y: 0 };
-    return {
-      x: clientX * ctm.a + clientY * ctm.c + ctm.e,
-      y: clientX * ctm.b + clientY * ctm.d + ctm.f,
-    };
-  };
-  let pointerId = -1;
-  let dx = 0;
-  let dy = 0;
-  let anchor: BodyAnchor | undefined;
-  const offDown = shape.on("pointerdown", e => {
-    const pe = e as PointerEvent;
-    const wp = toWorld(pe.clientX, pe.clientY);
-    const p = body.pose.value;
-    dx = wp.x - p.x;
-    dy = wp.y - p.y;
-    pointerId = pe.pointerId;
-    shape.el.setPointerCapture(pointerId);
-    (dragging as Writable<typeof dragging>).value = true;
-    anchor = bodyAnchor(body, { x: p.x, y: p.y }, stiffness);
-    world.add(anchor);
-  });
-  const offMove = shape.on("pointermove", e => {
-    if (pointerId === -1 || !anchor) return;
-    const pe = e as PointerEvent;
-    const w = toWorld(pe.clientX, pe.clientY);
-    anchor.target.value = { x: w.x - dx, y: w.y - dy };
-  });
-  const stop = () => {
-    if (pointerId !== -1) {
-      try {
-        shape.el.releasePointerCapture(pointerId);
-      } catch {
-        /* fine */
-      }
-      pointerId = -1;
-    }
-    if (anchor) {
-      world.remove(anchor);
-      anchor = undefined;
-    }
-    (dragging as Writable<typeof dragging>).value = false;
-  };
-  const offUp = shape.on("pointerup", stop);
-  const offCancel = shape.on("pointercancel", stop);
-  return () => {
-    offDown();
-    offMove();
-    offUp();
-    offCancel();
-  };
-}
+import { animate, type Body, body, dragBodyAnchored, joint, world } from "@minim/constraints";
+import { Anchor, Diagram, label, Mount, rect } from "../../minim";
 
 const PALETTE = ["#5b8def", "#e25c5c", "#f5a623", "#7ed321", "#9b59b6", "#1abc9c"];
 
@@ -281,11 +185,9 @@ export class MdRigidStack extends Diagram {
     s(rect(ballX - 6, ballY - 6, 12, 12, { fill: "rgba(120, 120, 120, 0.6)", thin: true }));
 
     // ─── Render dynamics ────────────────────────────────────────
-    const renderBody = (b: Body, fill: string, cursor = "grab") => {
+    const renderBody = (b: Body, fill: string) => {
       const r = s(rect(b.position, b.w, b.h, { fill, corner: 2, thin: true, rotate: b.angle }));
-      r.el.style.cursor = cursor;
-      const dragging = signal(false);
-      dragBody(r, w, b, dragging);
+      dragBodyAnchored(r, w, b);
       return r;
     };
 

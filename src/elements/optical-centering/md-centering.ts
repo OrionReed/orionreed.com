@@ -32,8 +32,6 @@ function tick(a: Vec, b: Vec, f: number, h: number, opts: LineOpts = {}) {
   return line(c.sub(off), c.add(off), { thin: true, ...opts });
 }
 
-const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
-
 export class MdCentering extends Diagram {
   protected scene(s: Mount): void {
     this.view(640, 240);
@@ -78,7 +76,7 @@ export class MdCentering extends Diagram {
         }),
         tick(O, yTip, f, 7, { opacity: yShown }),
         tick(O, xEnd, f, 7, {
-          opacity: computed(() => (v => clamp01((v - f) / 0.06))(lineT.value)),
+          opacity: computed(() => Math.max(0, Math.min(1, (lineT.value - f) / 0.06))),
         }),
       ),
     );
@@ -91,17 +89,17 @@ export class MdCentering extends Diagram {
       rect(vec(xMin.x, yMax.y), vec(xMax.x, yMin.y), {
         thin: true,
         corner: 4,
-        opacity: computed(() => (v => v * 0.5)(boxT.value)),
+        opacity: computed(() => boxT.value * 0.5),
       }),
       line(xMid, c, {
         thin: true,
         dashed: true,
-        opacity: computed(() => (v => v * 0.6)(boxT.value)),
+        opacity: computed(() => boxT.value * 0.6),
       }),
       line(yMid, c, {
         thin: true,
         dashed: true,
-        opacity: computed(() => (v => v * 0.6)(boxT.value)),
+        opacity: computed(() => boxT.value * 0.6),
       }),
       circle(c, 4, { fill: true, opacity: centroidT }),
       label(c.right(10).up(10), t("(", math("x", "c"), ", ", math("y", "c"), ")"), {

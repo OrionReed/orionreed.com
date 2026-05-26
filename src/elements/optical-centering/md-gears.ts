@@ -104,7 +104,6 @@ export class MdGears extends Diagram {
       // the cursor. Writes propagate through the gear-ratio chain
       // back to drive0 (so dragging any gear scrubs the whole chain).
       dragRotate(g, a, dragging);
-      g.el.style.cursor = "grab";
     }
 
     s(

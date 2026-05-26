@@ -9,9 +9,7 @@
 // "redistribute the violation among the un-pinned cells."
 
 import { clamp, constraints, generic, pin } from "@minim/constraints";
-import { Anchor, circle, Diagram, drag, label, line, Mount, num, signal, Vec } from "../../minim";
-
-type V = { x: number; y: number };
+import { Anchor, Diagram, handle, label, line, Mount, num, range, vec } from "../../minim";
 
 const TRACK_LEN = 360;
 const A_MAX = 10;
@@ -47,39 +45,25 @@ export class MdEquation extends Diagram {
       { sig: c, max: C_MAX, color: "#f5a623", label: "c", y: 260 },
     ];
 
-    const fixedV = (x: number, y: number) =>
-      Vec.lens(
-        () => ({ x, y }),
-        () => {},
-      );
-
     for (const t of tracks) {
-      s(line(fixedV(trackX0, t.y), fixedV(trackX1, t.y), { thin: true, opacity: 0.4 }));
-      s(line(fixedV(trackX0, t.y - 6), fixedV(trackX0, t.y + 6), { thin: true, opacity: 0.5 }));
+      s(line(vec(trackX0, t.y), vec(trackX1, t.y), { thin: true, opacity: 0.4 }));
+      s(line(vec(trackX0, t.y - 6), vec(trackX0, t.y + 6), { thin: true, opacity: 0.5 }));
 
-      const handlePos = Vec.lens(
-        () => ({ x: trackX0 + (t.sig.value / t.max) * TRACK_LEN, y: t.y }),
-        (v: V) => {
-          const v01 = (v.x - trackX0) / TRACK_LEN;
-          (t.sig as unknown as { value: number }).value = v01 * t.max;
-        },
-      );
-
-      const dot = s(circle(handlePos, 9, { fill: t.color }));
-      dot.el.style.cursor = "ew-resize";
-      const dragging = signal(false);
-      drag(dot, handlePos, dragging);
-      cluster.addWhile(dragging, pin(t.sig));
+      // Chained invertible lens: pixel ↔ unit-value via the bidirectional
+      // `range.slider`. Writing the knob's x writes back through to `t.sig`.
+      const knobX = range(trackX0, trackX1).slider(t.sig.scale(1 / t.max));
+      const h = s(handle(vec(knobX, t.y), { r: 9, fill: t.color, cursor: "ew-resize" }));
+      cluster.addWhile(h.dragging, pin(t.sig));
 
       s(
-        label(fixedV(trackX0 - 30, t.y + 4), t.label, {
+        label(vec(trackX0 - 30, t.y + 4), t.label, {
           size: 16,
           align: Anchor.Center,
           opacity: 0.85,
         }),
       );
       s(
-        label(fixedV(trackX1 + 40, t.y + 4), () => t.sig.value.toFixed(2), {
+        label(vec(trackX1 + 40, t.y + 4), () => t.sig.value.toFixed(2), {
           size: 12,
           align: Anchor.Center,
           opacity: 0.7,

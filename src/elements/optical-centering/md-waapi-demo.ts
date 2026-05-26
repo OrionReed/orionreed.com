@@ -40,7 +40,7 @@ export class MdWaapiDemo extends Diagram {
         rect(
           X,
           y,
-          computed(() => (v => BW * v)(p.value)),
+          computed(() => BW * p.value),
           6,
           { fill: true },
         ),
@@ -49,7 +49,7 @@ export class MdWaapiDemo extends Diagram {
             .at(1, 0)
             .left(20)
             .down(y + 4),
-          computed(() => (v => v.toFixed(2))(p.value)),
+          computed(() => p.value.toFixed(2)),
           {
             size: 11,
             align: Anchor.Right,
@@ -74,13 +74,13 @@ export class MdWaapiDemo extends Diagram {
     const LOOPS = 15;
     const R = 15;
     const center = vec(
-      computed(() => (p => X + BW * p)(vp.value)),
+      computed(() => X + BW * vp.value),
       150,
     );
     const tracker = polar(
       center,
       R,
-      computed(() => (p => p * 2 * Math.PI * LOOPS)(vp.value)),
+      computed(() => vp.value * 2 * Math.PI * LOOPS),
     );
 
     s(

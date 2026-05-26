@@ -88,12 +88,16 @@ export function draggable(
  *  `dragging` signal reports active/inactive (useful for `rate` on
  *  animators that should freeze during drag).
  *
+ *  Sets `shape.el.style.cursor = "grab"` by default — callers that want
+ *  a different cursor (e.g. `"ew-resize"`) assign after this call.
+ *
  *  Returns a disposer. */
 export function drag(
   shape: AnyShape,
   target: Writable<Vec>,
   dragging?: Writable<Signal<boolean>>,
 ): () => void {
+  if (!shape.el.style.cursor) shape.el.style.cursor = "grab";
   let dx = 0;
   let dy = 0;
   const offDown = shape.on("pointerdown", e => {
@@ -148,6 +152,7 @@ export function dragRotate(
   angle: Writable<Num>,
   dragging?: Writable<Signal<boolean>>,
 ): () => void {
+  if (!shape.el.style.cursor) shape.el.style.cursor = "grab";
   let grabAngle = 0;
   const offDown = shape.on("pointerdown", e => {
     const local = shape.toLocal(e as PointerEvent);

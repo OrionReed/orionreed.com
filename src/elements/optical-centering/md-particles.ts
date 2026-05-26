@@ -13,13 +13,11 @@
 import { animate, gap, inside, physics, pin } from "@minim/constraints";
 import {
   Anchor,
-  circle,
   Diagram,
-  drag,
+  handle,
   label,
   Mount,
   rect,
-  signal,
   type Vec,
   vec,
   type Writable,
@@ -65,11 +63,8 @@ export class MdParticles extends Diagram {
 
     for (let i = 0; i < N; i++) {
       const color = COLORS[i % COLORS.length]!;
-      const dot = s(circle(particles[i]!, R, { fill: color }));
-      dot.el.style.cursor = "grab";
-      const dragging = signal(false);
-      drag(dot, particles[i]!, dragging);
-      cluster.addWhile(dragging, pin(particles[i]!));
+      const h = s(handle(particles[i]!, { r: R, fill: color }));
+      cluster.addWhile(h.dragging, pin(particles[i]!));
     }
 
     this.anim.start(animate(cluster));

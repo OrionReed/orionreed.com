@@ -15,7 +15,7 @@ import {
   race,
   rect,
   signal,
-  suspend,
+  untilEvent,
   vec,
   zoomOut,
 } from "../../minim";
@@ -32,15 +32,6 @@ const BTN_Y = PLAYFIELD_H + 60;
 const BTN_W = 80;
 const BTN_H = 26;
 const BTN_GAP = 12;
-
-/** Wake on click with the `MouseEvent`; race timeout yields `undefined`. */
-function trackedClick(target: EventTarget): Animator<MouseEvent> {
-  return suspend<MouseEvent>(wake => {
-    const handler = (e: Event): void => wake(e as MouseEvent);
-    target.addEventListener("click", handler, { once: true });
-    return () => target.removeEventListener("click", handler);
-  });
-}
 
 export class MdReact extends Diagram {
   protected scene(s: Mount): void {
@@ -60,7 +51,7 @@ export class MdReact extends Diagram {
     s(
       label(
         vec(PAD, STATS_Y),
-        computed(() => (n => `hits: ${n}`)(hits.value)),
+        computed(() => `hits: ${hits.value}`),
         {
           size: 12,
           align: Anchor.Left,
@@ -68,7 +59,7 @@ export class MdReact extends Diagram {
       ),
       label(
         vec(W - PAD, STATS_Y),
-        computed(() => (n => `misses: ${n}`)(misses.value)),
+        computed(() => `misses: ${misses.value}`),
         { size: 12, align: Anchor.Right },
       ),
       label(
@@ -105,7 +96,10 @@ export class MdReact extends Diagram {
 
     function* round(target: Target): Animator {
       try {
-        const evt = yield* race(ROUND_TIMEOUT, trackedClick(target.el));
+        const evt = yield* race(
+          ROUND_TIMEOUT,
+          untilEvent<MouseEvent>(target.el, "click", { once: true }),
+        );
         if (evt) {
           hits.value = hits.peek() + 1;
           yield zoomOut(target, 0.25);

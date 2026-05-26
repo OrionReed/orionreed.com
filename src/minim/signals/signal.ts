@@ -157,7 +157,7 @@ function propagate(start: Link, innerWrite: boolean, excluding?: ReactiveNode): 
   top: do {
     const sub: ReactiveNode = l!.sub;
     // `excluding` skips a specific subscriber from notification —
-    // used by `writeBack` so an effect that writes a signal it
+    // used by `network()` so an effect that writes a signal it
     // subscribes to doesn't re-trigger itself. The advance / stack-
     // pop logic below runs unchanged, so other subs are visited
     // normally. Per-iteration cost: one identity compare.
@@ -986,27 +986,9 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  defineProperty under the hood — no V8 perf delta.) */
   declare readonly value: T;
 
-  /** Write `next`, propagating to all subscribers EXCEPT the one
-   *  currently active (typically an effect calling this from its
-   *  body). Lets a node read signals it subscribes to AND write
-   *  back without re-triggering itself.
-   *
-   *  Use case: a constraint solver subscribed to its inputs writes
-   *  solved values to those same signals via `writeBack`. Other
-   *  subscribers (UI effects, etc.) get notified normally; the
-   *  solver-effect itself does not re-fire. Termination is
-   *  structural — guaranteed by the propagation exclusion, not by
-   *  convergence.
-   *
-   *  If called outside an active reactive context, behaves the same
-   *  as `value =`. */
-  writeBack(next: T): void {
-    this._setWithExclusion(next, activeSub);
-  }
-
   /** @internal — write `next`, propagating to all subs except `excluding`.
-   *  Used by `value` setter (excludes activeNetwork), `writeBack`
-   *  (excludes activeSub), and engine-internal lens/field setters. */
+   *  Used by the `value` setter (excludes activeNetwork) and
+   *  engine-internal lens/field setters. */
   _setWithExclusion(next: T, excluding: ReactiveNode | undefined): void {
     // Computed/lens slow path — same as before, no exclusion concept
     // (writes go through a setter callback the user installed).

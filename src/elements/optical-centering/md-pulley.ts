@@ -54,6 +54,7 @@ export class MdPulley extends Diagram {
     const bRect = s(rect(bPos, 36, 24, { fill: "#e25c5c", corner: 3 }));
     drag(aRect, aPos);
     drag(bRect, bPos);
+    // Vertical-only drag — override the default "grab" cursor.
     aRect.el.style.cursor = "ns-resize";
     bRect.el.style.cursor = "ns-resize";
 

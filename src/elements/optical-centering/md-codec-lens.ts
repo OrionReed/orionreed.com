@@ -23,10 +23,9 @@
 
 import {
   Anchor,
-  circle,
   computed,
   Diagram,
-  drag,
+  handle,
   hexFromColor,
   label,
   line,
@@ -111,18 +110,15 @@ export class MdCodecLens extends Diagram {
       }),
     );
 
-    const swatch = s(
-      circle(swatchPos, 14, {
+    s(
+      handle(swatchPos, {
+        r: 14,
         fill: computed(() => {
           const c = color.value;
           return `rgb(${(c.r * 255) | 0}, ${(c.g * 255) | 0}, ${(c.b * 255) | 0})`;
         }),
-        stroke: "white",
-        strokeWidth: 2.5,
       }),
     );
-    drag(swatch, swatchPos);
-    swatch.el.style.cursor = "grab";
 
     // Live hex label — `hex.value` is the codec's format direction.
     s(
@@ -210,14 +206,8 @@ export class MdCodecLens extends Diagram {
       );
     }
 
-    const knob = s(
-      circle(knobPos, 9, {
-        fill: "#5b8def",
-        stroke: "white",
-        strokeWidth: 2,
-      }),
-    );
-    drag(knob, knobPos as Writable<typeof knobPos>);
+    const knob = s(handle(knobPos as Writable<typeof knobPos>, { r: 9, fill: "#5b8def" }));
+    // 1-D slider — override the default "grab" cursor.
     knob.el.style.cursor = "ew-resize";
 
     // Live time label. Reads from `time` (the codec view) — equivalent

@@ -134,7 +134,7 @@ export class MdMultitrack extends Diagram {
       );
     });
 
-    const playX = computed(() => (t => STRIP_X + t * STRIP_W)(tl.t.value));
+    const playX = computed(() => STRIP_X + tl.t.value * STRIP_W);
     s(
       line(vec(playX, STRIP_Y - 4), vec(playX, STRIP_Y + STRIP_H_TOTAL + 4), {
         strokeWidth: 1.5,

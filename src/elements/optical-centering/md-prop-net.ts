@@ -16,18 +16,7 @@
 // arithmetic, instant.
 
 import { adder, propagators } from "@minim/propagators";
-import {
-  Anchor,
-  circle,
-  Diagram,
-  drag,
-  label,
-  line,
-  Mount,
-  num,
-  signal,
-  Vec,
-} from "../../minim";
+import { Anchor, circle, Diagram, drag, label, line, Mount, num, signal, Vec } from "../../minim";
 
 const TRACK_X0 = 100;
 const TRACK_X1 = 460;
@@ -110,16 +99,16 @@ export class MdPropNet extends Diagram {
     }
 
     s(
-      label(
-        fixedV(280, 36),
-        "drag any slider — three adders keep a + b + c + d = Σ",
-        { size: 12, align: Anchor.Center, opacity: 0.7 },
-      ),
-      label(
-        fixedV(280, 360),
-        "5 Num cells • 3 adder() propagators • multi-direction in 1 pass",
-        { size: 10, align: Anchor.Center, opacity: 0.55 },
-      ),
+      label(fixedV(280, 36), "drag any slider — three adders keep a + b + c + d = Σ", {
+        size: 12,
+        align: Anchor.Center,
+        opacity: 0.7,
+      }),
+      label(fixedV(280, 360), "5 Num cells • 3 adder() propagators • multi-direction in 1 pass", {
+        size: 10,
+        align: Anchor.Center,
+        opacity: 0.55,
+      }),
     );
   }
 }

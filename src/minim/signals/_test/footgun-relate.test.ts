@@ -145,7 +145,7 @@ describe("relate: stacking multiple relates on the same cell", () => {
     a.value = 10;
     // b changes once (10+1=11), so the b-watcher fires once.
     // But internally, both relate-pairs fire their a→b effect.
-    // The second writeBack to b sees same value (===), no new propagation.
+    // The second `network()` write to b sees same value (===), no new propagation.
     expect(b.value).toBe(11);
     expect(bFires).toBe(1);
     stop();

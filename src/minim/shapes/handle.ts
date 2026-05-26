@@ -6,6 +6,7 @@ import {
   polar as polarLens,
   Signal,
   signal,
+  type Val,
   Vec,
   type Writable,
 } from "@minim/signals";
@@ -19,8 +20,8 @@ const COLOR = "var(--minim-handle, #2563eb)";
 export interface HandleOpts {
   /** Handle radius (px). Default 6. */
   r?: number;
-  /** Fill color. Default `--minim-handle`. */
-  fill?: string;
+  /** Fill color. Default `--minim-handle`. Accepts reactive values. */
+  fill?: Val<string>;
   /** CSS cursor on hover. Default `grab`. */
   cursor?: string;
 }

@@ -69,6 +69,7 @@ export {
   softTarget,
   spring,
 } from "./factories";
+export { dragBody, dragBodyAnchored } from "./interaction";
 export { type Phase, prepare, snapshot, solve, writeback } from "./phases";
 export { type Physics, type PhysicsOpts, physics } from "./physics";
 export {

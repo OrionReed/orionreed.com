@@ -52,7 +52,13 @@ export class MdPropFlex extends Diagram {
     p.add(hstack(c, items, { gap, minSize: 30, maxSize: 200, align: "stretch" }));
 
     // Render container outline.
-    s(rect(containerX, containerY, containerW, containerH, { stroke: "#666", fill: "#00000010", thin: true }));
+    s(
+      rect(containerX, containerY, containerW, containerH, {
+        stroke: "#666",
+        fill: "#00000010",
+        thin: true,
+      }),
+    );
 
     // Render each item rect using its Box's reactive fields.
     items.forEach((it, i) => {
@@ -61,7 +67,10 @@ export class MdPropFlex extends Diagram {
 
     // Right-edge handle: drag to resize container width.
     const rightHandle = Vec.lens(
-      () => ({ x: containerX.value + containerW.value, y: containerY.value + containerH.value / 2 }),
+      () => ({
+        x: containerX.value + containerW.value,
+        y: containerY.value + containerH.value / 2,
+      }),
       v => {
         const newW = v.x - containerX.value;
         if (newW > 60) (containerW as { value: number }).value = newW;
@@ -83,7 +92,10 @@ export class MdPropFlex extends Diagram {
       );
     s(line(fixedV(trackX0, trackY), fixedV(trackX1, trackY), { thin: true, opacity: 0.4 }));
     const gapPos = Vec.lens(
-      () => ({ x: trackX0 + ((gap.value - gapMin) / (gapMax - gapMin)) * (trackX1 - trackX0), y: trackY }),
+      () => ({
+        x: trackX0 + ((gap.value - gapMin) / (gapMax - gapMin)) * (trackX1 - trackX0),
+        y: trackY,
+      }),
       (v: { x: number; y: number }) => {
         const v01 = (v.x - trackX0) / (trackX1 - trackX0);
         const next = gapMin + Math.max(0, Math.min(1, v01)) * (gapMax - gapMin);
@@ -95,11 +107,11 @@ export class MdPropFlex extends Diagram {
     drag(knob, gapPos, signal(false));
 
     s(
-      label(
-        view.top.down(20),
-        "drag the gap slider above • drag the right edge of the container",
-        { size: 12, align: Anchor.Center, opacity: 0.7 },
-      ),
+      label(view.top.down(20), "drag the gap slider above • drag the right edge of the container", {
+        size: 12,
+        align: Anchor.Center,
+        opacity: 0.7,
+      }),
       label(
         view.bottom.up(16),
         "one hstack(...) propagator • items clamp at min-width 30 • bounds invisible to caller",
@@ -108,4 +120,3 @@ export class MdPropFlex extends Diagram {
     );
   }
 }
-

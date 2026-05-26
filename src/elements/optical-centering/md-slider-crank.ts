@@ -13,7 +13,7 @@
 // Newton, the shape "slips" along the closest valid configuration.
 
 import { collinear, constraints, distance, pin } from "@minim/constraints";
-import { Anchor, circle, Diagram, drag, label, line, Mount, rect, vec } from "../../minim";
+import { Anchor, circle, Diagram, drag, handle, label, line, Mount, rect, vec } from "../../minim";
 
 const CRANK = 50;
 const ROD = 130;
@@ -48,10 +48,9 @@ export class MdSliderCrank extends Diagram {
     s(line(A, B, { thin: false }));
     s(circle(O1, 5, { fill: true }));
 
-    const aH = s(circle(A, 8, { fill: "#e25c5c" }));
-    aH.el.style.cursor = "grab";
-    drag(aH, A);
+    s(handle(A, { r: 8, fill: "#e25c5c" }));
 
+    // Piston is a rect, not a dot — keep custom drag with ew-resize cursor.
     const piston = s(rect(B, 56, 20, { fill: "#5b8def", corner: 3 }));
     piston.el.style.cursor = "ew-resize";
     drag(piston, B);

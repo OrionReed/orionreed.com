@@ -23,83 +23,12 @@
 // AVBD substrate; same `world()` driver. The 3-DOF cell is the
 // difference.
 
-import { animate, type Body, body, joint, world } from "@minim/constraints";
-import {
-  Anchor,
-  type AnyShape,
-  circle,
-  Diagram,
-  label,
-  Mount,
-  Path,
-  type Signal,
-  signal,
-  Vec,
-  type Writable,
-} from "../../minim";
+import { animate, type Body, body, dragBody, joint, world } from "@minim/constraints";
+import { Anchor, circle, Diagram, label, Mount, Path, Vec } from "../../minim";
 
 const N = 28;
 const LINK_W = 12;
 const LINK_H = 4;
-
-function findSvgRoot(el: Element | null): SVGSVGElement | null {
-  let walker: Element | null = el;
-  while (walker) {
-    if (walker.tagName === "svg") return walker as SVGSVGElement;
-    walker = walker.parentElement;
-  }
-  return null;
-}
-
-function dragWorld(shape: AnyShape, target: Writable<Vec>, dragging: Signal<boolean>): () => void {
-  const root = findSvgRoot(shape.el);
-  const toWorld = (clientX: number, clientY: number) => {
-    const ctm = root?.getScreenCTM()?.inverse();
-    if (!ctm) return { x: 0, y: 0 };
-    return {
-      x: clientX * ctm.a + clientY * ctm.c + ctm.e,
-      y: clientX * ctm.b + clientY * ctm.d + ctm.f,
-    };
-  };
-  let pid = -1;
-  let dx = 0;
-  let dy = 0;
-  const offDown = shape.on("pointerdown", e => {
-    const pe = e as PointerEvent;
-    const w = toWorld(pe.clientX, pe.clientY);
-    const v = target.value;
-    dx = w.x - v.x;
-    dy = w.y - v.y;
-    pid = pe.pointerId;
-    shape.el.setPointerCapture(pid);
-    (dragging as Writable<typeof dragging>).value = true;
-  });
-  const offMove = shape.on("pointermove", e => {
-    if (pid === -1) return;
-    const pe = e as PointerEvent;
-    const w = toWorld(pe.clientX, pe.clientY);
-    target.value = { x: w.x - dx, y: w.y - dy };
-  });
-  const stop = () => {
-    if (pid !== -1) {
-      try {
-        shape.el.releasePointerCapture(pid);
-      } catch {
-        /* fine */
-      }
-      pid = -1;
-    }
-    (dragging as Writable<typeof dragging>).value = false;
-  };
-  const offUp = shape.on("pointerup", stop);
-  const offCancel = shape.on("pointercancel", stop);
-  return () => {
-    offDown();
-    offMove();
-    offUp();
-    offCancel();
-  };
-}
 
 export class MdChain extends Diagram {
   protected scene(s: Mount): void {
@@ -170,20 +99,15 @@ export class MdChain extends Diagram {
     pivots.push(tipPos);
     s(new Path(pivots, { thin: false }));
 
+    // Tip handle — drag the rope's free end.
     const tipHandle = s(circle(tipPos, 6, { fill: "#5b8def" }));
-    tipHandle.el.style.cursor = "grab";
-    const dragging = signal(false);
-    dragWorld(tipHandle, tipBody.position as Writable<Vec>, dragging);
-    w.addWhile(dragging, tipBody.pin());
+    dragBody(tipHandle, w, tipBody);
 
     // Mid-rope handle so the user can grab the rope by the middle too.
     const midIdx = (links.length / 2) | 0;
     const midBody = links[midIdx]!;
     const midHandle = s(circle(midBody.position, 5, { fill: "#e25c5c" }));
-    midHandle.el.style.cursor = "grab";
-    const midDragging = signal(false);
-    dragWorld(midHandle, midBody.position as Writable<Vec>, midDragging);
-    w.addWhile(midDragging, midBody.pin());
+    dragBody(midHandle, w, midBody);
 
     this.anim.start(animate(w));
 

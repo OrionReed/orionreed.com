@@ -7,36 +7,42 @@ import {
   group,
   loop,
   Mount,
+  num,
   polar,
   rect,
-  type Signal,
-  signal,
   stagger,
   vec,
-  type Writable,
   zoomOut,
 } from "../../minim";
+
+const TAU = Math.PI * 2;
 
 export class MdOrbits extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(400, 320);
 
-    const sun = s(group({ translate: view.center }, circle(vec(0, 0), 12, { fill: true })));
+    // One `time: Num` drives the whole solar system. Each body's angle is
+    // `time.affine(τ/period, phase)` — an invertible 1-D affine chain — so
+    // every visible angle is deterministic in time. Reads go time → angle
+    // for the visuals; the same chain accepts inverse writes if a body
+    // ever gets dragged (see md-solar-system for that variant).
+    const time = num(0);
+    this.anim.start(
+      drive(tick => {
+        time.value = time.peek() + tick.dt;
+      }),
+    );
 
-    /** Integrate ω = 2π/period; returns the angle signal (wraps mod 2π). */
-    const angularMotion = (period: number, sig?: Writable<Signal<number>>) => {
-      const a = sig ?? signal(Math.random() * 2 * Math.PI);
-      const omega = (2 * Math.PI) / period;
-      this.anim.start(
-        drive(tick => {
-          a.value = (a.peek() + omega * tick.dt) % (2 * Math.PI);
-        }),
-      );
-      return a;
-    };
+    /** Angle = `τ·time/period + phase` (mod 2π implicitly via cos/sin). */
+    const angleOf = (period: number, phase = 0) => time.affine(TAU / period, phase);
 
-    sun.add(circle(vec(7, 0), 2, { fill: true, opacity: 0.3 }));
-    angularMotion(8, sun.rotate);
+    const sun = s(
+      group(
+        { translate: view.center, rotate: angleOf(8) },
+        circle(vec(0, 0), 12, { fill: true }),
+        circle(vec(7, 0), 2, { fill: true, opacity: 0.3 }),
+      ),
+    );
 
     const orbitRing = (parent: AnyShape, r: number) => {
       parent.add(circle(vec(0, 0), r, { thin: true, dashed: true, opacity: 0.2 }));
@@ -47,19 +53,23 @@ export class MdOrbits extends Diagram {
       r: number,
       size: number,
       period: number,
-      opts: { spin?: number; ring?: boolean } = {},
+      opts: { spin?: number; ring?: boolean; phase?: number } = {},
     ) => {
       orbitRing(parent, r);
-      const angle = angularMotion(period);
-      const p = group({ translate: polar(vec(0, 0), r, angle) });
+      const phase = opts.phase ?? Math.random() * TAU;
+      const p = group({
+        translate: polar(vec(0, 0), r, angleOf(period, phase)),
+        // When `opts.spin` is set, the body's group also rotates at its
+        // own rate — independent affine chain on the same time signal.
+        rotate: opts.spin !== undefined ? angleOf(opts.spin, phase) : undefined,
+      });
       p.add(circle(vec(0, 0), size, { fill: true }));
 
       if (opts.ring) {
         p.add(circle(vec(0, 0), size + 4, { thin: true, opacity: 0.4 }));
       }
-      if (opts.spin) {
+      if (opts.spin !== undefined) {
         p.add(rect(vec(size - 1, 0), 4, 1.5, { fill: true }));
-        angularMotion(opts.spin, p.rotate);
       }
 
       parent.add(p);

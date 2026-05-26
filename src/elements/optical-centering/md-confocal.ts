@@ -5,8 +5,8 @@ import {
   computed,
   curve,
   Diagram,
-  drag,
   ellipse,
+  handle,
   label,
   line,
   Mount,
@@ -152,17 +152,7 @@ export class MdConfocal extends Diagram {
     );
 
     // ── Handles ──────────────────────────────────────────────────
-    const f1Dot = s(circle(f1, 7, { fill: true }));
-    const f2Dot = s(circle(f2, 7, { fill: true }));
-    const probeDot = s(
-      circle(probe, 8, { fill: "#5b8def", stroke: "var(--bg-color, white)", strokeWidth: 2 }),
-    );
-    drag(f1Dot, f1);
-    drag(f2Dot, f2);
-    drag(probeDot, probe);
-    f1Dot.el.style.cursor = "grab";
-    f2Dot.el.style.cursor = "grab";
-    probeDot.el.style.cursor = "grab";
+    s(handle(f1, { r: 7 }), handle(f2, { r: 7 }), handle(probe, { r: 8, fill: "#5b8def" }));
 
     s(
       label(

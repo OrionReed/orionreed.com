@@ -107,8 +107,9 @@ describe("stress: relate + batch", () => {
     // After batch flushes, the relate effects run. Order is:
     //   e1 (a-driven, queued first) runs: reads a=5, writes b=105. But
     //     b was just written to 200 in the batch. So b's currentValue
-    //     is 200 (committed lazily). e1 writes b.writeBack(105). b
-    //     sees 200 → 105, propagates.
+    //     is 200 (committed lazily). e1's `network()` write notifies
+    //     b's other subs but skips itself, so b sees 200 → 105 and
+    //     propagates to e2 without re-queueing e1.
     //   e2 (b-driven) runs: reads b's new value (105), writes a=5.
     //     a's currentValue is 5. Same. No propagation.
     // Final: a=5, b=105. The "b = 200" write got overwritten by the
@@ -121,28 +122,6 @@ describe("stress: relate + batch", () => {
 });
 
 describe("stress: effect that writes own dep", () => {
-  it("writeBack inside effect breaks the self-trigger loop", () => {
-    const a = num(0);
-    let count = 0;
-    const stop = effect(() => {
-      count++;
-      const v = a.value;
-      if (v < 50) {
-        (a as unknown as { writeBack: (v: number) => void }).writeBack(v + 1);
-      }
-    });
-    // The effect runs once, reads a=0, writeBacks a=1. exclusion
-    // prevents re-trigger of THIS effect, so the propagate doesn't
-    // re-queue it. But there's nothing else watching a, so no further
-    // effects fire. The effect ran exactly once.
-    //
-    // BUT — if anyone else watches a, they'd be notified. So
-    // writeBack only mutes the current effect, not all effects.
-    expect(count).toBe(1);
-    expect(a.value).toBe(1);
-    stop();
-  });
-
   it("plain set inside effect: engine RecursedCheck silently swallows self-trigger", () => {
     // FOOTGUN: writing a signal within an effect's body that subscribes
     // to that signal does NOT re-trigger the effect (the engine's
@@ -151,8 +130,9 @@ describe("stress: effect that writes own dep", () => {
     // signal). The effect runs ONCE — the conditional re-run never
     // happens. This is the correct behavior for the "loop guard" but
     // it can surprise users who expect the effect to "drive" itself
-    // toward a fixed point. Use `writeBack` for explicit self-mute
-    // intent, or do the loop in a separate effect / outside an effect.
+    // toward a fixed point. For self-mute by design, use `network()`
+    // (e.g. via `relate(...)` / `constraints(...)`), or do the loop
+    // in a separate effect / outside an effect.
     const a = num(0);
     let count = 0;
     const stop = effect(() => {

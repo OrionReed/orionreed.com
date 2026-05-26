@@ -1,5 +1,6 @@
 import {
   Anchor,
+  type Animatable,
   Diagram,
   easeInOut,
   label,
@@ -9,7 +10,7 @@ import {
   rect,
   spring,
   tween,
-  vec,
+  type Writable,
 } from "../../minim";
 
 const VIEW_W = 680;
@@ -20,29 +21,7 @@ const CY = VIEW_H / 2 - 16;
 const POSE_DX = 120;
 const POSE_DY = 70;
 
-function randomPose() {
-  return {
-    translate: {
-      x: CX + (-POSE_DX + Math.random() * 2 * POSE_DX),
-      y: CY + (-POSE_DY + Math.random() * 2 * POSE_DY),
-    },
-    scale: {
-      x: 0.75 + Math.random() * 0.6,
-      y: 0.75 + Math.random() * 0.6,
-    },
-    rotate: -0.7 + Math.random() * 1.4,
-    origin: { x: 0, y: 0 },
-    opacity: 1,
-  };
-}
-
-const INITIAL_POSE = {
-  translate: { x: CX, y: CY },
-  scale: { x: 1, y: 1 },
-  rotate: 0,
-  origin: { x: 0, y: 0 },
-  opacity: 1,
-};
+const SPRING_OPTS = { omega: 11, zeta: 0.4, precision: 0 } as const;
 
 export class MdTrails extends Diagram {
   protected scene(s: Mount): void {
@@ -56,9 +35,7 @@ export class MdTrails extends Diagram {
         corner: 8,
       }),
     );
-    target.transform.value = INITIAL_POSE;
-
-    const master = num(1);
+    target.translate.value = { x: CX, y: CY };
 
     const follower = s(
       rect(-55, -35, 110, 70, {
@@ -68,88 +45,92 @@ export class MdTrails extends Diagram {
         aside: true,
       }),
     );
-    follower.transform.value = INITIAL_POSE;
+    follower.translate.value = { x: CX, y: CY };
 
-    // Engine root for the master tweens so they keep stepping while
-    // master = 0; the follower spring takes `rate` directly so it freezes
-    // during the master-paused window.
+    // Per-property rates. Splitting them means we can pause translation
+    // and rotation independently — the master envelope below cycles them
+    // out of phase so you see the follower drift one axis at a time.
+    const rateTranslate = num(1);
+    const rateScale = num(1);
+    const rateRotate = num(1);
+
+    /** Spring `sig` toward `tgt` with a per-prop rate gate. */
+    const spr = <T>(
+      sig: Writable<Animatable<T, "linear" | "metric">>,
+      tgt: Writable<Animatable<T, "linear" | "metric">>,
+      rate: { value: number },
+    ) =>
+      spring(sig, tgt, {
+        ...SPRING_OPTS,
+        rate: () => rate.value,
+      });
+
     this.anim.start(
-      spring(follower.transform, target.transform, {
-        omega: 11,
-        zeta: 0.4,
-        precision: 0,
-        rate: () => master.value,
-      }),
+      spr(follower.translate, target.translate, rateTranslate),
+      spr(follower.scale, target.scale, rateScale),
+      spr(follower.rotate, target.rotate, rateRotate),
+
+      // Target keeps jumping regardless of follower's per-prop pauses.
       loop(function* () {
-        yield* tween(target.transform, randomPose(), 0.9, easeInOut);
+        yield [
+          tween(
+            target.translate,
+            {
+              x: CX + (-POSE_DX + Math.random() * 2 * POSE_DX),
+              y: CY + (-POSE_DY + Math.random() * 2 * POSE_DY),
+            },
+            0.9,
+            easeInOut,
+          ),
+          tween(
+            target.scale,
+            { x: 0.75 + Math.random() * 0.6, y: 0.75 + Math.random() * 0.6 },
+            0.9,
+            easeInOut,
+          ),
+          tween(target.rotate, -0.7 + Math.random() * 1.4, 0.9, easeInOut),
+        ];
         yield 2.6;
       }),
+
+      // Master envelope — fast → normal → translate-only paused →
+      // rotate-only paused → normal. Each phase pauses one prop at a
+      // time so the follower visibly drifts off-axis.
       loop(function* () {
-        yield* tween(master, 2, 1.2, easeInOut);
+        yield [
+          tween(rateTranslate, 2, 1.2, easeInOut),
+          tween(rateScale, 2, 1.2, easeInOut),
+          tween(rateRotate, 2, 1.2, easeInOut),
+        ];
         yield 0.7;
-        yield* tween(master, 1, 1.0, easeInOut);
+        yield [
+          tween(rateTranslate, 1, 1.0, easeInOut),
+          tween(rateScale, 1, 1.0, easeInOut),
+          tween(rateRotate, 1, 1.0, easeInOut),
+        ];
         yield 0.5;
-        yield* tween(master, 0, 1.4, easeInOut);
-        yield 3.2;
-        yield* tween(master, 1, 1.2, easeInOut);
-        yield 0.5;
-      }),
-    );
-
-    const BAR_X0 = 110;
-    const BAR_W = VIEW_W - 220;
-    const BAR_Y = VIEW_H - 38;
-
-    s(
-      rect(BAR_X0, BAR_Y - 1, BAR_W, 2, {
-        fill: "rgba(127,127,127,0.3)",
-        stroke: "transparent",
-        aside: true,
-      }),
-    );
-
-    const fillColor = () => {
-      const v = master.value;
-      if (v < 0.06) return "#e25c5c";
-      if (v < 0.9) return "#f5a623";
-      if (v < 1.1) return "#10b981";
-      return "#5b8def";
-    };
-    s(
-      rect(BAR_X0, BAR_Y - 4, () => Math.min(BAR_W, (master.value / 2.5) * BAR_W), 8, {
-        fill: fillColor,
-        stroke: "transparent",
-        corner: 4,
-        aside: true,
+        yield* tween(rateTranslate, 0, 1.0, easeInOut);
+        yield 2.0;
+        yield* tween(rateTranslate, 1, 1.0, easeInOut);
+        yield 0.4;
+        yield* tween(rateRotate, 0, 1.0, easeInOut);
+        yield 2.0;
+        yield* tween(rateRotate, 1, 1.0, easeInOut);
+        yield 0.4;
       }),
     );
 
     s(
-      label(vec(BAR_X0 + BAR_W + 14, BAR_Y + 4), () => `${master.value.toFixed(2)}×`, {
-        size: 11,
-        align: Anchor.Left,
+      label(view.top.down(22), "per-property springs · pause translate or rotate independently", {
+        size: 12,
+        align: Anchor.Center,
         opacity: 0.7,
       }),
-    );
-    s(
-      label(vec(BAR_X0 - 14, BAR_Y + 4), "master", {
-        size: 11,
-        align: Anchor.Right,
-        opacity: 0.55,
+      label(view.top.down(40), "each rate is a separate signal · master cycles them out of phase", {
+        size: 10,
+        align: Anchor.Center,
+        opacity: 0.5,
       }),
-    );
-
-    s(
-      label(
-        view.top.down(22),
-        "the dashed target jumps to random poses · the follower spring-tracks it",
-        { size: 12, align: Anchor.Center, opacity: 0.7 },
-      ),
-      label(
-        view.top.down(40),
-        "master = 0 → follower freezes (engine skips its active) · target keeps jumping",
-        { size: 10, align: Anchor.Center, opacity: 0.5 },
-      ),
     );
   }
 }

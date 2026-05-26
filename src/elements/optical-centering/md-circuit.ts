@@ -123,6 +123,9 @@ export class MdCircuit extends Diagram {
       const dot = circle(w.atDistance(dist), 5, { fill: true });
       s(dot);
       anim.start(
+        // TODO: if `play(...).then(fn)` ever accepts side-effect functions
+        // (`(): void`) we could drop the `(function* () { ... })()` IIFE
+        // and write `.then(() => { dot.dispose(); onArrive?.(); })` here.
         play([dist.to(total, sec, linear), w.opacity.to(0.75, sec * 0.3).to(0.25, sec * 0.7)]).then(
           (function* () {
             dot.dispose();

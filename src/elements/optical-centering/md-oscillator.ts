@@ -10,9 +10,8 @@ import {
   Mount,
   Num,
   not,
+  pathD,
   play,
-  type Read,
-  Shape,
   signal,
   tokens,
   vec,
@@ -88,14 +87,7 @@ const computeTicks = (T: number): string => {
   return d;
 };
 
-function makePath(d: Read<string>): Shape {
-  const s = new Shape("path", () => ({ x: TL, y: CY - A_AMP - 12, w: TW, h: (A_AMP + 12) * 2 }));
-  s.attr("fill", "none");
-  s.attr("stroke-linecap", "round");
-  s.attr("stroke-linejoin", "round");
-  s.attr("d", d);
-  return s;
-}
+const TRACE_BOX = () => ({ x: TL, y: CY - A_AMP - 12, w: TW, h: (A_AMP + 12) * 2 });
 
 export class MdOscillator extends Diagram {
   protected scene(s: Mount): void {
@@ -121,9 +113,12 @@ export class MdOscillator extends Diagram {
     cl.attr("stroke-width", "0.5");
     cl.opacity.value = 0.12;
 
-    const trace = s(makePath(computed(() => computeTrace(t.value))));
-    trace.attr("stroke", tokens.stroke);
-    trace.attr("stroke-width", "1.5");
+    s(
+      pathD(
+        computed(() => computeTrace(t.value)),
+        { stroke: tokens.stroke, cap: "round", join: "round", box: TRACE_BOX },
+      ),
+    );
 
     const ball = s(
       circle(
@@ -141,19 +136,25 @@ export class MdOscillator extends Diagram {
     );
 
     const ampStroke = computed(() => A.color.value ?? tokens.stroke);
-    const ampOpacity = computed(() => (on => (on ? 0.7 : 0.18))(A.active.value));
+    const ampOpacity = computed(() => (A.active.value ? 0.7 : 0.18));
     [CY - A_AMP, CY + A_AMP].forEach(y => {
       const l = s(line(vec(TL, y), vec(TR, y), { stroke: ampStroke, opacity: ampOpacity }));
       l.attr("stroke-dasharray", "3 5");
     });
 
-    const tickPath = s(makePath(computed(() => computeTicks(t.value))));
-    tickPath.attr(
-      "stroke",
-      computed(() => omega.color.value ?? tokens.stroke),
+    const tickPath = s(
+      pathD(
+        computed(() => computeTicks(t.value)),
+        {
+          stroke: computed(() => omega.color.value ?? tokens.stroke),
+          strokeWidth: 1,
+          dasharray: "2 3",
+          cap: "round",
+          join: "round",
+          box: TRACE_BOX,
+        },
+      ),
     );
-    tickPath.attr("stroke-dasharray", "2 3");
-    tickPath.attr("stroke-width", "1");
     tickPath.opacity.value = 0;
 
     this.anim.start(
@@ -165,13 +166,19 @@ export class MdOscillator extends Diagram {
       }),
     );
 
-    const envPath = s(makePath(computed(() => computeEnvelope(t.value))));
-    envPath.attr(
-      "stroke",
-      computed(() => gamma.color.value ?? tokens.stroke),
+    const envPath = s(
+      pathD(
+        computed(() => computeEnvelope(t.value)),
+        {
+          stroke: computed(() => gamma.color.value ?? tokens.stroke),
+          strokeWidth: 1,
+          dasharray: "4 6",
+          cap: "round",
+          join: "round",
+          box: TRACE_BOX,
+        },
+      ),
     );
-    envPath.attr("stroke-dasharray", "4 6");
-    envPath.attr("stroke-width", "1");
     envPath.opacity.value = 0;
 
     this.anim.start(

@@ -11,17 +11,8 @@
 // shape, same feel, but propagators handle the few-relations
 // case in a single pass with exact arithmetic.
 
-import {
-  hstack as _hstack, // unused; placeholder so tree-shake stays sane
-  box as _box,
-  propagators,
-  vCentroid,
-  vMidpoint,
-} from "@minim/propagators";
-import { Anchor, circle, Diagram, handle, label, line, Mount, vec } from "../../minim";
-
-void _hstack;
-void _box;
+import { propagators, vCentroid, vMidpoint } from "@minim/propagators";
+import { Anchor, Diagram, handle, label, line, Mount, vec } from "../../minim";
 
 const VERT = "#5b8def";
 const CENT = "#f5a623";
@@ -51,29 +42,29 @@ export class MdPropGeom extends Diagram {
     p.add(vMidpoint(C, A, Mca));
 
     // Triangle sides.
-    s(line(A, B, { thin: true, opacity: 0.6 }));
-    s(line(B, C, { thin: true, opacity: 0.6 }));
-    s(line(C, A, { thin: true, opacity: 0.6 }));
-
-    // Medians (centroid to midpoint of opposite side).
-    s(line(G, Mab, { thin: true, opacity: 0.25 }));
-    s(line(G, Mbc, { thin: true, opacity: 0.25 }));
-    s(line(G, Mca, { thin: true, opacity: 0.25 }));
-
-    // Vertices (draggable).
-    s(handle(A, { fill: VERT, r: 7 }));
-    s(handle(B, { fill: VERT, r: 7 }));
-    s(handle(C, { fill: VERT, r: 7 }));
-
-    // Centroid (draggable).
-    s(handle(G, { fill: CENT, r: 8 }));
-
-    // Midpoints (draggable).
-    s(handle(Mab, { fill: MID, r: 5 }));
-    s(handle(Mbc, { fill: MID, r: 5 }));
-    s(handle(Mca, { fill: MID, r: 5 }));
-
     s(
+      line(A, B, { thin: true, opacity: 0.6 }),
+      line(B, C, { thin: true, opacity: 0.6 }),
+      line(C, A, { thin: true, opacity: 0.6 }),
+
+      // Medians (centroid to midpoint of opposite side).
+      line(G, Mab, { thin: true, opacity: 0.25 }),
+      line(G, Mbc, { thin: true, opacity: 0.25 }),
+      line(G, Mca, { thin: true, opacity: 0.25 }),
+
+      // Vertices (draggable).
+      handle(A, { fill: VERT, r: 7 }),
+      handle(B, { fill: VERT, r: 7 }),
+      handle(C, { fill: VERT, r: 7 }),
+
+      // Centroid (draggable).
+      handle(G, { fill: CENT, r: 8 }),
+
+      // Midpoints (draggable).
+      handle(Mab, { fill: MID, r: 5 }),
+      handle(Mbc, { fill: MID, r: 5 }),
+      handle(Mca, { fill: MID, r: 5 }),
+
       label(
         view.top.down(20),
         "drag any vertex • centroid (orange) follows • drag centroid → triangle translates",

@@ -4,7 +4,7 @@ import {
   circle,
   clampToDisc,
   Diagram,
-  drag,
+  handle,
   label,
   line,
   Mount,
@@ -70,9 +70,7 @@ export class MdIk extends Diagram {
       if (i > 0) s(circle(joints[i], 4, { fill: "var(--bg-color, white)", thin: true }));
     }
     s(circle(root, 6, { fill: true }));
-    const tipDot = s(circle(tip, 8, { fill: "#5b8def" }));
-    drag(tipDot, tip);
-    tipDot.el.style.cursor = "grab";
+    s(handle(tip, { r: 8, fill: "#5b8def" }));
 
     s(
       label(view.top.down(20), "drag the blue tip — workspace clamp keeps IK stable at max reach", {

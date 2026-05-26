@@ -6,7 +6,7 @@ import { constraints, distance, eq, lensNum, leq, pin } from "../index";
 
 type WVec = Writable<Vec>;
 
-describe("Cluster (writeBack) — basic correctness", () => {
+describe("Cluster (network) — basic correctness", () => {
   it("eq: pinned a, write a → b matches", () => {
     const c = constraints({ iterations: 10 });
     const a = num(3);
@@ -48,7 +48,7 @@ describe("Cluster (writeBack) — basic correctness", () => {
   });
 });
 
-describe("Cluster (writeBack) — structural single-fire", () => {
+describe("Cluster (network) — structural single-fire", () => {
   it("one user write = one solver step (NOT two)", () => {
     const c = constraints({ iterations: 20 });
     const a = num(0);
@@ -60,8 +60,8 @@ describe("Cluster (writeBack) — structural single-fire", () => {
     const stepSpy = vi.spyOn(c.solver, "solve");
 
     a.value = 5;
-    // Single solve. The cluster's writeBack to b excludes the
-    // cluster effect from propagation, so it doesn't re-fire.
+    // Single solve. The cluster's `network()` write to b excludes the
+    // cluster from propagation, so it doesn't re-fire.
     expect(stepSpy).toHaveBeenCalledTimes(1);
     expect(b.value).toBeCloseTo(5, 1);
 
@@ -102,18 +102,18 @@ describe("Cluster (writeBack) — structural single-fire", () => {
     expect(observed).toEqual([7]);
 
     a.value = 5;
-    // The cluster's writeBack to b notifies b's other subs (the
-    // user's effect) but not the cluster itself. The user's effect
+    // The cluster's `network()` write to b notifies b's other subs
+    // (the user's effect) but not the cluster itself. The user's effect
     // re-runs and reads the solved value.
     expect(observed[observed.length - 1]).toBeCloseTo(5, 1);
     dispose();
   });
 });
 
-describe("Cluster (writeBack) — lens composition", () => {
+describe("Cluster (network) — lens composition", () => {
   // Lens composition works transparently: the cluster reads
   // `a.x.value` (through the lens fwd) and writes `a.x.value = X`
-  // via writeBack (through the lens bwd → writes parent →
+  // via `network()` (through the lens bwd → writes parent →
   // propagates normally). Nothing about the lens is replaced.
 
   it("eq(a.x, b.x) with parent write propagates correctly", () => {

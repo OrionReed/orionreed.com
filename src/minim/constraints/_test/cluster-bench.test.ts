@@ -1,4 +1,4 @@
-// cluster-bench.test.ts — sanity perf bench for the writeBack
+// cluster-bench.test.ts — sanity perf bench for the network()
 // reactive integration. Asserts only that timings are finite;
 // the console output is the actual signal.
 

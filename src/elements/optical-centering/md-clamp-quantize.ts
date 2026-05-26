@@ -29,8 +29,8 @@ import {
   label,
   line,
   type Mount,
-  num,
   type Num,
+  num,
   range,
   rect,
   vec,
@@ -145,9 +145,7 @@ export class MdClampQuantize extends Diagram {
       line(vec(X0, y), vec(X1, y), { thin: true, opacity: 0.35, cap: "round" }),
     );
     const sliderX = range(X0, X1).slider(t);
-    const knob = s(
-      circle(vec(sliderX, y), 9, { fill: color, stroke: "white", strokeWidth: 2 }),
-    );
+    const knob = s(circle(vec(sliderX, y), 9, { fill: color, stroke: "white", strokeWidth: 2 }));
     dragX(knob, sliderX);
   }
 }

@@ -34,9 +34,9 @@ import {
   loop,
   Mount,
   type Num,
+  pathD,
   type Read,
   rect,
-  Shape,
   signal,
   type Val,
   Vec,
@@ -413,12 +413,7 @@ export class MdDebugger extends Diagram {
         }
         return parts.join(" ");
       });
-      s(
-        rawPath(dStr, {
-          stroke: FN_COLOR[fnName],
-          thin: true,
-        }),
-      );
+      s(pathD(dStr, { stroke: FN_COLOR[fnName], thin: true }));
     }
     // Plus a fallback "no author" gray series.
     const dGray = computed(() => {
@@ -444,7 +439,7 @@ export class MdDebugger extends Diagram {
       }
       return parts.join(" ");
     });
-    s(rawPath(dGray, { stroke: "#bbb", thin: true }));
+    s(pathD(dGray, { stroke: "#bbb", thin: true }));
 
     // ─── claim strips ────────────────────────────────────────
     const claimRows = [
@@ -477,10 +472,7 @@ export class MdDebugger extends Diagram {
       const failD = computed(() =>
         runsPath(windowed.value, row.pick, false, xFor, y, CLAIM_TRACK_H),
       );
-      s(
-        rawPath(passD, { fill: PASS, stroke: "none" }),
-        rawPath(failD, { fill: FAIL, stroke: "none" }),
-      );
+      s(pathD(passD, { fill: PASS, stroke: "none" }), pathD(failD, { fill: FAIL, stroke: "none" }));
     });
 
     // ─── time cursor (across all timeline tracks) ───────────
@@ -489,7 +481,7 @@ export class MdDebugger extends Diagram {
       const x = cursorX.value.toFixed(2);
       return `M${x} ${TIMELINE_TOP - 3} L${x} ${CLAIMS_BOT + 3}`;
     });
-    s(rawPath(cursorD, { stroke: "#222", thin: true }));
+    s(pathD(cursorD, { stroke: "#222", thin: true }));
 
     // ─── transport bar ──────────────────────────────────────
     const playPause = chunkButton(
@@ -568,29 +560,6 @@ export class MdDebugger extends Diagram {
 }
 
 // ─── helpers ─────────────────────────────────────────────────────
-
-/** A bare `<path>` with a reactive `d` and styling attrs. We use this
- *  instead of N individual `line` / `rect` shapes for the value plot
- *  and claim strips: ONE attr effect per author color (vs thousands of
- *  bind effects when each segment is its own shape). The bind-heavy
- *  approach overflows alien-signals' recursive `flush` stack at this
- *  scale; one path per "thing" keeps the queue small. */
-function rawPath(
-  d: Read<string>,
-  opts: {
-    stroke?: Val<string>;
-    fill?: Val<string>;
-    thin?: boolean;
-  },
-): AnyShape {
-  const sh = new Shape("path", () => ({ x: 0, y: 0, w: 0, h: 0 }), {});
-  sh.attr("d", d);
-  sh.attr("fill", opts.fill ?? "none");
-  sh.attr("stroke", opts.stroke ?? "#222");
-  sh.attr("stroke-width", opts.thin ? 1 : 1.5);
-  sh.attr("vector-effect", "non-scaling-stroke");
-  return sh;
-}
 
 /** Build a path string covering all maximal contiguous runs of
  *  samples where `pick(sample) === target`. Each run becomes a

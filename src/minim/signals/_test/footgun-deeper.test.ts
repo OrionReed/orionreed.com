@@ -191,22 +191,3 @@ describe("footgun: cyclic computed still throws (engine invariant preserved)", (
     expect(() => cell.value).toThrow(/Cyclic computed/);
   });
 });
-
-describe("footgun: writeBack inside effect — self-mute correctness", () => {
-  it("effect that writes back to its source via writeBack does not loop", () => {
-    const a = num(0);
-    let fires = 0;
-    const stop = effect(() => {
-      fires++;
-      const v = a.value;
-      // Write back doubled — exclusion prevents self-trigger.
-      if (v < 100) {
-        // Use writeBack to avoid re-firing this effect.
-        (a as unknown as { writeBack: (v: number) => void }).writeBack(v * 2 + 1);
-      }
-    });
-    expect(fires).toBeGreaterThan(0);
-    expect(fires).toBeLessThan(20); // does not blow up
-    stop();
-  });
-});

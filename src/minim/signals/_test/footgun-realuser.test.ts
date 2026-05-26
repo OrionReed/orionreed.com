@@ -308,33 +308,6 @@ describe("real-user pattern: chain of relates (a ↔ b ↔ c)", () => {
   });
 });
 
-describe("real-user pattern: writeBack inside an effect (event handler shape)", () => {
-  it("event handler that updates a related signal without re-firing self", () => {
-    // Pattern: a click handler that reads a counter and increments
-    // it via `writeBack` so the click effect doesn't loop on its
-    // own writes.
-    const counter = num(0);
-    const clickEvent = signal(0); // bumps on each click
-    let observedCount = -1;
-
-    const stop = effect(() => {
-      void clickEvent.value;
-      observedCount = counter.value;
-      // Increment counter via writeBack to avoid self-trigger.
-      (counter as unknown as { writeBack: (v: number) => void }).writeBack(observedCount + 1);
-    });
-
-    expect(counter.value).toBe(1); // initial run
-
-    clickEvent.value = 1;
-    expect(counter.value).toBe(2);
-
-    clickEvent.value = 2;
-    expect(counter.value).toBe(3);
-    stop();
-  });
-});
-
 describe("real-user pattern: dispose during reactive chain", () => {
   it("disposing relate inside an effect that's writing", () => {
     const a = num(0);

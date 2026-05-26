@@ -56,9 +56,9 @@ export class MdTimelineEditor extends Diagram {
       const c = tl[name];
       const body = s(
         rect(
-          computed(() => (a => STRIP_X + a * scale.value)(c.at.value)),
+          computed(() => STRIP_X + c.at.value * scale.value),
           STRIP_Y,
-          computed(() => (d => d * scale.value)(c.dur.value)),
+          computed(() => c.dur.value * scale.value),
           STRIP_H,
           { fill: COLORS[i] },
         ),
@@ -113,7 +113,7 @@ export class MdTimelineEditor extends Diagram {
     const actors = PHASES.map((name, i) => {
       const c = circle(vec(120 + i * 180, STAGE_Y), 24, {
         fill: COLORS[i],
-        opacity: computed(() => (t => 0.1 + t * 0.9)(tl[name].t.value)),
+        opacity: computed(() => 0.1 + tl[name].t.value * 0.9),
       });
       c.on("click", () => bus.emit("ping"));
       return c;

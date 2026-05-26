@@ -111,7 +111,7 @@ export class MdLerps extends Diagram {
       rect(
         VIS_X,
         rowY(0) + 4,
-        computed(() => ((v: number) => v * VIS_W)(n.value)),
+        computed(() => n.value * VIS_W),
         10,
         {
           stroke: "transparent",
@@ -170,7 +170,7 @@ export class MdLerps extends Diagram {
       }),
       readout(
         4,
-        computed(() => (str => `len=${str.length}`)(txt.value)),
+        computed(() => `len=${txt.value.length}`),
       ),
     );
 
