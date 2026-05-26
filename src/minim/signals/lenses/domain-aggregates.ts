@@ -109,19 +109,28 @@ export function meanColor(colors: readonly Writable<Traits<ColorV, "linear">>[])
 }
 
 /** Generic "spread" lens: scalar that scales every input's deviation
- *  from the centroid. Writing spread = 0 collapses all inputs to the
- *  centroid; spread = 2 doubles the spread.
+ *  from the centroid. Writing spread = T scales all deviations by
+ *  (T / current); writing 2× the current spread doubles the dispersion.
  *
- *  Trait-driven via `Linear` (for add/sub/scale on the deviation) AND
+ *  Trait-driven via `Linear` (for add/sub/scale on deviations) AND
  *  `Metric` (for the L2 distance from centroid). Works for ANY value
- *  class that declares both — Color, Vec, Pose, Box, Range, custom.
+ *  class declaring both — Vec, Color, Pose, Box, Range, custom.
  *
  *  Cross-channel invariance with `meanOf`: writing mean is rigid
- *  translation (preserves all relative differences → spread unchanged).
- *  Writing spread is scale-about-centroid (preserves the centroid). */
+ *  translation (preserves all relative differences → spread unchanged);
+ *  writing spread is scale-about-centroid (preserves the centroid).
+ *
+ *  Collapse protection: the bwd never multiplies deviations by < `eps`
+ *  (default 1e-3). Without this, writing spread = 0 would erase all
+ *  direction information and trap the lens at the centroid permanently
+ *  — a "black-hole" footgun with no recovery path. The clamp means
+ *  writing 0 produces a very compact (but recoverable) palette and a
+ *  read returns ~`eps × current`. Documented as lossy at the floor;
+ *  override via `opts.minRatio` if you genuinely want full collapse. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
 export function spreadOf<T extends NonNullable<unknown>, S extends Signal<T> & Traits<T, "linear" | "metric">>(
   inputs: readonly Writable<S>[],
+  opts: { minRatio?: number } = {},
 ): Writable<Num> {
   const K = inputs.length;
   if (K < 1) throw new Error("spreadOf: need ≥ 1 input");
@@ -133,6 +142,7 @@ export function spreadOf<T extends NonNullable<unknown>, S extends Signal<T> & T
     throw new Error(`spreadOf: ${(Cls as { name?: string }).name ?? "?"} needs Linear + Metric`);
   }
   const inv = 1 / K;
+  const minRatio = opts.minRatio ?? 1e-3;
 
   const centroid = (vals: readonly T[]): T => {
     let acc = vals[0]!;
@@ -153,8 +163,12 @@ export function spreadOf<T extends NonNullable<unknown>, S extends Signal<T> & T
       let cur = 0;
       for (let i = 0; i < K; i++) cur += met(vals[i]!, c);
       cur *= inv;
+      // No deviation info → can't expand back out. Leave inputs alone.
       if (cur < 1e-12) return vals.map(() => undefined) as never;
-      const k = target / cur;
+      // Clamp the multiplicative ratio: never let it land below
+      // `minRatio` — collapse is one-way and we want to stay recoverable.
+      const rawK = target / cur;
+      const k = rawK < minRatio ? minRatio : rawK;
       const out: T[] = new Array(K);
       // new_i = centroid + k * (vals_i - centroid)
       for (let i = 0; i < K; i++) {
@@ -176,7 +190,7 @@ export function spreadOf<T extends NonNullable<unknown>, S extends Signal<T> & T
  *  This is the "centroid + uniform scale about centroid" decomposition,
  *  generalised across domains via the trait system. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape on value class
-export function palette<T extends NonNullable<unknown>, S extends Signal<T> & Traits<T, "linear" | "metric">>(
+export function paletteLens<T extends NonNullable<unknown>, S extends Signal<T> & Traits<T, "linear" | "metric">>(
   colors: readonly Writable<S>[],
 ): { mean: Writable<S>; spread: Writable<Num> } {
   return {
@@ -216,7 +230,7 @@ export function palette<T extends NonNullable<unknown>, S extends Signal<T> & Tr
 
 type V = { x: number; y: number };
 
-export function bezierGestalt(
+export function bezierGestaltLens(
   p0: Writable<Vec>,
   p1: Writable<Vec>,
   p2: Writable<Vec>,
@@ -287,7 +301,7 @@ export function bezierGestalt(
 
 /** Time-series scalar aggregate. Returns 3 writable views over a
  *  sequence of Num values, treating them as (i, value_i) samples. */
-export function timeSeries(values: readonly Writable<Num>[]): {
+export function timeSeriesLens(values: readonly Writable<Num>[]): {
   mean: Writable<Num>;
   slope: Writable<Num>;
 } {

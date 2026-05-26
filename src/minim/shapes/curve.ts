@@ -224,6 +224,44 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
     return this._segments.peek();
   }
 
+  /** Override Shape's default (bounding-rect) for the dashed renderer.
+   *  Lines pass through; circular ellipse-arcs (`a ≈ b`, rotation ≈ 0)
+   *  become native arcs; non-circular ellipse-arcs tessellate into line
+   *  segments so the dasher still has something to chew on. */
+  override segments(): import("./shape").Segment[] {
+    const arr = this._segments.value;
+    const out: import("./shape").Segment[] = [];
+    for (const seg of arr) {
+      if (seg.kind === "line") {
+        out.push({ type: "line", from: seg.from, to: seg.to });
+      } else if (Math.abs(seg.a - seg.b) < 1e-6 && Math.abs(seg.rotation) < 1e-6) {
+        const cx = seg.center.x;
+        const cy = seg.center.y;
+        const r = seg.a;
+        const a0 = seg.a0;
+        const a1 = seg.a1;
+        out.push({
+          type: "arc",
+          cx: () => cx,
+          cy: () => cy,
+          r: () => r,
+          a0: () => a0,
+          a1: () => a1,
+        });
+      } else {
+        // Non-circular ellipse: tessellate into a polyline.
+        const N = 64;
+        let prev = sampleSegment(seg, 0);
+        for (let i = 1; i <= N; i++) {
+          const p = sampleSegment(seg, i / N);
+          out.push({ type: "line", from: prev, to: p });
+          prev = p;
+        }
+      }
+    }
+    return out;
+  }
+
   /** Sample at `t ∈ [0, 1]` along arc length. */
   pointAt(t: Val<number>): Vec {
     const ts = num(t);

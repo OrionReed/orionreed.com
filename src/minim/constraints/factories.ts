@@ -114,6 +114,9 @@ export function distance(
     bind(c) {
       const f = new DistanceTerm(c.solver, c._bind(a), c._bind(b), rest_, hard, stiff_);
       c.solver.addTerm(f);
+      // Track reactive params so mutating rest / stiffness fires the network.
+      c._trackParam(rest_);
+      if (stiff_ !== undefined) c._trackParam(stiff_);
       return () => c.solver.removeTerm(f);
     },
   };
@@ -156,6 +159,8 @@ export function clamp(
     bind(c) {
       const f = new BoundsTerm(c.solver, c._bind(x), lo_, hi_);
       c.solver.addTerm(f);
+      c._trackParam(lo_);
+      c._trackParam(hi_);
       return () => c.solver.removeTerm(f);
     },
   };

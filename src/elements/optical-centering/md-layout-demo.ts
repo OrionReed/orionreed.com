@@ -2,8 +2,6 @@ import { arrange, Diagram, handle, label, Mount, num, rect, spring, Vec } from "
 
 const WIDTHS = [72, 68, 80, 60, 76];
 const HEIGHTS = [52, 44, 60, 48, 56];
-const SPRING_IDX = 2;
-const SPRING_REST = 80;
 const MIN_W = 22;
 const GAP = 14;
 
@@ -14,16 +12,9 @@ export class MdLayoutDemo extends Diagram {
 
     // `num` (not `signal`) so `spring` can read the `[ALGEBRA]` slot.
     const widths = WIDTHS.map(w => num(w));
-    widths[SPRING_IDX].value = SPRING_REST;
 
     const cards = widths.map((w, i) =>
-      s(
-        rect(0, 0, w, HEIGHTS[i], {
-          fill: i === SPRING_IDX ? "#e25c5c" : true,
-          opacity: i === SPRING_IDX ? 0.55 : 0.38,
-          corner: 6,
-        }),
-      ),
+      s(rect(0, 0, w, HEIGHTS[i], { fill: true, opacity: 0.42, corner: 6 })),
     );
 
     cards[0].translate.value = { x: 30, y: cy - HEIGHTS[0] / 2 };
@@ -46,17 +37,20 @@ export class MdLayoutDemo extends Diagram {
       return s(handle(pos, { cursor: "ew-resize", r: 5 }));
     });
 
-    // `rate: 0` freezes the spring while dragging; `rate: 1` resumes on release.
-    const dragging = handles[SPRING_IDX].dragging;
-    this.anim.start(
-      spring(widths[SPRING_IDX], SPRING_REST, {
-        omega: 15,
-        zeta: 0.4,
-        precision: 0,
-        rate: () => (dragging.value ? 0 : 1),
-      }),
-    );
+    // Every width springs back to its rest; `rate: 0` freezes the
+    // spring on the handle being dragged, others keep evolving.
+    widths.forEach((w, i) => {
+      const dragging = handles[i].dragging;
+      this.anim.start(
+        spring(w, WIDTHS[i], {
+          omega: 7,
+          zeta: 0.08,
+          precision: 0,
+          rate: () => (dragging.value ? 0 : 1),
+        }),
+      );
+    });
 
-    s(label(view.bottom.up(14), "drag handles to resize · red card springs back", { size: 10 }));
+    s(label(view.bottom.up(14), "drag handles to resize · cards spring back", { size: 10 }));
   }
 }

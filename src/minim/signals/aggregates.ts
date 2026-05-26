@@ -176,7 +176,12 @@ export function clampToDisc(
 
 /** Scalar-output argmin lens. Reads `forward(inputs)`; writes do one
  *  Newton step against the finite-difference Jacobian, distributing
- *  the residual into inputs by `weights`. */
+ *  the residual into inputs by `weights`.
+ *
+ *  For the typed-output generic case (heterogeneous Vec/Num/Pose
+ *  outputs, named records, analytical Jacobian, auto-converge), use
+ *  `factor()` from `./lenses`. This M=1 scalar specialization is kept
+ *  for its hand-rolled inner loop. */
 export function argminNum(
   inputs: readonly Num[],
   forward: (xs: readonly number[]) => number,
@@ -222,7 +227,9 @@ export function argminNum(
 
 /** 2D-output argmin lens. Inputs are scalar Nums; forward returns
  *  `{x, y}`. Suitable for IK arms, multi-input draggable points,
- *  parametric handle projection, etc. */
+ *  parametric handle projection, etc. Kept specialized for its
+ *  hand-rolled 2×2 inverse + the `clampTarget` workspace-projection
+ *  hook. For other M values and typed outputs, see `factor()`. */
 export function argminVec(
   inputs: readonly Num[],
   forward: (xs: readonly number[]) => { x: number; y: number },

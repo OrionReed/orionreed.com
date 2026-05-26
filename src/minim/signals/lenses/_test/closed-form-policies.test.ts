@@ -12,13 +12,13 @@
 // =====================================================================
 
 import { describe, expect, it } from "vitest";
-import { centroidLens, num, pose, Pose, Vec, vec } from "../index";
-import type { Num, Writable } from "../index";
-import { factor } from "./typed-factor";
-import { procrustesLens } from "./factor-lens";
+import { centroidLens, num, pose, Pose, Vec, vec } from "../../index";
+import type { Num, Writable } from "../../index";
+import { factor } from "../typed-factor";
+import { procrustesLens } from "../factor-lens";
 import {
-  bestFitCircle,
-  bestFitLine,
+  bestFitCircleLens,
+  bestFitLineLens,
   pcaLens,
   procrustesViaBuildingBlocks,
   rigidTranslate,
@@ -26,7 +26,7 @@ import {
   scaleAbout,
   scaleAboutXY,
   totalLens,
-} from "./closed-form-policies";
+} from "../closed-form-policies";
 
 // ─── helpers ───────────────────────────────────────────────────────────
 
@@ -248,10 +248,10 @@ describe("§2 Procrustes via building blocks: parity", () => {
 // §3 — Best-fit line
 // =====================================================================
 
-describe("§3 bestFitLine", () => {
+describe("§3 bestFitLineLens", () => {
   it("forward: principal axis of a horizontal cloud is 0°", () => {
     const pts = mkPoints([-10, 0], [-5, 0], [0, 0], [5, 0], [10, 0]);
-    const { point, direction } = bestFitLine(pts);
+    const { point, direction } = bestFitLineLens(pts);
     expect(point.value).toEqual({ x: 0, y: 0 });
     expect(near(direction.value, 0)).toBe(true);
   });
@@ -259,13 +259,13 @@ describe("§3 bestFitLine", () => {
   it("forward: principal axis of a 45°-tilted cloud is π/4", () => {
     // Points along y = x: (-2,-2), (-1,-1), (0,0), (1,1), (2,2)
     const pts = mkPoints([-2, -2], [-1, -1], [0, 0], [1, 1], [2, 2]);
-    const { direction } = bestFitLine(pts);
+    const { direction } = bestFitLineLens(pts);
     expect(near(Math.abs(direction.value), Math.PI / 4, 1e-9)).toBe(true);
   });
 
   it("write point: translates cluster, principal axis preserved", () => {
     const pts = mkPoints([-10, 0], [-5, 0], [0, 0], [5, 0], [10, 0]);
-    const { point, direction } = bestFitLine(pts);
+    const { point, direction } = bestFitLineLens(pts);
     const dir0 = direction.value;
     point.value = { x: 100, y: 50 };
     expect(direction.value).toBeCloseTo(dir0, 9);
@@ -274,7 +274,7 @@ describe("§3 bestFitLine", () => {
 
   it("write direction: rotates cluster about centroid", () => {
     const pts = mkPoints([-10, 0], [-5, 0], [0, 0], [5, 0], [10, 0]);
-    const { point, direction } = bestFitLine(pts);
+    const { point, direction } = bestFitLineLens(pts);
     const c0 = point.value;
     direction.value = Math.PI / 2; // make line vertical
     expect(vnear(point.value, c0, 1e-9)).toBe(true); // centroid unchanged (machine-eps)
@@ -289,7 +289,7 @@ describe("§3 bestFitLine", () => {
 // §4 — Best-fit circle
 // =====================================================================
 
-describe("§4 bestFitCircle", () => {
+describe("§4 bestFitCircleLens", () => {
   it("forward: circle of K points around origin reads exact center+radius", () => {
     const K = 8;
     const R = 5;
@@ -297,7 +297,7 @@ describe("§4 bestFitCircle", () => {
     for (let i = 0; i < K; i++) {
       pts.push(vec(R * Math.cos((2 * Math.PI * i) / K), R * Math.sin((2 * Math.PI * i) / K)));
     }
-    const { center, radius } = bestFitCircle(pts);
+    const { center, radius } = bestFitCircleLens(pts);
     expect(vnear(center.value, { x: 0, y: 0 }, 1e-9)).toBe(true);
     expect(near(radius.value, R, 1e-9)).toBe(true);
   });
@@ -309,7 +309,7 @@ describe("§4 bestFitCircle", () => {
     for (let i = 0; i < K; i++) {
       pts.push(vec(R * Math.cos((2 * Math.PI * i) / K), R * Math.sin((2 * Math.PI * i) / K)));
     }
-    const { center, radius } = bestFitCircle(pts);
+    const { center, radius } = bestFitCircleLens(pts);
     const r0 = radius.value;
     center.value = { x: 100, y: 50 };
     expect(radius.value).toBeCloseTo(r0, 9);
@@ -322,7 +322,7 @@ describe("§4 bestFitCircle", () => {
     for (let i = 0; i < K; i++) {
       pts.push(vec(R * Math.cos((2 * Math.PI * i) / K), R * Math.sin((2 * Math.PI * i) / K)));
     }
-    const { center, radius } = bestFitCircle(pts);
+    const { center, radius } = bestFitCircleLens(pts);
     const c0 = center.value;
     radius.value = 10;
     expect(vnear(center.value, c0, 1e-9)).toBe(true);
@@ -547,7 +547,7 @@ describe("§7 Performance: closed-form policies vs alternatives", () => {
     });
   });
 
-  it("bestFitLine + bestFitCircle write throughput (K=10)", () => {
+  it("bestFitLineLens + bestFitCircleLens write throughput (K=10)", () => {
     const K = 10;
     const ptsLine: Writable<Vec>[] = [];
     const ptsCircle: Writable<Vec>[] = [];
@@ -556,20 +556,20 @@ describe("§7 Performance: closed-form policies vs alternatives", () => {
       const θ = (2 * Math.PI * i) / K;
       ptsCircle.push(vec(5 * Math.cos(θ), 5 * Math.sin(θ)));
     }
-    const line = bestFitLine(ptsLine);
-    const circle = bestFitCircle(ptsCircle);
+    const line = bestFitLineLens(ptsLine);
+    const circle = bestFitCircleLens(ptsCircle);
     // eslint-disable-next-line no-console
     console.info("  Best-fit-line / circle (K=10) write throughput:");
-    timed("bestFitLine: point", ITERS, () => {
+    timed("bestFitLineLens: point", ITERS, () => {
       for (let i = 0; i < ITERS; i++) line.point.value = { x: i & 31, y: i & 31 };
     });
-    timed("bestFitLine: direction", ITERS, () => {
+    timed("bestFitLineLens: direction", ITERS, () => {
       for (let i = 0; i < ITERS; i++) line.direction.value = (i & 31) * 0.05;
     });
-    timed("bestFitCircle: center", ITERS, () => {
+    timed("bestFitCircleLens: center", ITERS, () => {
       for (let i = 0; i < ITERS; i++) circle.center.value = { x: i & 31, y: i & 31 };
     });
-    timed("bestFitCircle: radius", ITERS, () => {
+    timed("bestFitCircleLens: radius", ITERS, () => {
       for (let i = 0; i < ITERS; i++) circle.radius.value = 1 + (i & 31);
     });
   });

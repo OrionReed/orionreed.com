@@ -24,6 +24,7 @@ export {
   wave,
   when,
 } from "./anim";
+export { transitiveDeps } from "./introspect";
 export { bind } from "./lateral";
 export { each, type Lifecycle, param } from "./network-utils";
 export { reflectionLens } from "./new-primitives";
@@ -111,3 +112,4 @@ export { Transform, type TransformInit, transform } from "./values/transform";
 export * as VecMath from "./values/vec";
 export { axes, type PolarPolicy, polar, tangentPoint, Vec, vec } from "./values/vec";
 export { derived, field } from "./writable";
+export * from "./lenses";

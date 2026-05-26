@@ -145,12 +145,23 @@ describe("4. cycles through lens AND propagator", () => {
     p.dispose();
   });
 
-  it("FOUND: self-inconsistent cycle leaves system inconsistent silently", () => {
-    // Pathological: a → halfA → adder → c → twoC → eq → a.
-    // Algebraically a = a + 2b ⇒ b must be 0.
-    // The system silently settles at an inconsistent state when
-    // b ≠ 0, because freshness propagation doesn't see through
-    // lens chains in-fixpoint.
+  it("self-inconsistent cycle: AUTO-EXPAND drives system to consistent fixpoint by adjusting b", () => {
+    // a → halfA → adder → c → twoC → eq → a.
+    // Algebraically: a = 2c = 2(a/2 + b) = a + 2b ⇒ b must be 0.
+    //
+    // Before AUTO-EXPAND: eq never fired (freshness didn't see
+    // through twoC), so a stayed 0 while c became 1 → constraint
+    // a = 2c silently violated.
+    //
+    // After AUTO-EXPAND: eq fires (twoC's expanded reads include
+    // c). The cycle DOES propagate. The bidirectional adder has a
+    // b-deriving propagator which OVERWRITES the user's input to
+    // satisfy the constraints — the system converges to the only
+    // algebraic fixpoint (b=0) by silently rewriting b.
+    //
+    // The constraint IS now satisfied (the silent inconsistency is
+    // gone); but the user's input was overwritten. This is the
+    // bidirectional-adder write-policy showing through.
     const a = num(0);
     const halfA = a.scale(0.5);
     const b = num(0);
@@ -161,42 +172,35 @@ describe("4. cycles through lens AND propagator", () => {
     p.add(adder(halfA as never, b, c));
     p.add(eq(twoC as never, a));
 
-    let thrown = false;
-    try {
-      b.value = 1;
-    } catch (_e) {
-      thrown = true;
-    }
-    // Document the actual behaviour. eq says a should be 2c,
-    // but a = 0 and c = 1 — inconsistent.
-    expect(thrown).toBe(false);
-    expect(a.value === 2 * c.value).toBe(false); // CONSTRAINT VIOLATED
+    b.value = 1;
+    // Constraints are satisfied:
+    expect(a.value).toBeCloseTo(2 * c.value);  // a = 2c ✓
+    expect(c.value).toBeCloseTo(halfA.value + b.value);  // c = a/2 + b ✓
+    // But b was overwritten:
+    expect(b.value).toBe(0);  // user wrote 1; system wrote it back to 0.
     p.dispose();
   });
 });
 
-describe("5. freshness propagation gap (the real finding)", () => {
-  it("EXTERNAL write to chain parent fires reader propagator (works)", () => {
-    let fires = 0;
+describe("5. freshness propagation through lens chains (post AUTO-EXPAND)", () => {
+  it("EXTERNAL write to chain parent fires reader propagator", () => {
     const a = num(0);
     const doubled = a.scale(2);
     const out = num(0);
 
     const p = propagators();
-    p.add(propagator([doubled], [out], () => { fires++; out.value = doubled.value; }));
+    p.add(propagator([doubled], [out], () => { out.value = doubled.value; }));
 
-    const init = fires;
     a.value = 5;
     expect(out.value).toBe(10);
-    expect(fires).toBeGreaterThan(init);
     p.dispose();
   });
 
-  it("IN-FIXPOINT write to chain parent does NOT fire reader (gap)", () => {
+  it("IN-FIXPOINT write to chain parent NOW FIRES reader (gap closed)", () => {
     // Writer writes a (parent of `doubled` lens). Reader reads
-    // `doubled`. Within the SAME body run, freshness sees `a` as
-    // fresh but doesn't bridge to the lens chain `doubled` — so
-    // the reader doesn't re-fire.
+    // `doubled`. Within the SAME body run, AUTO-EXPAND has
+    // included `a` in reader's effective read set, so the cascade
+    // works. Pre-AUTO-EXPAND this was the silent freshness gap.
     const trigger = num(0);
     const a = num(0);
     const doubled = a.scale(2);
@@ -207,44 +211,31 @@ describe("5. freshness propagation gap (the real finding)", () => {
     p.add(propagator([doubled], [out], () => { out.value = doubled.value; }));
 
     trigger.value = 5;
-    // The bug: reader didn't fire on the same body run because
-    // its read (`doubled`) wasn't in fresh (only `a` was).
     expect(a.value).toBe(5);
     expect(doubled.value).toBe(10);
-    expect(out.value).not.toBe(10); // <-- GAP. out is stale.
+    expect(out.value).toBe(10); // ✓ AUTO-EXPAND fixes the cascade
     p.dispose();
   });
 
-  it("WORKAROUND: list the chain's parents in propagator reads", () => {
+  it("multi-level lens chain — AUTO-EXPAND walks the full graph", () => {
     const trigger = num(0);
     const a = num(0);
-    const doubled = a.scale(2);
+    const b = num(3);
+    const big = a.add(b).scale(2); // chain with two parents
     const out = num(0);
 
     const p = propagators();
     p.add(propagator([trigger], [a], () => { a.value = trigger.value; }));
-    // Include `a` in reads as well as `doubled`.
-    p.add(propagator([doubled, a], [out], () => { out.value = doubled.value; }));
+    p.add(propagator([big], [out], () => { out.value = big.value; }));
 
-    trigger.value = 5;
-    expect(out.value).toBe(10);
+    trigger.value = 4;
+    // big = (4 + 3) * 2 = 14. AUTO-EXPAND included a in reader's
+    // effective reads.
+    expect(out.value).toBe(14);
+
+    // Mutating b also fires the reader (b is also transitive).
+    b.value = 5;
+    expect(out.value).toBe(18);
     p.dispose();
-  });
-
-  it("WORKAROUND 2: split into separate Propagators (external write boundary)", () => {
-    const trigger = num(0);
-    const a = num(0);
-    const doubled = a.scale(2);
-    const out = num(0);
-
-    const writer = propagators();
-    const reader = propagators();
-    writer.add(propagator([trigger], [a], () => { a.value = trigger.value; }));
-    reader.add(propagator([doubled], [out], () => { out.value = doubled.value; }));
-
-    trigger.value = 5;
-    expect(out.value).toBe(10);
-    writer.dispose();
-    reader.dispose();
   });
 });

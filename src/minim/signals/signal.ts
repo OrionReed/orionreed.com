@@ -1250,21 +1250,38 @@ Object.defineProperty(Signal.prototype, "value", {
 
 // ─── Network: reactive sub-DAG with self-excluded writes ────────────
 //
-// `network(body)` is the building block for constraint networks,
+// `network()` is the building block for constraint networks,
 // propagators, bidirectional relations — any "many signals tied
 // together with feedback" abstraction that doesn't fit the dep-DAG
-// pipeline shape. Three guarantees the framework provides:
+// pipeline shape. Four guarantees the framework provides:
 //
-//   1. Body re-runs when any signal it reads changes (same as `effect`).
+//   1. Body re-runs when any subscribed dep changes.
 //   2. Bare `signal.value =` writes inside the body self-exclude
 //      this network — so termination is structural, not convergence-
 //      based.
 //   3. The body runs inside `batch()`, so all writes commit atomically
 //      to downstream observers (glitch-free).
+//   4. `body` receives `dirty` — the set of subscribed signals
+//      whose value changed since last run. Empty sentinel on the
+//      first run.
 //
-// `body` receives `dirty` — the set of signals from the previous run
-// whose value differs from then. Empty on the first run. Kernels that
-// don't care can ignore it.
+// Two subscription shapes:
+//
+//   network(body, opts?)        — IMPLICIT deps. Body's `.value`
+//                                 reads auto-subscribe (effect-like).
+//                                 Subs purge between runs to match
+//                                 the body's current read pattern.
+//                                 Convenient for casual use; matches
+//                                 effect/computed mental model.
+//
+//   network(deps, body, opts?)  — EXPLICIT deps. The deps array IS
+//                                 the topology. Body's `.value`
+//                                 reads do NOT subscribe; only the
+//                                 declared deps do. The handle has
+//                                 `subscribe(...sigs)` and
+//                                 `unsubscribe(...sigs)` to grow or
+//                                 shrink the topology dynamically.
+//                                 Predictable, no auto-track surprises.
 //
 // `manual: true` defers auto-firing: dep changes mark the network
 // dirty but the body only runs on `flush()`. The initial run still
@@ -1275,11 +1292,23 @@ Object.defineProperty(Signal.prototype, "value", {
 export interface Network {
   /** Tear down: unsubscribe from every signal, drop internal state. */
   dispose(): void;
-  /** Run the body now if it's pending. In auto mode, equivalent to a
-   *  no-op when nothing has changed. In manual mode, this is the only
-   *  way to advance after construction. */
+  /** Run the body now. In auto mode, equivalent to a no-op when
+   *  nothing has changed. In manual mode, this is the only way to
+   *  advance after construction. */
   flush(): void;
+  /** Add signals to the network's topology (explicit-deps mode only).
+   *  Idempotent. Does NOT fire the body — call `flush()` if you want
+   *  the body to re-run with the new topology. No-op on
+   *  implicit-deps networks. */
+  // biome-ignore lint/suspicious/noExplicitAny: deps come in many flavours
+  subscribe(...sigs: Signal<any>[]): void;
+  /** Remove signals from the network's topology (explicit-deps mode
+   *  only). Idempotent. Body is NOT re-run by unsubscribe. */
+  // biome-ignore lint/suspicious/noExplicitAny: deps come in many flavours
+  unsubscribe(...sigs: Signal<any>[]): void;
 }
+
+type NetworkBody = (dirty: ReadonlySet<Signal<unknown>>, handle: Network) => void;
 
 class _NetworkNode implements ReactiveNode {
   subs: Link | undefined = undefined;
@@ -1287,27 +1316,43 @@ class _NetworkNode implements ReactiveNode {
   deps: Link | undefined = undefined;
   depsTail: Link | undefined = undefined;
   flags: number = F.Watching | F.RecursedCheck;
-  body: (dirty: ReadonlySet<Signal<unknown>>) => void;
+  body: NetworkBody;
   manual: boolean;
   /** Per-instance last-seen values for current deps. Used to compute
-   *  `dirty` at the start of each run. Cleared and refilled at the
-   *  end of every run from the current dep list. */
+   *  `dirty` at the start of each run. */
   lastValues: Map<Signal<unknown>, unknown> = new Map();
-  /** Set by `_notify` in manual mode (instead of queueing). Read by
-   *  `flush()` to decide whether there's work to do. */
+  /** Set by `_notify` in manual mode. Read by `flush()`. */
   pending: boolean = false;
-  /** Once disposed, every subsequent `flush()` and `_run()` is a
-   *  silent no-op. Without this guard, a `flush()` after `dispose()`
-   *  would re-run the body (lastValues was cleared so dirty is empty,
-   *  but `flush` always runs the body — so it'd re-subscribe and
-   *  resurrect the network node). */
+  /** Once disposed, every subsequent `flush()` and `_run()` is a no-op. */
   disposed: boolean = false;
+  /** True while `_runBody` is on the call stack. Guards against
+   *  re-entrant `flush()` calls from inside the body (which would
+   *  stack-overflow without this guard). */
+  private _running: boolean = false;
+  /** Cycle counter used by our own `link()` calls. Doesn't need to
+   *  align with the engine's `cycle` global — it's only used by
+   *  `link()`'s same-cycle skip-rule. */
+  private _ownCycle: number = 0;
+  /** Set mirror of the deps linked list. O(1) membership test for
+   *  `subscribe`/`unsubscribe`. */
+  private _depsSet: Set<Signal<unknown>> = new Set();
+  /** Handle passed to the body. Set by `_initWithHandle()` after
+   *  factory wraps the node in a Network handle, before initial fire. */
+  private _handle!: Network;
 
-  constructor(body: (dirty: ReadonlySet<Signal<unknown>>) => void, manual: boolean) {
+  constructor(body: NetworkBody, manual: boolean) {
     this.body = body;
     this.manual = manual;
-    // Initial run: subscribe to whatever the body reads, with empty dirty.
-    this._runBody(new Set());
+  }
+
+  /** Two-phase init: factory constructs the node, builds the handle
+   *  (which closes over `this`), then calls `_initWithHandle(handle)`
+   *  to link initial deps and run the first body. This way the body
+   *  sees its own handle on the very first fire. */
+  _initWithHandle(handle: Network, initialDeps: readonly Signal<unknown>[]): void {
+    this._handle = handle;
+    this._linkBatch(initialDeps);
+    this._runBody(EMPTY_DIRTY);
   }
 
   _update(): boolean {
@@ -1318,14 +1363,9 @@ class _NetworkNode implements ReactiveNode {
   _notify(): void {
     if (this.manual) {
       this.pending = true;
-      // In manual mode we don't queue for auto-flush; user calls `flush()`.
-      // Re-arm the watching flag so subsequent dep changes still notify us.
       this.flags |= F.Watching;
       return;
     }
-    // Auto mode: queue same shape as Effect so the existing flush loop
-    // handles us. We append directly; no chain-walk because network nodes
-    // don't have a `subs` follow-the-chain shape worth optimizing.
     queued[queuedLength++] = this;
     this.flags &= ~F.Watching;
   }
@@ -1342,8 +1382,6 @@ class _NetworkNode implements ReactiveNode {
   _run(): void {
     if (this.disposed) return;
     const flags = this.flags;
-    // Same dirty-check as Effect: only run if Dirty or (Pending and a
-    // dep actually changed under check).
     if (flags & F.Dirty || (flags & F.Pending && checkDirty(this.deps!, this))) {
       this._runBody(this._computeDirty());
     } else if (this.deps !== undefined) {
@@ -1351,10 +1389,6 @@ class _NetworkNode implements ReactiveNode {
     }
   }
 
-  /** Lazily allocate a `dirty` Set: when nothing has changed since
-   *  the last run (the steady-state common case between actual
-   *  mutations), return the frozen `EMPTY_DIRTY` sentinel and skip
-   *  the allocation entirely. ~40% reduction on no-change flushes. */
   private _computeDirty(): ReadonlySet<Signal<unknown>> {
     let dirty: Set<Signal<unknown>> | undefined;
     for (const [sig, lastVal] of this.lastValues) {
@@ -1366,32 +1400,26 @@ class _NetworkNode implements ReactiveNode {
     return dirty ?? EMPTY_DIRTY;
   }
 
-  /** Body invocation + dep tracking + lastValues refresh. Shared
-   *  between the constructor's initial run and subsequent fires. */
   private _runBody(dirty: ReadonlySet<Signal<unknown>>): void {
-    this.depsTail = undefined;
     this.flags = F.Watching | F.RecursedCheck;
-    const prevSub = activeSub;
+    this._running = true;
     const prevSettler = activeNetwork;
-    activeSub = this;
     activeNetwork = this;
     try {
       ++cycle;
       ++runDepth;
-      // Auto-batch the body: any writes commit atomically at body end.
       ++batchDepth;
       try {
-        this.body(dirty);
+        this.body(dirty, this._handle);
       } finally {
         if (!--batchDepth) flush();
       }
     } finally {
       --runDepth;
-      activeSub = prevSub;
       activeNetwork = prevSettler;
       this.flags &= ~F.RecursedCheck;
-      purgeDeps(this);
-      // Snapshot current deps' values for next run's dirty computation.
+      this._running = false;
+      // Snapshot deps' values for next run's dirty computation.
       this.lastValues.clear();
       let l = this.deps;
       while (l !== undefined) {
@@ -1405,34 +1433,103 @@ class _NetworkNode implements ReactiveNode {
 
   flush(): void {
     if (this.disposed) return;
-    // Always runs the body. Whether or not anything has changed —
-    // `flush` is the explicit "run now" lever. In manual mode it's
-    // the only way to advance; in auto mode it's a deliberate
-    // re-evaluation. `dirty` reflects whatever has changed since
-    // the last run (empty-sentinel if nothing has).
+    if (this._running) {
+      throw new Error(
+        "network: flush() called from inside body — would recurse infinitely. " +
+          "If you need to re-run after a topology change, return from the body and " +
+          "let the next dep change (or the caller) drive the next fire.",
+      );
+    }
     this._runBody(this._computeDirty());
+  }
+
+  /** Add signals to the topology. Idempotent — already-subscribed
+   *  signals are skipped. Does NOT fire the body; call `flush()` if
+   *  you want the body to re-run with the new topology. (Splitting
+   *  these lets callers add many deps cheaply and fire once at the
+   *  end.) */
+  subscribe(sigs: readonly Signal<unknown>[]): void {
+    if (this.disposed) return;
+    this._linkBatch(sigs);
+  }
+
+  /** Remove signals from the topology. Idempotent. Doesn't fire the
+   *  body. */
+  unsubscribe(sigs: readonly Signal<unknown>[]): void {
+    if (this.disposed) return;
+    const set = this._depsSet;
+    for (const s of sigs) {
+      if (!set.has(s)) continue;
+      set.delete(s);
+      let l = this.deps;
+      while (l !== undefined) {
+        if (l.dep === s) {
+          unlink(l, this);
+          break;
+        }
+        l = l.nextDep;
+      }
+    }
+  }
+
+  /** Batch-link N signals into the deps chain. depsTail is
+   *  positioned once at the current tail; each successful `link()`
+   *  call sets `depsTail = newLink`, so subsequent appends are O(1).
+   *  This avoids O(N²) re-walks on large initial-dep arrays. */
+  private _linkBatch(sigs: readonly Signal<unknown>[]): void {
+    const set = this._depsSet;
+    // Walk to current tail once.
+    let tail = this.deps;
+    if (tail !== undefined) {
+      while (tail.nextDep !== undefined) tail = tail.nextDep;
+    }
+    this.depsTail = tail;
+    for (const s of sigs) {
+      if (set.has(s)) continue;
+      set.add(s);
+      link(s as ReactiveNode, this, ++this._ownCycle);
+    }
   }
 }
 
-/** Build a reactive sub-DAG node. See module header for semantics.
+/** Build a reactive sub-DAG node.
  *
  *  ```ts
- *  const s = network((dirty) => {
- *    // read signals (subscribes); write signals (self-excluded);
- *    // dirty contains signals whose value changed since last run.
+ *  const n = network([a, b], (dirty, n) => {
+ *    // body fires when a or b changes; reads of c, d, ... here
+ *    // do NOT add subscriptions.
+ *    // dirty: subset of {a, b} that changed since last fire.
+ *    // n: the network's own handle (subscribe / unsubscribe / dispose).
  *  });
- *  // later:
- *  s.dispose();
- *  ``` */
+ *  // grow/shrink topology dynamically:
+ *  n.subscribe(c);
+ *  n.unsubscribe(a);
+ *  ```
+ *
+ *  Promises:
+ *  - Body fires when any subscribed dep changes.
+ *  - `signal.value =` writes inside the body self-exclude THIS
+ *    network so it doesn't re-trigger itself.
+ *  - Body runs inside `batch()`; writes commit atomically.
+ *  - Topology is exactly the deps array + later subscribe/unsubscribe.
+ *    Reads inside the body DO NOT add to the topology.
+ *  - `flush()` from inside the body throws (would recurse infinitely).
+ *  - `manual: true` defers auto-firing; only `flush()` advances. */
 export function network(
-  body: (dirty: ReadonlySet<Signal<unknown>>) => void,
+  // biome-ignore lint/suspicious/noExplicitAny: deps come in many flavours
+  deps: readonly Signal<any>[],
+  body: (dirty: ReadonlySet<Signal<unknown>>, handle: Network) => void,
   opts?: { manual?: boolean },
 ): Network {
-  const s = new _NetworkNode(body, opts?.manual ?? false);
-  return {
-    dispose: () => s._unwatched(),
-    flush: () => s.flush(),
+  const node = new _NetworkNode(body, opts?.manual ?? false);
+  const handle: Network = {
+    dispose: () => node._unwatched(),
+    flush: () => node.flush(),
+    subscribe: (...sigs) => node.subscribe(sigs),
+    unsubscribe: (...sigs) => node.unsubscribe(sigs),
   };
+  node._initWithHandle(handle, deps as readonly Signal<unknown>[]);
+  return handle;
 }
 
 // ─── Public factories ────────────────────────────────────────────────

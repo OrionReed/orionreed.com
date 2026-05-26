@@ -227,21 +227,51 @@ export class Constraints {
     pack.read(sig.peek(), this.solver.positions, this.solver.offsets[id]!);
     this._sigToCell.set(sig, id);
     this._bindings[id] = { sig, pack };
-    if (this._network === undefined && !this._networkDisposed) this._installReactiveDriver();
+    if (this._network === undefined && !this._networkDisposed) {
+      this._installReactiveDriver();
+    } else if (this._network !== undefined) {
+      // Network already running — subscribe to the new cell signal
+      // so writes to it fire the body. (gen-based fire would also
+      // catch it but only because gen changes; subscribing the cell
+      // means later .value mutations trigger a solve.)
+      this._network.subscribe(sig);
+    }
     this._gen.value = this._gen.value + 1;
     return id;
   }
+
+  /** @internal — register a reactive parameter signal that a Term
+   *  reads inside `step()`. Without this, mutating the parameter
+   *  wouldn't fire the network (its body's reads don't auto-track
+   *  any more). Called from Relation `bind` implementations that
+   *  construct Terms with reactive params (`distance`, `bounds`,
+   *  `softTarget`, etc.). */
+  // biome-ignore lint/suspicious/noExplicitAny: heterogeneous params
+  _trackParam(sig: Signal<any>): void {
+    if (this._network !== undefined) this._network.subscribe(sig);
+    else this._pendingParamDeps.push(sig);
+  }
+  /** Reactive params bound BEFORE the network was installed; folded
+   *  in at install time. */
+  // biome-ignore lint/suspicious/noExplicitAny: same
+  private _pendingParamDeps: Signal<any>[] = [];
 
   // ─── Reactive driver wiring ─────────────────────────────────────
 
   private _installReactiveDriver(): void {
     const gen = this._gen;
-    this._network = network(_dirty => {
-      // Subscribe to gen so structural edits force a re-fire.
-      gen.value;
-      // Run the pipeline — snapshot phase reads cell signals via
-      // `.value` (so the network subscribes), solve runs, writeback
-      // writes back through network's auto-self-exclusion + auto-batch.
+    // Initial deps: gen plus every cell signal already bound, plus
+    // any reactive params registered before the network came up.
+    const initialDeps: Signal<unknown>[] = [gen as Signal<unknown>];
+    for (const [sig] of this._sigToCell) initialDeps.push(sig as Signal<unknown>);
+    for (const sig of this._pendingParamDeps) initialDeps.push(sig as Signal<unknown>);
+    this._pendingParamDeps.length = 0;
+    this._network = network(initialDeps, () => {
+      // Run the pipeline. Snapshot reads cell positions, solve runs,
+      // writeback uses self-exclusion + auto-batch. Reads inside the
+      // body don't subscribe (explicit-deps mode); deps come from the
+      // initial array + later `_network.subscribe(...)` calls in
+      // `_bind` and `_trackParam`.
       this.step();
     });
   }

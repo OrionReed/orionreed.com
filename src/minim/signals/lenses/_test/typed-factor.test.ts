@@ -16,11 +16,11 @@
 // =====================================================================
 
 import { describe, expect, it } from "vitest";
-import { centroidLens, field, meanLens, midpointLens, Num, num, Pose, pose, signal, Vec, vec } from "../index";
-import type { Writable } from "../index";
-import { diffLens, pulleySum } from "../new-primitives";
-import { procrustesLens } from "./factor-lens";
-import { bundle, factor, factorTuple, procrustesTyped } from "./typed-factor";
+import { centroidLens, field, meanLens, midpointLens, Num, num, Pose, pose, signal, Vec, vec } from "../../index";
+import type { Writable } from "../../index";
+import { diffLens, pulleySum } from "../../new-primitives";
+import { procrustesLens } from "../factor-lens";
+import { bundle, factor, factorTuple, procrustesTyped } from "../typed-factor";
 
 // ─── helpers ───────────────────────────────────────────────────────────
 

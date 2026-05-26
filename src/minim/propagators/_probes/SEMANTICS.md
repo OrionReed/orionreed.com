@@ -216,11 +216,208 @@ The propagator package's value isn't "do everything lenses can't."
 It's "be the solver-role half of constraint composition." That's
 a clearer pitch and a more honest one.
 
+## The freshness design space
+
+The earlier "freshness through lens" finding was incomplete.
+After more probing (`freshness-design-space.test.ts`,
+`freshness-auto-expand.test.ts`, `freshness-enforcement.test.ts`),
+the design space has at least five distinct contracts, each with
+different semantic guarantees, install/runtime cost, and rules
+the user must follow:
+
+| Contract | Rule for users | Enforcement | Runtime cost | Guarantee |
+|---|---|---|---|---|
+| **TRUST** (current) | Declare every transitive dep yourself | None | Lowest | Only as good as user discipline |
+| **VALIDATE** | Declare; framework warns/errors at install if reads not transitively closed | Install-time | Lowest | User catches own mistakes |
+| **AUTO-EXPAND** | Declare logical reads; framework walks lens chains and adds parents at install | Install-time | Lowest (one-shot) | Strong; no runtime walk |
+| **WALK-DEPENDENTS** | Declare logical reads; framework walks Computed dependents of fresh signals at runtime | Per-iteration | Medium | Strong; handles dynamic graphs |
+| **POLL** | Declare reads (any granularity); framework peek-checks all reads vs snapshot every iteration | Per-iteration | High (technically) | Trivially strong |
+
+Probe findings:
+
+- **POLL is faster than TRUST** in microbenchmarks for medium
+  chains — because TRUST's iteration scan + freshness-set bookkeeping
+  has overhead, while POLL is just N peeks and comparisons. Worth
+  re-measuring on production-shaped workloads before drawing
+  strong conclusions, but the cost gap isn't 10× — it's comparable.
+
+- **AUTO-EXPAND works cleanly** — the lens chain's parent set is
+  walkable at install time via the engine's existing Computed deps
+  list. Two-line introspection helper in `freshness-auto-expand.test.ts`
+  shows it. Zero runtime overhead vs TRUST, plus the freshness gap
+  is gone.
+
+- **VALIDATE is cheap at install and useful as a warning level.**
+  Same introspection as AUTO-EXPAND, but emits a warning instead of
+  silently expanding. Good for debug builds.
+
+- **The "lens chains fuse" property** simplifies AUTO-EXPAND: a
+  chain like `a.add(b).scale(2)` has a single Computed cell with
+  deps `{a, b}`, not three nested cells. So expanding is shallow,
+  not deep.
+
+### What gets enforced — design tradeoffs
+
+Beyond freshness rules, the framework can also check:
+
+- **Declared writes were used** (peek-before/after). Useful diagnostic;
+  unreliable for "wrote-same" cases without setter interception.
+- **Read set is transitively closed** (introspect lens chains). The
+  freshness-gap detector — useful as a warn even without auto-expansion.
+- **Body is deterministic** (run twice; compare). Slow but useful in
+  test mode.
+- **Network is acyclic on direct deps** (cycle detection). Catches
+  obvious infinite loops at install.
+
+The menu of policies an engine could expose:
+
+| Policy | Default | Description |
+|---|---|---|
+| `off` | non-prod | trust the user (current behaviour) |
+| `warn` | dev | warn at install on incomplete read sets |
+| `auto` | maybe | silently expand at install |
+| `strict` | tests | error at install on incomplete read sets |
+
+### My recommendation
+
+**Ship `auto` as default + `warn` in dev mode.**
+
+- AUTO-EXPAND eliminates the freshness gap with no runtime cost.
+- `warn` mode flags accidental incomplete declarations so users
+  learn the model.
+- `strict` is opt-in for users who want maximum control.
+- TRUST stays available as `off` for advanced cases.
+
+The principle: **the framework should make the right thing easy
+and the wrong thing visible.** Auto-expand is right by default;
+warn surfaces declarations the user might want to re-examine.
+
+## Composability examples in real shapes
+
+`composability-examples.test.ts` shows four worked compositions:
+
+1. **Form validation:** field-level constraints expressed as
+   residual lenses (`num(3).sub(usernameLen)` for "need length ≥ 3").
+   UI subscribes via effect to show error messages. A submit
+   propagator (or a derived "all-zero" predicate lens) gates the
+   action. The constraint becomes data; the UI is just a
+   subscriber.
+
+2. **Coordinate-system change:** Cartesian (x, y) is primary;
+   polar (r, θ) is a lens. A constraint expressed naturally in
+   polar ("θ = π/4") translates back to Cartesian via the lens
+   chain. The lens encapsulates the change of basis; the propagator
+   only deals with the natural form.
+
+3. **Animation × constraint:** a tween writes a target Vec, which
+   is a centroid lens. Each tween write redistributes to underlying
+   points. A clamp propagator keeps the target in a bounding box.
+   Three independent concerns (tween / lens / clamp) compose into
+   one declarative pipeline.
+
+4. **Energy conservation:** total kinetic energy is a lens chain
+   over (mass, velocity). A propagator enforces conservation: when
+   one velocity changes, others adjust to preserve total E. The
+   conserved quantity is a derived value; the conservation law is
+   a constraint over it.
+
+The unifying pattern: **a lens says "this IS true by construction";
+a propagator says "this SHOULD be true by intervention."** The
+composition lets you mix declarative derivations with imperative
+corrections cleanly.
+
+## The user-facing picture
+
+After all the probes, here's what someone mixing the two should
+think about. This is the MENTAL MODEL — what to ask yourself when
+designing a relation.
+
+### The three roles
+
+When you have a "constraint," it splits into three orthogonal
+pieces. Each is a different tool:
+
+| Role | Tool | Question |
+|---|---|---|
+| Definition | **Lens** | "What VALUE do I care about?" |
+| Predicate | **Lens** (residual) | "What should be TRUE about it?" |
+| Solver | **Propagator** | "How do I MAKE it true?" |
+
+Concrete: "the bar's length must be in [50, 200]."
+- Definition: `length = Num.derive([A, B], distance)` — a lens.
+- Predicate: out-of-range → `length < 50 || length > 200` — also
+  a lens chain, observable by UI.
+- Solver: a propagator that scales (B − A) about the midpoint
+  when length is out of range. Writes A and B.
+
+Each is independently swappable. Want a different "length" notion
+(weighted, projected, etc.)? Change the lens. Want different
+bounds? Change the predicate. Want a different correction (snap,
+clamp, gradient, …)? Change the propagator.
+
+### Decision tree
+
+> "I want a derived value" → **lens.**
+>
+> "I want to constrain existing cells" → **propagator.**
+>
+> "I want multiple outputs / iteration / branching" → **propagator.**
+>
+> "Both" → **mix.** The lens defines the value; the propagator
+> writes through the lens to enforce the property.
+
+`decision-framework.test.ts` walks each branch with a worked
+example.
+
+### What you're optimising for
+
+In order of how often it bites in real usage:
+
+- **Expressiveness.** Lenses for definitions; propagators for
+  constraints. Don't force a definitional relation through a
+  propagator (you lose composability and pay 8× cost).
+- **Performance.** Lenses are 8× faster than propagators on the
+  same 1-output relation. Reach for lenses where you can.
+- **Correctness.** Lenses are total functions, never inconsistent.
+  Propagators iterate to fixpoint, can diverge or settle
+  inconsistent (cycle case). Mix carefully across cycles.
+- **Simplicity.** The three-role split keeps each piece short and
+  swappable. The mental overhead is "which role?", not "which
+  API?".
+
+## The footgun catalog
+
+`footgun-catalog.test.ts` reproduces all eight with workarounds.
+The high-impact ones:
+
+| # | Symptom | Workaround |
+|---|---|---|
+| 1 | In-fixpoint cascade through lens silently fails | List chain parents in reads, or ship AUTO-EXPAND |
+| 2 | Bidirectional propagator's first-fire direction overwrites your driver | Write the canonical driver AFTER install |
+| 3 | Cycle through lens silently leaves system inconsistent | Avoid such cycles, or use AVBD's iterative solve |
+| 4 | Two propagators writing the same lens — last write wins | Combine into one propagator with explicit policy |
+| 5 | Hot loop re-peeking a chain | Cache `chain.value` once at start of step body |
+| 6 | Disposing the propagator doesn't dispose the lens | Separate concerns; dispose what you own |
+| 7 | Writing through `centroidLens` moves ALL parents, not just one | Read the lens's bwd policy; use a custom Vec.lens if you want different distribution |
+| 8 | Lens chain on cells outside the network: propagator observes but can't force | Recognise the boundary; use AVBD or another tool to force across boundaries |
+
+Footguns 1 and 3 are the substantive ones — both are about the
+freshness-through-lens semantics. AUTO-EXPAND fixes 1; cycles
+through lens (3) need different machinery.
+
+Footgun 2 is the eq/adder initial-fire issue we already
+documented in earlier rounds.
+
+The rest are predictable consequences of the model — easy once
+you know they exist.
+
 ## Open questions that the probes don't fully resolve
 
-1. **Is the freshness gap fixable cleanly?** Or does it require
-   walking arbitrary Computed graphs from inside the fixpoint loop
-   (potentially expensive)?
+1. **Should AUTO-EXPAND replace TRUST as default?** It fixes the
+   gap with zero runtime cost. The only downside is the engine
+   now depends on lens-chain introspection, which currently uses
+   private state (`getter`, `deps` fields). That contract should
+   be public if AUTO-EXPAND becomes the default.
 
 2. **Are there cases where the lens approach is OUT-classed** —
    even for definitions — and propagators are the right

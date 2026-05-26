@@ -16,8 +16,8 @@
 // =====================================================================
 
 import { describe, expect, it } from "vitest";
-import { centroidLens, meanLens, num, Num, signal, Vec, vec } from "../index";
-import type { Writable } from "../index";
+import { centroidLens, meanLens, num, Num, signal, Vec, vec } from "../../index";
+import type { Writable } from "../../index";
 import {
   bboxLens,
   bundleLens,
@@ -25,7 +25,7 @@ import {
   meanDiffLens,
   procrustesJacobianLens,
   procrustesLens,
-} from "./factor-lens";
+} from "../factor-lens";
 
 // ─── helpers ───────────────────────────────────────────────────────────
 

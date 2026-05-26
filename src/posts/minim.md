@@ -229,6 +229,26 @@ Anywhere a writable Point exists, a handle can sit on it.
 
 <md-layout-demo></md-layout-demo>
 
+Aggregates aren't only N→1. An N→M decomposition gives M coupled writable views — each one a closed-form group action on the cluster — and cross-channel invariance follows from action commutativity, exact by construction. A bounding box is {center, size}; drag a corner to scale about the center:
+
+<md-bbox-handles></md-bbox-handles>
+
+The full similarity transform is {centroid, rotation, scale} — three handles, none of them perturbs the other two:
+
+<md-procrustes></md-procrustes>
+
+Two decompositions over the same cluster share the centroid: `bestFitLineLens` exposes {point, direction}; `bestFitCircleLens` exposes {center, radius}. Three handles, two fitted curves, every write a single group action:
+
+<md-best-fit></md-best-fit>
+
+A cubic Bezier becomes {start, end, startTangent, endTangent} — gestalt handles on curve shape, not on raw control-point positions:
+
+<md-bezier-gestalt></md-bezier-gestalt>
+
+The same machinery is trait-dispatched. `paletteLens(inputs) → {mean, spread}` works for any value class declaring `Linear + Metric`. Three rows of different value types — Vecs, Colors, Poses — each with its own `paletteLens` and mean/spread handles, all wired together by `meanOf` over the three normalised spreads. Drag any of the four spread sliders, the rest follow. Same lens primitive, three domains, one composition:
+
+<md-traits-cross-domain></md-traits-cross-domain>
+
 The same idea generalises. `polar(c, r, a)` is `center + (r·cos a, r·sin a)` — and its inverse is one of four policies on which inputs absorb a write: `rotate` (c fixed, write r and a), `translate` (only c shifts), `radial` (only r), `circular` (only a). `handle.rotate` is one line of `polar(center, radius, angle, "circular")`.
 
 The bidirectional story compounds when you chain it. A solar system is deterministic in one scalar — `time` — with each body's angle derived as `time.scale(τ/period)`. Both `.scale` and `polar` (under `"circular"`) are invertible, so dragging *any* body writes back through its chain into `time`. Every other body re-derives from the new time. Drag winds and unwinds the whole system through a single degree of freedom.

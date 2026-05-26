@@ -242,7 +242,7 @@ function covariance(
   return { cxx: cxx / K, cxy: cxy / K, cyy: cyy / K };
 }
 
-export function bestFitLine(points: readonly Writable<Vec>[]): {
+export function bestFitLineLens(points: readonly Writable<Vec>[]): {
   point: Writable<Vec>;
   direction: Writable<Num>;
 } {
@@ -313,7 +313,7 @@ export function bestFitLine(points: readonly Writable<Vec>[]): {
 //                    Uniform scale-about-center preserves the center.
 // =====================================================================
 
-export function bestFitCircle(points: readonly Writable<Vec>[]): {
+export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
   center: Writable<Vec>;
   radius: Writable<Num>;
 } {

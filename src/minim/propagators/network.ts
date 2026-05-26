@@ -1,33 +1,43 @@
-// network.ts — propagator network holder. PROTOTYPE.
+// network.ts — propagator network holder.
 //
 // A propagator network is a single `network()` whose body runs a
-// fixpoint loop over the registered propagators. Same shape as
-// `Constraints` in `../constraints/cluster.ts`. The propagator
-// equivalent of `Constraints.add(rel)` is `Propagators.add(p)`.
+// fixpoint loop over the registered propagators.
 //
 // Termination: bounded by `iterations` fuel cap. Inside the loop,
 // freshness propagation: each pass runs only propagators whose
-// READS were freshly modified in the prior pass. This avoids
-// "user wrote c=20; propagator immediately overwrites c with
-// computed value" pathology — propagators that write a fresh-from-
-// user signal don't fire in the same iteration as the user's write.
+// READS were freshly modified in the prior pass.
 //
-// The freshness rule:
-//   1. On body entry, fresh = `dirty` (signals changed since last fire).
-//   2. Each iteration: run propagators whose reads ∩ fresh ≠ ∅.
-//      Track which writes actually changed value (peek-based).
-//   3. Set fresh = changed writes. Loop.
-//   4. Empty fresh → fixpoint.
+// AUTO-EXPAND: at install time, every propagator's declared
+// `reads` is expanded transitively via `transitiveDeps()` — every
+// signal the read-set transitively depends on becomes part of the
+// EFFECTIVE read-set used for subscription and freshness gating.
+// This means a propagator that reads a lens chain (`a.scale(2)`)
+// implicitly reads the chain's parents too. Without this, writes
+// inside the fixpoint loop that update a chain's parent wouldn't
+// re-fire propagators reading the chain — a silent freshness gap.
 //
 // Self-exclusion of the network's own body keeps writes from re-
 // firing the network. External writes (outside the body) re-fire
 // it normally.
 
-import { network as makeNetwork, type Network, type Signal } from "../signals";
+import {
+  network as makeNetwork,
+  type Network,
+  type Signal,
+  transitiveDeps,
+} from "../signals";
 import type { Propagator } from "./propagator";
 
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous signal registry
 type AnySignal = Signal<any>;
+
+interface Entry {
+  p: Propagator;
+  /** Transitively-expanded read set. Includes every direct read
+   *  plus every signal those reads depend on (lens-chain parents,
+   *  fan-in lens parents, etc.). */
+  expanded: readonly AnySignal[];
+}
 
 export interface PropagatorsOpts {
   /** Maximum fixpoint iterations per body run. Default 1000.
@@ -36,7 +46,7 @@ export interface PropagatorsOpts {
 }
 
 export class Propagators {
-  private readonly _propagators: Propagator[] = [];
+  private readonly _entries: Entry[] = [];
   private readonly _maxIterations: number;
   private _network?: Network;
 
@@ -45,25 +55,36 @@ export class Propagators {
   }
 
   /** Add one or more propagators. Multi-direction combinators (e.g.
-   *  `adder`) return arrays; spread them. */
+   *  `adder`) return arrays; spread them. Subscribes new deps and
+   *  flushes the network once per `add()` call regardless of how
+   *  many propagators or cells are added. */
   add(...props: readonly (Propagator | readonly Propagator[])[]): void {
+    const newDeps = new Set<AnySignal>();
     for (const p of props) {
-      if (Array.isArray(p)) this._propagators.push(...p);
-      else this._propagators.push(p as Propagator);
+      if (Array.isArray(p)) for (const pp of p) this._addOne(pp, newDeps);
+      else this._addOne(p as Propagator, newDeps);
     }
-    if (this._network === undefined) this._install();
-    else {
-      // Network already running — force it to re-fire so the new
-      // propagators run for the first time. Cheapest way: write a
-      // dummy signal we control. For now, the easiest is to call
-      // its flush directly (works in both manual and auto modes).
+    if (this._network === undefined) {
+      this._install();
+    } else {
+      // Subscribe before flush so the new deps are in the topology
+      // when the body runs.
+      this._network.subscribe(...newDeps);
+      // Flush so newly-added propagators get a chance to run, even
+      // if their reads were already in the dep set.
       this._network.flush();
     }
   }
 
+  private _addOne(p: Propagator, newDeps: Set<AnySignal>): void {
+    const expanded = expandReads(p.reads);
+    this._entries.push({ p, expanded });
+    for (const s of expanded) newDeps.add(s);
+  }
+
   /** Number of propagators currently in the network. */
   get count(): number {
-    return this._propagators.length;
+    return this._entries.length;
   }
 
   /** Tear down the underlying reactive driver. */
@@ -75,60 +96,29 @@ export class Propagators {
   // ─── Internals ─────────────────────────────────────────────────
 
   private _install(): void {
-    this._network = makeNetwork(dirty => {
-      this._runFixpoint(dirty as ReadonlySet<AnySignal>);
-    });
+    // Collect all expanded reads across all current propagators as
+    // the network's explicit topology. New propagators added later
+    // grow it via `_addOne`'s `network.subscribe(...)` call.
+    const allDeps = new Set<AnySignal>();
+    for (const { expanded } of this._entries) {
+      for (const s of expanded) allDeps.add(s);
+    }
+    this._network = makeNetwork(
+      [...allDeps] as readonly Signal<unknown>[],
+      dirty => {
+        this._runFixpoint(dirty as ReadonlySet<AnySignal>);
+      },
+    );
   }
 
   private _runFixpoint(initialDirty: ReadonlySet<AnySignal>): void {
-    if (this._propagators.length === 0) return;
-    // ─── HACK: stable subscription via "touch all reads" ─────────
-    //
-    // `network()` inherits effect/computed's fine-grained reactivity
-    // model: subs are exactly what the body READ this run, and
-    // `purgeDeps` removes anything not re-read. That's the right
-    // semantic for derived computations — but it's WRONG for a
-    // propagator network whose subs should be the UNION of every
-    // relation's reads, regardless of which fires this iteration.
-    //
-    // Concrete failure without this loop: add adder #1 (reads
-    // a1, b1, c1) and adder #2 (reads a2, b2, c2). Drag a1 → only
-    // adder #1 fires → adder #2's reads aren't touched → next
-    // body run purges them from the dep list → subsequent writes
-    // to a2/b2/c2 silently don't notify. Adder #2 broken.
-    //
-    // The cheap fix is to read all propagators' reads at the top
-    // of every body run, forcing them into the dep list. ~3% perf
-    // overhead in benchmarks. Zero memory overhead vs. principled
-    // alternatives. See `PROTOTYPE3.md` for the full analysis.
-    //
-    // Future options to revisit, if any of them look better in
-    // practice:
-    //
-    //   A. `network(body, { static: true })` opt — skip purgeDeps;
-    //      once subscribed, always subscribed until dispose.
-    //      Cleanest fix, smallest API delta.
-    //
-    //   B. `n.track(...signals)` method on the handle — explicit
-    //      static subscriptions alongside fine-grained body reads.
-    //      Useful for HYBRID networks; chatty for the Propagators
-    //      use-case where every read is static.
-    //
-    //   C. `staticNetwork(deps, body)` sibling primitive — declare
-    //      deps array up front, separate from body reads. Cleanest
-    //      conceptually but doubles primitive count.
-    //
-    // None of these is blocking — the loop below is correct — but
-    // they'd let the Propagators class drop this O(P × R) prelude.
-    for (const p of this._propagators) {
-      for (const s of p.reads) s.value;
-    }
+    if (this._entries.length === 0) return;
     let fresh: Set<AnySignal> = new Set(initialDirty);
     // First fire: fresh is empty (initial run had no prior). Run
     // every propagator once to populate the network.
     if (fresh.size === 0) {
       const newFresh = new Set<AnySignal>();
-      for (const p of this._propagators) {
+      for (const { p } of this._entries) {
         const changed = runPropagator(p);
         for (const w of changed) newFresh.add(w);
       }
@@ -138,8 +128,8 @@ export class Propagators {
     while (fresh.size > 0 && iters < this._maxIterations) {
       iters++;
       const newFresh = new Set<AnySignal>();
-      for (const p of this._propagators) {
-        if (!hasFreshRead(p, fresh)) continue;
+      for (const { p, expanded } of this._entries) {
+        if (!hasExpandedFreshRead(expanded, fresh)) continue;
         const changed = runPropagator(p);
         for (const w of changed) newFresh.add(w);
       }
@@ -169,6 +159,18 @@ export class PropagatorDivergedError extends Error {
   }
 }
 
+/** Auto-expand declared reads to include transitive lens-chain
+ *  parents. Each direct read contributes itself plus every signal
+ *  it depends on (recursively). The expanded set is what the
+ *  freshness algorithm uses for both subscription and fire-gating. */
+function expandReads(reads: readonly AnySignal[]): readonly AnySignal[] {
+  const set = new Set<AnySignal>();
+  for (const r of reads) {
+    for (const dep of transitiveDeps(r)) set.add(dep);
+  }
+  return [...set];
+}
+
 /** Run a propagator's `step()` and return the set of WRITE signals
  *  whose values actually changed. */
 function runPropagator(p: Propagator): Set<AnySignal> {
@@ -182,9 +184,15 @@ function runPropagator(p: Propagator): Set<AnySignal> {
   return changed;
 }
 
-/** True iff any of the propagator's read signals is in the fresh set. */
-function hasFreshRead(p: Propagator, fresh: ReadonlySet<AnySignal>): boolean {
-  for (const r of p.reads) if (fresh.has(r)) return true;
+/** True iff any signal in the EXPANDED read-set is fresh. The
+ *  expansion at install time is what makes lens-chain parents
+ *  appear here even when the propagator's declared reads only
+ *  named the chain. */
+function hasExpandedFreshRead(
+  expanded: readonly AnySignal[],
+  fresh: ReadonlySet<AnySignal>,
+): boolean {
+  for (const r of expanded) if (fresh.has(r)) return true;
   return false;
 }
 
