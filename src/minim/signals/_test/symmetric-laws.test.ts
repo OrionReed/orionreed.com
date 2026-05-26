@@ -95,14 +95,16 @@ describe("symmetric spreadOf — lens laws", () => {
     verifyReadStability(make, { viewEq: approxNum05, sourceEq: approxVecArr05, reads: 5 });
   });
 
-  it("recovery: spread → 0 → 7 reinflates to the same shape scaled to 7", () => {
+  it("recovery: spread → 0 → 7 reinflates to the same shape scaled to mean=7", () => {
     verifyRecovery(
       make,
       0,
       7,
       orig => {
-        // Original spread = 3 (mean of unit distances). Recovered shape
-        // should be the same unit directions × 7.
+        // Baseline: each point's deviation normalized by the cluster's
+        // mean radial distance, then scaled by the target. This is the
+        // distribution-preserving semantic — a point at 1.5× the mean
+        // radius stays at 1.5× the new mean radius.
         const ctr = { x: 0, y: 0 };
         for (const p of orig) {
           ctr.x += p.x;
@@ -110,17 +112,55 @@ describe("symmetric spreadOf — lens laws", () => {
         }
         ctr.x /= orig.length;
         ctr.y /= orig.length;
-        return orig.map(p => {
-          const dx = p.x - ctr.x;
-          const dy = p.y - ctr.y;
-          const r = Math.hypot(dx, dy);
-          return r > 0
-            ? { x: ctr.x + (dx / r) * 7, y: ctr.y + (dy / r) * 7 }
-            : { x: ctr.x, y: ctr.y };
-        });
+        let sum = 0;
+        for (const p of orig) sum += Math.hypot(p.x - ctr.x, p.y - ctr.y);
+        const meanR = sum / orig.length;
+        const scale = meanR > 0 ? 7 / meanR : 0;
+        return orig.map(p => ({
+          x: ctr.x + (p.x - ctr.x) * scale,
+          y: ctr.y + (p.y - ctr.y) * scale,
+        }));
       },
       { sourceEq: approxVecArr05 },
     );
+  });
+
+  it("REGRESSION: non-symmetric cluster preserves its distribution under spread writes", () => {
+    // A cluster with mixed radial distances. After a spread write,
+    // the relative magnitudes (each point's deviation / cluster mean)
+    // should be preserved. The OLD bug would force all points onto a
+    // ring of radius target around the (drifted) centroid.
+    const NONSYM = [
+      { x: 5, y: 0 },   // |dev| = 5
+      { x: 0, y: 1 },   // |dev| = 1
+      { x: -1, y: 0 },  // |dev| = 1
+      { x: 0, y: -2 },  // |dev| = 2
+    ];
+    const { cells, source } = vecCluster(NONSYM);
+    const spread = spreadOf(cells as never);
+    spread.peek(); // realize complement
+    // current centroid = (1, -0.25), |devs| ≈ [4.013, 1.6, 2.01, 2.06],
+    // mean ≈ 2.42. Write spread = 2*mean = 4.84 should DOUBLE each
+    // deviation about the centroid.
+    const ctrBefore = { x: 1, y: -0.25 };
+    const meanBefore = (Math.hypot(4, 0.25) + Math.hypot(1, 1.25)
+      + Math.hypot(2, 0.25) + Math.hypot(1, 1.75)) / 4;
+    spread.value = meanBefore * 2;
+    const after = source.peek();
+    // Centroid should NOT have moved (scale about centroid preserves it):
+    const ctrAfter = {
+      x: (after[0]!.x + after[1]!.x + after[2]!.x + after[3]!.x) / 4,
+      y: (after[0]!.y + after[1]!.y + after[2]!.y + after[3]!.y) / 4,
+    };
+    expect(ctrAfter.x).toBeCloseTo(ctrBefore.x, 6);
+    expect(ctrAfter.y).toBeCloseTo(ctrBefore.y, 6);
+    // Each point's deviation should be exactly 2× original:
+    for (let i = 0; i < NONSYM.length; i++) {
+      const origDev = { x: NONSYM[i]!.x - ctrBefore.x, y: NONSYM[i]!.y - ctrBefore.y };
+      const newDev = { x: after[i]!.x - ctrAfter.x, y: after[i]!.y - ctrAfter.y };
+      expect(newDev.x).toBeCloseTo(origDev.x * 2, 6);
+      expect(newDev.y).toBeCloseTo(origDev.y * 2, 6);
+    }
   });
 
   it("recovery is stable across cycles: 0→7→0→3 all land correctly", () => {
@@ -246,6 +286,39 @@ describe("symmetric bestFitCircleLens.radius — lens laws", () => {
       ],
       { sourceEq: approxVecArr05 },
     );
+  });
+
+  it("REGRESSION: non-symmetric cluster preserves its shape under radius writes", () => {
+    // Points at varying distances. A radius write should scale them
+    // uniformly about the centroid — preserving relative distribution.
+    const NONSYM = [
+      { x: 3, y: 0 },     // dist from origin = 3
+      { x: 0, y: 8 },     // dist = 8
+      { x: -1, y: 0 },    // dist = 1
+      { x: 0, y: -4 },    // dist = 4
+    ];
+    const { cells, source } = vecCluster(NONSYM);
+    const { radius } = bestFitCircleLens(cells as never);
+    radius.peek();
+    const ctrBefore = { x: 0.5, y: 1 };
+    const meanBefore = (Math.hypot(2.5, 1) + Math.hypot(0.5, 7)
+      + Math.hypot(1.5, 1) + Math.hypot(0.5, 5)) / 4;
+    radius.value = meanBefore * 3;
+    const after = source.peek();
+    // Centroid stable under uniform scale about centroid:
+    const ctrAfter = {
+      x: (after[0]!.x + after[1]!.x + after[2]!.x + after[3]!.x) / 4,
+      y: (after[0]!.y + after[1]!.y + after[2]!.y + after[3]!.y) / 4,
+    };
+    expect(ctrAfter.x).toBeCloseTo(ctrBefore.x, 6);
+    expect(ctrAfter.y).toBeCloseTo(ctrBefore.y, 6);
+    // Each deviation × 3:
+    for (let i = 0; i < NONSYM.length; i++) {
+      const dx = NONSYM[i]!.x - ctrBefore.x;
+      const dy = NONSYM[i]!.y - ctrBefore.y;
+      expect(after[i]!.x - ctrAfter.x).toBeCloseTo(dx * 3, 6);
+      expect(after[i]!.y - ctrAfter.y).toBeCloseTo(dy * 3, 6);
+    }
   });
 });
 

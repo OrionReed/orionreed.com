@@ -454,9 +454,10 @@ export function bboxLens(points: readonly Writable<Vec>[]): {
     y: initBox.sy > 1e-12 ? (v.y - initBox.cy) / halfY0 : 0,
   }));
 
-  const size = Vec.symmetricLens<V, { fracs: V[] }>(points as never, {
-    missing: { fracs: initFracs },
-    putr: (vals, c) => {
+  type C = { fracs: V[] };
+  const size = Vec.symmetricLens(points as readonly Writable<Vec>[], {
+    missing: { fracs: initFracs } as C,
+    putr: (vals: readonly V[], c: C) => {
       const b = computeBox(vals);
       const fracs = c.fracs;
       const hx = b.sx > 1e-12 ? b.sx / 2 : 0;
@@ -468,7 +469,7 @@ export function bboxLens(points: readonly Writable<Vec>[]): {
       }
       return { x: b.sx, y: b.sy };
     },
-    putl: (target, vals, c) => {
+    putl: (target: V, vals: readonly V[], c: C) => {
       const b = computeBox(vals);
       const fracs = c.fracs;
       const hx = b.sx > 1e-12 ? b.sx / 2 : 0;

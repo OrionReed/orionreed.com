@@ -108,20 +108,24 @@ export function meanColor(colors: readonly Writable<Traits<ColorV, "linear">>[])
   return meanOf(colors);
 }
 
-/** Generic "spread" lens: scalar that scales every input's deviation
- *  from the centroid. Writing spread = T sets every input to
- *  `centroid + unit_i * T` where `unit_i` is its unit deviation
- *  direction.
+/** Generic "spread" lens: scalar that reads the mean radial distance
+ *  from the cluster's centroid (via the `Metric` trait) and on write
+ *  scales the cluster's deviations so the new mean matches the
+ *  target — preserving the relative distribution.
  *
  *  Trait-driven via `Linear` (add/sub/scale on deviations) AND
  *  `Metric` (L2 distance from centroid). Works for any value class
  *  declaring both — Vec, Color, Pose, Box, Range, custom.
  *
- *  Symmetric implementation: the complement carries the per-input
- *  unit deviation directions. When the current cluster is degenerate
- *  (spread < eps) the stored units survive, so spread → 0 → T fully
- *  recovers the original geometry. No epsilon clamping; `spread = 0`
- *  is truly 0; composition does not amplify a floor.
+ *  Symmetric implementation: the complement carries per-input
+ *  deviations NORMALIZED by the cluster's current mean radial
+ *  distance. Writing `spread = T` places each input at
+ *  `centroid + normDev_i * T`. A point that was at 1.5× the mean
+ *  radius stays at 1.5× the new mean radius — relative shape is
+ *  preserved. When the cluster collapses (spread < eps) the stored
+ *  norms survive, so `spread → 0 → T` reinflates the original SHAPE
+ *  (not a perfect sphere around the centroid). No epsilon clamping;
+ *  `spread = 0` is truly 0; composition does not amplify a floor.
  *
  *  Cross-channel invariance with `meanOf`: writing mean translates the
  *  cluster (spread unchanged); writing spread scales about the current
@@ -149,50 +153,55 @@ export function spreadOf<T extends NonNullable<unknown>, S extends Signal<T> & T
     return lin.scale(acc, inv);
   };
 
-  // Initial complement: capture unit deviations from peek()ed sources.
-  // If any are degenerate, store the additive zero (`lin.scale(v0, 0)`)
-  // as a "no direction info yet" marker. Those inputs will not move
-  // when spread is written — until they're moved manually and the
-  // lens re-reads (which refreshes the unit).
+  // Initial complement: capture normalized deviations (dev / mean) from
+  // peek()ed sources. If the initial cluster is fully collapsed, store
+  // additive zeros — those inputs won't move when spread is written
+  // until they're moved manually and a re-read refreshes the norms.
   const initVals = inputs.map(s => s.peek() as T);
   const initCtr = centroid(initVals);
   const zero = lin.scale(initVals[0]!, 0);
-  const initUnits = initVals.map(v => {
-    const r = met(v, initCtr);
-    return r > 1e-9 ? lin.scale(lin.sub(v, initCtr), 1 / r) : zero;
-  });
+  let initSum = 0;
+  for (let i = 0; i < K; i++) initSum += met(initVals[i]!, initCtr);
+  const initMean = initSum * inv;
+  const initNorms = initVals.map(v =>
+    initMean > 1e-9 ? lin.scale(lin.sub(v, initCtr), 1 / initMean) : zero,
+  );
 
-  return Num.symmetricLens<T, { units: T[] }>(inputs as never, {
-    missing: { units: initUnits },
-    putr: (vals, c) => {
+  type C = { norms: T[] };
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape — spec is checked structurally
+  return (Num as any).symmetricLens(inputs as unknown as readonly Writable<Signal<T>>[], {
+    missing: { norms: initNorms },
+    putr: (vals: readonly T[], c: C) => {
       const ctr = centroid(vals);
       let total = 0;
-      const units = c.units;
-      for (let i = 0; i < K; i++) {
-        const r = met(vals[i]!, ctr);
-        total += r;
-        if (r > 1e-9) {
-          units[i] = lin.scale(lin.sub(vals[i]!, ctr), 1 / r);
+      for (let i = 0; i < K; i++) total += met(vals[i]!, ctr);
+      const mean = total * inv;
+      if (mean > 1e-9) {
+        const invMean = 1 / mean;
+        for (let i = 0; i < K; i++) {
+          c.norms[i] = lin.scale(lin.sub(vals[i]!, ctr), invMean);
         }
       }
-      return total * inv;
+      return mean;
     },
-    putl: (target, vals, c) => {
+    putl: (target: number, vals: readonly T[], c: C) => {
       const ctr = centroid(vals);
-      const units = c.units;
-      for (let i = 0; i < K; i++) {
-        const r = met(vals[i]!, ctr);
-        if (r > 1e-9) {
-          units[i] = lin.scale(lin.sub(vals[i]!, ctr), 1 / r);
+      let total = 0;
+      for (let i = 0; i < K; i++) total += met(vals[i]!, ctr);
+      const mean = total * inv;
+      if (mean > 1e-9) {
+        const invMean = 1 / mean;
+        for (let i = 0; i < K; i++) {
+          c.norms[i] = lin.scale(lin.sub(vals[i]!, ctr), invMean);
         }
       }
       const out: T[] = new Array(K);
       for (let i = 0; i < K; i++) {
-        out[i] = lin.add(ctr, lin.scale(units[i]!, target));
+        out[i] = lin.add(ctr, lin.scale(c.norms[i]!, target));
       }
       return out;
     },
-  });
+  }) as Writable<Num>;
 }
 
 /** Palette decomposition: K colors → {mean: Color, spread: Num}.

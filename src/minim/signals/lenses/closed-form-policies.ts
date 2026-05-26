@@ -140,9 +140,11 @@ export function scaleAbout<T extends { x: number; y: number }>(
   const initVals = points.map(s => s.peek() as T);
   const initDevs = initVals.map(v => ({ x: v.x - p0.x, y: v.y - p0.y }));
 
-  return Num.symmetricLens<T, { devs: V[] }>(points as never, {
+  type C = { devs: V[] };
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape — spec is checked structurally
+  return (Num as any).symmetricLens(points as unknown as readonly Writable<Signal<T>>[], {
     missing: { devs: initDevs },
-    putr: (vals, c) => {
+    putr: (vals: readonly T[], c: C) => {
       const p = pivot.peek();
       const devs = c.devs;
       for (let i = 0; i < K; i++) {
@@ -156,7 +158,7 @@ export function scaleAbout<T extends { x: number; y: number }>(
       }
       return Math.hypot(vals[0]!.x - p.x, vals[0]!.y - p.y);
     },
-    putl: (target, vals, c) => {
+    putl: (target: number, vals: readonly T[], c: C) => {
       const p = pivot.peek();
       const devs = c.devs;
       for (let i = 0; i < K; i++) {
@@ -181,7 +183,7 @@ export function scaleAbout<T extends { x: number; y: number }>(
       }
       return out;
     },
-  });
+  }) as Writable<Num>;
 }
 
 /** Per-axis scale about a pivot. Vec-specific (the Pivotal trait
@@ -312,9 +314,10 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
     ? dominantAxisAngle(cov0.cxx, cov0.cxy, cov0.cyy)
     : 0;
 
-  const direction = Num.symmetricLens<V, { θ: number }>(points as never, {
-    missing: { θ: initθ },
-    putr: (vals, c) => {
+  type C = { θ: number };
+  const direction = Num.symmetricLens(points as readonly Writable<Vec>[], {
+    missing: { θ: initθ } as C,
+    putr: (vals: readonly V[], c: C) => {
       let sx = 0;
       let sy = 0;
       for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
@@ -329,7 +332,7 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
       c.θ = θ;
       return θ;
     },
-    putl: (target, vals, c) => {
+    putl: (target: number, vals: readonly V[], c: C) => {
       let sx = 0;
       let sy = 0;
       for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
@@ -389,66 +392,81 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
 
   const center = rigidTranslate(points);
 
-  // Symmetric: complement = per-point unit deviation from the centroid.
-  // When the cluster collapses (radius ≈ 0) the stored units survive
-  // and a subsequent radius write reinflates the original geometry.
+  // Symmetric: complement = per-point deviations normalized by the
+  // cluster's mean radial distance. Writing `radius = T` places each
+  // point at `centroid + normDev_i * T` — preserving the relative
+  // distribution (a point that was at 1.5× the mean radius stays at
+  // 1.5× the new mean radius). When the cluster collapses to a point
+  // (mean ≈ 0) the stored normalized devs survive and reinflate the
+  // original SHAPE, not a perfect circle.
   const initVals = points.map(s => s.peek());
   let sx0 = 0;
   let sy0 = 0;
   for (const v of initVals) { sx0 += v.x; sy0 += v.y; }
   const cx0 = sx0 / K;
   const cy0 = sy0 / K;
-  const initUnits = initVals.map(v => {
+  let sumR0 = 0;
+  const initDevs = initVals.map(v => {
     const dx = v.x - cx0;
     const dy = v.y - cy0;
-    const r = Math.hypot(dx, dy);
-    return r > 1e-9 ? { x: dx / r, y: dy / r } : { x: 0, y: 0 };
+    sumR0 += Math.hypot(dx, dy);
+    return { x: dx, y: dy };
   });
+  const meanR0 = sumR0 / K;
+  const initNorms = initDevs.map(d =>
+    meanR0 > 1e-9 ? { x: d.x / meanR0, y: d.y / meanR0 } : { x: 0, y: 0 },
+  );
 
-  const radius = Num.symmetricLens<V, { units: V[] }>(points as never, {
-    missing: { units: initUnits },
-    putr: (vals, c) => {
+  type C = { norms: V[] };
+  const radius = Num.symmetricLens(points as readonly Writable<Vec>[], {
+    missing: { norms: initNorms } as C,
+    putr: (vals: readonly V[], c: C) => {
       let sx = 0;
       let sy = 0;
       for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
       const cx = sx / K;
       const cy = sy / K;
       let sum = 0;
-      const units = c.units;
       for (let i = 0; i < K; i++) {
-        const dx = vals[i]!.x - cx;
-        const dy = vals[i]!.y - cy;
-        const r = Math.hypot(dx, dy);
-        sum += r;
-        if (r > 1e-9) {
-          const u = units[i]!;
-          u.x = dx / r;
-          u.y = dy / r;
+        sum += Math.hypot(vals[i]!.x - cx, vals[i]!.y - cy);
+      }
+      const mean = sum / K;
+      if (mean > 1e-9) {
+        const inv = 1 / mean;
+        const norms = c.norms;
+        for (let i = 0; i < K; i++) {
+          const n = norms[i]!;
+          n.x = (vals[i]!.x - cx) * inv;
+          n.y = (vals[i]!.y - cy) * inv;
         }
       }
-      return sum / K;
+      return mean;
     },
-    putl: (target, vals, c) => {
+    putl: (target: number, vals: readonly V[], c: C) => {
       let sx = 0;
       let sy = 0;
       for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
       const cx = sx / K;
       const cy = sy / K;
-      const units = c.units;
+      let sum = 0;
       for (let i = 0; i < K; i++) {
-        const dx = vals[i]!.x - cx;
-        const dy = vals[i]!.y - cy;
-        const r = Math.hypot(dx, dy);
-        if (r > 1e-9) {
-          const u = units[i]!;
-          u.x = dx / r;
-          u.y = dy / r;
+        sum += Math.hypot(vals[i]!.x - cx, vals[i]!.y - cy);
+      }
+      const mean = sum / K;
+      if (mean > 1e-9) {
+        const inv = 1 / mean;
+        const norms = c.norms;
+        for (let i = 0; i < K; i++) {
+          const n = norms[i]!;
+          n.x = (vals[i]!.x - cx) * inv;
+          n.y = (vals[i]!.y - cy) * inv;
         }
       }
       const out = new Array<V>(K);
+      const norms = c.norms;
       for (let i = 0; i < K; i++) {
-        const u = units[i]!;
-        out[i] = { x: cx + u.x * target, y: cy + u.y * target };
+        const n = norms[i]!;
+        out[i] = { x: cx + n.x * target, y: cy + n.y * target };
       }
       return out;
     },
