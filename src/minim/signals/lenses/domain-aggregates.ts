@@ -109,28 +109,28 @@ export function meanColor(colors: readonly Writable<Traits<ColorV, "linear">>[])
 }
 
 /** Generic "spread" lens: scalar that scales every input's deviation
- *  from the centroid. Writing spread = T scales all deviations by
- *  (T / current); writing 2× the current spread doubles the dispersion.
+ *  from the centroid. Writing spread = T sets every input to
+ *  `centroid + unit_i * T` where `unit_i` is its unit deviation
+ *  direction.
  *
- *  Trait-driven via `Linear` (for add/sub/scale on deviations) AND
- *  `Metric` (for the L2 distance from centroid). Works for ANY value
- *  class declaring both — Vec, Color, Pose, Box, Range, custom.
+ *  Trait-driven via `Linear` (add/sub/scale on deviations) AND
+ *  `Metric` (L2 distance from centroid). Works for any value class
+ *  declaring both — Vec, Color, Pose, Box, Range, custom.
  *
- *  Cross-channel invariance with `meanOf`: writing mean is rigid
- *  translation (preserves all relative differences → spread unchanged);
- *  writing spread is scale-about-centroid (preserves the centroid).
+ *  Symmetric implementation: the complement carries the per-input
+ *  unit deviation directions. When the current cluster is degenerate
+ *  (spread < eps) the stored units survive, so spread → 0 → T fully
+ *  recovers the original geometry. No epsilon clamping; `spread = 0`
+ *  is truly 0; composition does not amplify a floor.
  *
- *  Collapse protection: the bwd never multiplies deviations by < `eps`
- *  (default 1e-3). Without this, writing spread = 0 would erase all
- *  direction information and trap the lens at the centroid permanently
- *  — a "black-hole" footgun with no recovery path. The clamp means
- *  writing 0 produces a very compact (but recoverable) palette and a
- *  read returns ~`eps × current`. Documented as lossy at the floor;
- *  override via `opts.minRatio` if you genuinely want full collapse. */
+ *  Cross-channel invariance with `meanOf`: writing mean translates the
+ *  cluster (spread unchanged); writing spread scales about the current
+ *  centroid (mean unchanged). The centroid is recomputed from the
+ *  current source on every read & write, so an intervening mean
+ *  translate works correctly without staleness. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
 export function spreadOf<T extends NonNullable<unknown>, S extends Signal<T> & Traits<T, "linear" | "metric">>(
   inputs: readonly Writable<S>[],
-  opts: { minRatio?: number } = {},
 ): Writable<Num> {
   const K = inputs.length;
   if (K < 1) throw new Error("spreadOf: need ≥ 1 input");
@@ -142,7 +142,6 @@ export function spreadOf<T extends NonNullable<unknown>, S extends Signal<T> & T
     throw new Error(`spreadOf: ${(Cls as { name?: string }).name ?? "?"} needs Linear + Metric`);
   }
   const inv = 1 / K;
-  const minRatio = opts.minRatio ?? 1e-3;
 
   const centroid = (vals: readonly T[]): T => {
     let acc = vals[0]!;
@@ -150,34 +149,50 @@ export function spreadOf<T extends NonNullable<unknown>, S extends Signal<T> & T
     return lin.scale(acc, inv);
   };
 
-  return Num.lens(
-    inputs as never,
-    (vals: readonly T[]) => {
-      const c = centroid(vals);
-      let s = 0;
-      for (let i = 0; i < K; i++) s += met(vals[i]!, c);
-      return s * inv;
-    },
-    (target: number, vals: readonly T[]) => {
-      const c = centroid(vals);
-      let cur = 0;
-      for (let i = 0; i < K; i++) cur += met(vals[i]!, c);
-      cur *= inv;
-      // No deviation info → can't expand back out. Leave inputs alone.
-      if (cur < 1e-12) return vals.map(() => undefined) as never;
-      // Clamp the multiplicative ratio: never let it land below
-      // `minRatio` — collapse is one-way and we want to stay recoverable.
-      const rawK = target / cur;
-      const k = rawK < minRatio ? minRatio : rawK;
-      const out: T[] = new Array(K);
-      // new_i = centroid + k * (vals_i - centroid)
+  // Initial complement: capture unit deviations from peek()ed sources.
+  // If any are degenerate, store the additive zero (`lin.scale(v0, 0)`)
+  // as a "no direction info yet" marker. Those inputs will not move
+  // when spread is written — until they're moved manually and the
+  // lens re-reads (which refreshes the unit).
+  const initVals = inputs.map(s => s.peek() as T);
+  const initCtr = centroid(initVals);
+  const zero = lin.scale(initVals[0]!, 0);
+  const initUnits = initVals.map(v => {
+    const r = met(v, initCtr);
+    return r > 1e-9 ? lin.scale(lin.sub(v, initCtr), 1 / r) : zero;
+  });
+
+  return Num.symmetricLens<T, { units: T[] }>(inputs as never, {
+    missing: { units: initUnits },
+    putr: (vals, c) => {
+      const ctr = centroid(vals);
+      let total = 0;
+      const units = c.units;
       for (let i = 0; i < K; i++) {
-        const dev = lin.sub(vals[i]!, c);
-        out[i] = lin.add(c, lin.scale(dev, k));
+        const r = met(vals[i]!, ctr);
+        total += r;
+        if (r > 1e-9) {
+          units[i] = lin.scale(lin.sub(vals[i]!, ctr), 1 / r);
+        }
       }
-      return out as never;
+      return total * inv;
     },
-  );
+    putl: (target, vals, c) => {
+      const ctr = centroid(vals);
+      const units = c.units;
+      for (let i = 0; i < K; i++) {
+        const r = met(vals[i]!, ctr);
+        if (r > 1e-9) {
+          units[i] = lin.scale(lin.sub(vals[i]!, ctr), 1 / r);
+        }
+      }
+      const out: T[] = new Array(K);
+      for (let i = 0; i < K; i++) {
+        out[i] = lin.add(ctr, lin.scale(units[i]!, target));
+      }
+      return out;
+    },
+  });
 }
 
 /** Palette decomposition: K colors → {mean: Color, spread: Num}.

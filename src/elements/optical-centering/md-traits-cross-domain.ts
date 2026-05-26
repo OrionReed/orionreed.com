@@ -12,9 +12,11 @@
 // one composition. The trait dispatch (`Linear + Metric`) is what
 // lets `paletteLens` work uniformly across them.
 //
-// The spread lens has built-in collapse protection (`minRatio` in
-// `spreadOf`), so dragging spread to 0 squeezes the palette toward
-// the centroid but stays recoverable — no black-hole footgun.
+// `spreadOf` is a symmetric lens: dragging spread to 0 truly collapses
+// the cluster to its centroid (no epsilon clamp), but the per-input
+// unit directions live in the lens's complement, so any subsequent
+// non-zero spread write reinflates the original geometry exactly. The
+// "black-hole" trap is structurally absent.
 
 import {
   type Color,

@@ -812,9 +812,10 @@ This algorithm is the substrate for several higher layers:
   guarantees from §8.1 are enough for them to work uniformly.
 
 - **Aggregate primitives** (`aggregates.ts`, `new-primitives.ts`,
-  the prototype `_explore/factor-lens.ts`): closed-form and
-  numerical bwd policies for N→1 and N→M cardinalities. All ride on
-  the same `Cls.lens([parents], fwd, bwd)` API.
+  `lenses/`): closed-form and numerical bwd policies for N→1 and N→M
+  cardinalities. Most ride on the same `Cls.lens([parents], fwd, bwd)`
+  API; trap-class lenses (multiplicative scales, gauge-sensitive axes)
+  use `Cls.symmetricLens` — see §15.
 
 - **Constraint and physics layers** (`constraints/`, `propagators/`):
   use `network()` to coordinate multi-cell updates with self-
@@ -831,3 +832,110 @@ finite, terminate, propagate glitch-free, notify subscribers exactly
 once per logical change, and apply the lens's bwd policy to the
 source(s). That's the contract. The lawfulness of any specific bwd
 is a property of how the lens was authored, not of the engine.
+
+---
+
+## 15. Symmetric lenses (`Cls.symmetricLens`)
+
+The standard `Cls.lens(parents, fwd, bwd)` is sufficient for any lens
+whose bwd is a pure function of `(target, currentSources)`. But two
+classes of lens get stuck under that constraint:
+
+1. **Multiplicative scales.** `radius`, `spread`, `size`, `scaleAbout`
+   — the bwd is "scale current deviations by `target / current`".
+   When the current state is zero (cluster collapsed onto its centre),
+   the multiplier is undefined and the bwd has nowhere to go. Writing
+   `radius = 0` then `radius = 5` cannot recover the original
+   directions because they were destroyed by the collapse. Epsilon
+   clamping (`max(currentScale, 1e-3)`) hides the trap but leaks
+   through composition: `radius.scale(1000)` reports `0.001 × 1000 =
+   1` when the user reads zero.
+2. **Gauge-ambiguous axes.** `bestFitLineLens.direction` — the
+   principal axis of a covariance matrix is defined only up to sign,
+   so `atan2` jumps by π discontinuously as the cluster rotates
+   through certain regions. The view value jitters by half a turn
+   even though the source moves smoothly.
+
+Both classes share a root cause: information needed to *invert* the
+view is not derivable from the view alone OR from the current source
+alone. A symmetric lens carries an extra **complement** `C` —
+engine-managed mutable state private to the lens — that stores
+exactly that missing information.
+
+```ts
+const radius = Num.symmetricLens<V, { units: V[] }>(points, {
+  missing: { units: pointsInitial.map(initialUnitDirection) },
+  putr: (vals, c) => {
+    // Refresh c.units[i] from current source where well-defined,
+    // return the mean radial distance.
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      const dx = vals[i].x - cx, dy = vals[i].y - cy;
+      const r = Math.hypot(dx, dy);
+      sum += r;
+      if (r > 1e-9) { c.units[i].x = dx / r; c.units[i].y = dy / r; }
+    }
+    return sum / n;
+  },
+  putl: (target, vals, c) => {
+    // Use stored units: collapsed inputs reinflate via stored direction.
+    return vals.map((_, i) =>
+      ({ x: cx + c.units[i].x * target, y: cy + c.units[i].y * target })
+    );
+  },
+});
+```
+
+The API rules:
+
+- `putr` returns the view value directly; `putl` returns per-parent
+  updates (`undefined` to leave a parent untouched).
+- Both mutate `complement: C` in place through field writes.
+  Primitive complements should be wrapped in `{ value: T }`.
+- The complement is *engine-opaque*: nothing outside the spec ever
+  sees it. The lens still appears to consumers as a plain
+  `Writable<V>`.
+
+**Trap recovery.** Because `putl` consults the complement, writing
+through a singular view does NOT lose information: `radius → 0 →
+T` reinflates the original geometry exactly. `radius.scale(1000)`
+at `radius = 0` reads `0`, not `1000 × ε`. Composition stays sane.
+
+**Fusion.** A `.lens(F, B)` chained on top of a symmetric lens
+collapses into a single cell (`_fuseOnSymmetric`) that shares the
+inner complement and skips the intermediate cell entirely. This makes
+`radius.scale(10)` reads match a plain Jacobi lens within ~3%.
+
+**Continuity.** `bestFitLineLens.direction` stores the last-emitted
+angle in its complement and unwraps subsequent reads relative to it,
+modulo the axis period (π). The 180° eigenvector-sign jitter is
+structurally absent — the lens emits a monotonic real-valued angle
+as the cluster rotates, well past 2π and beyond.
+
+**Laws.** Symmetric lenses satisfy the classical GetPut / PutGet /
+PutPut laws (with PutPut modulo any gauge orbit the spec admits,
+e.g. axis equivalence for the line lens) plus three more checked by
+`_test/_laws.ts` helpers:
+
+- `verifyReadStability` — repeated reads return the same value,
+  with no observable side effect on the source.
+- `verifyRecovery` — driving the lens through a singular value and
+  back lands on a user-specified baseline shape.
+- `verifyContinuity` — smooth source perturbations produce smooth
+  view changes (no gauge jumps).
+
+**Theoretical lineage.** This is the stateful presentation of the
+symmetric lens from Hofmann–Pierce–Wagner (POPL '11), where the
+complement is what those papers call the "private state of the
+maintainer". Our engine cell *is* the maintainer; the complement
+lives in `SymmetricMeta` on the cell.
+
+**Where to use it.** Whenever a lens has either:
+
+- a multiplicative inverse that crosses zero (scales, sizes,
+  radii), OR
+- a gauge ambiguity in its read (axes, eigenvectors, polar angles).
+
+When in doubt: write a `verifyRecovery` test pointed at the
+trap-triggering view value. If the source can't be recovered, the
+lens wants a complement.

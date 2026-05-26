@@ -116,8 +116,15 @@ export function rotateAbout<T extends { x: number; y: number }>(
 }
 
 /** Writable radial distance from pivot to position of `points[0]`. Write
- *  scales every input about `pivot` via the `Pivotal` trait. Negative
- *  target reflects. Cross-channel invariance with `rotateAbout` is exact. */
+ *  scales every input radially about `pivot`. Negative target reflects.
+ *  Cross-channel invariance with `rotateAbout` is exact.
+ *
+ *  Symmetric implementation: the complement carries per-point offsets
+ *  from the pivot at the most recent non-degenerate state. When the
+ *  cluster has collapsed onto the pivot (radius ≈ 0), writing a
+ *  non-zero target reinflates from the stored shape — the trap is
+ *  gone. For Pose inputs, `theta` is preserved across the round-trip
+ *  (the complement only stores spatial offset). */
 export function scaleAbout<T extends { x: number; y: number }>(
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   points: readonly Writable<Traits<T, "pivotal"> & Signal<T>>[],
@@ -125,24 +132,56 @@ export function scaleAbout<T extends { x: number; y: number }>(
 ): Writable<Num> {
   const K = points.length;
   if (K < 1) throw new Error("scaleAbout: need ≥ 1 point");
-  const pv = pivotalOf<T>(points[0]!);
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape on Num.lens
-  return Num.lens(
-    points as never,
-    (vals: readonly T[]) => {
+  // Pivotal lookup eagerly so an undeclared class fails at construction:
+  pivotalOf<T>(points[0]!);
+
+  // Initial complement: capture offsets from the current pivot reading.
+  const p0 = pivot.peek();
+  const initVals = points.map(s => s.peek() as T);
+  const initDevs = initVals.map(v => ({ x: v.x - p0.x, y: v.y - p0.y }));
+
+  return Num.symmetricLens<T, { devs: V[] }>(points as never, {
+    missing: { devs: initDevs },
+    putr: (vals, c) => {
       const p = pivot.peek();
+      const devs = c.devs;
+      for (let i = 0; i < K; i++) {
+        const dx = vals[i]!.x - p.x;
+        const dy = vals[i]!.y - p.y;
+        if (dx * dx + dy * dy > 1e-18) {
+          const d = devs[i]!;
+          d.x = dx;
+          d.y = dy;
+        }
+      }
       return Math.hypot(vals[0]!.x - p.x, vals[0]!.y - p.y);
     },
-    (target: number, vals: readonly T[]) => {
+    putl: (target, vals, c) => {
       const p = pivot.peek();
-      const oldS = Math.hypot(vals[0]!.x - p.x, vals[0]!.y - p.y);
-      if (oldS < 1e-12) return vals.map(() => undefined) as never;
-      const k = target / oldS;
+      const devs = c.devs;
+      for (let i = 0; i < K; i++) {
+        const dx = vals[i]!.x - p.x;
+        const dy = vals[i]!.y - p.y;
+        if (dx * dx + dy * dy > 1e-18) {
+          const d = devs[i]!;
+          d.x = dx;
+          d.y = dy;
+        }
+      }
+      const d0 = devs[0]!;
+      const r0 = Math.hypot(d0.x, d0.y);
+      if (r0 < 1e-12) {
+        return vals.map(() => undefined);
+      }
+      const k = target / r0;
       const out = new Array<T>(K);
-      for (let i = 0; i < K; i++) out[i] = pv.scaleAbout(vals[i]!, p, k);
-      return out as never;
+      for (let i = 0; i < K; i++) {
+        const d = devs[i]!;
+        out[i] = { ...vals[i]!, x: p.x + k * d.x, y: p.y + k * d.y };
+      }
+      return out;
     },
-  );
+  });
 }
 
 /** Per-axis scale about a pivot. Vec-specific (the Pivotal trait
@@ -242,6 +281,11 @@ function covariance(
   return { cxx: cxx / K, cxy: cxy / K, cyy: cyy / K };
 }
 
+/** Wrap to (-m/2, m/2]; used to choose the representative of an angle
+ *  closest to a stored reference, modulo `m`. For axes we use m = π
+ *  (axis-angle has period π); for full-vector angles m = 2π. */
+const wrapMod = (x: number, m: number): number => x - m * Math.round(x / m);
+
 export function bestFitLineLens(points: readonly Writable<Vec>[]): {
   point: Writable<Vec>;
   direction: Writable<Num>;
@@ -251,32 +295,54 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
 
   const point = rigidTranslate(points);
 
-  const direction = Num.lens(
-    points as never,
-    (vals: readonly V[]) => {
+  // Symmetric: the principal axis is an eigenvector — defined only up
+  // to sign. As the cloud rotates, the "raw" angle from atan2 jumps by
+  // π discontinuously. The complement stores the last-emitted angle;
+  // we wrap the raw value to the representative closest to it (mod π,
+  // because axis ≡ axis + π). Result: a continuous real-valued angle
+  // that monotonically tracks rotation — no jitter at the wrap points,
+  // and the lens reads the same value as it last reported when nothing
+  // has changed (idempotent).
+  const initVals = points.map(s => s.peek());
+  let sx0 = 0;
+  let sy0 = 0;
+  for (const v of initVals) { sx0 += v.x; sy0 += v.y; }
+  const cov0 = covariance(initVals, sx0 / K, sy0 / K);
+  const initθ = cov0.cxx + cov0.cyy > 1e-18
+    ? dominantAxisAngle(cov0.cxx, cov0.cxy, cov0.cyy)
+    : 0;
+
+  const direction = Num.symmetricLens<V, { θ: number }>(points as never, {
+    missing: { θ: initθ },
+    putr: (vals, c) => {
       let sx = 0;
       let sy = 0;
-      for (let i = 0; i < K; i++) {
-        sx += vals[i]!.x;
-        sy += vals[i]!.y;
-      }
+      for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
       const cx = sx / K;
       const cy = sy / K;
       const { cxx, cxy, cyy } = covariance(vals, cx, cy);
-      return dominantAxisAngle(cxx, cxy, cyy);
+      if (cxx + cyy < 1e-18) {
+        return c.θ;
+      }
+      const rawθ = dominantAxisAngle(cxx, cxy, cyy);
+      const θ = c.θ + wrapMod(rawθ - c.θ, Math.PI);
+      c.θ = θ;
+      return θ;
     },
-    (target: number, vals: readonly V[]) => {
+    putl: (target, vals, c) => {
       let sx = 0;
       let sy = 0;
-      for (let i = 0; i < K; i++) {
-        sx += vals[i]!.x;
-        sy += vals[i]!.y;
-      }
+      for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
       const cx = sx / K;
       const cy = sy / K;
       const { cxx, cxy, cyy } = covariance(vals, cx, cy);
-      const oldθ = dominantAxisAngle(cxx, cxy, cyy);
-      const dθ = target - oldθ;
+      if (cxx + cyy < 1e-18) {
+        c.θ = target;
+        return vals.map(() => undefined);
+      }
+      const rawθ = dominantAxisAngle(cxx, cxy, cyy);
+      const cur = c.θ + wrapMod(rawθ - c.θ, Math.PI);
+      const dθ = target - cur;
       const cos = Math.cos(dθ);
       const sin = Math.sin(dθ);
       const out = new Array<V>(K);
@@ -285,9 +351,10 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
         const ry = vals[i]!.y - cy;
         out[i] = { x: cx + cos * rx - sin * ry, y: cy + sin * rx + cos * ry };
       }
-      return out as never;
+      c.θ = target;
+      return out;
     },
-  );
+  });
 
   return { point, direction };
 }
@@ -322,49 +389,70 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
 
   const center = rigidTranslate(points);
 
-  const radius = Num.lens(
-    points as never,
-    (vals: readonly V[]) => {
+  // Symmetric: complement = per-point unit deviation from the centroid.
+  // When the cluster collapses (radius ≈ 0) the stored units survive
+  // and a subsequent radius write reinflates the original geometry.
+  const initVals = points.map(s => s.peek());
+  let sx0 = 0;
+  let sy0 = 0;
+  for (const v of initVals) { sx0 += v.x; sy0 += v.y; }
+  const cx0 = sx0 / K;
+  const cy0 = sy0 / K;
+  const initUnits = initVals.map(v => {
+    const dx = v.x - cx0;
+    const dy = v.y - cy0;
+    const r = Math.hypot(dx, dy);
+    return r > 1e-9 ? { x: dx / r, y: dy / r } : { x: 0, y: 0 };
+  });
+
+  const radius = Num.symmetricLens<V, { units: V[] }>(points as never, {
+    missing: { units: initUnits },
+    putr: (vals, c) => {
       let sx = 0;
       let sy = 0;
-      for (let i = 0; i < K; i++) {
-        sx += vals[i]!.x;
-        sy += vals[i]!.y;
-      }
+      for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
       const cx = sx / K;
       const cy = sy / K;
       let sum = 0;
+      const units = c.units;
       for (let i = 0; i < K; i++) {
-        sum += Math.hypot(vals[i]!.x - cx, vals[i]!.y - cy);
+        const dx = vals[i]!.x - cx;
+        const dy = vals[i]!.y - cy;
+        const r = Math.hypot(dx, dy);
+        sum += r;
+        if (r > 1e-9) {
+          const u = units[i]!;
+          u.x = dx / r;
+          u.y = dy / r;
+        }
       }
       return sum / K;
     },
-    (target: number, vals: readonly V[]) => {
+    putl: (target, vals, c) => {
       let sx = 0;
       let sy = 0;
-      for (let i = 0; i < K; i++) {
-        sx += vals[i]!.x;
-        sy += vals[i]!.y;
-      }
+      for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
       const cx = sx / K;
       const cy = sy / K;
-      let cur = 0;
+      const units = c.units;
       for (let i = 0; i < K; i++) {
-        cur += Math.hypot(vals[i]!.x - cx, vals[i]!.y - cy);
+        const dx = vals[i]!.x - cx;
+        const dy = vals[i]!.y - cy;
+        const r = Math.hypot(dx, dy);
+        if (r > 1e-9) {
+          const u = units[i]!;
+          u.x = dx / r;
+          u.y = dy / r;
+        }
       }
-      cur /= K;
-      if (cur < 1e-12) return vals.map(() => undefined) as never;
-      const k = target / cur;
       const out = new Array<V>(K);
       for (let i = 0; i < K; i++) {
-        out[i] = {
-          x: cx + k * (vals[i]!.x - cx),
-          y: cy + k * (vals[i]!.y - cy),
-        };
+        const u = units[i]!;
+        out[i] = { x: cx + u.x * target, y: cy + u.y * target };
       }
-      return out as never;
+      return out;
     },
-  );
+  });
 
   return { center, radius };
 }

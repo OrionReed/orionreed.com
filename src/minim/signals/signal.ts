@@ -616,6 +616,13 @@ export class Signal<T = unknown> implements ReactiveNode {
     fieldPath?: readonly (string | number | symbol)[];
   };
 
+  /** @internal — symmetric-lens metadata. Present when this cell was
+   *  built by `Cls.symmetricLens(...)`, or when a `.lens(F, B)` was
+   *  fused on top of one. Lets `.lens()` recognise a symmetric
+   *  receiver and inline F/B into the spec directly. */
+  // biome-ignore lint/suspicious/noExplicitAny: opaque to engine
+  _symOf?: SymmetricMeta<T, any>;
+
   constructor(initial: T, opts?: SignalOptions<T>) {
     this.currentValue = initial;
     this.pendingValue = initial;
@@ -758,6 +765,50 @@ export class Signal<T = unknown> implements ReactiveNode {
     return Signal._fuse(parent, this, fwd, bwd);
   }
 
+  /** Symmetric lens with a private complement. The complement is
+   *  engine-managed state that the spec's `putr` (read) and `putl`
+   *  (write) mutate. It preserves information the view alone discards,
+   *  eliminating the "trap" behaviour of multiplicative/sign-ambiguous
+   *  lenses (spread-to-zero, axis sign-flip, etc.).
+   *
+   *    Cls.symmetricLens(parent,   spec)   — 1-input.
+   *    Cls.symmetricLens([parents], spec)  — N-input.
+   *
+   *  `spec.putr` returns the view value directly; `spec.putl` returns
+   *  per-parent updates. Both mutate `complement` in place through
+   *  field writes. For "primitive complement" wrap in `{ value: T }`.
+   *
+   *  Fusion: a subsequent `.lens(F, B)` on the resulting cell collapses
+   *  into a single cell that shares the same complement (no extra
+   *  cell layer, no extra getter dispatch). Chained `.lens()` continues
+   *  to fuse. The internal multi-parent fanin is NOT collapsed (the
+   *  fan-out shape can't be expressed as a single-parent chain). */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static symmetricLens<C extends new (...args: never[]) => Signal<any>, P, COMP>(
+    this: C,
+    parent: Read<P>,
+    spec: SymmetricLensSpec1<P, Of<InstanceType<C>>, COMP>,
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static symmetricLens<
+    C extends new (...args: never[]) => Signal<any>,
+    P extends readonly Read<unknown>[],
+    COMP,
+  >(
+    this: C,
+    parents: P,
+    spec: SymmetricLensSpecN<
+      { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
+      Of<InstanceType<C>>,
+      COMP
+    >,
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: dispatch
+  static symmetricLens(this: any, parent: any, spec: any): any {
+    if (Array.isArray(parent)) return _symmetric(this, parent, spec);
+    return _symmetric(this, [parent], _liftSpec1(spec));
+  }
+
   /** Endo-lens: same-class lens via `(fwd, bwd)` in value-space.
    *  Auto-fuses: `.lens(F, B)` after `.lens(f, b)` collapses to one
    *  cell with composed fns.
@@ -778,6 +829,19 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  via `fwd` only. */
   lens(this: Signal<T>, fwd: (v: T) => T, bwd: (v: T, s: T) => T): this {
     const Cls = this.constructor as new (...args: never[]) => Signal<T>;
+    // Symmetric-lens receiver: collapse F/B into one fused cell that
+    // shares the inner spec's complement (skips the .lens cell layer).
+    const symOf = this._symOf;
+    if (symOf !== undefined) {
+      return _fuseOnSymmetric(
+        Cls as new (
+          ...args: never[]
+        ) => Signal<unknown>,
+        symOf as unknown as SymmetricMeta<unknown, unknown>,
+        fwd as (v: unknown) => unknown,
+        bwd as (v: unknown, s: unknown) => unknown,
+      ) as unknown as this;
+    }
     if (this._fusedOf !== undefined && this._fusedOf.bwd === undefined) {
       return Signal._fuse(
         this as Signal<unknown>,
@@ -1595,6 +1659,185 @@ export function lens(parent: any, fwd: any, bwd: any): any {
     return _fanin(Signal as new (...args: never[]) => Signal<unknown>, parent, fwd, bwd);
   }
   return Signal._fuse(parent, Signal as new (...args: never[]) => Signal<unknown>, fwd, bwd);
+}
+
+// ─── symmetric lens: complement-carrying lens ───────────────────────
+//
+// A symmetric lens carries a private `complement` — an opaque,
+// engine-managed cell that the lens's putr/putl mutate. The complement
+// preserves information the view alone discards, which is what makes
+// "trap" classes (multiplicative-zero, sign ambiguity, polar
+// singularity) recoverable across collapse round-trips.
+//
+// API design notes:
+//   - putr returns the view value; putl returns per-parent updates.
+//   - Both receive `complement: C` and mutate it through field writes
+//     (e.g. `c.θ = newθ`, `c.units[i].x = …`). This avoids the per-
+//     call result-object allocation and matches every shipping spec.
+//   - For "primitive complement" (no wrapper object), wrap in a
+//     `{ value: T }` cell and mutate that.
+//   - `putl` returns `ReadonlyArray<S | undefined>` — `undefined` to
+//     leave a parent untouched.
+//   - The lens does NOT participate in `_fuse` directly; instead, the
+//     instance `.lens(F, B)` method DOES recognize symmetric lens
+//     receivers and inlines F/B into a single composed cell. See
+//     `_fuseOnSymmetric` for the composition rule.
+
+/** Spec for a multi-input symmetric lens. The complement is owned by
+ *  the engine and passed into every call; spec mutates it in place. */
+export interface SymmetricLensSpecN<S extends readonly unknown[], V, C> {
+  missing: C;
+  putr: (sources: S, complement: C) => V;
+  putl: (target: V, sources: S, complement: C) => ReadonlyArray<S[number] | undefined>;
+}
+
+/** Spec for a single-input symmetric lens (sugar over N-input). */
+export interface SymmetricLensSpec1<S, V, C> {
+  missing: C;
+  putr: (source: S, complement: C) => V;
+  putl: (target: V, source: S, complement: C) => S | undefined;
+}
+
+/** Lift a 1-input spec into the canonical N-input form. */
+function _liftSpec1<S, V, C>(
+  spec: SymmetricLensSpec1<S, V, C>,
+): SymmetricLensSpecN<readonly S[], V, C> {
+  return {
+    missing: spec.missing,
+    putr: (sources, c) => spec.putr(sources[0]!, c),
+    putl: (target, sources, c) => [spec.putl(target, sources[0]!, c)],
+  };
+}
+
+/** Metadata installed on the resulting cell so the instance `.lens()`
+ *  fast path can recognize a symmetric-lens receiver and fuse against
+ *  its spec without indirection. */
+interface SymmetricMeta<V, C> {
+  parents: readonly Signal<unknown>[];
+  spec: SymmetricLensSpecN<readonly unknown[], V, C>;
+  complement: C;
+  vals: unknown[];
+}
+
+/** N-input symmetric lens. Allocates closure-captured `complement`
+ *  plus one scratch `vals` array. */
+function _symmetric<S extends readonly unknown[], V, C>(
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  Cls: new (...args: never[]) => Signal<any>,
+  parents: readonly Signal<unknown>[],
+  spec: SymmetricLensSpecN<S, V, C>,
+): Signal<V> {
+  const n = parents.length;
+  const meta: SymmetricMeta<V, C> = {
+    parents,
+    spec: spec as unknown as SymmetricLensSpecN<readonly unknown[], V, C>,
+    complement: spec.missing,
+    vals: new Array(n) as unknown[],
+  };
+
+  const getter = (): V => {
+    const vals = meta.vals;
+    for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
+    return spec.putr(vals as unknown as S, meta.complement);
+  };
+
+  const setter = (v: V): void => {
+    const vals = meta.vals;
+    for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+    const updates = spec.putl(v, vals as unknown as S, meta.complement);
+    batch(() => {
+      for (let i = 0; i < n; i++) {
+        const u = updates[i];
+        if (u === undefined) continue;
+        parents[i]!._setWithExclusion(u, activeNetwork);
+      }
+    });
+  };
+
+  const inst = Signal.install(Cls, getter, setter) as unknown as Signal<V>;
+  (inst as Signal<V> & { _symOf?: SymmetricMeta<V, C> })._symOf = meta;
+  return inst;
+}
+
+/** Build a fused cell where a plain endo `.lens(F, B)` sits on top of
+ *  a symmetric lens. The composed cell skips the `.lens` cell entirely:
+ *
+ *    view  = F(spec.putr(sources, c))
+ *    write = spec.putl(B(target, F(spec.putr(sources, c))), sources, c)
+ *
+ *  The composed cell stays symmetric (carries `_symOf`) so further
+ *  `.lens()` calls keep fusing.
+ *
+ *  Stateless B (arity ≤ 1): the inner `F(putr(...))` recomputation is
+ *  skipped on write — `putl(B(target), …)` is enough.
+ *
+ *  Returns the new cell. */
+function _fuseOnSymmetric<V, U, C>(
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  Cls: new (...args: never[]) => Signal<any>,
+  inner: SymmetricMeta<V, C>,
+  fwd: (v: V) => U,
+  bwd: (v: U, s: V) => V,
+): Signal<U> {
+  const { parents, spec, vals } = inner;
+  const n = parents.length;
+  const stateless = bwd.length < 2;
+
+  const getter = (): U => {
+    for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
+    return fwd(spec.putr(vals, inner.complement));
+  };
+
+  const setter: (v: U) => void = stateless
+    ? (v: U): void => {
+        for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+        const innerTarget = bwd(v, undefined as never);
+        const updates = spec.putl(innerTarget, vals, inner.complement);
+        batch(() => {
+          for (let i = 0; i < n; i++) {
+            const u = updates[i];
+            if (u === undefined) continue;
+            parents[i]!._setWithExclusion(u, activeNetwork);
+          }
+        });
+      }
+    : (v: U): void => {
+        for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+        // Stateful bwd needs current inner view value (= F⁻¹ of view).
+        // We can reconstruct it via putr (same `vals`, same complement).
+        const innerCur = spec.putr(vals, inner.complement);
+        const innerTarget = bwd(v, innerCur);
+        const updates = spec.putl(innerTarget, vals, inner.complement);
+        batch(() => {
+          for (let i = 0; i < n; i++) {
+            const u = updates[i];
+            if (u === undefined) continue;
+            parents[i]!._setWithExclusion(u, activeNetwork);
+          }
+        });
+      };
+
+  const inst = Signal.install(Cls, getter, setter) as unknown as Signal<U>;
+  // Tag the fused cell with a NEW SymmetricMeta whose spec wraps the
+  // composed F/B inline. Sharing parents + complement with inner ensures
+  // chained fusion sees the same complement state.
+  const composedSpec: SymmetricLensSpecN<readonly unknown[], U, C> = {
+    missing: inner.complement,
+    putr: (sources, c) => fwd(spec.putr(sources, c)),
+    putl: stateless
+      ? (target, sources, c) => spec.putl(bwd(target, undefined as never), sources, c)
+      : (target, sources, c) => {
+          const innerCur = spec.putr(sources, c);
+          return spec.putl(bwd(target, innerCur), sources, c);
+        },
+  };
+  (inst as Signal<U> & { _symOf?: SymmetricMeta<U, C> })._symOf = {
+    parents,
+    spec: composedSpec,
+    complement: inner.complement,
+    vals,
+  };
+  return inst;
 }
 
 // ─── _fanin: N-input lens helper ────────────────────────────────────

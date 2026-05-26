@@ -438,26 +438,56 @@ export function bboxLens(points: readonly Writable<Vec>[]): {
     },
   );
 
-  const size = Vec.lens(
-    points as never,
-    (vals: readonly V[]) => {
+  // Symmetric: the complement is per-point fractional offsets relative
+  // to the current bbox center/half-size, captured at the last non-
+  // degenerate read/write. On a write to `size`, points are placed at
+  // `center + frac_i * (target / 2)` from stored fractions — surviving
+  // a per-axis collapse to a line and reinflating cleanly. Stored
+  // fractions are updated component-wise: only the axes that are
+  // currently non-degenerate get refreshed.
+  const initVals = points.map(s => s.peek());
+  const initBox = computeBox(initVals);
+  const halfX0 = initBox.sx > 1e-12 ? initBox.sx / 2 : 1;
+  const halfY0 = initBox.sy > 1e-12 ? initBox.sy / 2 : 1;
+  const initFracs = initVals.map(v => ({
+    x: initBox.sx > 1e-12 ? (v.x - initBox.cx) / halfX0 : 0,
+    y: initBox.sy > 1e-12 ? (v.y - initBox.cy) / halfY0 : 0,
+  }));
+
+  const size = Vec.symmetricLens<V, { fracs: V[] }>(points as never, {
+    missing: { fracs: initFracs },
+    putr: (vals, c) => {
       const b = computeBox(vals);
+      const fracs = c.fracs;
+      const hx = b.sx > 1e-12 ? b.sx / 2 : 0;
+      const hy = b.sy > 1e-12 ? b.sy / 2 : 0;
+      for (let i = 0; i < K; i++) {
+        const f = fracs[i]!;
+        if (hx > 0) f.x = (vals[i]!.x - b.cx) / hx;
+        if (hy > 0) f.y = (vals[i]!.y - b.cy) / hy;
+      }
       return { x: b.sx, y: b.sy };
     },
-    (target: V, vals: readonly V[]) => {
+    putl: (target, vals, c) => {
       const b = computeBox(vals);
-      const kx = b.sx > 1e-12 ? target.x / b.sx : 1;
-      const ky = b.sy > 1e-12 ? target.y / b.sy : 1;
+      const fracs = c.fracs;
+      const hx = b.sx > 1e-12 ? b.sx / 2 : 0;
+      const hy = b.sy > 1e-12 ? b.sy / 2 : 0;
+      for (let i = 0; i < K; i++) {
+        const f = fracs[i]!;
+        if (hx > 0) f.x = (vals[i]!.x - b.cx) / hx;
+        if (hy > 0) f.y = (vals[i]!.y - b.cy) / hy;
+      }
+      const halfTx = target.x / 2;
+      const halfTy = target.y / 2;
       const out = new Array<V>(K);
       for (let i = 0; i < K; i++) {
-        out[i] = {
-          x: b.cx + kx * (vals[i]!.x - b.cx),
-          y: b.cy + ky * (vals[i]!.y - b.cy),
-        };
+        const f = fracs[i]!;
+        out[i] = { x: b.cx + f.x * halfTx, y: b.cy + f.y * halfTy };
       }
-      return out as never;
+      return out;
     },
-  );
+  });
 
   return { center, size };
 }

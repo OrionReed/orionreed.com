@@ -46,6 +46,8 @@ export {
   type SignalOptions,
   setSignalWriteHook,
   signal,
+  type SymmetricLensSpec1,
+  type SymmetricLensSpecN,
   untracked,
   type Val,
   valFn,
