@@ -4,20 +4,23 @@ The conceptual foundation of `@minim/signals`: what the substrate *is*,
 why it is shaped the way it is, and how the shape is realised in code.
 
 This document has two parts. **Part I — Theory** is implementation-free:
-it describes the paradigm, the central result and what the
-substrate can model. **Part II — Implementation** describes how the theory is  
-realised — the lens cell, fusion, the cost model, and the open design  
-questions.
+the paradigm, the central result, and what the substrate can model.
+**Part II — Implementation** describes how the theory is realised — the
+lens cell, fusion, the cost model, and the open design questions.
+
+
 
 # Part I — Theory
 
-## 1. The one-sentence claim
+## 1. Introduction
 
-Reactive programming is the *forward, acyclic fragment* of a larger
-paradigm. The larger paradigm is obtained by making every dependency
-edge a **lens** — a derivation bundled with its inverse — so that
-information flows both ways across the same edge. We call this
-**coreactive programming**.
+Reactive programming, in the usual signal/computed sense, is the
+*forward, acyclic fragment* of a larger picture. Coreactivity makes every\* dependency edge a **lens** — a derivation
+bundled with its inverse — so that information flows both ways across
+the same edge. **Coreactive programming** is we give to a reactive runtime whose edges are lenses.
+
+\* When a dependency does *not* have an inverse, this is a break/partition in the backwards direction of the graph and behaves like a normal derived value.
+[NOTE: what should the semantics be here? i guess you can't write to a readonly signal, which is fine...?]
 
 A standard reactive system is a directed acyclic graph (DAG) of cells.
 Edges mean "reads". Information flows one way: leaf to root, input to
@@ -30,34 +33,39 @@ a `get`. A derived cell can be *written*; the write flows back up the
 edge and updates the source. No cell is permanently an input or an
 output. You can drive either end.
 
+The *model* underneath this — acyclic networks of edge-local two-way
+constraints, with a least-change discipline on the backward direction —
+is not new; see §3. What this document describes is one realisation of
+it as a push-based reactive engine.
+
 > Naming note. The "co-" is the *lens dual* — `put` against `get` — and
 > is unrelated to the comonadic "co-" of Uustalu & Vene's comonadic
 > dataflow or Petricek's coeffects, where "co-" denotes a *temporal*
-> dual (a value depending on its past or neighbours). 
+> dual (a value depending on its past or neighbours).
 
-## 2. The central result: edge-local bidirectionality
+## 2. Edge-local bidirectionality
 
-> **A derivation graph can be made fully bidirectional — every edge**  
-> **traversable both ways — without becoming a cyclic constraint system.**  
+The structural fact the engine relies on:
+
+> **A derivation graph can be made fully bidirectional — every edge**
+> **traversable both ways — without becoming a cyclic constraint system.**
 > `put` **remains a bounded, one-way, upstream write.**
 
-This is worth stating carefully because the obvious assumption is the  
-opposite. "Bidirectional" intuitively suggests "the graph is now  
-symmetric or cyclic, so it is a constraint network, so it needs a solver." [NOTE: strawman, should update]  
-That is **graph-global bidirectionality** — no edge has a direction, the  
-whole graph is one mutual relation, and satisfying it requires  
-iteration to a fixpoint. Constraint systems work this way and pay for  
-it.
+The natural assumption is the opposite. "Bidirectional" suggests the
+graph has become symmetric — no edge has a direction, the whole graph
+is one mutual relation — and that satisfying such a relation requires
+iteration to a fixpoint. That is **graph-global bidirectionality**, and
+constraint systems do work that way and pay for it.
 
-Coreactive programming achieves **edge-local bidirectionality**
-instead. Each edge *independently* carries both directions. The graph
-stays a DAG; it stays oriented; `get` still flows leaf-to-root and
-`put` still flows root-to-leaf along *individual* edges. Bidirectionality
-is a property *of each edge in isolation*, not a property of the graph
-as a whole.
+Coreactive programming uses **edge-local bidirectionality** instead.
+Each edge *independently* carries both directions. The graph stays a
+DAG; it stays oriented; `get` still flows leaf-to-root and `put` still
+flows root-to-leaf along *individual* edges. Bidirectionality is a
+property *of each edge in isolation*, not a property of the graph as a
+whole. This is the constraint-maintainer model of Meertens (§3): an
+acyclic network of two-way maintainers, each restoring its own edge.
 
-The three regimes, by topology:
-
+The contrast, by topology:
 
 | Regime                   | Edges                         | Termination          |
 | ------------------------ | ----------------------------- | -------------------- |
@@ -65,249 +73,131 @@ The three regimes, by topology:
 | **Coreactive**           | **bidirectional, edge-local** | **acyclicity**       |
 | Constraint system        | bidirectional, graph-global   | fixpoint convergence |
 
+The middle row is the unoccupied corner. It is the source of the
+performance story: a constraint system is slow because *any* update may
+require global re-satisfaction; a coreactive `put` is fast because it
+is one bounded upstream write down a DAG (cost model, §9).
 
-The middle row is the unoccupied corner that minim's lens tier fills.
-It is the source of the performance story: a constraint system is slow
-because *every* update may require global re-satisfaction; a coreactive
-`put` is fast because it is one bounded upstream write down a DAG.
+## 3. Relation to prior work
 
-## 3. Equivalence to Reverse AD
+The model is old. Lambert Meertens, *Designing Constraint Maintainers
+for User Interaction* (1998, unpublished manuscript), describes acyclic
+networks of two-way constraint maintainers for direct-manipulation user
+interfaces: each edge is a pair of update functions taking the new value
+at one end and the old value at the other, governed by a Principle of
+Least Change, with the four laws this document's lens laws restate.
+That is the conceptual core here — edge-local bidirectionality, the
+laws, least-change — and minim does not claim it.
 
-A natural objection: "this is just reverse-mode automatic  
-differentiation / a separate backward propagation pass, rephrased."
+The backward-direction algebra was then developed for two decades by
+the bidirectional-transformation field: lenses (Foster et al.),
+symmetric lenses, delta lenses, the model-driven "bx" work. The lens
+cell here uses their laws (GetPut / PutGet / PutPut) unchanged. It is
+also folklore that reverse-mode automatic differentiation has the same
+shape — forward `get`, Jacobian-transpose `put`, chain rule as
+composition. None of this is novel to minim.
 
-**Equivalence.** The lens-factored DAG (each edge `(get, put)`) computes  
-the same class of relationships as a formulation with a separate  
-forward computation and a separately-specified backward pass. This is  
-the content of the known result that reverse-mode AD *is* a lens  
-(profunctor-optics literature; "Backprop as Functor"). Nothing  
-representable by separate forward/backward propagation is unreachable  
-by composed lenses.
+What that lineage produced were *invoked, batch* systems — Harmony,
+Boomerang, Augeas — and theory. A synchroniser consumes whole states on
+demand; a delta lens propagates a delta when called. What none of them
+is, is a *standing, push-based reactive runtime*: a live graph with
+automatic dependency tracking, glitch-free incremental propagation,
+lazy caching, and effects, where a `put` is not an invoked
+transformation but a write that enters ordinary propagation.
 
-[Note: mehhh is this true?:]
-
-**Superiority.** Equivalence of *computed results* is the weakest
-equivalence. The two formulations differ as engineering artifacts, and
-every difference favours the lens factoring:
-
-1. **Locality of authorship.** A separate backward pass is a *global*
-  object the framework coordinates; its correctness is a whole-graph
-   property. A lens bundles `get` and `put` *at the edge*; the lens
-   laws are *local* obligations on each edge, and lawful edges compose
-   to lawful chains. Correctness becomes local and compositional.
-2. **Single structure, no drift.** A separate backward pass is a
-  *second structure* that can fall out of sync with the forward graph.
-   A lens edge is *one* structure traversed two ways. There is nothing
-   to keep synchronised because there is only one thing.
-3. **The backward direction free-rides the forward engine.** Because
-  `put` bottoms out in the engine's ordinary write path, it inherits —
-   for free — every optimisation the forward engine already has:
-   equality short-circuiting, glitch-freedom, batching, dirty-tracking.
-   A separate backward pass must re-implement all of these.
-4. **Composition is automatic.** Lenses compose by construction
-  (fusion, Part II §3). Making a separate backward pass compositional  
-   is the hard part of every such system. [Note: is this true? points 1,2,3 feel like they are correctness criteria that any other implementation with a backwards pass would need to do correctly, so i dont think they hold up, and its not clear that they CANT be as performant, or CANT be implemented well in languages like JS, but maybe so... need better research here to explore these claims]
-
-The contribution is therefore **architectural, not expressive**: the
-backward direction is local, single-structure, and free-riding, where
-the alternative is global, dual-structure, and separately optimised.
+So the only thing minim offers beyond the prior work is **a reactive
+runtime for the maintainer model** — the engineering of §§5–10. Whether
+that is worth having is an empirical question (does it stay fast and
+ergonomic at scale?), not a theoretical one. The model is Meertens'; the
+laws are the bx field's; the runtime is the part to evaluate on its own
+merits.
 
 ## 4. What the substrate can model
 
-### 4.1 The lens/fixpoint dichotomy
+### 4.1 The lens-factorable boundary
 
 Define a relationship to be **lens-factorable** if it has a `put` that
 is:
 
 - **total** — defined for every value of the view that the view itself
-admits;
+  admits;
 - **single-pass** — computable in bounded steps, no iteration to a
-fixpoint;
+  fixpoint;
 - **local** — needs only the written value and the current source(s),
-nothing global.
+  nothing global.
 
-Then:
+A lens-factorable relationship is an *edge*. A relationship that is not
+lens-factorable falls outside the lens model — concretely, it fails in
+one of exactly three ways:
 
-> **Every relationship is either lens-factorable — in which case it is**  
-> **an edge in the DAG (the lens tier) — or it is not — in which case it**  
-> **requires the fixpoint tier.**
+1. the forward map is **non-injective with unrecoverable loss** — `put`
+   would have to invent information; no function can;
+2. the forward map is **not invertible in closed form** — an inverse
+   exists but only via iteration; not single-pass;
+3. there is **no forward map at all** — the relationship is a symmetric
+   relation, no end is the source; not function-shaped.
 
-Modelling of non lens-factorable computation (fixpoint convergence) is addressed in (§5).
+These three cases are the negation of lens-factorability, and they are
+what the separate `network()` mechanism exists for — a cyclic region
+under an iterative regime. `network()` is out of scope for this
+document; it is named here only to mark the boundary. Everything below
+concerns the lens model proper.
 
-### 4.2 The three lens disciplines
+### 4.2 The four lens disciplines
 
-We can sort lenses by how their forward map treats information:
+Lenses sort by one question: **where does `put` get the information that
+`get` discarded?**
 
-1. **Invertible edges.** `f` is a bijection; `put` reconstructs the
-  source exactly. `add(k)`, `scale(k≠0)`, affine maps, coordinate-frame
-   and unit conversions. `put` does not even need the old source.
-   Satisfies all lens laws. Composes and fuses perfectly. The heart of
-   the tier.
-2. **Residual edges.** `f` discards information, but the discarded part
-  is still present in the live source, so `put` reconstructs by
-   reading it back. `field(parent, "x")` (spread-replace, reading the
-   other fields), `centroid`, `mean`, `pulleySum` (distribute-delta,
-   reading the current configuration). The classical *constant-
-   complement* lens. Modelable exactly when the
-   complement is live-readable from the source.
-3. **Idempotent edges.** `f` discards information that is *gone* from
-  the source, and `put` does not reconstruct anything — it *projects*:
-   it snaps the source into a constrained subset, idempotently
-   (`put∘put = put`). `clamp`, `quantize`, `onLine`, `onCircle`,
-   `snap`. The conceptually important class: **an idempotent edge is a
-   constraint whose projection has a closed form, absorbed into a
-   single edge.** It is a constraint that costs nothing — it never
-   reaches the fixpoint tier because projecting onto its admissible set
-   is a one-step closed-form operation.
-4. [note: what about symmetric lenses?]
+1. **Invertible edges — needs none.** `f` is a bijection; `put`
+   reconstructs the source exactly, from the written value alone.
+   `add(k)`, `scale(k≠0)`, affine maps, coordinate-frame and unit
+   conversions. Satisfies all lens laws. Composes and fuses perfectly.
+   The heart of the model.
 
-In §4.1: the fixpoint tier is needed not for "all constraints" but specifically for  
-**constraints whose projection has no closed form** — a four-bar  
-linkage, a coupled nonlinear system. A circle is a lens; a linkage is a  
-fixpoint region*.  
-  
-[note:* depends on the linkage]
+2. **Residual edges — reads the live source.** `f` discards
+   information, but the discarded part is still present in the source,
+   so `put` reads it back. `field(parent, "x")` (spread-replace,
+   reading the other fields); `centroid`, `mean`, `pulleySum`
+   (distribute-delta, reading the current configuration). The classical
+   constant-complement lens. Works exactly when the complement is
+   live-readable from the source.
 
-### 4.3 The two axes [note: i dont think we need this section]
+3. **Idempotent edges — discards it, then projects.** `f` discards
+   information that is *gone* from the source, and `put` does not
+   reconstruct anything — it *projects*, snapping the source into a
+   constrained subset, idempotently (`put∘put = put`). `clamp`,
+   `quantize`, `onLine`, `onCircle`, `snap`. The conceptually important
+   class: **an idempotent edge is a constraint whose projection has a
+   closed form, absorbed into a single edge.** A circle constraint is a
+   lens; it never needs iteration, because projecting onto a circle is
+   a one-step closed-form operation. (Only constraints whose projection
+   has *no* closed form — a four-bar linkage, a coupled nonlinear
+   system — fall outside the lens model.)
 
-[NOTE: i think all the mentions of fixpoint stuff dont need to be woven in, not as a first-class "tier" really...]
+4. **Symmetric edges — holds it in a complement.** `f` discards
+   information recoverable from *neither* the view nor the live source
+   — a collapsed cluster's radial directions, an eigenvector's sign.
+   The lens carries an engine-managed **complement**: private bounded
+   state on the edge, holding exactly the missing information,
+   refreshed on read and consulted on write. This is the stateful
+   presentation of Hofmann–Pierce–Wagner symmetric lenses. It is still
+   a single-pass `put` and still inside the lens model — the complement
+   is bounded state on an edge, not a fixpoint.
 
-The full space has two decidable axes:
-
-- **Is the inverse lens-factorable?** Yes → lens. No → fixpoint.
-- **Is there an inherent direction at all?** A *function* has a
-primary end (a lens, if factorable). A *relation* (`a+b = c+d`,
-conservation laws, geometric constraints) has no primary end and
-always needs the fixpoint tier.
-
-Four quadrants:
-
-
-|                    | Directed                                                                                               | Undirected                                                                      |
-| ------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| **Factorable**     | **Lens.** Coordinate changes, field access, affine views, closed-form aggregates. Fast, lawful, fuses. | Symmetric-but-factorable relations (`eq`). Small but real.                      |
-| **Non-factorable** | Fixpoint region, directional regime. IK: tip is the view, joints the source, but the inverse iterates. | Fixpoint region, relational regime. Pulleys, conservation, physical simulation. |
-
-
-### 4.4 Ergonomics is a gradient [note: meh on this section]
-
-*Correctness* coverage is total — the fixpoint tier is universal, so
-everything is modelable. That is true and uninformative.
-
-*Ergonomics* is the real measure, and it is a smooth gradient that
-**aligns with** the conceptual gradient — the sign of a good
-abstraction:
-
-- Invertible lens — zero overhead. Write the forward map; the inverse
-is obvious.
-- Residual lens — small overhead. A standard distribute-delta `put`.
-- Idempotent lens — small overhead. A projection.
-- Fixpoint region, directional — moderate. Declare reads/writes, trust
-a fixpoint, accept the cost.
-- Fixpoint region, relational — most. Strengths, convergence,
-divergence handling.
-
-The easy things are easy; the hard things are possible; the boundary
-between them is a real property of the problem, not an artifact of the
-API.
-
-## 5. Why the fixpoint region is necessary, not bolted on [note: meh on this section existing, and also, why wouldnt this apply just as much to normal reactive systems? i do like some of the prose here though on fixpoint regimes, though it spends far too much time justifying its own existence. other note: i dont think we need the context of 'tier' in this doc]
-
-The lens tier's guarantees rest on one precondition: **every edge has a
-`put` that is a bounded single-pass function.** Ask when an edge *fails*
-that precondition. Exactly three cases, and they are exhaustive:
-
-1. The forward map is **non-injective and the lost information is
-  unrecoverable** — `put` would have to invent information. No
-   function can.
-2. The forward map is **not invertible in closed form** — an inverse
-  exists but is only reachable by iteration. Not single-pass.
-3. There is **no forward map at all** — the relationship is a symmetric
-  relation, no end is the source. Not even function-shaped.
-
-In all three cases the lens tier *cannot represent the relationship* —
-not "represents it poorly", cannot, because its load-bearing assumption
-is violated. And the three cases are precisely the negation of
-lens-factorability (§4.1).
-
-Therefore the fixpoint region is not a feature added alongside lenses.
-It is the **uniquely determined shape of everything that is not a
-lens**. Given the dichotomy, once you commit to "edges are lenses," the
-fixpoint region is *forced* — it is the completion of the architecture,
-the way the irrationals complete the rationals.
-
-This also fixes the fixpoint region's *minimal interface*: it must do
-exactly, and only, what the lens tier cannot — reach a consistent
-assignment over a set of cells with no functional inverse and possibly
-no direction, by iteration. That is the spec. Propagators, an AVBD
-solver, a relaxation loop — these are interchangeable *implementations*
-of that one spec. The `network()` primitive is the substrate's name for
-"a cyclic region governed by such a regime."
-
-## 6. The topological picture
-
-Three tiers, exhausting the shapes a dependency graph can take:
-
-- **DAG of one-way edges** — ordinary computed signals. Termination by
-acyclicity.
-- **DAG of bidirectional edges** — lenses. *Still* a DAG, *still*
-acyclic; each edge's `put` is a bounded upstream write. Termination
-still by acyclicity. (The central result, §2.)
-- **Cyclic regions under a fixpoint regime** — networks. Termination by
-a convergence/exclusion contract that *replaces* acyclicity.
-
-A reactive system's identity is *what topology it admits and how it
-guarantees termination over that topology*. The three tiers exhaust
-that question — one-way, bidirectional-acyclic, cyclic — which is why
-the picture feels complete: it is.
-
-## 7. Problem spaces [note: can drop this section]
-
-The substrate's natural applications are the cross-product of the
-topology with a domain. The diagnostic for a strong fit: a problem
-where the current pain is that *the relationship between two
-representations is maintained by hand-written, separately-authored,
-drift-prone forward and backward code* — often with one direction
-missing entirely, replaced by the user doing it in their head.
-
-- **Interactive diagrams** — every element manipulable because the
-relationships are lens edges. (The native demo.)
-- **Editable projections** — a canonical model edited *through* a
-derived view: timelines over event data, HSL sliders over an RGB
-swatch, tables over a database.
-- **Parametric design** — a model where the *outputs* are also
-grabbable. CAD-lite, design-by-outcome.
-- **Inverse-problem UIs** — calculators where you grab the *answer*:
-retirement target → contributions, macros → ingredients, contrast
-ratio → colours. A large, almost entirely unserved space, unserved
-precisely because every framework's `computed` is one-way.
-- **The document/code round-trip problem** — a structured artifact and
-a projection of it (rendered prose ↔ AST, visual editor ↔ code),
-edits to either side reflected in the other. A decades-old, genuinely
-unsolved problem; bidirectional-transformation theory addressed it
-but never had a reactive runtime to live in. The coreactive substrate
-is a candidate for that runtime.
-- **Live, manipulable simulation** — reach into a running simulation
-and drag the state; constraints re-satisfy. Animation that is also
-interaction.
-- **Bidirectional data sync** — multiple representations kept
-consistent without hand-written per-pair reconciliation.
-
-The unifying observation: the pain is always the same pain. Two
-representations, related by a rule, the relationship smeared across
-hand-written getters and setters that drift. Coreactive programming
-makes the *relationship* the unit of authorship — written once,
-traversed both ways.
+The four are a progression on the recoverability question: needs none /
+reads the live source / discards and projects / holds privately.
+Authoring cost rises gently along the same axis — an invertible edge is
+trivial to write, a symmetric edge takes real care — and that gradient
+is a property of the relationships themselves, not of the API.
 
 ---
 
 # Part II — Implementation
 
-## 8. The lens cell
+## 5. The lens cell
 
 There is no separate `Lens` class. A `Signal<T>` is one cell in one of
 three modes, determined by which fields are populated:
-
 
 | Mode     | `getter` | `setter` | Truth                     |
 | -------- | -------- | -------- | ------------------------- |
@@ -315,18 +205,17 @@ three modes, determined by which fields are populated:
 | computed | set      | unset    | `cachedValue` (lazy)      |
 | lens     | set      | **set**  | the parent's stored value |
 
-
 A lens is the third mode: a writable view. It stores no truth of its
 own — the truth is the root signal's. It holds a *cache* of its last
-computed value (§10), and a `getter`/`setter` pair.
+computed value (§7), and a `getter`/`setter` pair.
 
 Every lens operation — `.add(x)`, `.lens(f, g)`, `field(p, "k", C)`,
 `Cls.derive(...)` — returns a **real, first-class, fully-installed
-`Signal*`*. It has its own value, type, getter, setter, cache, and
+`Signal`**. It has its own value, type, getter, setter, cache, and
 subscriber list. There is no deferred or virtual cell, and no
 "materialise" step. `a.add(x)` is a real node the instant it returns.
 
-## 9. Fusion is edge re-rooting, not node merging
+## 6. Fusion is edge re-rooting, not node merging
 
 "Fusion" is a misleading name for a precise and narrow mechanism. It
 does **not** merge cells. Every cell in a chain stays alive and
@@ -339,7 +228,7 @@ intermediate's transform into its own composed closures.**
 Worked example. `a = vec(0,0)`, `b = a.add(x)`, `c = b.add(y)`:
 
 - `b` is a real cell; `b._fusedOf.parent === a`.
-- `c` is a real cell; `c._fusedOf.parent === a` — `**a`, not `b`.**
+- `c` is a real cell; `c._fusedOf.parent === a` — **`a`, not `b`**.
 - `c`'s getter is `composedFwd = s => f_c(f_b(s))`.
 - `c`'s setter inverts `g_b ∘ g_c` straight onto `a`.
 - `a` has two subscribers: `b` *and* `c`, both directly.
@@ -351,10 +240,10 @@ single edge carries the *composed* transform of the whole chain.
 So "fusion" fuses the *edge*, collapsing a multi-hop dependency into one
 re-rooted edge with a composed closure. It does not fuse nodes.
 
-### 9.1 Consequence: fused chains do not share subexpressions
+### 6.1 Consequence: fused chains do not share subexpressions
 
 Because `c` is re-rooted onto `a` and recomputes `f_c(f_b(a))` itself,
-`**c` does not use `b`'s cached value.** When `a` changes, `b` and `c`
+**`c` does not use `b`'s cached value.** When `a` changes, `b` and `c`
 are both marked dirty; reading `b` computes `f_b(a)`; reading `c`
 computes `f_c(f_b(a))`, recomputing `f_b(a)` *again* inside its own
 composite.
@@ -366,17 +255,17 @@ right) but it trades subexpression-sharing for graph-flatness.
 The trade is:
 
 - **Right** when the intermediate is *private* — `a.add(x).add(y)` as
-one expression, the `add(x)` result never bound. Nobody reads it; its
-cache would never be hit; flattening removes a useless hop.
+  one expression, the `add(x)` result never bound. Nobody reads it; its
+  cache would never be hit; flattening removes a useless hop.
 - **Wrong** when the intermediate is *shared* — out-degree ≥ 2. Then it
-is a genuine common subexpression and should be a materialised node
-whose cache both consumers read.
+  is a genuine common subexpression and should be a materialised node
+  whose cache both consumers read.
 
 The principle: **fuse a chain segment iff every node in it has
 out-degree 1.** Currently fusion is unconditional — every chained
-`.lens()` fuses regardless of out-degree (§13, open).
+`.lens()` fuses regardless of out-degree (§10, open).
 
-### 9.2 Captured state is root-derived, so deleting intermediates is safe
+### 6.2 Captured state is root-derived, so deleting intermediates is safe
 
 A fused cell is **closed**: it depends only on the root signal and the
 pure function values it captured at construction. `c`'s closures
@@ -396,7 +285,7 @@ break a stateful chain.
 retained mutable state — but it lives in `SymmetricMeta` on the *fused
 cell itself*, not on an intermediate, so the invariant holds.)
 
-## 10. The cache, and write-priming
+## 7. The cache, and write-priming
 
 Every computed/lens cell has a `cachedValue`. While the root is
 unchanged, lens reads hit the cache — a lens read is as cheap as a
@@ -408,7 +297,7 @@ are writable, and only nodes have a `put` site and a subscriber list),
 and nodes must cache to keep propagation `O(changed set)` rather than
 `O(reads)`.
 
-**Write-priming** (optimisation, see §13). After `view.value = v`, the
+**Write-priming** (optimisation, see §10). After `view.value = v`, the
 view is dirtied and will recompute its `get` on next read — rediscovering
 a value already known. `put` could instead *prime* the view's cache and
 mark it clean. The correctness rule is exact: prime with
@@ -419,7 +308,7 @@ nodes conflicts with fusion, which discarded them). It is a
 constant-factor latency win on the hot read-after-write path, not an
 asymptotic one.
 
-## 11. Lossy lenses and the agreement set
+## 8. Lossy lenses and the agreement set
 
 An idempotent/lossy lens need not have `fwd` and `bwd` agree
 numerically — they may be different functions over different domains
@@ -438,36 +327,36 @@ fails on the view's own admitted domain.
 it. A lens with an empty or undersized agreement set should fail
 loudly — under fusion it poisons everything composed on top of it.
 
-## 12. Cost model
+## 9. Cost model
 
 A `put` to a depth-`D` fused chain costs:
 
 - **Inverse descent** — `O(D)` arithmetic, fused inline into one
-closure. `D` is *syntactic chain depth* — how long a method chain the
-author typed — not a graph-size quantity. Effectively `O(1)`.
+  closure. `D` is *syntactic chain depth* — how long a method chain the
+  author typed — not a graph-size quantity. Effectively `O(1)`.
 - **Root write + equality check** — `O(1)`.
 - **Forward-cone refresh** — `O(|genuinely-changed cone|)`. The only
-unbounded term, and it is *not* a cost of bidirectionality: a one-way
-`signal.value = x` observed by the same `k` nodes pays the identical
-`O(k)`. It is the cost of the answer being different.
+  unbounded term, and it is *not* a cost of bidirectionality: a one-way
+  `signal.value = x` observed by the same `k` nodes pays the identical
+  `O(k)`. It is the cost of the answer being different.
 
 So: a `put` is `O(D + |changed cone|)`, `D` syntactic-small, the cone
 term irreducible and shared with one-way reactivity. **Bidirectionality
 carries no asymptotic penalty.**
 
-### 12.1 Why intermediate commit cannot help
+### 9.1 Why intermediate commit cannot help
 
 A tempting optimisation: have `put` commit at an intermediate node and
 stop, rather than descending to the root. It cannot strictly improve on
 root-commit:
 
 - If the inverse maps the write to a root value equal to the current
-one, the **root equality check** already halts propagation — zero
-refresh. Intermediate commit saves nothing.
+  one, the **root equality check** already halts propagation — zero
+  refresh. Intermediate commit saves nothing.
 - If the root value genuinely changes, every other branch off the root
-*genuinely depends on the new value* and must refresh for
-correctness. Intermediate commit that skips them *forks the truth* at
-a non-dominator — incorrect.
+  *genuinely depends on the new value* and must refresh for
+  correctness. Intermediate commit that skips them *forks the truth* at
+  a non-dominator — incorrect.
 
 So whenever intermediate commit would help, it is wrong; whenever it is
 correct, the equality cutoff already delivered the saving. Root-write
@@ -476,7 +365,7 @@ downstream computed's recompute) is **already at the asymptotic
 optimum**: every node that recomputes did so because its value really
 moved.
 
-### 12.2 Allocation
+### 9.2 Allocation
 
 A depth-`N` chain currently allocates: `N` full `Signal` objects, `N`
 `_fusedOf` records, `2N` leaf closures, `2N` composed closures, `N`
@@ -487,63 +376,62 @@ subscriber, never referenced). The composed getter is also a closure
 stack `N`-deep — fusion removes node-hop indirection but the composed
 `fwd` is still `N` nested calls.
 
-## 13. Open design questions
+## 10. Open design questions
 
 - **Out-degree-aware fusion.** Fusion is currently unconditional. The
-correct policy (§9.1) fuses only out-degree-1 segments and
-materialises fan-out points so subexpressions are shared. Out-degree
-is not known at construction time and evolves as subscribers are
-added; a principled implementation is *lazy re-rooting* — build the
-shared `a → b → c` chain, and collapse `b` away only once the engine
-observes it has a single subscriber.
+  correct policy (§6.1) fuses only out-degree-1 segments and
+  materialises fan-out points so subexpressions are shared. Out-degree
+  is not known at construction time and evolves as subscribers are
+  added; a principled implementation is *lazy re-rooting* — build the
+  shared `a → b → c` chain, and collapse `b` away only once the engine
+  observes it has a single subscriber.
+
 - **Descriptor / lazy-materialisation.** In `a.add(f).add(f).add(f)` as
-a single expression, the intermediates are *provably unreferenceable*
-— no binding escapes. They need not be built as real `Signal`s at
-all. `.add` / `.lens` could return a lightweight **pending-lens
-descriptor** (just the composed `{parent, fwd, bwd, stateful}`),
-accumulating under chaining, and **reify to a real `Signal` lazily**
-on first observation as a node (read in an effect/computed, `.value`
-touched, passed to an animator/propagator). Forcing must be memoised
-so a descriptor used twice still reifies once.
-  This eliminates the `N−1` wasted allocations of §12.2 *and* dissolves
+  a single expression, the intermediates are *provably unreferenceable*
+  — no binding escapes. They need not be built as real `Signal`s at
+  all. `.add` / `.lens` could return a lightweight **pending-lens
+  descriptor** (just the composed `{parent, fwd, bwd, stateful}`),
+  accumulating under chaining, and **reify to a real `Signal` lazily**
+  on first observation as a node (read in an effect/computed, `.value`
+  touched, passed to an animator/propagator). Forcing must be memoised
+  so a descriptor used twice still reifies once.
+
+  This eliminates the `N−1` wasted allocations of §9.2 *and* dissolves
   the out-degree question: a chained-through intermediate is never
   forced and never becomes a node; a *bound and used* intermediate is
   forced into a shareable node by the act of using it. "Was the
   intermediate referenced" becomes observable — referencing it is what
   forces it. The out-degree-1 policy stops being a guess and becomes a
   consequence of evaluation order.
-- **Arity-based statefulness inference.** A `bwd`'s statefulness is
-currently inferred from `Function.length` (`≥ 2` → stateful). A
-default parameter silently changes arity and misclassifies. Replace
-with an explicit signal — a flag, or two differently-typed methods —
-so the type system catches the mismatch.
-- **Law-checking fused chains.** `laws.ts` checks primitive lenses.
-Fusion *composes* lenses; the law tests should also run against fused
-chains, where a closure-composition bug would hide. (Lawfulness is
-preserved by composition in theory — iso∘iso = iso, the lossy/
-numerical classes follow the weakest-layer rule — but the test
-should pin the implementation.)
 
-## 14. Glossary
+- **Arity-based statefulness inference.** A `bwd`'s statefulness is
+  currently inferred from `Function.length` (`≥ 2` → stateful). A
+  default parameter silently changes arity and misclassifies. Replace
+  with an explicit signal — a flag, or two differently-typed methods —
+  so the type system catches the mismatch.
+
+- **Law-checking fused chains.** `laws.ts` checks primitive lenses.
+  Fusion *composes* lenses; the law tests should also run against fused
+  chains, where a closure-composition bug would hide. (Lawfulness is
+  preserved by composition in theory — iso∘iso = iso, the lossy/
+  numerical classes follow the weakest-layer rule — but the test
+  should pin the implementation.)
+
+## 11. Glossary
 
 - **Coreactive programming** — reactive programming where every
-dependency edge is a lens; reactivity paired with its lens-dual.
+  dependency edge is a lens; reactivity paired with its lens-dual.
 - **Edge-local bidirectionality** — bidirectionality as an independent
-property of each edge; the graph stays an oriented DAG. Contrast
-*graph-global bidirectionality* (constraint systems).
+  property of each edge; the graph stays an oriented DAG. Contrast
+  *graph-global bidirectionality* (constraint systems).
 - **Lens-factorable** — a relationship with a total, single-pass, local
-`put`. The decidable property partitioning the lens tier from the
-fixpoint tier.
-- **Invertible / residual / idempotent edge** — the three lens
-disciplines (§4.2): exact inverse / complement read back from the
-live source / closed-form projection.
-- **Fixpoint region** — a cyclic sub-graph deliberately exempted from
-acyclicity, governed by a convergence regime instead; minim's
-`network()`. Necessary by exhaustion (§5).
+  `put`. The decidable property marking the boundary of the lens model.
+- **Invertible / residual / idempotent / symmetric edge** — the four
+  lens disciplines (§4.2), sorted by where `put` recovers the
+  information `get` discarded: from nothing / from the live source / by
+  closed-form projection / from a private complement.
 - **Fusion** — edge re-rooting: a lens built on a lens is re-rooted
-onto the original root with composed closures. Not node merging
-(§9).
+  onto the original root with composed closures. Not node merging (§6).
 - **Agreement set** — for a lossy lens, the set of view values that
-round-trip; must equal the view's producible set for the lens to be
-well-formed (§11).
-
+  round-trip; must equal the view's producible set for the lens to be
+  well-formed (§8).
