@@ -188,35 +188,74 @@ export function scaleAbout<T extends { x: number; y: number }>(
 
 /** Per-axis scale about a pivot. Vec-specific (the Pivotal trait
  *  doesn't currently expose per-axis scaling — it'd require an extra
- *  method; for now the per-axis case stays inline for Vec). */
+ *  method; for now the per-axis case stays inline for Vec).
+ *
+ *  Symmetric: complement carries per-point per-axis fractions of
+ *  point 0's offset from pivot, so collapse on either axis is
+ *  recoverable (cf. `bboxLens.size`). */
 export function scaleAboutXY(
   points: readonly Writable<Vec>[],
   pivot: Read<V>,
 ): Writable<Vec> {
   const K = points.length;
   if (K < 1) throw new Error("scaleAboutXY: need ≥ 1 point");
-  return Vec.lens(
-    points as never,
-    (vals: readonly V[]) => {
+
+  // Initial fractions: point i's (x − pivot.x) / (point0.x − pivot.x),
+  // and same for y. Captures the cluster's shape relative to point 0's
+  // own offset, so that writing target=(Tx, Ty) places points at
+  // `pivot + (fx_i*Tx, fy_i*Ty)`.
+  const p0 = pivot.peek();
+  const initVals = points.map(s => s.peek());
+  const ox = initVals[0]!.x - p0.x;
+  const oy = initVals[0]!.y - p0.y;
+  const initFracs = initVals.map(v => ({
+    x: Math.abs(ox) > 1e-12 ? (v.x - p0.x) / ox : 0,
+    y: Math.abs(oy) > 1e-12 ? (v.y - p0.y) / oy : 0,
+  }));
+
+  type C = { fracs: V[] };
+  return Vec.symmetricLens(points as readonly Writable<Vec>[], {
+    missing: { fracs: initFracs } as C,
+    putr: (vals: readonly V[], c: C) => {
       const p = pivot.peek();
-      return { x: vals[0]!.x - p.x, y: vals[0]!.y - p.y };
+      const ox = vals[0]!.x - p.x;
+      const oy = vals[0]!.y - p.y;
+      if (Math.abs(ox) > 1e-12 && Math.abs(oy) > 1e-12) {
+        const fracs = c.fracs;
+        for (let i = 0; i < K; i++) {
+          const f = fracs[i]!;
+          f.x = (vals[i]!.x - p.x) / ox;
+          f.y = (vals[i]!.y - p.y) / oy;
+        }
+      } else {
+        // Partial refresh on whichever axis is non-degenerate.
+        const fracs = c.fracs;
+        for (let i = 0; i < K; i++) {
+          const f = fracs[i]!;
+          if (Math.abs(ox) > 1e-12) f.x = (vals[i]!.x - p.x) / ox;
+          if (Math.abs(oy) > 1e-12) f.y = (vals[i]!.y - p.y) / oy;
+        }
+      }
+      return { x: ox, y: oy };
     },
-    (target: V, vals: readonly V[]) => {
+    putl: (target: V, vals: readonly V[], c: C) => {
       const p = pivot.peek();
-      const oldX = vals[0]!.x - p.x;
-      const oldY = vals[0]!.y - p.y;
-      const kx = Math.abs(oldX) > 1e-12 ? target.x / oldX : 1;
-      const ky = Math.abs(oldY) > 1e-12 ? target.y / oldY : 1;
+      const ox = vals[0]!.x - p.x;
+      const oy = vals[0]!.y - p.y;
+      const fracs = c.fracs;
+      for (let i = 0; i < K; i++) {
+        const f = fracs[i]!;
+        if (Math.abs(ox) > 1e-12) f.x = (vals[i]!.x - p.x) / ox;
+        if (Math.abs(oy) > 1e-12) f.y = (vals[i]!.y - p.y) / oy;
+      }
       const out = new Array<V>(K);
       for (let i = 0; i < K; i++) {
-        out[i] = {
-          x: p.x + kx * (vals[i]!.x - p.x),
-          y: p.y + ky * (vals[i]!.y - p.y),
-        };
+        const f = fracs[i]!;
+        out[i] = { x: p.x + f.x * target.x, y: p.y + f.y * target.y };
       }
-      return out as never;
+      return out;
     },
-  );
+  });
 }
 
 // ─── 2. Decomposed procrustes (refactor via building blocks) ───────────
@@ -454,14 +493,23 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
       }
       const mean = sum / K;
       if (mean > 1e-9) {
+        // Non-degenerate fast path: scale current devs by k. Refresh
+        // stored norms as a side effect for the degenerate case.
         const inv = 1 / mean;
+        const k = target * inv;
         const norms = c.norms;
+        const out = new Array<V>(K);
         for (let i = 0; i < K; i++) {
+          const dx = vals[i]!.x - cx;
+          const dy = vals[i]!.y - cy;
           const n = norms[i]!;
-          n.x = (vals[i]!.x - cx) * inv;
-          n.y = (vals[i]!.y - cy) * inv;
+          n.x = dx * inv;
+          n.y = dy * inv;
+          out[i] = { x: cx + dx * k, y: cy + dy * k };
         }
+        return out;
       }
+      // Degenerate: reconstruct from stored norms.
       const out = new Array<V>(K);
       const norms = c.norms;
       for (let i = 0; i < K; i++) {
@@ -585,36 +633,112 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
     return out;
   };
 
-  const majorLength = Num.lens(
-    points as never,
-    (vals: readonly V[]) => Math.sqrt(Math.max(0, decompose(vals)?.lambdaMajor ?? 0)),
-    (target: number, vals: readonly V[]) => {
-      const d = decompose(vals);
-      if (!d) return vals.map(() => undefined) as never;
-      const curMajor = Math.sqrt(Math.max(0, d.lambdaMajor));
-      if (curMajor < 1e-12) return vals.map(() => undefined) as never;
-      const k = target / curMajor;
-      const ux = Math.cos(d.θ);
-      const uy = Math.sin(d.θ);
-      return scaleAlongAxis(vals, d.cx, d.cy, ux, uy, k) as never;
-    },
-  );
+  // Symmetric majorLength / minorLength: the complement carries the
+  // axes and per-point projections (normalized by the std-devs) at the
+  // most recent non-degenerate state. When the cluster collapses
+  // along an axis (eigenvalue → 0) the stored basis + projections
+  // reinflate the original geometry. Non-degenerate writes use the
+  // existing fast path (scaleAlongAxis) so the perf parity holds.
 
-  const minorLength = Num.lens(
-    points as never,
-    (vals: readonly V[]) => Math.sqrt(Math.max(0, decompose(vals)?.lambdaMinor ?? 0)),
-    (target: number, vals: readonly V[]) => {
+  // Capture initial state once for both axis lenses.
+  const initD = decompose(points.map(s => s.peek()));
+  const buildAxisLens = (which: "major" | "minor") => {
+    type AxisC = {
+      uX: number; uY: number;   // unit axis of THIS lens
+      vX: number; vY: number;   // unit perpendicular axis
+      lenThis: number;          // last known √λ on THIS axis
+      lenOther: number;         // last known √λ on the other axis
+      projThis: number[];       // dev·u / lenThis, per point
+      projOther: number[];      // dev·v / lenOther, per point
+    };
+
+    const initVals = points.map(s => s.peek());
+    const ux0 = initD ? (which === "major" ? Math.cos(initD.θ) : -Math.sin(initD.θ)) : 1;
+    const uy0 = initD ? (which === "major" ? Math.sin(initD.θ) : Math.cos(initD.θ)) : 0;
+    const vx0 = -uy0;
+    const vy0 = ux0;
+    const lenThis0 = Math.sqrt(Math.max(0, initD ? (which === "major" ? initD.lambdaMajor : initD.lambdaMinor) : 0));
+    const lenOther0 = Math.sqrt(Math.max(0, initD ? (which === "major" ? initD.lambdaMinor : initD.lambdaMajor) : 0));
+    const projThis0: number[] = [];
+    const projOther0: number[] = [];
+    if (initD) {
+      for (const v of initVals) {
+        const dx = v.x - initD.cx;
+        const dy = v.y - initD.cy;
+        projThis0.push(lenThis0 > 1e-12 ? (dx * ux0 + dy * uy0) / lenThis0 : 0);
+        projOther0.push(lenOther0 > 1e-12 ? (dx * vx0 + dy * vy0) / lenOther0 : 0);
+      }
+    } else {
+      for (let i = 0; i < K; i++) { projThis0.push(0); projOther0.push(0); }
+    }
+
+    const missing: AxisC = {
+      uX: ux0, uY: uy0,
+      vX: vx0, vY: vy0,
+      lenThis: lenThis0, lenOther: lenOther0,
+      projThis: projThis0, projOther: projOther0,
+    };
+
+    const refresh = (c: AxisC, vals: readonly V[]) => {
       const d = decompose(vals);
-      if (!d) return vals.map(() => undefined) as never;
-      const curMinor = Math.sqrt(Math.max(0, d.lambdaMinor));
-      if (curMinor < 1e-12) return vals.map(() => undefined) as never;
-      const k = target / curMinor;
-      // Scale along the MINOR axis (perpendicular to major):
-      const ux = -Math.sin(d.θ);
-      const uy = Math.cos(d.θ);
-      return scaleAlongAxis(vals, d.cx, d.cy, ux, uy, k) as never;
-    },
-  );
+      if (!d) return null;
+      const ux = which === "major" ? Math.cos(d.θ) : -Math.sin(d.θ);
+      const uy = which === "major" ? Math.sin(d.θ) : Math.cos(d.θ);
+      const vx = -uy;
+      const vy = ux;
+      const lenThis = Math.sqrt(Math.max(0, which === "major" ? d.lambdaMajor : d.lambdaMinor));
+      const lenOther = Math.sqrt(Math.max(0, which === "major" ? d.lambdaMinor : d.lambdaMajor));
+      c.uX = ux; c.uY = uy;
+      c.vX = vx; c.vY = vy;
+      c.lenThis = lenThis;
+      c.lenOther = lenOther;
+      // Only refresh projections on axes that aren't collapsed.
+      const invThis = lenThis > 1e-12 ? 1 / lenThis : null;
+      const invOther = lenOther > 1e-12 ? 1 / lenOther : null;
+      for (let i = 0; i < K; i++) {
+        const dx = vals[i]!.x - d.cx;
+        const dy = vals[i]!.y - d.cy;
+        if (invThis !== null) c.projThis[i] = (dx * ux + dy * uy) * invThis;
+        if (invOther !== null) c.projOther[i] = (dx * vx + dy * vy) * invOther;
+      }
+      return d;
+    };
+
+    return Num.symmetricLens(points as readonly Writable<Vec>[], {
+      missing,
+      putr: (vals: readonly V[], c: AxisC) => {
+        const d = refresh(c, vals);
+        return d ? c.lenThis : 0;
+      },
+      putl: (target: number, vals: readonly V[], c: AxisC) => {
+        const d = refresh(c, vals);
+        if (d && c.lenThis > 1e-12) {
+          // Non-degenerate fast path: scale current cluster along axis.
+          const k = target / c.lenThis;
+          c.lenThis = target;
+          return scaleAlongAxis(vals, d.cx, d.cy, c.uX, c.uY, k);
+        }
+        // Degenerate: reconstruct from complement. Centroid still
+        // derivable from current source (mean translates always work).
+        let sx = 0;
+        let sy = 0;
+        for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
+        const cx = sx / K;
+        const cy = sy / K;
+        const out = new Array<V>(K);
+        for (let i = 0; i < K; i++) {
+          const a = c.projThis[i]! * target;
+          const b = c.projOther[i]! * c.lenOther;
+          out[i] = { x: cx + a * c.uX + b * c.vX, y: cy + a * c.uY + b * c.vY };
+        }
+        c.lenThis = target;
+        return out;
+      },
+    });
+  };
+
+  const majorLength = buildAxisLens("major");
+  const minorLength = buildAxisLens("minor");
 
   return { mean, rotation, majorLength, minorLength };
 }
@@ -641,33 +765,55 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
 /** Single-output: writable total. Writing total scales all parts
  *  proportionally, preserving the ratios between them.
  *
- *  Cross-channel invariance: this is M=1 so there are no cross-channels
- *  to preserve. The behaviour to verify is that ratios stay constant:
- *  for any pair (i, j), `parts[i] / parts[j]` is unchanged by a total
- *  write. */
+ *  Symmetric implementation: the complement holds per-part fractions
+ *  (`parts[i] / total`) captured at the last non-degenerate state.
+ *  When the sum collapses to zero, the stored fractions reinflate the
+ *  original distribution on the next non-zero write — no "distribute
+ *  evenly" fallback, no information loss. */
 export function totalLens(parts: readonly Writable<Num>[]): Writable<Num> {
   const K = parts.length;
   if (K < 1) throw new Error("totalLens: need ≥ 1 part");
-  return Num.lens(
-    parts as never,
-    (vals: readonly number[]) => {
+
+  const initVals = parts.map(s => s.peek());
+  let sum0 = 0;
+  for (const v of initVals) sum0 += v;
+  const initFracs = initVals.map(v => (sum0 > 1e-12 ? v / sum0 : 1 / K));
+
+  type C = { fracs: number[] };
+  const sumLens = Num.symmetricLens(parts as readonly Writable<Num>[], {
+    missing: { fracs: initFracs } as C,
+    putr: (vals: readonly number[], c: C) => {
       let s = 0;
       for (let i = 0; i < K; i++) s += vals[i]!;
+      if (s > 1e-12) {
+        const inv = 1 / s;
+        for (let i = 0; i < K; i++) c.fracs[i] = vals[i]! * inv;
+      }
       return s;
     },
-    (target: number, vals: readonly number[]) => {
-      let cur = 0;
-      for (let i = 0; i < K; i++) cur += vals[i]!;
-      if (cur < 1e-12) {
-        // Collapsed: all parts at 0; can't scale up from there.
-        // Distribute target evenly as a fallback.
-        const each = target / K;
-        return vals.map(() => each) as never;
+    putl: (target: number, vals: readonly number[], c: C) => {
+      let s = 0;
+      for (let i = 0; i < K; i++) s += vals[i]!;
+      if (s > 1e-12) {
+        // Non-degenerate fast path: scale current values by k. This is
+        // bit-exact under simple ratios (k = target/s); using the
+        // stored fractions would re-multiply and introduce ulps.
+        const k = target / s;
+        const inv = 1 / s;
+        const out = new Array<number>(K);
+        for (let i = 0; i < K; i++) {
+          c.fracs[i] = vals[i]! * inv;
+          out[i] = vals[i]! * k;
+        }
+        return out;
       }
-      const k = target / cur;
-      return vals.map(v => v * k) as never;
+      // Degenerate (sum ≈ 0): reconstruct from stored fractions.
+      const out = new Array<number>(K);
+      for (let i = 0; i < K; i++) out[i] = c.fracs[i]! * target;
+      return out;
     },
-  );
+  });
+  return sumLens;
 }
 
 // ─── 7. (Aside) The "policy" framing ───────────────────────────────────

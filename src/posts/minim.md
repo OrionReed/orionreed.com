@@ -275,13 +275,7 @@ Constraints fall out of the same primitive. A pulley conserving rope length is j
 
 <md-pulley></md-pulley>
 
-When the inverse isn't a closed form, `argminVec` does one Newton step per write — damped least squares against a finite-difference Jacobian. Forward is whatever you can compute; the put redistributes the residual into inputs by weight. An N-link IK arm is the forward kinematics plus weights, plus a target-clamp into the reachable workspace (the principled fix for the rank-deficient Jacobian at full extension):
-
-```ts
-const tip = argminVec(angles, fwdKin, angles.map(() => 1), {
-  clampTarget: clampToDisc(root, N * L),
-});
-```
+When the inverse isn't a closed form, the lens's bwd can run a solver. An N-link IK arm is positions plus segment-length constraints; FABRIK alternates two geometric passes per iteration (forward: tip → target, walk back at segment length; backward: anchor root, walk forward at segment length) and converges in a handful of iterations from any configuration. Full extension is the algorithm's own first case — no rank-deficient Jacobian, no damping, no slack constants. Joints are Vec cells, the tip is a plain `Vec.lens([joints], fwd, bwd)`, the bwd runs FABRIK on every write.
 
 <md-ik></md-ik>
 

@@ -190,11 +190,19 @@ export function spreadOf<T extends NonNullable<unknown>, S extends Signal<T> & T
       for (let i = 0; i < K; i++) total += met(vals[i]!, ctr);
       const mean = total * inv;
       if (mean > 1e-9) {
+        // Non-degenerate fast path: scale current deviations by k.
+        // Refresh stored norms as a side effect.
         const invMean = 1 / mean;
+        const k = target * invMean;
+        const out: T[] = new Array(K);
         for (let i = 0; i < K; i++) {
-          c.norms[i] = lin.scale(lin.sub(vals[i]!, ctr), invMean);
+          const dev = lin.sub(vals[i]!, ctr);
+          c.norms[i] = lin.scale(dev, invMean);
+          out[i] = lin.add(ctr, lin.scale(dev, k));
         }
+        return out;
       }
+      // Degenerate: reconstruct from stored norms.
       const out: T[] = new Array(K);
       for (let i = 0; i < K; i++) {
         out[i] = lin.add(ctr, lin.scale(c.norms[i]!, target));

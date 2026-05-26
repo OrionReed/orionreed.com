@@ -338,38 +338,68 @@ export function procrustesLens(points: readonly Writable<Vec>[]): {
     },
   );
 
-  const scale = Num.lens(
-    points as never,
-    (vals: readonly V[]) => {
+  // Symmetric scale lens: complement stores per-point deviations from
+  // centroid at the most recent non-degenerate read/write. View is
+  // point 0's radial distance; writing target T places each point at
+  // `centroid + k * stored_dev_i` where k = T / |stored_dev_0|. Trap
+  // (whole cluster at centroid) is recoverable from the stored shape.
+  const initVals = points.map(s => s.peek());
+  let csx = 0;
+  let csy = 0;
+  for (const v of initVals) { csx += v.x; csy += v.y; }
+  const ccx = csx / K;
+  const ccy = csy / K;
+  const initDevs = initVals.map(v => ({ x: v.x - ccx, y: v.y - ccy }));
+
+  type C = { devs: V[] };
+  const scale = Num.symmetricLens(points as readonly Writable<Vec>[], {
+    missing: { devs: initDevs } as C,
+    putr: (vals: readonly V[], c: C) => {
       let sx = 0;
       let sy = 0;
-      for (let i = 0; i < K; i++) {
-        sx += vals[i]!.x;
-        sy += vals[i]!.y;
-      }
+      for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
       const cx = sx / K;
       const cy = sy / K;
+      const devs = c.devs;
+      for (let i = 0; i < K; i++) {
+        const dx = vals[i]!.x - cx;
+        const dy = vals[i]!.y - cy;
+        if (dx * dx + dy * dy > 1e-18) {
+          const d = devs[i]!;
+          d.x = dx;
+          d.y = dy;
+        }
+      }
       return Math.hypot(vals[0]!.x - cx, vals[0]!.y - cy);
     },
-    (target: number, vals: readonly V[]) => {
+    putl: (target: number, vals: readonly V[], c: C) => {
       let sx = 0;
       let sy = 0;
-      for (let i = 0; i < K; i++) {
-        sx += vals[i]!.x;
-        sy += vals[i]!.y;
-      }
+      for (let i = 0; i < K; i++) { sx += vals[i]!.x; sy += vals[i]!.y; }
       const cx = sx / K;
       const cy = sy / K;
-      const oldS = Math.hypot(vals[0]!.x - cx, vals[0]!.y - cy);
-      if (oldS < 1e-12) return vals.map(() => undefined) as never;
-      const k = target / oldS;
+      const devs = c.devs;
+      for (let i = 0; i < K; i++) {
+        const dx = vals[i]!.x - cx;
+        const dy = vals[i]!.y - cy;
+        if (dx * dx + dy * dy > 1e-18) {
+          const d = devs[i]!;
+          d.x = dx;
+          d.y = dy;
+        }
+      }
+      const d0 = devs[0]!;
+      const r0 = Math.hypot(d0.x, d0.y);
+      if (r0 < 1e-12) return vals.map(() => undefined);
+      const k = target / r0;
       const out = new Array<V>(K);
       for (let i = 0; i < K; i++) {
-        out[i] = { x: cx + k * (vals[i]!.x - cx), y: cy + k * (vals[i]!.y - cy) };
+        const d = devs[i]!;
+        out[i] = { x: cx + k * d.x, y: cy + k * d.y };
       }
-      return out as never;
+      return out;
     },
-  );
+  });
 
   return { centroid, rotation, scale };
 }
