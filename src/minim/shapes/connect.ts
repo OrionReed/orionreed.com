@@ -1,7 +1,7 @@
 // Connectors. Uses `shape.boundary` so analytic edges work without
 // per-kind dispatch.
 
-import { computed, num, type Val, Vec } from "@minim/signals";
+import { computed, type Val, Vec, valFn } from "@minim/signals";
 import { Line, type LineOpts } from "./line";
 import { Shape, SVG_NS } from "./shape";
 import { tokens } from "./tokens";
@@ -30,10 +30,10 @@ export function arrow(a: Shape | Vec, b: Shape | Vec, opts: ArrowOpts = {}): Lin
   const aBase = a instanceof Shape ? a.boundary(b instanceof Shape ? b.center : b) : a;
   const bBase = b instanceof Shape ? b.boundary(a instanceof Shape ? a.center : a) : b;
 
-  const gapSig = num(opts.gap ?? ARROW_GAP_DEFAULT);
+  const gap = valFn(opts.gap ?? ARROW_GAP_DEFAULT);
   const dir = bBase.sub(aBase).normalize();
-  const aP = aBase.add(dir.scale(computed(() => gapSig.value + tokens.weight)));
-  const bP = bBase.sub(dir.scale(computed(() => gapSig.value + ARROW_W)));
+  const aP = aBase.add(dir.scale(computed(() => gap() + tokens.weight)));
+  const bP = bBase.sub(dir.scale(computed(() => gap() + ARROW_W)));
 
   const line = new Line(aP, bP, opts);
   line.attr("marker-end", `url(#${ARROW_ID})`);

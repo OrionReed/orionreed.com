@@ -1,4 +1,4 @@
-import { Box, computed, Num, num, type Val, Vec } from "@minim/signals";
+import { Box, computed, Num, num, type Val, Vec, valFn } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 import { tokens } from "./tokens";
 
@@ -68,13 +68,13 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   /** Concentric outline — a new unmounted Rect inflated by `by` per
    *  side; corner radius bumps to keep curves parallel. */
   outline(by: Val<number>, opts?: RectOpts): Rect {
-    const bys = num(by);
+    const b = valFn(by);
     return new Rect(
-      () => this.x.value - bys.value,
-      () => this.y.value - bys.value,
-      () => this.w.value + 2 * bys.value,
-      () => this.h.value + 2 * bys.value,
-      { corner: () => this.corner.value + bys.value, ...opts } as RectOpts,
+      () => this.x.value - b(),
+      () => this.y.value - b(),
+      () => this.w.value + 2 * b(),
+      () => this.h.value + 2 * b(),
+      { corner: () => this.corner.value + b(), ...opts } as RectOpts,
     );
   }
 

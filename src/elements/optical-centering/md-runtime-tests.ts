@@ -6,7 +6,6 @@ import {
   type Animator,
   assemble,
   attract,
-  bind,
   centroid,
   circle,
   Diagram,
@@ -843,17 +842,22 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "bind(a, b): reactive mirror with disposer",
+    name: "effect(): reactive mirror with disposer",
     run: assert => {
       const a = vec(0, 0);
       const b = vec(10, 20);
-      const dispose = bind(a, b);
-      assert(a.value.x === 10 && a.value.y === 20, `a after bind: ${JSON.stringify(a.value)}`);
+      const dispose = effect(() => {
+        a.value = b.value;
+      });
+      assert(a.value.x === 10 && a.value.y === 20, `a after effect: ${JSON.stringify(a.value)}`);
       b.value = { x: 30, y: 40 };
-      assert(a.value.x === 30 && a.value.y === 40, `bind didn't track: ${JSON.stringify(a.value)}`);
+      assert(
+        a.value.x === 30 && a.value.y === 40,
+        `effect didn't track: ${JSON.stringify(a.value)}`,
+      );
       dispose();
       b.value = { x: 99, y: 99 };
-      assert(a.value.x === 30, `disposer didn't stop bind`);
+      assert(a.value.x === 30, `disposer didn't stop effect`);
     },
   },
   {

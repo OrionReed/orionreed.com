@@ -16,12 +16,12 @@
 
 import {
   computed,
-  num,
   type Of,
   type Signal,
   signal,
   type Val,
   Vec,
+  valFn,
   value,
   type Writable,
 } from "@minim/signals";
@@ -264,11 +264,11 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
 
   /** Sample at `t ∈ [0, 1]` along arc length. */
   pointAt(t: Val<number>): Vec {
-    const ts = num(t);
+    const ts = valFn(t);
     return Vec.derive(() => {
       const arr = this._segments.value;
       if (arr.length === 0) return { x: 0, y: 0 };
-      const target = clamp01(ts.value) * this.length.value;
+      const target = clamp01(ts()) * this.length.value;
       let acc = 0;
       for (const seg of arr) {
         const segLen = segmentLength(seg);
@@ -284,11 +284,11 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
 
   /** Unit tangent at `t ∈ [0, 1]`. */
   tangentAt(t: Val<number>): Vec {
-    const ts = num(t);
+    const ts = valFn(t);
     return Vec.derive(() => {
       const arr = this._segments.value;
       if (arr.length === 0) return { x: 1, y: 0 };
-      const target = clamp01(ts.value) * this.length.value;
+      const target = clamp01(ts()) * this.length.value;
       let acc = 0;
       for (const seg of arr) {
         const segLen = segmentLength(seg);

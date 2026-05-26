@@ -1,11 +1,11 @@
 import {
   computed,
-  num,
   type Read,
   type Signal,
   signal,
   type Val,
   Vec,
+  valFn,
   type Writable,
 } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
@@ -61,20 +61,23 @@ function sampler(pts: Signal<readonly Vec[]>) {
     });
 
   const at = (t: Val<number>): Vec => {
-    const ts = num(t);
-    return sampleAt(computed(() => clamp01(ts.value) * length.value));
+    const ts = valFn(t);
+    return sampleAt(computed(() => clamp01(ts()) * length.value));
   };
 
   /** Sample at absolute arc-length (px from start). */
-  const atDistance = (d: Val<number>): Vec => sampleAt(num(d));
+  const atDistance = (d: Val<number>): Vec => {
+    const ds = valFn(d);
+    return sampleAt(computed(ds));
+  };
 
   const tangentAt = (t: Val<number>): Vec => {
-    const ts = num(t);
+    const ts = valFn(t);
     return Vec.derive(() => {
       const points = pts.value;
       if (points.length < 2) return { x: 1, y: 0 };
       const total = length.value;
-      const { i } = locateAt(clamp01(ts.value) * total, points);
+      const { i } = locateAt(clamp01(ts()) * total, points);
       const a = points[i].value;
       const b = points[i + 1].value;
       const dx = b.x - a.x;
@@ -213,12 +216,12 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   }
   /** Walk `dist` at `angle` (radians, y-down). */
   along(angle: Val<number>, dist: Val<number>) {
-    const a = num(angle);
-    const d = num(dist);
+    const af = valFn(angle);
+    const df = valFn(dist);
     return this.extend(
       this.last.offset(
-        computed(() => Math.cos(a.value) * d.value),
-        computed(() => Math.sin(a.value) * d.value),
+        computed(() => Math.cos(af()) * df()),
+        computed(() => Math.sin(af()) * df()),
       ),
     );
   }

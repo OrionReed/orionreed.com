@@ -13,7 +13,7 @@
 //     tween on Kept lines; opacity fades for Lost/Gained); there's no
 //     drive loop or DOM rebuild.
 
-import { bind, type Content, css, Diagram, label, loop, Mount, signal, vec } from "../../minim";
+import { type Content, css, Diagram, label, loop, Mount, signal } from "../../minim";
 import { type CodeShape, code, codeStyles, Part } from "../../minim/code";
 
 const STATES = [
@@ -117,11 +117,8 @@ export class MdCode extends Diagram {
       label(view.bottom.up(20), status),
     );
 
-    const c = s(code(STATES[0], { size: 13 }));
-    // Top-left anchored.
-    const LEFT_X = 40;
-    const TOP_Y = 48;
-    bind(c.translate, () => vec(LEFT_X, TOP_Y).value);
+    // Top-left anchored — set translate once at construction.
+    const c = s(code(STATES[0], { size: 13, translate: { x: 40, y: 48 } }));
 
     this.anim.start(
       loop(function* () {

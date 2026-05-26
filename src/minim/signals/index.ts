@@ -25,7 +25,6 @@ export {
   when,
 } from "./anim";
 export { transitiveDeps } from "./introspect";
-export { bind } from "./lateral";
 export * from "./lenses";
 export { each, type Lifecycle, param } from "./network-utils";
 export { reflectionLens } from "./new-primitives";

@@ -1,4 +1,4 @@
-import { Num, num, type Val, Vec } from "@minim/signals";
+import { Num, num, type Val, Vec, valFn } from "@minim/signals";
 import { TWO_PI } from "./dashed";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 
@@ -26,19 +26,16 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
 
   /** Point on perimeter at angle θ (radians, y-down). */
   atAngle(angle: Val<number>): Vec {
-    const a = num(angle);
+    const a = valFn(angle);
     return Vec.derive(() => ({
-      x: this.center.x.value + this.radius.value * Math.cos(a.value),
-      y: this.center.y.value + this.radius.value * Math.sin(a.value),
+      x: this.center.x.value + this.radius.value * Math.cos(a()),
+      y: this.center.y.value + this.radius.value * Math.sin(a()),
     }));
   }
   /** Unit tangent at angle θ. */
   tangentAt(angle: Val<number>): Vec {
-    const a = num(angle);
-    return Vec.derive(() => ({
-      x: -Math.sin(a.value),
-      y: Math.cos(a.value),
-    }));
+    const a = valFn(angle);
+    return Vec.derive(() => ({ x: -Math.sin(a()), y: Math.cos(a()) }));
   }
 
   override boundary(toward: Vec): Vec {

@@ -1,15 +1,4 @@
-import {
-  bind,
-  circle,
-  Diagram,
-  easeInOut,
-  label,
-  line,
-  loop,
-  Mount,
-  rect,
-  snapshot,
-} from "../../minim";
+import { circle, Diagram, easeInOut, label, line, loop, Mount, rect, snapshot } from "../../minim";
 
 export class MdAnchors extends Diagram {
   protected scene(s: Mount): void {
@@ -40,14 +29,12 @@ export class MdAnchors extends Diagram {
       [0, 1],
     ];
     for (const [u, v] of corners) {
-      const dot = s(circle(view.center, 5, { fill: true }));
-      bind(dot.center, r.at(u, v));
+      s(circle(r.at(u, v), 5, { fill: true }));
     }
 
     const edges = [r.top, r.right, r.bottom, r.left];
     for (const e of edges) {
-      const m = s(circle(view.center, 3.5, { fill: "var(--accent)" }));
-      bind(m.center, e);
+      s(circle(e, 3.5, { fill: "var(--accent)" }));
     }
 
     s(

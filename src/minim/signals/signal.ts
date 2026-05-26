@@ -351,6 +351,20 @@ export type Of<R> = R extends Signal<infer T> ? T : R extends Read<infer T> ? T 
  *  `value: Of<R>` to the value class shape. */
 export type Writable<R> = R & WritableBrand & { value: Of<R> };
 
+/** Strict factory input: a literal of the value class's underlying
+ *  type, or an existing `Writable<Cls>` cell. Factories accepting
+ *  `Init<C>` lift literals to fresh writable seeds and identity-pass
+ *  through writables. Read-only sources (computed views, RO field
+ *  lenses, thunks) are rejected at the type level — reach for
+ *  `Cls.derive(...)` to track them reactively, or `signal.value` to
+ *  snapshot.
+ *
+ *      Init<Num> = number | Writable<Num>
+ *      Init<Vec> = { x: number; y: number } | Writable<Vec>
+ *      Init<Pose> = { x; y; theta } | Writable<Pose>                  */
+// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors `Of`
+export type Init<C extends Signal<any>> = Of<C> | Writable<C>;
+
 /** T-anchored constraint for animator-style parameters:
  *
  *      function spring<T>(s: WritableOf<T>, target: T)

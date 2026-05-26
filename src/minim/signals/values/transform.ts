@@ -8,7 +8,6 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { bind } from "../lateral";
 import { type Of, Signal, type Val, valFn, value, type Writable } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
 import { field } from "../writable";
@@ -135,16 +134,19 @@ export class Transform extends Signal<V> {
   }
 }
 
-export type TransformInit = { [K in keyof V]?: Val<V[K]> };
+export type TransformInit = { [K in keyof V]?: V[K] };
 
+/** Seed a `Writable<Transform>` from literal initial values. For
+ *  reactive sources, construct via `Transform.lens(...)` / field-write
+ *  composition directly — `transform({ ... })` is the literal seeder. */
 export function transform(init?: TransformInit): Writable<Transform> {
   const tr = new Transform() as Writable<Transform>;
   if (init) {
-    if (init.translate !== undefined) bind(tr.translate, init.translate);
-    if (init.scale !== undefined) bind(tr.scale, init.scale);
-    if (init.origin !== undefined) bind(tr.origin, init.origin);
-    if (init.rotate !== undefined) bind(tr.rotate, init.rotate);
-    if (init.opacity !== undefined) bind(tr.opacity, init.opacity);
+    if (init.translate !== undefined) tr.translate.value = init.translate;
+    if (init.scale !== undefined) tr.scale.value = init.scale;
+    if (init.origin !== undefined) tr.origin.value = init.origin;
+    if (init.rotate !== undefined) tr.rotate.value = init.rotate;
+    if (init.opacity !== undefined) tr.opacity.value = init.opacity;
   }
   return tr;
 }

@@ -1,7 +1,8 @@
 // lifecycle.test.ts — disposal, dispose-fn idempotence, equals-skip,
 // large-scale unwatch.
 
-import { bind, effect, signal, vec } from "@minim/signals";
+import { effect, signal, vec } from "@minim/signals";
+import { bind } from "@minim/signals/lateral";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 

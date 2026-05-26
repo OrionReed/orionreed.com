@@ -2,7 +2,6 @@ import { type Animator, suspend } from "@minim/core";
 import {
   Box,
   BoxMath,
-  bind,
   centroidLens,
   compose,
   computed,
@@ -14,7 +13,6 @@ import {
   type Of,
   Signal,
   signal,
-  Transform,
   toMatrixString,
   transformBox,
   transformPoint,
@@ -82,15 +80,15 @@ export type Has<K extends AnimatableKey> = {
   readonly [P in K]: AnimatableField<P>;
 };
 
-/** Scene-graph node wrapping an SVG `<g>`. Field aliases (`translate`,
- *  `rotate`, …) forward to `this.transform`'s nested signals. Shape's
- *  `center`/`top`/…/`at(u,v)` return parent-frame points (writes adjust
- *  `translate`); `shape.box.center` is local-frame. */
+/** Scene-graph node wrapping an SVG `<g>`. `translate`, `rotate`,
+ *  `scale`, `origin`, `opacity` are independent writable cells; the
+ *  composed `localFrame` matrix is a derived view. `center`/`top`/…
+ *  /`at(u,v)` return parent-frame points (writes adjust `translate`);
+ *  `shape.box.center` is local-frame. */
 export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly el: SVGGElement;
   readonly intrinsic?: SVGElement;
 
-  readonly transform: Writable<Transform>;
   readonly translate: Writable<Vec>;
   readonly rotate: Writable<Num>;
   readonly scale: Writable<Vec>;
@@ -152,21 +150,16 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
       this.el.appendChild(this.intrinsic);
     }
 
-    this.transform = new Transform() as Writable<Transform>;
-    const setField = <T>(target: Writable<Signal<T>>, src: Val<T> | undefined): void => {
-      if (src !== undefined) bind(target, src);
-    };
-    setField(this.transform.translate, opts.translate ?? defaults.translate ?? { x: 0, y: 0 });
-    setField(this.transform.rotate, opts.rotate ?? defaults.rotate ?? 0);
-    setField(this.transform.scale, opts.scale ?? defaults.scale ?? { x: 1, y: 1 });
-    setField(this.transform.origin, opts.origin ?? defaults.origin ?? { x: 0, y: 0 });
-    setField(this.transform.opacity, opts.opacity ?? defaults.opacity ?? 1);
-
-    this.translate = this.transform.translate;
-    this.rotate = this.transform.rotate;
-    this.scale = this.transform.scale;
-    this.origin = this.transform.origin;
-    this.opacity = this.transform.opacity;
+    // Each animatable axis is held directly. Identity passthrough for
+    // an already-writable source (drag handles compose naturally);
+    // literal seeds a fresh cell; signal/thunk drives the cell via an
+    // effect registered against `this.disposers`. No aggregate
+    // `Transform` cell — `localFrame` is a derived matrix below.
+    this.translate = this.#liftVec(opts.translate ?? defaults.translate ?? { x: 0, y: 0 });
+    this.rotate = this.#liftNum(opts.rotate ?? defaults.rotate ?? 0);
+    this.scale = this.#liftVec(opts.scale ?? defaults.scale ?? { x: 1, y: 1 });
+    this.origin = this.#liftVec(opts.origin ?? defaults.origin ?? { x: 0, y: 0 });
+    this.opacity = this.#liftNum(opts.opacity ?? defaults.opacity ?? 1);
     this.aside = opts.aside ?? defaults.aside ?? false;
 
     // Group default: union of non-aside children's boxes composed
@@ -184,15 +177,14 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     this.box = boxSig;
 
     // Identity short-circuit avoids reading `origin` on no-transform groups.
-    const tr = this.transform;
     this.localFrame = computed(() => {
-      const t = tr.translate.value;
-      const r = tr.rotate.value;
-      const sc = tr.scale.value;
+      const t = this.translate.value;
+      const r = this.rotate.value;
+      const sc = this.scale.value;
       if (t.x === 0 && t.y === 0 && r === 0 && sc.x === 1 && sc.y === 1) {
         return compose(t, r, sc, { x: 0, y: 0 });
       }
-      return compose(t, r, sc, tr.origin.value);
+      return compose(t, r, sc, this.origin.value);
     });
 
     this.disposers.push(
@@ -210,13 +202,46 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     );
   }
 
+  // Lift a `Val<Of<Vec>>` to a `Writable<Vec>`. Identity passthrough
+  // for an already-writable Vec; literal seeds a fresh cell; signal /
+  // thunk inputs drive the cell via a disposer-tracked effect.
+  #liftVec(src: Val<VecValue>): Writable<Vec> {
+    if (src instanceof Vec) return src as Writable<Vec>;
+    const target = new Vec() as Writable<Vec>;
+    if (src instanceof Signal || typeof src === "function") {
+      this.disposers.push(
+        effect(() => {
+          target.value = value(src);
+        }),
+      );
+    } else {
+      target.value = src as VecValue;
+    }
+    return target;
+  }
+
+  #liftNum(src: Val<number>): Writable<Num> {
+    if (src instanceof Num) return src as Writable<Num>;
+    const target = new Num() as Writable<Num>;
+    if (src instanceof Signal || typeof src === "function") {
+      this.disposers.push(
+        effect(() => {
+          target.value = value(src);
+        }),
+      );
+    } else {
+      target.value = src as number;
+    }
+    return target;
+  }
+
   #makeAnchor(u: number, v: number): Writable<Vec> {
-    // 3-input lens: reads `box`, `localFrame`, `transform.translate`;
-    // writes only `transform.translate` (other slots `undefined`).
-    // The bwd shifts the translate by the world-space drag delta so
-    // the anchor lands at the target — anchor-drag = body-translate.
+    // 3-input lens: reads `box`, `localFrame`, `translate`; writes only
+    // `translate` (other slots `undefined`). The bwd shifts the
+    // translate by the world-space drag delta so the anchor lands at
+    // the target — anchor-drag = body-translate.
     return Vec.lens(
-      [this.box, this.localFrame, this.transform.translate] as const,
+      [this.box, this.localFrame, this.translate] as const,
       vals => {
         const [b, m] = vals;
         return transformPoint(m, { x: b.x + u * b.w, y: b.y + v * b.h });
