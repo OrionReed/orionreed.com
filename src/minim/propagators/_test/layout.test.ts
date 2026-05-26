@@ -1,212 +1,312 @@
-// layout.test.ts — propagators for layout combinators.
-//
-// Probes whether propagator-based layout works ergonomically for
-// the cases lenses struggle with.
+// layout.test.ts — Box-relational layout combinators.
 
 import { describe, expect, it } from "vitest";
 import { num } from "../../signals";
-import { align, distributeH, eq, propagators } from "..";
+import {
+  attach,
+  box,
+  centerInside,
+  follow,
+  grid,
+  hstack,
+  inset,
+  lockSize,
+  pinEdge,
+  propagators,
+  vstack,
+} from "..";
 
-describe("layout: align (multi-cell same-axis)", () => {
-  it("4 boxes top-aligned: writing one updates all", () => {
-    const y1 = num(0);
-    const y2 = num(0);
-    const y3 = num(0);
-    const y4 = num(0);
+// ─── hstack basics ─────────────────────────────────────────────────
 
+describe("hstack", () => {
+  it("3 items grow to fill container with no gap", () => {
+    const c = box(0, 0, 300, 100);
+    const items = [box(), box(), box()];
     const p = propagators();
-    p.add(align(y1, y2, y3, y4));
+    p.add(hstack(c, items, { gap: 0 }));
 
-    // Write through y1; the others mirror.
-    y1.value = 50;
-    expect(y2.value).toBe(50);
-    expect(y3.value).toBe(50);
-    expect(y4.value).toBe(50);
-
-    // Write through y3; symmetric.
-    y3.value = 100;
-    expect(y1.value).toBe(100);
-    expect(y2.value).toBe(100);
-    expect(y4.value).toBe(100);
-
-    p.dispose();
-  });
-});
-
-describe("layout: distributeH", () => {
-  it("3 items inside a 300px container with equal gaps; positions derived", () => {
-    const containerX = num(0);
-    const containerWidth = num(300);
-    const w1 = num(60);
-    const w2 = num(60);
-    const w3 = num(60);
-    const x1 = num(0);
-    const x2 = num(0);
-    const x3 = num(0);
-    const gap = num(0);
-
-    const p = propagators();
-    p.add(
-      distributeH({
-        containerX,
-        containerWidth,
-        itemXs: [x1, x2, x3],
-        itemWidths: [w1, w2, w3],
-        gap,
-      }),
-    );
-
-    // 300 = 3*60 + 2*gap → gap = (300 - 180) / 2 = 60.
-    expect(gap.value).toBe(60);
-    expect(x1.value).toBe(0);
-    expect(x2.value).toBe(60 + 60); // 60 (w1) + 60 (gap) = 120
-    expect(x3.value).toBe(60 + 60 + 60 + 60); // 240
-
+    expect(items[0]!.w.value).toBeCloseTo(100);
+    expect(items[1]!.x.value).toBeCloseTo(100);
+    expect(items[2]!.x.value).toBeCloseTo(200);
     p.dispose();
   });
 
-  it("resize the container: gap auto-updates", () => {
-    const containerX = num(0);
-    const containerWidth = num(200);
-    const w1 = num(40);
-    const w2 = num(40);
-    const x1 = num(0);
-    const x2 = num(0);
-    const gap = num(0);
-
+  it("per-item min/max via tagged item objects", () => {
+    const c = box(0, 0, 500, 100);
+    const a = box();
+    const b = box();
+    const cc = box();
     const p = propagators();
-    p.add(
-      distributeH({
-        containerX,
-        containerWidth,
-        itemXs: [x1, x2],
-        itemWidths: [w1, w2],
-        gap,
-      }),
-    );
+    p.add(hstack(c, [
+      { box: a, max: 100 },
+      { box: b, max: 100 },
+      { box: cc, max: 100 },
+    ], { gap: 0 }));
 
-    // 200 - 80 = 120; 1 gap → gap = 120.
-    expect(gap.value).toBe(120);
-
-    // Resize container to 100 → gap shrinks.
-    containerWidth.value = 100;
-    expect(gap.value).toBe(20);
-
+    expect(a.w.value).toBe(100);
+    expect(b.w.value).toBe(100);
+    expect(cc.w.value).toBe(100);
     p.dispose();
   });
 
-  it("change an item's width: gap absorbs the difference", () => {
-    const containerX = num(0);
-    const containerWidth = num(300);
-    const w1 = num(60);
-    const w2 = num(60);
-    const w3 = num(60);
-    const x1 = num(0);
-    const x2 = num(0);
-    const x3 = num(0);
-    const gap = num(0);
-
+  it("padding eats into container", () => {
+    const c = box(0, 0, 300, 100);
+    const items = [box(), box()];
     const p = propagators();
-    p.add(
-      distributeH({
-        containerX,
-        containerWidth,
-        itemXs: [x1, x2, x3],
-        itemWidths: [w1, w2, w3],
-        gap,
-      }),
-    );
+    p.add(hstack(c, items, { gap: 0, padding: 20 }));
 
-    expect(gap.value).toBe(60);
-    expect(x3.value).toBe(240);
-
-    // Grow w2 by 30 → gap shrinks accordingly.
-    w2.value = 90;
-    // 300 - (60+90+60) = 90; 2 gaps → gap = 45.
-    expect(gap.value).toBe(45);
-    expect(x1.value).toBe(0);
-    expect(x2.value).toBe(60 + 45); // 105
-    expect(x3.value).toBe(60 + 45 + 90 + 45); // 240
-
+    expect(items[0]!.w.value).toBeCloseTo(130); // (300 - 40) / 2
+    expect(items[0]!.x.value).toBe(20);
     p.dispose();
   });
 
-  it("hug mode: container width derives from items + gap", () => {
-    const containerX = num(0);
-    const containerWidth = num(0);
-    const w1 = num(80);
-    const w2 = num(80);
-    const w3 = num(80);
-    const x1 = num(0);
-    const x2 = num(0);
-    const x3 = num(0);
+  it("reactive gap signal", () => {
+    const c = box(0, 0, 300, 100);
+    const items = [box(), box()];
     const gap = num(20);
-
     const p = propagators();
-    p.add(
-      distributeH({
-        containerX,
-        containerWidth,
-        itemXs: [x1, x2, x3],
-        itemWidths: [w1, w2, w3],
-        gap,
-        mode: "hug",
-      }),
-    );
+    p.add(hstack(c, items, { gap }));
+    expect(items[0]!.w.value).toBeCloseTo(140); // (300 - 20) / 2
 
-    // 3*80 + 2*20 = 280.
-    expect(containerWidth.value).toBe(280);
-    expect(x1.value).toBe(0);
-    expect(x2.value).toBe(80 + 20);
-    expect(x3.value).toBe(80 + 20 + 80 + 20);
+    gap.value = 100;
+    expect(items[0]!.w.value).toBeCloseTo(100);
+    p.dispose();
+  });
 
-    // Resize an item → container grows.
-    w2.value = 120;
-    expect(containerWidth.value).toBe(80 + 120 + 80 + 2 * 20);
+  it("hug mode: container resizes to fit items", () => {
+    const c = box();
+    const items = [box(0, 0, 80), box(0, 0, 120), box(0, 0, 60)];
+    const p = propagators();
+    p.add(hstack(c, items, { gap: 10, mode: "hug" }));
 
+    expect(c.w.value).toBe(280); // 80+120+60+2*10
+    p.dispose();
+  });
+
+  it("uneven grow weights via tagged items", () => {
+    const c = box(0, 0, 400, 100);
+    const a = box();
+    const b = box();
+    const cc = box();
+    const p = propagators();
+    p.add(hstack(c, [
+      { box: a, grow: 1 },
+      { box: b, grow: 2 },
+      { box: cc, grow: 1 },
+    ], { gap: 0 }));
+
+    // 400 / 4 weights = 100 per weight unit. a:100, b:200, c:100.
+    expect(a.w.value).toBeCloseTo(100);
+    expect(b.w.value).toBeCloseTo(200);
+    expect(cc.w.value).toBeCloseTo(100);
     p.dispose();
   });
 });
 
-describe("layout: composition", () => {
-  it("two layout primitives stacked: align + distributeH", () => {
-    // Three boxes, top-aligned (shared y) AND distributed horizontally.
-    const containerX = num(0);
-    const containerWidth = num(450);
-    const w1 = num(100);
-    const w2 = num(100);
-    const w3 = num(100);
-    const x1 = num(0);
-    const x2 = num(0);
-    const x3 = num(0);
-    const y1 = num(50);
-    const y2 = num(0);
-    const y3 = num(0);
-    const gap = num(0);
+// ─── alignment ──────────────────────────────────────────────────────
 
+describe("hstack alignment", () => {
+  it("center alignment on cross-axis", () => {
+    const c = box(0, 0, 300, 100);
+    const items = [box(0, 0, 50, 40), box(0, 0, 50, 60)];
     const p = propagators();
-    p.add(
-      distributeH({
-        containerX,
-        containerWidth,
-        itemXs: [x1, x2, x3],
-        itemWidths: [w1, w2, w3],
-        gap,
-      }),
-      align(y1, y2, y3),
-    );
+    p.add(hstack(c, items, { gap: 0, align: "center" }));
+    expect(items[0]!.y.value).toBe(30); // (100 - 40) / 2
+    expect(items[1]!.y.value).toBe(20); // (100 - 60) / 2
+    p.dispose();
+  });
 
-    // gap = (450 - 300) / 2 = 75.
-    expect(gap.value).toBe(75);
-    expect(x2.value).toBe(100 + 75);
-    expect(y2.value).toBe(50);
-    expect(y3.value).toBe(50);
+  it("stretch fills cross-axis", () => {
+    const c = box(0, 0, 300, 100);
+    const items = [box(), box()];
+    const p = propagators();
+    p.add(hstack(c, items, { gap: 0, align: "stretch" }));
+    expect(items[0]!.h.value).toBe(100);
+    expect(items[1]!.h.value).toBe(100);
+    p.dispose();
+  });
+});
 
-    // Drag y2; all align.
-    y2.value = 200;
-    expect(y1.value).toBe(200);
-    expect(y3.value).toBe(200);
+// ─── vstack ────────────────────────────────────────────────────────
 
+describe("vstack", () => {
+  it("vertical layout — items stack top-to-bottom", () => {
+    const c = box(0, 0, 100, 300);
+    const items = [box(), box(), box()];
+    const p = propagators();
+    p.add(vstack(c, items, { gap: 0 }));
+
+    expect(items[0]!.h.value).toBeCloseTo(100);
+    expect(items[1]!.y.value).toBeCloseTo(100);
+    expect(items[2]!.y.value).toBeCloseTo(200);
+    p.dispose();
+  });
+});
+
+// ─── grid ──────────────────────────────────────────────────────────
+
+describe("grid", () => {
+  it("2x2 grid", () => {
+    const c = box(0, 0, 200, 200);
+    const items = [box(), box(), box(), box()];
+    const p = propagators();
+    p.add(grid(c, items, { cols: 2, gap: 0 }));
+
+    expect(items[0]!.w.value).toBe(100);
+    expect(items[0]!.h.value).toBe(100);
+    expect(items[1]!.x.value).toBe(100);
+    expect(items[2]!.y.value).toBe(100);
+    expect(items[3]!.x.value).toBe(100);
+    expect(items[3]!.y.value).toBe(100);
+    p.dispose();
+  });
+
+  it("grid with gaps + padding", () => {
+    const c = box(0, 0, 220, 220);
+    const items = [box(), box(), box(), box()];
+    const p = propagators();
+    p.add(grid(c, items, { cols: 2, gap: 10, padding: 5 }));
+
+    expect(items[0]!.w.value).toBe(100);
+    expect(items[0]!.x.value).toBe(5);
+    expect(items[1]!.x.value).toBe(115);
+    p.dispose();
+  });
+});
+
+// ─── inset ─────────────────────────────────────────────────────────
+
+describe("inset", () => {
+  it("inner fills outer minus padding", () => {
+    const outer = box(10, 20, 300, 200);
+    const inner = box();
+    const p = propagators();
+    p.add(inset(outer, inner, { padding: 16 }));
+
+    expect(inner.x.value).toBe(26);
+    expect(inner.y.value).toBe(36);
+    expect(inner.w.value).toBe(268);
+    expect(inner.h.value).toBe(168);
+
+    outer.w.value = 600;
+    expect(inner.w.value).toBe(568);
+    p.dispose();
+  });
+});
+
+// ─── attach ────────────────────────────────────────────────────────
+
+describe("attach", () => {
+  it("sidebar.left = panel.right + gap", () => {
+    const panel = box(0, 0, 200, 100);
+    const sidebar = box(0, 0, 50, 100);
+    const p = propagators();
+    p.add(attach(panel, sidebar, "right", "left", { gap: 8 }));
+    expect(sidebar.x.value).toBe(208);
+
+    panel.w.value = 300;
+    expect(sidebar.x.value).toBe(308);
+    p.dispose();
+  });
+
+  it("body.top = header.bottom (no gap)", () => {
+    const header = box(0, 0, 200, 50);
+    const body = box(0, 0, 200, 200);
+    const p = propagators();
+    p.add(attach(header, body, "bottom", "top"));
+    expect(body.y.value).toBe(50);
+
+    header.h.value = 80;
+    expect(body.y.value).toBe(80);
+    p.dispose();
+  });
+});
+
+// ─── centerInside ───────────────────────────────────────────────────
+
+describe("centerInside", () => {
+  it("inner centered in outer", () => {
+    const outer = box(0, 0, 200, 100);
+    const inner = box(0, 0, 60, 40);
+    const p = propagators();
+    p.add(centerInside(outer, inner));
+    expect(inner.x.value).toBe(70);
+    expect(inner.y.value).toBe(30);
+
+    outer.w.value = 400;
+    expect(inner.x.value).toBe(170);
+    p.dispose();
+  });
+});
+
+// ─── pinEdge ────────────────────────────────────────────────────────
+
+describe("pinEdge", () => {
+  it("pin right edge to viewport width — width grows/shrinks", () => {
+    const b = box(50, 0, 100, 50);
+    const viewportW = num(300);
+    const p = propagators();
+    p.add(pinEdge(b, "right", viewportW));
+    expect(b.w.value).toBe(250);
+
+    viewportW.value = 500;
+    expect(b.w.value).toBe(450);
+    p.dispose();
+  });
+});
+
+// ─── lockSize ───────────────────────────────────────────────────────
+
+describe("lockSize", () => {
+  it("prevents external writes from changing dimension", () => {
+    const b = box(0, 0, 100, 50);
+    const p = propagators();
+    p.add(lockSize(b, "w", 200));
+    expect(b.w.value).toBe(200);
+
+    b.w.value = 100;
+    expect(b.w.value).toBe(200); // bounced back
+    p.dispose();
+  });
+});
+
+// ─── follow ─────────────────────────────────────────────────────────
+
+describe("follow", () => {
+  it("follower mirrors leader exactly", () => {
+    const lead = box(10, 20, 100, 50);
+    const fol = box();
+    const p = propagators();
+    p.add(follow(lead, fol));
+    expect(fol.x.value).toBe(10);
+    expect(fol.w.value).toBe(100);
+
+    lead.x.value = 100;
+    lead.w.value = 200;
+    expect(fol.x.value).toBe(100);
+    expect(fol.w.value).toBe(200);
+    p.dispose();
+  });
+});
+
+// ─── nested composition ────────────────────────────────────────────
+
+describe("composition", () => {
+  it("app shell: window → padded content → 3 stretched panes", () => {
+    const window = box(0, 0, 1024, 768);
+    const content = box();
+    const panes = [box(), box(), box()];
+    const p = propagators();
+    p.add(inset(window, content, { padding: 24 }));
+    p.add(hstack(content, panes, { gap: 12, align: "stretch" }));
+
+    expect(content.w.value).toBe(976);
+    expect(panes[0]!.w.value).toBeCloseTo((976 - 24) / 3);
+    expect(panes[0]!.h.value).toBe(720);
+
+    window.w.value = 1280;
+    expect(content.w.value).toBe(1232);
+    expect(panes[0]!.w.value).toBeCloseTo((1232 - 24) / 3);
     p.dispose();
   });
 });

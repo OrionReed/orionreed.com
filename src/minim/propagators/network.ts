@@ -55,7 +55,7 @@ export class Propagators {
   }
 
   /** Add one or more propagators. Multi-direction combinators (e.g.
-   *  `adder`) return arrays; spread them. Subscribes new deps and
+   *  `add`) return arrays; spread them. Subscribes new deps and
    *  flushes the network once per `add()` call regardless of how
    *  many propagators or cells are added. */
   add(...props: readonly (Propagator | readonly Propagator[])[]): void {

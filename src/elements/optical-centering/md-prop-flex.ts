@@ -4,7 +4,7 @@
 // Min-width clamps, gap is a draggable signal. Every box's geometry
 // is a Box value-type; the layout is a single `hstack` propagator.
 //
-//   p.add(hstack(c, items, { gap, minSize: 30 }));
+//   p.add(hstack(c, items.map(it => ({ box: it, min: 30 })), { gap }));
 //
 // Drag the container's right edge to resize. Drag the gap handle
 // (above) to widen / narrow inter-item spacing. Items shrink to
@@ -47,8 +47,15 @@ export class MdPropFlex extends Diagram {
     const items = Array.from({ length: N }, () => box(0, 0, 60, 80));
 
     // Single propagator that does the whole layout.
+    // Per-item bounds via tagged item objects.
     const p = propagators();
-    p.add(hstack(c, items, { gap, minSize: 30, maxSize: 200, align: "stretch" }));
+    p.add(
+      hstack(
+        c,
+        items.map(it => ({ box: it, min: 30, max: 200 })),
+        { gap, align: "stretch" },
+      ),
+    );
 
     // Render container outline.
     s(

@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import { num } from "../../signals";
-import { adder, intervalAdder, propagators, type Range, rangeCell } from "..";
+import { add as adder, intervalAdder, propagators, type Range, rangeCell } from "..";
 
 describe("range vs exact perf", () => {
   it("100-cell exact-adder chain, drag head 1000 times", () => {

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { effect, num, Num, signal, Vec, vec } from "../../signals";
-import { adder, eq, propagators } from "..";
+import { add, eq, propagators } from "..";
 
 describe("composition: non-coloring", () => {
   it("plain Num signals participate in propagators", () => {
@@ -12,7 +12,7 @@ describe("composition: non-coloring", () => {
     const b = num(3);
     const c = num(0);
     const p = propagators();
-    p.add(adder(a, b, c));
+    p.add(add(a, b, c));
     expect(c.value).toBe(5);
     p.dispose();
   });
@@ -20,7 +20,7 @@ describe("composition: non-coloring", () => {
   it("a lens-derived Num participates as a propagator output", () => {
     // The classic case: `a` is a real signal; `aPlus5` is a lens
     // that derives a + 5 with a writable bwd. Use BOTH in a propagator
-    // network: adder(aPlus5, b, c) means "(a+5) + b = c".
+    // network: add(aPlus5, b, c) means "(a+5) + b = c".
     // Should work — the lens IS a Writable<Num>, propagator just sees
     // it as a Num.
     const a = num(10);
@@ -29,7 +29,7 @@ describe("composition: non-coloring", () => {
     const c = num(0);
 
     const p = propagators();
-    p.add(adder(aPlus5, b, c));
+    p.add(add(aPlus5, b, c));
     // a=10 → aPlus5=15; aPlus5 + b = c → c = 17.
     expect(aPlus5.value).toBe(15);
     expect(c.value).toBe(17);
@@ -49,7 +49,7 @@ describe("composition: non-coloring", () => {
   });
 
   it("a lens-derived Num back-deduces through the propagator network", () => {
-    // adder(a, b, c). Wrap a in a lens. Drag c; expect a (and via lens
+    // add(a, b, c). Wrap a in a lens. Drag c; expect a (and via lens
     // the underlying root) to back-deduce.
     const aRoot = num(0);
     const a = aRoot.add(0); // identity-like lens, but a real lens
@@ -57,7 +57,7 @@ describe("composition: non-coloring", () => {
     const c = num(0);
 
     const p = propagators();
-    p.add(adder(a, b, c));
+    p.add(add(a, b, c));
 
     c.value = 50;
     // freshness: c fresh → propagator (a, c → b): b = 50 - 0 = 50.
@@ -68,7 +68,7 @@ describe("composition: non-coloring", () => {
     // Wait — let me think. The freshness algorithm runs ALL
     // propagators whose reads contain fresh signals, in a single iter.
     // First iter: fresh = {c}. Propagators that read c: 2 of the 3
-    // adder-directions. Both run: writes new b and new a.
+    // add directions. Both run: writes new b and new a.
     // After iter 1: a=47, b=50. Both newly fresh.
     // Iter 2: fresh = {a, b}. The remaining propagator (a, b → c) reads
     // both. Runs: c = a + b = 47 + 50 = 97. NEW c. c is fresh now.
@@ -131,7 +131,7 @@ describe("composition: non-coloring", () => {
     expect(observed).toEqual([0]);
 
     const p = propagators();
-    p.add(adder(a, b, c));
+    p.add(add(a, b, c));
     // Initial run: c = 3. Effect sees the write, fires.
     expect(observed[observed.length - 1]).toBe(3);
 
@@ -177,7 +177,7 @@ describe("composition: non-coloring", () => {
 
     const p1 = propagators();
     const p2 = propagators();
-    p1.add(adder(a, b, c));
+    p1.add(add(a, b, c));
     p2.add({
       reads: [c],
       writes: [d],

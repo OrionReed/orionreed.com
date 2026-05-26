@@ -3,7 +3,7 @@
 //                         total
 //                          │
 //                       ┌──┴──┐
-//                       │ +   │       (chainSum: a+b+c+d = total)
+//                       │ +   │       (a + b + c + d = total)
 //                       └─┬─┬─┘
 //                       a b c d
 //
@@ -15,7 +15,7 @@
 // No solver, no convergence loop — straight propagator
 // arithmetic, instant.
 
-import { adder, propagators } from "@minim/propagators";
+import { add, propagators } from "@minim/propagators";
 import { circle, Diagram, drag, label, line, Mount, num, signal, Vec } from "../../minim";
 
 const TRACK_X0 = 100;
@@ -40,9 +40,9 @@ export class MdPropNet extends Diagram {
     const cd = num(0);
 
     const p = propagators();
-    p.add(adder(a, b, ab));
-    p.add(adder(c, d, cd));
-    p.add(adder(ab, cd, total));
+    p.add(add(a, b, ab));
+    p.add(add(c, d, cd));
+    p.add(add(ab, cd, total));
 
     const tracks = [
       { sig: a, label: "a", y: 80, color: "#5b8def" },
@@ -88,7 +88,7 @@ export class MdPropNet extends Diagram {
 
     s(
       label(fixedV(280, 36), "drag any slider — three adders keep a + b + c + d = Σ"),
-      label(fixedV(280, 360), "5 Num cells • 3 adder() propagators • multi-direction in 1 pass", {
+      label(fixedV(280, 360), "5 Num cells • 3 add() propagators • multi-direction in 1 pass", {
         size: 10,
       }),
     );

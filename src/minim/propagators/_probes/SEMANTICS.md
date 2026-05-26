@@ -405,7 +405,7 @@ Footguns 1 and 3 are the substantive ones — both are about the
 freshness-through-lens semantics. AUTO-EXPAND fixes 1; cycles
 through lens (3) need different machinery.
 
-Footgun 2 is the eq/adder initial-fire issue we already
+Footgun 2 is the eq/add initial-fire issue we already
 documented in earlier rounds.
 
 The rest are predictable consequences of the model — easy once

@@ -11,7 +11,7 @@
 // shape, same feel, but propagators handle the few-relations
 // case in a single pass with exact arithmetic.
 
-import { propagators, vCentroid, vMidpoint } from "@minim/propagators";
+import { centroid, mid, propagators } from "@minim/propagators";
 import { Diagram, handle, label, line, Mount, vec } from "../../minim";
 
 const VERT = "#5b8def";
@@ -21,8 +21,7 @@ const MID = "#86b966";
 export class MdPropGeom extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(620, 400);
-    const cx = view.center.value.x;
-    const cy = view.center.value.y;
+    const { x: cx, y: cy } = view.center.value;
 
     // Triangle vertices.
     const A = vec(cx - 140, cy + 80);
@@ -30,50 +29,40 @@ export class MdPropGeom extends Diagram {
     const C = vec(cx, cy - 100);
 
     // Derived: centroid + per-side midpoints.
-    const G = vec(0, 0);
-    const Mab = vec(0, 0);
-    const Mbc = vec(0, 0);
-    const Mca = vec(0, 0);
+    const G = vec();
+    const Mab = vec();
+    const Mbc = vec();
+    const Mca = vec();
 
-    const p = propagators();
-    p.add(vCentroid(G, A, B, C));
-    p.add(vMidpoint(A, B, Mab));
-    p.add(vMidpoint(B, C, Mbc));
-    p.add(vMidpoint(C, A, Mca));
+    propagators().add(centroid(G, A, B, C), mid(A, B, Mab), mid(B, C, Mbc), mid(C, A, Mca));
+
+    const SIDE = { thin: true, opacity: 0.6 };
+    const MEDIAN = { thin: true, opacity: 0.25 };
+    const VERTEX = { fill: VERT, r: 7 };
+    const CENTROID = { fill: CENT, r: 8 };
+    const MIDPOINT = { fill: MID, r: 5 };
 
     // Triangle sides.
     s(
-      line(A, B, { thin: true, opacity: 0.6 }),
-      line(B, C, { thin: true, opacity: 0.6 }),
-      line(C, A, { thin: true, opacity: 0.6 }),
-
-      // Medians (centroid to midpoint of opposite side).
-      line(G, Mab, { thin: true, opacity: 0.25 }),
-      line(G, Mbc, { thin: true, opacity: 0.25 }),
-      line(G, Mca, { thin: true, opacity: 0.25 }),
-
-      // Vertices (draggable).
-      handle(A, { fill: VERT, r: 7 }),
-      handle(B, { fill: VERT, r: 7 }),
-      handle(C, { fill: VERT, r: 7 }),
-
-      // Centroid (draggable).
-      handle(G, { fill: CENT, r: 8 }),
-
-      // Midpoints (draggable).
-      handle(Mab, { fill: MID, r: 5 }),
-      handle(Mbc, { fill: MID, r: 5 }),
-      handle(Mca, { fill: MID, r: 5 }),
+      line(A, B, SIDE),
+      line(B, C, SIDE),
+      line(C, A, SIDE),
+      line(G, Mab, MEDIAN),
+      line(G, Mbc, MEDIAN),
+      line(G, Mca, MEDIAN),
+      handle(A, VERTEX),
+      handle(B, VERTEX),
+      handle(C, VERTEX),
+      handle(G, CENTROID),
+      handle(Mab, MIDPOINT),
+      handle(Mbc, MIDPOINT),
+      handle(Mca, MIDPOINT),
 
       label(
         view.top.down(20),
         "drag any vertex • centroid (orange) follows • drag centroid → triangle translates",
       ),
-      label(
-        view.bottom.up(16),
-        "vCentroid · vMidpoint — bidirectional propagators on Vec signals",
-        { size: 10 },
-      ),
+      label(view.bottom.up(16), "centroid · mid — bidirectional propagators on Vec signals"),
     );
   }
 }

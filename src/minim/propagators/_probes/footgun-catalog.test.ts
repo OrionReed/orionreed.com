@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from "vitest";
 import { centroidLens, num, vec } from "../../signals";
-import { adder, eq, propagator, propagators } from "..";
+import { add, eq, propagator, propagators } from "..";
 
 // ─── 1. Freshness gap (FIXED by AUTO-EXPAND) ───────────────────────
 
@@ -44,16 +44,16 @@ describe("(Closed) Footgun 1: in-fixpoint cascade through lens", () => {
 // ─── 2. Initial-fire direction ─────────────────────────────────────
 
 describe("Footgun 2: bidirectional propagator's first-fire direction is order-dependent", () => {
-  it("PROBLEM: adder's c-deriving propagator fires first, overwriting a or b", () => {
-    // User wants to set up adder(a, b, c) with a=2, b=3, expecting
+  it("PROBLEM: add's c-deriving propagator fires first, overwriting a or b", () => {
+    // User wants to set up add(a, b, c) with a=2, b=3, expecting
     // c to derive as 5. But what if they declare it differently?
     const a = num(2);
     const b = num(3);
     const c = num(0);
 
-    // adder.prop1 (a+b=c) fires first. Initial fire writes c.
+    // add.prop1 (a+b=c) fires first. Initial fire writes c.
     const p = propagators();
-    p.add(adder(a, b, c));
+    p.add(add(a, b, c));
     expect(c.value).toBe(5); // OK, c derived
 
     // But: if c had a meaningful initial value, it'd be overwritten.
@@ -63,7 +63,7 @@ describe("Footgun 2: bidirectional propagator's first-fire direction is order-de
     const b2 = num(0);
     const c2 = num(7); // user set c first
     const p2 = propagators();
-    p2.add(adder(a2, b2, c2));
+    p2.add(add(a2, b2, c2));
     expect(c2.value).toBe(0); // c was OVERWRITTEN by initial fire (a+b = 0)
     p2.dispose();
   });
@@ -73,7 +73,7 @@ describe("Footgun 2: bidirectional propagator's first-fire direction is order-de
     const b = num(0);
     const c = num(0);
     const p = propagators();
-    p.add(adder(a, b, c));
+    p.add(add(a, b, c));
     // Now write the actual values.
     a.value = 2;
     b.value = 3;
@@ -88,7 +88,7 @@ describe("Footgun 3 (changed character): cycle through lens drives to fixpoint",
   it("the cycle converges via overwriting one of the user's inputs", () => {
     // Pre-AUTO-EXPAND: silently inconsistent.
     // Post-AUTO-EXPAND: cycle propagates correctly. Bidirectional
-    // adder finds the algebraic fixpoint by rewriting b to 0
+    // add finds the algebraic fixpoint by rewriting b to 0
     // (the only feasible value). User's input gets overwritten.
     const a = num(0);
     const halfA = a.scale(0.5);
@@ -97,7 +97,7 @@ describe("Footgun 3 (changed character): cycle through lens drives to fixpoint",
     const twoC = c.scale(2);
 
     const p = propagators({ iterations: 100 });
-    p.add(adder(halfA as never, b, c));
+    p.add(add(halfA as never, b, c));
     p.add(eq(twoC as never, a));
 
     b.value = 1;
@@ -105,7 +105,7 @@ describe("Footgun 3 (changed character): cycle through lens drives to fixpoint",
     expect(a.value === 2 * c.value).toBe(true);
     expect(b.value).toBe(0); // user wrote 1; got overwritten
     p.dispose();
-    // Lesson: bidirectional propagators (adder writes b in one
+    // Lesson: bidirectional propagators (add writes b in one
     // direction) can rewrite user input to satisfy the cycle. If
     // you want the user's b respected, use a one-direction
     // propagator (only c-deriving).

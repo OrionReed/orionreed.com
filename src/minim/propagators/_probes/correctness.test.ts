@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 import { centroidLens, effect, num, vec } from "../../signals";
-import { adder, eq, propagator, propagators } from "..";
+import { add, eq, propagator, propagators } from "..";
 
 describe("1. lens chain as propagator read", () => {
   it("subscribes transitively through to chain parents", () => {
@@ -117,7 +117,7 @@ describe("3. mixed bidirectional graph behaviour", () => {
     const big = sum.scale(10); // lens consumes propagator output
 
     const p = propagators();
-    p.add(adder(x, y, sum));
+    p.add(add(x, y, sum));
 
     x.value = 4;
     y.value = 6;
@@ -130,7 +130,7 @@ describe("3. mixed bidirectional graph behaviour", () => {
 describe("4. cycles through lens AND propagator", () => {
   it("self-consistent cycle: lens-mediated feedback converges", () => {
     // a → lens scale 2 → twoA
-    // twoA, b → propagator adder → c
+    // twoA, b → propagator add → c
     // External writes only — no in-fixpoint feedback.
     const a = num(1);
     const twoA = a.scale(2);
@@ -138,7 +138,7 @@ describe("4. cycles through lens AND propagator", () => {
     const c = num(0);
 
     const p = propagators();
-    p.add(adder(twoA as never, b, c));
+    p.add(add(twoA as never, b, c));
     expect(c.value).toBe(5); // 2*1 + 3
     a.value = 5;
     expect(c.value).toBe(13); // 2*5 + 3
@@ -146,7 +146,7 @@ describe("4. cycles through lens AND propagator", () => {
   });
 
   it("self-inconsistent cycle: AUTO-EXPAND drives system to consistent fixpoint by adjusting b", () => {
-    // a → halfA → adder → c → twoC → eq → a.
+    // a → halfA → add → c → twoC → eq → a.
     // Algebraically: a = 2c = 2(a/2 + b) = a + 2b ⇒ b must be 0.
     //
     // Before AUTO-EXPAND: eq never fired (freshness didn't see
@@ -154,14 +154,14 @@ describe("4. cycles through lens AND propagator", () => {
     // a = 2c silently violated.
     //
     // After AUTO-EXPAND: eq fires (twoC's expanded reads include
-    // c). The cycle DOES propagate. The bidirectional adder has a
+    // c). The cycle DOES propagate. The bidirectional add has a
     // b-deriving propagator which OVERWRITES the user's input to
     // satisfy the constraints — the system converges to the only
     // algebraic fixpoint (b=0) by silently rewriting b.
     //
     // The constraint IS now satisfied (the silent inconsistency is
     // gone); but the user's input was overwritten. This is the
-    // bidirectional-adder write-policy showing through.
+    // bidirectional-add write-policy showing through.
     const a = num(0);
     const halfA = a.scale(0.5);
     const b = num(0);
@@ -169,7 +169,7 @@ describe("4. cycles through lens AND propagator", () => {
     const twoC = c.scale(2);
 
     const p = propagators({ iterations: 100 });
-    p.add(adder(halfA as never, b, c));
+    p.add(add(halfA as never, b, c));
     p.add(eq(twoC as never, a));
 
     b.value = 1;

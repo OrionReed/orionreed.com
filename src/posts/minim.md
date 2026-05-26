@@ -367,32 +367,32 @@ None of this is fundamentally geometric. The cluster operates on cells of arbitr
 
 AVBD's sweet spot is *many soft constraints, approximate solving fast* — cloth, contacts, force-directed graphs. The opposite shape — *few exact relations, instant fixpoint* — wants a different substrate: propagator networks. Same `network()` primitive underneath, different traversal: each propagator declares its read/write topology, the network runs them in a freshness-driven fixpoint until stable. Reads are exact arithmetic; writes are atomic; multi-direction relations let any cell drive any other.
 
-The four-leaf example is the smallest version of the idea. Three `adder` propagators — `a + b = ab`, `c + d = cd`, `ab + cd = Σ` — are enough to let any one of five sliders drive the rest. There's no "input" and no "output"; pull the total and the leaves redistribute, pull a leaf and the total re-derives.
+The four-leaf example is the smallest version of the idea. Three `add` propagators — `a + b = ab`, `c + d = cd`, `ab + cd = Σ` — are enough to let any one of five sliders drive the rest. There's no "input" and no "output"; pull the total and the leaves redistribute, pull a leaf and the total re-derives.
 
 ```ts
 const p = propagators();
-p.add(adder(a, b, ab));
-p.add(adder(c, d, cd));
-p.add(adder(ab, cd, total));
+p.add(add(a, b, ab));
+p.add(add(c, d, cd));
+p.add(add(ab, cd, total));
 ```
 
 <md-prop-net></md-prop-net>
 
-Vec-typed propagators do the same thing for 2D points. `vCentroid(G, A, B, C)` runs both directions: drag any vertex and the centroid follows; drag the centroid and all three vertices translate by its delta. `vMidpoint(A, B, M)` is the two-point version. Stack them and a triangle's medians come out for free — the centroid, the three side-midpoints, and the three medians, six bidirectional propagators total.
+The same combinators dispatch on type — `add(a, b, c)` works on `Num`, `Vec`, or anything with the `Linear` trait. `centroid(G, A, B, C)` runs both directions: drag any vertex and the centroid follows; drag the centroid and all three vertices translate by its delta. `mid(A, B, M)` is the two-point version. Stack them and a triangle's medians come out for free — the centroid, the three side-midpoints, and the three medians, six bidirectional propagators total.
 
 ```ts
-p.add(vCentroid(G, A, B, C));
-p.add(vMidpoint(A, B, Mab));
-p.add(vMidpoint(B, C, Mbc));
-p.add(vMidpoint(C, A, Mca));
+p.add(centroid(G, A, B, C));
+p.add(mid(A, B, Mab));
+p.add(mid(B, C, Mbc));
+p.add(mid(C, A, Mca));
 ```
 
 <md-prop-geom></md-prop-geom>
 
-The same substrate is the right tool for layout. `hstack(container, items, opts)` is one big procedural propagator — reads `container.{x,w}`, gap, item widths, plus optional bound metadata; writes item positions and sizes via a single CSS-flex-style algorithm. No bidirectionality, no fixpoint loop, just one fire per drag. 100 items in 50µs; 1000 in 160µs — Yoga territory, on a substrate that composes with everything else in the system.
+The same substrate is the right tool for layout. `hstack(container, items, opts)` is one big procedural propagator — reads `container.{x,w}`, gap, item widths, plus optional per-item bound metadata; writes item positions and sizes via a single CSS-flex-style algorithm. No bidirectionality, no fixpoint loop, just one fire per drag. 100 items in 150µs; 1000 in 1.5ms — competitive with native layout engines, on a substrate that composes with everything else in the system.
 
 ```ts
-p.add(hstack(container, items, { gap, minSize: 30, align: "stretch" }));
+p.add(hstack(container, items.map(b => ({ box: b, min: 30 })), { gap, align: "stretch" }));
 ```
 
 <md-prop-flex></md-prop-flex>
