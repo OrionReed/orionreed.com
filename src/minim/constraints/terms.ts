@@ -20,7 +20,7 @@
 // `initialize()` runs.
 
 import { type Signal, signal, type Writable } from "../signals";
-import { Solver } from "./solver";
+import type { Solver } from "./solver";
 import { Term } from "./term";
 
 // ─── Strength constants ──────────────────────────────────────────────
@@ -33,7 +33,7 @@ export const Strength = {
   /** True hard constraint: solved via the augmented Lagrangian
    *  path rather than penalty weighting. The default for the
    *  `*Term` constructors. */
-  HARD: Infinity,
+  HARD: Number.POSITIVE_INFINITY,
 } as const;
 
 // ─── Equality between two same-dim cells ─────────────────────────────
@@ -57,7 +57,7 @@ export class EqTerm extends Term {
     const bOff = this.cellOffsets[1]!;
     for (let k = 0; k < this.rows; k++) {
       const Cn = positions[aOff + k]! - positions[bOff + k]!;
-      this.C[k]! = this.stiffness[k]! === Infinity ? Cn - alpha * this.C0[k]! : Cn;
+      this.C[k]! = this.stiffness[k]! === Number.POSITIVE_INFINITY ? Cn - alpha * this.C0[k]! : Cn;
     }
   }
 
@@ -77,7 +77,7 @@ export class LensNumTerm extends Term {
   fwd: (a: number) => number;
   private readonly fdStep: number;
   private _cachedFwdA = 0;
-  private _cachedA = NaN;
+  private _cachedA = Number.NaN;
 
   constructor(solver: Solver, a: number, b: number, fwd: (x: number) => number, fdStep = 1e-6) {
     if (solver.dims[a]! !== 1 || solver.dims[b]! !== 1) {
@@ -102,7 +102,7 @@ export class LensNumTerm extends Term {
     this._cachedFwdA = fa;
     this._cachedA = a;
     const Cn = b - fa;
-    this.C[0]! = this.stiffness[0]! === Infinity ? Cn - alpha * this.C0[0]! : Cn;
+    this.C[0]! = this.stiffness[0]! === Number.POSITIVE_INFINITY ? Cn - alpha * this.C0[0]! : Cn;
   }
 
   computeDerivatives(cellIdx: number): void {
@@ -181,7 +181,7 @@ export class DistanceTerm extends Term {
       this._cachedNy = 0;
       this._cachedInvD = 0;
       const Cn = -restCached;
-      this.C[0]! = this.stiffness[0]! === Infinity ? Cn - alpha * this.C0[0]! : Cn;
+      this.C[0]! = this.stiffness[0]! === Number.POSITIVE_INFINITY ? Cn - alpha * this.C0[0]! : Cn;
       return;
     }
     const d = Math.sqrt(d2);
@@ -191,7 +191,7 @@ export class DistanceTerm extends Term {
     this._cachedNy = dy * inv;
     this._cachedInvD = inv;
     const Cn = d - restCached;
-    this.C[0]! = this.stiffness[0]! === Infinity ? Cn - alpha * this.C0[0]! : Cn;
+    this.C[0]! = this.stiffness[0]! === Number.POSITIVE_INFINITY ? Cn - alpha * this.C0[0]! : Cn;
   }
 
   computeDerivatives(cellIdx: number): void {
@@ -253,8 +253,8 @@ export class BoundsTerm extends Term {
     const c0 = x - this._loCached;
     const c1 = this._hiCached - x;
     const stiff = this.stiffness;
-    this.C[0]! = stiff[0]! === Infinity ? c0 - alpha * this.C0[0]! : c0;
-    this.C[1]! = stiff[1]! === Infinity ? c1 - alpha * this.C0[1]! : c1;
+    this.C[0]! = stiff[0]! === Number.POSITIVE_INFINITY ? c0 - alpha * this.C0[0]! : c0;
+    this.C[1]! = stiff[1]! === Number.POSITIVE_INFINITY ? c1 - alpha * this.C0[1]! : c1;
   }
 
   computeDerivatives(_cellIdx: number): void {
@@ -359,7 +359,7 @@ export class GenericTerm extends Term {
     const stiff = this.stiffness;
     for (let r = 0; r < this.rows; r++) {
       const raw = this._fdRawBase[r]!;
-      this.C[r]! = stiff[r]! === Infinity ? raw - alpha * this.C0[r]! : raw;
+      this.C[r]! = stiff[r]! === Number.POSITIVE_INFINITY ? raw - alpha * this.C0[r]! : raw;
     }
   }
 

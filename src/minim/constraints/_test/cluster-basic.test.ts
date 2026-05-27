@@ -252,7 +252,7 @@ describe("physics() — numerical robustness", () => {
     // range (vs ~20 with the user's earlier STRONG/MEDIUM mix); 8 leaves
     // a safety margin for variation.
     expect(maxV).toBeLessThan(8);
-    let minD = Infinity;
+    let minD = Number.POSITIVE_INFINITY;
     for (let j = 0; j < H; j++) {
       for (let i = 1; i < W; i++) {
         const a = grid[j]![i - 1]!.value;

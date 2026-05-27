@@ -7,10 +7,10 @@ import {
   effect,
   every,
   loop,
-  Num,
+  type Num,
   num,
   signal,
-  Vec,
+  type Vec,
   vec,
   type Writable,
 } from "../../minim";

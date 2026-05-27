@@ -8,7 +8,7 @@ import {
   type Lerp,
   label,
   loop,
-  Mount,
+  type Mount,
   num,
   rect,
   rgb,

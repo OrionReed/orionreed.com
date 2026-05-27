@@ -58,8 +58,8 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
       const dy = t.y - c.y;
       if (dx === 0 && dy === 0) return c;
       const k = Math.min(
-        dx === 0 ? Infinity : halfW / Math.abs(dx),
-        dy === 0 ? Infinity : halfH / Math.abs(dy),
+        dx === 0 ? Number.POSITIVE_INFINITY : halfW / Math.abs(dx),
+        dy === 0 ? Number.POSITIVE_INFINITY : halfH / Math.abs(dy),
       );
       return { x: c.x + dx * k, y: c.y + dy * k };
     });

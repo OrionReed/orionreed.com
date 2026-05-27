@@ -8,7 +8,7 @@ import {
   effect,
   type Inner,
   lazy,
-  Matrix,
+  type Matrix,
   meanLens,
   Num,
   readNow,

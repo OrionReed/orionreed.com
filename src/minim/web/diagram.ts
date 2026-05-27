@@ -15,7 +15,7 @@
 import { Anim } from "@minim/core";
 import { ensureArrowMarker, type Mount, mount, Shape, SVG_NS } from "@minim/shapes";
 import { Box, effect, Num, type Val } from "@minim/signals";
-import { Marker } from "@minim/tex";
+import type { Marker } from "@minim/tex";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
 import { attachRaf } from "./raf";
 
@@ -264,7 +264,7 @@ export class Diagram extends HTMLElement {
       const baseStyles = Diagram.styles ?? "";
       const ownStyles = ctor === Diagram ? "" : (ctor.styles ?? "");
       const sheet = new CSSStyleSheet();
-      sheet.replaceSync(baseStyles + "\n" + ownStyles);
+      sheet.replaceSync(`${baseStyles}\n${ownStyles}`);
       Diagram.styleSheets.set(cacheKey, sheet);
     }
     this.shadow.adoptedStyleSheets = [Diagram.styleSheets.get(cacheKey)!];

@@ -13,7 +13,7 @@ import {
   Diagram,
   handle,
   label,
-  Mount,
+  type Mount,
   num,
   Path,
   type Vec,

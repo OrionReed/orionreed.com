@@ -22,7 +22,7 @@
 
     <!-- Prevent flash of unstyled content by applying theme immediately -->
     <script>
-      (function () {
+      (() => {
         const savedTheme = localStorage.getItem("theme");
         const theme = savedTheme || "light";
         document.documentElement.setAttribute("data-theme", theme);

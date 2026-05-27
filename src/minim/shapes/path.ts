@@ -128,10 +128,10 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
       () => {
         const ps = points.value;
         if (ps.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
-        let xMin = Infinity,
-          yMin = Infinity,
-          xMax = -Infinity,
-          yMax = -Infinity;
+        let xMin = Number.POSITIVE_INFINITY,
+          yMin = Number.POSITIVE_INFINITY,
+          xMax = Number.NEGATIVE_INFINITY,
+          yMax = Number.NEGATIVE_INFINITY;
         for (const p of ps) {
           const v = p.value;
           if (v.x < xMin) xMin = v.x;

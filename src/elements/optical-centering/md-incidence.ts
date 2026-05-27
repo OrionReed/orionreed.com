@@ -22,7 +22,7 @@ import {
   handle,
   label,
   line,
-  Mount,
+  type Mount,
   type Vec,
   vec,
   type Writable,

@@ -29,7 +29,7 @@ import {
   type Inner,
   label,
   line,
-  Mount,
+  type Mount,
   type Num,
   num,
   polar,
@@ -138,7 +138,7 @@ export class MdLoop extends Diagram {
     }
     const projectOntoGait = (target: V): V => {
       let best = gait[0];
-      let bestD2 = Infinity;
+      let bestD2 = Number.POSITIVE_INFINITY;
       for (const p of gait) {
         const d2 = (p.x - target.x) ** 2 + (p.y - target.y) ** 2;
         if (d2 < bestD2) {

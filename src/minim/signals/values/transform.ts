@@ -6,10 +6,10 @@
 // receivers because writability propagates through nested chains via
 // the conditional return.
 
-import { type Easing } from "../../core";
+import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { type Inner, reader, readNow, Signal, type Val, type Writable } from "../signal";
-import { type Linear, type TraitDict } from "../traits";
+import type { Linear, TraitDict } from "../traits";
 import { field } from "../writable";
 import { Num } from "./num";
 import {

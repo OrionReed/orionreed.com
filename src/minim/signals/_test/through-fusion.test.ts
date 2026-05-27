@@ -171,7 +171,7 @@ describe(".lens() fusion", () => {
         v => v + 1,
         v => v - 1,
       );
-    let observed: number[] = [];
+    const observed: number[] = [];
     const stop = effect(() => {
       observed.push(c.value);
     });

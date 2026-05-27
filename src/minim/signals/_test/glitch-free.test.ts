@@ -12,7 +12,7 @@ describe("glitch-free: diamond shapes", () => {
     const a = signal(0);
     const b1 = derive(() => a.value + 1);
     const b2 = derive(() => a.value * 10);
-    let observed: { b1: number; b2: number; aviabranches: number }[] = [];
+    const observed: { b1: number; b2: number; aviabranches: number }[] = [];
     effect(() => {
       const v1 = b1.value;
       const v2 = b2.value;
@@ -30,7 +30,7 @@ describe("glitch-free: diamond shapes", () => {
     const tr = transform({ translate: { x: 0, y: 0 } });
     const x = tr.translate.x;
     const y = tr.translate.y;
-    let observed: Array<{ x: number; y: number; sum: number }> = [];
+    const observed: Array<{ x: number; y: number; sum: number }> = [];
     effect(() => {
       const xv = x.value;
       const yv = y.value;
@@ -63,7 +63,7 @@ describe("glitch-free: diamond shapes", () => {
     const a = num(50);
     const c1 = a.clamp(0, 10);
     const c2 = a.clamp(0, 10);
-    let observed: Array<{ c1: number; c2: number }> = [];
+    const observed: Array<{ c1: number; c2: number }> = [];
     effect(() => {
       observed.push({ c1: c1.value, c2: c2.value });
     });

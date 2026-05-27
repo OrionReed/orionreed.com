@@ -176,7 +176,7 @@ describe("Footgun 5: peeking a stale chain inside a hot loop re-evaluates each t
     const b = num(2);
     const sum = a.add(b);
 
-    let evaluations = 0;
+    const evaluations = 0;
     const tracked = a.add(b).scale(2); // chain that we'll peek
     void tracked;
 

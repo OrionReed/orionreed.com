@@ -6,7 +6,7 @@ import {
   easeInOut,
   label,
   loop,
-  Mount,
+  type Mount,
   num,
   rect,
   tween,

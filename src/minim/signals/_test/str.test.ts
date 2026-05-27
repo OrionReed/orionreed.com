@@ -58,8 +58,7 @@ const rngString = (len = 16): string => {
 const rngWord = (): string => {
   const len = 1 + Math.floor(Math.random() * 6);
   let s = "";
-  for (let i = 0; i < len; i++)
-    s += String.fromCharCode(97 + Math.floor(Math.random() * 26));
+  for (let i = 0; i < len; i++) s += String.fromCharCode(97 + Math.floor(Math.random() * 26));
   return s;
 };
 
@@ -473,9 +472,7 @@ describe("Str.words()", () => {
         lens.peek();
         return { source: s, lens };
       },
-      () =>
-        Array.from({ length: 3 }, () => rngWord())
-          .join("\n"),
+      () => Array.from({ length: 3 }, () => rngWord()).join("\n"),
       { viewEq: strEq },
     );
   });
@@ -497,16 +494,9 @@ describe("Str.sortedUnique()", () => {
   it("reads sorted unique lowercase", () => {
     const s = str("the quick brown fox jumps over the lazy dog");
     const u = s.sortedUnique();
-    expect(u.value.split("\n").sort()).toEqual([
-      "brown",
-      "dog",
-      "fox",
-      "jumps",
-      "lazy",
-      "over",
-      "quick",
-      "the",
-    ].sort());
+    expect(u.value.split("\n").sort()).toEqual(
+      ["brown", "dog", "fox", "jumps", "lazy", "over", "quick", "the"].sort(),
+    );
   });
 
   it("dedupes case-insensitively but the SOURCE keeps each occurrence's case", () => {
@@ -774,7 +764,7 @@ describe("utility functions", () => {
 // ─── Recovery (after writing through a degenerate intermediate) ───
 
 describe("Recovery from degenerate writes", () => {
-  it("trim → \"\" → \"x\" produces \"  x  \" (lead/trail preserved)", () => {
+  it('trim → "" → "x" produces "  x  " (lead/trail preserved)', () => {
     verifyRecovery(
       () => {
         const s = str("  hello  ");
@@ -787,7 +777,7 @@ describe("Recovery from degenerate writes", () => {
     );
   });
 
-  it("lowercase → \"\" → \"foo\" applies the source mask to non-empty positions only", () => {
+  it('lowercase → "" → "foo" applies the source mask to non-empty positions only', () => {
     verifyRecovery(
       () => {
         const s = str("HELLO");
@@ -922,8 +912,7 @@ describe("Stress: try to break the symmetric chain", () => {
     expect(parts).toHaveLength(100);
     for (let i = 0; i < 100; i++) {
       const original = i % 5 === 0 ? "Alpha" : i % 3 === 0 ? "Beta" : "gamma";
-      const expected =
-        original === "Alpha" ? "X" : original === "Beta" ? "Y" : "z";
+      const expected = original === "Alpha" ? "X" : original === "Beta" ? "Y" : "z";
       expect(parts[i]).toBe(expected);
     }
   });

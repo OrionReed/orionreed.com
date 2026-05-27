@@ -13,8 +13,8 @@
 //     tween on Kept lines; opacity fades for Lost/Gained); there's no
 //     drive loop or DOM rebuild.
 
-import { type Content, css, Diagram, label, loop, Mount, signal } from "../../minim";
-import { type CodeShape, code, codeStyles, Part } from "../../minim/code";
+import { type Content, css, Diagram, label, loop, type Mount, signal } from "../../minim";
+import { type CodeShape, code, codeStyles, type Part } from "../../minim/code";
 
 const STATES = [
   // 1. Inline original.

@@ -66,24 +66,22 @@ describe("engine", () => {
     }
 
     section("isSignal brand: branded prototypes, not structural .value");
-    {
-      check("isSignal(signal)", isSignal(signal(0)));
-      check("isSignal(computed)", isSignal(derive(() => 0)));
-      check(
-        "isSignal(lens)",
-        isSignal(
-          Num.lens(
-            () => 0,
-            () => {},
-          ),
+    check("isSignal(signal)", isSignal(signal(0)));
+    check("isSignal(computed)", isSignal(derive(() => 0)));
+    check(
+      "isSignal(lens)",
+      isSignal(
+        Num.lens(
+          () => 0,
+          () => {},
         ),
-      );
-      check("isSignal(plain {value: 5})", !isSignal({ value: 5 }));
-      check("isSignal(plain {value: 5, name: 'a'})", !isSignal({ value: 5, name: "a" }));
-      check("isSignal(number)", !isSignal(5));
-      check("isSignal(fn)", !isSignal(() => 5));
-      check("isSignal(null)", !isSignal(null));
-    }
+      ),
+    );
+    check("isSignal(plain {value: 5})", !isSignal({ value: 5 }));
+    check("isSignal(plain {value: 5, name: 'a'})", !isSignal({ value: 5, name: "a" }));
+    check("isSignal(number)", !isSignal(5));
+    check("isSignal(fn)", !isSignal(() => 5));
+    check("isSignal(null)", !isSignal(null));
 
     section("readNow() unwraps via brand, not structural shape");
     {

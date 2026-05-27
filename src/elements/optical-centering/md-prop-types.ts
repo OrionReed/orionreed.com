@@ -22,7 +22,7 @@
 // error, rendered red.
 
 import { propagator, propagators, type SetCell } from "@minim/propagators";
-import { Diagram, derive, label, line, loop, Mount, rect, signal, vec } from "../../minim";
+import { Diagram, derive, label, line, loop, type Mount, rect, signal, vec } from "../../minim";
 
 // ─── Type language ─────────────────────────────────────────────────
 

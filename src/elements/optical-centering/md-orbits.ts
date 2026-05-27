@@ -6,7 +6,7 @@ import {
   drive,
   group,
   loop,
-  Mount,
+  type Mount,
   num,
   polar,
   rect,

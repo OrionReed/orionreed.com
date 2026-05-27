@@ -12,8 +12,8 @@
 
 import { derive, effect, type Read, signal } from "@minim/signals";
 import { activeRecorder } from "./record";
-import { type Scoped } from "./scope";
-import { type Span } from "./span";
+import type { Scoped } from "./scope";
+import type { Span } from "./span";
 
 /** Anything an interval can be derived from. */
 export type Scope = Scoped<any> | Span | Read<boolean>;

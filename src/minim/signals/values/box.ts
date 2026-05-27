@@ -3,7 +3,7 @@
 // Invertibles (`add`, `sub`, `scale`, `expand`) return `: this` and ride
 // on `Signal#lens(fwd, bwd)`. Chained calls auto-fuse.
 
-import { type Easing } from "../../core";
+import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import {
   batch,
@@ -17,7 +17,7 @@ import {
   type Val,
   type Writable,
 } from "../signal";
-import { type Linear, type Pack, type TraitDict } from "../traits";
+import type { Linear, Pack, TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
 import { Vec } from "./vec";
@@ -72,8 +72,8 @@ export function edgeFrom(b: V, toward: Inner<Vec>): Inner<Vec> {
   const dy = toward.y - cy;
   if (dx === 0 && dy === 0) return { x: cx, y: cy };
   const k = Math.min(
-    dx === 0 ? Infinity : b.w / 2 / Math.abs(dx),
-    dy === 0 ? Infinity : b.h / 2 / Math.abs(dy),
+    dx === 0 ? Number.POSITIVE_INFINITY : b.w / 2 / Math.abs(dx),
+    dy === 0 ? Number.POSITIVE_INFINITY : b.h / 2 / Math.abs(dy),
   );
   return { x: cx + dx * k, y: cy + dy * k };
 }

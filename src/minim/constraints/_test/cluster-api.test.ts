@@ -23,7 +23,7 @@ describe("API — Strength constants", () => {
     expect(Strength.WEAK).toBeLessThan(Strength.MEDIUM);
     expect(Strength.MEDIUM).toBeLessThan(Strength.STRONG);
     expect(Strength.STRONG).toBeLessThan(Strength.REQUIRED);
-    expect(Strength.HARD).toBe(Infinity);
+    expect(Strength.HARD).toBe(Number.POSITIVE_INFINITY);
   });
 
   it("STRONG soft spring approximates a hard distance", () => {

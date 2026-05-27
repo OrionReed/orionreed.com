@@ -13,7 +13,16 @@
 // supported bodies otherwise produce.
 
 import { animate, bend, physics, pin, Strength, spring } from "@minim/constraints";
-import { Diagram, handle, label, line, Mount, type Vec, vec, type Writable } from "../../minim";
+import {
+  Diagram,
+  handle,
+  label,
+  line,
+  type Mount,
+  type Vec,
+  vec,
+  type Writable,
+} from "../../minim";
 
 type WVec = Writable<Vec>;
 

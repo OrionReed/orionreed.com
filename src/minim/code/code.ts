@@ -24,7 +24,7 @@
 // and routes typed tokens to the part containing them. Independent of
 // part structure — adding cuts doesn't change the colours.
 
-import { type Animator, type Easing } from "@minim/core";
+import type { Animator, Easing } from "@minim/core";
 import { Shape, type ShapeOpts } from "@minim/shapes";
 import {
   derive,

@@ -8,7 +8,7 @@
 // downstream consumers that only care about translation or rotation.
 
 import { type Init, Signal, type Writable } from "../signal";
-import { type Linear, type Pack, type Pivotal, type TraitDict } from "../traits";
+import type { Linear, Pack, Pivotal, TraitDict } from "../traits";
 
 type V = { x: number; y: number; theta: number };
 

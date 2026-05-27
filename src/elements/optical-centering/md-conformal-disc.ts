@@ -30,7 +30,7 @@ import {
   handle,
   type Inner,
   label,
-  Mount,
+  type Mount,
   Vec,
   vec,
   type Writable,

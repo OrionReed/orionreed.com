@@ -8,7 +8,7 @@
 // reads the scratch.
 
 import type { Signal, Writable } from "./signal";
-import { type Linear } from "./traits";
+import type { Linear } from "./traits";
 import { Num } from "./values/num";
 import { Vec } from "./values/vec";
 

@@ -32,7 +32,7 @@ import {
   label,
   line,
   loop,
-  Mount,
+  type Mount,
   type Num,
   pathD,
   type Read,

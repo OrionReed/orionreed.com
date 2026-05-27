@@ -7,7 +7,7 @@ import {
   label,
   linear,
   loop,
-  Mount,
+  type Mount,
   num,
   type Path,
   path,

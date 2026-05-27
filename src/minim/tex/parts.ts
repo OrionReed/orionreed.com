@@ -2,7 +2,16 @@
 // is by marker reference; `with`/`expand` share the root's identity.
 // Color cascades up the `group` chain via `effectiveColor`.
 
-import { Box, derive, effect, num, Signal, signal, type Val, type Writable } from "@minim/signals";
+import {
+  type Box,
+  derive,
+  effect,
+  num,
+  Signal,
+  signal,
+  type Val,
+  type Writable,
+} from "@minim/signals";
 import { highlightTint, hover, type Marker, marker, registerMarker } from "./marker";
 import type { TexShape } from "./tex";
 

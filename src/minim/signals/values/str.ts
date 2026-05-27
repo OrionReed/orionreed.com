@@ -28,7 +28,7 @@
 //                  occurrence in the source with its original casing.
 
 import { type Init, Signal, type Writable } from "../signal";
-import { type TraitDict } from "../traits";
+import type { TraitDict } from "../traits";
 
 type V = string;
 
@@ -97,11 +97,7 @@ export function applyCasePattern(target: V, mask: string): V {
   if (letters.length > 0 && letters.every(c => c === "L")) return target.toLowerCase();
   // Title case: first letter U, all subsequent letters L (non-letter
   // positions don't count against the pattern).
-  if (
-    letters.length > 0 &&
-    letters[0] === "U" &&
-    letters.slice(1).every(c => c === "L")
-  ) {
+  if (letters.length > 0 && letters[0] === "U" && letters.slice(1).every(c => c === "L")) {
     return target.charAt(0).toUpperCase() + target.slice(1).toLowerCase();
   }
   return applyCaseMask(target, mask);

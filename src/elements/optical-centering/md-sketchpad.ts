@@ -17,7 +17,7 @@ import {
   handle,
   label,
   line,
-  Mount,
+  type Mount,
   signal,
   type Vec,
   vec,

@@ -18,8 +18,8 @@
 //                        to push back on the drag.
 
 import type { AnyShape } from "@minim/shapes";
-import { type Signal, signal, Vec, type Writable } from "@minim/signals";
-import { type Body, BodyAnchor, bodyAnchor } from "./rigid";
+import { type Signal, signal, type Vec, type Writable } from "@minim/signals";
+import { type Body, type BodyAnchor, bodyAnchor } from "./rigid";
 import type { World } from "./world";
 
 interface DragHandle {

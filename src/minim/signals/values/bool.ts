@@ -18,7 +18,7 @@
 // `Num.greaterThan(t): Bool`) declare the policy in their own bwd.
 
 import { type Init, reader, Signal, type Val, type Writable } from "../signal";
-import { type Linear, type TraitDict } from "../traits";
+import type { Linear, TraitDict } from "../traits";
 
 type V = boolean;
 

@@ -12,10 +12,10 @@
 // `lerp` (animate between intervals), `equals`, `pack`. Subclasses
 // over a Vec-valued lo/hi could come later; today this is scalar-only.
 
-import { type Easing } from "../../core";
+import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { derive, type Init, reader, readNow, Signal, type Val, type Writable } from "../signal";
-import { type Linear, type Pack, type TraitDict } from "../traits";
+import type { Linear, Pack, TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
 

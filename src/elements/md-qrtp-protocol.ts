@@ -8,7 +8,7 @@ import {
   label,
   line,
   loop,
-  Mount,
+  type Mount,
   polar,
   type Signal,
   signal,

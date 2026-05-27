@@ -175,10 +175,10 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
       () => {
         const arr = segs.value;
         if (arr.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
-        let xMin = Infinity,
-          yMin = Infinity,
-          xMax = -Infinity,
-          yMax = -Infinity;
+        let xMin = Number.POSITIVE_INFINITY,
+          yMin = Number.POSITIVE_INFINITY,
+          xMax = Number.NEGATIVE_INFINITY,
+          yMax = Number.NEGATIVE_INFINITY;
         for (const seg of arr) {
           const N = seg.kind === "line" ? 1 : ARC_SAMPLES;
           for (let i = 0; i <= N; i++) {

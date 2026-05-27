@@ -9,7 +9,7 @@ import {
   label,
   line,
   loop,
-  Mount,
+  type Mount,
   meanRotation,
   meanScale,
   num,

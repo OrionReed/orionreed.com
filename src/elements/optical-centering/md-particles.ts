@@ -11,7 +11,16 @@
 // constraints every frame.
 
 import { animate, gap, inside, physics, pin } from "@minim/constraints";
-import { Diagram, handle, label, Mount, rect, type Vec, vec, type Writable } from "../../minim";
+import {
+  Diagram,
+  handle,
+  label,
+  type Mount,
+  rect,
+  type Vec,
+  vec,
+  type Writable,
+} from "../../minim";
 
 type WVec = Writable<Vec>;
 

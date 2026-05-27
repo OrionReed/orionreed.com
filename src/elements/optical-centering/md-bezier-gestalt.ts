@@ -23,7 +23,7 @@ import {
   handle,
   label,
   line,
-  Mount,
+  type Mount,
   pathD,
   Vec,
   vec,

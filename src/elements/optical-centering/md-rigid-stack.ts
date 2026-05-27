@@ -25,7 +25,7 @@
 // so a rotating rect's drag still returns stable world coords.
 
 import { animate, type Body, body, dragBodyAnchored, joint, world } from "@minim/constraints";
-import { Diagram, label, Mount, rect } from "../../minim";
+import { Diagram, label, type Mount, rect } from "../../minim";
 
 const PALETTE = ["#5b8def", "#e25c5c", "#f5a623", "#7ed321", "#9b59b6", "#1abc9c"];
 

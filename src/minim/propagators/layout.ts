@@ -71,9 +71,9 @@ function specs(items: readonly StackItem[]): StackItemSpec[] {
           grow: it.grow ?? 1,
           shrink: it.shrink ?? 1,
           min: it.min ?? 0,
-          max: it.max ?? Infinity,
+          max: it.max ?? Number.POSITIVE_INFINITY,
         }
-      : { box: it, grow: 1, shrink: 1, min: 0, max: Infinity },
+      : { box: it, grow: 1, shrink: 1, min: 0, max: Number.POSITIVE_INFINITY },
   );
 }
 

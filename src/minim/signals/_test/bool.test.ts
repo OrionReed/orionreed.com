@@ -13,9 +13,9 @@
 //   - Edge cases: many-deep fusion, xor with reactive b, xor identity
 
 import { describe, expect, it } from "vitest";
+import { effect, isLens, signal } from "../signal";
 import { Bool, bool } from "../values/bool";
 import { Num, num } from "../values/num";
-import { effect, isLens, signal } from "../signal";
 import { verifyLensLaws } from "./_laws";
 
 // ─── Factory ──────────────────────────────────────────────────────

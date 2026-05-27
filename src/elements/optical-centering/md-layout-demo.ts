@@ -1,4 +1,4 @@
-import { arrange, Diagram, handle, label, Mount, num, rect, spring, Vec } from "../../minim";
+import { arrange, Diagram, handle, label, type Mount, num, rect, spring, Vec } from "../../minim";
 
 const WIDTHS = [72, 68, 80, 60, 76];
 const HEIGHTS = [52, 44, 60, 48, 56];
@@ -27,7 +27,7 @@ export class MdLayoutDemo extends Diagram {
     const handles = widths.map((w, i) => {
       const card = cards[i];
       const h = HEIGHTS[i];
-      const handleX = w.clamp(MIN_W, Infinity).add(card.translate.x);
+      const handleX = w.clamp(MIN_W, Number.POSITIVE_INFINITY).add(card.translate.x);
       const pos = Vec.lens(
         () => ({ x: handleX.value, y: card.translate.value.y + h / 2 }),
         p => {

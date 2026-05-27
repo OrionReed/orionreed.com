@@ -3,7 +3,7 @@
 import { type Animator, type Easing, easeInOut, easeOut } from "@minim/core";
 import { Shape } from "@minim/shapes";
 import { effect, num } from "@minim/signals";
-import { Part, type PartMarker } from "./parts";
+import type { Part, PartMarker } from "./parts";
 import type { TexShape } from "./tex";
 
 /** Wildcard TexShape — accepts any `Names` union, so cross-cycle

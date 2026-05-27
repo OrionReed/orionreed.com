@@ -5,7 +5,7 @@ import {
   derive,
   label,
   loop,
-  Mount,
+  type Mount,
   rect,
   type Signal,
   stagger,

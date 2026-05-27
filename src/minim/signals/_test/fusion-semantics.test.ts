@@ -6,7 +6,7 @@
 // hypothetical "always materialise every cell" engine.
 
 import { describe, expect, it } from "vitest";
-import { effect, Num, num, Signal, transform, Vec, vec } from "../index";
+import { effect, Num, num, type Signal, transform, Vec, vec } from "../index";
 
 describe("intermediate-cell equality filter is bypassed under fusion", () => {
   // Setup: a → b (via Cls.derive with non-injective fwd) → c

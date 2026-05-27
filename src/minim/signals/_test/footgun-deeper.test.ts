@@ -153,7 +153,7 @@ describe("footgun: reactive args in field chains", () => {
       v => v * k.value,
       v => v / k.value,
     );
-    let observed: number[] = [];
+    const observed: number[] = [];
     const stop = effect(() => {
       observed.push(c.value);
     });

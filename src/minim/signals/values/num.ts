@@ -5,10 +5,10 @@
 // and return `: this` so chains preserve writability of the receiver.
 // Chained calls auto-fuse to a single lens cell.
 
-import { type Easing } from "../../core";
+import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { type Init, reader, Signal, type Val, type Writable } from "../signal";
-import { type Linear, type Pack, type TraitDict } from "../traits";
+import type { Linear, Pack, TraitDict } from "../traits";
 
 type V = number;
 

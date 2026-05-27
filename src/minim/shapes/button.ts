@@ -8,14 +8,14 @@ import {
   type Signal,
   signal,
   type Val,
-  Vec,
+  type Vec,
   vec,
   type Writable,
 } from "@minim/signals";
 import { group } from "./group";
 import { label } from "./label";
 import { rect } from "./rect";
-import { type AnyShape } from "./shape";
+import type { AnyShape } from "./shape";
 import type { Content } from "./text";
 import { tokens } from "./tokens";
 

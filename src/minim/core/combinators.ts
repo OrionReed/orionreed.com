@@ -14,7 +14,7 @@ import {
 /** Park each frame until `cb` returns `false`. `t` is elapsed since the
  *  first call (sampled from `tick.elapsed` — no float accumulation). */
 export function* drive(cb: (tick: Tick, t: number) => boolean | void): Animator<void> {
-  let startElapsed = NaN;
+  let startElapsed = Number.NaN;
   while (true) {
     const tick = yield;
     if (startElapsed !== startElapsed) startElapsed = tick.elapsed - tick.dt;

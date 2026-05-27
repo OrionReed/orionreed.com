@@ -1,6 +1,15 @@
 // `tex` reads strings.raw, so use single backslashes (`\frac`, `\dot`, `\cdot`).
 
-import { type Content, Diagram, label, loop, Mount, signal, snapshot, stagger } from "../../minim";
+import {
+  type Content,
+  Diagram,
+  label,
+  loop,
+  type Mount,
+  signal,
+  snapshot,
+  stagger,
+} from "../../minim";
 import {
   brace,
   frame,

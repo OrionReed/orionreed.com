@@ -21,7 +21,7 @@ import {
   handle,
   label,
   line,
-  Mount,
+  type Mount,
   Vec,
   vec,
 } from "../../minim";

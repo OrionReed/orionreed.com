@@ -4,7 +4,7 @@ import {
   drag,
   label,
   line,
-  Mount,
+  type Mount,
   type Num,
   num,
   rect,

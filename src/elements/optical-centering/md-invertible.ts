@@ -1,4 +1,4 @@
-import { circle, Diagram, debug, handle, label, line, Mount, vec } from "../../minim";
+import { circle, Diagram, debug, handle, label, line, type Mount, vec } from "../../minim";
 
 export class MdInvertible extends Diagram {
   protected scene(s: Mount): void {

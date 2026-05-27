@@ -3,7 +3,7 @@
 // Invertibles (`add`, `sub`, `scale`) return `: this` and ride on
 // `Signal#lens(fwd, bwd)`. Chained calls auto-fuse.
 
-import { type Easing } from "../../core";
+import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import {
   derive,
@@ -15,7 +15,7 @@ import {
   type Val,
   type Writable,
 } from "../signal";
-import { type Linear, type Pack, type TraitDict } from "../traits";
+import type { Linear, Pack, TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
 

@@ -438,10 +438,10 @@ export function bboxLens(points: readonly Writable<Vec>[]): {
   type V = { x: number; y: number };
 
   const computeBox = (vals: readonly V[]): { cx: number; cy: number; sx: number; sy: number } => {
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
     for (let i = 0; i < K; i++) {
       const x = vals[i]!.x;
       const y = vals[i]!.y;

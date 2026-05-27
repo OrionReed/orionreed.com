@@ -4,7 +4,7 @@ import {
   drag,
   drive,
   label,
-  Mount,
+  type Mount,
   num,
   polar,
   signal,

@@ -10,7 +10,7 @@ import {
   group,
   label,
   line,
-  Mount,
+  type Mount,
   num,
   rect,
   t,

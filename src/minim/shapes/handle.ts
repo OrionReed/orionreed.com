@@ -4,7 +4,7 @@ import {
   centroidLens,
   midpointLens,
   polar as polarLens,
-  Signal,
+  type Signal,
   signal,
   type Val,
   Vec,
@@ -13,7 +13,7 @@ import {
 import { Circle, type CircleOpts } from "./circle";
 import { drag } from "./interaction";
 import type { Path } from "./path";
-import { type AnyShape, type Has } from "./shape";
+import type { AnyShape, Has } from "./shape";
 
 const COLOR = "var(--minim-handle, #2563eb)";
 
@@ -117,7 +117,7 @@ const tOnPath = (p: Path, t: Signal<number>, opts?: HandleOpts & { samples?: num
   const N = opts?.samples ?? 64;
   const project = (target: { x: number; y: number }) => {
     let bestT = 0;
-    let bestD = Infinity;
+    let bestD = Number.POSITIVE_INFINITY;
     for (let i = 0; i <= N; i++) {
       const tt = i / N;
       const pp = p.pointAt(tt).value;

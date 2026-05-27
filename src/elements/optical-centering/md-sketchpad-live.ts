@@ -51,7 +51,7 @@ import {
   group,
   label,
   line,
-  Mount,
+  type Mount,
   rect,
   type Signal,
   signal,

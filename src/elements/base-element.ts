@@ -66,7 +66,7 @@ export class BaseElement extends HTMLElement {
 
 /** Decorator: maps a class field to a typed HTML attribute. */
 export function attr(options: { type?: "string" | "number" | "boolean" } = {}) {
-  return function <T extends { constructor: any }>(target: T, propertyKey: string) {
+  return <T extends { constructor: any }>(target: T, propertyKey: string) => {
     const constructor = target.constructor;
     if (!constructor._attributes) constructor._attributes = [];
     constructor._attributes.push(propertyKey);

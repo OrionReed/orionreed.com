@@ -8,7 +8,7 @@
 // has rotational inertia per link — bars feel like bars, not beads.
 
 import { animate, type Body, body, dragBody, joint, world } from "@minim/constraints";
-import { circle, Diagram, label, Mount, rect, Vec } from "../../minim";
+import { circle, Diagram, label, type Mount, rect, Vec } from "../../minim";
 
 const N = 18;
 const LINK_W = 18;

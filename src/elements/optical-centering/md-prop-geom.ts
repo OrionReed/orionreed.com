@@ -12,7 +12,7 @@
 // case in a single pass with exact arithmetic.
 
 import { centroid, mid, propagators } from "@minim/propagators";
-import { Diagram, handle, label, line, Mount, vec } from "../../minim";
+import { Diagram, handle, label, line, type Mount, vec } from "../../minim";
 
 const VERT = "#5b8def";
 const CENT = "#f5a623";

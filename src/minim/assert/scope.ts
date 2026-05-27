@@ -25,7 +25,7 @@ import { closeSpan, currentSpan, notifySpanOpen, openSpan, type Span, withSpan }
 type AnyFactory = (...args: any[]) => Animator<any>;
 
 /** Bumped by record() on each open/close so derived signals refresh. */
-let traceVersion = signal(0);
+const traceVersion = signal(0);
 
 /** Scope notifies record() of new spans; record() bumps the version,
  *  which causes `alive` / `last` / `runs` etc. to recompute. */
@@ -216,7 +216,7 @@ function descends(s: Span, ancestor: Span): boolean {
 /** Iterate every `Span[]` we've ever recorded. WeakMap can't be
  *  iterated, so the recorder stores a parallel `factories` array
  *  it appends to whenever a never-before-seen factory opens a span. */
-let knownFactories: Function[] = [];
+const knownFactories: Function[] = [];
 export function rememberFactory(fn: Function): void {
   if (!spansByFactory.has(fn)) knownFactories.push(fn);
 }

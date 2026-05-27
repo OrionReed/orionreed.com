@@ -24,7 +24,15 @@
 // `closed-form-policies.ts`, applied beyond points.
 // =====================================================================
 
-import { type Linear, type Metric, Num, Signal, type Traits, Vec, type Writable } from "../index";
+import {
+  type Linear,
+  type Metric,
+  Num,
+  type Signal,
+  type Traits,
+  Vec,
+  type Writable,
+} from "../index";
 
 // ─── 1. Generic Linear-trait aggregates ────────────────────────────────
 //

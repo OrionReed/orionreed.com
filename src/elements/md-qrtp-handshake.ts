@@ -6,7 +6,7 @@ import {
   label,
   line,
   loop,
-  Mount,
+  type Mount,
   rect,
   type Signal,
   signal,

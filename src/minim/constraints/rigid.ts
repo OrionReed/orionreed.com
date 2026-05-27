@@ -813,8 +813,8 @@ export class JointTerm extends Term {
     this.rAy = rA.y;
     this.rBx = rB.x;
     this.rBy = rB.y;
-    this.stiffness[0]! = opts.x ?? Infinity;
-    this.stiffness[1]! = opts.y ?? Infinity;
+    this.stiffness[0]! = opts.x ?? Number.POSITIVE_INFINITY;
+    this.stiffness[1]! = opts.y ?? Number.POSITIVE_INFINITY;
     this.stiffness[2]! = opts.angle ?? 0;
     this.restAngle = bodyA.pose.peek().theta - bodyB.pose.peek().theta;
     const sumW = bodyA.w + bodyB.w;
@@ -863,7 +863,7 @@ export class JointTerm extends Term {
     this._Cn[1]! = aWy - bWy;
     this._Cn[2]! = (poseA.theta - poseB.theta - this.restAngle) * this.torqueArm;
     for (let i = 0; i < 3; i++) {
-      if (this.stiffness[i]! === Infinity) {
+      if (this.stiffness[i]! === Number.POSITIVE_INFINITY) {
         this.C[i]! = this._Cn[i]! - this.C0[i]! * alpha;
       } else {
         this.C[i]! = this._Cn[i]!;
@@ -1020,7 +1020,11 @@ export function weld(
   rA: { x: number; y: number },
   rB: { x: number; y: number },
 ): Joint {
-  return new Joint(a, b, rA, rB, { x: Infinity, y: Infinity, angle: Infinity });
+  return new Joint(a, b, rA, rB, {
+    x: Number.POSITIVE_INFINITY,
+    y: Number.POSITIVE_INFINITY,
+    angle: Number.POSITIVE_INFINITY,
+  });
 }
 
 /** Soft constraint that pulls a body's translation toward `target`

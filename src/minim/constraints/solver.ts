@@ -424,7 +424,7 @@ export class Solver {
         const fMax = t.lambdaMax;
         const rows = t.rows;
         for (let r = 0; r < rows; r++) {
-          const lambda = fStiff[r]! === Infinity ? fLambda[r]! : 0;
+          const lambda = fStiff[r]! === Number.POSITIVE_INFINITY ? fLambda[r]! : 0;
           const kC = fPenalty[r]! * fC[r]! + lambda;
           const lo = fMin[r]!;
           const hi = fMax[r]!;
@@ -536,7 +536,7 @@ export class Solver {
       const fFracture = t.fracture;
       const rows = t.rows;
       for (let r = 0; r < rows; r++) {
-        const lambda = fStiff[r]! === Infinity ? fLambda[r]! : 0;
+        const lambda = fStiff[r]! === Number.POSITIVE_INFINITY ? fLambda[r]! : 0;
         const kC = fPenalty[r]! * fC[r]! + lambda;
         const lo = fMin[r]!;
         const hi = fMax[r]!;

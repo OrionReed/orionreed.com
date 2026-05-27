@@ -188,7 +188,7 @@ export class Anim {
 
   private advance(a: Active, payload: any, asThrow: boolean): void {
     try {
-      let r = asThrow ? a.gen.throw(payload) : a.gen.next(payload);
+      const r = asThrow ? a.gen.throw(payload) : a.gen.next(payload);
       while (!r.done) {
         if (a.wakeAt === DEAD) return;
         const v = r.value;
@@ -304,9 +304,9 @@ export class Anim {
 
 // ─── Internal ────────────────────────────────────────────────────────
 
-const DEAD = -Infinity;
+const DEAD = Number.NEGATIVE_INFINITY;
 const READY = 0;
-const PARKED = Infinity;
+const PARKED = Number.POSITIVE_INFINITY;
 
 const CUT_KEY = Symbol("cut");
 

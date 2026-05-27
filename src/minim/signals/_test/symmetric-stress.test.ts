@@ -374,7 +374,7 @@ describe("pathological inputs", () => {
     ]);
     const spread = spreadOf(cells as never);
     spread.peek();
-    spread.value = NaN;
+    spread.value = Number.NaN;
     // Cells are now NaN — this is the shared limitation.
     expect(Number.isNaN(cells[0]!.value.x)).toBe(true);
     // Recovery via parents (the supported path):
@@ -391,7 +391,7 @@ describe("pathological inputs", () => {
     const pivot = vec(0, 0);
     const s = scaleAbout(cells as never, pivot);
     s.peek();
-    s.value = Infinity;
+    s.value = Number.POSITIVE_INFINITY;
     expect(Number.isFinite(cells[0]!.value.x)).toBe(false);
     // Recovery via parents:
     cells[0]!.value = { x: 4, y: 0 };

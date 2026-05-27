@@ -13,7 +13,7 @@ import {
   type Has,
   label,
   loop,
-  Mount,
+  type Mount,
   rand,
   signal,
   snapshot,

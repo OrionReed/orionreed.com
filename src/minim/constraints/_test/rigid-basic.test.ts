@@ -1,7 +1,7 @@
 // rigid-basic.test.ts — sanity tests for the 2D rigid-body extension.
 
 import { describe, expect, it } from "vitest";
-import { Body, BoxContact, body, bodyAnchor, joint, world } from "../index";
+import { type Body, BoxContact, body, bodyAnchor, joint, world } from "../index";
 
 describe("box-box SAT collide", () => {
   it("box overlapping ground produces contacts", () => {
@@ -108,8 +108,8 @@ describe("world — basics", () => {
     // left-end local (-0.5, 0). Pendulum length = 0.5m (anchor to bob center).
     const bob = w.add(body({ size: { w: 1, h: 0.2 } }, { x: 0.5, y: 5 }));
     w.add(joint(anchor, bob, { x: 0, y: 0 }, { x: -0.5, y: 0 }));
-    let maxX = -Infinity;
-    let minX = Infinity;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minX = Number.POSITIVE_INFINITY;
     for (let f = 0; f < 240; f++) {
       w.step(1 / 60);
       const p = bob.pose.value;

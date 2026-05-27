@@ -6,10 +6,10 @@
 // conditional return type propagates writability from the receiver;
 // `derived()` wraps RO views.
 
-import { type Easing } from "../../core";
+import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { batch, type Init, reader, readNow, Signal, type Val, type Writable } from "../signal";
-import { type Linear, type Pack, type Pivotal, type TraitDict } from "../traits";
+import type { Linear, Pack, Pivotal, TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
 

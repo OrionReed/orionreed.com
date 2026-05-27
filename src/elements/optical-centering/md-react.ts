@@ -11,7 +11,7 @@ import {
   type Has,
   label,
   loop,
-  Mount,
+  type Mount,
   race,
   rect,
   signal,

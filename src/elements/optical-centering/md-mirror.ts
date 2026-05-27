@@ -3,9 +3,9 @@ import {
   handle,
   label,
   line,
-  Mount,
+  type Mount,
   reflectionLens,
-  Vec,
+  type Vec,
   vec,
   type Writable,
 } from "../../minim";

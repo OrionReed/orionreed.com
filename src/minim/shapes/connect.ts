@@ -1,7 +1,7 @@
 // Connectors. Uses `shape.boundary` so analytic edges work without
 // per-kind dispatch.
 
-import { derive, reader, type Val, Vec } from "@minim/signals";
+import { derive, reader, type Val, type Vec } from "@minim/signals";
 import { Line, type LineOpts } from "./line";
 import { Shape, SVG_NS } from "./shape";
 import { tokens } from "./tokens";

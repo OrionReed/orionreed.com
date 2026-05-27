@@ -20,7 +20,7 @@ import {
   propagators,
   type SetCell,
 } from "@minim/propagators";
-import { Diagram, derive, label, line, loop, Mount, rect, signal } from "../../minim";
+import { Diagram, derive, label, line, loop, type Mount, rect, signal } from "../../minim";
 
 const BASE_PUZZLE =
   "53..7...." +

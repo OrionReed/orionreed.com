@@ -114,10 +114,10 @@ export abstract class Term {
     this.rows = rows;
     this.C = new Float64Array(rows);
     this.C0 = new Float64Array(rows);
-    this.stiffness = new Float64Array(rows).fill(Infinity);
-    this.lambdaMin = new Float64Array(rows).fill(-Infinity);
-    this.lambdaMax = new Float64Array(rows).fill(Infinity);
-    this.fracture = new Float64Array(rows).fill(Infinity);
+    this.stiffness = new Float64Array(rows).fill(Number.POSITIVE_INFINITY);
+    this.lambdaMin = new Float64Array(rows).fill(Number.NEGATIVE_INFINITY);
+    this.lambdaMax = new Float64Array(rows).fill(Number.POSITIVE_INFINITY);
+    this.fracture = new Float64Array(rows).fill(Number.POSITIVE_INFINITY);
     this.penalty = new Float64Array(rows).fill(PENALTY_MIN);
     this.lambda = new Float64Array(rows);
     this.J = this.cellDims.map(d => new Float64Array(rows * d));
@@ -142,6 +142,6 @@ export abstract class Term {
    *  augmented-Lagrangian path rather than penalty weighting.
    *  Hot paths inline the `=== Infinity` check directly. */
   isHard(row: number): boolean {
-    return this.stiffness[row]! === Infinity;
+    return this.stiffness[row]! === Number.POSITIVE_INFINITY;
   }
 }

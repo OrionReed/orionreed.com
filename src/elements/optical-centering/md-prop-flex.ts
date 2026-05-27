@@ -11,7 +11,19 @@
 // their min, then overflow.
 
 import { hstack, propagate } from "@minim/propagators";
-import { box, Diagram, handle, label, line, Mount, Num, num, rect, Vec, vec } from "../../minim";
+import {
+  box,
+  Diagram,
+  handle,
+  label,
+  line,
+  type Mount,
+  Num,
+  num,
+  rect,
+  Vec,
+  vec,
+} from "../../minim";
 
 const ITEM_COLORS = ["#5b8def", "#e25c5c", "#f5a623", "#86b966", "#9c6bce", "#5fb1c6"];
 

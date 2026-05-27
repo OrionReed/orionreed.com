@@ -1,4 +1,14 @@
-import { circle, Diagram, easeInOut, label, line, loop, Mount, rect, snapshot } from "../../minim";
+import {
+  circle,
+  Diagram,
+  easeInOut,
+  label,
+  line,
+  loop,
+  type Mount,
+  rect,
+  snapshot,
+} from "../../minim";
 
 export class MdAnchors extends Diagram {
   protected scene(s: Mount): void {

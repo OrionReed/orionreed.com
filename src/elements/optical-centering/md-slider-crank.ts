@@ -13,7 +13,7 @@
 // Newton, the shape "slips" along the closest valid configuration.
 
 import { collinear, constraints, distance, pin } from "@minim/constraints";
-import { circle, Diagram, drag, handle, label, line, Mount, rect, vec } from "../../minim";
+import { circle, Diagram, drag, handle, label, line, type Mount, rect, vec } from "../../minim";
 
 const CRANK = 50;
 const ROD = 130;

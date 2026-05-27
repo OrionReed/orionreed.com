@@ -17,7 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Writable } from "../../index";
-import { centroidLens, meanLens, Num, num, signal, Vec, vec } from "../../index";
+import { centroidLens, meanLens, Num, num, signal, type Vec, vec } from "../../index";
 import {
   bboxLens,
   bundleLens,

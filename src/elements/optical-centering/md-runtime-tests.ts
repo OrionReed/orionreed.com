@@ -17,7 +17,7 @@ import {
   forEach,
   label,
   loop,
-  Mount,
+  type Mount,
   meanLens,
   meanRotation,
   meanScale,

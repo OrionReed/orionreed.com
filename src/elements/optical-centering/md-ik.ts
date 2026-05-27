@@ -25,7 +25,17 @@
 // driver: each frame the spring writes the next tip, the lens's bwd
 // runs FABRIK on the commit, and the whole arm whips around for free.
 
-import { circle, cursor, Diagram, line, Mount, spring, Vec, vec, type Writable } from "../../minim";
+import {
+  circle,
+  cursor,
+  Diagram,
+  line,
+  type Mount,
+  spring,
+  Vec,
+  vec,
+  type Writable,
+} from "../../minim";
 
 const N = 5;
 const L = 56;

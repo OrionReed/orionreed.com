@@ -4,7 +4,7 @@ import {
   Diagram,
   label,
   line,
-  Mount,
+  type Mount,
   path,
   rect,
   type Signal,
@@ -40,7 +40,7 @@ function parseContent(text: string): CodecPart[] {
     const m = rest.match(/^(?:(\d+)\s+([a-zA-Z])|([a-zA-Z])\s+(\d+)|(\d+)|([a-zA-Z]))$/);
     if (!m) return { label: lbl, unitSize: 1 };
     const [, s1, g1, g2, s2, sOnly, gOnly] = m;
-    const unitSize = parseInt(s1 || s2 || sOnly || "1", 10);
+    const unitSize = Number.parseInt(s1 || s2 || sOnly || "1", 10);
     const group = g1 || g2 || gOnly || undefined;
     return { label: lbl, unitSize, group };
   });

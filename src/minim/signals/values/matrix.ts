@@ -10,10 +10,10 @@
 //   - `invert()`    — its own inverse
 
 import { batch, type Init, type Inner, reader, Signal, type Val, type Writable } from "../signal";
-import { type TraitDict } from "../traits";
+import type { TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
-import { Vec } from "./vec";
+import type { Vec } from "./vec";
 
 type V = { a: number; b: number; c: number; d: number; e: number; f: number };
 type BoxV = { x: number; y: number; w: number; h: number };

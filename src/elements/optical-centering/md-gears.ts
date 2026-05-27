@@ -4,7 +4,7 @@ import {
   dragRotate,
   drive,
   label,
-  Mount,
+  type Mount,
   type Num,
   num,
   Shape,

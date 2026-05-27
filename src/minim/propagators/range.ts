@@ -28,7 +28,7 @@ import { type Propagator, propagator } from "./propagator";
  *  `lo > hi` = contradiction (empty interval). */
 export type Range = readonly [number, number];
 
-export const RANGE_TOP: Range = [-Infinity, Infinity];
+export const RANGE_TOP: Range = [Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY];
 
 export function rangeEq(a: Range, b: Range): boolean {
   return a[0] === b[0] && a[1] === b[1];
@@ -59,7 +59,10 @@ export function rangeWidth(r: Range): number {
 export type RangeCell = Writable<Signal<Range>>;
 
 /** Construct a Range cell. Optionally seed with bounds. */
-export function rangeCell(lo: number = -Infinity, hi: number = Infinity): RangeCell {
+export function rangeCell(
+  lo: number = Number.NEGATIVE_INFINITY,
+  hi: number = Number.POSITIVE_INFINITY,
+): RangeCell {
   return signal<Range>([lo, hi], { equals: rangeEq });
 }
 

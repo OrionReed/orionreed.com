@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Num, Writable } from "../../index";
-import { centroidLens, num, Pose, pose, Vec, vec } from "../../index";
+import { centroidLens, num, type Pose, pose, type Vec, vec } from "../../index";
 import {
   bestFitCircleLens,
   bestFitLineLens,

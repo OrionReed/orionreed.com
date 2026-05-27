@@ -2,7 +2,7 @@
 // `[at, at + dur)` interval); `yield* tl` advances the clock to
 // `duration`. `sequential({...})` produces cumulative-start specs.
 
-import { type Animator } from "@minim/core";
+import type { Animator } from "@minim/core";
 import {
   derive,
   type Init,

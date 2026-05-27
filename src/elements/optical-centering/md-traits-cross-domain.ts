@@ -24,7 +24,7 @@ import {
   handle,
   label,
   line,
-  Mount,
+  type Mount,
   meanOf,
   Num,
   paletteLens,

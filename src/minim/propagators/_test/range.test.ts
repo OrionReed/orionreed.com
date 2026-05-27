@@ -60,9 +60,9 @@ describe("range cells: monotone narrowing", () => {
     const p = propagators();
     p.add(intervalAdder(a, b, c));
     // Nothing to narrow. All stay at top.
-    expect(a.value).toEqual([-Infinity, Infinity]);
-    expect(b.value).toEqual([-Infinity, Infinity]);
-    expect(c.value).toEqual([-Infinity, Infinity]);
+    expect(a.value).toEqual([Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY]);
+    expect(b.value).toEqual([Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY]);
+    expect(c.value).toEqual([Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY]);
 
     // Add info to a. b still unknown → c stays top (since a + ∞ = ∞).
     a.value = [1, 3];
@@ -158,7 +158,7 @@ describe("range cells: order-independence", () => {
     p.add(intervalSum(parts, total));
     // No info yet on any part; total constrains nothing useful (parts could
     // each be -Inf to Inf and still sum to [20, 30]).
-    expect(parts[0]!.value).toEqual([-Infinity, Infinity]);
+    expect(parts[0]!.value).toEqual([Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY]);
 
     // Add bounds on three parts; the fourth is back-deduced.
     parts[0]!.value = [3, 5] as Range;

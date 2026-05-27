@@ -19,7 +19,7 @@
 
 import { Constraints } from "./cluster";
 import { ensureCapacity, type Phase, prepare, snapshot, writeback } from "./phases";
-import { type PhysicsOpts } from "./physics";
+import type { PhysicsOpts } from "./physics";
 import { Body, BoxContact, Joint } from "./rigid";
 
 export interface WorldOpts extends PhysicsOpts {
