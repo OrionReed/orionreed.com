@@ -108,6 +108,28 @@ Lenses don't have to keep the value type fixed. A **bridge lens** projects acros
 
 Five distinct shapes flow through the same `Bool.lens(parents, fwd, bwd)` primitive. The first two are clamp-family — single source, threshold-style. The next three diverge: a two-source equality relation that writes both endpoints to a midpoint; an N-source aggregate that broadcasts a single click across every member of the cluster; a discrete classifier that rides on top of an integer-quantised slider and flips parity by ±1. Boolean predicates that used to be one-way derived values are now bidirectional UI primitives — click `inside` and the point teleports; click `even` and the knob snaps.
 
+The natural sum-type extension of Bool is `Tri` — three-valued logic with an explicit "indeterminate" state. The motivating UI primitive: a nested checkbox tree where each folder's state is the Kleene-AND of its descendants. All-checked → checked; none-checked → unchecked; partial → indeterminate. `Tri.allOf(leaves)` is one writable cell that reads as the aggregate and broadcasts on write — both halves of the indeterminate-checkbox UI in one primitive. The recursion lives in the data structure, not the rendering code:
+
+```ts
+const leaf = (label, init = false) =>
+  ({ kind: "leaf", label, checked: bool(init) });
+
+const folder = (label, children) => ({
+  kind: "folder", label, children,
+  checked: Tri.allOf(collectLeaves(children)), // ← cascade + indeterminate, free
+});
+
+const tree = folder("Tasks", [
+  folder("Work",     [leaf("Report"), leaf("Review", true), leaf("Email")]),
+  folder("Personal", [leaf("Groceries"), leaf("Call mom", true), leaf("Laundry")]),
+  folder("Reading",  [leaf("Chapter 4", true), leaf("Chapter 5", true)]),
+]);
+```
+
+<md-tri-tree></md-tri-tree>
+
+Every folder is just another reactive cell of the same shape as a leaf. Rendering is then a uniform loop — bind each checkbox's `.checked` and `.indeterminate` to its cell, write `cb.checked` back on change. No recursive aggregate-state computation per render, no `useEffect` for the `indeterminate` flag, no manual cascade walk. Click a folder; the Tri's bwd broadcasts to every descendant in one batched propagation, and the engine refreshes ancestor aggregates in the same pass.
+
 The lenses up to here all ride on continuous numeric value types where the inverse is closed-form or numerical. The same engine has a second lens shape for *unstructured* domains — strings, arrays, sets — where the projection loses information no closed-form can recover. Each cell carries a private `complement` (Hofmann–Pierce symmetric-lens style) threaded through every `putr`/`putl`, and the engine fuses plain `.lens(F, B)` chains on top of it without breaking the complement's identity (see `_fuseOnSymmetric` in the signal core).
 
 A single source string, five live projections. Edit any pane; the source updates with the discarded detail recovered from the complement — leading/trailing padding, per-word case patterns (Title / ALL CAPS / lower), separator runs, duplicate source positions. Editing the deduped pane broadcasts to every occurrence in the source with that occurrence's original case. Foster/Pierce's case-preserving find-and-replace, played live across the lens chain:

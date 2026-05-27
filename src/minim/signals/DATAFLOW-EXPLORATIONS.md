@@ -6,6 +6,11 @@ explorations into how the system could grow. **None of this is implemented.**
 Read this when thinking about cycles, transactions, lattice cells, or edit
 lenses; ignore it when shipping features.
 
+For the specific design exploration around incremental aggregates (the
+algebraic story, the engine extension that was prototyped and reverted,
+and the deeper engine change that would unlock the perf win), see
+[`INCREMENTAL-AGGREGATES.md`](./INCREMENTAL-AGGREGATES.md).
+
 ---
 
 ## 1. What `network()` actually does
@@ -285,6 +290,16 @@ verified by hand. Optional `isBounded` annotation.
 
 Migrate `propagators/` and `constraints/` set-narrowing code to use
 these. `network()` no longer needed for monotonic convergent computation.
+
+### B' — Incremental aggregates
+
+Aggregates like `centroidLens`, `meanLens`, `bboxLens` currently
+re-compute fully on any input change. There's a clean algebraic story
+for incrementalising them (group/monoid/lattice structure) — and a
+specific engine-side blocker (auto-track dep management) that needs a
+bounded refactor to unlock. Worked out in detail in
+[`INCREMENTAL-AGGREGATES.md`](./INCREMENTAL-AGGREGATES.md), including
+a prototype that was built and reverted.
 
 ### C — Declarative bidirectional pairs
 

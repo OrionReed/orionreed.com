@@ -105,6 +105,8 @@ export * as StrMath from "./values/str";
 export { Str, str } from "./values/str";
 export * as TransformMath from "./values/transform";
 export { Transform, type TransformInit, transform } from "./values/transform";
+export * as TriMath from "./values/tri";
+export { Tri, tri } from "./values/tri";
 export * as VecMath from "./values/vec";
 export { type PolarPolicy, polar, tangentPoint, Vec, vec } from "./values/vec";
 export { derived, field } from "./writable";
