@@ -25,10 +25,10 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
       () => ({ x: xs.value, y: ys.value, w: ws.value, h: hs.value }),
       opts,
       {
-        origin: () => ({
+        origin: derive(() => ({
           x: xs.value + ws.value / 2,
           y: ys.value + hs.value / 2,
-        }),
+        })),
       },
     );
     this.x = xs;
@@ -70,11 +70,11 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   outline(by: Val<number>, opts?: RectOpts): Rect {
     const b = reader(by);
     return new Rect(
-      () => this.x.value - b(),
-      () => this.y.value - b(),
-      () => this.w.value + 2 * b(),
-      () => this.h.value + 2 * b(),
-      { corner: () => this.corner.value + b(), ...opts } as RectOpts,
+      derive(() => this.x.value - b()),
+      derive(() => this.y.value - b()),
+      derive(() => this.w.value + 2 * b()),
+      derive(() => this.h.value + 2 * b()),
+      { corner: derive(() => this.corner.value + b()), ...opts } as RectOpts,
     );
   }
 

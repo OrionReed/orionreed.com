@@ -59,7 +59,7 @@ export class MdCentering extends Diagram {
     const subs = ["min", "c", "max"];
 
     const yTip = xEnd.lerp(yEnd, morphT);
-    const yShown = () => (tl.morph.t.value ? 1 : 0);
+    const yShown = derive(() => (tl.morph.t.value ? 1 : 0));
 
     s(line(O, O.lerp(xEnd, lineT)), line(O, yTip, { opacity: yShown }));
 

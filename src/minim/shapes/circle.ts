@@ -18,7 +18,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
         h: 2 * r.value,
       }),
       opts,
-      { origin: () => center.value },
+      { origin: center },
     );
     this.radius = r;
     this.stroke(opts, true, { cx: center.x, cy: center.y, r });

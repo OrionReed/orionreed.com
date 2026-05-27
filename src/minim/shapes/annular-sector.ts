@@ -31,7 +31,7 @@ export class AnnularSector<O extends AnnularSectorOpts = AnnularSectorOpts> exte
         h: 2 * ro.value,
       }),
       opts,
-      { origin: () => center.value },
+      { origin: center },
     );
     this.rOuter = ro;
     this.rInner = ri;

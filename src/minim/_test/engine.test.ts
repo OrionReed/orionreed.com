@@ -88,7 +88,6 @@ describe("engine", () => {
     section("readNow() unwraps via brand, not structural shape");
     {
       check("readNow(5)", readNow(5) === 5);
-      check("readNow(() => 10)", readNow(() => 10) === 10);
       check("readNow(signal(15))", readNow(signal(15)) === 15);
       const plainT = { value: 5, name: "alice" };
       check("plain T with .value is preserved", readNow(plainT as any) === plainT);

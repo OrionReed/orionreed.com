@@ -1,6 +1,7 @@
 import {
   arrow,
   attr,
+  derive,
   Diagram,
   label,
   line,
@@ -62,16 +63,16 @@ export class MdQrtpHandshake extends Diagram {
           r.outline(4, {
             dashed: true,
             cap: "round",
-            opacity: () => (state[device].value[i].status === "current" ? 1 : 0),
+            opacity: derive(() => (state[device].value[i].status === "current" ? 1 : 0)),
             aside: true,
           }),
-          label(data.center.up(5), () => {
+          label(data.center.up(5), derive(() => {
             const c = state[device].value[i];
             if (c.status === "future") return "";
             return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
-          }),
+          })),
           label(data.center.down(8), t("data").muted()),
-          label(ack.center.up(5), () => state[device].value[i].ack),
+          label(ack.center.up(5), derive(() => state[device].value[i].ack)),
           label(ack.center.down(8), t("ack").muted()),
         );
 
@@ -91,10 +92,10 @@ export class MdQrtpHandshake extends Diagram {
     for (let i = 0; i < N; i++) {
       s(
         arrow(slotsA[i].ack.bottom, slotsB[i].data.top, {
-          opacity: () => (state.A.value[i].ack !== "" ? 1 : 0),
+          opacity: derive(() => (state.A.value[i].ack !== "" ? 1 : 0)),
         }),
         arrow(slotsB[i].ack.top, slotsA[i].data.bottom, {
-          opacity: () => (state.B.value[i].ack !== "" ? 1 : 0),
+          opacity: derive(() => (state.B.value[i].ack !== "" ? 1 : 0)),
         }),
       );
     }

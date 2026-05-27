@@ -22,7 +22,7 @@
 // error, rendered red.
 
 import { propagator, propagators, type SetCell } from "@minim/propagators";
-import { Diagram, label, line, loop, Mount, rect, signal, vec } from "../../minim";
+import { derive, Diagram, label, line, loop, Mount, rect, signal, vec } from "../../minim";
 
 // ─── Type language ─────────────────────────────────────────────────
 
@@ -355,23 +355,23 @@ export class MdPropTypes extends Diagram {
       }
 
       const visible = signal(exprIdx === 0);
-      const opacity = () => (visible.value ? 1 : 0);
+      const opacity = derive(() => (visible.value ? 1 : 0));
 
       // Render each AST node as a small card: label + type below.
       for (const n of walkLayout(layout)) {
         const t = inf.annotations.get(n.node)!;
-        const colorFor = (): string => {
+        const colorFor = derive((): string => {
           const st = cellStatus(t);
           if (st === "error") return ERROR_COLOR;
           if (st === "solved") return SOLVED_COLOR;
           return NARROWING_COLOR;
-        };
+        });
 
         // Card backing.
         s(
           rect(n.x - CELL_W / 2, n.y - CELL_H / 2, CELL_W, CELL_H, {
             fill: CARD_BG,
-            stroke: () => (cellStatus(t) === "error" ? ERROR_COLOR : "#aaa"),
+            stroke: derive(() => (cellStatus(t) === "error" ? ERROR_COLOR : "#aaa")),
             thin: true,
             corner: 6,
             opacity,
@@ -383,7 +383,7 @@ export class MdPropTypes extends Diagram {
             opacity,
           }),
           // Type display (bottom half).
-          label(vec(n.x, n.y + 11), () => showType(t), {
+          label(vec(n.x, n.y + 11), derive(() => showType(t)), {
             size: 10,
             fill: colorFor,
             opacity,
@@ -409,34 +409,34 @@ export class MdPropTypes extends Diagram {
     s(
       label(
         view.top.down(20),
-        () => {
+        derive(() => {
           const i = current.value;
           return `${prettyExpr(EXPRESSIONS[i]!)}`;
-        },
+        }),
         { size: 16, bold: true },
       ),
       label(
         view.top.down(44),
-        () => {
+        derive(() => {
           const i = current.value;
           const root = stages[i]!.inf.rootType;
           const status = cellStatus(root);
           if (status === "error") return `▸ type error · cannot infer a consistent type`;
           if (status === "solved") return `▸ inferred · ${showType(root)}`;
           return `▸ narrowing · wave ${stepCount.value}`;
-        },
+        }),
         {
           size: 12,
-          fill: () => {
+          fill: derive(() => {
             const i = current.value;
             const status = cellStatus(stages[i]!.inf.rootType);
             if (status === "error") return ERROR_COLOR;
             if (status === "solved") return SOLVED_COLOR;
             return NARROWING_COLOR;
-          },
+          }),
         },
       ),
-      label(view.bottom.up(14), () => TITLES[current.value]!, { size: 10 }),
+      label(view.bottom.up(14), derive(() => TITLES[current.value]!), { size: 10 }),
     );
 
     // ─── Animation: cycle expressions, animate narrowing ──────────

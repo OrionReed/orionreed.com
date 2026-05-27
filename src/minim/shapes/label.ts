@@ -45,7 +45,7 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
       },
       opts,
       // Pivot rotations on the anchor, not the bbox center.
-      { origin: () => anchor.value },
+      { origin: anchor },
     );
     this.anchor = anchor;
     this.attr("x", anchor.x);

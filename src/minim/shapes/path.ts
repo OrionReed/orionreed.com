@@ -145,10 +145,10 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
       {
         // First vertex — matches `path.pointAt(0)`. Override via `origin`
         // for a different pivot.
-        origin: () => {
+        origin: derive(() => {
           const ps = points.value;
           return ps.length > 0 ? ps[0].value : { x: 0, y: 0 };
-        },
+        }),
       },
     );
 

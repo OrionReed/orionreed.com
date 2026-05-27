@@ -1,6 +1,6 @@
 // LaTeX → MathML shape, rendered via Temml.
 
-import { Box, type Inner, type Signal, signal, type Writable } from "@minim/signals";
+import { Box, derive, type Inner, type Signal, signal, type Writable } from "@minim/signals";
 import temml from "temml";
 
 type BoxValue = Inner<Box>;
@@ -198,7 +198,7 @@ export class TexShape<Names extends string = string> extends Shape {
     const h = signal(measured.height);
 
     super("foreignObject", () => ({ x: 0, y: 0, w: w.value, h: h.value }), opts, {
-      origin: () => ({ x: w.value / 2, y: h.value / 2 }),
+      origin: derive(() => ({ x: w.value / 2, y: h.value / 2 })),
     });
 
     this.width = w;

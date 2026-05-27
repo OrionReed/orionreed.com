@@ -262,11 +262,11 @@ export class MdConformalDisc extends Diagram {
 
     s(
       label(view.top.down(20), "drag any vertex — sides curve, sister triangles follow"),
-      label(view.top.down(40), () => {
+      label(view.top.down(40), derive(() => {
         const sumDeg = ((angleSum.value * 180) / Math.PI).toFixed(1);
         const area = (Math.PI - angleSum.value).toFixed(3);
         return `α + β + γ = ${sumDeg}° (Euclidean: 180°) · area = π − sum = ${area}`;
-      }),
+      })),
       label(
         view.bottom.up(16),
         "Poincaré disc · geodesics are circles ⊥ boundary · reflections are inversions in those circles",

@@ -1,6 +1,6 @@
 // debug.* — read-only diagnostic shapes that visualize layout state.
 
-import { Box, transformBox, transformPoint, Vec } from "@minim/signals";
+import { Box, derive, transformBox, transformPoint, Vec } from "@minim/signals";
 import { circle } from "./circle";
 import { group } from "./group";
 import { label } from "./label";
@@ -88,7 +88,7 @@ const distance = (a: AnyShape | Vec, b: AnyShape | Vec) => {
   return group(
     { aside: true },
     connect(aP, bP),
-    label(mid.up(6), () => d.value.toFixed(0), { size: 10, opacity: 0.85 }),
+    label(mid.up(6), derive(() => d.value.toFixed(0)), { size: 10, opacity: 0.85 }),
   );
 };
 

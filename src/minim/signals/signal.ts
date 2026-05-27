@@ -324,8 +324,11 @@ function disposeAllDepsInReverse(sub: ReactiveNode): void {
 
 // ─── Public types ───────────────────────────────────────────────────
 
-/** Plain T, thunk `() => T`, or any read-shape (Signal/Computed/…). */
-export type Val<T> = T | (() => T) | Read<T>;
+/** Plain T or any read-shape (Signal/Computed/…). Permissive consumer
+ *  input — call `readNow(v)` for a snapshot, `reader(v)` for a closure
+ *  that resolves on each call. For closures, wrap with `derive(...)`
+ *  to get explicit reactive tracking before passing in. */
+export type Val<T> = T | Read<T>;
 
 /** Covariant read-only surface (parameter-site for `Val<T>`). */
 export interface Read<out T> {
@@ -366,11 +369,10 @@ export type Writable<R> = R & WritableBrand & { value: Inner<R> };
 export type Init<C extends Signal<any>> = Inner<C> | Writable<C>;
 
 /** Snapshot a `Val<T>` to a plain `T`: reads `.value` from signals,
- *  invokes thunks, returns literals untouched. One-shot — no tracking,
- *  no closure retained. For repeated resolution, prefer `reader(v)`. */
+ *  returns literals untouched. One-shot — no tracking, no closure
+ *  retained. For repeated resolution, prefer `reader(v)`. */
 export function readNow<T>(v: Val<T>): T {
   if (v instanceof Signal) return v.value;
-  if (typeof v === "function") return (v as () => T)();
   return v as T;
 }
 
@@ -380,7 +382,6 @@ export function readNow<T>(v: Val<T>): T {
  *  `readNow(v)`. */
 export function reader<T>(v: Val<T>): () => T {
   if (v instanceof Signal) return () => v.value;
-  if (typeof v === "function") return v as () => T;
   return () => v as T;
 }
 
@@ -819,7 +820,7 @@ export class Signal<T = unknown> implements ReactiveNode {
    *
    *    - existing `Cls` instance → identity passthrough.
    *    - literal value → fresh writable seed.
-   *    - RO signal or thunk → `Cls.derive(...)` (tracks the source).
+   *    - RO signal → `Cls.derive(...)` (tracks the source).
    *
    *  Return type is `Cls` (not `Writable<Cls>`) — the caller can't
    *  assume writability. Use this where the consumer layer needs a
@@ -833,7 +834,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     v: Val<Inner<InstanceType<C>>>,
   ): InstanceType<C> {
     if (v instanceof this) return v as InstanceType<C>;
-    if (v instanceof Signal || typeof v === "function") {
+    if (v instanceof Signal) {
       // biome-ignore lint/suspicious/noExplicitAny: dispatch
       return (this as any).derive(() => readNow(v)) as InstanceType<C>;
     }

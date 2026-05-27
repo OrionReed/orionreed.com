@@ -79,7 +79,7 @@ export class MdQrtpProtocol extends Diagram {
         annularSector(center, rOut, rIn, a0, a1, {
           stroke: "none",
           fill: derive(() => colors[i].value ?? "transparent"),
-          opacity: () => (colors[i].value ? 1 : 0),
+          opacity: derive(() => (colors[i].value ? 1 : 0)),
         }),
       );
     }

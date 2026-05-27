@@ -9,7 +9,19 @@
 // "redistribute the violation among the un-pinned cells."
 
 import { clamp, constraints, generic, pin } from "@minim/constraints";
-import { Anchor, Diagram, handle, label, line, Mount, Num, num, range, vec } from "../../minim";
+import {
+  Anchor,
+  derive,
+  Diagram,
+  handle,
+  label,
+  line,
+  Mount,
+  Num,
+  num,
+  range,
+  vec,
+} from "../../minim";
 
 const TRACK_LEN = 360;
 const A_MAX = 10;
@@ -64,7 +76,7 @@ export class MdEquation extends Diagram {
         }),
       );
       s(
-        label(vec(trackX1 + 40, t.y + 4), () => t.sig.value.toFixed(2), {
+        label(vec(trackX1 + 40, t.y + 4), derive(() => t.sig.value.toFixed(2)), {
           size: 12,
           align: Anchor.Center,
           opacity: 0.7,

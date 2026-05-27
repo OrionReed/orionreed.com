@@ -3,6 +3,7 @@
 
 import {
   Anchor,
+  derive,
   Num,
   type Signal,
   signal,
@@ -45,7 +46,7 @@ export function button(
     { translate: pos },
     rect(0, 0, w, h, {
       fill: tokens.stroke,
-      opacity: () => (hovered.value ? 0.08 : 0),
+      opacity: derive(() => (hovered.value ? 0.08 : 0)),
       stroke: "none",
     }),
     rect(0, 0, w, h, { thin: true }),

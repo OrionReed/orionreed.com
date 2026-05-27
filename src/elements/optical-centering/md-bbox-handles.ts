@@ -4,7 +4,7 @@
 // derived corner handles. Drag any point to recompute the bounds;
 // drag the bounds to translate or resize the whole cluster.
 
-import { bboxLens, Diagram, handle, label, Mount, rect, Vec, vec } from "../../minim";
+import { bboxLens, derive, Diagram, handle, label, Mount, rect, Vec, vec } from "../../minim";
 
 const PT = "#5b8def";
 const CTR = "#f5a623";
@@ -40,8 +40,8 @@ export class MdBboxHandles extends Diagram {
       // Bounds visualization (rect at center +/- size/2).
       rect(
         center,
-        () => size.value.x,
-        () => size.value.y,
+        derive(() => size.value.x),
+        derive(() => size.value.y),
         {
           thin: true,
           stroke: "#9b9b9b",

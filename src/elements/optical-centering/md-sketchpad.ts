@@ -13,6 +13,7 @@ import { constraints, distance, pin } from "@minim/constraints";
 import {
   circle,
   Diagram,
+  derive,
   handle,
   label,
   line,
@@ -58,14 +59,14 @@ export class MdSketchpad extends Diagram {
       line(A, C, {
         thin: true,
         dashed: true,
-        opacity: () => (braced.value ? 0.65 : 0.2),
+        opacity: derive(() => (braced.value ? 0.65 : 0.2)),
       }),
     );
 
     const dotPos = A.lerp(C, 0.5);
     const dot = s(
       circle(dotPos, 7, {
-        fill: () => (braced.value ? BRACED_FILL : UNBRACED_FILL),
+        fill: derive(() => (braced.value ? BRACED_FILL : UNBRACED_FILL)),
         stroke: "#1a1a1a",
         thin: true,
       }),

@@ -23,11 +23,11 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
       },
       opts,
       {
-        origin: () => {
+        origin: derive(() => {
           const a = from.value;
           const b = to.value;
           return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-        },
+        }),
       },
     );
     this.attr("stroke-linecap", opts.cap ?? "round");

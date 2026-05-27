@@ -83,7 +83,7 @@ export class MdCircuit extends Diagram {
     /** Indicator dot toggled by a reactive boolean. */
     const lit = (at: Vec, on: Val<boolean>) =>
       circle(at, 4, {
-        fill: () => (readNow(on) ? tokens.stroke : "transparent"),
+        fill: derive(() => (readNow(on) ? tokens.stroke : "transparent")),
       });
 
     /** Reactive auto-route src→tgt with a 45° staircase via the y-midline. */
@@ -161,8 +161,8 @@ export class MdCircuit extends Diagram {
       const a = signal(0);
       const b = signal(0);
       gate.add(
-        lit(gate.center.offset(-14, 14), () => a.value > 0),
-        lit(gate.center.offset(+14, 14), () => b.value > 0),
+        lit(gate.center.offset(-14, 14), derive(() => a.value > 0)),
+        lit(gate.center.offset(+14, 14), derive(() => b.value > 0)),
       );
 
       const settle = () => {

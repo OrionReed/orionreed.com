@@ -31,10 +31,10 @@ const applyStroke = (s: Shape, opts: DecorationOpts) => {
 function rectFromBox(layout: Signal<BoxValue>): Shape {
   const s = new Shape("rect", () => layout.value);
   s.attrs({
-    x: () => layout.value.x,
-    y: () => layout.value.y,
-    width: () => layout.value.w,
-    height: () => layout.value.h,
+    x: derive(() => layout.value.x),
+    y: derive(() => layout.value.y),
+    width: derive(() => layout.value.w),
+    height: derive(() => layout.value.h),
   });
   return s;
 }
@@ -56,10 +56,10 @@ function lineFromEnds(layout: Signal<LineEnds>): Shape {
     return { x, y, w: Math.abs(e.x2 - e.x1), h: Math.abs(e.y2 - e.y1) };
   });
   s.attrs({
-    x1: () => layout.value.x1,
-    y1: () => layout.value.y1,
-    x2: () => layout.value.x2,
-    y2: () => layout.value.y2,
+    x1: derive(() => layout.value.x1),
+    y1: derive(() => layout.value.y1),
+    x2: derive(() => layout.value.x2),
+    y2: derive(() => layout.value.y2),
   });
   return s;
 }

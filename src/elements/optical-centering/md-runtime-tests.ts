@@ -9,6 +9,7 @@ import {
   centroid,
   circle,
   Diagram,
+  derive,
   detach,
   EventBus,
   effect,
@@ -1156,12 +1157,12 @@ export class MdRuntimeTests extends Diagram {
     forEach(s.root, TESTS, (t, i) => {
       const y = HEADER_H + i * ROW_H + ROW_H / 2;
       const dot = circle(vec(PAD_X + 6, y), 5, {
-        fill: () => COLOR[statuses[i].value],
+        fill: derive(() => COLOR[statuses[i].value]),
       });
       const name = label(vec(PAD_X + 22, y), t.name, {
         align: Anchor.Left,
         // Pending tests fade until they're run, then snap to full presence.
-        opacity: () => (statuses[i].value === "pending" ? 0.5 : 1),
+        opacity: derive(() => (statuses[i].value === "pending" ? 0.5 : 1)),
       });
       const msg = label(vec(W - PAD_X, y), messages[i], { align: Anchor.Right });
       return [dot, name, msg];

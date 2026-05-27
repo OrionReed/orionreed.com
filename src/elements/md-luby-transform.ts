@@ -1,8 +1,8 @@
 import {
   circle,
   clipPath,
-  derive,
   connect,
+  derive,
   Diagram,
   every,
   forEach,
@@ -52,7 +52,7 @@ export class MdLubyTransform extends Diagram {
 
     const sourcesLayer = s(group());
     const sources = forEach(sourcesLayer, indices, i => {
-      const r = rect(() => i * stride.value, 24, SIZE, SIZE);
+      const r = rect(derive(() => i * stride.value), 24, SIZE, SIZE);
       const lbl = label(
         r.center,
         t("S")
@@ -89,7 +89,7 @@ export class MdLubyTransform extends Diagram {
             fill: true,
             corner: 0,
             strokeWidth: 0.1,
-            opacity: () => (cells.value[i] ? 1 : 0),
+            opacity: derive(() => (cells.value[i] ? 1 : 0)),
           }),
         ),
       );
@@ -100,7 +100,7 @@ export class MdLubyTransform extends Diagram {
       if (!src) return [];
       return connect(src.bottom, xor, {
         thin: true,
-        opacity: () => (edges.value[i] ? 1 : 0),
+        opacity: derive(() => (edges.value[i] ? 1 : 0)),
       });
     });
   }

@@ -1,8 +1,8 @@
 import {
   Anchor,
   circle,
-  derive,
   Diagram,
+  derive,
   label,
   loop,
   Mount,
@@ -68,7 +68,10 @@ export class MdWaapiDemo extends Diagram {
     s(
       circle(tracker, 7, { fill: true }),
       label(view.top.down(195), "↑ loops with view progress — scroll the page", { size: 10 }),
-      label(view.top.down(217), () => (inView(this).value ? "in view" : "offscreen")),
+      label(
+        view.top.down(217),
+        derive(() => (inView(this).value ? "in view" : "offscreen")),
+      ),
     );
 
     // Raw SVG nodes (not Shapes) so minim's per-frame effects don't fight WAAPI.

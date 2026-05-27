@@ -194,10 +194,10 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
       },
       opts,
       {
-        origin: () => {
+        origin: derive(() => {
           const arr = segs.value;
           return arr.length > 0 ? segmentStart(arr[0]) : { x: 0, y: 0 };
-        },
+        }),
       },
     );
 

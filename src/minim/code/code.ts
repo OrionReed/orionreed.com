@@ -27,6 +27,7 @@
 import { type Animator, type Easing } from "@minim/core";
 import { Shape, type ShapeOpts } from "@minim/shapes";
 import {
+  derive,
   effect,
   type Num as NumSignal,
   num,
@@ -163,7 +164,7 @@ export class CodeShape extends Shape {
     const h = signal(initH);
 
     super("foreignObject", () => ({ x: 0, y: 0, w: w.value, h: h.value }), opts, {
-      origin: () => ({ x: w.value / 2, y: h.value / 2 }),
+      origin: derive(() => ({ x: w.value / 2, y: h.value / 2 })),
     });
 
     this.width = w;

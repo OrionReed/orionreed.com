@@ -219,7 +219,7 @@ export class MdLoop extends Diagram {
     const fmt = (sig: { value: number }) => `${((wrap(sig.value) * 180) / Math.PI).toFixed(0)}°`;
     const corner = view.at(0, 1).right(18);
     const labelAt = (yOffset: number, text: () => string) =>
-      label(corner.up(yOffset), text, { align: Anchor.Left });
+      label(corner.up(yOffset), derive(text), { align: Anchor.Left });
     s(
       labelAt(64, () => `θ_OA (input)   = ${fmt(thetaOA)}`),
       labelAt(46, () => `θ_AB (coupler) = ${fmt(thetaAB)}`),

@@ -102,7 +102,7 @@ export class MdClampQuantize extends Diagram {
       s(
         line(vec(x, ROWS.quant - 5), vec(x, ROWS.quant + 5), {
           thin: true,
-          opacity: () => (i / 10 >= lo.value && i / 10 <= hi.value ? 0.45 : 0.12),
+          opacity: derive(() => (i / 10 >= lo.value && i / 10 <= hi.value ? 0.45 : 0.12)),
         }),
       );
     }

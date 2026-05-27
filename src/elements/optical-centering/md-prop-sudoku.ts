@@ -20,7 +20,7 @@ import {
   propagators,
   type SetCell,
 } from "@minim/propagators";
-import { Diagram, label, line, loop, Mount, rect, signal } from "../../minim";
+import { derive, Diagram, label, line, loop, Mount, rect, signal } from "../../minim";
 
 const BASE_PUZZLE =
   "53..7...." +
@@ -86,12 +86,12 @@ export class MdPropSudoku extends Diagram {
         rect(b.x, b.y, b.w, b.h, {
           stroke: "#aaa",
           thin: true,
-          fill: () => (isGiven() ? "#00000008" : "transparent"),
+          fill: derive(() => (isGiven() ? "#00000008" : "transparent")),
         }),
         // Big digit when narrowed to a singleton.
-        label(b.center, () => (cell.value.size === 1 ? `${[...cell.value][0]}` : ""), {
+        label(b.center, derive(() => (cell.value.size === 1 ? `${[...cell.value][0]}` : "")), {
           size: 22,
-          fill: () => (isGiven() ? GIVEN : SOLVED),
+          fill: derive(() => (isGiven() ? GIVEN : SOLVED)),
         }),
       );
       // 3×3 candidates inside the cell, positions via `b.at(u, v)`.
@@ -101,7 +101,7 @@ export class MdPropSudoku extends Diagram {
           s(
             label(
               b.at((gx + 0.5) / 3, (gy + 0.5) / 3),
-              () => (cell.value.size > 1 && cell.value.has(digit) ? `${digit}` : ""),
+              derive(() => (cell.value.size > 1 && cell.value.has(digit) ? `${digit}` : "")),
               { size: 9, fill: CANDIDATE },
             ),
           );
@@ -121,11 +121,11 @@ export class MdPropSudoku extends Diagram {
     const solved = signal(false);
 
     s(
-      label(view.top.down(20), () =>
+      label(view.top.down(20), derive(() =>
         solved.value
           ? "solved · ✓ all cells singletons"
           : `narrowing · wave ${stepCount.value} · candidates shrinking via allDifferent`,
-      ),
+      )),
       label(
         view.bottom.up(14),
         "27 allDifferent propagators · 9 rows + 9 cols + 9 boxes · one fixpoint wave / 0.35s",
