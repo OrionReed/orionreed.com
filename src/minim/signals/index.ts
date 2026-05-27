@@ -120,3 +120,4 @@ export { Tri, tri } from "./values/tri";
 export * as VecMath from "./values/vec";
 export { type PolarPolicy, polar, tangentPoint, Vec, vec } from "./values/vec";
 export { derived, field } from "./writable";
+export { isW, type Param, paramReader, type W, type WOpts, w } from "./wrap";

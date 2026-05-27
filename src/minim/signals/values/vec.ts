@@ -10,6 +10,7 @@ import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { batch, type Init, reader, readNow, Signal, type Val, type Writable } from "../signal";
 import type { Linear, Pack, Pivotal, TraitDict } from "../traits";
+import { isW, type Param, paramReader, type W } from "../wrap";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
 
@@ -98,8 +99,9 @@ export class Vec extends Signal<V> {
   }
 
   // ── invertibles: return `: this`, propagating writability ──────────
-  add(b: Val<V>): this {
-    const bf = reader(b);
+  add(b: Param<V>): this {
+    if (isW(b)) return _vecAddW(this, b as W<V>) as unknown as this;
+    const bf = reader(b as Val<V>);
     return this.lens(
       v => {
         const o = bf();
@@ -111,8 +113,9 @@ export class Vec extends Signal<V> {
       },
     );
   }
-  sub(b: Val<V>): this {
-    const bf = reader(b);
+  sub(b: Param<V>): this {
+    if (isW(b)) return _vecSubW(this, b as W<V>) as unknown as this;
+    const bf = reader(b as Val<V>);
     return this.lens(
       v => {
         const o = bf();
@@ -137,38 +140,44 @@ export class Vec extends Signal<V> {
       },
     );
   }
-  offset(dx: Val<number>, dy: Val<number>): this {
-    const xf = reader(dx);
-    const yf = reader(dy);
+  offset(dx: Param<number>, dy: Param<number>): this {
+    if (isW(dx) || isW(dy))
+      return _vecOffsetW(this, dx, dy) as unknown as this;
+    const xf = reader(dx as Val<number>);
+    const yf = reader(dy as Val<number>);
     return this.lens(
       v => ({ x: v.x + xf(), y: v.y + yf() }),
       n => ({ x: n.x - xf(), y: n.y - yf() }),
     );
   }
   // Axis-aligned offset sugar — same fwd/bwd shape as offset.
-  up(n: Val<number>): this {
-    const f = reader(n);
+  up(n: Param<number>): this {
+    if (isW(n)) return _vecAxisW(this, n as W<number>, "y", -1) as unknown as this;
+    const f = reader(n as Val<number>);
     return this.lens(
       v => ({ x: v.x, y: v.y - f() }),
       o => ({ x: o.x, y: o.y + f() }),
     );
   }
-  down(n: Val<number>): this {
-    const f = reader(n);
+  down(n: Param<number>): this {
+    if (isW(n)) return _vecAxisW(this, n as W<number>, "y", +1) as unknown as this;
+    const f = reader(n as Val<number>);
     return this.lens(
       v => ({ x: v.x, y: v.y + f() }),
       o => ({ x: o.x, y: o.y - f() }),
     );
   }
-  left(n: Val<number>): this {
-    const f = reader(n);
+  left(n: Param<number>): this {
+    if (isW(n)) return _vecAxisW(this, n as W<number>, "x", -1) as unknown as this;
+    const f = reader(n as Val<number>);
     return this.lens(
       v => ({ x: v.x - f(), y: v.y }),
       o => ({ x: o.x + f(), y: o.y }),
     );
   }
-  right(n: Val<number>): this {
-    const f = reader(n);
+  right(n: Param<number>): this {
+    if (isW(n)) return _vecAxisW(this, n as W<number>, "x", +1) as unknown as this;
+    const f = reader(n as Val<number>);
     return this.lens(
       v => ({ x: v.x + f(), y: v.y }),
       o => ({ x: o.x - f(), y: o.y }),
@@ -329,4 +338,160 @@ export function polar(
       break;
   }
   return Signal.install(Vec, fwd, bwd);
+}
+
+// ─── Writable-parameter bwd helpers ─────────────────────────────────
+//
+// Residual-aware: each helper writes its wrapped param(s) first, peeks
+// to observe what actually landed, and routes any unabsorbed residual
+// to the receiver. For primitive params this collapses to the
+// weight-only behaviour (residual = 0). For saturating-lens params
+// (e.g., `slack.clamp(min, max)`) the residual flows naturally,
+// producing the soft-spring-hard-stop pattern.
+
+function _vecAddW(self: Vec, b: W<V>): Writable<Vec> {
+  const selfRW = self as Writable<Vec>;
+  const wf = reader(b.weight);
+  return Vec.lens(
+    () => {
+      const nv = self.value;
+      const bv = b.sig.value;
+      return { x: nv.x + bv.x, y: nv.y + bv.y };
+    },
+    (target: V) => {
+      batch(() => {
+        const nv = self.peek();
+        const bv = b.sig.peek();
+        const w = wf();
+        const dx = target.x - (nv.x + bv.x);
+        const dy = target.y - (nv.y + bv.y);
+        const desired = { x: bv.x + dx * w, y: bv.y + dy * w };
+        b.sig.value = desired;
+        const after = b.sig.peek();
+        const residualX = desired.x - after.x;
+        const residualY = desired.y - after.y;
+        const rxx = dx * (1 - w) + residualX;
+        const ryy = dy * (1 - w) + residualY;
+        if (rxx !== 0 || ryy !== 0) selfRW.value = { x: nv.x + rxx, y: nv.y + ryy };
+      });
+    },
+  );
+}
+
+function _vecSubW(self: Vec, b: W<V>): Writable<Vec> {
+  const selfRW = self as Writable<Vec>;
+  const wf = reader(b.weight);
+  return Vec.lens(
+    () => {
+      const nv = self.value;
+      const bv = b.sig.value;
+      return { x: nv.x - bv.x, y: nv.y - bv.y };
+    },
+    (target: V) => {
+      batch(() => {
+        const nv = self.peek();
+        const bv = b.sig.peek();
+        const w = wf();
+        const dx = target.x - (nv.x - bv.x);
+        const dy = target.y - (nv.y - bv.y);
+        // b absorbs negated delta.
+        const desired = { x: bv.x - dx * w, y: bv.y - dy * w };
+        b.sig.value = desired;
+        const after = b.sig.peek();
+        const residualXNeg = desired.x - after.x;
+        const residualYNeg = desired.y - after.y;
+        const rxx = dx * (1 - w) - residualXNeg;
+        const ryy = dy * (1 - w) - residualYNeg;
+        if (rxx !== 0 || ryy !== 0) selfRW.value = { x: nv.x + rxx, y: nv.y + ryy };
+      });
+    },
+  );
+}
+
+function _vecOffsetW(self: Vec, dxP: Param<number>, dyP: Param<number>): Writable<Vec> {
+  const selfRW = self as Writable<Vec>;
+  const xWrap = isW(dxP) ? (dxP as W<number>) : undefined;
+  const yWrap = isW(dyP) ? (dyP as W<number>) : undefined;
+  const xRead = paramReader(dxP);
+  const yRead = paramReader(dyP);
+  const xWeight = xWrap ? reader(xWrap.weight) : () => 0;
+  const yWeight = yWrap ? reader(yWrap.weight) : () => 0;
+
+  return Vec.lens(
+    () => {
+      const nv = self.value;
+      return {
+        x: nv.x + (xWrap ? xWrap.sig.value : xRead()),
+        y: nv.y + (yWrap ? yWrap.sig.value : yRead()),
+      };
+    },
+    (target: V) => {
+      batch(() => {
+        const nv = self.peek();
+        const xv = xWrap ? xWrap.sig.peek() : xRead();
+        const yv = yWrap ? yWrap.sig.peek() : yRead();
+        const dx = target.x - (nv.x + xv);
+        const dy = target.y - (nv.y + yv);
+        const wx = xWeight();
+        const wy = yWeight();
+
+        let residX = 0;
+        let residY = 0;
+        if (xWrap) {
+          const desired = xv + dx * wx;
+          xWrap.sig.value = desired;
+          residX = desired - xWrap.sig.peek();
+        }
+        if (yWrap) {
+          const desired = yv + dy * wy;
+          yWrap.sig.value = desired;
+          residY = desired - yWrap.sig.peek();
+        }
+
+        const rxx = dx * (1 - wx) + residX;
+        const ryy = dy * (1 - wy) + residY;
+        if (rxx !== 0 || ryy !== 0) selfRW.value = { x: nv.x + rxx, y: nv.y + ryy };
+      });
+    },
+  );
+}
+
+function _vecAxisW(
+  self: Vec,
+  n: W<number>,
+  axis: "x" | "y",
+  sign: 1 | -1,
+): Writable<Vec> {
+  const selfRW = self as Writable<Vec>;
+  const wf = reader(n.weight);
+  const other = axis === "x" ? "y" : "x";
+  return Vec.lens(
+    () => {
+      const nv = self.value;
+      const kv = n.sig.value;
+      const out = { x: nv.x, y: nv.y } as V;
+      out[axis] = nv[axis] + sign * kv;
+      return out;
+    },
+    (target: V) => {
+      batch(() => {
+        const nv = self.peek();
+        const kv = n.sig.peek();
+        const w = wf();
+        const cur = nv[axis] + sign * kv;
+        const d = target[axis] - cur;
+        // n absorbs along its axis with sign.
+        const desired_k = kv + sign * d * w;
+        n.sig.value = desired_k;
+        const actual_k_change = n.sig.peek() - kv;
+        // residual along axis (in receiver-relative direction)
+        const residual_axis = sign * (sign * d * w - actual_k_change);
+        const axisChange = d * (1 - w) + residual_axis;
+        const newReceiver = { x: nv.x, y: nv.y } as V;
+        newReceiver[axis] = nv[axis] + axisChange;
+        newReceiver[other] = target[other];
+        selfRW.value = newReceiver;
+      });
+    },
+  );
 }
