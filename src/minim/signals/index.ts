@@ -72,6 +72,8 @@ export {
   type Traits,
 } from "./traits";
 export { Anchor, Dir } from "./values/anchor";
+export * as BoolMath from "./values/bool";
+export { Bool, bool } from "./values/bool";
 export * as BoxMath from "./values/box";
 export { Box, box, edgeFrom, union as boxUnion } from "./values/box";
 export * as ColorMath from "./values/color";
@@ -99,6 +101,8 @@ export * as PoseMath from "./values/pose";
 export { Pose, pose } from "./values/pose";
 export * as RangeMath from "./values/range";
 export { Range, range, span } from "./values/range";
+export * as StrMath from "./values/str";
+export { Str, str } from "./values/str";
 export * as TransformMath from "./values/transform";
 export { Transform, type TransformInit, transform } from "./values/transform";
 export * as VecMath from "./values/vec";

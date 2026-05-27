@@ -102,6 +102,14 @@ When the mechanism is a single closed loop, vector-loop is the textbook angle-sp
 
 <md-loop></md-loop>
 
+The lenses up to here all ride on continuous numeric value types where the inverse is closed-form or numerical. The same engine has a second lens shape for *unstructured* domains — strings, arrays, sets — where the projection loses information no closed-form can recover. Each cell carries a private `complement` (Hofmann–Pierce symmetric-lens style) threaded through every `putr`/`putl`, and the engine fuses plain `.lens(F, B)` chains on top of it without breaking the complement's identity (see `_fuseOnSymmetric` in the signal core).
+
+A single source string, five live projections. Edit any pane; the source updates with the discarded detail recovered from the complement — leading/trailing padding, per-word case patterns (Title / ALL CAPS / lower), separator runs, duplicate source positions. Editing the deduped pane broadcasts to every occurrence in the source with that occurrence's original case. Foster/Pierce's case-preserving find-and-replace, played live across the lens chain:
+
+<md-string-pipeline></md-string-pipeline>
+
+Each pane's badge names the lens kind. `trim` stores leading/trailing whitespace as its complement; `lowercase` stores a per-word case mask and applies a Title/ALL CAPS/lower rule on write; `words` stores the original separator runs (spaces, tabs, punctuation) and rebuilds them on write; `sortedUnique` stores a `(canonical key → [source position, original case]+)` map so a single edit fans out to every matching position with its own case mask preserved; `rot13` is the iso/involution baseline. Every chain composes — `source.trim().lowercase().words()` is one writable cell with its own composed complement, by construction.
+
 ## Fixpoint Networks
 
 Some relationships aren't function-shaped at all. A four-bar linkage, a cloth, a sudoku — there's no "source" end. The lens model bottoms out and you reach for a substrate where the *cluster* owns the solve. Two flavours in minim, same `network()` primitive underneath: constraint clusters that project onto the manifold, propagator networks that narrow to a fixpoint.

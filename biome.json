@@ -24,5 +24,32 @@
       }
     }
   },
-  "linter": { "enabled": false }
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": false,
+      "correctness": {
+        "noUnusedImports": "error"
+      },
+      "style": {
+        "useImportType": "error",
+        "useExportType": "error",
+        "useNodejsImportProtocol": "error",
+        "useConst": "error",
+        "useTemplate": "error",
+        "useShorthandAssign": "error",
+        "useNumberNamespace": "error"
+      },
+      "complexity": {
+        "useOptionalChain": "error",
+        "useArrowFunction": "error",
+        "noUselessRename": "error",
+        "noUselessLoneBlockStatements": "error"
+      },
+      "suspicious": {
+        "noDoubleEquals": "error",
+        "noExplicitAny": "warn"
+      }
+    }
+  }
 }
