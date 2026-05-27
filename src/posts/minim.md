@@ -102,6 +102,12 @@ When the mechanism is a single closed loop, vector-loop is the textbook angle-sp
 
 <md-loop></md-loop>
 
+Lenses don't have to keep the value type fixed. A **bridge lens** projects across the type boundary — most usefully, from a continuous source to a boolean predicate. The forward direction is the predicate itself (`v > t`, `box.contains(p)`, `a ≈ b`); the inverse is a policy that nudges the source into the requested half-space. They're the cross-type cousin of `clamp` / `quantize` / `snap`: a Foster-style **quotient lens** with source equivalence `≈_S = "same boolean class"`, in the codebase's terms a stateful idempotent projection. Click any indicator below — the lens's bwd projects the source(s) into a state consistent with the new boolean:
+
+<md-bool-bridges></md-bool-bridges>
+
+Five distinct shapes flow through the same `Bool.lens(parents, fwd, bwd)` primitive. The first two are clamp-family — single source, threshold-style. The next three diverge: a two-source equality relation that writes both endpoints to a midpoint; an N-source aggregate that broadcasts a single click across every member of the cluster; a discrete classifier that rides on top of an integer-quantised slider and flips parity by ±1. Boolean predicates that used to be one-way derived values are now bidirectional UI primitives — click `inside` and the point teleports; click `even` and the knob snaps.
+
 The lenses up to here all ride on continuous numeric value types where the inverse is closed-form or numerical. The same engine has a second lens shape for *unstructured* domains — strings, arrays, sets — where the projection loses information no closed-form can recover. Each cell carries a private `complement` (Hofmann–Pierce symmetric-lens style) threaded through every `putr`/`putl`, and the engine fuses plain `.lens(F, B)` chains on top of it without breaking the complement's identity (see `_fuseOnSymmetric` in the signal core).
 
 A single source string, five live projections. Edit any pane; the source updates with the discarded detail recovered from the complement — leading/trailing padding, per-word case patterns (Title / ALL CAPS / lower), separator runs, duplicate source positions. Editing the deduped pane broadcasts to every occurrence in the source with that occurrence's original case. Foster/Pierce's case-preserving find-and-replace, played live across the lens chain:

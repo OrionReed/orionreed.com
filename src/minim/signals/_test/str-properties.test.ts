@@ -47,23 +47,24 @@ const TRIALS = 100;
 const rngInt = (lo: number, hi: number): number =>
   lo + Math.floor(Math.random() * (hi - lo + 1));
 
-const rngChoice = <T>(arr: readonly T[]): T => arr[rngInt(0, arr.length - 1)]!;
+/** Pick one character at random from a string. */
+const rngChar = (chars: string): string => chars.charAt(rngInt(0, chars.length - 1));
 
 const LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const DIGITS = "0123456789";
 const PUNCT = ".,!?;:-_'";
 const WS = " \t\n";
-const WORD_CHARS = LETTERS + DIGITS + "_'-";
+const WORD_CHARS = `${LETTERS}${DIGITS}_'-`;
 
 /** Mixed string: ~60% letters, 10% digits, 15% punctuation, 15% whitespace. */
 const rngMixed = (len: number): string => {
   let s = "";
   for (let i = 0; i < len; i++) {
     const r = Math.random();
-    if (r < 0.6) s += rngChoice(LETTERS);
-    else if (r < 0.7) s += rngChoice(DIGITS);
-    else if (r < 0.85) s += rngChoice(PUNCT);
-    else s += rngChoice(WS);
+    if (r < 0.6) s += rngChar(LETTERS);
+    else if (r < 0.7) s += rngChar(DIGITS);
+    else if (r < 0.85) s += rngChar(PUNCT);
+    else s += rngChar(WS);
   }
   return s;
 };
@@ -72,7 +73,7 @@ const rngMixed = (len: number): string => {
 const rngWord = (): string => {
   const n = rngInt(1, 8);
   let s = "";
-  for (let i = 0; i < n; i++) s += rngChoice(WORD_CHARS);
+  for (let i = 0; i < n; i++) s += rngChar(WORD_CHARS);
   return s;
 };
 
@@ -80,7 +81,7 @@ const rngWord = (): string => {
 const rngLowerWord = (): string => {
   const n = rngInt(1, 8);
   let s = "";
-  for (let i = 0; i < n; i++) s += rngChoice("abcdefghijklmnopqrstuvwxyz");
+  for (let i = 0; i < n; i++) s += rngChar("abcdefghijklmnopqrstuvwxyz");
   return s;
 };
 
@@ -88,12 +89,12 @@ const rngLowerWord = (): string => {
  *  (spaces, punctuation), with optional leading / trailing whitespace. */
 const rngSentence = (minWords = 1, maxWords = 8): string => {
   const n = rngInt(minWords, maxWords);
-  const lead = Math.random() < 0.3 ? rngChoice(WS).repeat(rngInt(1, 3)) : "";
-  const trail = Math.random() < 0.3 ? rngChoice(WS).repeat(rngInt(1, 3)) : "";
+  const lead = Math.random() < 0.3 ? rngChar(WS).repeat(rngInt(1, 3)) : "";
+  const trail = Math.random() < 0.3 ? rngChar(WS).repeat(rngInt(1, 3)) : "";
   const seps: string[] = [];
   for (let i = 0; i < n - 1; i++) {
     if (Math.random() < 0.7) seps.push(" ");
-    else seps.push(rngChoice(PUNCT) + " ");
+    else seps.push(`${rngChar(PUNCT)} `);
   }
   let s = lead;
   for (let i = 0; i < n; i++) {
@@ -378,7 +379,7 @@ describe("PROPERTY: lowercase — resourceful (per-word case preserved under str
         return -1;
       })();
       if (splitPos < 0) continue;
-      const split = lower.slice(0, splitPos) + " " + lower.slice(splitPos);
+      const split = `${lower.slice(0, splitPos)} ${lower.slice(splitPos)}`;
       lo.value = split;
       lo.value = lower;
       expect(s.value).toBe(source);
