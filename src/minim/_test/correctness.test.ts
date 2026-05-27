@@ -9,7 +9,6 @@ import { batch, derive, effect, type Inner, num, signal, Vec, vec } from "@minim
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 
-type VecValue = Inner<Vec>;
 
 describe("correctness", () => {
   it("all checks", () => {
@@ -103,7 +102,7 @@ describe("correctness", () => {
       const rx = num(10);
       const ry = num(20);
       const v = vec(rx, ry);
-      const seen: VecValue[] = [];
+      const seen: Inner<Vec>[] = [];
       effect(() => {
         seen.push({ ...v.value });
       });

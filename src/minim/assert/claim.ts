@@ -14,7 +14,6 @@
 import type { Box, Vec } from "@minim/signals";
 import { derive, type Inner, type Read } from "@minim/signals";
 
-type VecValue = Inner<Vec>;
 
 import { intervals, latch, type Scope } from "./algebra";
 import { above, below, equal, following, inRange, inside, isEqual, near } from "./predicates";
@@ -72,7 +71,7 @@ export interface Predicates<T> {
   below(this: Predicates<number>, n: number): Claim;
   near(this: Predicates<number>, n: number, tol?: number): Claim;
   following(this: Predicates<number>, other: Read<number>, tol?: number): Claim;
-  inside(this: Predicates<VecValue>, region: Box): Claim;
+  inside(this: Predicates<Inner<Vec>>, region: Box): Claim;
 
   /** True/false predicates — for moods over already-bool signals. */
   true(this: Predicates<boolean>): Claim;
@@ -120,7 +119,7 @@ function predicates<T>(sig: Read<T>, mood: Mood, lbl: string | undefined): Predi
       return build(following(sig as unknown as Read<number>, other, tol), `≈ other`);
     },
     inside(region: Box) {
-      return build(inside(sig as unknown as Read<VecValue>, region), `inside`);
+      return build(inside(sig as unknown as Read<Inner<Vec>>, region), `inside`);
     },
     true: () => build(sig as unknown as Read<boolean>, `= true`),
     false: () =>

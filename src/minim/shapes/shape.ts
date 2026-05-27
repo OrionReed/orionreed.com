@@ -25,8 +25,6 @@ import { dashedPath } from "./dashed";
 import { tokens } from "./tokens";
 
 type VecValue = Inner<Vec>;
-type BoxValue = Inner<Box>;
-type MatrixValue = Inner<Matrix>;
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -96,7 +94,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly opacity: Writable<Num>;
 
   /** Composed local-frame matrix: `T(t) T(p) R(r) S(s) T(-p)`. */
-  readonly localFrame: Signal<MatrixValue>;
+  readonly localFrame: Signal<Inner<Matrix>>;
 
   /** Local-frame box; reach into `.x`, `.center`, `.at(u,v)`, etc. */
   readonly box: Box;
@@ -136,7 +134,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
   constructor(
     intrinsicType?: keyof SVGElementTagNameMap,
-    boxFn?: () => BoxValue,
+    boxFn?: () => Inner<Box>,
     opts: O = {} as O,
     /** Subclass per-prop defaults (kept off `O`). */
     defaults: ShapeOpts = {},

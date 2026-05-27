@@ -8,7 +8,6 @@
 import { type Easing, easeIn, easeInOut, easeOut, type Yieldable } from "@minim/core";
 import { Dir, type Inner, tween, type Val, Vec } from "@minim/signals";
 
-type VecValue = Inner<Vec>;
 
 import type { Has } from "./shape";
 
@@ -42,7 +41,7 @@ export const fadeUpOut = (s: Has<"translate" | "opacity">, sec = 0.3, dy = 16): 
 /** Slide in from `dir` + fade in. */
 export function slideIn(
   s: Has<"translate" | "opacity">,
-  dir: VecValue = Dir.Left,
+  dir: Inner<Vec> = Dir.Left,
   sec = 0.4,
   dist = 30,
 ): Yieldable {
@@ -54,7 +53,7 @@ export function slideIn(
 /** Slide out toward a side + fade out. */
 export const slideOut = (
   s: Has<"translate" | "opacity">,
-  dir: VecValue = Dir.Right,
+  dir: Inner<Vec> = Dir.Right,
   sec = 0.3,
   dist = 30,
 ): Yieldable => [

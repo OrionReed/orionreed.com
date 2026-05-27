@@ -6,7 +6,6 @@
 import { type Animator, drive, type Easing, type Yieldable } from "@minim/core";
 import { type Inner, reader, type Val, Vec } from "@minim/signals";
 
-type VecValue = Inner<Vec>;
 
 import type { Has } from "./shape";
 
@@ -64,7 +63,7 @@ export function* splay(
 /** Tween each shape to its paired target (matched by index). */
 export function* assemble(
   shapes: readonly Has<"translate">[],
-  targets: readonly (Vec | VecValue)[],
+  targets: readonly (Vec | Inner<Vec>)[],
   sec = 0.5,
   ease?: Easing,
 ): Animator {

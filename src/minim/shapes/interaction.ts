@@ -2,7 +2,6 @@
 
 import { type Inner, Num, type Signal, signal, Vec, type Writable } from "@minim/signals";
 
-type VecValue = Inner<Vec>;
 type ClientPoint = { clientX: number; clientY: number };
 
 import type { AnyShape } from "./shape";
@@ -66,9 +65,9 @@ export function hoverSignal(shape: AnyShape, sig: Writable<Signal<boolean>>): ()
  *  `init` is the value returned before the page has seen its first
  *  `pointermove`. Useful when a follower (spring, tween) reads on
  *  the first frame and you don't want a jolt to (0, 0). */
-export function cursor(shape: AnyShape, init?: VecValue): Vec {
+export function cursor(shape: AnyShape, init?: Inner<Vec>): Vec {
   const cp = pageClientPointer();
-  const fallback: VecValue = init ?? { x: 0, y: 0 };
+  const fallback: Inner<Vec> = init ?? { x: 0, y: 0 };
   return Vec.derive(cp, p => (p ? shape.toWorld(p) : fallback));
 }
 
@@ -79,7 +78,7 @@ export function cursor(shape: AnyShape, init?: VecValue): Vec {
  *  on pointerup/cancel — `Handle` uses it to drive `.dragging`. */
 export function draggable(
   handle: AnyShape,
-  onDrag: (local: VecValue) => void,
+  onDrag: (local: Inner<Vec>) => void,
   onState?: (active: boolean) => void,
 ): () => void {
   let dragging = false;

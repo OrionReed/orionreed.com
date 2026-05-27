@@ -6,7 +6,6 @@
 import type { Box, Vec } from "@minim/signals";
 import { derive, type Inner, type Read } from "@minim/signals";
 
-type VecValue = Inner<Vec>;
 
 /** `lo ≤ s ≤ hi`. */
 export function inRange(s: Read<number>, range: readonly [number, number]): Read<boolean> {
@@ -38,7 +37,7 @@ export function near(s: Read<number>, n: number, tol = 1e-6): Read<boolean> {
 }
 
 /** Point lies inside a Box (signal or shape's `.box`). */
-export function inside(s: Read<VecValue>, region: Box): Read<boolean> {
+export function inside(s: Read<Inner<Vec>>, region: Box): Read<boolean> {
   return derive(() => {
     const v = s.value;
     const b = region.value;

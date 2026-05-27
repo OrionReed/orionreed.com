@@ -1,6 +1,5 @@
 import { derive, type Inner, Num, Signal, signal, type Val, Vec } from "@minim/signals";
 
-type VecValue = Inner<Vec>;
 
 import { Shape, type ShapeOpts } from "./shape";
 import { type Content, flattenText, renderContent } from "./text";
@@ -10,7 +9,7 @@ export interface LabelOpts extends ShapeOpts {
   size?: Val<number>;
   /** Bbox point that sits at `at` — `{0, 0}` = top-left, `{0.5, 0.5}`
    *  (default) = center. See `Anchor` for named consts. */
-  align?: VecValue;
+  align?: Inner<Vec>;
   bold?: boolean;
   /** Text color. Default `tokens.stroke` (i.e. `var(--text-color)`,
    *  flips with dark mode). Accepts a reactive `Val<string>`. */

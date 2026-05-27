@@ -2,7 +2,6 @@
 
 import { Box, derive, type Inner, type Signal } from "@minim/signals";
 
-type BoxValue = Inner<Box>;
 
 import { Shape, tokens } from "@minim/shapes";
 import type { Part } from "./parts";
@@ -28,7 +27,7 @@ const applyStroke = (s: Shape, opts: DecorationOpts) => {
 
 /** A `<rect>` whose x/y/w/h and Box all computed from the same layout
  *  signal — single source of truth, one re-render per change. */
-function rectFromBox(layout: Signal<BoxValue>): Shape {
+function rectFromBox(layout: Signal<Inner<Box>>): Shape {
   const s = new Shape("rect", () => layout.value);
   s.attrs({
     x: derive(() => layout.value.x),

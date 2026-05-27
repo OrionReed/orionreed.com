@@ -28,7 +28,6 @@ import {
 import { type CommonOpts, Shape } from "./shape";
 
 type V = Inner<Vec>;
-type VecValue = V;
 
 export interface CurveOpts extends CommonOpts {
   closed?: boolean;
@@ -348,7 +347,7 @@ export function curve<const O extends CurveOpts>(init?: CurveInit, opts?: O): Cu
  *  optional `rotation` (radians). All four args accept `Val<>`, so the
  *  ellipse re-renders when any input changes. */
 export function ellipse<O extends CurveOpts>(
-  center: Val<VecValue>,
+  center: Val<V>,
   a: Val<number>,
   b: Val<number>,
   rotation: Val<number> = 0,

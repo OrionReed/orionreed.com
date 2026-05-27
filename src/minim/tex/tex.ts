@@ -3,7 +3,6 @@
 import { Box, derive, type Inner, type Signal, signal, type Writable } from "@minim/signals";
 import temml from "temml";
 
-type BoxValue = Inner<Box>;
 
 import { Shape, type ShapeOpts, tokens } from "@minim/shapes";
 import { Part, type PartList, PartMarker } from "./parts";
@@ -134,7 +133,7 @@ const stabilizePart = (el: HTMLElement): void => {
 interface Measurement {
   width: number;
   height: number;
-  rects: Map<string, BoxValue>;
+  rects: Map<string, Inner<Box>>;
 }
 
 const measureMathML = (mathml: string, fontSize: number, fontFamily: string): Measurement => {
@@ -153,7 +152,7 @@ const measureMathML = (mathml: string, fontSize: number, fontFamily: string): Me
     // not to `<math>` — `<mfrac>` can overflow its line-box upward,
     // so math-relative bounds would be off by that overflow.
     const wrapperRect = div.getBoundingClientRect();
-    const rects = new Map<string, BoxValue>();
+    const rects = new Map<string, Inner<Box>>();
     div.querySelectorAll<HTMLElement>("[class*='minim-part-']").forEach(el => {
       const cls = Array.from(el.classList).find(c => c.startsWith("minim-part-"));
       if (!cls) return;
