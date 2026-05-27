@@ -9,7 +9,7 @@
 //   - `multiply(b)` — inverse is multiply by `invert(b)`
 //   - `invert()`    — its own inverse
 
-import { batch, type Of, Signal, type Val, valFn, type Writable } from "../signal";
+import { batch, type Init, type Of, Signal, type Val, valFn, type Writable } from "../signal";
 import { type TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
@@ -155,13 +155,23 @@ export class Matrix extends Signal<V> {
  *  for reactive RO tracking, or `signal.value` to snapshot. Lock an entry
  *  with `Num.pin(c)`. */
 export function matrix(
-  a: number | Writable<Num> = 1,
-  b: number | Writable<Num> = 0,
-  c: number | Writable<Num> = 0,
-  d: number | Writable<Num> = 1,
-  e: number | Writable<Num> = 0,
-  f: number | Writable<Num> = 0,
+  a: Init<Num> = 1,
+  b: Init<Num> = 0,
+  c: Init<Num> = 0,
+  d: Init<Num> = 1,
+  e: Init<Num> = 0,
+  f: Init<Num> = 0,
 ): Writable<Matrix> {
+  if (
+    typeof a === "number" &&
+    typeof b === "number" &&
+    typeof c === "number" &&
+    typeof d === "number" &&
+    typeof e === "number" &&
+    typeof f === "number"
+  ) {
+    return new Matrix({ a, b, c, d, e, f }) as Writable<Matrix>;
+  }
   const aN = num(a);
   const bN = num(b);
   const cN = num(c);

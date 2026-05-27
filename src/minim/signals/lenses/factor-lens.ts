@@ -352,7 +352,7 @@ export function procrustesLens(points: readonly Writable<Vec>[]): {
   const initDevs = initVals.map(v => ({ x: v.x - ccx, y: v.y - ccy }));
 
   type C = { devs: V[] };
-  const scale = Num.symmetricLens(points as readonly Writable<Vec>[], {
+  const scale = Num.lens(points as readonly Writable<Vec>[], {
     missing: { devs: initDevs } as C,
     putr: (vals: readonly V[], c: C) => {
       let sx = 0;
@@ -491,7 +491,7 @@ export function bboxLens(points: readonly Writable<Vec>[]): {
   }));
 
   type C = { fracs: V[] };
-  const size = Vec.symmetricLens(points as readonly Writable<Vec>[], {
+  const size = Vec.lens(points as readonly Writable<Vec>[], {
     missing: { fracs: initFracs } as C,
     putr: (vals: readonly V[], c: C) => {
       const b = computeBox(vals);

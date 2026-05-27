@@ -151,15 +151,28 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     }
 
     // Each animatable axis is held directly. Identity passthrough for
-    // an already-writable source (drag handles compose naturally);
-    // literal seeds a fresh cell; signal/thunk drives the cell via an
-    // effect registered against `this.disposers`. No aggregate
-    // `Transform` cell — `localFrame` is a derived matrix below.
-    this.translate = this.#liftVec(opts.translate ?? defaults.translate ?? { x: 0, y: 0 });
-    this.rotate = this.#liftNum(opts.rotate ?? defaults.rotate ?? 0);
-    this.scale = this.#liftVec(opts.scale ?? defaults.scale ?? { x: 1, y: 1 });
-    this.origin = this.#liftVec(opts.origin ?? defaults.origin ?? { x: 0, y: 0 });
-    this.opacity = this.#liftNum(opts.opacity ?? defaults.opacity ?? 1);
+    // an already-writable source; literal seeds a fresh cell;
+    // signal/thunk drives the cell via a disposer-tracked effect (the
+    // one place we tolerate the "stomping mirror" semantic — Shape's
+    // animatable surface needs to expose `Writable<T>` regardless of
+    // input flavour). `localFrame` is a derived matrix below.
+    this.translate = liftAnimatable(
+      opts.translate ?? defaults.translate ?? { x: 0, y: 0 },
+      Vec,
+      this.disposers,
+    );
+    this.rotate = liftAnimatable(opts.rotate ?? defaults.rotate ?? 0, Num, this.disposers);
+    this.scale = liftAnimatable(
+      opts.scale ?? defaults.scale ?? { x: 1, y: 1 },
+      Vec,
+      this.disposers,
+    );
+    this.origin = liftAnimatable(
+      opts.origin ?? defaults.origin ?? { x: 0, y: 0 },
+      Vec,
+      this.disposers,
+    );
+    this.opacity = liftAnimatable(opts.opacity ?? defaults.opacity ?? 1, Num, this.disposers);
     this.aside = opts.aside ?? defaults.aside ?? false;
 
     // Group default: union of non-aside children's boxes composed
@@ -200,39 +213,6 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     return Vec.derive(() =>
       BoxMath.edgeFrom(transformBox(this.localFrame.value, this.box.value), toward.value),
     );
-  }
-
-  // Lift a `Val<Of<Vec>>` to a `Writable<Vec>`. Identity passthrough
-  // for an already-writable Vec; literal seeds a fresh cell; signal /
-  // thunk inputs drive the cell via a disposer-tracked effect.
-  #liftVec(src: Val<VecValue>): Writable<Vec> {
-    if (src instanceof Vec) return src as Writable<Vec>;
-    const target = new Vec() as Writable<Vec>;
-    if (src instanceof Signal || typeof src === "function") {
-      this.disposers.push(
-        effect(() => {
-          target.value = value(src);
-        }),
-      );
-    } else {
-      target.value = src as VecValue;
-    }
-    return target;
-  }
-
-  #liftNum(src: Val<number>): Writable<Num> {
-    if (src instanceof Num) return src as Writable<Num>;
-    const target = new Num() as Writable<Num>;
-    if (src instanceof Signal || typeof src === "function") {
-      this.disposers.push(
-        effect(() => {
-          target.value = value(src);
-        }),
-      );
-    } else {
-      target.value = src as number;
-    }
-    return target;
   }
 
   #makeAnchor(u: number, v: number): Writable<Vec> {
@@ -467,4 +447,35 @@ export function meanScale(...shapes: { scale: Writable<Vec> }[]): Writable<Vec> 
     Vec,
     shapes.map(s => s.scale),
   );
+}
+
+/** Lift a `Val<T>` to a `Writable<Cls<T>>` for the animatable-surface
+ *  contract Shape exposes (`translate`, `rotate`, `scale`, …). Identity
+ *  passthrough for an existing writable; literal seeds a fresh cell;
+ *  signal / thunk inputs drive the cell via a disposer-tracked effect.
+ *
+ *  This is the *only* place in the library that uses the stomping-
+ *  mirror semantic (effect-driven cell mirroring an RO source). It's
+ *  tolerated here because Shape's animatable surface must expose
+ *  `Writable<T>` for tween / drag / direct write — every other layer
+ *  rejects RO inputs at the type level. Internal to shape.ts; not
+ *  exported. */
+// biome-ignore lint/suspicious/noExplicitAny: variance escape on constructor
+function liftAnimatable<T, C extends Signal<T>>(
+  src: Val<T>,
+  Cls: new (v?: T) => C,
+  disposers: (() => void)[],
+): Writable<C> {
+  if (src instanceof Cls) return src as Writable<C>;
+  const target = new Cls() as Writable<C>;
+  if (src instanceof Signal || typeof src === "function") {
+    disposers.push(
+      effect(() => {
+        target.value = value(src) as Of<C>;
+      }),
+    );
+  } else {
+    target.value = src as Of<C>;
+  }
+  return target;
 }

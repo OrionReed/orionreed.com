@@ -9,7 +9,6 @@
 //   - value() unwraps reactives without footgunning plain {value: …}
 
 import { computed, effect, isSignal, Num, Signal, signal, value } from "@minim/signals";
-import { bind } from "@minim/signals/lateral";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 
@@ -34,12 +33,14 @@ describe("engine", () => {
       check("plain init", s.value === 7);
     }
 
-    section("bind(target, source) — the binding API");
+    section("effect-driven mirror — auto-updates with disposer");
     {
       const a = signal(2);
       const s = signal(0);
-      const stop = bind(s, () => a.value * 10);
-      check("initial computed via thunk", s.value === 20);
+      const stop = effect(() => {
+        s.value = a.value * 10;
+      });
+      check("initial computed via effect", s.value === 20);
       a.value = 5;
       check("auto-updates on a change", s.value === 50);
       stop();
@@ -47,11 +48,13 @@ describe("engine", () => {
       check("after dispose, no update", s.value === 50);
     }
 
-    section("bind with signal source");
+    section("effect mirror with signal source");
     {
       const src = signal(100);
       const t = signal(0);
-      const stop = bind(t, src);
+      const stop = effect(() => {
+        t.value = src.value;
+      });
       check("initial sync", t.value === 100);
       src.value = 200;
       check("auto-updates", t.value === 200);

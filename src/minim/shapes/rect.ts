@@ -1,4 +1,4 @@
-import { Box, computed, Num, num, type Val, Vec, valFn } from "@minim/signals";
+import { Box, computed, Num, type Val, Vec, valFn } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 import { tokens } from "./tokens";
 
@@ -16,10 +16,10 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   readonly corner: Num;
 
   constructor(x: Val<number>, y: Val<number>, w: Val<number>, h: Val<number>, opts: O = {} as O) {
-    const xs = num(x);
-    const ys = num(y);
-    const ws = num(w);
-    const hs = num(h);
+    const xs = Num.from(x);
+    const ys = Num.from(y);
+    const ws = Num.from(w);
+    const hs = Num.from(h);
     super(
       opts.dashed ? "path" : "rect",
       () => ({ x: xs.value, y: ys.value, w: ws.value, h: hs.value }),
@@ -35,7 +35,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
     this.y = ys;
     this.w = ws;
     this.h = hs;
-    this.corner = num(opts.corner ?? tokens.corner);
+    this.corner = Num.from(opts.corner ?? tokens.corner);
     this.stroke(opts, true, {
       x: xs,
       y: ys,
@@ -187,8 +187,8 @@ export function rect(
   if (a instanceof Vec) {
     const w = b as Val<number>;
     const h = c as Val<number>;
-    const ws = num(w);
-    const hs = num(h);
+    const ws = Num.from(w);
+    const hs = Num.from(h);
     return new Rect(
       computed(() => a.x.value - ws.value / 2),
       computed(() => a.y.value - hs.value / 2),

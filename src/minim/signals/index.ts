@@ -33,6 +33,7 @@ export {
   computed,
   derive,
   effect,
+  type Init,
   isComputed,
   isLens,
   isSignal,

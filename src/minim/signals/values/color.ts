@@ -5,10 +5,10 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { computed, lazy, Signal, type Val, valFn, value, type Writable } from "../signal";
+import { computed, type Init, lazy, Signal, type Val, valFn, value, type Writable } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
 import { derived, field } from "../writable";
-import { Num } from "./num";
+import { num, Num } from "./num";
 
 type V = { r: number; g: number; b: number; a: number };
 
@@ -112,7 +112,41 @@ export class Color extends Signal<V> {
   }
 }
 
-export const rgb = (r: number, g: number, b: number) =>
-  new Color({ r, g, b, a: 1 }) as Writable<Color>;
-export const rgba = (r: number, g: number, b: number, a: number) =>
-  new Color({ r, g, b, a }) as Writable<Color>;
+/** Writable `Color` from RGB channels with alpha = 1. Each channel is
+ *  either a literal `number` (lifted to a fresh `Writable<Num>` seed)
+ *  or an existing `Writable<Num>` (identity-aliased; writes propagate).
+ *
+ *  All-literal inputs take a single-allocation fast path; mixed inputs
+ *  build a 3-input lens so that channel-writes round-trip to source. */
+export function rgb(r: Init<Num>, g: Init<Num>, b: Init<Num>): Writable<Color> {
+  if (typeof r === "number" && typeof g === "number" && typeof b === "number") {
+    return new Color({ r, g, b, a: 1 }) as Writable<Color>;
+  }
+  return Color.lens(
+    [num(r), num(g), num(b)] as const,
+    ([r, g, b]) => ({ r, g, b, a: 1 }),
+    target => [target.r, target.g, target.b] as never,
+  );
+}
+
+/** Writable `Color` from RGBA channels. Same lift rule as `rgb`. */
+export function rgba(
+  r: Init<Num>,
+  g: Init<Num>,
+  b: Init<Num>,
+  a: Init<Num>,
+): Writable<Color> {
+  if (
+    typeof r === "number" &&
+    typeof g === "number" &&
+    typeof b === "number" &&
+    typeof a === "number"
+  ) {
+    return new Color({ r, g, b, a }) as Writable<Color>;
+  }
+  return Color.lens(
+    [num(r), num(g), num(b), num(a)] as const,
+    ([r, g, b, a]) => ({ r, g, b, a }),
+    target => [target.r, target.g, target.b, target.a] as never,
+  );
+}

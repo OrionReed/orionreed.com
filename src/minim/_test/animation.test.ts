@@ -7,6 +7,7 @@
 import { Anim, detach, linear, race, suspend } from "@minim/core";
 import {
   driven,
+  effect,
   not,
   num,
   play,
@@ -18,7 +19,6 @@ import {
   vec,
   when,
 } from "@minim/signals";
-import { bind } from "@minim/signals/lateral";
 import { describe, it } from "vitest";
 import { approx, check, section } from "./_check";
 
@@ -286,7 +286,11 @@ describe("animation", () => {
       anim.start(
         (function* () {
           yield* race(
-            suspend(_wake => bind(b, a)),
+            suspend(_wake =>
+              effect(() => {
+                b.value = a.value;
+              }),
+            ),
             when(stop),
           );
         })(),

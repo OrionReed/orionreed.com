@@ -5,6 +5,7 @@
 import { type Animator } from "@minim/core";
 import {
   computed,
+  type Init,
   isComputed,
   Num,
   num,
@@ -101,8 +102,8 @@ class TimelineImpl implements Timeline {
 }
 
 function makeClip(spec: ClipSpec, clock: Num): Clip {
-  const at = num(spec.at);
-  const dur = num(spec.dur);
+  const at = Num.from(spec.at);
+  const dur = Num.from(spec.dur);
   const end = Num.derive(() => at.value + dur.value);
   // Bidirectional span when both at and dur are writable; RO derive when
   // either is computed (the sequential-`at` case). Same narrowing the
@@ -144,7 +145,7 @@ export function timeline<T extends Record<string, ClipSpec>>(specs: T): Timeline
   return tl as TimelineOf<T>;
 }
 
-type Durations = Record<string, number | Writable<Num>>;
+type Durations = Record<string, Init<Num>>;
 
 /** Cumulative-start helper. Each clip's `at` is the reactive sum of
  *  prior durations, so editing one duration ripples through. `at` is
@@ -156,7 +157,7 @@ export function sequential<T extends Durations>(
   durs: T,
 ): { [K in keyof T]: { at: Num; dur: ResolvedField<T[K]> } } {
   const keys = Object.keys(durs) as Array<keyof T>;
-  const durSigs: Writable<Num>[] = keys.map(k => num(durs[k] as number | Writable<Num>));
+  const durSigs: Writable<Num>[] = keys.map(k => num(durs[k] as Init<Num>));
   const out = {} as Record<string, { at: Num; dur: Num }>;
   keys.forEach((key, i) => {
     const idx = i;

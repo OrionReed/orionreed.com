@@ -1,4 +1,4 @@
-import { computed, num, type Signal, type Val, Vec } from "@minim/signals";
+import { computed, Num, type Signal, type Val, Vec } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 
 export interface AnnularSectorOpts extends CommonOpts {}
@@ -18,10 +18,10 @@ export class AnnularSector<O extends AnnularSectorOpts = AnnularSectorOpts> exte
     a1: Val<number>,
     opts: O = {} as O,
   ) {
-    const ro = num(rOuter);
-    const ri = num(rInner);
-    const a0s = num(a0);
-    const a1s = num(a1);
+    const ro = Num.from(rOuter);
+    const ri = Num.from(rInner);
+    const a0s = Num.from(a0);
+    const a1s = Num.from(a1);
     super(
       "path",
       () => ({

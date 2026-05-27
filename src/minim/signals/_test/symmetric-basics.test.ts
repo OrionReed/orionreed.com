@@ -12,11 +12,11 @@ import { describe, expect, it } from "vitest";
 import { Num, num } from "../values/num";
 import { vec } from "../values/vec";
 
-describe("symmetricLens — single input, identity-ish", () => {
+describe("symmetric lens — single input, identity-ish", () => {
   it("missing complement is used for the first read", () => {
     const src = num(7);
     let seenComplement: number | null = null;
-    const view = Num.symmetricLens<number, { v: number }>(src, {
+    const view = Num.lens(src, {
       missing: { v: -1 },
       putr: (s, c) => {
         seenComplement = c.v;
@@ -32,7 +32,7 @@ describe("symmetricLens — single input, identity-ish", () => {
   it("putr can refresh the complement on each read", () => {
     const src = num(10);
     let calls = 0;
-    const view = Num.symmetricLens<number, { v: number }>(src, {
+    const view = Num.lens(src, {
       missing: { v: 0 },
       putr: (s, c) => {
         calls += 1;
@@ -53,7 +53,7 @@ describe("symmetricLens — single input, identity-ish", () => {
     // Lens stores the LAST WRITE as complement, and on subsequent
     // writes uses it to "snap" odd writes upward.
     const src = num(0);
-    const snapped = Num.symmetricLens<number, { last: number }>(src, {
+    const snapped = Num.lens(src, {
       missing: { last: 0 },
       putr: (s, c) => {
         c.last = s;
@@ -74,7 +74,7 @@ describe("symmetricLens — single input, identity-ish", () => {
   });
 });
 
-describe("symmetricLens — multi-input scaling (the trap case)", () => {
+describe("symmetric lens — multi-input scaling (the trap case)", () => {
   // Setup: N points around a centroid. View = scalar "spread" (mean
   // radial distance). The trap under plain lenses: setting spread = 0
   // collapses all points to the centroid, destroying directions; you
@@ -89,7 +89,7 @@ describe("symmetricLens — multi-input scaling (the trap case)", () => {
   type C = { units: V[]; centroid: V };
 
   const makeSpread = (pts: ReturnType<typeof vec>[]) =>
-    Num.symmetricLens<V, C>(pts, {
+    Num.lens(pts, {
       missing: { units: pts.map(() => ({ x: 0, y: 0 })), centroid: { x: 0, y: 0 } },
       putr: (positions, c) => {
         const n = positions.length;

@@ -14,7 +14,7 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { computed, Signal, type Val, valFn, value, type Writable } from "../signal";
+import { computed, type Init, Signal, type Val, valFn, value, type Writable } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
@@ -205,9 +205,9 @@ export function span(at: Writable<Num>, dur: Writable<Num>): Writable<Range> {
  *  RO sources are rejected at the type level — use `Range.derive(...)`
  *  for reactive RO tracking, or `signal.value` to snapshot. Lock an
  *  endpoint with `Num.pin(c)`. */
-export function range(
-  lo: number | Writable<Num> = 0,
-  hi: number | Writable<Num> = 1,
-): Writable<Range> {
+export function range(lo: Init<Num> = 0, hi: Init<Num> = 1): Writable<Range> {
+  if (typeof lo === "number" && typeof hi === "number") {
+    return new Range({ lo, hi }) as Writable<Range>;
+  }
   return ends(num(lo), num(hi));
 }

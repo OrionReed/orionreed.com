@@ -167,7 +167,7 @@ export function spreadOf<
 
   type C = { norms: T[] };
   // biome-ignore lint/suspicious/noExplicitAny: variance escape — spec is checked structurally
-  return (Num as any).symmetricLens(inputs as unknown as readonly Writable<Signal<T>>[], {
+  return (Num as any).lens(inputs as unknown as readonly Writable<Signal<T>>[], {
     missing: { norms: initNorms },
     putr: (vals: readonly T[], c: C) => {
       const ctr = centroid(vals);

@@ -14,7 +14,7 @@
 
 import { Anim } from "@minim/core";
 import { ensureArrowMarker, type Mount, mount, Shape, SVG_NS } from "@minim/shapes";
-import { Box, effect, num, type Val } from "@minim/signals";
+import { Box, effect, Num, type Val } from "@minim/signals";
 import { Marker } from "@minim/tex";
 import { observedAttributesOf, syncAttrSignal } from "./attr";
 import { attachRaf } from "./raf";
@@ -165,8 +165,8 @@ export class Diagram extends HTMLElement {
    *  `view.center`, etc.). */
   view(w: Val<number>, h: Val<number>): Box {
     if (this.#viewSet) return this.#viewBox;
-    const ws = num(w);
-    const hs = num(h);
+    const ws = Num.from(w);
+    const hs = Num.from(h);
     effect(() => this.setViewBox(0, 0, ws.value, hs.value));
     this.#viewSet = true;
     return this.#viewBox;

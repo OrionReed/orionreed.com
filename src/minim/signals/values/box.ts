@@ -8,6 +8,7 @@ import { type Tween, tween } from "../anim";
 import {
   batch,
   computed,
+  type Init,
   lazy,
   type Of,
   Signal,
@@ -196,11 +197,19 @@ export class Box extends Signal<V> {
  *  for reactive RO tracking, or `signal.value` to snapshot. Lock a
  *  component with `Num.pin(c)`. */
 export function box(
-  x: number | Writable<Num> = 0,
-  y: number | Writable<Num> = 0,
-  w: number | Writable<Num> = 0,
-  h: number | Writable<Num> = 0,
+  x: Init<Num> = 0,
+  y: Init<Num> = 0,
+  w: Init<Num> = 0,
+  h: Init<Num> = 0,
 ): Writable<Box> {
+  if (
+    typeof x === "number" &&
+    typeof y === "number" &&
+    typeof w === "number" &&
+    typeof h === "number"
+  ) {
+    return new Box({ x, y, w, h }) as Writable<Box>;
+  }
   const xN = num(x);
   const yN = num(y);
   const wN = num(w);

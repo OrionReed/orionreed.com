@@ -3,7 +3,7 @@
 
 import {
   Anchor,
-  num,
+  Num,
   type Signal,
   signal,
   type Val,
@@ -37,7 +37,7 @@ export function button(
 ): AnyShape {
   const w = opts.width ?? 80;
   const h = opts.height ?? 26;
-  const size = num(opts.size ?? 11);
+  const size = Num.from(opts.size ?? 11);
   const hovered = opts.hovered ?? signal(false);
 
   // Hover tint behind the border so outline weight stays constant.

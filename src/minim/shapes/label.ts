@@ -1,4 +1,4 @@
-import { computed, num, type Of, Signal, signal, type Val, Vec } from "@minim/signals";
+import { computed, Num, type Of, Signal, signal, type Val, Vec } from "@minim/signals";
 
 type VecValue = Of<Vec>;
 
@@ -33,7 +33,7 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
         : typeof content === "function"
           ? computed(content)
           : signal(content as Content);
-    const sizeSig = num(opts.size ?? tokens.fontSize);
+    const sizeSig = Num.from(opts.size ?? tokens.fontSize);
     const a = opts.align ?? { x: 0.5, y: 0.5 };
     super(
       "text",

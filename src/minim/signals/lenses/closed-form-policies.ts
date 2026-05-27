@@ -142,7 +142,7 @@ export function scaleAbout<T extends { x: number; y: number }>(
 
   type C = { devs: V[] };
   // biome-ignore lint/suspicious/noExplicitAny: variance escape — spec is checked structurally
-  return (Num as any).symmetricLens(points as unknown as readonly Writable<Signal<T>>[], {
+  return (Num as any).lens(points as unknown as readonly Writable<Signal<T>>[], {
     missing: { devs: initDevs },
     putr: (vals: readonly T[], c: C) => {
       const p = pivot.peek();
@@ -211,7 +211,7 @@ export function scaleAboutXY(points: readonly Writable<Vec>[], pivot: Read<V>): 
   }));
 
   type C = { fracs: V[] };
-  return Vec.symmetricLens(points as readonly Writable<Vec>[], {
+  return Vec.lens(points as readonly Writable<Vec>[], {
     missing: { fracs: initFracs } as C,
     putr: (vals: readonly V[], c: C) => {
       const p = pivot.peek();
@@ -352,7 +352,7 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
   const initθ = cov0.cxx + cov0.cyy > 1e-18 ? dominantAxisAngle(cov0.cxx, cov0.cxy, cov0.cyy) : 0;
 
   type C = { θ: number };
-  const direction = Num.symmetricLens(points as readonly Writable<Vec>[], {
+  const direction = Num.lens(points as readonly Writable<Vec>[], {
     missing: { θ: initθ } as C,
     putr: (vals: readonly V[], c: C) => {
       let sx = 0;
@@ -464,7 +464,7 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
   );
 
   type C = { norms: V[] };
-  const radius = Num.symmetricLens(points as readonly Writable<Vec>[], {
+  const radius = Num.lens(points as readonly Writable<Vec>[], {
     missing: { norms: initNorms } as C,
     putr: (vals: readonly V[], c: C) => {
       let sx = 0;
@@ -732,7 +732,7 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
       return d;
     };
 
-    return Num.symmetricLens(points as readonly Writable<Vec>[], {
+    return Num.lens(points as readonly Writable<Vec>[], {
       missing,
       putr: (vals: readonly V[], c: AxisC) => {
         const d = refresh(c, vals);
@@ -811,7 +811,7 @@ export function totalLens(parts: readonly Writable<Num>[]): Writable<Num> {
   const initFracs = initVals.map(v => (sum0 > 1e-12 ? v / sum0 : 1 / K));
 
   type C = { fracs: number[] };
-  const sumLens = Num.symmetricLens(parts as readonly Writable<Num>[], {
+  const sumLens = Num.lens(parts as readonly Writable<Num>[], {
     missing: { fracs: initFracs } as C,
     putr: (vals: readonly number[], c: C) => {
       let s = 0;

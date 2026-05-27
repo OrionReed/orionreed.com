@@ -1,4 +1,4 @@
-import { Num, num, type Val, Vec, valFn } from "@minim/signals";
+import { Num, type Val, Vec, valFn } from "@minim/signals";
 import { TWO_PI } from "./dashed";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 
@@ -8,7 +8,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   readonly radius: Num;
 
   constructor(center: Vec, radius: Val<number>, opts: O = {} as O) {
-    const r = num(radius);
+    const r = Num.from(radius);
     super(
       opts.dashed ? "path" : "circle",
       () => ({

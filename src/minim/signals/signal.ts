@@ -631,7 +631,7 @@ export class Signal<T = unknown> implements ReactiveNode {
   };
 
   /** @internal — symmetric-lens metadata. Present when this cell was
-   *  built by `Cls.symmetricLens(...)`, or when a `.lens(F, B)` was
+   *  built by `Cls.lens(parents, spec)`, or when a `.lens(F, B)` was
    *  fused on top of one. Lets `.lens()` recognise a symmetric
    *  receiver and inline F/B into the spec directly. */
   // biome-ignore lint/suspicious/noExplicitAny: opaque to engine
@@ -737,14 +737,23 @@ export class Signal<T = unknown> implements ReactiveNode {
     return Signal._fuse(parent, this, fn);
   }
 
-  /** Read-write typed lens. Three call shapes:
+  /** Read-write typed lens. Five call shapes, dispatched at runtime:
    *
-   *    Cls.lens(parent, fwd, bwd)    — 1-input. Goes through `_fuse`.
-   *    Cls.lens(parents, fwd, bwd)   — N-input.
-   *    Cls.lens(g, s)                — closure-style getter/setter.
+   *    Cls.lens(parent,   fwd, bwd)   — 1-input stateless. Fuses.
+   *    Cls.lens(parents,  fwd, bwd)   — N-input stateless.
+   *    Cls.lens(g, s)                 — closure-style getter / setter.
+   *    Cls.lens(parent,   spec)       — 1-input symmetric (complement).
+   *    Cls.lens(parents,  spec)       — N-input symmetric.
    *
-   *  `bwd` is typed `(target, v) => P`; engine arity-detects statefulness
-   *  via `bwd.length`. Polymorphic-`this`: `Vec.lens(...)` → `Writable<Vec>`. */
+   *  Stateless `bwd` is typed `(target, v) => P`; engine arity-detects
+   *  statefulness via `bwd.length`. The symmetric form takes a spec
+   *  `{ missing, putr, putl }` whose `complement` is engine-managed and
+   *  preserves information the view discards — eliminates "trap"
+   *  behaviour for multiplicative or sign-ambiguous lenses (spread-to-
+   *  zero, axis sign-flip, etc.). Symmetric receivers participate in
+   *  subsequent `.lens(F, B)` fusion (shared complement, single cell).
+   *
+   *  Polymorphic-`this`: `Vec.lens(...)` → `Writable<Vec>`. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static lens<C extends new (...args: never[]) => Signal<any>, P>(
     this: C,
@@ -768,43 +777,14 @@ export class Signal<T = unknown> implements ReactiveNode {
     g: () => Of<InstanceType<C>>,
     s: (v: Of<InstanceType<C>>) => void,
   ): Writable<InstanceType<C>>;
-  // biome-ignore lint/suspicious/noExplicitAny: dispatch
-  static lens(this: any, ...args: any[]): any {
-    if (args.length === 2) {
-      // Closure-style: getter + setter.
-      return Signal.install(this, args[0], args[1]);
-    }
-    const [parent, fwd, bwd] = args;
-    if (Array.isArray(parent)) return _fanin(this, parent, fwd, bwd);
-    return Signal._fuse(parent, this, fwd, bwd);
-  }
-
-  /** Symmetric lens with a private complement. The complement is
-   *  engine-managed state that the spec's `putr` (read) and `putl`
-   *  (write) mutate. It preserves information the view alone discards,
-   *  eliminating the "trap" behaviour of multiplicative/sign-ambiguous
-   *  lenses (spread-to-zero, axis sign-flip, etc.).
-   *
-   *    Cls.symmetricLens(parent,   spec)   — 1-input.
-   *    Cls.symmetricLens([parents], spec)  — N-input.
-   *
-   *  `spec.putr` returns the view value directly; `spec.putl` returns
-   *  per-parent updates. Both mutate `complement` in place through
-   *  field writes. For "primitive complement" wrap in `{ value: T }`.
-   *
-   *  Fusion: a subsequent `.lens(F, B)` on the resulting cell collapses
-   *  into a single cell that shares the same complement (no extra
-   *  cell layer, no extra getter dispatch). Chained `.lens()` continues
-   *  to fuse. The internal multi-parent fanin is NOT collapsed (the
-   *  fan-out shape can't be expressed as a single-parent chain). */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static symmetricLens<C extends new (...args: never[]) => Signal<any>, P, COMP>(
+  static lens<C extends new (...args: never[]) => Signal<any>, P, COMP>(
     this: C,
     parent: Read<P>,
     spec: SymmetricLensSpec1<P, Of<InstanceType<C>>, COMP>,
   ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static symmetricLens<
+  static lens<
     C extends new (
       ...args: never[]
     ) => Signal<any>,
@@ -820,9 +800,52 @@ export class Signal<T = unknown> implements ReactiveNode {
     >,
   ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: dispatch
-  static symmetricLens(this: any, parent: any, spec: any): any {
-    if (Array.isArray(parent)) return _symmetric(this, parent, spec);
-    return _symmetric(this, [parent], _liftSpec1(spec));
+  static lens(this: any, ...args: any[]): any {
+    if (args.length === 2) {
+      const [first, second] = args;
+      // Closure-style: both args are bare functions (getter + setter).
+      // Anything else with two args is a symmetric spec: arg[0] is a
+      // parent signal or parents-array, arg[1] is `{ missing, putr,
+      // putl }`. Signals/arrays aren't `function`, so this is
+      // unambiguous.
+      if (typeof first === "function" && typeof second === "function") {
+        return Signal.install(this, first, second);
+      }
+      if (Array.isArray(first)) return _symmetric(this, first, second);
+      return _symmetric(this, [first], _liftSpec1(second));
+    }
+    const [parent, fwd, bwd] = args;
+    if (Array.isArray(parent)) return _fanin(this, parent, fwd, bwd);
+    return Signal._fuse(parent, this, fwd, bwd);
+  }
+
+  /** Permissive consumer-layer lift — `Val<Of<Cls>>` → `Cls`. Accepts
+   *  any read shape (literal, writable, RO signal, thunk). Returns the
+   *  most-natural cell:
+   *
+   *    - existing `Cls` instance → identity passthrough.
+   *    - literal value → fresh writable seed.
+   *    - RO signal or thunk → `Cls.derive(...)` (tracks the source).
+   *
+   *  Return type is `Cls` (not `Writable<Cls>`) — the caller can't
+   *  assume writability. Use this where the consumer layer needs a
+   *  reactive cell from an arbitrary `Val<...>` input (shape
+   *  constructors, etc.). For the strict factory contract (literal or
+   *  writable in, `Writable<Cls>` out) use the lowercase factory
+   *  functions: `num(...)`, `vec(...)`, `box(...)`, etc. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static from<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    v: Val<Of<InstanceType<C>>>,
+  ): InstanceType<C> {
+    if (v instanceof this) return v as InstanceType<C>;
+    if (v instanceof Signal || typeof v === "function") {
+      // biome-ignore lint/suspicious/noExplicitAny: dispatch
+      return (this as any).derive(() => value(v)) as InstanceType<C>;
+    }
+    return new (this as unknown as new (init?: Of<InstanceType<C>>) => InstanceType<C>)(
+      v as Of<InstanceType<C>>,
+    ) as InstanceType<C>;
   }
 
   /** Constant-projection lens — a `Writable<this>` whose reads always

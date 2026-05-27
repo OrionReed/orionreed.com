@@ -8,7 +8,7 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { batch, Signal, type Val, valFn, value, type Writable } from "../signal";
+import { batch, type Init, Signal, type Val, valFn, value, type Writable } from "../signal";
 import { type Linear, type Pack, type Pivotal, type TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
@@ -236,7 +236,10 @@ function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
  *  literal axis with the constant-projection primitive:
  *
  *      vec(slider, Num.pin(100))   // x writable, y locked at 100 */
-export function vec(x: number | Writable<Num> = 0, y: number | Writable<Num> = 0): Writable<Vec> {
+export function vec(x: Init<Num> = 0, y: Init<Num> = 0): Writable<Vec> {
+  if (typeof x === "number" && typeof y === "number") {
+    return new Vec({ x, y }) as Writable<Vec>;
+  }
   return axes(num(x), num(y));
 }
 
@@ -261,9 +264,9 @@ export type PolarPolicy = "rotate" | "translate" | "radial" | "circular";
  *  structurally inert under writes (lock-axis), wrap it in the
  *  constant-projection primitive: `polar(c, Num.pin(100), a)`. */
 export function polar(
-  center: V | Writable<Vec>,
-  r: number | Writable<Num>,
-  a: number | Writable<Num>,
+  center: Init<Vec>,
+  r: Init<Num>,
+  a: Init<Num>,
   policy: PolarPolicy = "rotate",
 ): Writable<Vec> {
   // Lift literals — all three inputs become unified `Writable<...>`.

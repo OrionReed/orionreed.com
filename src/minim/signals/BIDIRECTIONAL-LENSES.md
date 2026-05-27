@@ -815,7 +815,8 @@ This algorithm is the substrate for several higher layers:
   `lenses/`): closed-form and numerical bwd policies for N→1 and N→M
   cardinalities. Most ride on the same `Cls.lens([parents], fwd, bwd)`
   API; trap-class lenses (multiplicative scales, gauge-sensitive axes)
-  use `Cls.symmetricLens` — see §15.
+  ride on the symmetric-spec call shape `Cls.lens([parents], spec)` —
+  see §15.
 
 - **Constraint and physics layers** (`constraints/`, `propagators/`):
   use `network()` to coordinate multi-cell updates with self-
@@ -835,7 +836,7 @@ is a property of how the lens was authored, not of the engine.
 
 ---
 
-## 15. Symmetric lenses (`Cls.symmetricLens`)
+## 15. Symmetric lenses (`Cls.lens(parent, spec)`)
 
 The standard `Cls.lens(parents, fwd, bwd)` is sufficient for any lens
 whose bwd is a pure function of `(target, currentSources)`. But two
@@ -863,7 +864,7 @@ engine-managed mutable state private to the lens — that stores
 exactly that missing information.
 
 ```ts
-const radius = Num.symmetricLens<V, { units: V[] }>(points, {
+const radius = Num.lens(points, {
   missing: { units: pointsInitial.map(initialUnitDirection) },
   putr: (vals, c) => {
     // Refresh c.units[i] from current source where well-defined,
