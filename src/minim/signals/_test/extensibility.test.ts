@@ -9,10 +9,10 @@ import {
   field,
   type Linear,
   Num,
+  reader,
   Signal,
   type TraitDict,
   type Val,
-  reader,
   type Writable,
 } from "../index";
 

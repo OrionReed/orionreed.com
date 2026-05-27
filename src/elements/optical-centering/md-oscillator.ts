@@ -2,8 +2,8 @@
 
 import {
   circle,
-  derive,
   Diagram,
+  derive,
   drive,
   line,
   loop,

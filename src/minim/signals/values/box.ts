@@ -11,10 +11,10 @@ import {
   type Init,
   type Inner,
   lazy,
-  Signal,
-  type Val,
   reader,
   readNow,
+  Signal,
+  type Val,
   type Writable,
 } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";

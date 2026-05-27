@@ -1,8 +1,8 @@
 import {
   arrow,
   attr,
-  derive,
   Diagram,
+  derive,
   label,
   line,
   loop,
@@ -66,13 +66,19 @@ export class MdQrtpHandshake extends Diagram {
             opacity: derive(() => (state[device].value[i].status === "current" ? 1 : 0)),
             aside: true,
           }),
-          label(data.center.up(5), derive(() => {
-            const c = state[device].value[i];
-            if (c.status === "future") return "";
-            return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
-          })),
+          label(
+            data.center.up(5),
+            derive(() => {
+              const c = state[device].value[i];
+              if (c.status === "future") return "";
+              return t(t(c.data[0]).bold(), t(c.data.slice(1)).italic());
+            }),
+          ),
           label(data.center.down(8), t("data").muted()),
-          label(ack.center.up(5), derive(() => state[device].value[i].ack)),
+          label(
+            ack.center.up(5),
+            derive(() => state[device].value[i].ack),
+          ),
           label(ack.center.down(8), t("ack").muted()),
         );
 

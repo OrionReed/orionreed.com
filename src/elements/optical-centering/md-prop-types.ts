@@ -22,7 +22,7 @@
 // error, rendered red.
 
 import { propagator, propagators, type SetCell } from "@minim/propagators";
-import { derive, Diagram, label, line, loop, Mount, rect, signal, vec } from "../../minim";
+import { Diagram, derive, label, line, loop, Mount, rect, signal, vec } from "../../minim";
 
 // ─── Type language ─────────────────────────────────────────────────
 
@@ -383,11 +383,15 @@ export class MdPropTypes extends Diagram {
             opacity,
           }),
           // Type display (bottom half).
-          label(vec(n.x, n.y + 11), derive(() => showType(t)), {
-            size: 10,
-            fill: colorFor,
-            opacity,
-          }),
+          label(
+            vec(n.x, n.y + 11),
+            derive(() => showType(t)),
+            {
+              size: 10,
+              fill: colorFor,
+              opacity,
+            },
+          ),
         );
 
         // Edges to children.
@@ -436,7 +440,11 @@ export class MdPropTypes extends Diagram {
           }),
         },
       ),
-      label(view.bottom.up(14), derive(() => TITLES[current.value]!), { size: 10 }),
+      label(
+        view.bottom.up(14),
+        derive(() => TITLES[current.value]!),
+        { size: 10 },
+      ),
     );
 
     // ─── Animation: cycle expressions, animate narrowing ──────────

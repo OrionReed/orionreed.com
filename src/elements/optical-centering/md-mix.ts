@@ -1,7 +1,7 @@
 import {
   circle,
-  derive,
   Diagram,
+  derive,
   driven,
   easeInOut,
   label,

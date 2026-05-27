@@ -31,7 +31,7 @@
 //   the FD path treats duplicated slots as independent. Use
 //   `rightAngle(A, B, C)` instead of `perpendicular(A, B, B, C)`.
 
-import { signal, type Signal, type Writable } from "../signals";
+import { type Signal, signal, type Writable } from "../signals";
 import { type Constraints, type Relation } from "./cluster";
 import {
   BoundsTerm,

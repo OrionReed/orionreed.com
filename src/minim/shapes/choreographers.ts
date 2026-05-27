@@ -6,7 +6,6 @@
 import { type Animator, drive, type Easing, type Yieldable } from "@minim/core";
 import { type Inner, reader, type Val, Vec } from "@minim/signals";
 
-
 import type { Has } from "./shape";
 
 /** Swap two shapes' positions over `sec`. */

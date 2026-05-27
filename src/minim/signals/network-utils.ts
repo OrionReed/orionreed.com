@@ -78,4 +78,3 @@ export function when<T>(source: Read<T>, body: (v: T) => () => void): Lifecycle 
     },
   };
 }
-

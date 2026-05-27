@@ -25,9 +25,9 @@
 import { describe, expect, it } from "vitest";
 import {
   centroidLens,
+  type Inner,
   midpointLens,
   num,
-  type Inner,
   signal,
   Vec,
   vec,

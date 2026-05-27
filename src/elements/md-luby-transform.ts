@@ -2,8 +2,8 @@ import {
   circle,
   clipPath,
   connect,
-  derive,
   Diagram,
+  derive,
   every,
   forEach,
   grid,
@@ -29,9 +29,7 @@ export class MdLubyTransform extends Diagram {
     const W = derive(() => ((m: boolean) => (m ? 300 : 400))(isMobile.value));
     const N = derive(() => ((m: boolean) => (m ? 7 : 10))(isMobile.value));
     const stride = derive(() => (W.value - SIZE) / (N.value - 1));
-    const indices = derive(() =>
-      ((n: number) => Array.from({ length: n }, (_, i) => i))(N.value),
-    );
+    const indices = derive(() => ((n: number) => Array.from({ length: n }, (_, i) => i))(N.value));
 
     const view = this.view(W, 200);
 
@@ -52,7 +50,12 @@ export class MdLubyTransform extends Diagram {
 
     const sourcesLayer = s(group());
     const sources = forEach(sourcesLayer, indices, i => {
-      const r = rect(derive(() => i * stride.value), 24, SIZE, SIZE);
+      const r = rect(
+        derive(() => i * stride.value),
+        24,
+        SIZE,
+        SIZE,
+      );
       const lbl = label(
         r.center,
         t("S")

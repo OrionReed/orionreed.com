@@ -20,7 +20,7 @@ import {
   propagators,
   type SetCell,
 } from "@minim/propagators";
-import { derive, Diagram, label, line, loop, Mount, rect, signal } from "../../minim";
+import { Diagram, derive, label, line, loop, Mount, rect, signal } from "../../minim";
 
 const BASE_PUZZLE =
   "53..7...." +
@@ -89,10 +89,14 @@ export class MdPropSudoku extends Diagram {
           fill: derive(() => (isGiven() ? "#00000008" : "transparent")),
         }),
         // Big digit when narrowed to a singleton.
-        label(b.center, derive(() => (cell.value.size === 1 ? `${[...cell.value][0]}` : "")), {
-          size: 22,
-          fill: derive(() => (isGiven() ? GIVEN : SOLVED)),
-        }),
+        label(
+          b.center,
+          derive(() => (cell.value.size === 1 ? `${[...cell.value][0]}` : "")),
+          {
+            size: 22,
+            fill: derive(() => (isGiven() ? GIVEN : SOLVED)),
+          },
+        ),
       );
       // 3×3 candidates inside the cell, positions via `b.at(u, v)`.
       for (let gy = 0; gy < 3; gy++) {
@@ -121,11 +125,14 @@ export class MdPropSudoku extends Diagram {
     const solved = signal(false);
 
     s(
-      label(view.top.down(20), derive(() =>
-        solved.value
-          ? "solved · ✓ all cells singletons"
-          : `narrowing · wave ${stepCount.value} · candidates shrinking via allDifferent`,
-      )),
+      label(
+        view.top.down(20),
+        derive(() =>
+          solved.value
+            ? "solved · ✓ all cells singletons"
+            : `narrowing · wave ${stepCount.value} · candidates shrinking via allDifferent`,
+        ),
+      ),
       label(
         view.bottom.up(14),
         "27 allDifferent propagators · 9 rows + 9 cols + 9 boxes · one fixpoint wave / 0.35s",

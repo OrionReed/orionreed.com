@@ -25,9 +25,9 @@ import { propagate, propagator } from "@minim/propagators";
 import {
   type CurveSegment,
   circle,
-  derive,
   curve,
   Diagram,
+  derive,
   drag,
   easeIn,
   easeOut,

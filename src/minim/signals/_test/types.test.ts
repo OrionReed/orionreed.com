@@ -44,10 +44,7 @@ function _probes(): void {
   // traits dict at the type level, so `Traits<T, "linear" | "metric">`
   // can verify presence at compile time. Bare RO Vec is rejected
   // through the brand (separate axis from traits).
-  function spring<T>(
-    s: Writable<Signal<T>> & Traits<T, "linear" | "metric">,
-    target: T,
-  ): void {
+  function spring<T>(s: Writable<Signal<T>> & Traits<T, "linear" | "metric">, target: T): void {
     s.value = target;
   }
   spring(v, { x: 0, y: 0 }); // Writable<Vec> ⊆ Writable<Signal<V>>

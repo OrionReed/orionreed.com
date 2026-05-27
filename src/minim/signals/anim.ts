@@ -252,7 +252,10 @@ export function* attract<T>(
 // ─── generator-scoped reactive helpers ────────────────────────────
 
 /** Drive `sig` per frame with a pure function `f(t, initial)`. */
-export function* wave<T>(sig: Writable<Signal<T>>, fn: (t: number, initial: T) => T): Animator<void> {
+export function* wave<T>(
+  sig: Writable<Signal<T>>,
+  fn: (t: number, initial: T) => T,
+): Animator<void> {
   const initial = sig.peek();
   yield* drive((_tick, t) => {
     sig.value = fn(t, initial);

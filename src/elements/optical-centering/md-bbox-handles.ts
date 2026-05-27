@@ -4,7 +4,7 @@
 // derived corner handles. Drag any point to recompute the bounds;
 // drag the bounds to translate or resize the whole cluster.
 
-import { bboxLens, derive, Diagram, handle, label, Mount, rect, Vec, vec } from "../../minim";
+import { bboxLens, Diagram, derive, handle, label, Mount, rect, Vec, vec } from "../../minim";
 
 const PT = "#5b8def";
 const CTR = "#f5a623";

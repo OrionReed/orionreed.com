@@ -18,8 +18,8 @@
 
 import {
   bezierGestaltLens,
-  derive,
   Diagram,
+  derive,
   handle,
   label,
   line,

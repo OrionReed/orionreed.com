@@ -88,7 +88,11 @@ const distance = (a: AnyShape | Vec, b: AnyShape | Vec) => {
   return group(
     { aside: true },
     connect(aP, bP),
-    label(mid.up(6), derive(() => d.value.toFixed(0)), { size: 10, opacity: 0.85 }),
+    label(
+      mid.up(6),
+      derive(() => d.value.toFixed(0)),
+      { size: 10, opacity: 0.85 },
+    ),
   );
 };
 

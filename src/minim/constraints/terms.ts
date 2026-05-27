@@ -19,7 +19,7 @@
 // reactive flow. The term then peeks the new value when
 // `initialize()` runs.
 
-import { signal, type Signal, type Writable } from "../signals";
+import { type Signal, signal, type Writable } from "../signals";
 import { Solver } from "./solver";
 import { Term } from "./term";
 

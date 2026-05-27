@@ -1,6 +1,5 @@
 import { derive, type Inner, Num, Signal, signal, type Val, Vec } from "@minim/signals";
 
-
 import { Shape, type ShapeOpts } from "./shape";
 import { type Content, flattenText, renderContent } from "./text";
 import { tokens } from "./tokens";

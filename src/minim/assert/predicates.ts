@@ -6,7 +6,6 @@
 import type { Box, Vec } from "@minim/signals";
 import { derive, type Inner, type Read } from "@minim/signals";
 
-
 /** `lo ≤ s ≤ hi`. */
 export function inRange(s: Read<number>, range: readonly [number, number]): Read<boolean> {
   const [lo, hi] = range;

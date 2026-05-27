@@ -9,7 +9,6 @@ import { batch, derive, effect, type Inner, num, signal, Vec, vec } from "@minim
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 
-
 describe("correctness", () => {
   it("all checks", () => {
     section("1.1 Computed rethrows getter errors + retries");

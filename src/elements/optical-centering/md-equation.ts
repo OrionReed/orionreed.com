@@ -11,8 +11,8 @@
 import { clamp, constraints, generic, pin } from "@minim/constraints";
 import {
   Anchor,
-  derive,
   Diagram,
+  derive,
   handle,
   label,
   line,
@@ -76,11 +76,15 @@ export class MdEquation extends Diagram {
         }),
       );
       s(
-        label(vec(trackX1 + 40, t.y + 4), derive(() => t.sig.value.toFixed(2)), {
-          size: 12,
-          align: Anchor.Center,
-          opacity: 0.7,
-        }),
+        label(
+          vec(trackX1 + 40, t.y + 4),
+          derive(() => t.sig.value.toFixed(2)),
+          {
+            size: 12,
+            align: Anchor.Center,
+            opacity: 0.7,
+          },
+        ),
       );
     }
 

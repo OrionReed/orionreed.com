@@ -32,8 +32,8 @@
 
 import {
   batch,
-  Num,
   type Inner,
+  Num,
   type Pack,
   type Read,
   type Signal,

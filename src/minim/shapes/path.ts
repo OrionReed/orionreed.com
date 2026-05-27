@@ -1,11 +1,11 @@
 import {
   derive,
   type Read,
+  reader,
   type Signal,
   signal,
   type Val,
   Vec,
-  reader,
   type Writable,
 } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";

@@ -25,8 +25,8 @@ import {
   type Animator,
   type AnyShape,
   circle,
-  derive,
   Diagram,
+  derive,
   forEach,
   group,
   label,
@@ -461,12 +461,8 @@ export class MdDebugger extends Diagram {
       // Two paths per row: pass-runs and fail-runs. Each builds
       // a series of M..L..L (top edge) + L..L (bottom edge) +
       // Z polygons covering contiguous true/false sample runs.
-      const passD = derive(() =>
-        runsPath(windowed.value, row.pick, true, xFor, y, CLAIM_TRACK_H),
-      );
-      const failD = derive(() =>
-        runsPath(windowed.value, row.pick, false, xFor, y, CLAIM_TRACK_H),
-      );
+      const passD = derive(() => runsPath(windowed.value, row.pick, true, xFor, y, CLAIM_TRACK_H));
+      const failD = derive(() => runsPath(windowed.value, row.pick, false, xFor, y, CLAIM_TRACK_H));
       s(pathD(passD, { fill: PASS, stroke: "none" }), pathD(failD, { fill: FAIL, stroke: "none" }));
     });
 

@@ -1,7 +1,7 @@
 import {
   circle,
-  derive,
   Diagram,
+  derive,
   draggable,
   label,
   line,

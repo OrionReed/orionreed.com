@@ -23,8 +23,8 @@
 import {
   Anchor,
   circle,
-  derive,
   Diagram,
+  derive,
   drag,
   label,
   line,

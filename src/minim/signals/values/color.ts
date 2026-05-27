@@ -5,10 +5,19 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { derive, type Init, lazy, reader, readNow, Signal, type Val, type Writable } from "../signal";
+import {
+  derive,
+  type Init,
+  lazy,
+  reader,
+  readNow,
+  Signal,
+  type Val,
+  type Writable,
+} from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
 import { derived, field } from "../writable";
-import { num, Num } from "./num";
+import { Num, num } from "./num";
 
 type V = { r: number; g: number; b: number; a: number };
 
@@ -130,12 +139,7 @@ export function rgb(r: Init<Num>, g: Init<Num>, b: Init<Num>): Writable<Color> {
 }
 
 /** Writable `Color` from RGBA channels. Same lift rule as `rgb`. */
-export function rgba(
-  r: Init<Num>,
-  g: Init<Num>,
-  b: Init<Num>,
-  a: Init<Num>,
-): Writable<Color> {
+export function rgba(r: Init<Num>, g: Init<Num>, b: Init<Num>, a: Init<Num>): Writable<Color> {
   if (
     typeof r === "number" &&
     typeof g === "number" &&

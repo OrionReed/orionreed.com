@@ -714,7 +714,9 @@ export class Signal<T = unknown> implements ReactiveNode {
   >(
     this: C,
     parents: P,
-    fn: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => Inner<InstanceType<C>>,
+    fn: (
+      vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
+    ) => Inner<InstanceType<C>>,
   ): InstanceType<C>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static derive<C extends new (...args: never[]) => Signal<any>>(
@@ -760,7 +762,9 @@ export class Signal<T = unknown> implements ReactiveNode {
   static lens<C extends new (...args: never[]) => Signal<any>, P extends readonly Read<unknown>[]>(
     this: C,
     parents: P,
-    fwd: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => Inner<InstanceType<C>>,
+    fwd: (
+      vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
+    ) => Inner<InstanceType<C>>,
     bwd: (
       target: Inner<InstanceType<C>>,
       vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
@@ -1741,11 +1745,7 @@ export function lens<P, R, COMP>(
 ): Writable<Signal<R>>;
 export function lens<P extends readonly Read<unknown>[], R, COMP>(
   parents: P,
-  spec: SymmetricLensSpecN<
-    { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
-    R,
-    COMP
-  >,
+  spec: SymmetricLensSpecN<{ [K in keyof P]: P[K] extends Read<infer V> ? V : never }, R, COMP>,
 ): Writable<Signal<R>>;
 // biome-ignore lint/suspicious/noExplicitAny: dispatch
 export function lens(...args: any[]): any {
@@ -1758,7 +1758,9 @@ export function lens(...args: any[]): any {
       return _symmetric(Signal as new (...args: never[]) => Signal<unknown>, first, second);
     }
     return _symmetric(
-      Signal as new (...args: never[]) => Signal<unknown>,
+      Signal as new (
+        ...args: never[]
+      ) => Signal<unknown>,
       [first],
       _liftSpec1(second),
     );

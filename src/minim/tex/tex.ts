@@ -1,10 +1,8 @@
 // LaTeX → MathML shape, rendered via Temml.
 
+import { Shape, type ShapeOpts, tokens } from "@minim/shapes";
 import { Box, derive, type Inner, type Signal, signal, type Writable } from "@minim/signals";
 import temml from "temml";
-
-
-import { Shape, type ShapeOpts, tokens } from "@minim/shapes";
 import { Part, type PartList, PartMarker } from "./parts";
 
 /** Anything legal in a `tex\`…\`` interpolation slot. Strings splice

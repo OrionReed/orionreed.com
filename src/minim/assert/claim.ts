@@ -14,7 +14,6 @@
 import type { Box, Vec } from "@minim/signals";
 import { derive, type Inner, type Read } from "@minim/signals";
 
-
 import { intervals, latch, type Scope } from "./algebra";
 import { above, below, equal, following, inRange, inside, isEqual, near } from "./predicates";
 

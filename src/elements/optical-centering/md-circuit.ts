@@ -1,8 +1,8 @@
 import {
   type AnyShape,
   circle,
-  derive,
   Diagram,
+  derive,
   EventBus,
   label,
   linear,
@@ -161,8 +161,14 @@ export class MdCircuit extends Diagram {
       const a = signal(0);
       const b = signal(0);
       gate.add(
-        lit(gate.center.offset(-14, 14), derive(() => a.value > 0)),
-        lit(gate.center.offset(+14, 14), derive(() => b.value > 0)),
+        lit(
+          gate.center.offset(-14, 14),
+          derive(() => a.value > 0),
+        ),
+        lit(
+          gate.center.offset(+14, 14),
+          derive(() => b.value > 0),
+        ),
       );
 
       const settle = () => {

@@ -8,7 +8,6 @@
 import { type Easing, easeIn, easeInOut, easeOut, type Yieldable } from "@minim/core";
 import { Dir, type Inner, tween, type Val, Vec } from "@minim/signals";
 
-
 import type { Has } from "./shape";
 
 /** Fade opacity 0 → 1. */
