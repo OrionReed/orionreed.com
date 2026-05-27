@@ -21,6 +21,7 @@
 import {
   Anchor,
   Bool,
+  box,
   derive,
   Diagram,
   group,
@@ -124,25 +125,14 @@ export class MdBoolBridges extends Diagram {
       }),
     );
 
-    // ─── Demo 1: Point in box ──────────────────────────────────
+    // ─── Demo 1: Point in box (Vec → Bool) ────────────────────
     {
       const cx = cellCx(0);
-      const box1: BoxV = { x: cx - 35, y: CANVAS_Y + 20, w: 70, h: 60 };
+      const box1 = box(cx - 35, CANVAS_Y + 20, 70, 60);
       const p1 = vec(cx, CANVAS_Y + 50);
-      const inBox = Bool.lens(
-        p1,
-        v => isInside(v, box1),
-        (target, current) => {
-          if (target) {
-            return isInside(current, box1)
-              ? current
-              : { x: box1.x + box1.w / 2, y: box1.y + box1.h / 2 };
-          }
-          return !isInside(current, box1) ? current : ejectOut(current, box1);
-        },
-      );
+      const inBox = box1.contains(p1);
       s(
-        rect(box1.x, box1.y, box1.w, box1.h, {
+        rect(box1, {
           thin: true,
           fill: "rgba(91,141,239,0.10)",
           stroke: "#5b8def",
@@ -150,10 +140,10 @@ export class MdBoolBridges extends Diagram {
         handle(p1, { fill: "#222", r: 6 }),
       );
       boolIndicator(s, cx, IND_Y, inBox, "inside", "outside");
-      s(label(vec(cx, LABEL_Y), "Vec → Bool", { size: 10, opacity: 0.6 }));
+      s(label(vec(cx, LABEL_Y), "Box#contains(Vec)", { size: 10, opacity: 0.6 }));
     }
 
-    // ─── Demo 2: Slider above threshold ────────────────────────
+    // ─── Demo 2: Slider above threshold (Num → Bool) ──────────
     {
       const cx = cellCx(1);
       const trackX0 = cx - 50;
@@ -161,18 +151,7 @@ export class MdBoolBridges extends Diagram {
       const trackY = CANVAS_Y + 60;
       const threshold = 0.5;
       const t2 = num(0.7);
-      const above = Bool.lens(
-        t2,
-        v => v > threshold,
-        (target, current) =>
-          target
-            ? current > threshold
-              ? current
-              : threshold + 0.06
-            : current <= threshold
-              ? current
-              : threshold - 0.06,
-      );
+      const above = t2.greaterThan(threshold, 0.06);
       const knobX = t2.clamp(0, 1).affine(trackX1 - trackX0, trackX0);
       const knobPos = Vec.lens(
         () => ({ x: knobX.value, y: trackY }),
@@ -197,7 +176,7 @@ export class MdBoolBridges extends Diagram {
         handle(knobPos, { fill: "#222", r: 6 }),
       );
       boolIndicator(s, cx, IND_Y, above, "above", "below");
-      s(label(vec(cx, LABEL_Y), "Num → Bool", { size: 10, opacity: 0.6 }));
+      s(label(vec(cx, LABEL_Y), "Num#greaterThan", { size: 10, opacity: 0.6 }));
     }
 
     // ─── Demo 3: Two points coincide ───────────────────────────
@@ -272,7 +251,7 @@ export class MdBoolBridges extends Diagram {
       s(label(vec(cx, LABEL_Y), "Array<Vec> → Bool", { size: 10, opacity: 0.6 }));
     }
 
-    // ─── Demo 5: Even (discrete classifier) ────────────────────
+    // ─── Demo 5: Even (Num → Bool, discrete classifier) ────────
     {
       const cx = cellCx(4);
       const trackX0 = cx - 50;
@@ -281,18 +260,7 @@ export class MdBoolBridges extends Diagram {
       const NMAX = 10;
       const n5 = num(4);
       const snapped = n5.clamp(0, NMAX).quantize(1);
-      const even = Bool.lens(
-        snapped,
-        v => Math.round(v) % 2 === 0,
-        (target, current) => {
-          const r = Math.round(current);
-          const isEven = r % 2 === 0;
-          if (target === isEven) return r;
-          // Bump by ±1 to the nearest opposite-parity integer, staying
-          // within [0, NMAX] — prefer +1, fall back to −1 at the top.
-          return r < NMAX ? r + 1 : r - 1;
-        },
-      );
+      const even = snapped.isEven;
       const knobX = snapped.affine((trackX1 - trackX0) / NMAX, trackX0);
       const knobPos = Vec.lens(
         () => ({ x: knobX.value, y: trackY }),
@@ -319,9 +287,7 @@ export class MdBoolBridges extends Diagram {
         handle(knobPos, { fill: "#222", r: 6 }),
       );
       boolIndicator(s, cx, IND_Y, even, "even", "odd");
-      s(label(vec(cx, LABEL_Y), "Num → Bool", { size: 10, opacity: 0.6 }));
+      s(label(vec(cx, LABEL_Y), "Num#isEven", { size: 10, opacity: 0.6 }));
     }
-
-    void view;
   }
 }

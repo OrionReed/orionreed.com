@@ -15,7 +15,10 @@
 import { describe, expect, it } from "vitest";
 import { effect, isLens, signal } from "../signal";
 import { Bool, bool } from "../values/bool";
+import { box } from "../values/box";
 import { Num, num } from "../values/num";
+import { range } from "../values/range";
+import { vec } from "../values/vec";
 import { verifyLensLaws } from "./_laws";
 
 // ─── Factory ──────────────────────────────────────────────────────
@@ -446,6 +449,318 @@ describe("Bool — stress", () => {
     expect(b.value).toBe(false);
     raw.value = true;
     expect(b.value).toBe(true);
+  });
+});
+
+// ─── Predicate bridges (upstreamed methods) ─────────────────────────
+//
+// `Num.greaterThan`, `Num.lessThan`, `Num.divisibleBy`, `Num.isEven`,
+// `Num.isOdd`, `Box.contains(p)`, `Range.contains(v)` — the bridge
+// family. Each is a quotient lens with ≈_S = "same boolean class". The
+// laws verified below:
+//
+//   - Forward reads track source changes.
+//   - Writing the predicate flips source via the bwd's policy.
+//   - GetPut: writing back the read value is a no-op on source.
+//   - PutPut: only the last write counts.
+//   - Writability propagates: a writable receiver yields Writable<Bool>.
+
+describe("Num.greaterThan(t) — predicate bridge", () => {
+  it("reads `v > t` reactively", () => {
+    const n = num(0.3);
+    const above = n.greaterThan(0.5);
+    expect(above.value).toBe(false);
+    n.value = 0.7;
+    expect(above.value).toBe(true);
+    n.value = 0.4;
+    expect(above.value).toBe(false);
+  });
+
+  it("writing `true` bumps source past threshold by eps", () => {
+    const n = num(0.3);
+    const above = n.greaterThan(0.5, 0.05);
+    above.value = true;
+    expect(n.value).toBeCloseTo(0.55);
+    expect(above.value).toBe(true);
+  });
+
+  it("writing `false` bumps source below threshold", () => {
+    const n = num(0.9);
+    const above = n.greaterThan(0.5, 0.05);
+    above.value = false;
+    expect(n.value).toBeCloseTo(0.45);
+    expect(above.value).toBe(false);
+  });
+
+  it("identity write — no source change when target matches current state", () => {
+    const n = num(0.7);
+    const above = n.greaterThan(0.5);
+    above.value = true; // already true
+    expect(n.value).toBe(0.7);
+  });
+
+  it("GetPut over random thresholds and sources", () => {
+    for (let i = 0; i < 50; i++) {
+      const v = Math.random() * 2 - 1;
+      const t = Math.random() * 2 - 1;
+      const n = num(v);
+      const above = n.greaterThan(t);
+      above.value = above.peek();
+      expect(n.value).toBe(v);
+    }
+  });
+
+  it("reactive threshold tracks", () => {
+    const n = num(0.7);
+    const t = num(0.5);
+    const above = n.greaterThan(t);
+    expect(above.value).toBe(true);
+    t.value = 0.8;
+    expect(above.value).toBe(false);
+  });
+
+  it("PutPut: only the last write survives", () => {
+    const n = num(0.1);
+    const above = n.greaterThan(0.5);
+    above.value = true;
+    above.value = false;
+    expect(above.value).toBe(false);
+    expect(n.value).toBeLessThan(0.5);
+  });
+});
+
+describe("Num.lessThan(t) — predicate bridge", () => {
+  it("reads `v < t`", () => {
+    const n = num(0.3);
+    const below = n.lessThan(0.5);
+    expect(below.value).toBe(true);
+    n.value = 0.7;
+    expect(below.value).toBe(false);
+  });
+
+  it("writes flip source across the threshold", () => {
+    const n = num(0.7);
+    const below = n.lessThan(0.5, 0.05);
+    below.value = true;
+    expect(n.value).toBeCloseTo(0.45);
+    below.value = false;
+    expect(n.value).toBeCloseTo(0.55);
+  });
+});
+
+describe("Num.divisibleBy(d) — discrete classifier", () => {
+  it("reads divisibility under round()", () => {
+    const n = num(6);
+    const by3 = n.divisibleBy(3);
+    expect(by3.value).toBe(true);
+    n.value = 7;
+    expect(by3.value).toBe(false);
+    n.value = 0;
+    expect(by3.value).toBe(true);
+  });
+
+  it("write `true` snaps to NEAREST multiple", () => {
+    const n = num(7);
+    const by3 = n.divisibleBy(3);
+    by3.value = true;
+    // Closer to 6 than to 9.
+    expect(n.value).toBe(6);
+    expect(by3.value).toBe(true);
+  });
+
+  it("write `true` on equidistant target prefers the lower multiple", () => {
+    // For r=7.5, |down=6|=1.5, |up=9|=1.5 — tie. Math.abs(<=) tiebreaks
+    // toward `down` (the if-branch evaluates lhs first).
+    const n = num(7.5);
+    const by3 = n.divisibleBy(3);
+    by3.value = true;
+    expect(n.value).toBe(6);
+  });
+
+  it("write `false` bumps by +1", () => {
+    const n = num(6);
+    const by3 = n.divisibleBy(3);
+    by3.value = false;
+    expect(n.value).toBe(7);
+    expect(by3.value).toBe(false);
+  });
+
+  it("identity write — no change when target matches", () => {
+    const n = num(6);
+    const by3 = n.divisibleBy(3);
+    by3.value = true;
+    expect(n.value).toBe(6);
+  });
+
+  it("handles negative numbers correctly", () => {
+    const n = num(-7);
+    const by3 = n.divisibleBy(3);
+    // -7 mod 3 = (-7 % 3 + 3) % 3 = (-1 + 3) % 3 = 2 → not divisible.
+    expect(by3.value).toBe(false);
+    by3.value = true;
+    // Nearest multiple to -7: -6 (dist 1) or -9 (dist 2) → -6.
+    expect(n.value).toBe(-6);
+  });
+
+  it("GetPut over random ints", () => {
+    for (let i = 0; i < 50; i++) {
+      const v = Math.floor(Math.random() * 40 - 20);
+      const d = 1 + Math.floor(Math.random() * 9);
+      const n = num(v);
+      const by = n.divisibleBy(d);
+      by.value = by.peek();
+      expect(n.value).toBe(v);
+    }
+  });
+});
+
+describe("Num.isEven / Num.isOdd — getters", () => {
+  it("isEven reads parity", () => {
+    const n = num(4);
+    expect(n.isEven.value).toBe(true);
+    n.value = 5;
+    expect(n.isEven.value).toBe(false);
+  });
+
+  it("isOdd is the negation", () => {
+    const n = num(4);
+    expect(n.isOdd.value).toBe(false);
+    n.value = 5;
+    expect(n.isOdd.value).toBe(true);
+  });
+
+  it("isEven write flips parity by ±1", () => {
+    const n = num(5);
+    n.isEven.value = true;
+    // Nearest even integer: 4 or 6 (tie) → snap-to-nearer picks 4.
+    expect([4, 6]).toContain(n.value);
+    expect(n.value % 2).toBe(0);
+  });
+
+  it("isEven and isOdd are cached lazy getters (identity-stable)", () => {
+    const n = num(4);
+    expect(n.isEven).toBe(n.isEven);
+    expect(n.isOdd).toBe(n.isOdd);
+  });
+});
+
+describe("Box.contains(p) — spatial bridge", () => {
+  type BoxV = { x: number; y: number; w: number; h: number };
+  const BOX: BoxV = { x: 0, y: 0, w: 10, h: 10 };
+
+  it("reads `p in box` reactively", () => {
+    const b = box(BOX.x, BOX.y, BOX.w, BOX.h);
+    const p = vec(5, 5);
+    const inside = b.contains(p);
+    expect(inside.value).toBe(true);
+    p.value = { x: 20, y: 5 };
+    expect(inside.value).toBe(false);
+    p.value = { x: 0, y: 5 }; // boundary
+    expect(inside.value).toBe(true);
+  });
+
+  it("writing `true` (currently outside) clamps to the nearest in-box point", () => {
+    const b = box(BOX.x, BOX.y, BOX.w, BOX.h);
+    const p = vec(20, 5);
+    const inside = b.contains(p);
+    inside.value = true;
+    // Nearest in-box: clamp x to [0, 10] → x=10.
+    expect(p.value).toEqual({ x: 10, y: 5 });
+    expect(inside.value).toBe(true);
+  });
+
+  it("writing `false` (currently inside) ejects past nearest edge by eps", () => {
+    const b = box(BOX.x, BOX.y, BOX.w, BOX.h);
+    const p = vec(7, 5);
+    const inside = b.contains(p);
+    inside.value = false;
+    // Nearest edge: right (10 - 7 = 3) vs bottom (10 - 5 = 5). Right wins.
+    expect(p.value.x).toBeGreaterThan(10);
+    expect(p.value.y).toBe(5);
+    expect(inside.value).toBe(false);
+  });
+
+  it("identity write — no source change when target matches", () => {
+    const b = box(BOX.x, BOX.y, BOX.w, BOX.h);
+    const p = vec(5, 5);
+    const inside = b.contains(p);
+    inside.value = true;
+    expect(p.value).toEqual({ x: 5, y: 5 });
+  });
+
+  it("RO branch: literal `p` yields a bare Bool (no write capability)", () => {
+    const b = box(BOX.x, BOX.y, BOX.w, BOX.h);
+    const inside = b.contains({ x: 5, y: 5 });
+    expect(inside.value).toBe(true);
+    // RO at the type level; runtime write throws via the underlying
+    // computed (no setter installed).
+    expect(() => {
+      (inside as unknown as { value: boolean }).value = false;
+    }).toThrow();
+  });
+
+  it("GetPut: writing back the read value is a no-op", () => {
+    for (let i = 0; i < 50; i++) {
+      const px = Math.random() * 20 - 5;
+      const py = Math.random() * 20 - 5;
+      const b = box(BOX.x, BOX.y, BOX.w, BOX.h);
+      const p = vec(px, py);
+      const inside = b.contains(p);
+      inside.value = inside.peek();
+      expect(p.value).toEqual({ x: px, y: py });
+    }
+  });
+
+  it("box and p both tracked: moving box and writing predicate both work", () => {
+    const b = box(0, 0, 10, 10);
+    const p = vec(15, 5);
+    const inside = b.contains(p);
+    expect(inside.value).toBe(false);
+    // Move box to contain p without moving p.
+    b.value = { x: 10, y: 0, w: 10, h: 10 };
+    expect(inside.value).toBe(true);
+    // Now move p back outside.
+    inside.value = false;
+    expect(inside.value).toBe(false);
+  });
+});
+
+describe("Range.contains(v) — 1D spatial bridge", () => {
+  it("reads membership", () => {
+    const r = range(0, 1);
+    const v = num(0.5);
+    const inside = r.contains(v);
+    expect(inside.value).toBe(true);
+    v.value = 2;
+    expect(inside.value).toBe(false);
+  });
+
+  it("writing `true` (currently outside) clamps into range", () => {
+    const r = range(0, 1);
+    const v = num(2);
+    const inside = r.contains(v);
+    inside.value = true;
+    expect(v.value).toBe(1);
+    expect(inside.value).toBe(true);
+  });
+
+  it("writing `false` (currently inside) ejects past nearest endpoint", () => {
+    const r = range(0, 1);
+    const v = num(0.7);
+    const inside = r.contains(v);
+    inside.value = false;
+    // hi=1 distance 0.3, lo=0 distance 0.7 → eject past hi.
+    expect(v.value).toBeGreaterThan(1);
+    expect(inside.value).toBe(false);
+  });
+
+  it("RO branch: literal value yields a bare Bool", () => {
+    const r = range(0, 1);
+    const inside = r.contains(0.5);
+    expect(inside.value).toBe(true);
+    expect(() => {
+      (inside as unknown as { value: boolean }).value = false;
+    }).toThrow();
   });
 });
 

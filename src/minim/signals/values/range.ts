@@ -14,9 +14,18 @@
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { derive, type Init, reader, readNow, Signal, type Val, type Writable } from "../signal";
+import {
+  type Init,
+  reader,
+  readNow,
+  Signal,
+  type Val,
+  type Writable,
+  type WritableBrand,
+} from "../signal";
 import type { Linear, Pack, TraitDict } from "../traits";
 import { derived, field } from "../writable";
+import { Bool } from "./bool";
 import { Num, num } from "./num";
 
 type V = { lo: number; hi: number };
@@ -36,6 +45,14 @@ export const width = (r: V) => r.hi - r.lo;
 export const center = (r: V) => (r.lo + r.hi) / 2;
 export const contains = (r: V, v: number) => v >= r.lo && v <= r.hi;
 export const clamp = (r: V, v: number) => (v < r.lo ? r.lo : v > r.hi ? r.hi : v);
+
+/** Closest value STRICTLY outside `[lo, hi]`, displaced past the
+ *  nearest endpoint by `eps`. Used by `Range#contains` as the bwd's
+ *  false-side policy. */
+export const eject = (r: V, v: number, eps = 1e-6) => {
+  if (!contains(r, v)) return v;
+  return v - r.lo <= r.hi - v ? r.lo - eps : r.hi + eps;
+};
 
 /** Sample at parameter `t`: `lo + t·(hi - lo)`. `t ∈ [0, 1]` stays
  *  inside the range; values outside extrapolate linearly. */
@@ -152,9 +169,30 @@ export class Range extends Signal<V> {
   }
 
   // ── predicates / clamps ────────────────────────────────────────────
-  /** True iff `v` is in `[lo, hi]`. */
-  contains(v: Val<number>): Signal<boolean> {
-    return derive(() => contains(this.value, readNow(v)));
+  /** Membership predicate. Conditional return type: when `v` is a
+   *  writable `Num`, the result is `Writable<Bool>` and flipping the
+   *  view bumps the source — `true` clamps into `[lo, hi]`, `false`
+   *  ejects past the nearest endpoint by `eps`. Literal / RO inputs
+   *  yield a bare RO `Bool`. The 1-D dual of `Box#contains`. */
+  contains<P extends Val<number>>(
+    v: P,
+  ): P extends WritableBrand ? Writable<Bool> : Bool {
+    if (v instanceof Num) {
+      const fused = (v as { _fusedOf?: { bwd?: unknown } })._fusedOf;
+      const isRO = fused !== undefined && fused.bwd === undefined;
+      if (!isRO) {
+        return Bool.lens(
+          [this, v] as never,
+          (vals: readonly [V, number]) => contains(vals[0], vals[1]),
+          (target, vals) => {
+            const [r, n] = vals as readonly [V, number];
+            if (contains(r, n) === target) return [undefined, undefined] as never;
+            return [undefined, target ? clamp(r, n) : eject(r, n)] as never;
+          },
+        ) as never;
+      }
+    }
+    return Bool.derive(() => contains(this.value, readNow(v))) as never;
   }
   /** RO clamp: read `v` into `[lo, hi]`. For a writable clamping lens
    *  on a single Num, see `Num#clamp(lo, hi)`. */

@@ -7,8 +7,17 @@
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { type Init, reader, Signal, type Val, type Writable } from "../signal";
+import {
+  type Init,
+  lazy,
+  reader,
+  Signal,
+  type Val,
+  type Writable,
+  type WritableBrand,
+} from "../signal";
 import type { Linear, Pack, TraitDict } from "../traits";
+import { Bool } from "./bool";
 
 type V = number;
 
@@ -123,6 +132,104 @@ export class Num extends Signal<V> {
         return s + delta - p * Math.round(delta / p);
       },
     );
+  }
+
+  // ── Predicate bridges to Bool ────────────────────────────────────
+  //
+  // Cross-type quotient lenses: project Num through a boolean
+  // predicate. The bwd policy is the obvious "snap across the
+  // boundary by eps" (for thresholds) or "walk to the nearest
+  // satisfying integer" (for divisibility). The Bool cousins of
+  // `clamp` / `quantize` — same Foster-style ≈_S = "same boolean
+  // class" equivalence.
+  //
+  // Each method has a conditional return type: writable receiver
+  // (Writable<Num>) yields Writable<Bool>; bare RO receiver yields
+  // RO Bool. Mirrors `field()`'s writability-propagating shape.
+
+  /** `this > t` as a (writability-propagating) Bool. Flipping the view
+   *  bumps the source across the threshold by `eps`. Cross-type analog
+   *  of `clamp`: a stateful idempotent projection through a 2-element
+   *  quotient. */
+  greaterThan<T extends Num>(
+    this: T,
+    t: Val<V>,
+    eps: Val<V> = 1e-6,
+  ): T extends WritableBrand ? Writable<Bool> : Bool {
+    const tf = reader(t);
+    const ef = reader(eps);
+    return Bool.lens(
+      this,
+      v => v > tf(),
+      (target, current) => {
+        const th = tf();
+        if (target === current > th) return current;
+        return target ? th + ef() : th - ef();
+      },
+    ) as never;
+  }
+
+  /** `this < t`. Dual of `greaterThan`. */
+  lessThan<T extends Num>(
+    this: T,
+    t: Val<V>,
+    eps: Val<V> = 1e-6,
+  ): T extends WritableBrand ? Writable<Bool> : Bool {
+    const tf = reader(t);
+    const ef = reader(eps);
+    return Bool.lens(
+      this,
+      v => v < tf(),
+      (target, current) => {
+        const th = tf();
+        if (target === current < th) return current;
+        return target ? th - ef() : th + ef();
+      },
+    ) as never;
+  }
+
+  /** `round(this) ≡ 0 (mod d)`. The source is treated as an integer
+   *  (rounded for the test); pair with `quantize(1)` for clean integer
+   *  sliders.
+   *
+   *  Bwd policy:
+   *   - `true` (currently non-divisible): snap to the nearer of the
+   *     two adjacent multiples of `d`.
+   *   - `false` (currently divisible): bump by `+1` (smallest move
+   *     guaranteed to flip the class).
+   *   - target matches current class: no-op. */
+  divisibleBy<T extends Num>(
+    this: T,
+    d: Val<V>,
+  ): T extends WritableBrand ? Writable<Bool> : Bool {
+    const df = reader(d);
+    return Bool.lens(
+      this,
+      v => Math.round(v) % df() === 0,
+      (target, current) => {
+        const dv = df();
+        const r = Math.round(current);
+        // ((a % b) + b) % b handles negative `r` cleanly.
+        const mod = ((r % dv) + dv) % dv;
+        const isDiv = mod === 0;
+        if (target === isDiv) return current;
+        if (target) {
+          const down = r - mod;
+          const up = r + (dv - mod);
+          return Math.abs(current - down) <= Math.abs(current - up) ? down : up;
+        }
+        return r + 1;
+      },
+    ) as never;
+  }
+
+  /** `divisibleBy(2)` — lazy getter for the common case. */
+  get isEven(): this extends WritableBrand ? Writable<Bool> : Bool {
+    return lazy(this, "isEven", () => (this as Num).divisibleBy(2)) as never;
+  }
+  /** `not(divisibleBy(2))` — lazy getter. */
+  get isOdd(): this extends WritableBrand ? Writable<Bool> : Bool {
+    return lazy(this, "isOdd", () => (this as Num).divisibleBy(2).not()) as never;
   }
 
   /** Tween-builder, implied by the lerp trait. The `this:` parameter

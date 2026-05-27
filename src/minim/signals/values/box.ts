@@ -7,7 +7,6 @@ import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import {
   batch,
-  derive,
   type Init,
   type Inner,
   lazy,
@@ -16,9 +15,11 @@ import {
   Signal,
   type Val,
   type Writable,
+  type WritableBrand,
 } from "../signal";
 import type { Linear, Pack, TraitDict } from "../traits";
 import { derived, field } from "../writable";
+import { Bool } from "./bool";
 import { Num, num } from "./num";
 import { Vec } from "./vec";
 
@@ -45,6 +46,32 @@ export const expand = (b: V, n: number): V => ({
 });
 export const contains = (b: V, p: Inner<Vec>): boolean =>
   p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+
+/** Closest point inside `b` to `p`. Already-inside is identity; outside
+ *  snaps to the nearest box-boundary point (which is inside under our
+ *  inclusive `contains`). Used by `Box#contains` as the bwd's true-side
+ *  policy and reusable on its own as an idempotent projection helper. */
+export const clampToBox = (p: Inner<Vec>, b: V): Inner<Vec> => ({
+  x: Math.max(b.x, Math.min(b.x + b.w, p.x)),
+  y: Math.max(b.y, Math.min(b.y + b.h, p.y)),
+});
+
+/** Closest point STRICTLY outside `b` to `p`, displaced past the nearest
+ *  edge by `eps`. Already-outside is identity; inside maps to whichever
+ *  of the four edges is nearest. The bwd's false-side policy for
+ *  `Box#contains`. */
+export const ejectFromBox = (p: Inner<Vec>, b: V, eps = 1e-6): Inner<Vec> => {
+  if (!contains(b, p)) return p;
+  const dLeft = p.x - b.x;
+  const dRight = b.x + b.w - p.x;
+  const dTop = p.y - b.y;
+  const dBot = b.y + b.h - p.y;
+  const min = Math.min(dLeft, dRight, dTop, dBot);
+  if (min === dLeft) return { x: b.x - eps, y: p.y };
+  if (min === dRight) return { x: b.x + b.w + eps, y: p.y };
+  if (min === dTop) return { x: p.x, y: b.y - eps };
+  return { x: p.x, y: b.y + b.h + eps };
+};
 
 /** Bounding box around a set of boxes. */
 export function union(...bs: V[]): V {
@@ -136,8 +163,37 @@ export class Box extends Signal<V> {
   lerp(b: Val<V>, t: Val<number>): Box {
     return Box.derive(() => lerp(this.value, readNow(b), readNow(t)));
   }
-  contains(p: Val<Inner<Vec>>): Signal<boolean> {
-    return derive(() => contains(this.value, readNow(p)));
+  /** Membership predicate. Conditional return type: when `p` is a
+   *  writable `Vec`, the result is `Writable<Bool>` and clicks on the
+   *  view flip the source — `true` clamps to the nearest in-box point,
+   *  `false` ejects past the nearest edge by `eps`. For literal or RO
+   *  inputs, the result is a bare (RO) `Bool` since there's no source
+   *  to write back to. Both branches are O(1) box geometry — no policy
+   *  beyond "closest point where the predicate becomes target."
+   *
+   *  GetPut, PutGet, PutPut all hold within the view's domain (boolean
+   *  ≈_V = strict; source ≈_S = "same in/out class"). */
+  contains<P extends Val<Inner<Vec>>>(
+    p: P,
+  ): P extends WritableBrand ? Writable<Bool> : Bool {
+    if (p instanceof Vec) {
+      // Detect fused-RO chains: a Vec produced by `derive(...)` or a
+      // computed parent has no bwd path. Fall through to the RO branch.
+      const fused = (p as { _fusedOf?: { bwd?: unknown } })._fusedOf;
+      const isRO = fused !== undefined && fused.bwd === undefined;
+      if (!isRO) {
+        return Bool.lens(
+          [this, p] as never,
+          (vals: readonly [V, Inner<Vec>]) => contains(vals[0], vals[1]),
+          (target, vals) => {
+            const [b, v] = vals as readonly [V, Inner<Vec>];
+            if (contains(b, v) === target) return [undefined, undefined] as never;
+            return [undefined, target ? clampToBox(v, b) : ejectFromBox(v, b)] as never;
+          },
+        ) as never;
+      }
+    }
+    return Bool.derive(() => contains(this.value, readNow(p))) as never;
   }
 
   // ── field lenses & derived views ──────────────────────────────────
