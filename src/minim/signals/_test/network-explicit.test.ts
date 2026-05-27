@@ -220,7 +220,7 @@ describe("explicit-deps: self-exclusion", () => {
     let fires = 0;
     const n = network([a], () => {
       fires++;
-      a.value = a.value + 1; // self-write should not refire
+      a.value += 1; // self-write should not refire
     });
     expect(fires).toBe(1); // ran once
     expect(a.value).toBe(1);
@@ -665,7 +665,7 @@ describe("explicit-deps: re-entry & timing", () => {
     const dirties: number[] = [];
     const n = network([a], dirty => {
       dirties.push(dirty.size);
-      a.value = a.value + 1;
+      a.value += 1;
     });
     // Initial: dirty empty (size 0). Body wrote a = 1.
     expect(dirties).toEqual([0]);

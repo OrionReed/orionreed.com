@@ -15,7 +15,6 @@ import {
   rect,
   t,
   Vec,
-  vec,
   viewport,
 } from "../minim";
 import * as R from "./rand";

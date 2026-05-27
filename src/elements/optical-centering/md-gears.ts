@@ -29,7 +29,7 @@ function gearPathD(r: number, teeth: number, toothDepth = 3.5): string {
       `${i === 0 ? "M" : "L"} ${(rad * Math.cos(a)).toFixed(2)} ${(rad * Math.sin(a)).toFixed(2)}`,
     );
   }
-  return parts.join(" ") + " Z";
+  return `${parts.join(" ")} Z`;
 }
 
 /** Gear-shaped Shape — one SVG `<path>`, one rotate signal. */

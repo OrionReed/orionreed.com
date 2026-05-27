@@ -28,7 +28,7 @@
 //   3. "How does the constraint write back?" → through the lens.
 
 import { describe, expect, it } from "vitest";
-import { midpointLens, num, vec } from "../../signals";
+import { midpointLens, vec } from "../../signals";
 import { Num } from "../../signals/values/num";
 import { propagator, propagators } from "..";
 

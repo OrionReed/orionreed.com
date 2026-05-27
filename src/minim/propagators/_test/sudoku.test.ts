@@ -7,7 +7,7 @@
 // is structural: monotone narrowing of finite sets.
 
 import { describe, expect, it } from "vitest";
-import { type Signal, signal, type Writable } from "../../signals";
+import { signal } from "../../signals";
 import { allDifferent, propagators, type SetCell } from "..";
 
 // Custom equality so set-equality writes don't notify when two

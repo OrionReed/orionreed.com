@@ -136,8 +136,7 @@ interface Measurement {
 
 const measureMathML = (mathml: string, fontSize: number, fontFamily: string): Measurement => {
   const div = document.createElement("div");
-  div.style.cssText =
-    "position:absolute;left:-99999px;top:0;visibility:hidden;" + wrapperCss(fontSize, fontFamily);
+  div.style.cssText = `position:absolute;left:-99999px;top:0;visibility:hidden;${wrapperCss(fontSize, fontFamily)}`;
   div.innerHTML = mathml;
   const mathEl = div.querySelector("math") as HTMLElement | null;
   if (mathEl) styleMathRoot(mathEl, fontSize, fontFamily);

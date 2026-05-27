@@ -98,8 +98,8 @@ describe("Decision: 'I want multiple outputs'", () => {
         const rhs = c.value + d.value;
         const r = lhs - rhs;
         if (Math.abs(r) > 1e-9) {
-          c.value = c.value + r / 2;
-          d.value = d.value + r / 2;
+          c.value += r / 2;
+          d.value += r / 2;
         }
       }),
     );

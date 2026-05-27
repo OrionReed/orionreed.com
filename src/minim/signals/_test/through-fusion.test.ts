@@ -654,8 +654,8 @@ describe(".lens() fusion: non-Iso compositions match unfused reference", () => {
       [50, -0.4],
       [-100, 0.0],
     ] as const) {
-      a1.value = a1.value + rootBump;
-      a2.value = a2.value + rootBump;
+      a1.value += rootBump;
+      a2.value += rootBump;
       fused.value = target;
       cyclicRef.value = target;
       expect(a1.value).toBeCloseTo(a2.value, 9);

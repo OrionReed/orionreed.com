@@ -6,7 +6,8 @@ import {
   readFileSync,
   statSync,
   writeFileSync,
-} from "fs";
+} from "node:fs";
+import { basename, extname, join } from "node:path";
 import matter from "gray-matter";
 import {
   type MarkedExtension,
@@ -15,7 +16,6 @@ import {
   type TokenizerExtension,
 } from "marked";
 import markedFootnote from "marked-footnote";
-import { basename, extname, join } from "path";
 import temml from "temml";
 
 /** Marked extension that renders `$$...$$` (block) and `$...$` (inline)

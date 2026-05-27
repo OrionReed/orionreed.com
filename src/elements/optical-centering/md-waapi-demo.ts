@@ -10,7 +10,6 @@ import {
   type Signal,
   stagger,
   Vec,
-  vec,
 } from "../../minim";
 import { inView, native, scrollProgress, viewProgress } from "../../minim/ext";
 

@@ -165,7 +165,7 @@ export class Constraints {
           this._disposers.delete(r);
           for (const fn of this._removeHooks) fn(r);
         }
-        this._gen.value = this._gen.value + 1;
+        this._gen.value += 1;
       };
     });
   }
@@ -177,7 +177,7 @@ export class Constraints {
     dispose();
     this._disposers.delete(rel);
     for (const fn of this._removeHooks) fn(rel);
-    this._gen.value = this._gen.value + 1;
+    this._gen.value += 1;
   }
 
   /** Subscribe to relation-add events. Returns an unsubscribe thunk.
@@ -236,7 +236,7 @@ export class Constraints {
       // means later .value mutations trigger a solve.)
       this._network.subscribe(sig);
     }
-    this._gen.value = this._gen.value + 1;
+    this._gen.value += 1;
     return id;
   }
 
