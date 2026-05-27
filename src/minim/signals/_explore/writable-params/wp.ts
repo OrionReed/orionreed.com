@@ -144,18 +144,22 @@ export function clampSlide(
 /** Thin wrapper that matches the engine's `Cls.lens([parents], fwd, bwd)`
  *  shape but defaults to `Num` as the output class — convenient for
  *  exploration tests. For real usage prefer `Cls.lens(...)` directly. */
-export function lensW<P extends readonly Read<unknown>[], T>(
+export function lensW<
+  P extends readonly Read<unknown>[],
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  C extends abstract new (...args: any[]) => Signal<any> = typeof Num,
+>(
   parents: P,
-  fwd: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => T,
+  fwd: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) =>
+    InstanceType<C> extends Signal<infer V> ? V : never,
   bwd: (
-    target: T,
+    target: InstanceType<C> extends Signal<infer V> ? V : never,
     vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
   ) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
+  Cls: C = Num as unknown as C,
+): Writable<InstanceType<C>> {
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  Cls: new (...args: any[]) => Signal<T> = Num as never,
-): Writable<Signal<T>> {
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  return (Cls as any).lens(parents, fwd, bwd);
+  return (Cls as any).lens(parents, fwd, bwd) as Writable<InstanceType<C>>;
 }
 
 // ─── Utilities used by tests ────────────────────────────────────────
