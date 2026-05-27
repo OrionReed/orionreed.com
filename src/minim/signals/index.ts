@@ -26,6 +26,16 @@ export {
 } from "./anim";
 export { transitiveDeps } from "./introspect";
 export * from "./lenses";
+export {
+  allNodes,
+  atPath,
+  isLeaf,
+  leavesOf,
+  node as treeNode,
+  nodeCount,
+  type TreeNode,
+  walkTree,
+} from "./tree";
 export { each, type Lifecycle } from "./network-utils";
 export { reflectionLens } from "./new-primitives";
 export {

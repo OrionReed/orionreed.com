@@ -1,6 +1,6 @@
 ---
-title: Coreactive Programming
-description: Reactive runtime where every dependency edge is a lens.
+title: Coreactive (Bireactive?) Programming
+description: Bidirectional reactive programming with lenses.
 ---
 
 Reactive systems are DAGs of cells where edges mean "reads". Information flows one way — leaf to root, input to output — and a cell is permanently either input or output. **Coreactivity** keeps the DAG and the acyclicity, but every edge now carries a `put` as well as a `get`. A derived cell can be *written*; the write flows back up the same edge the read came down. No cell is permanently anything. You can drive either end.
@@ -129,6 +129,18 @@ const tree = folder("Tasks", [
 <md-tri-tree></md-tri-tree>
 
 Every folder is just another reactive cell of the same shape as a leaf. Rendering is then a uniform loop — bind each checkbox's `.checked` and `.indeterminate` to its cell, write `cb.checked` back on change. No recursive aggregate-state computation per render, no `useEffect` for the `indeterminate` flag, no manual cascade walk. Click a folder; the Tri's bwd broadcasts to every descendant in one batched propagation, and the engine refreshes ancestor aggregates in the same pass.
+
+The pattern generalises. A `TreeNode<T>` is a graph of cells with parent-child structure; reactive behaviour is layered on top via the existing `Cls.lens` / `Cls.derive` primitives. There's no `Signal<TreeShape>` anywhere — the tree value is the cell graph itself, so writes go through individual cells at the engine's normal O(1) field-lens cost, not O(N) tree-copy cost. Two canonical patterns over a `TreeNode<T>` cover most use cases: an AGGREGATE direction (bottom-up: each internal node is a lens that reads as the merge of descendants and writes by redistributing) and a PROPAGATE direction (top-down: each node has a local cell, the world view at each node composes parent-world with local). Two demos, same primitive.
+
+Budget rollup is the aggregate direction. Each leaf is a writable `num()`; each category is `Num.lens([children], sum, redistributeProportional)`; the root is `Num.lens([categories], sum, …)`. Three nested stacked bars show one tree level each; widths are proportional to value cells, so the invariant `Σ leaves = Σ categories = total` is visible at a glance. Drag any boundary to reapportion the two adjacent cells; sibling shares update, the parent's total reflects the new sum, downstream rows redraw — all from the lens chain, no manual recomputation per row:
+
+<md-budget-tree></md-budget-tree>
+
+A skeletal armature is the propagate direction. Each bone holds a local `pose()` (offset + rotation relative to its parent); the world pose at each node is `Pose.derive([parent.world, this.local], compose)`. Compose is the standard 2-D rigid-body composition; decompose is its exact inverse. The drag handle at each joint is a `Vec.lens([parent.world, this.local], …)` whose read returns the joint's world position and whose write `decompose`'s a new target back into `this.local`. The TREE STRUCTURE is what makes this work: dragging the left hand updates only that arm's bones because everything else is in a structurally independent branch. The same lens for the root translates the entire figure:
+
+<md-skeletal-rig></md-skeletal-rig>
+
+One `TreeNode<T>` primitive, two utterly different visual demos. The aggregate side is a recursive `Num.lens([…], sum, redistribute)`; the propagate side is a recursive `Pose.derive([parent, local], compose)` plus its inverse via decompose. Both reuse the existing engine machinery — fan-in lenses for aggregate, fan-in derives + path lenses for propagate. The "tree" doesn't need to be a value type because the cells already are; the tree is structure.
 
 The lenses up to here all ride on continuous numeric value types where the inverse is closed-form or numerical. The same engine has a second lens shape for *unstructured* domains — strings, arrays, sets — where the projection loses information no closed-form can recover. Each cell carries a private `complement` (Hofmann–Pierce symmetric-lens style) threaded through every `putr`/`putl`, and the engine fuses plain `.lens(F, B)` chains on top of it without breaking the complement's identity (see `_fuseOnSymmetric` in the signal core).
 
