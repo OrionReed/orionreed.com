@@ -9,10 +9,8 @@
 //   `each(source, body)` — body runs per element keyed by reference
 //                          identity; cleanup on removal.
 //   `when(source, body)` — body runs while truthy; cleanup on falsy.
-//   `param(v)`           — coalesce `T | Writable<Signal<T>>` to
-//                          `Writable<Signal<T>>`.
 
-import { effect, isSignal, type Read, type Signal, signal, type Writable } from "./signal";
+import { effect, type Read } from "./signal";
 
 /** Disposable handle. */
 export interface Lifecycle {
@@ -81,11 +79,3 @@ export function when<T>(source: Read<T>, body: (v: T) => () => void): Lifecycle 
   };
 }
 
-/** Coalesce `T | Writable<Signal<T>>` to `Writable<Signal<T>>`. If `v`
- *  is already a signal, returns it untouched (so external mutations
- *  propagate); otherwise wraps a fresh `signal(v)`. Use in factory
- *  constructors that accept either a constant or a writable source
- *  for a param. */
-export function param<T>(v: T | Writable<Signal<T>>): Writable<Signal<T>> {
-  return isSignal(v) ? (v as unknown as Writable<Signal<T>>) : signal(v as T);
-}

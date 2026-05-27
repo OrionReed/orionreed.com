@@ -1,7 +1,7 @@
-// network-utils.test.ts — `each`, `when`, `param`.
+// network-utils.test.ts — `each`, `when`.
 
 import { describe, expect, it } from "vitest";
-import { each, param, signal } from "../index";
+import { each, signal } from "../index";
 import { when as whenLifecycle } from "../network-utils";
 
 describe("each — reactive collection lifecycle", () => {
@@ -125,24 +125,24 @@ describe("when — boolean lifecycle", () => {
   });
 });
 
-describe("param — coalesce T | Signal<T>", () => {
+describe("signal — strict factory with identity passthrough", () => {
   it("plain value is wrapped in a fresh signal", () => {
-    const p = param(42);
+    const p = signal(42);
     expect(p.value).toBe(42);
     p.value = 99;
     expect(p.value).toBe(99);
   });
 
-  it("signal is returned untouched", () => {
+  it("existing signal is returned untouched", () => {
     const original = signal(7);
-    const p = param(original);
+    const p = signal(original);
     expect(p).toBe(original); // same reference
     original.value = 8;
     expect(p.value).toBe(8); // mutations propagate
   });
 
   it("works for non-numeric types", () => {
-    const p = param({ x: 1, y: 2 });
+    const p = signal({ x: 1, y: 2 });
     expect(p.value).toEqual({ x: 1, y: 2 });
   });
 });

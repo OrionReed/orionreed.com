@@ -19,8 +19,7 @@
 // reactive flow. The term then peeks the new value when
 // `initialize()` runs.
 
-import { type Signal, type Writable } from "../signals";
-import { param } from "../signals/network-utils";
+import { signal, type Signal, type Writable } from "../signals";
 import { Solver } from "./solver";
 import { Term } from "./term";
 
@@ -145,10 +144,10 @@ export class DistanceTerm extends Term {
       throw new Error("distance: both cells must be Vec (dim=2)");
     }
     super(solver, [a, b], 1);
-    this.rest = param(rest);
+    this.rest = signal(rest);
     this._restCached = this.rest.peek();
     if (!hard) {
-      this.stiffnessSig = param(stiffness ?? 1e6);
+      this.stiffnessSig = signal(stiffness ?? 1e6);
       this.stiffness.fill(this.stiffnessSig.peek());
     }
   }
@@ -232,8 +231,8 @@ export class BoundsTerm extends Term {
   ) {
     if (solver.dims[cell]! !== 1) throw new Error("clamp: cell must be Num (dim=1)");
     super(solver, [cell], 2);
-    this.lo = param(lo);
-    this.hi = param(hi);
+    this.lo = signal(lo);
+    this.hi = signal(hi);
     this._loCached = this.lo.peek();
     this._hiCached = this.hi.peek();
     this.lambdaMax[0]! = 0;

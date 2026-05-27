@@ -31,8 +31,7 @@
 //   the FD path treats duplicated slots as independent. Use
 //   `rightAngle(A, B, C)` instead of `perpendicular(A, B, B, C)`.
 
-import { type Signal, type Writable } from "../signals";
-import { param } from "../signals/network-utils";
+import { signal, type Signal, type Writable } from "../signals";
 import { type Constraints, type Relation } from "./cluster";
 import {
   BoundsTerm,
@@ -105,9 +104,9 @@ export function distance(
   rest: number | Writable<Signal<number>>,
   opts?: { stiffness?: number | Writable<Signal<number>> },
 ): DistanceRelation {
-  const rest_ = param(rest);
+  const rest_ = signal(rest);
   const hard = opts?.stiffness === undefined;
-  const stiff_ = hard ? undefined : param(opts.stiffness!);
+  const stiff_ = hard ? undefined : signal(opts.stiffness!);
   return {
     rest: rest_,
     stiffness: stiff_,
@@ -151,8 +150,8 @@ export function clamp(
   lo: number | Writable<Signal<number>>,
   hi: number | Writable<Signal<number>>,
 ): Relation & { lo: Writable<Signal<number>>; hi: Writable<Signal<number>> } {
-  const lo_ = param(lo);
-  const hi_ = param(hi);
+  const lo_ = signal(lo);
+  const hi_ = signal(hi);
   return {
     lo: lo_,
     hi: hi_,

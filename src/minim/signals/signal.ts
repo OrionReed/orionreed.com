@@ -1083,12 +1083,27 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  Use via `field(parent, "key", Cls)` from `./writable.ts`; this
    *  static is the engine entry point. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors Cls.lens
+  /** Typed field lens onto `parent.value[key]`. Dispatches on the
+   *  parent's actual structure: writable parents (root signals, lens-
+   *  fused chains) get a bidirectional field lens with spread-replace
+   *  bwd; RO parents (derive-fused chains, computed views) get a RO
+   *  derive view. Mirrors the type-level conditional in `field()`. */
   static fieldOf<C extends new (...args: never[]) => Signal<any>>(
     // biome-ignore lint/suspicious/noExplicitAny: variance escape — concrete Signal<T> contravariant on setter
     parent: Signal<any>,
     key: string | number | symbol,
     Cls: C,
   ): InstanceType<C> {
+    const fused = (parent as { _fusedOf?: { bwd?: unknown } })._fusedOf;
+    if (fused !== undefined && fused.bwd === undefined) {
+      return Signal._fuse(
+        parent as Signal<unknown>,
+        Cls as unknown as new (
+          ...args: never[]
+        ) => Signal<Inner<InstanceType<C>>>,
+        s => (s as Record<string | number | symbol, unknown>)[key] as Inner<InstanceType<C>>,
+      ) as InstanceType<C>;
+    }
     return Signal._fuse(
       parent as Signal<unknown>,
       Cls as unknown as new (
@@ -1657,12 +1672,18 @@ export function network(
 
 // ─── Public factories ────────────────────────────────────────────────
 
-/** Writable source. Returns a branded `Signal<T>` so `.value =` is
- *  callable on it. Use `new Vec(...)` for typed value-class signals
- *  (and `vec(x, y)` / `num(v)` / etc. for the factory form). For
- *  reactive driving see the free `bind(target, source)` helper. */
-export function signal<T>(initial: T, opts?: SignalOptions<T>): Writable<Signal<T>> {
-  return new Signal(initial, opts) as Writable<Signal<T>>;
+/** Writable source. Strict factory: a literal seeds a fresh writable
+ *  cell; an existing `Writable<Signal<T>>` passes through by identity.
+ *  Returns a branded `Signal<T>` so `.value =` is callable on it.
+ *  For typed value-class signals use `vec(x, y)` / `num(v)` / etc.
+ *
+ *  `opts` is ignored when `initial` is already a signal. */
+export function signal<T>(
+  initial: T | Writable<Signal<T>>,
+  opts?: SignalOptions<T>,
+): Writable<Signal<T>> {
+  if (initial instanceof Signal) return initial as Writable<Signal<T>>;
+  return new Signal(initial as T, opts) as Writable<Signal<T>>;
 }
 
 /** Untyped read-only derived view. Three call shapes:

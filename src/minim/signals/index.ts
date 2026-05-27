@@ -26,7 +26,7 @@ export {
 } from "./anim";
 export { transitiveDeps } from "./introspect";
 export * from "./lenses";
-export { each, type Lifecycle, param } from "./network-utils";
+export { each, type Lifecycle } from "./network-utils";
 export { reflectionLens } from "./new-primitives";
 export {
   batch,
