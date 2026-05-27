@@ -1,8 +1,8 @@
 // Derived shapes that decorate a tex Part (tracks `part.box` reactively).
 
-import { Box, computed, type Of, type Signal } from "@minim/signals";
+import { Box, derive, type Inner, type Signal } from "@minim/signals";
 
-type BoxValue = Of<Box>;
+type BoxValue = Inner<Box>;
 
 import { Shape, tokens } from "@minim/shapes";
 import type { Part } from "./parts";
@@ -78,7 +78,7 @@ export function brace(
   const height = opts.height ?? tokens.decoration.braceHeight;
   const gap = opts.gap ?? tokens.decoration.braceGap;
 
-  const d = computed(() => {
+  const d = derive(() => {
     const b = part.box.value;
     const x0 = b.x;
     const x1 = b.x + b.w;
@@ -115,7 +115,7 @@ export function brace(
 export function frame(part: Part, opts: DecorationOpts & { corner?: number } = {}): Shape {
   const gap = opts.gap ?? tokens.decoration.gap;
   const corner = opts.corner ?? tokens.corner;
-  const layout = computed(() => {
+  const layout = derive(() => {
     const b = part.box.value;
     return { x: b.x - gap, y: b.y - gap, w: b.w + 2 * gap, h: b.h + 2 * gap };
   });
@@ -128,7 +128,7 @@ export function frame(part: Part, opts: DecorationOpts & { corner?: number } = {
 /** Underline at the baseline of a part. */
 export function underline(part: Part, opts: DecorationOpts = {}): Shape {
   const gap = opts.gap ?? tokens.decoration.gap;
-  const layout = computed(() => {
+  const layout = derive(() => {
     const b = part.box.value;
     const y = b.y + b.h + gap;
     return { x1: b.x, y1: y, x2: b.x + b.w, y2: y };
@@ -143,7 +143,7 @@ export function underline(part: Part, opts: DecorationOpts = {}): Shape {
  *  top-right). */
 export function cross(part: Part, opts: DecorationOpts = {}): Shape {
   const gap = opts.gap ?? tokens.decoration.crossGap;
-  const layout = computed(() => {
+  const layout = derive(() => {
     const b = part.box.value;
     return {
       x1: b.x - gap,

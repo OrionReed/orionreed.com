@@ -12,7 +12,7 @@ import {
   Signal,
   type TraitDict,
   type Val,
-  valFn,
+  reader,
   type Writable,
 } from "../index";
 
@@ -57,14 +57,14 @@ class Hsl extends Signal<V> {
   }
 
   add(b: Val<V>): this {
-    const bf = valFn(b);
+    const bf = reader(b);
     return this.lens(
       v => hslAdd(v, bf()),
       n => hslSub(n, bf()),
     );
   }
   scale(k: Val<number>): this {
-    const kf = valFn(k);
+    const kf = reader(k);
     return this.lens(
       v => hslScale(v, kf()),
       n => hslScale(n, 1 / kf()),

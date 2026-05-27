@@ -6,7 +6,7 @@
 // inside fwd/bwd, and a few sequencing hazards.
 
 import { describe, expect, it } from "vitest";
-import { computed, effect, Num, num, signal, transform, Vec, vec } from "../index";
+import { derive, effect, Num, num, signal, transform, Vec, vec } from "../index";
 import { Signal } from "../signal";
 import { field } from "../writable";
 
@@ -183,7 +183,7 @@ describe("footgun: reactive args in field chains", () => {
 describe("footgun: cyclic computed still throws (engine invariant preserved)", () => {
   it("computed reading itself throws RangeError", () => {
     let cellRef: { value: number } | undefined;
-    const cell = computed<number>(() => {
+    const cell = derive<number>(() => {
       if (cellRef) return cellRef.value + 1; // self-reference
       return 0;
     });

@@ -12,9 +12,9 @@
 // `latch` shape).
 
 import type { Box, Vec } from "@minim/signals";
-import { computed, type Of, type Read } from "@minim/signals";
+import { derive, type Inner, type Read } from "@minim/signals";
 
-type VecValue = Of<Vec>;
+type VecValue = Inner<Vec>;
 
 import { intervals, latch, type Scope } from "./algebra";
 import { above, below, equal, following, inRange, inside, isEqual, near } from "./predicates";
@@ -88,7 +88,7 @@ function predicates<T>(sig: Read<T>, mood: Mood, lbl: string | undefined): Predi
       case "stays":
         return makeClaim(pred, latch(pred, true), true, label);
       case "never": {
-        const negated = computed(() => !pred.value);
+        const negated = derive(() => !pred.value);
         return makeClaim(negated, latch(negated, true), true, label);
       }
       case "becomes":
@@ -99,7 +99,7 @@ function predicates<T>(sig: Read<T>, mood: Mood, lbl: string | undefined): Predi
   return {
     satisfies: (fn, what = "predicate") =>
       build(
-        computed(() => fn(sig.value)),
+        derive(() => fn(sig.value)),
         what,
       ),
     equal: v => build(equal(sig, v), `= ${fmt(v)}`),
@@ -125,7 +125,7 @@ function predicates<T>(sig: Read<T>, mood: Mood, lbl: string | undefined): Predi
     true: () => build(sig as unknown as Read<boolean>, `= true`),
     false: () =>
       build(
-        computed(() => !(sig as unknown as Read<boolean>).value),
+        derive(() => !(sig as unknown as Read<boolean>).value),
         `= false`,
       ),
   } as Predicates<T>;
@@ -156,12 +156,12 @@ function wrapClaim(pred: Read<boolean>, body: Read<boolean>, init: boolean, labe
     label,
     pred,
     and(other) {
-      const next = computed(() => body.value && other.value);
+      const next = derive(() => body.value && other.value);
       const otherLabel = (other as { label?: string }).label;
       return wrapClaim(pred, next, init, `${label} ∧ ${otherLabel ?? "?"}`);
     },
     or(other) {
-      const next = computed(() => body.value || other.value);
+      const next = derive(() => body.value || other.value);
       const otherLabel = (other as { label?: string }).label;
       return wrapClaim(pred, next, init, `${label} ∨ ${otherLabel ?? "?"}`);
     },
@@ -169,7 +169,7 @@ function wrapClaim(pred: Read<boolean>, body: Read<boolean>, init: boolean, labe
       // Negation flips init too — invariant becomes liveness and vice versa.
       return wrapClaim(
         pred,
-        computed(() => !body.value),
+        derive(() => !body.value),
         !init,
         `¬(${label})`,
       );
@@ -182,8 +182,8 @@ function wrapClaim(pred: Read<boolean>, body: Read<boolean>, init: boolean, labe
       const next = latch(pred, init, sc);
       const gated =
         init === true
-          ? computed(() => !sc.value || next.value)
-          : computed(() => sc.value && next.value);
+          ? derive(() => !sc.value || next.value)
+          : derive(() => sc.value && next.value);
       return wrapClaim(pred, gated, init, `(${label}) during ${scopeName(scope)}`);
     },
     labelled(name) {

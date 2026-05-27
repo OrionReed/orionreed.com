@@ -1,7 +1,7 @@
 import {
   Anchor,
   type Content,
-  computed,
+  derive,
   Diagram,
   handle,
   label,
@@ -38,9 +38,9 @@ export class MdTexLive extends Diagram {
     );
 
     const t = num(0.4);
-    const n = computed(() => Math.round(N_MIN + t.value * (N_MAX - N_MIN)));
-    const nStr = computed(() => String(n.value));
-    const sumStr = computed(() => String((n.value * (n.value + 1)) / 2));
+    const n = derive(() => Math.round(N_MIN + t.value * (N_MAX - N_MIN)));
+    const nStr = derive(() => String(n.value));
+    const sumStr = derive(() => String((n.value * (n.value + 1)) / 2));
 
     const trackW = TRACK_X1 - TRACK_X0;
     s(

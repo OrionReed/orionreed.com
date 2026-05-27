@@ -3,7 +3,7 @@ import {
   annularSector,
   attr,
   circle,
-  computed,
+  derive,
   Diagram,
   label,
   line,
@@ -59,7 +59,7 @@ export class MdQrtpProtocol extends Diagram {
 
     // Precedence: override > broadcast highlight > state. Null hides the cell.
     const cellColor = (i: number) =>
-      computed((): string | null => {
+      derive((): string | null => {
         const ov = state.overrides.value.get(i);
         if (ov !== undefined) return ov;
         if (i === state.lastBroadcast.value) return stroke.toString();
@@ -78,7 +78,7 @@ export class MdQrtpProtocol extends Diagram {
       s(
         annularSector(center, rOut, rIn, a0, a1, {
           stroke: "none",
-          fill: computed(() => colors[i].value ?? "transparent"),
+          fill: derive(() => colors[i].value ?? "transparent"),
           opacity: () => (colors[i].value ? 1 : 0),
         }),
       );

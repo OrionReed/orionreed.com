@@ -4,7 +4,7 @@
 
 import {
   Box,
-  computed,
+  derive,
   effect,
   num,
   Signal,
@@ -101,7 +101,7 @@ export class PartMarker<N extends string = string> {
       source instanceof Signal
         ? source
         : typeof source === "function"
-          ? computed(source)
+          ? derive(source)
           : signal(source as string);
     this.#m = group ? group.#m : marker();
   }

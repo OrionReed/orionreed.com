@@ -44,7 +44,7 @@ import {
   type AnyShape,
   type Content,
   circle,
-  computed,
+  derive,
   Diagram,
   drag,
   forEach,
@@ -294,7 +294,7 @@ export class MdSketchpadLive extends Diagram {
       // Pin while pinned-toggle is on OR the user is actively dragging
       // the point. Single relation, single derived condition, so the
       // mass save/restore stays consistent.
-      const fixed = computed(() => p.pinned.value || p.dragging.value);
+      const fixed = derive(() => p.pinned.value || p.dragging.value);
       const pinLc = cluster.addWhile(fixed, pin(p.pos));
       p.disposers.push(() => pinLc.dispose());
       points.value = [...points.peek(), p];
@@ -478,13 +478,13 @@ export class MdSketchpadLive extends Diagram {
       { id: "line", label: "/ line" },
     ];
     layoutRow(creationTools, 70, 8, (item, x) => {
-      const isActive = computed(() => tool.value === item.id);
+      const isActive = derive(() => tool.value === item.id);
       s(toolBtn(vec(x, PALETTE_Y), item.label, isActive, () => setTool(item.id), 70));
     });
 
     // ─── constraint-action palette ───────────────────────────────────
 
-    const enabledFor = (a: ActionSpec) => computed(() => a.match(selection.value) !== undefined);
+    const enabledFor = (a: ActionSpec) => derive(() => a.match(selection.value) !== undefined);
     layoutRow(ACTIONS, 56, 4, (item, x) => {
       const enabled = enabledFor(item);
       s(actionBtn(vec(x, ACTIONS_Y), item.label, enabled, () => applyAction(item.id), 56));
@@ -492,7 +492,7 @@ export class MdSketchpadLive extends Diagram {
 
     // ─── status text ─────────────────────────────────────────────────
 
-    const status = computed<Content>(() => {
+    const status = derive<Content>(() => {
       const t = tool.value;
       if (t === "point") return "+ pt — click anywhere · click tool again to exit";
       if (t === "line") {
@@ -555,9 +555,9 @@ function renderPoint(
   linePending: Signal<Point | null>,
   onClick: (e: Entity, evt: PointerEvent) => void,
 ): AnyShape {
-  const selected = computed(() => selection.value.includes(p));
-  const pending = computed(() => linePending.value === p);
-  const fill = computed(() => (p.pinned.value ? PIN_COLOR : selected.value ? SELECTED : ACCENT));
+  const selected = derive(() => selection.value.includes(p));
+  const pending = derive(() => linePending.value === p);
+  const fill = derive(() => (p.pinned.value ? PIN_COLOR : selected.value ? SELECTED : ACCENT));
 
   const visible = circle(p.pos, POINT_R, {
     fill,
@@ -569,19 +569,19 @@ function renderPoint(
     thin: true,
     stroke: ACCENT,
     dashed: true,
-    opacity: computed(() => (pending.value ? 1 : 0)),
+    opacity: derive(() => (pending.value ? 1 : 0)),
   });
   // Selection halo.
   const selRing = circle(p.pos, POINT_R + 4, {
     thin: true,
     stroke: SELECTED,
-    opacity: computed(() => (selected.value && !pending.value ? 0.9 : 0)),
+    opacity: derive(() => (selected.value && !pending.value ? 0.9 : 0)),
   });
 
   // Pin dot.
   const pinDot = circle(p.pos, 2, {
     fill: "white",
-    opacity: computed(() => (p.pinned.value ? 1 : 0)),
+    opacity: derive(() => (p.pinned.value ? 1 : 0)),
   });
 
   // Generously sized invisible hit target — sits on top of `visible`
@@ -614,9 +614,9 @@ function renderLine(
   linePending: Signal<Point | null>,
   onClick: (e: Entity, evt: PointerEvent) => void,
 ): AnyShape {
-  const selected = computed(() => selection.value.includes(l));
-  const stroke = computed(() => (selected.value ? SELECTED : "var(--text-color, #222)"));
-  const opacity = computed(() => (selected.value ? 1 : 0.55));
+  const selected = derive(() => selection.value.includes(l));
+  const stroke = derive(() => (selected.value ? SELECTED : "var(--text-color, #222)"));
+  const opacity = derive(() => (selected.value ? 1 : 0.55));
 
   const vis = line(l.a.pos, l.b.pos, {
     thin: true,
@@ -667,7 +667,7 @@ function offsetMid(
   b: Writable<Vec>,
   side: 1 | -1 = 1,
 ): Signal<{ x: number; y: number }> {
-  return computed(() => {
+  return derive(() => {
     const av = a.value;
     const bv = b.value;
     const mx = (av.x + bv.x) / 2;
@@ -685,7 +685,7 @@ function offsetMid(
  *  so it sits *off* the vertex point and doesn't intercept point clicks. */
 function rightAngleBadge(c: Constraint, onRemove: (c: Constraint) => void): AnyShape {
   const [A, B, C] = c.entities as Point[];
-  const pos = computed(() => {
+  const pos = derive(() => {
     const av = A.pos.value;
     const bv = B.pos.value;
     const cv = C.pos.value;
@@ -718,7 +718,7 @@ function collinearBadge(c: Constraint, onRemove: (c: Constraint) => void): AnySh
 /** "Coincide" — between two co-located points, badge sits offset. */
 function coincideBadge(c: Constraint, onRemove: (c: Constraint) => void): AnyShape {
   const [a, b] = c.entities as Point[];
-  const pos = computed(() => {
+  const pos = derive(() => {
     const av = a.pos.value;
     const bv = b.pos.value;
     return { x: (av.x + bv.x) / 2 + BADGE_OFFSET, y: (av.y + bv.y) / 2 };
@@ -756,9 +756,9 @@ function badge(
   onRemove: (c: Constraint) => void,
 ): AnyShape {
   const hovered = signal(false);
-  const fill = computed(() => (hovered.value ? SELECTED : "var(--bg-color, white)"));
-  const fg = computed(() => (hovered.value ? "white" : "var(--text-color, #222)"));
-  const text = computed(() => (hovered.value ? "×" : glyph));
+  const fill = derive(() => (hovered.value ? SELECTED : "var(--bg-color, white)"));
+  const fg = derive(() => (hovered.value ? "white" : "var(--text-color, #222)"));
+  const text = derive(() => (hovered.value ? "×" : glyph));
 
   const g = group(
     { translate: pos as unknown as Val<{ x: number; y: number }> },
@@ -807,13 +807,13 @@ function toolBtn(
   const g = group(
     { translate: pos },
     rect(0, 0, width, PALETTE_H, {
-      fill: computed(() => (active.value ? ACCENT_TINT : "transparent")),
-      stroke: computed(() => (active.value ? ACCENT : "var(--text-color, #222)")),
+      fill: derive(() => (active.value ? ACCENT_TINT : "transparent")),
+      stroke: derive(() => (active.value ? ACCENT : "var(--text-color, #222)")),
       thin: true,
       corner: 4,
     }),
     label(vec(width / 2, PALETTE_H / 2 + 1), text, {
-      fill: computed(() => (active.value ? ACCENT : "var(--text-color, #222)")),
+      fill: derive(() => (active.value ? ACCENT : "var(--text-color, #222)")),
     }),
   );
   g.el.style.cursor = "pointer";
@@ -834,15 +834,15 @@ function actionBtn(
   const g = group(
     { translate: pos },
     rect(0, 0, width, PALETTE_H, {
-      fill: computed(() => (enabled.value ? SELECTED_TINT : "transparent")),
-      stroke: computed(() => (enabled.value ? SELECTED : "var(--text-color, #222)")),
+      fill: derive(() => (enabled.value ? SELECTED_TINT : "transparent")),
+      stroke: derive(() => (enabled.value ? SELECTED : "var(--text-color, #222)")),
       thin: true,
       corner: 4,
-      opacity: computed(() => (enabled.value ? 1 : 0.35)),
+      opacity: derive(() => (enabled.value ? 1 : 0.35)),
     }),
     label(vec(width / 2, PALETTE_H / 2 + 1), text, {
-      fill: computed(() => (enabled.value ? SELECTED : "var(--text-color, #222)")),
-      opacity: computed(() => (enabled.value ? 1 : 0.55)),
+      fill: derive(() => (enabled.value ? SELECTED : "var(--text-color, #222)")),
+      opacity: derive(() => (enabled.value ? 1 : 0.55)),
     }),
   );
   g.effect(() => {

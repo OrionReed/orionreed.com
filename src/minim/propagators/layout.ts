@@ -19,7 +19,7 @@ import {
   isSignal,
   type Num as NumClass,
   type Read,
-  value,
+  readNow,
   type Writable,
 } from "../signals";
 import { type Propagator, propagator } from "./propagator";
@@ -137,8 +137,8 @@ function _stack(
   }
 
   return propagator(reads, writes, () => {
-    const gap = value(opts.gap ?? 0);
-    const pad = value(opts.padding ?? 0);
+    const gap = readNow(opts.gap ?? 0);
+    const pad = readNow(opts.padding ?? 0);
     const n = items.length;
 
     let sizes: number[];
@@ -266,10 +266,10 @@ export function grid(c: Box, items: readonly Box[], opts: GridOpts): Propagator 
   const writes: Writable<NumClass>[] = [];
   for (const it of items) writes.push(asW(it.x), asW(it.y), asW(it.w), asW(it.h));
   return propagator(reads, writes, () => {
-    const pad = value(opts.padding ?? 0);
-    const gap = value(opts.gap ?? 0);
-    const gx = value(opts.gapX ?? gap);
-    const gy = value(opts.gapY ?? gap);
+    const pad = readNow(opts.padding ?? 0);
+    const gap = readNow(opts.gap ?? 0);
+    const gx = readNow(opts.gapX ?? gap);
+    const gy = readNow(opts.gapY ?? gap);
     const rows = Math.ceil(items.length / cols);
     const cellW = (c.w.value - 2 * pad - (cols - 1) * gx) / cols;
     const cellH = (c.h.value - 2 * pad - (rows - 1) * gy) / rows;
@@ -293,7 +293,7 @@ export function inset(outer: Box, inner: Box, opts: { padding?: ValOrSig } = {})
   const reads: Num[] = [outer.x, outer.y, outer.w, outer.h, ...readDeps(opts.padding ?? 0)];
   const writes: Writable<NumClass>[] = [asW(inner.x), asW(inner.y), asW(inner.w), asW(inner.h)];
   return propagator(reads, writes, () => {
-    const pad = value(opts.padding ?? 0);
+    const pad = readNow(opts.padding ?? 0);
     asW(inner.x).value = outer.x.value + pad;
     asW(inner.y).value = outer.y.value + pad;
     asW(inner.w).value = outer.w.value - 2 * pad;
@@ -319,7 +319,7 @@ export function attach(
   opts: { gap?: ValOrSig } = {},
 ): Propagator[] {
   const gapDeps = readDeps(opts.gap ?? 0);
-  const gap = (): number => value(opts.gap ?? 0);
+  const gap = (): number => readNow(opts.gap ?? 0);
 
   const sideValue = (box: Box, side: Side): number => {
     switch (side) {
@@ -390,7 +390,7 @@ export function centerInside(outer: Box, inner: Box): Propagator[] {
  *  stays put; size adjusts. */
 export function pinEdge(b: Box, side: Side, target: ValOrSig): Propagator {
   const targetDeps = readDeps(target);
-  const t = () => value(target);
+  const t = () => readNow(target);
   return propagator(
     [b.x, b.y, b.w, b.h, ...targetDeps],
     [asW(b.x), asW(b.y), asW(b.w), asW(b.h)],
@@ -427,7 +427,7 @@ export function lockSize(b: Box, axis: "w" | "h", target: ValOrSig): Propagator 
   const deps = readDeps(target);
   const cell = axis === "w" ? asW(b.w) : asW(b.h);
   return propagator([cell, ...deps], [cell], () => {
-    const v = value(target);
+    const v = readNow(target);
     if (cell.value !== v) cell.value = v;
   });
 }

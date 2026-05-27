@@ -18,7 +18,7 @@
 
 import {
   bezierGestaltLens,
-  computed,
+  derive,
   Diagram,
   handle,
   label,
@@ -57,7 +57,7 @@ export class MdBezierGestalt extends Diagram {
     );
 
     // Reactive cubic Bezier `d` string.
-    const d = computed(() => {
+    const d = derive(() => {
       const a = p0.value;
       const b = p1.value;
       const c = p2.value;

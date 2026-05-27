@@ -1,4 +1,4 @@
-import { Box, computed, Num, type Val, Vec, valFn } from "@minim/signals";
+import { Box, derive, Num, reader, type Val, Vec } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 import { tokens } from "./tokens";
 
@@ -68,7 +68,7 @@ export class Rect<O extends RectOpts = RectOpts> extends Shape<O> {
   /** Concentric outline — a new unmounted Rect inflated by `by` per
    *  side; corner radius bumps to keep curves parallel. */
   outline(by: Val<number>, opts?: RectOpts): Rect {
-    const b = valFn(by);
+    const b = reader(by);
     return new Rect(
       () => this.x.value - b(),
       () => this.y.value - b(),
@@ -167,20 +167,20 @@ export function rect(
 ): Rect {
   if (a instanceof Box) {
     return new Rect(
-      computed(() => a.value.x),
-      computed(() => a.value.y),
-      computed(() => a.value.w),
-      computed(() => a.value.h),
+      derive(() => a.value.x),
+      derive(() => a.value.y),
+      derive(() => a.value.w),
+      derive(() => a.value.h),
       b as RectOpts | undefined,
     );
   }
   if (a instanceof Vec && b instanceof Vec) {
     // Bounding rect of two points (any orientation).
     return new Rect(
-      computed(() => Math.min(a.x.value, b.x.value)),
-      computed(() => Math.min(a.y.value, b.y.value)),
-      computed(() => Math.abs(b.x.value - a.x.value)),
-      computed(() => Math.abs(b.y.value - a.y.value)),
+      derive(() => Math.min(a.x.value, b.x.value)),
+      derive(() => Math.min(a.y.value, b.y.value)),
+      derive(() => Math.abs(b.x.value - a.x.value)),
+      derive(() => Math.abs(b.y.value - a.y.value)),
       c as RectOpts | undefined,
     );
   }
@@ -190,8 +190,8 @@ export function rect(
     const ws = Num.from(w);
     const hs = Num.from(h);
     return new Rect(
-      computed(() => a.x.value - ws.value / 2),
-      computed(() => a.y.value - hs.value / 2),
+      derive(() => a.x.value - ws.value / 2),
+      derive(() => a.y.value - hs.value / 2),
       ws,
       hs,
       d as RectOpts | undefined,

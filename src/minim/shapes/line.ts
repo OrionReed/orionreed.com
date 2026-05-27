@@ -1,4 +1,4 @@
-import { computed, type Signal, type Val, Vec } from "@minim/signals";
+import { derive, type Signal, type Val, Vec } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 
 export interface LineOpts extends CommonOpts {}
@@ -62,11 +62,11 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
   angleAt(_t: Val<number> = 0): Signal<number> {
     if (this.#angle) return this.#angle;
     const tan = this.tangentAt();
-    return (this.#angle = computed(() => Math.atan2(tan.y.value, tan.x.value)));
+    return (this.#angle = derive(() => Math.atan2(tan.y.value, tan.x.value)));
   }
 
   length(): Signal<number> {
-    return (this.#length ??= computed(() => {
+    return (this.#length ??= derive(() => {
       const a = this.from.value;
       const b = this.to.value;
       return Math.hypot(b.x - a.x, b.y - a.y);

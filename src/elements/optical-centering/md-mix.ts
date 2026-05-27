@@ -1,6 +1,6 @@
 import {
   circle,
-  computed,
+  derive,
   Diagram,
   driven,
   easeInOut,
@@ -91,11 +91,11 @@ export class MdMix extends Diagram {
     s(
       circle(seqA, 5, {
         fill: "#5b8def",
-        opacity: computed(() => 0.2 + 0.55 * (1 - w.value)),
+        opacity: derive(() => 0.2 + 0.55 * (1 - w.value)),
       }),
       circle(seqB, 5, {
         fill: "#e25c5c",
-        opacity: computed(() => 0.2 + 0.55 * w.value),
+        opacity: derive(() => 0.2 + 0.55 * w.value),
       }),
     );
 

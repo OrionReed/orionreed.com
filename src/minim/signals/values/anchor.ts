@@ -3,10 +3,10 @@
 //
 // Plain constants — no reactive wrapping. Use as defaults / arguments.
 
-import { type Of } from "../signal";
+import { type Inner } from "../signal";
 import { type Vec } from "./vec";
 
-type V = Of<Vec>;
+type V = Inner<Vec>;
 
 /** Anchor points on the unit box (`Center = {0.5, 0.5}`). */
 export const Anchor = {

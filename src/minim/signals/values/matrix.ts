@@ -9,7 +9,7 @@
 //   - `multiply(b)` — inverse is multiply by `invert(b)`
 //   - `invert()`    — its own inverse
 
-import { batch, type Init, type Of, Signal, type Val, valFn, type Writable } from "../signal";
+import { batch, type Init, type Inner, reader, Signal, type Val, type Writable } from "../signal";
 import { type TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
@@ -61,7 +61,7 @@ export function invert(m: V): V {
 
 export const determinant = (m: V): number => m.a * m.d - m.b * m.c;
 
-export const transformPoint = (m: V, p: Of<Vec>): Of<Vec> => ({
+export const transformPoint = (m: V, p: Inner<Vec>): Inner<Vec> => ({
   x: m.a * p.x + m.c * p.y + m.e,
   y: m.b * p.x + m.d * p.y + m.f,
 });
@@ -90,7 +90,7 @@ export function transformBox(m: V, b: BoxV): BoxV {
 
 const SCALE_EPS = 1e-7;
 
-export function compose(t: Of<Vec>, r: number, s: Of<Vec>, pivot: Of<Vec>): V {
+export function compose(t: Inner<Vec>, r: number, s: Inner<Vec>, pivot: Inner<Vec>): V {
   const sx = Math.abs(s.x) < SCALE_EPS ? (s.x < 0 ? -SCALE_EPS : SCALE_EPS) : s.x;
   const sy = Math.abs(s.y) < SCALE_EPS ? (s.y < 0 ? -SCALE_EPS : SCALE_EPS) : s.y;
   let m = fromTranslate(t.x, t.y);
@@ -112,7 +112,7 @@ export class Matrix extends Signal<V> {
   }
 
   multiply(b: Val<V>): this {
-    const bf = valFn(b);
+    const bf = reader(b);
     return this.lens(
       v => multiply(v, bf()),
       n => multiply(n, invert(bf())),

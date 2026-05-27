@@ -1,7 +1,7 @@
 import {
   Anchor,
   circle,
-  computed,
+  derive,
   Diagram,
   label,
   loop,
@@ -36,7 +36,7 @@ export class MdWaapiDemo extends Diagram {
         rect(
           X,
           y,
-          computed(() => BW * p.value),
+          derive(() => BW * p.value),
           6,
           { fill: true },
         ),
@@ -45,7 +45,7 @@ export class MdWaapiDemo extends Diagram {
             .at(1, 0)
             .left(20)
             .down(y + 4),
-          computed(() => p.value.toFixed(2)),
+          derive(() => p.value.toFixed(2)),
           { align: Anchor.Right },
         ),
       );

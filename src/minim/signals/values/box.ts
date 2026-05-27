@@ -7,14 +7,14 @@ import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import {
   batch,
-  computed,
+  derive,
   type Init,
+  type Inner,
   lazy,
-  type Of,
   Signal,
   type Val,
-  valFn,
-  value,
+  reader,
+  readNow,
   type Writable,
 } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
@@ -43,7 +43,7 @@ export const expand = (b: V, n: number): V => ({
   w: b.w + 2 * n,
   h: b.h + 2 * n,
 });
-export const contains = (b: V, p: Of<Vec>): boolean =>
+export const contains = (b: V, p: Inner<Vec>): boolean =>
   p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 
 /** Bounding box around a set of boxes. */
@@ -65,7 +65,7 @@ export function union(...bs: V[]): V {
 
 /** Perimeter point on a Box facing `toward`. Used by default
  *  `Shape.boundary`. */
-export function edgeFrom(b: V, toward: Of<Vec>): Of<Vec> {
+export function edgeFrom(b: V, toward: Inner<Vec>): Inner<Vec> {
   const cx = b.x + b.w / 2;
   const cy = b.y + b.h / 2;
   const dx = toward.x - cx;
@@ -105,28 +105,28 @@ export class Box extends Signal<V> {
   }
 
   add(b: Val<V>): this {
-    const bf = valFn(b);
+    const bf = reader(b);
     return this.lens(
       v => add(v, bf()),
       n => sub(n, bf()),
     );
   }
   sub(b: Val<V>): this {
-    const bf = valFn(b);
+    const bf = reader(b);
     return this.lens(
       v => sub(v, bf()),
       n => add(n, bf()),
     );
   }
   scale(k: Val<number>): this {
-    const kf = valFn(k);
+    const kf = reader(k);
     return this.lens(
       v => scale(v, kf()),
       n => scale(n, 1 / kf()),
     );
   }
   expand(n: Val<number>): this {
-    const nf = valFn(n);
+    const nf = reader(n);
     return this.lens(
       v => expand(v, nf()),
       o => expand(o, -nf()),
@@ -134,10 +134,10 @@ export class Box extends Signal<V> {
   }
 
   lerp(b: Val<V>, t: Val<number>): Box {
-    return Box.derive(() => lerp(this.value, value(b), value(t)));
+    return Box.derive(() => lerp(this.value, readNow(b), readNow(t)));
   }
-  contains(p: Val<Of<Vec>>): Signal<boolean> {
-    return computed(() => contains(this.value, value(p)));
+  contains(p: Val<Inner<Vec>>): Signal<boolean> {
+    return derive(() => contains(this.value, readNow(p)));
   }
 
   // ── field lenses & derived views ──────────────────────────────────

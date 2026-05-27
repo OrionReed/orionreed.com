@@ -1,7 +1,7 @@
 // Spatial composition primitives. Reference points for growth:
 // Manim's `next_to`, `align_to`, `arrange_in_grid`, `move_to`.
 
-import { Box, BoxMath, transformBox, type Val, valFn } from "@minim/signals";
+import { Box, BoxMath, reader, transformBox, type Val } from "@minim/signals";
 import type { Shape } from "./shape";
 
 export interface ArrangeOpts {
@@ -54,7 +54,7 @@ export function arrange(
 
 /** Inflate a Box on each side by `by`. */
 export function expand(b: Box, by: Val<number>): Box {
-  const byFn = valFn(by);
+  const byFn = reader(by);
   return Box.derive(() => BoxMath.expand(b.value, byFn()));
 }
 
@@ -73,7 +73,7 @@ export function split(
   const ratios = typeof parts === "number" ? new Array(parts).fill(1) : parts;
   const total = ratios.reduce((a, b) => a + b, 0);
   const cumBefore = ratios.map((_, i) => ratios.slice(0, i).reduce((a, b) => a + b, 0));
-  const gapFn = valFn(opts.gap ?? 0);
+  const gapFn = reader(opts.gap ?? 0);
   return ratios.map((r, i) =>
     Box.derive(() => {
       const b = source.value;

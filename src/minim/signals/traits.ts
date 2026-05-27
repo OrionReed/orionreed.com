@@ -126,7 +126,7 @@ export type TraitKey = keyof TraitDict<unknown>;
  *  trait values; unlisted keys may or may not be present.
  *
  *  Pure constraint — does not require `Signal<T>` directly; consumers
- *  intersect with `WritableOf<T>` / `Read<T>` / etc. for capability. */
+ *  intersect with `Writable<Signal<T>>` / `Read<T>` / etc. for capability. */
 export type Traits<T, K extends TraitKey = never> = {
   readonly _t: { [P in K]-?: NonNullable<TraitDict<T>[P]> } & TraitDict<T>;
 };

@@ -1,11 +1,11 @@
 import {
-  computed,
+  derive,
   type Read,
   type Signal,
   signal,
   type Val,
   Vec,
-  valFn,
+  reader,
   type Writable,
 } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
@@ -20,7 +20,7 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 /** Geometry sampler over a reactive list of Points. `pts` is tracked
  *  by every computed, so mutating the list re-runs sampling. */
 function sampler(pts: Signal<readonly Vec[]>) {
-  const cumLen = computed(() => {
+  const cumLen = derive(() => {
     const points = pts.value;
     const lens = [0];
     for (let i = 1; i < points.length; i++) {
@@ -31,7 +31,7 @@ function sampler(pts: Signal<readonly Vec[]>) {
     return lens;
   });
 
-  const length: Signal<number> = computed(() => {
+  const length: Signal<number> = derive(() => {
     const lens = cumLen.value;
     return lens[lens.length - 1] ?? 0;
   });
@@ -61,18 +61,18 @@ function sampler(pts: Signal<readonly Vec[]>) {
     });
 
   const at = (t: Val<number>): Vec => {
-    const ts = valFn(t);
-    return sampleAt(computed(() => clamp01(ts()) * length.value));
+    const ts = reader(t);
+    return sampleAt(derive(() => clamp01(ts()) * length.value));
   };
 
   /** Sample at absolute arc-length (px from start). */
   const atDistance = (d: Val<number>): Vec => {
-    const ds = valFn(d);
-    return sampleAt(computed(ds));
+    const ds = reader(d);
+    return sampleAt(derive(ds));
   };
 
   const tangentAt = (t: Val<number>): Vec => {
-    const ts = valFn(t);
+    const ts = reader(t);
     return Vec.derive(() => {
       const points = pts.value;
       if (points.length < 2) return { x: 1, y: 0 };
@@ -91,7 +91,7 @@ function sampler(pts: Signal<readonly Vec[]>) {
 
   const angleAt = (t: Val<number>): Signal<number> => {
     const tan = tangentAt(t);
-    return computed(() => Math.atan2(tan.y.value, tan.x.value));
+    return derive(() => Math.atan2(tan.y.value, tan.x.value));
   };
 
   return { length, at, atDistance, tangentAt, normalAt, angleAt };
@@ -164,7 +164,7 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
     this.angleAt = s.angleAt;
 
     this.stroke(opts, closed, {
-      d: computed(() => {
+      d: derive(() => {
         const ps = points.value;
         if (ps.length === 0) return "";
         const parts: string[] = [`M ${ps[0].x.value} ${ps[0].y.value}`];
@@ -216,12 +216,12 @@ export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
   }
   /** Walk `dist` at `angle` (radians, y-down). */
   along(angle: Val<number>, dist: Val<number>) {
-    const af = valFn(angle);
-    const df = valFn(dist);
+    const af = reader(angle);
+    const df = reader(dist);
     return this.extend(
       this.last.offset(
-        computed(() => Math.cos(af()) * df()),
-        computed(() => Math.sin(af()) * df()),
+        derive(() => Math.cos(af()) * df()),
+        derive(() => Math.sin(af()) * df()),
       ),
     );
   }

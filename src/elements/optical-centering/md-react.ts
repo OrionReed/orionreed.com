@@ -5,7 +5,7 @@ import {
   button,
   type Content,
   circle,
-  computed,
+  derive,
   Diagram,
   fadeOut,
   type Has,
@@ -51,17 +51,17 @@ export class MdReact extends Diagram {
     s(
       label(
         vec(PAD, STATS_Y),
-        computed(() => `hits: ${hits.value}`),
+        derive(() => `hits: ${hits.value}`),
         { align: Anchor.Left },
       ),
       label(
         vec(W - PAD, STATS_Y),
-        computed(() => `misses: ${misses.value}`),
+        derive(() => `misses: ${misses.value}`),
         { align: Anchor.Right },
       ),
       label(
         vec(W / 2, STATS_Y),
-        computed(() => {
+        derive(() => {
           const h = hits.value;
           const m = misses.value;
           const total = h + m;

@@ -2,7 +2,7 @@ import {
   Anchor,
   Box,
   circle,
-  computed,
+  derive,
   Diagram,
   easeInOut,
   easeOut,
@@ -45,8 +45,8 @@ export class MdCentering extends Diagram {
       box: { at: 4.64, dur: 0.6 },
       centroid: { at: 5.64, dur: 0.5 },
     });
-    const lineT = computed(() => easeOut(tl.intro.t.value));
-    const morphT = computed(() => easeInOut(tl.morph.t.value));
+    const lineT = derive(() => easeOut(tl.intro.t.value));
+    const morphT = derive(() => easeInOut(tl.morph.t.value));
     const xLabelsT = tl.xLabels.t;
     const yLabelsT = tl.yLabels.t;
     const boxT = tl.box.t;
@@ -77,7 +77,7 @@ export class MdCentering extends Diagram {
         }),
         tick(O, yTip, f, 7, { opacity: yShown }),
         tick(O, xEnd, f, 7, {
-          opacity: computed(() => Math.max(0, Math.min(1, (lineT.value - f) / 0.06))),
+          opacity: derive(() => Math.max(0, Math.min(1, (lineT.value - f) / 0.06))),
         }),
       ),
     );
@@ -96,17 +96,17 @@ export class MdCentering extends Diagram {
       rect(rectBox, {
         thin: true,
         corner: 4,
-        opacity: computed(() => boxT.value * 0.5),
+        opacity: derive(() => boxT.value * 0.5),
       }),
       line(xMid, c, {
         thin: true,
         dashed: true,
-        opacity: computed(() => boxT.value * 0.6),
+        opacity: derive(() => boxT.value * 0.6),
       }),
       line(yMid, c, {
         thin: true,
         dashed: true,
-        opacity: computed(() => boxT.value * 0.6),
+        opacity: derive(() => boxT.value * 0.6),
       }),
       circle(c, 4, { fill: true, opacity: centroidT }),
       label(c.right(10).up(10), t("(", math("x", "c"), ", ", math("y", "c"), ")"), {

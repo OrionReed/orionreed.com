@@ -10,7 +10,7 @@
 // All return `Read<boolean>` (or, for `firstOf`, `Read<{first,at}>`).
 // Composition with `and` / `or` / `not` is just signal algebra.
 
-import { computed, effect, type Read, signal } from "@minim/signals";
+import { derive, effect, type Read, signal } from "@minim/signals";
 import { activeRecorder } from "./record";
 import { type Scoped } from "./scope";
 import { type Span } from "./span";
@@ -18,7 +18,7 @@ import { type Span } from "./span";
 /** Anything an interval can be derived from. */
 export type Scope = Scoped<any> | Span | Read<boolean>;
 
-const ALWAYS_TRUE: Read<boolean> = computed(() => true);
+const ALWAYS_TRUE: Read<boolean> = derive(() => true);
 
 /** "Is this scope open right now?" — one converter for the whole
  *  parameter zoo. Spans become a one-shot interval (closed-and-stays-
@@ -27,7 +27,7 @@ const ALWAYS_TRUE: Read<boolean> = computed(() => true);
 export function intervals(s: Scope): Read<boolean> {
   if (isScoped(s)) return s.alive;
   if (isSpan(s)) {
-    return computed(() => s.status === "open");
+    return derive(() => s.status === "open");
   }
   return s;
 }

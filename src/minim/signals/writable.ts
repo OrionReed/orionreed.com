@@ -18,10 +18,10 @@
 // `Color.css` building a CSS string), use `lazy()` from "../signal"
 // directly with whatever `make()` body you want.
 //
-// Public types `Writable<R>` / `WritableOf<T>` live in `./signal`
+// Public type `Writable<R>` lives in `./signal`
 // alongside the brand they ride on.
 
-import { lazy, type Of, Signal, type Writable, type WritableBrand } from "./signal";
+import { type Inner, lazy, Signal, type Writable, type WritableBrand } from "./signal";
 
 /** Bidirectional field lens onto `parent.value[key]`. Read returns
  *  the field; write spread-replaces the composite. Cached per
@@ -44,10 +44,10 @@ import { lazy, type Of, Signal, type Writable, type WritableBrand } from "./sign
 // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.lens
 export function field<
   S extends Signal<any>,
-  K extends keyof Of<S>,
+  K extends keyof Inner<S>,
   C extends new (
     ...args: never[]
-  ) => Signal<Of<S>[K]>,
+  ) => Signal<Inner<S>[K]>,
 >(
   parent: S,
   key: K,
@@ -57,7 +57,7 @@ export function field<
     const fused = (parent as unknown as { _fusedOf?: { bwd?: unknown } })._fusedOf;
     if (fused !== undefined && fused.bwd === undefined) {
       // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.derive
-      return (Cls as any).derive(parent, (s: Of<S>) => s[key] as Of<InstanceType<C>>);
+      return (Cls as any).derive(parent, (s: Inner<S>) => s[key] as Inner<InstanceType<C>>);
     }
     return Signal.fieldOf(parent as unknown as Signal<unknown>, key as string | symbol, Cls);
   }) as never;
@@ -76,7 +76,7 @@ export function derived<S extends Signal<any>, C extends new (...args: never[]) 
   parent: S,
   key: string | symbol,
   Cls: C,
-  fn: (v: Of<S>) => Of<InstanceType<C>>,
+  fn: (v: Inner<S>) => Inner<InstanceType<C>>,
 ): InstanceType<C> {
   // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.derive
   return lazy(parent, key, () => (Cls as any).derive(parent, fn)) as InstanceType<C>;

@@ -6,7 +6,7 @@ import {
   label,
   loop,
   type Mount,
-  type Of,
+  type Inner,
   Path,
   Signal,
   signal,
@@ -16,7 +16,7 @@ import {
   Vec,
 } from "../../minim";
 
-type VecValue = Of<Vec>;
+type VecValue = Inner<Vec>;
 
 const W = 640;
 const H = 360;

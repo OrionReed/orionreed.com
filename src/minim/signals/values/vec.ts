@@ -8,7 +8,7 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { batch, type Init, Signal, type Val, valFn, value, type Writable } from "../signal";
+import { batch, type Init, reader, readNow, Signal, type Val, type Writable } from "../signal";
 import { type Linear, type Pack, type Pivotal, type TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
@@ -99,7 +99,7 @@ export class Vec extends Signal<V> {
 
   // ── invertibles: return `: this`, propagating writability ──────────
   add(b: Val<V>): this {
-    const bf = valFn(b);
+    const bf = reader(b);
     return this.lens(
       v => {
         const o = bf();
@@ -112,7 +112,7 @@ export class Vec extends Signal<V> {
     );
   }
   sub(b: Val<V>): this {
-    const bf = valFn(b);
+    const bf = reader(b);
     return this.lens(
       v => {
         const o = bf();
@@ -125,7 +125,7 @@ export class Vec extends Signal<V> {
     );
   }
   scale(k: Val<number>): this {
-    const kf = valFn(k);
+    const kf = reader(k);
     return this.lens(
       v => {
         const k = kf();
@@ -138,8 +138,8 @@ export class Vec extends Signal<V> {
     );
   }
   offset(dx: Val<number>, dy: Val<number>): this {
-    const xf = valFn(dx);
-    const yf = valFn(dy);
+    const xf = reader(dx);
+    const yf = reader(dy);
     return this.lens(
       v => ({ x: v.x + xf(), y: v.y + yf() }),
       n => ({ x: n.x - xf(), y: n.y - yf() }),
@@ -147,28 +147,28 @@ export class Vec extends Signal<V> {
   }
   // Axis-aligned offset sugar — same fwd/bwd shape as offset.
   up(n: Val<number>): this {
-    const f = valFn(n);
+    const f = reader(n);
     return this.lens(
       v => ({ x: v.x, y: v.y - f() }),
       o => ({ x: o.x, y: o.y + f() }),
     );
   }
   down(n: Val<number>): this {
-    const f = valFn(n);
+    const f = reader(n);
     return this.lens(
       v => ({ x: v.x, y: v.y + f() }),
       o => ({ x: o.x, y: o.y - f() }),
     );
   }
   left(n: Val<number>): this {
-    const f = valFn(n);
+    const f = reader(n);
     return this.lens(
       v => ({ x: v.x - f(), y: v.y }),
       o => ({ x: o.x + f(), y: o.y }),
     );
   }
   right(n: Val<number>): this {
-    const f = valFn(n);
+    const f = reader(n);
     return this.lens(
       v => ({ x: v.x + f(), y: v.y }),
       o => ({ x: o.x - f(), y: o.y }),
@@ -183,10 +183,10 @@ export class Vec extends Signal<V> {
     return Vec.derive(() => perp(this.value));
   }
   lerp(b: Val<V>, t: Val<number>): Vec {
-    return Vec.derive(() => lerp(this.value, value(b), value(t)));
+    return Vec.derive(() => lerp(this.value, readNow(b), readNow(t)));
   }
   distance(other: Val<V>): Num {
-    return Num.derive(this, v => metric(v, value(other)));
+    return Num.derive(this, v => metric(v, readNow(other)));
   }
 
   // ── field lenses & derived views ───────────────────────────────────

@@ -4,9 +4,9 @@
 // `centroid(...shapes).to(...)` instead.
 
 import { type Animator, drive, type Easing, type Yieldable } from "@minim/core";
-import { type Of, type Val, Vec, valFn } from "@minim/signals";
+import { type Inner, reader, type Val, Vec } from "@minim/signals";
 
-type VecValue = Of<Vec>;
+type VecValue = Inner<Vec>;
 
 import type { Has } from "./shape";
 
@@ -84,7 +84,7 @@ export function orbit(
   opts: { period?: number; rate?: Val<number> } = {},
 ): Animator {
   const period = opts.period ?? 4;
-  const rateFn = valFn(opts.rate ?? 1);
+  const rateFn = reader(opts.rate ?? 1);
   const omega = (2 * Math.PI) / period;
   const N = shapes.length;
   const c0 = center.value;

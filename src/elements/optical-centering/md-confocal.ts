@@ -1,6 +1,6 @@
 import {
   type CurveSegment,
-  computed,
+  derive,
   curve,
   Diagram,
   ellipse,
@@ -48,13 +48,13 @@ export class MdConfocal extends Diagram {
       x: (f1.value.x + f2.value.x) / 2,
       y: (f1.value.y + f2.value.y) / 2,
     }));
-    const cDist = computed(() => Math.hypot(f2.value.x - f1.value.x, f2.value.y - f1.value.y) / 2);
-    const rot = computed(() => Math.atan2(f2.value.y - f1.value.y, f2.value.x - f1.value.x));
+    const cDist = derive(() => Math.hypot(f2.value.x - f1.value.x, f2.value.y - f1.value.y) / 2);
+    const rot = derive(() => Math.atan2(f2.value.y - f1.value.y, f2.value.x - f1.value.x));
 
     // ── Confocal ellipses ────────────────────────────────────────
     for (const m of ELLIPSE_MULTS) {
-      const a = computed(() => cDist.value * m);
-      const b = computed(() => {
+      const a = derive(() => cDist.value * m);
+      const b = derive(() => {
         const c = cDist.value;
         const av = a.value;
         return Math.sqrt(Math.max(0, av * av - c * c));
@@ -116,12 +116,12 @@ export class MdConfocal extends Diagram {
     }
 
     // ── Probe → confocal coordinates → highlighted pair ──────────
-    const r1 = computed(() => Math.hypot(probe.value.x - f1.value.x, probe.value.y - f1.value.y));
-    const r2 = computed(() => Math.hypot(probe.value.x - f2.value.x, probe.value.y - f2.value.y));
+    const r1 = derive(() => Math.hypot(probe.value.x - f1.value.x, probe.value.y - f1.value.y));
+    const r2 = derive(() => Math.hypot(probe.value.x - f2.value.x, probe.value.y - f2.value.y));
 
     // Ellipse through probe: 2a_e = r1 + r2.
-    const aE = computed(() => (r1.value + r2.value) / 2);
-    const bE = computed(() => {
+    const aE = derive(() => (r1.value + r2.value) / 2);
+    const bE = derive(() => {
       const c = cDist.value;
       const a = aE.value;
       return Math.sqrt(Math.max(0, a * a - c * c));
@@ -131,8 +131,8 @@ export class MdConfocal extends Diagram {
     // Hyperbola branch through probe: 2a_h = |r1 − r2|. Sign of
     // (r2 − r1) selects which branch (the one closer to f1 is the
     // −x branch in the rotated frame).
-    const aHmult = computed(() => Math.abs(r1.value - r2.value) / 2 / cDist.value);
-    const hypSide = computed<1 | -1>(() => (r2.value > r1.value ? -1 : 1));
+    const aHmult = derive(() => Math.abs(r1.value - r2.value) / 2 / cDist.value);
+    const hypSide = derive<1 | -1>(() => (r2.value > r1.value ? -1 : 1));
     s(
       hypBranch(
         () => aHmult.value,

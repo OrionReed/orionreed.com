@@ -1,7 +1,7 @@
 // conformance.test.ts — RFTS (reactive-framework-test-suite) ~179
 // algorithm-correctness tests against minim's signal engine.
 
-import { batch, computed, effect, signal, untracked } from "@minim/signals";
+import { batch, derive, effect, signal, untracked } from "@minim/signals";
 import { type ReactiveFramework, setExpect, testSuite } from "reactive-framework-test-suite";
 import { describe, expect, it } from "vitest";
 
@@ -17,7 +17,7 @@ const fw: ReactiveFramework = {
     };
   },
   computed: <T>(fn: () => T) => {
-    const c = computed(fn);
+    const c = derive(fn);
     return { read: () => c.value };
   },
   effect: (fn: () => void | (() => void)) => effect(fn),

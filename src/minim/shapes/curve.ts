@@ -15,19 +15,19 @@
 // so all four parameters accept `Val<>`.
 
 import {
-  computed,
-  type Of,
+  derive,
+  type Inner,
+  reader,
+  readNow,
   type Signal,
   signal,
   type Val,
   Vec,
-  valFn,
-  value,
   type Writable,
 } from "@minim/signals";
 import { type CommonOpts, Shape } from "./shape";
 
-type V = Of<Vec>;
+type V = Inner<Vec>;
 type VecValue = V;
 
 export interface CurveOpts extends CommonOpts {
@@ -154,11 +154,11 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
   constructor(init: CurveInit = [], opts: O = {} as O) {
     const reactive = typeof init === "function";
     const segs: Signal<readonly CurveSegment[]> = reactive
-      ? computed(init)
+      ? derive(init)
       : signal<readonly CurveSegment[]>(init);
     const closed = opts.closed ?? false;
 
-    const cumLen = computed(() => {
+    const cumLen = derive(() => {
       const arr = segs.value;
       const out = [0];
       for (let i = 0; i < arr.length; i++) {
@@ -166,7 +166,7 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
       }
       return out;
     });
-    const total = computed(() => {
+    const total = derive(() => {
       const c = cumLen.value;
       return c[c.length - 1] ?? 0;
     });
@@ -207,7 +207,7 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
     this.length = total;
 
     this.stroke(opts, closed, {
-      d: computed(() => {
+      d: derive(() => {
         const arr = segs.value;
         if (arr.length === 0) return "";
         const start = segmentStart(arr[0]);
@@ -264,7 +264,7 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
 
   /** Sample at `t ∈ [0, 1]` along arc length. */
   pointAt(t: Val<number>): Vec {
-    const ts = valFn(t);
+    const ts = reader(t);
     return Vec.derive(() => {
       const arr = this._segments.value;
       if (arr.length === 0) return { x: 0, y: 0 };
@@ -284,7 +284,7 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
 
   /** Unit tangent at `t ∈ [0, 1]`. */
   tangentAt(t: Val<number>): Vec {
-    const ts = valFn(t);
+    const ts = reader(t);
     return Vec.derive(() => {
       const arr = this._segments.value;
       if (arr.length === 0) return { x: 1, y: 0 };
@@ -359,10 +359,10 @@ export function ellipse<O extends CurveOpts>(
     () => [
       {
         kind: "ellipseArc",
-        center: value(center),
-        a: value(a),
-        b: value(b),
-        rotation: value(rotation),
+        center: readNow(center),
+        a: readNow(a),
+        b: readNow(b),
+        rotation: readNow(rotation),
         a0: 0,
         a1: TAU,
       },

@@ -8,7 +8,7 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { type Of, Signal, type Val, valFn, value, type Writable } from "../signal";
+import { type Inner, reader, readNow, Signal, type Val, type Writable } from "../signal";
 import { type Linear, type TraitDict } from "../traits";
 import { field } from "../writable";
 import { Num } from "./num";
@@ -23,9 +23,9 @@ import {
 } from "./vec";
 
 type V = {
-  translate: Of<Vec>;
-  scale: Of<Vec>;
-  origin: Of<Vec>;
+  translate: Inner<Vec>;
+  scale: Inner<Vec>;
+  origin: Inner<Vec>;
   rotate: number;
   opacity: number;
 };
@@ -95,21 +95,21 @@ export class Transform extends Signal<V> {
   }
 
   add(b: Val<V>): this {
-    const bf = valFn(b);
+    const bf = reader(b);
     return this.lens(
       v => add(v, bf()),
       n => sub(n, bf()),
     );
   }
   sub(b: Val<V>): this {
-    const bf = valFn(b);
+    const bf = reader(b);
     return this.lens(
       v => sub(v, bf()),
       n => add(n, bf()),
     );
   }
   lerp(b: Val<V>, t: Val<number>): Transform {
-    return Transform.derive(() => lerp(this.value, value(b), value(t)));
+    return Transform.derive(() => lerp(this.value, readNow(b), readNow(t)));
   }
 
   get translate() {

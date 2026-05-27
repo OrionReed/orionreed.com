@@ -23,7 +23,7 @@
 import {
   Anchor,
   circle,
-  computed,
+  derive,
   Diagram,
   drag,
   label,
@@ -67,14 +67,14 @@ export class MdClampQuantize extends Diagram {
       rect(
         X0,
         ROWS.clamp - 4,
-        computed(() => loX.value - X0),
+        derive(() => loX.value - X0),
         8,
         shade,
       ),
       rect(
         hiX,
         ROWS.clamp - 4,
-        computed(() => X1 - hiX.value),
+        derive(() => X1 - hiX.value),
         8,
         shade,
       ),
@@ -127,7 +127,7 @@ export class MdClampQuantize extends Diagram {
   ): void {
     s(
       label(vec(X0, y - 16), name, { align: Anchor.Left }),
-      label(vec(X1, y - 16), computed(readout), { align: Anchor.Right }),
+      label(vec(X1, y - 16), derive(readout), { align: Anchor.Right }),
       line(vec(X0, y), vec(X1, y), { thin: true, opacity: 0.35, cap: "round" }),
     );
     const pos = vec(range(X0, X1).slider(t), Num.pin(y));

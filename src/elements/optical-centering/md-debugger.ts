@@ -25,7 +25,7 @@ import {
   type Animator,
   type AnyShape,
   circle,
-  computed,
+  derive,
   Diagram,
   forEach,
   group,
@@ -179,7 +179,7 @@ export class MdDebugger extends Diagram {
     // ─── claims ─────────────────────────────────────────────
     const safe = claim(c.opacity, "α").stays.in([0, 1]).during(intro);
     const reaches = claim(c.opacity, "α").becomes.equal(1).during(intro);
-    const allHold = computed(() => safe.value && reaches.value);
+    const allHold = derive(() => safe.value && reaches.value);
 
     // Author of c.opacity at every moment — registered before any
     // writes happen so the writer signal is hooked up.
@@ -202,15 +202,15 @@ export class MdDebugger extends Diagram {
     });
 
     // ─── window (latest intro invocation + tail) ────────────
-    const winStart = computed(() => intro.last.value?.start ?? 0);
-    const winEnd = computed(() => {
+    const winStart = derive(() => intro.last.value?.start ?? 0);
+    const winEnd = derive(() => {
       const last = intro.last.value;
       const now = this.anim.clock;
       if (!last) return Math.max(1.6, now);
       const tail = (last.end ?? now) + 0.2;
       return Math.max(tail, last.start + 1.6);
     });
-    const xScale = computed(() => GANTT_W / Math.max(0.001, winEnd.value - winStart.value));
+    const xScale = derive(() => GANTT_W / Math.max(0.001, winEnd.value - winStart.value));
     const xFor = (t: number): number => PAD_X + (t - winStart.value) * xScale.value;
 
     // y-coord of α=v in the value plot. Range [-0.1, 1.4] so the
@@ -232,7 +232,7 @@ export class MdDebugger extends Diagram {
       // Live verdict (right-aligned).
       label(
         vec(W - PAD_X, HEADER_Y),
-        computed(() => {
+        derive(() => {
           if (allHold.value) return "✓ all claims hold";
           if (!safe.value) {
             const last = intro.last.value;
@@ -255,7 +255,7 @@ export class MdDebugger extends Diagram {
           size: 11,
           align: Anchor.Right,
           bold: true,
-          fill: computed(() => (allHold.value ? PASS : FAIL)),
+          fill: derive(() => (allHold.value ? PASS : FAIL)),
         },
       ),
     );
@@ -283,7 +283,7 @@ export class MdDebugger extends Diagram {
 
     // ─── gantt: live bars (intro + descendants) ─────────────
     // Walk via parent back-links. For O(N²) but N is tiny here.
-    const visibleSpans = computed<readonly Span[]>(() => {
+    const visibleSpans = derive<readonly Span[]>(() => {
       const last = intro.last.value;
       if (!last) return [];
       // We need every span whose ancestor chain includes `last`.
@@ -316,15 +316,15 @@ export class MdDebugger extends Diagram {
       span => {
         const lane = TRACK_OF[span.name] ?? 0;
         const y = TIMELINE_TOP + lane * (GANTT_TRACK_H + GANTT_TRACK_GAP);
-        const x = computed(() => xFor(span.start));
-        const w = computed(() => {
+        const x = derive(() => xFor(span.start));
+        const w = derive(() => {
           const end = span.end ?? this.anim.clock;
           return Math.max(2, (end - span.start) * xScale.value);
         });
         const fill = FN_COLOR[span.name] ?? "#888";
         const bar = rect(x, y, w, GANTT_TRACK_H, {
           fill,
-          opacity: computed(() => (span.end === undefined ? 0.7 : 0.92)),
+          opacity: derive(() => (span.end === undefined ? 0.7 : 0.92)),
           corner: 2,
           stroke: "none",
         });
@@ -374,7 +374,7 @@ export class MdDebugger extends Diagram {
     );
 
     // Filtered samples: only those within the current window.
-    const windowed = computed(() => {
+    const windowed = derive(() => {
       const arr = samples.value;
       const lo = winStart.value;
       return arr.filter(sample => sample.t >= lo);
@@ -386,7 +386,7 @@ export class MdDebugger extends Diagram {
     // so the engine's flush stack stays shallow.
     const authorNames = Object.keys(FN_COLOR);
     for (const fnName of authorNames) {
-      const dStr = computed(() => {
+      const dStr = derive(() => {
         const arr = windowed.value;
         const parts: string[] = [];
         let inSeg = false;
@@ -412,7 +412,7 @@ export class MdDebugger extends Diagram {
       s(pathD(dStr, { stroke: FN_COLOR[fnName], thin: true }));
     }
     // Plus a fallback "no author" gray series.
-    const dGray = computed(() => {
+    const dGray = derive(() => {
       const arr = windowed.value;
       const parts: string[] = [];
       let inSeg = false;
@@ -461,18 +461,18 @@ export class MdDebugger extends Diagram {
       // Two paths per row: pass-runs and fail-runs. Each builds
       // a series of M..L..L (top edge) + L..L (bottom edge) +
       // Z polygons covering contiguous true/false sample runs.
-      const passD = computed(() =>
+      const passD = derive(() =>
         runsPath(windowed.value, row.pick, true, xFor, y, CLAIM_TRACK_H),
       );
-      const failD = computed(() =>
+      const failD = derive(() =>
         runsPath(windowed.value, row.pick, false, xFor, y, CLAIM_TRACK_H),
       );
       s(pathD(passD, { fill: PASS, stroke: "none" }), pathD(failD, { fill: FAIL, stroke: "none" }));
     });
 
     // ─── time cursor (across all timeline tracks) ───────────
-    const cursorX = computed(() => xFor(this.anim.clock));
-    const cursorD = computed(() => {
+    const cursorX = derive(() => xFor(this.anim.clock));
+    const cursorD = derive(() => {
       const x = cursorX.value.toFixed(2);
       return `M${x} ${TIMELINE_TOP - 3} L${x} ${CLAIMS_BOT + 3}`;
     });
@@ -481,8 +481,8 @@ export class MdDebugger extends Diagram {
     // ─── transport bar ──────────────────────────────────────
     const playPause = chunkButton(
       vec(PAD_X, TRANSPORT_Y),
-      computed(() => (playing.value ? "⏸ pause" : "▶ play")),
-      computed(() => false), // never highlighted
+      derive(() => (playing.value ? "⏸ pause" : "▶ play")),
+      derive(() => false), // never highlighted
       () => {
         playing.value = !playing.value;
       },
@@ -493,7 +493,7 @@ export class MdDebugger extends Diagram {
     const stepBtn = chunkButton(
       vec(PAD_X + BTN_W + 14 + 6, TRANSPORT_Y),
       "▏▶ step",
-      computed(() => false),
+      derive(() => false),
       () => {
         playing.value = false;
         stepBudget += 0.016;
@@ -507,7 +507,7 @@ export class MdDebugger extends Diagram {
     const speedX = PAD_X + BTN_W + 14 + 6 + BTN_W + 26;
     speeds.forEach((sp, i) => {
       const x = speedX + i * (BTN_W + 4);
-      const isActive = computed(() => speed.value === sp);
+      const isActive = derive(() => speed.value === sp);
       s(
         chunkButton(
           vec(x, TRANSPORT_Y),
@@ -525,7 +525,7 @@ export class MdDebugger extends Diagram {
     s(
       label(
         vec(W - PAD_X, TRANSPORT_Y + BTN_H / 2),
-        computed(() => {
+        derive(() => {
           const last = intro.last.value;
           if (!last) return `t = 0.00`;
           const t = Math.max(0, this.anim.clock - last.start);
@@ -597,7 +597,7 @@ function chunkButton(
   const g = group(
     { translate: pos },
     rect(0, 0, width, BTN_H, {
-      fill: computed(() => (active.value ? "#dceaff" : "#ffffff")),
+      fill: derive(() => (active.value ? "#dceaff" : "#ffffff")),
       stroke: "#222",
       thin: true,
       corner: 4,

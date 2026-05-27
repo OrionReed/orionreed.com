@@ -19,7 +19,7 @@ import {
   type Tick,
   type Yieldable,
 } from "../core";
-import { computed, effect, type Read, Signal, type Val, valFn, type WritableOf } from "./signal";
+import { derive, effect, type Read, reader, Signal, type Val, type Writable } from "./signal";
 import { requireLerp, requireLinear, requireMetric, type TraitKey, type Traits } from "./traits";
 
 const defaultEase = easeOut;
@@ -28,7 +28,7 @@ const defaultEase = easeOut;
  *  class declares the listed traits. Reads as a sentence:
  *
  *      function spring<T>(s: Animatable<T, "linear" | "metric">, …) */
-export type Animatable<T, K extends TraitKey = never> = WritableOf<T> & Traits<T, K>;
+export type Animatable<T, K extends TraitKey = never> = Writable<Signal<T>> & Traits<T, K>;
 
 // ─── Tween chainable builder ────────────────────────────────────────
 
@@ -94,7 +94,7 @@ function* tweenStep<T>(
 ): Animator<void> {
   const lerp = requireLerp(sig);
   const start = sig.peek();
-  const D = valFn(dur);
+  const D = reader(dur);
   yield* drive((tick, t) => {
     const total = D();
     if (total <= 0 || t + tick.dt * 1e-3 >= total) {
@@ -148,7 +148,7 @@ export function* spring<T>(
   const eps = opts.precision ?? 1e-4;
   const rate = opts.rate;
   const project = opts.project;
-  const T = valFn(target);
+  const T = reader(target);
 
   const zero: T = lin.scale(sig.peek(), 0);
   let vel: T = zero;
@@ -217,8 +217,8 @@ export function* toward<T>(
 ): Animator<void> {
   const lin = requireLinear(sig);
   const met = requireMetric(sig);
-  const T = valFn(target);
-  const S = valFn(speed);
+  const T = reader(target);
+  const S = reader(speed);
   yield* drive(tick => {
     const t = T();
     const cur = sig.peek();
@@ -240,8 +240,8 @@ export function* attract<T>(
   k: Val<number> = 1,
 ): Animator<void> {
   const lin = requireLinear(sig);
-  const T = valFn(target);
-  const K = valFn(k);
+  const T = reader(target);
+  const K = reader(k);
   yield* drive(tick => {
     const cur = sig.peek();
     const delta = lin.scale(lin.sub(T(), cur), K() * tick.dt);
@@ -252,7 +252,7 @@ export function* attract<T>(
 // ─── generator-scoped reactive helpers ────────────────────────────
 
 /** Drive `sig` per frame with a pure function `f(t, initial)`. */
-export function* wave<T>(sig: WritableOf<T>, fn: (t: number, initial: T) => T): Animator<void> {
+export function* wave<T>(sig: Writable<Signal<T>>, fn: (t: number, initial: T) => T): Animator<void> {
   const initial = sig.peek();
   yield* drive((_tick, t) => {
     sig.value = fn(t, initial);
@@ -262,7 +262,7 @@ export function* wave<T>(sig: WritableOf<T>, fn: (t: number, initial: T) => T): 
 /** Escape hatch: drive sig per frame with `step(dt, t, current)`.
  *  Return `false` to terminate. Use `wave` instead for pure `f(t)`. */
 export function* driven<T>(
-  sig: WritableOf<T>,
+  sig: Writable<Signal<T>>,
   step: (dt: number, t: number, v: T) => T | false,
 ): Animator<void> {
   yield* drive((tick, t) => {
@@ -363,7 +363,7 @@ export function when(sig: Read<unknown>): Animator<void> {
 
 /** Reactive boolean negation as a `Signal<boolean>` (RO). */
 export function not(sig: Read<unknown>): Signal<boolean> {
-  return computed(() => !sig.value);
+  return derive(() => !sig.value);
 }
 
 /** Wait until `sig` changes; resumes with the new value. */
@@ -397,7 +397,7 @@ export function loop(factory: () => Yieldable): Play {
 
 /** Run `fn` every `sec` seconds (drift-corrected, `sec` may be reactive). */
 export function every(sec: Val<number>, fn: () => void): Play {
-  const getSec = valFn(sec);
+  const getSec = reader(sec);
   return play(
     (function* (): Animator {
       let tick = yield;

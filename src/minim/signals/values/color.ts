@@ -5,7 +5,7 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { computed, type Init, lazy, Signal, type Val, valFn, value, type Writable } from "../signal";
+import { derive, type Init, lazy, reader, readNow, Signal, type Val, type Writable } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { num, Num } from "./num";
@@ -54,28 +54,28 @@ export class Color extends Signal<V> {
   }
 
   add(b: Val<V>): this {
-    const bf = valFn(b);
+    const bf = reader(b);
     return this.lens(
       v => add(v, bf()),
       n => sub(n, bf()),
     );
   }
   sub(b: Val<V>): this {
-    const bf = valFn(b);
+    const bf = reader(b);
     return this.lens(
       v => sub(v, bf()),
       n => add(n, bf()),
     );
   }
   scale(k: Val<number>): this {
-    const kf = valFn(k);
+    const kf = reader(k);
     return this.lens(
       v => scale(v, kf()),
       n => scale(n, 1 / kf()),
     );
   }
   lerp(b: Val<V>, t: Val<number>): Color {
-    return Color.derive(() => lerp(this.value, value(b), value(t)));
+    return Color.derive(() => lerp(this.value, readNow(b), readNow(t)));
   }
 
   // ── field lenses & derived views ──────────────────────────────────
@@ -96,7 +96,7 @@ export class Color extends Signal<V> {
   }
   get css(): Signal<string> {
     return lazy(this, "css", () =>
-      computed(() => {
+      derive(() => {
         const c = this.value;
         const r = Math.round(c.r * 255);
         const g = Math.round(c.g * 255);

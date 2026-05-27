@@ -1,7 +1,7 @@
 // Named reactive identity linking diagram parts to prose. Prefer the
 // scoped registration on `Diagram` over the global registry below.
 
-import { computed, type Signal, signal, type Writable } from "@minim/signals";
+import { derive, type Signal, signal, type Writable } from "@minim/signals";
 
 const registry = new Map<string, Marker>();
 
@@ -25,7 +25,7 @@ export function marker(color?: string): Marker {
   const colorCell = signal<string | null>(color ?? null);
   const locals = new Set<Signal<boolean>>();
   const v = signal(0);
-  const active = computed(() => {
+  const active = derive(() => {
     v.value;
     for (const s of locals) if (s.value) return true;
     return false;

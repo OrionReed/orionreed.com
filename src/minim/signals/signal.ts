@@ -19,7 +19,7 @@
 // constructor.
 //
 // Writability is type-tracked via `WritableBrand` and the `Writable<R>`
-// / `WritableOf<T>` modifiers (declared below). The class declares
+// modifier (declared below). The class declares
 // `value` as `declare readonly value: T;` — the runtime accessor is
 // installed on the prototype via `Object.defineProperty` after the
 // class declaration, equivalent to compile output of `get value() { … }`
@@ -345,11 +345,11 @@ export interface WritableBrand {
 
 /** Extract the value type carried by any reactive read shape —
  *  `Signal<T>`, `Read<T>`, or any subclass thereof. */
-export type Of<R> = R extends Signal<infer T> ? T : R extends Read<infer T> ? T : never;
+export type Inner<R> = R extends Signal<infer T> ? T : R extends Read<infer T> ? T : never;
 
 /** "The writable form of R." Adds the writable brand and a settable
- *  `value: Of<R>` to the value class shape. */
-export type Writable<R> = R & WritableBrand & { value: Of<R> };
+ *  `value: Inner<R>` to the value class shape. */
+export type Writable<R> = R & WritableBrand & { value: Inner<R> };
 
 /** Strict factory input: a literal of the value class's underlying
  *  type, or an existing `Writable<Cls>` cell. Factories accepting
@@ -362,20 +362,13 @@ export type Writable<R> = R & WritableBrand & { value: Of<R> };
  *      Init<Num> = number | Writable<Num>
  *      Init<Vec> = { x: number; y: number } | Writable<Vec>
  *      Init<Pose> = { x; y; theta } | Writable<Pose>                  */
-// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors `Of`
-export type Init<C extends Signal<any>> = Of<C> | Writable<C>;
+// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors `Inner`
+export type Init<C extends Signal<any>> = Inner<C> | Writable<C>;
 
-/** T-anchored constraint for animator-style parameters:
- *
- *      function spring<T>(s: WritableOf<T>, target: T)
- *
- *  Equivalent to `Writable<Read<T>>` — a writable reactive carrying T.
- *  Satisfied by `Writable<Num>` / `Writable<Vec>` / any factory-
- *  returned writable signal. Bare RO value classes are rejected
- *  because they lack the brand. */
-export type WritableOf<T> = Read<T> & WritableBrand & { value: T };
-
-export function value<T>(v: Val<T>): T {
+/** Snapshot a `Val<T>` to a plain `T`: reads `.value` from signals,
+ *  invokes thunks, returns literals untouched. One-shot — no tracking,
+ *  no closure retained. For repeated resolution, prefer `reader(v)`. */
+export function readNow<T>(v: Val<T>): T {
   if (v instanceof Signal) return v.value;
   if (typeof v === "function") return (v as () => T)();
   return v as T;
@@ -383,8 +376,9 @@ export function value<T>(v: Val<T>): T {
 
 /** Resolve a `Val<T>` to a closure `() => T` that unwraps it on each
  *  call. Hot-path helper for animators that read reactive args every
- *  frame — set up once, invoke each tick. */
-export function valFn<T>(v: Val<T>): () => T {
+ *  frame — set up once, invoke each tick. For a one-shot snapshot use
+ *  `readNow(v)`. */
+export function reader<T>(v: Val<T>): () => T {
   if (v instanceof Signal) return () => v.value;
   if (typeof v === "function") return v as () => T;
   return () => v as T;
@@ -575,7 +569,7 @@ function pathSetN(
  *  Construction patterns:
  *    - `new Signal(initial)` — signal mode
  *    - `signal(initial)` — same as `new Signal(initial)`
- *    - `computed(fn)` — computed mode (untyped)
+ *    - `derive(fn)` — computed mode (untyped)
  *    - `Vec.derive(fn)` — computed mode (typed as Cls instance)
  *    - `lens(get, set)` — lens mode (untyped)
  *    - `Vec.lens(get, set)` — lens mode (typed)
@@ -658,7 +652,7 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  prefer `Cls.lens(parent, fwd, bwd)` / `Cls.derive(parent, fn)`.
    *
    *  Overload: with a setter, returns `Writable<C>` (the writable
-   *  form: `C & WritableBrand & { value: Of<C> }`). Without, returns
+   *  form: `C & WritableBrand & { value: Inner<C> }`). Without, returns
    *  plain `C` (read-only at the type level). */
   static install<T, C extends Signal<T>>(Cls: new (...args: never[]) => C, getter: () => T): C;
   static install<T, C extends Signal<T>>(
@@ -708,7 +702,7 @@ export class Signal<T = unknown> implements ReactiveNode {
   static derive<C extends new (...args: never[]) => Signal<any>, P>(
     this: C,
     parent: Read<P>,
-    fn: (v: P) => Of<InstanceType<C>>,
+    fn: (v: P) => Inner<InstanceType<C>>,
   ): InstanceType<C>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static derive<
@@ -719,12 +713,12 @@ export class Signal<T = unknown> implements ReactiveNode {
   >(
     this: C,
     parents: P,
-    fn: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => Of<InstanceType<C>>,
+    fn: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => Inner<InstanceType<C>>,
   ): InstanceType<C>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static derive<C extends new (...args: never[]) => Signal<any>>(
     this: C,
-    fn: () => Of<InstanceType<C>>,
+    fn: () => Inner<InstanceType<C>>,
   ): InstanceType<C>;
   // biome-ignore lint/suspicious/noExplicitAny: dispatch
   static derive(this: any, ...args: any[]): any {
@@ -758,30 +752,30 @@ export class Signal<T = unknown> implements ReactiveNode {
   static lens<C extends new (...args: never[]) => Signal<any>, P>(
     this: C,
     parent: Read<P>,
-    fwd: (v: P) => Of<InstanceType<C>>,
-    bwd: (target: Of<InstanceType<C>>, v: P) => P,
+    fwd: (v: P) => Inner<InstanceType<C>>,
+    bwd: (target: Inner<InstanceType<C>>, v: P) => P,
   ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static lens<C extends new (...args: never[]) => Signal<any>, P extends readonly Read<unknown>[]>(
     this: C,
     parents: P,
-    fwd: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => Of<InstanceType<C>>,
+    fwd: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => Inner<InstanceType<C>>,
     bwd: (
-      target: Of<InstanceType<C>>,
+      target: Inner<InstanceType<C>>,
       vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
     ) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
   ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static lens<C extends new (...args: never[]) => Signal<any>>(
     this: C,
-    g: () => Of<InstanceType<C>>,
-    s: (v: Of<InstanceType<C>>) => void,
+    g: () => Inner<InstanceType<C>>,
+    s: (v: Inner<InstanceType<C>>) => void,
   ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static lens<C extends new (...args: never[]) => Signal<any>, P, COMP>(
     this: C,
     parent: Read<P>,
-    spec: SymmetricLensSpec1<P, Of<InstanceType<C>>, COMP>,
+    spec: SymmetricLensSpec1<P, Inner<InstanceType<C>>, COMP>,
   ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static lens<
@@ -795,7 +789,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     parents: P,
     spec: SymmetricLensSpecN<
       { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
-      Of<InstanceType<C>>,
+      Inner<InstanceType<C>>,
       COMP
     >,
   ): Writable<InstanceType<C>>;
@@ -819,7 +813,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     return Signal._fuse(parent, this, fwd, bwd);
   }
 
-  /** Permissive consumer-layer lift — `Val<Of<Cls>>` → `Cls`. Accepts
+  /** Permissive consumer-layer lift — `Val<Inner<Cls>>` → `Cls`. Accepts
    *  any read shape (literal, writable, RO signal, thunk). Returns the
    *  most-natural cell:
    *
@@ -836,15 +830,15 @@ export class Signal<T = unknown> implements ReactiveNode {
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static from<C extends new (...args: never[]) => Signal<any>>(
     this: C,
-    v: Val<Of<InstanceType<C>>>,
+    v: Val<Inner<InstanceType<C>>>,
   ): InstanceType<C> {
     if (v instanceof this) return v as InstanceType<C>;
     if (v instanceof Signal || typeof v === "function") {
       // biome-ignore lint/suspicious/noExplicitAny: dispatch
-      return (this as any).derive(() => value(v)) as InstanceType<C>;
+      return (this as any).derive(() => readNow(v)) as InstanceType<C>;
     }
-    return new (this as unknown as new (init?: Of<InstanceType<C>>) => InstanceType<C>)(
-      v as Of<InstanceType<C>>,
+    return new (this as unknown as new (init?: Inner<InstanceType<C>>) => InstanceType<C>)(
+      v as Inner<InstanceType<C>>,
     ) as InstanceType<C>;
   }
 
@@ -865,7 +859,7 @@ export class Signal<T = unknown> implements ReactiveNode {
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static pin<C extends new (...args: never[]) => Signal<any>>(
     this: C,
-    v: Of<InstanceType<C>>,
+    v: Inner<InstanceType<C>>,
   ): Writable<InstanceType<C>> {
     return Signal.install(
       this,
@@ -1099,8 +1093,8 @@ export class Signal<T = unknown> implements ReactiveNode {
       parent as Signal<unknown>,
       Cls as unknown as new (
         ...args: never[]
-      ) => Signal<Of<InstanceType<C>>>,
-      s => (s as Record<string | number | symbol, unknown>)[key] as Of<InstanceType<C>>,
+      ) => Signal<Inner<InstanceType<C>>>,
+      s => (s as Record<string | number | symbol, unknown>)[key] as Inner<InstanceType<C>>,
       // 2-arg bwd → arity-detected as stateful.
       (v, s) => ({ ...(s as object), [key]: v }) as unknown,
       key,
@@ -1671,17 +1665,11 @@ export function signal<T>(initial: T, opts?: SignalOptions<T>): Writable<Signal<
   return new Signal(initial, opts) as Writable<Signal<T>>;
 }
 
-/** Untyped read-only derived view. Closure-captured deps. For typed
- *  views, prefer `Cls.derive(parent, fn)` or `Cls.derive(parents, fn)`.
- *  Same shape as the closure form of `Cls.derive(fn)`. */
-export function computed<T>(getter: () => T): Signal<T> {
-  return Signal.install(Signal as new (...args: never[]) => Signal<T>, getter);
-}
-
-/** Untyped read-only derived view from explicit parents.
+/** Untyped read-only derived view. Three call shapes:
  *
  *    derive(parent, fn)        — 1-input. Fuses with parent's chain.
  *    derive(parents, fn)       — N-input. Aggregates over the array.
+ *    derive(closure)           — auto-tracks `.value` reads in closure.
  *
  *  For typed returns prefer `Cls.derive(...)`. */
 export function derive<P, R>(parent: Read<P>, fn: (v: P) => R): Signal<R>;
@@ -1689,22 +1677,28 @@ export function derive<P extends readonly Read<unknown>[], R>(
   parents: P,
   fn: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => R,
 ): Signal<R>;
+export function derive<R>(closure: () => R): Signal<R>;
 // biome-ignore lint/suspicious/noExplicitAny: dispatch
-export function derive(parent: any, fn: any): any {
+export function derive(parent: any, fn?: any): any {
+  if (fn === undefined) {
+    return Signal.install(Signal as new (...args: never[]) => Signal<unknown>, parent);
+  }
   if (Array.isArray(parent)) {
     return _fanin(Signal as new (...args: never[]) => Signal<unknown>, parent, fn);
   }
   return Signal._fuse(parent, Signal as new (...args: never[]) => Signal<unknown>, fn);
 }
 
-/** Read-write lens (untyped, free function). Two shapes:
+/** Read-write lens (untyped, free function). Five call shapes, parallel
+ *  to `Cls.lens(...)`:
  *
- *    lens(parent, fwd, bwd)    — 1-input. Fuses with parent's chain.
- *    lens(parents, fwd, bwd)   — N-input. Aggregates over the array.
+ *    lens(parent,  fwd, bwd)   — 1-input stateless. Fuses.
+ *    lens(parents, fwd, bwd)   — N-input stateless.
+ *    lens(g, s)                — closure-style getter / setter.
+ *    lens(parent,  spec)       — 1-input symmetric (complement).
+ *    lens(parents, spec)       — N-input symmetric.
  *
- *  For typed returns prefer `Cls.lens(...)`. For closure-style
- *  getter/setter, use `Cls.lens(g, s)` (typed) — the closure overload
- *  has no untyped equivalent. */
+ *  For typed returns prefer `Cls.lens(...)`. */
 export function lens<P, R>(
   parent: Read<P>,
   fwd: (v: P) => R,
@@ -1718,8 +1712,36 @@ export function lens<P extends readonly Read<unknown>[], R>(
     vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
   ) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
 ): Writable<Signal<R>>;
+export function lens<R>(g: () => R, s: (v: R) => void): Writable<Signal<R>>;
+export function lens<P, R, COMP>(
+  parent: Read<P>,
+  spec: SymmetricLensSpec1<P, R, COMP>,
+): Writable<Signal<R>>;
+export function lens<P extends readonly Read<unknown>[], R, COMP>(
+  parents: P,
+  spec: SymmetricLensSpecN<
+    { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
+    R,
+    COMP
+  >,
+): Writable<Signal<R>>;
 // biome-ignore lint/suspicious/noExplicitAny: dispatch
-export function lens(parent: any, fwd: any, bwd: any): any {
+export function lens(...args: any[]): any {
+  if (args.length === 2) {
+    const [first, second] = args;
+    if (typeof first === "function" && typeof second === "function") {
+      return Signal.install(Signal as new (...args: never[]) => Signal<unknown>, first, second);
+    }
+    if (Array.isArray(first)) {
+      return _symmetric(Signal as new (...args: never[]) => Signal<unknown>, first, second);
+    }
+    return _symmetric(
+      Signal as new (...args: never[]) => Signal<unknown>,
+      [first],
+      _liftSpec1(second),
+    );
+  }
+  const [parent, fwd, bwd] = args;
   if (Array.isArray(parent)) {
     return _fanin(Signal as new (...args: never[]) => Signal<unknown>, parent, fwd, bwd);
   }

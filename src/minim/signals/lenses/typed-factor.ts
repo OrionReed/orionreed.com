@@ -33,7 +33,7 @@
 import {
   batch,
   Num,
-  type Of,
+  type Inner,
   type Pack,
   type Read,
   type Signal,
@@ -55,7 +55,7 @@ export type PackedInput<T = any> = Writable<Read<T> & Traits<T, "pack">>;
 export interface OutputSpec<C extends new (...args: never[]) => Signal<any>> {
   Cls: C;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape on input values
-  fwd: (inputs: ReadonlyArray<any>) => Of<InstanceType<C>>;
+  fwd: (inputs: ReadonlyArray<any>) => Inner<InstanceType<C>>;
   /** Optional analytical Jacobian. Returns dim(Cls) rows, each of
    *  length `sum(input pack dims)`. If supplied for ALL outputs, FD
    *  is skipped entirely → faster AND exact (no eps drift). */
@@ -488,7 +488,7 @@ function invertMatrix(A: Float64Array, M: number, out: Float64Array): boolean {
 // typed-output ergonomics can be eyeballed.
 // =====================================================================
 
-export function procrustesTyped(points: readonly PackedInput<Of<Vec>>[]): {
+export function procrustesTyped(points: readonly PackedInput<Inner<Vec>>[]): {
   centroid: Writable<Vec>;
   rotation: Writable<Num>;
   scale: Writable<Num>;
@@ -499,7 +499,7 @@ export function procrustesTyped(points: readonly PackedInput<Of<Vec>>[]): {
     {
       centroid: {
         Cls: Vec,
-        fwd: (pts: readonly Of<Vec>[]) => {
+        fwd: (pts: readonly Inner<Vec>[]) => {
           let sx = 0;
           let sy = 0;
           for (let i = 0; i < K; i++) {
@@ -511,7 +511,7 @@ export function procrustesTyped(points: readonly PackedInput<Of<Vec>>[]): {
       },
       rotation: {
         Cls: Num,
-        fwd: (pts: readonly Of<Vec>[]) => {
+        fwd: (pts: readonly Inner<Vec>[]) => {
           let sx = 0;
           let sy = 0;
           for (let i = 0; i < K; i++) {
@@ -523,7 +523,7 @@ export function procrustesTyped(points: readonly PackedInput<Of<Vec>>[]): {
       },
       scale: {
         Cls: Num,
-        fwd: (pts: readonly Of<Vec>[]) => {
+        fwd: (pts: readonly Inner<Vec>[]) => {
           let sx = 0;
           let sy = 0;
           for (let i = 0; i < K; i++) {

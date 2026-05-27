@@ -1,4 +1,4 @@
-import { computed, Num, type Signal, type Val, Vec } from "@minim/signals";
+import { derive, Num, type Signal, type Val, Vec } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 
 export interface AnnularSectorOpts extends CommonOpts {}
@@ -39,7 +39,7 @@ export class AnnularSector<O extends AnnularSectorOpts = AnnularSectorOpts> exte
     this.a1 = a1s;
 
     this.stroke(opts, true, {
-      d: computed(() => {
+      d: derive(() => {
         const cx = center.x.value;
         const cy = center.y.value;
         const _ro = ro.value;

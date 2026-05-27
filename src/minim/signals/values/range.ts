@@ -14,7 +14,7 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { computed, type Init, Signal, type Val, valFn, value, type Writable } from "../signal";
+import { derive, type Init, reader, readNow, Signal, type Val, type Writable } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
@@ -93,7 +93,7 @@ export class Range extends Signal<V> {
   // ── invertibles: return `: this`, propagating writability ──────────
   /** Translate by `by`. Reads shift the interval; writes shift back. */
   shift(by: Val<number>): this {
-    const f = valFn(by);
+    const f = reader(by);
     return this.lens(
       v => ({ lo: v.lo + f(), hi: v.hi + f() }),
       n => ({ lo: n.lo - f(), hi: n.hi - f() }),
@@ -101,7 +101,7 @@ export class Range extends Signal<V> {
   }
   /** Scale uniformly about the origin. Iso for `k ≠ 0`. */
   scale(k: Val<number>): this {
-    const kf = valFn(k);
+    const kf = reader(k);
     return this.lens(
       v => {
         const k = kf();
@@ -130,7 +130,7 @@ export class Range extends Signal<V> {
   // ── samplers ───────────────────────────────────────────────────────
   /** RO sample at `t`. `t ∈ [0, 1]` stays inside; outside extrapolates. */
   sample(t: Val<number>): Num {
-    return Num.derive(() => sample(this.value, value(t)));
+    return Num.derive(() => sample(this.value, readNow(t)));
   }
   /** Bidirectional `t ↔ value` slider. Read: `lo + t·(hi - lo)`. Write:
    *  solves `t = (v - lo)/(hi - lo)` and writes back through `t` only;
@@ -154,16 +154,16 @@ export class Range extends Signal<V> {
   // ── predicates / clamps ────────────────────────────────────────────
   /** True iff `v` is in `[lo, hi]`. */
   contains(v: Val<number>): Signal<boolean> {
-    return computed(() => contains(this.value, value(v)));
+    return derive(() => contains(this.value, readNow(v)));
   }
   /** RO clamp: read `v` into `[lo, hi]`. For a writable clamping lens
    *  on a single Num, see `Num#clamp(lo, hi)`. */
   clampedRead(v: Val<number>): Num {
-    return Num.derive(() => clamp(this.value, value(v)));
+    return Num.derive(() => clamp(this.value, readNow(v)));
   }
   /** Inverse of `sample`: derive the `t` that would produce `v`. */
   paramOf(v: Val<number>): Num {
-    return Num.derive(() => paramOf(this.value, value(v)));
+    return Num.derive(() => paramOf(this.value, readNow(v)));
   }
 
   /** Tween-builder, implied by the lerp trait. Animates `{lo, hi}`

@@ -1,5 +1,5 @@
 // Structural view over `Span[]`. Pure derivation; call from a
-// `computed(() => traceTree(spans.value))` to keep it reactive.
+// `derive(() => traceTree(spans.value))` to keep it reactive.
 //
 // `parent` is already a back-link on Span, so this module is mostly
 // about producing forward links (children) and grouping siblings into

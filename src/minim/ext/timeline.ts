@@ -4,7 +4,7 @@
 
 import { type Animator } from "@minim/core";
 import {
-  computed,
+  derive,
   type Init,
   isComputed,
   Num,
@@ -16,7 +16,7 @@ import {
 } from "@minim/signals";
 
 /** A clip on a timeline. `t` extends past the endpoints (0 before,
- *  1 after) so `computed(() => (ease)(clip.t.value))` works without
+ *  1 after) so `derive(() => (ease)(clip.t.value))` works without
  *  conditional checks.
  *
  *  Per-field writability is preserved through `ResolvedField`: pass a
@@ -120,7 +120,7 @@ function makeClip(spec: ClipSpec, clock: Num): Clip {
     if (c >= a + d) return 1;
     return d > 0 ? (c - a) / d : 1;
   });
-  const active = computed(() => {
+  const active = derive(() => {
     const c = clock.value;
     return c >= at.value && c < end.value;
   });

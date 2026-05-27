@@ -5,7 +5,7 @@
 // fluent claim builder, intervals(), and firstOf event ordering.
 
 import { Anim, type Animator } from "@minim/core";
-import { computed, num, signal, spring, tween } from "@minim/signals";
+import { derive, num, signal, spring, tween } from "@minim/signals";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   activeRecorder,
@@ -362,7 +362,7 @@ describe("intervals & firstOf", () => {
 
     const op = num(0);
 
-    const driverSet = computed(() => {
+    const driverSet = derive(() => {
       const a = intervals(t_tween).value;
       const b = intervals(t_spring).value;
       return a || b;

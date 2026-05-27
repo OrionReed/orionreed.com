@@ -25,7 +25,7 @@ import { propagate, propagator } from "@minim/propagators";
 import {
   type CurveSegment,
   circle,
-  computed,
+  derive,
   curve,
   Diagram,
   drag,
@@ -328,8 +328,8 @@ export class MdCoreactive extends Diagram {
     //    interpolate off it; everything else uses defaults.
     function fireProps(activity: Writable<Num>, fireColor: string) {
       return {
-        stroke: computed(() => mixColor(activity.value, fireColor)),
-        strokeWidth: computed(() => REST_W + (ACTIVE_W - REST_W) * activity.value),
+        stroke: derive(() => mixColor(activity.value, fireColor)),
+        strokeWidth: derive(() => REST_W + (ACTIVE_W - REST_W) * activity.value),
         cap: "round" as const,
       };
     }

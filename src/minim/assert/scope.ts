@@ -18,7 +18,7 @@
 // getters. Allocate on first read; never if untouched.
 
 import type { Animator, Tick, Yieldable } from "@minim/core";
-import { computed, type Read, type Signal, signal } from "@minim/signals";
+import { derive, type Read, type Signal, signal } from "@minim/signals";
 import { closeSpan, currentSpan, notifySpanOpen, openSpan, type Span, withSpan } from "./span";
 
 /** Factory function shape. */
@@ -116,7 +116,7 @@ export function scope<F extends AnyFactory>(...args: [F] | [string, F]): Scoped<
   };
 
   const lastSpan = lazy(() =>
-    computed(() => {
+    derive(() => {
       traceVersion.value;
       const list = spansOf(fn);
       return list.length === 0 ? undefined : list[list.length - 1];
@@ -125,7 +125,7 @@ export function scope<F extends AnyFactory>(...args: [F] | [string, F]): Scoped<
 
   Object.defineProperty(factory, "alive", {
     get: lazy(() =>
-      computed(() => {
+      derive(() => {
         traceVersion.value;
         const list = spansOf(fn);
         for (const s of list) if (s.status === "open") return true;
@@ -138,7 +138,7 @@ export function scope<F extends AnyFactory>(...args: [F] | [string, F]): Scoped<
 
   Object.defineProperty(factory, "runs", {
     get: lazy(() =>
-      computed(() => {
+      derive(() => {
         traceVersion.value;
         return spansOf(fn).length;
       }),
@@ -147,7 +147,7 @@ export function scope<F extends AnyFactory>(...args: [F] | [string, F]): Scoped<
 
   Object.defineProperty(factory, "duration", {
     get: lazy(() =>
-      computed(() => {
+      derive(() => {
         traceVersion.value;
         const list = spansOf(fn);
         let total = 0;
@@ -162,7 +162,7 @@ export function scope<F extends AnyFactory>(...args: [F] | [string, F]): Scoped<
 
   Object.defineProperty(factory, "touched", {
     get: lazy(() =>
-      computed(() => {
+      derive(() => {
         traceVersion.value;
         const list = spansOf(fn);
         if (list.length === 0) return [];
@@ -173,7 +173,7 @@ export function scope<F extends AnyFactory>(...args: [F] | [string, F]): Scoped<
 
   Object.defineProperty(factory, "touchedDeep", {
     get: lazy(() =>
-      computed(() => {
+      derive(() => {
         traceVersion.value;
         const list = spansOf(fn);
         if (list.length === 0) return [];

@@ -1,7 +1,7 @@
 // types.test.ts — compile-time guarantees for Writable<R>.
 
 import { describe, expect, it } from "vitest";
-import { computed, num, type Traits, Vec, vec, type Writable, type WritableOf } from "../index";
+import { derive, num, type Signal, type Traits, Vec, vec, type Writable } from "../index";
 
 describe("compile-time guarantees", () => {
   it("placeholder — checks fire at tsc", () => {
@@ -44,10 +44,13 @@ function _probes(): void {
   // traits dict at the type level, so `Traits<T, "linear" | "metric">`
   // can verify presence at compile time. Bare RO Vec is rejected
   // through the brand (separate axis from traits).
-  function spring<T>(s: WritableOf<T> & Traits<T, "linear" | "metric">, target: T): void {
+  function spring<T>(
+    s: Writable<Signal<T>> & Traits<T, "linear" | "metric">,
+    target: T,
+  ): void {
     s.value = target;
   }
-  spring(v, { x: 0, y: 0 }); // Writable<Vec> ⊆ WritableOf<V>
+  spring(v, { x: 0, y: 0 }); // Writable<Vec> ⊆ Writable<Signal<V>>
   spring(num(5), 10);
   // @ts-expect-error — bare Vec has no WritableBrand
   spring(ro, { x: 0, y: 0 });
@@ -55,7 +58,7 @@ function _probes(): void {
   spring(new Vec(), { x: 0, y: 0 });
 
   // ─── Generic accept-any reader ──────────────────────────────────
-  // Use `Read<Of<Vec>>` for "any readable of vec-shape" parameters.
+  // Use `Read<Inner<Vec>>` for "any readable of vec-shape" parameters.
   // This accepts bare Vec, Writable<Vec>, custom readers — anything
   // with `{ readonly value: V; peek(): V }`. Stricter `(p: Vec)` only
   // accepts bare Vec instances (Writable<Vec>'s lifted invertibles
@@ -68,7 +71,7 @@ function _probes(): void {
   void readVec({ value: { x: 0, y: 0 }, peek: () => ({ x: 0, y: 0 }) });
 
   // ─── Computed factory returns bare Signal — RO ─────────────────
-  const c = computed(() => 1);
+  const c = derive(() => 1);
   // @ts-expect-error — bare `Signal<T>` is RO at the type level
   // (the class declares `readonly value: T`; the runtime accessor is
   // installed on the prototype). `signal(...)` returns

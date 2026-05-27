@@ -7,7 +7,7 @@
 
 import { type Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { type Init, Signal, type Val, valFn, type Writable } from "../signal";
+import { type Init, reader, Signal, type Val, type Writable } from "../signal";
 import { type Linear, type Pack, type TraitDict } from "../traits";
 
 type V = number;
@@ -43,21 +43,21 @@ export class Num extends Signal<V> {
   }
 
   add(b: Val<V>): this {
-    const bf = valFn(b);
+    const bf = reader(b);
     return this.lens(
       v => v + bf(),
       n => n - bf(),
     );
   }
   sub(b: Val<V>): this {
-    const bf = valFn(b);
+    const bf = reader(b);
     return this.lens(
       v => v - bf(),
       n => n + bf(),
     );
   }
   scale(k: Val<number>): this {
-    const kf = valFn(k);
+    const kf = reader(k);
     return this.lens(
       v => v * kf(),
       n => n / kf(),
@@ -68,8 +68,8 @@ export class Num extends Signal<V> {
    *  is purely a readability alias. Sliders: `t.affine(width, x0)`
    *  maps `t ∈ [0,1]` to screen coords. */
   affine(k: Val<number>, off: Val<number>): this {
-    const kf = valFn(k);
-    const of = valFn(off);
+    const kf = reader(k);
+    const of = reader(off);
     return this.lens(
       v => v * kf() + of(),
       n => (n - of()) / kf(),
@@ -82,8 +82,8 @@ export class Num extends Signal<V> {
    *  written one). Use for sliders, gauges, anywhere a value
    *  shouldn't escape its range. */
   clamp(lo: Val<V>, hi: Val<V>): this {
-    const lf = valFn(lo);
-    const hf = valFn(hi);
+    const lf = reader(lo);
+    const hf = reader(hi);
     const c = (v: V) => {
       const l = lf(),
         h = hf();
@@ -95,7 +95,7 @@ export class Num extends Signal<V> {
   /** Lossy lens that snaps reads and writes to the nearest multiple
    *  of `step`. For knobs with discrete positions. */
   quantize(step: Val<number>): this {
-    const sf = valFn(step);
+    const sf = reader(step);
     const q = (v: V) => {
       const s = sf();
       return Math.round(v / s) * s;
@@ -114,7 +114,7 @@ export class Num extends Signal<V> {
    *  (the current accumulated angle) through `s` even across
    *  composed chains. No `this.peek()` side-channel needed. */
   cyclic(period: Val<number>): this {
-    const pf = valFn(period);
+    const pf = reader(period);
     return this.lens(
       v => v,
       (v, s) => {

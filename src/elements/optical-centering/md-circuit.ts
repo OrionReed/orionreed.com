@@ -1,7 +1,7 @@
 import {
   type AnyShape,
   circle,
-  computed,
+  derive,
   Diagram,
   EventBus,
   label,
@@ -12,12 +12,12 @@ import {
   type Path,
   path,
   play,
+  readNow,
   rect,
   signal,
   tokens,
   type Val,
   Vec,
-  value,
   vec,
 } from "../../minim";
 import * as R from "../rand";
@@ -52,7 +52,7 @@ export class MdCircuit extends Diagram {
         c,
         label(
           c.center,
-          computed(() => String(tick.value)),
+          derive(() => String(tick.value)),
           { bold: true },
         ),
         label(c.center.up(30), lbl),
@@ -83,7 +83,7 @@ export class MdCircuit extends Diagram {
     /** Indicator dot toggled by a reactive boolean. */
     const lit = (at: Vec, on: Val<boolean>) =>
       circle(at, 4, {
-        fill: () => (value(on) ? tokens.stroke : "transparent"),
+        fill: () => (readNow(on) ? tokens.stroke : "transparent"),
       });
 
     /** Reactive auto-route src→tgt with a 45° staircase via the y-midline. */
@@ -101,7 +101,7 @@ export class MdCircuit extends Diagram {
         // Bend points on y-midline; each diagonal leg covers |dy|/2 horizontally.
         const m = aRef.lerp(bRef, 0.5);
         const dirX = bRefV.x > aRefV.x ? 1 : -1;
-        const halfDy = computed(() => Math.abs(m.y.value - aRef.y.value));
+        const halfDy = derive(() => Math.abs(m.y.value - aRef.y.value));
         const pA = Vec.derive(() => ({
           x: aRef.x.value + dirX * halfDy.value,
           y: m.y.value,

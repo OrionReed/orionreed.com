@@ -1,4 +1,4 @@
-import { Num, type Val, Vec, valFn } from "@minim/signals";
+import { Num, reader, type Val, Vec } from "@minim/signals";
 import { TWO_PI } from "./dashed";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 
@@ -26,7 +26,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
 
   /** Point on perimeter at angle θ (radians, y-down). */
   atAngle(angle: Val<number>): Vec {
-    const a = valFn(angle);
+    const a = reader(angle);
     return Vec.derive(() => ({
       x: this.center.x.value + this.radius.value * Math.cos(a()),
       y: this.center.y.value + this.radius.value * Math.sin(a()),
@@ -34,7 +34,7 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
   }
   /** Unit tangent at angle θ. */
   tangentAt(angle: Val<number>): Vec {
-    const a = valFn(angle);
+    const a = reader(angle);
     return Vec.derive(() => ({ x: -Math.sin(a()), y: Math.cos(a()) }));
   }
 

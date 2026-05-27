@@ -1,7 +1,7 @@
 import {
   circle,
   clipPath,
-  computed,
+  derive,
   connect,
   Diagram,
   every,
@@ -25,11 +25,11 @@ const SIZE = 32;
 
 export class MdLubyTransform extends Diagram {
   protected scene(s: Mount): void {
-    const isMobile = computed(() => viewport().value.w < 768);
-    const W = computed(() => ((m: boolean) => (m ? 300 : 400))(isMobile.value));
-    const N = computed(() => ((m: boolean) => (m ? 7 : 10))(isMobile.value));
-    const stride = computed(() => (W.value - SIZE) / (N.value - 1));
-    const indices = computed(() =>
+    const isMobile = derive(() => viewport().value.w < 768);
+    const W = derive(() => ((m: boolean) => (m ? 300 : 400))(isMobile.value));
+    const N = derive(() => ((m: boolean) => (m ? 7 : 10))(isMobile.value));
+    const stride = derive(() => (W.value - SIZE) / (N.value - 1));
+    const indices = derive(() =>
       ((n: number) => Array.from({ length: n }, (_, i) => i))(N.value),
     );
 
@@ -41,11 +41,11 @@ export class MdLubyTransform extends Diagram {
         tick.value++;
       }),
     );
-    const cells = computed(() => {
+    const cells = derive(() => {
       void tick.value;
       return R.bools(QR_GRID * QR_GRID);
     });
-    const edges = computed(() => {
+    const edges = derive(() => {
       void tick.value;
       return R.bools(N.value, 0.3, 1);
     });

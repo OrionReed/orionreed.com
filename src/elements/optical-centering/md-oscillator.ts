@@ -2,7 +2,7 @@
 
 import {
   circle,
-  computed,
+  derive,
   Diagram,
   drive,
   line,
@@ -101,7 +101,7 @@ export class MdOscillator extends Diagram {
       }),
     );
 
-    const disp = computed(() => A_AMP * Math.exp(-GAMMA * t.value) * Math.cos(OMEGA * t.value));
+    const disp = derive(() => A_AMP * Math.exp(-GAMMA * t.value) * Math.cos(OMEGA * t.value));
 
     const eq = s(
       tex`x(t) = ${A.with("A")} e^{-${gamma.with("\\gamma")}t}\cos(${omega.with("\\omega")}t)`,
@@ -116,7 +116,7 @@ export class MdOscillator extends Diagram {
 
     s(
       pathD(
-        computed(() => computeTrace(t.value)),
+        derive(() => computeTrace(t.value)),
         { stroke: tokens.stroke, cap: "round", join: "round", box: TRACE_BOX },
       ),
     );
@@ -130,11 +130,11 @@ export class MdOscillator extends Diagram {
     );
     ball.attr(
       "fill",
-      computed(() => A.color.value ?? tokens.stroke),
+      derive(() => A.color.value ?? tokens.stroke),
     );
 
-    const ampStroke = computed(() => A.color.value ?? tokens.stroke);
-    const ampOpacity = computed(() => (A.active.value ? 0.7 : 0.18));
+    const ampStroke = derive(() => A.color.value ?? tokens.stroke);
+    const ampOpacity = derive(() => (A.active.value ? 0.7 : 0.18));
     [CY - A_AMP, CY + A_AMP].forEach(y => {
       const l = s(line(vec(TL, y), vec(TR, y), { stroke: ampStroke, opacity: ampOpacity }));
       l.attr("stroke-dasharray", "3 5");
@@ -142,9 +142,9 @@ export class MdOscillator extends Diagram {
 
     const tickPath = s(
       pathD(
-        computed(() => computeTicks(t.value)),
+        derive(() => computeTicks(t.value)),
         {
-          stroke: computed(() => omega.color.value ?? tokens.stroke),
+          stroke: derive(() => omega.color.value ?? tokens.stroke),
           strokeWidth: 1,
           dasharray: "2 3",
           cap: "round",
@@ -166,9 +166,9 @@ export class MdOscillator extends Diagram {
 
     const envPath = s(
       pathD(
-        computed(() => computeEnvelope(t.value)),
+        derive(() => computeEnvelope(t.value)),
         {
-          stroke: computed(() => gamma.color.value ?? tokens.stroke),
+          stroke: derive(() => gamma.color.value ?? tokens.stroke),
           strokeWidth: 1,
           dasharray: "4 6",
           cap: "round",

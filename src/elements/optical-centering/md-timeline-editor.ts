@@ -1,6 +1,6 @@
 import {
   circle,
-  computed,
+  derive,
   Diagram,
   draggable,
   EventBus,
@@ -28,7 +28,7 @@ export class MdTimelineEditor extends Diagram {
     const tl = timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));
     const reset = snapshot(tl.clock);
 
-    const phaseName = computed(() => {
+    const phaseName = derive(() => {
       for (const name of PHASES) if (tl[name].active.value) return name;
       return tl.clock.value >= tl.duration.value ? "rest" : PHASES[0];
     });
@@ -41,7 +41,7 @@ export class MdTimelineEditor extends Diagram {
     s(
       label(
         view.top.down(24),
-        computed(() => `phase: ${phaseName.value}   ·   taps: ${taps.value}`),
+        derive(() => `phase: ${phaseName.value}   ·   taps: ${taps.value}`),
         { size: 14 },
       ),
     );
@@ -50,15 +50,15 @@ export class MdTimelineEditor extends Diagram {
     const STRIP_W = view.w.value - 120;
     const STRIP_Y = 60;
     const STRIP_H = 36;
-    const scale = computed(() => STRIP_W / tl.duration.value);
+    const scale = derive(() => STRIP_W / tl.duration.value);
 
     PHASES.forEach((name, i) => {
       const c = tl[name];
       const body = s(
         rect(
-          computed(() => STRIP_X + c.at.value * scale.value),
+          derive(() => STRIP_X + c.at.value * scale.value),
           STRIP_Y,
-          computed(() => c.dur.value * scale.value),
+          derive(() => c.dur.value * scale.value),
           STRIP_H,
           { fill: COLORS[i] },
         ),
@@ -66,7 +66,7 @@ export class MdTimelineEditor extends Diagram {
       s(
         label(
           body.center,
-          computed(() => `${name} ${c.dur.value.toFixed(2)}s`),
+          derive(() => `${name} ${c.dur.value.toFixed(2)}s`),
         ),
       );
     });
@@ -104,7 +104,7 @@ export class MdTimelineEditor extends Diagram {
     const actors = PHASES.map((name, i) => {
       const c = circle(vec(120 + i * 180, STAGE_Y), 24, {
         fill: COLORS[i],
-        opacity: computed(() => 0.1 + tl[name].t.value * 0.9),
+        opacity: derive(() => 0.1 + tl[name].t.value * 0.9),
       });
       c.on("click", () => bus.emit("ping"));
       return c;

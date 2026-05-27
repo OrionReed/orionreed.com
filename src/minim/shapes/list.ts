@@ -1,7 +1,7 @@
 // Reactive list rendering. Diffs `parent`'s children as `source`
 // changes; stable keys preserve per-shape state across updates.
 
-import { effect, untracked, type Val, value } from "@minim/signals";
+import { effect, readNow, untracked, type Val } from "@minim/signals";
 import type { AnyShape } from "./shape";
 
 export interface ForEachOptions<T> {
@@ -37,7 +37,7 @@ export function forEach<T>(
   let entries: Entry[] = [];
 
   const eff = effect(() => {
-    const next = value(source);
+    const next = readNow(source);
     // Diff in `untracked` so internal reads/writes don't re-trigger.
     untracked(() => {
       const prevByKey = new Map<unknown, Entry>();

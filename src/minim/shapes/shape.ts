@@ -4,13 +4,14 @@ import {
   BoxMath,
   centroidLens,
   compose,
-  computed,
+  derive,
   effect,
   lazy,
   Matrix,
   meanLens,
+  type Inner,
   Num,
-  type Of,
+  readNow,
   Signal,
   signal,
   toMatrixString,
@@ -18,15 +19,14 @@ import {
   transformPoint,
   type Val,
   Vec,
-  value,
   type Writable,
 } from "@minim/signals";
 import { dashedPath } from "./dashed";
 import { tokens } from "./tokens";
 
-type VecValue = Of<Vec>;
-type BoxValue = Of<Box>;
-type MatrixValue = Of<Matrix>;
+type VecValue = Inner<Vec>;
+type BoxValue = Inner<Box>;
+type MatrixValue = Inner<Matrix>;
 
 export const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -190,7 +190,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     this.box = boxSig;
 
     // Identity short-circuit avoids reading `origin` on no-transform groups.
-    this.localFrame = computed(() => {
+    this.localFrame = derive(() => {
       const t = this.translate.value;
       const r = this.rotate.value;
       const sc = this.scale.value;
@@ -261,7 +261,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   ): void {
     const el = target === "intrinsic" && this.intrinsic ? this.intrinsic : this.el;
     if (val instanceof Signal || typeof val === "function") {
-      this.disposers.push(effect(() => el.setAttribute(name, String(value(val)))));
+      this.disposers.push(effect(() => el.setAttribute(name, String(readNow(val)))));
     } else {
       el.setAttribute(name, String(val));
     }
@@ -294,11 +294,11 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
           ? opts.thin
             ? tokens.thinWeight
             : tokens.weight
-          : value(opts.strokeWidth);
+          : readNow(opts.strokeWidth);
       const capExt = cap === "round" ? w : 0;
       this.attr(
         "d",
-        computed(() => dashedPath(this.segments(), { closed, capExtension: capExt })),
+        derive(() => dashedPath(this.segments(), { closed, capExtension: capExt })),
       );
     } else if (nativeAttrs) {
       this.attrs(nativeAttrs);
@@ -471,11 +471,11 @@ function liftAnimatable<T, C extends Signal<T>>(
   if (src instanceof Signal || typeof src === "function") {
     disposers.push(
       effect(() => {
-        target.value = value(src) as Of<C>;
+        target.value = readNow(src) as Inner<C>;
       }),
     );
   } else {
-    target.value = src as Of<C>;
+    target.value = src as Inner<C>;
   }
   return target;
 }

@@ -9,9 +9,9 @@ import {
   Num,
   num,
   play,
+  readNow,
   type Val,
   Vec,
-  value,
   vec,
   type Writable,
   wave,
@@ -23,7 +23,7 @@ const LINK_LEN = 11;
 
 /** Constant-velocity advance — `sig += v·dt`. */
 const drift = (sig: Writable<Num>, v: Val<number>) =>
-  driven(sig, (dt, _t, cur) => cur + value(v) * dt);
+  driven(sig, (dt, _t, cur) => cur + readNow(v) * dt);
 
 const sine = (t: number, f: number) => Math.sin(2 * Math.PI * f * t);
 

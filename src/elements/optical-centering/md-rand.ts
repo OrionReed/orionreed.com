@@ -4,7 +4,7 @@ import {
   bounceIn,
   type Content,
   circle,
-  computed,
+  derive,
   Diagram,
   easeIn,
   easeInOut,
@@ -90,8 +90,8 @@ export class MdRand extends Diagram {
     this.view(600, 280);
 
     const current = signal<Pick | null>(null);
-    const currentName = computed<Content>(() => current.value?.name ?? "—");
-    const currentColor = computed(() => current.value?.color ?? "#1a1a1a");
+    const currentName = derive<Content>(() => current.value?.name ?? "—");
+    const currentColor = derive(() => current.value?.color ?? "#1a1a1a");
 
     s(
       label(vec(20, 24), "rand", { bold: true, align: Anchor.Left }),
@@ -110,8 +110,8 @@ export class MdRand extends Diagram {
     const ROW_H = 22;
     s(label(vec(MENU_X, MENU_Y - 22), "candidates", { size: 10, align: Anchor.Left }));
     MOVES.forEach((m, i) => {
-      const isActive = computed(() => current.value?.name === m.name);
-      const opacity = computed(() => (isActive.value ? 1 : 0.4));
+      const isActive = derive(() => current.value?.name === m.name);
+      const opacity = derive(() => (isActive.value ? 1 : 0.4));
       s(
         circle(vec(MENU_X, MENU_Y + i * ROW_H), 5, {
           fill: m.color,

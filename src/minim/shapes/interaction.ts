@@ -1,8 +1,8 @@
 // DOM input → signal-world bridges that bind to scene-graph shapes.
 
-import { Num, type Of, type Signal, signal, Vec, type Writable } from "@minim/signals";
+import { type Inner, Num, type Signal, signal, Vec, type Writable } from "@minim/signals";
 
-type VecValue = Of<Vec>;
+type VecValue = Inner<Vec>;
 type ClientPoint = { clientX: number; clientY: number };
 
 import type { AnyShape } from "./shape";

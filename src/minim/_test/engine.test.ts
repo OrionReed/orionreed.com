@@ -6,9 +6,9 @@
 //   - Constructor takes plain T (binding via the `bind` free fn)
 //   - bind(target, source) — the binding API
 //   - isSignal brand: prototype-based, not structural
-//   - value() unwraps reactives without footgunning plain {value: …}
+//   - readNow() unwraps reactives without footgunning plain {value: …}
 
-import { computed, effect, isSignal, Num, Signal, signal, value } from "@minim/signals";
+import { derive, effect, isSignal, Num, readNow, Signal, signal } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 
@@ -68,7 +68,7 @@ describe("engine", () => {
     section("isSignal brand: branded prototypes, not structural .value");
     {
       check("isSignal(signal)", isSignal(signal(0)));
-      check("isSignal(computed)", isSignal(computed(() => 0)));
+      check("isSignal(computed)", isSignal(derive(() => 0)));
       check(
         "isSignal(lens)",
         isSignal(
@@ -85,13 +85,13 @@ describe("engine", () => {
       check("isSignal(null)", !isSignal(null));
     }
 
-    section("value() unwraps via brand, not structural shape");
+    section("readNow() unwraps via brand, not structural shape");
     {
-      check("value(5)", value(5) === 5);
-      check("value(() => 10)", value(() => 10) === 10);
-      check("value(signal(15))", value(signal(15)) === 15);
+      check("readNow(5)", readNow(5) === 5);
+      check("readNow(() => 10)", readNow(() => 10) === 10);
+      check("readNow(signal(15))", readNow(signal(15)) === 15);
       const plainT = { value: 5, name: "alice" };
-      check("plain T with .value is preserved", value(plainT as any) === plainT);
+      check("plain T with .value is preserved", readNow(plainT as any) === plainT);
     }
   });
 });

@@ -21,7 +21,7 @@ import {
   argminVec,
   type CurveSegment,
   circle,
-  computed,
+  derive,
   curve,
   Diagram,
   drive,
@@ -31,13 +31,13 @@ import {
   Mount,
   type Num,
   num,
-  type Of,
+  type Inner,
   polar,
   Vec,
   type Writable,
 } from "../../minim";
 
-type V = Of<Vec>;
+type V = Inner<Vec>;
 
 const TAU = Math.PI * 2;
 
@@ -110,7 +110,7 @@ export class MdLoop extends Diagram {
     // seeds are also used (read-only) by the inverse forward below.
     let liveAB = 0.5;
     let liveBP = Math.PI - 0.5;
-    const sol = computed(() => {
+    const sol = derive(() => {
       const r = solveFourBar(O.value, P.value, r1, r2, r3, thetaOA.value, liveAB, liveBP);
       liveAB = r.thetaAB;
       liveBP = r.thetaBP;
@@ -118,8 +118,8 @@ export class MdLoop extends Diagram {
     });
 
     const B = Vec.derive(() => sol.value.B);
-    const thetaAB = computed(() => sol.value.thetaAB);
-    const thetaBP = computed(() => sol.value.thetaBP);
+    const thetaAB = derive(() => sol.value.thetaAB);
+    const thetaBP = derive(() => sol.value.thetaBP);
 
     // Pre-compute the coupler curve with its own private seeds so the
     // sweep doesn't perturb the live solver's continuity state. The

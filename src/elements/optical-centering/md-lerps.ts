@@ -2,7 +2,7 @@ import {
   Anchor,
   box,
   circle,
-  computed,
+  derive,
   Diagram,
   type Easing,
   type Lerp,
@@ -99,7 +99,7 @@ export class MdLerps extends Diagram {
       rect(
         VIS_X,
         rowY(0) + 4,
-        computed(() => n.value * VIS_W),
+        derive(() => n.value * VIS_W),
         10,
         {
           stroke: "transparent",
@@ -108,7 +108,7 @@ export class MdLerps extends Diagram {
       ),
       readout(
         0,
-        computed(() => fmtNum(n.value)),
+        derive(() => fmtNum(n.value)),
       ),
     );
 
@@ -118,7 +118,7 @@ export class MdLerps extends Diagram {
       circle(pos, 5, { fill: true, stroke: "transparent" }),
       readout(
         1,
-        computed(() => fmtVec(pos.value)),
+        derive(() => fmtVec(pos.value)),
       ),
     );
 
@@ -132,7 +132,7 @@ export class MdLerps extends Diagram {
       }),
       readout(
         2,
-        computed(() => fmtBox(box_.value)),
+        derive(() => fmtBox(box_.value)),
       ),
     );
 
@@ -145,7 +145,7 @@ export class MdLerps extends Diagram {
       }),
       readout(
         3,
-        computed(() => fmtColor(col.value)),
+        derive(() => fmtColor(col.value)),
       ),
     );
 
@@ -155,7 +155,7 @@ export class MdLerps extends Diagram {
       label(vec(VIS_X + 10, baseY(4)), txt, { align: Anchor.Left }),
       readout(
         4,
-        computed(() => `len=${txt.value.length}`),
+        derive(() => `len=${txt.value.length}`),
       ),
     );
 

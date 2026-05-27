@@ -1,6 +1,6 @@
 import {
   circle,
-  computed,
+  derive,
   Diagram,
   draggable,
   label,
@@ -44,7 +44,7 @@ export class MdMultitrack extends Diagram {
     ];
 
     const STRIP_W = view.w.value - 2 * STRIP_X;
-    const SCALE = computed(() => (tl.duration.value > 0 ? STRIP_W / tl.duration.value : 0));
+    const SCALE = derive(() => (tl.duration.value > 0 ? STRIP_W / tl.duration.value : 0));
 
     s(
       rect(STRIP_X, STRIP_Y, STRIP_W, STRIP_H_TOTAL, {
@@ -76,7 +76,7 @@ export class MdMultitrack extends Diagram {
       // no conversion math at the call site.
       const px = clip.span.scale(SCALE).shift(STRIP_X);
 
-      const renderedW = computed(() => Math.max(px.width.value, MIN_W_PX));
+      const renderedW = derive(() => Math.max(px.width.value, MIN_W_PX));
 
       const body = s(
         rect(px.lo, bodyY, renderedW, bodyH, {
@@ -133,9 +133,9 @@ export class MdMultitrack extends Diagram {
 
     const STAGE_Y = 210;
 
-    const ballX = computed(() => view.center.x.value + Math.sin(tl.shift.t.value * Math.PI) * 110);
-    const ballR = computed(() => 18 + Math.sin(tl.scale.t.value * Math.PI) * 28);
-    const ballOpacity = computed(() => tl.fadeIn.t.value * (1 - tl.fadeOut.t.value));
+    const ballX = derive(() => view.center.x.value + Math.sin(tl.shift.t.value * Math.PI) * 110);
+    const ballR = derive(() => 18 + Math.sin(tl.scale.t.value * Math.PI) * 28);
+    const ballOpacity = derive(() => tl.fadeIn.t.value * (1 - tl.fadeOut.t.value));
 
     s(
       circle(
@@ -148,7 +148,7 @@ export class MdMultitrack extends Diagram {
     s(
       label(
         view.bottom.up(32),
-        computed(() => `time: ${tl.clock.value.toFixed(2)}s / ${tl.duration.value.toFixed(2)}s`),
+        derive(() => `time: ${tl.clock.value.toFixed(2)}s / ${tl.duration.value.toFixed(2)}s`),
       ),
       label(
         view.bottom.up(14),

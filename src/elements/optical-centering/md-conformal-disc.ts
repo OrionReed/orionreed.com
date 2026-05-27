@@ -24,19 +24,19 @@
 import {
   type CurveSegment,
   circle,
-  computed,
+  derive,
   curve,
   Diagram,
   handle,
   label,
   Mount,
-  type Of,
+  type Inner,
   Vec,
   vec,
   type Writable,
 } from "../../minim";
 
-type V = Of<Vec>;
+type V = Inner<Vec>;
 
 interface GeodesicCircle {
   center: V;
@@ -253,7 +253,7 @@ export class MdConformalDisc extends Diagram {
     // Live readout. In a Euclidean triangle, α + β + γ = π exactly;
     // here it's strictly less, and the deficit IS the area
     // (Gauss–Bonnet for a triangle on a constant-curvature surface).
-    const angleSum = computed(() => {
+    const angleSum = derive(() => {
       const aA = angleAt(Aw.value, Bw.value, Cw.value);
       const aB = angleAt(Bw.value, Cw.value, Aw.value);
       const aC = angleAt(Cw.value, Aw.value, Bw.value);

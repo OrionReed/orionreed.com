@@ -1,6 +1,6 @@
 // hooks.test.ts — watched/unwatched lifecycle hooks.
 
-import { computed, effect, Signal } from "@minim/signals";
+import { derive, effect, Signal } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 
@@ -82,7 +82,7 @@ describe("hooks", () => {
           watched++;
         },
       });
-      const c = computed(() => s.value * 2);
+      const c = derive(() => s.value * 2);
       check("computed doesn't read yet, no watched", watched === 0);
       const stop = effect(() => {
         void c.value;

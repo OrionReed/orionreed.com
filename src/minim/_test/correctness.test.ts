@@ -5,11 +5,11 @@
 //   4.2  vec(reactiveX, reactiveY) glitches without batching
 // Plus the Symbol.toPrimitive footgun guard.
 
-import { batch, computed, effect, num, type Of, signal, Vec, vec } from "@minim/signals";
+import { batch, derive, effect, type Inner, num, signal, Vec, vec } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 
-type VecValue = Of<Vec>;
+type VecValue = Inner<Vec>;
 
 describe("correctness", () => {
   it("all checks", () => {
@@ -17,7 +17,7 @@ describe("correctness", () => {
     {
       const a = signal(0);
       let shouldThrow = true;
-      const c = computed(() => {
+      const c = derive(() => {
         if (shouldThrow) throw new Error("boom");
         return a.value * 2;
       });
@@ -76,7 +76,7 @@ describe("correctness", () => {
     section("1.3 Cyclic computed throws RangeError");
     {
       let c: { value: number };
-      c = computed(() => c.value + 1) as never;
+      c = derive(() => c.value + 1) as never;
       let threw: unknown;
       try {
         void c.value;
@@ -87,8 +87,8 @@ describe("correctness", () => {
       check("error message mentions cycle", /[Cc]yclic/.test((threw as Error).message));
 
       let a: { value: number }, b: { value: number };
-      a = computed(() => b.value + 1) as never;
-      b = computed(() => a.value + 1) as never;
+      a = derive(() => b.value + 1) as never;
+      b = derive(() => a.value + 1) as never;
       let threw2: unknown;
       try {
         void a.value;

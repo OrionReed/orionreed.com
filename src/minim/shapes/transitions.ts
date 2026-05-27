@@ -6,9 +6,9 @@
 // Tween is yield-able by virtue of being an Animator.
 
 import { type Easing, easeIn, easeInOut, easeOut, type Yieldable } from "@minim/core";
-import { Dir, type Of, tween, type Val, Vec } from "@minim/signals";
+import { Dir, type Inner, tween, type Val, Vec } from "@minim/signals";
 
-type VecValue = Of<Vec>;
+type VecValue = Inner<Vec>;
 
 import type { Has } from "./shape";
 

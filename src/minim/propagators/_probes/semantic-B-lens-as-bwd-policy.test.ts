@@ -27,7 +27,7 @@ import {
   centroidLens,
   midpointLens,
   num,
-  type Of,
+  type Inner,
   signal,
   Vec,
   vec,
@@ -151,7 +151,7 @@ describe("Semantic probe B: lens encodes WRITE POLICY", () => {
         const f = factor.value;
         for (const v of verts) {
           const cur = v.value;
-          (v.value as Of<Vec>) = {
+          (v.value as Inner<Vec>) = {
             x: c.x + (cur.x - c.x) * f,
             y: c.y + (cur.y - c.y) * f,
           };

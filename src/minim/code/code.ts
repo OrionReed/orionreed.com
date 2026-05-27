@@ -30,11 +30,11 @@ import {
   effect,
   type Num as NumSignal,
   num,
+  readNow,
   type Signal,
   signal,
   type Val,
   type Vec,
-  value,
   vec,
   type Writable,
 } from "@minim/signals";
@@ -154,7 +154,7 @@ export class CodeShape extends Shape {
     const fontFamily = opts.font ?? DEFAULT_FONT;
     const language = opts.language ?? "typescript";
     const { w: charW, h: lineH } = measureFont(fontSize, fontFamily);
-    const initialStr = value(initial);
+    const initialStr = readNow(initial);
 
     const lines = initialStr.split("\n");
     const initW = lines.reduce((a, l) => Math.max(a, l.length), 0) * charW;

@@ -11,7 +11,7 @@
 
 import type { Anim } from "@minim/core";
 import {
-  computed,
+  derive,
   type Read,
   type Signal,
   setSignalWriteHook,
@@ -82,7 +82,7 @@ export function record(anim: Anim): Recorder {
     });
   }
 
-  const spansRead = computed(() => {
+  const spansRead = derive(() => {
     ver.value;
     return list as readonly Span[];
   });
