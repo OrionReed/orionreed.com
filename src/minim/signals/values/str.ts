@@ -77,28 +77,45 @@ export function applyCaseMask(target: V, mask: string): V {
   return out;
 }
 
+const ASCII_LETTER = (c: string): boolean =>
+  (c >= "a" && c <= "z") || (c >= "A" && c <= "Z");
+
 /** Apply the case PATTERN of a source word to a target word. Detects
  *  the three common conventions before falling back to position-wise:
  *
- *    all-upper  → target.toUpperCase()        ("BROWN" + "purple" → "PURPLE")
- *    all-lower  → target.toLowerCase()        ("fox"   + "WOLF"   → "wolf")
- *    title case → first cap, rest lower       ("The"   + "wolf"   → "Wolf")
- *    other      → position-wise applyCaseMask (mixed, partial-cap, etc.)
+ *    all-upper  → all target letters uppercased ("BROWN" + "purple" → "PURPLE")
+ *    all-lower  → all target letters lowercased ("fox"   + "WOLF"   → "wolf")
+ *    title case → first letter up, rest down    ("The"   + "wolf"   → "Wolf")
+ *    other      → position-wise applyCaseMask   (mixed, partial-cap, etc.)
  *
- *  This is what makes case-preserving writes survive word-length
- *  changes — under pure position-wise application, "fox" → "wolf" in a
- *  source where "fox" is at the boundary would shift everything after
- *  by one position and corrupt the mask alignment. The pattern check
- *  fixes the common cases that humans actually care about. */
+ *  In every case, NON-LETTER characters in the target pass through
+ *  unchanged — title case applied to "-gng" produces "-Gng" (first
+ *  letter uppercased, leading dash unchanged), not "-gng" with a
+ *  no-op uppercased dash. Without the letter-aware handling, GetPut
+ *  fails on any source word containing non-letter characters because
+ *  position 0 of the target may not even be a letter. */
 export function applyCasePattern(target: V, mask: string): V {
   if (target.length === 0 || mask.length === 0) return target;
   const letters = [...mask].filter(c => c === "U" || c === "L");
-  if (letters.length > 0 && letters.every(c => c === "U")) return target.toUpperCase();
-  if (letters.length > 0 && letters.every(c => c === "L")) return target.toLowerCase();
-  // Title case: first letter U, all subsequent letters L (non-letter
-  // positions don't count against the pattern).
-  if (letters.length > 0 && letters[0] === "U" && letters.slice(1).every(c => c === "L")) {
-    return target.charAt(0).toUpperCase() + target.slice(1).toLowerCase();
+  if (letters.length === 0) return target;
+  if (letters.every(c => c === "U")) return target.toUpperCase();
+  if (letters.every(c => c === "L")) return target.toLowerCase();
+  if (letters[0] === "U" && letters.slice(1).every(c => c === "L")) {
+    // Title case: uppercase the FIRST letter (skipping leading
+    // non-letters), lowercase every subsequent letter, pass non-
+    // letters through unchanged.
+    let out = "";
+    let firstLetterDone = false;
+    for (let i = 0; i < target.length; i++) {
+      const c = target[i]!;
+      if (ASCII_LETTER(c)) {
+        out += firstLetterDone ? c.toLowerCase() : c.toUpperCase();
+        firstLetterDone = true;
+      } else {
+        out += c;
+      }
+    }
+    return out;
   }
   return applyCaseMask(target, mask);
 }
@@ -110,6 +127,16 @@ export function applyCasePattern(target: V, mask: string): V {
  *  contractions ("don't") and hyphenated terms ("co-op"). Everything
  *  else (whitespace, punctuation, brackets) becomes a separator. */
 const WORD_CHAR = /[\p{L}\p{N}_'-]/u;
+
+/** Strip every non-word character. Used by the `words` and
+ *  `sortedUnique` views' putl to enforce that user-typed punctuation
+ *  in those views (which project word tokens only) does NOT leak into
+ *  the source via the separator complement. Without this, the view's
+ *  contract ("each line is one word") and the complement's contract
+ *  ("separators capture everything else") would fight: extra `!` in a
+ *  line would land inside the source's adjacent separator, persist
+ *  there across reads, and re-emerge multiplied on the next edit. */
+const stripNonWord = (s: V): V => s.replace(/[^\p{L}\p{N}_'-]/gu, "");
 
 /** Split `s` into words and separators. Returns:
  *
@@ -190,9 +217,79 @@ interface TrimComplement {
   trail: string;
 }
 
+/** Build the case complement from a source string. Both the
+ *  positional `wordMasks` array AND the content-keyed `byContent` map
+ *  are populated in one parse pass. The byContent value lists are
+ *  stored in source order so FIFO consumption in `putl` matches up
+ *  duplicate words to their source positions. */
+function refreshCaseComplement(s: V, c: CaseComplement): void {
+  const { words } = parseWords(s);
+  const wordMasks = words.map(caseMaskOf);
+  const byContent = new Map<string, string[]>();
+  for (let i = 0; i < words.length; i++) {
+    const key = words[i]!.toLowerCase();
+    let arr = byContent.get(key);
+    if (arr === undefined) {
+      arr = [];
+      byContent.set(key, arr);
+    }
+    arr.push(wordMasks[i]!);
+  }
+  c.wordMasks = wordMasks;
+  c.byContent = byContent;
+}
+
+/** Apply the case complement to a target string and rebuild. Each
+ *  target word goes through three lookup tiers — content match
+ *  (FIFO-consumed from a per-call clone), positional fallback, then
+ *  native pass-through. */
+function applyCaseComplement(target: V, c: CaseComplement): V {
+  const { words, seps } = parseWords(target);
+  // Per-call clone so we can consume FIFO without mutating the stored
+  // map — multiple `putl` calls with the same complement must each
+  // start from the same byContent state.
+  const remaining = new Map<string, string[]>();
+  for (const [k, arr] of c.byContent) remaining.set(k, arr.slice());
+  const cased = words.map((w, i) => {
+    const key = w.toLowerCase();
+    const matches = remaining.get(key);
+    if (matches !== undefined && matches.length > 0) {
+      return applyCasePattern(w, matches.shift()!);
+    }
+    const mask = i < c.wordMasks.length ? c.wordMasks[i]! : "";
+    return mask.length === 0 ? w : applyCasePattern(w, mask);
+  });
+  return rebuildWords(cased, seps);
+}
+
 interface CaseComplement {
-  /** Per-word case mask, indexed by word position from `parseWords`. */
+  /** Per-word case mask, indexed by word position from `parseWords`.
+   *  Used as a fallback for new content the user types — a word added
+   *  at position `i` inherits the source's positional mask at `i`
+   *  (e.g., renaming "Fox" → "Wolf" gives "Wolf" because position 3
+   *  was title case). */
   wordMasks: string[];
+  /** Case masks keyed by lowercased source word. The primary lookup —
+   *  when the user splits / inserts / reorders without renaming, each
+   *  surviving word recovers its source mask by content rather than
+   *  by position. Multiple occurrences keep their masks in source
+   *  order (FIFO-consumed in `putl`), so "Hello hello" round-trips
+   *  exactly even across structural edits. Per-position fallback
+   *  handles purely new content. */
+  byContent: Map<string, string[]>;
+  /** The source value we last produced from `putl`. On `putr`, if the
+   *  source equals this, the change came from our own write — keep
+   *  both `wordMasks` and `byContent` intact so the user's structural
+   *  edits in this view round-trip cleanly (split "Quick" → "Q Uick",
+   *  rejoin → "Quick"). When the source differs from our last write,
+   *  an external write happened — refresh everything from the new
+   *  source.
+   *
+   *  Identity-of-value (not a flag) makes the rule robust against
+   *  the case where `putr` doesn't run between our `putl` and an
+   *  external write — a flag would survive stale across a missed
+   *  putr; the value check notices the mismatch and refreshes. */
+  lastWriteResult?: string;
 }
 
 interface WordsComplement {
@@ -236,7 +333,12 @@ export class Str extends Signal<V> {
   // ── symmetric projections ────────────────────────────────────────
 
   /** Trim leading and trailing whitespace. The complement remembers
-   *  exactly what was trimmed; writes restore the original padding. */
+   *  exactly what was trimmed; writes restore the original padding.
+   *
+   *  Edge whitespace in the user's WRITE is stripped before splicing —
+   *  the view's contract is "no edge whitespace", so accepting it on
+   *  writes would silently append to the padding complement and grow
+   *  unboundedly across edits. Same rule as `words` / `sortedUnique`. */
   trim(): Writable<Str> {
     return Str.lens(this, {
       missing: { lead: "", trail: "" } as TrimComplement,
@@ -250,51 +352,64 @@ export class Str extends Signal<V> {
         c.trail = trail;
         return remain.slice(0, remain.length - trail.length);
       },
-      putl: (target: V, _s: V, c: TrimComplement) => c.lead + target + c.trail,
+      putl: (target: V, _s: V, c: TrimComplement) => {
+        const stripped = target.replace(/^\s+/, "").replace(/\s+$/, "");
+        return c.lead + stripped + c.trail;
+      },
     });
   }
 
-  /** Lowercase view. The complement is the per-word case mask of the
-   *  source — when you write a new value, each output word picks up
-   *  the case pattern (all-caps / Title / lower / mixed) of the source
-   *  word at the same word index. Word-aware mask survives word-length
-   *  changes; the position-wise fallback handles mixed patterns. The
-   *  classical Foster/Pierce case-preserving find-and-replace example. */
+  /** Lowercase view. Word-aware case preservation with sticky mask
+   *  across the user's own structural edits and content-keyed lookup
+   *  for words that survive a rearrangement.
+   *
+   *  Lookup priority in `putl`:
+   *    1. Content match — if `byContent` has the lowercased target
+   *       word, consume its first remaining source mask. Keeps "Jumps"
+   *       capitalised when an unrelated split shifts indices, and
+   *       preserves per-word case across reorderings.
+   *    2. Per-position fallback — `wordMasks[i]` covers new content
+   *       at a known source position (renames "Fox" → "Wolf" → "Wolf"
+   *       because position 3 was title case).
+   *    3. Native — completely new content beyond the source structure
+   *       stays as the user typed it.
+   *
+   *  Both maps are sticky across the user's own writes via the
+   *  identity-of-value check on `lastWriteResult`; external source
+   *  changes refresh the maps to reflect new content. */
   lowercase(): Writable<Str> {
     return Str.lens(this, {
-      missing: { wordMasks: [] } as CaseComplement,
+      missing: { wordMasks: [], byContent: new Map() } as CaseComplement,
       putr: (s: V, c: CaseComplement) => {
-        const { words } = parseWords(s);
-        c.wordMasks = words.map(caseMaskOf);
+        if (s !== c.lastWriteResult) {
+          refreshCaseComplement(s, c);
+          c.lastWriteResult = s;
+        }
         return s.toLowerCase();
       },
       putl: (target: V, _s: V, c: CaseComplement) => {
-        const { words, seps } = parseWords(target);
-        const cased = words.map((w, i) => {
-          const mask = i < c.wordMasks.length ? c.wordMasks[i]! : "";
-          return mask.length === 0 ? w : applyCasePattern(w, mask);
-        });
-        return rebuildWords(cased, seps);
+        const result = applyCaseComplement(target, c);
+        c.lastWriteResult = result;
+        return result;
       },
     });
   }
 
-  /** Uppercase view. Dual of `lowercase`. */
+  /** Uppercase view. Dual of `lowercase`; same sticky-mask rule. */
   uppercase(): Writable<Str> {
     return Str.lens(this, {
-      missing: { wordMasks: [] } as CaseComplement,
+      missing: { wordMasks: [], byContent: new Map() } as CaseComplement,
       putr: (s: V, c: CaseComplement) => {
-        const { words } = parseWords(s);
-        c.wordMasks = words.map(caseMaskOf);
+        if (s !== c.lastWriteResult) {
+          refreshCaseComplement(s, c);
+          c.lastWriteResult = s;
+        }
         return s.toUpperCase();
       },
       putl: (target: V, _s: V, c: CaseComplement) => {
-        const { words, seps } = parseWords(target);
-        const cased = words.map((w, i) => {
-          const mask = i < c.wordMasks.length ? c.wordMasks[i]! : "";
-          return mask.length === 0 ? w : applyCasePattern(w, mask);
-        });
-        return rebuildWords(cased, seps);
+        const result = applyCaseComplement(target, c);
+        c.lastWriteResult = result;
+        return result;
       },
     });
   }
@@ -305,7 +420,13 @@ export class Str extends Signal<V> {
    *  Complement: the separator layout (lead, between-each, trail).
    *  Write: split the new line-separated target into words, rebuild
    *  the source with the original separators. Adding words inserts
-   *  single spaces; removing words preserves the trailing separator. */
+   *  single spaces; removing words preserves the trailing separator.
+   *
+   *  Non-word characters typed into a line are STRIPPED before write —
+   *  the view's contract is "each line is one word token". Without the
+   *  strip, user-typed punctuation would land inside the source's
+   *  adjacent separator and accumulate across edits. To add punctuation
+   *  to the source, edit `Trimmed` / `Lowercased` / `Source` instead. */
   words(): Writable<Str> {
     return Str.lens(this, {
       missing: { separators: [] } as WordsComplement,
@@ -315,13 +436,9 @@ export class Str extends Signal<V> {
         return words.join("\n");
       },
       putl: (target: V, _s: V, c: WordsComplement) => {
-        // Editing in this pane treats each line as one word — empty
-        // lines and per-line whitespace are dropped, mirroring the
-        // forward map. Punctuation typed into a line stays as part of
-        // that word; it'll round-trip through parseWords if it sticks.
         const words = target
           .split(/\n/)
-          .map(w => w.trim())
+          .map(stripNonWord)
           .filter(w => w.length > 0);
         return rebuildWords(words, c.separators);
       },
@@ -371,9 +488,12 @@ export class Str extends Signal<V> {
         return unique.join("\n");
       },
       putl: (target: V, _s: V, c: SortedUniqueComplement) => {
+        // Non-word characters typed into the view are stripped — same
+        // rule as `words` (sortedUnique's read also drops separators,
+        // so accepting them on write would leak into the complement).
         const edited = target
           .split(/\n/)
-          .map(w => w.trim())
+          .map(stripNonWord)
           .filter(w => w.length > 0);
         const sourceWords = c.sourceWords.slice();
         const n = Math.min(edited.length, c.unique.length);

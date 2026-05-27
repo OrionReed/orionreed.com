@@ -197,17 +197,27 @@ export class MdStringPipeline extends BaseElement {
         // User typed into this pane — write through. Editing through a
         // canonicalising projection (e.g. trim normalises trailing
         // spaces) shows up on next read; the cell's effect below skips
-        // any pane the user is actively focused on.
+        // any pane the user is actively focused on so the cursor stays
+        // put. We force a re-sync on blur to pick up the normalised
+        // form.
         p.cell.value = ta.value;
       };
       ta.addEventListener("input", onInput);
+
+      // On blur, re-sync the textarea to the cell's canonical value
+      // (which may differ if the lens normalised the user's input —
+      // e.g., typing "X" in the lowercase view is canonically "x").
+      ta.addEventListener("blur", () => {
+        const v = p.cell.value;
+        if (ta.value !== v) ta.value = v;
+      });
 
       wrap.append(ta);
       grid.append(wrap);
 
       // Bind cell → textarea. Skip the textarea the user is editing so
-      // we never clobber the cursor; the lens chain will land the
-      // normalized form on the next focus loss or external write.
+      // we never clobber the cursor; the blur handler above picks up
+      // the canonical form when focus leaves.
       const dispose = effect(() => {
         const v = p.cell.value;
         if (this.shadow.activeElement === ta) return;

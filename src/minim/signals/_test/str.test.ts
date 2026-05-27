@@ -791,6 +791,178 @@ describe("Recovery from degenerate writes", () => {
   });
 });
 
+// ─── Regression: complement-separator leak ────────────────────────
+//
+// The historical bug: a user types punctuation in a view that projects
+// word tokens only (`words` / `sortedUnique`). The non-word character
+// would land inside the source's adjacent separator on write, persist
+// in the complement, and re-emerge MULTIPLIED on the next edit (each
+// new write re-stitches the saved separator AND any new chars). The
+// fix: those views strip non-word chars before write. Same shape for
+// `trim` and edge whitespace.
+
+describe("regression: punctuation typed into projection views doesn't accumulate", () => {
+  it("words: adding `!` to a line strips it; source is unchanged", () => {
+    const s = str("the lazy dog");
+    const w = s.words();
+    w.peek();
+    w.value = "the\nlazy!\ndog";
+    expect(s.value).toBe("the lazy dog");
+  });
+
+  it("words: repeated `!` edits don't grow separators", () => {
+    const s = str("the lazy dog");
+    const w = s.words();
+    w.peek();
+    for (let i = 0; i < 10; i++) w.value = "the\nlazy!\ndog";
+    expect(s.value).toBe("the lazy dog");
+  });
+
+  it("sortedUnique: adding `!` to a duplicated word doesn't multiply across positions", () => {
+    const s = str("the lazy the dog the");
+    const u = s.sortedUnique();
+    u.peek();
+    expect(u.value).toBe("dog\nlazy\nthe");
+    // Edit the deduped "the" entry to "the!" — punctuation is stripped
+    // before broadcast, so source is unchanged (no `!` appears at any
+    // of the three "the" positions).
+    u.value = "dog\nlazy\nthe!";
+    expect(s.value).toBe("the lazy the dog the");
+  });
+
+  it("sortedUnique: repeated edits with `!` don't accumulate `!`s anywhere", () => {
+    const s = str("the lazy the dog the");
+    const u = s.sortedUnique();
+    u.peek();
+    for (let i = 0; i < 10; i++) u.value = "dog\nlazy\nthe!";
+    expect(s.value).toBe("the lazy the dog the");
+  });
+
+  it("words THROUGH lowercase chain: punctuation typed into words is stripped, not amplified", () => {
+    const s = str("the lazy dog");
+    const lo = s.lowercase();
+    const w = lo.words();
+    lo.peek();
+    w.peek();
+    for (let i = 0; i < 5; i++) w.value = "the\nlazy!\ndog";
+    expect(s.value).toBe("the lazy dog");
+  });
+
+  it("sortedUnique THROUGH words THROUGH lowercase THROUGH trim: deep chain, repeated `!` writes", () => {
+    const s = str("  The Quick Brown The  ");
+    const trimmed = s.trim();
+    const lo = trimmed.lowercase();
+    const w = lo.words();
+    const u = w.sortedUnique();
+    trimmed.peek();
+    lo.peek();
+    w.peek();
+    u.peek();
+    expect(u.value).toBe("brown\nquick\nthe");
+    // Type `!` after "the" repeatedly — should NOT add or accumulate
+    // punctuation anywhere in source.
+    for (let i = 0; i < 5; i++) u.value = "brown\nquick\nthe!";
+    expect(s.value).toBe("  The Quick Brown The  ");
+    // Now edit a legitimate change to confirm the chain still works.
+    u.value = "fox\nslow\nthe";
+    expect(s.value).toBe("  The Slow Fox The  ");
+  });
+
+  it("trim: leading whitespace typed in trim view is stripped, doesn't grow padding", () => {
+    const s = str("  hi  ");
+    const t = s.trim();
+    t.peek();
+    for (let i = 0; i < 10; i++) t.value = "   hi   ";
+    // Original padding preserved; no growth.
+    expect(s.value).toBe("  hi  ");
+  });
+
+  it("trim: writing back the visible value is a no-op even after a stripped write", () => {
+    const s = str("  hi  ");
+    const t = s.trim();
+    t.peek();
+    t.value = "  hi  "; // user typed extra padding
+    expect(s.value).toBe("  hi  ");
+    t.value = t.value; // no-op
+    expect(s.value).toBe("  hi  ");
+  });
+
+  it("lowercase: split a word then rejoin — original case restored", () => {
+    // Historical bug: typing a space inside "Quick" via the lowercase
+    // view splits source into "Q Uick". On the next putr, the OLD code
+    // refreshed wordMasks to reflect the split structure (mask "U" at
+    // idx 1), so when the user removed the space, "quick" picked up
+    // mask "U" and became "QUICK". The fix anchors the refresh on
+    // identity-of-value: putr only refreshes when source ≠ our last
+    // write, so the mask stays aligned with the original structure
+    // across the user's own splits and joins.
+    const s = str("The Quick Brown Fox");
+    const lo = s.lowercase();
+    lo.peek();
+    expect(lo.value).toBe("the quick brown fox");
+    lo.value = "the q uick brown fox"; // split
+    lo.value = "the quick brown fox"; // rejoin
+    expect(s.value).toBe("The Quick Brown Fox");
+  });
+
+  it("uppercase: split a word then rejoin — original case restored", () => {
+    const s = str("Hello World");
+    const up = s.uppercase();
+    up.peek();
+    up.value = "HEL LO WORLD"; // split
+    up.value = "HELLO WORLD"; // rejoin
+    expect(s.value).toBe("Hello World");
+  });
+
+  it("lowercase: alternating split / join cycles converge to original", () => {
+    const s = str("The Quick Brown Fox");
+    const lo = s.lowercase();
+    lo.peek();
+    for (let i = 0; i < 5; i++) {
+      lo.value = "the q uick brown fox";
+      lo.value = "the quick brown fox";
+    }
+    expect(s.value).toBe("The Quick Brown Fox");
+  });
+
+  it("lowercase: external source change refreshes the mask", () => {
+    // After our own edit, lastWriteResult equals source — putr skips.
+    // After an external write, source ≠ lastWriteResult — putr
+    // refreshes wordMasks. The subsequent edit uses the new mask.
+    const s = str("Hello World");
+    const lo = s.lowercase();
+    lo.peek();
+    expect(lo.value).toBe("hello world");
+    lo.value = "hello fox"; // internal edit (own write)
+    expect(s.value).toBe("Hello Fox");
+    s.value = "GREETINGS WORLD"; // external write
+    expect(lo.value).toBe("greetings world");
+    lo.value = "hi fox"; // uses the NEW (all-caps) mask
+    expect(s.value).toBe("HI FOX");
+  });
+
+  it("lowercase: identity-write through the view leaves source unchanged", () => {
+    const s = str("The Quick Brown Fox");
+    const lo = s.lowercase();
+    lo.peek();
+    lo.value = lo.value;
+    expect(s.value).toBe("The Quick Brown Fox");
+  });
+
+  it("lowercase: change a single word multiple times in a row keeps the mask", () => {
+    // The mask survives chained edits inside the view.
+    const s = str("Hello World");
+    const lo = s.lowercase();
+    lo.peek();
+    lo.value = "hello fox";
+    expect(s.value).toBe("Hello Fox");
+    lo.value = "hello wolf";
+    expect(s.value).toBe("Hello Wolf");
+    lo.value = "hi wolf";
+    expect(s.value).toBe("Hi Wolf");
+  });
+});
+
 // ─── Stress — really try to break the engine ──────────────────────
 
 describe("Stress: try to break the symmetric chain", () => {
