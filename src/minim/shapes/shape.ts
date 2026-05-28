@@ -64,7 +64,7 @@ export interface CommonOpts extends ShapeOpts {
 }
 
 /** Wide-form escape hatch for heterogeneous shape collections. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: variance escape
 export type AnyShape = Shape<any>;
 
 export type AnimatableKey = "translate" | "rotate" | "scale" | "origin" | "opacity";
@@ -458,7 +458,6 @@ export function meanScale(...shapes: { scale: Writable<Vec> }[]): Writable<Vec> 
  *  `Writable<T>` for tween / drag / direct write — every other layer
  *  rejects RO inputs at the type level. Internal to shape.ts; not
  *  exported. */
-// biome-ignore lint/suspicious/noExplicitAny: variance escape on constructor
 function liftAnimatable<T, C extends Signal<T>>(
   src: Val<T>,
   Cls: new (v?: T) => C,
