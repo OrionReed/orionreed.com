@@ -10,23 +10,14 @@ import {
   type Init,
   type Inner,
   lazy,
-  network,
   reader,
   readNow,
   Signal,
   type Val,
   type Writable,
   type WritableBrand,
-  withinOwner,
 } from "../signal";
-import {
-  claim,
-  isOwn,
-  isShare,
-  type Own,
-  type Param,
-  type Share,
-} from "../lens-params";
+import { type LensAlgebra, lensWithParam, type Param } from "../lens-params";
 import type { Linear, Pack, TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Bool } from "./bool";
@@ -155,30 +146,16 @@ export class Box extends Signal<V> {
       n => add(n, bf()),
     );
   }
-  /** Receiver × multiplier. With a bare `k` (literal or RO signal) the
-   *  receiver absorbs writes to the result. With `share(k)` @experimental,
-   *  `k` absorbs (with optional weight). With `own(k)` @experimental,
-   *  `k` is owned and parent-edits route through `k` symmetrically. */
+  /** Receiver × multiplier. With `share(k)`/`own(k)` @experimental,
+   *  `k` becomes the handle (receiver anchored on a non-zero axis;
+   *  receiver scales by inverse-k for residual flow). */
   scale(k: Param<number>): this {
-    if (isOwn(k)) return _boxScaleOwn(this as unknown as Writable<Box>, k as Own<number>) as unknown as this;
-    if (isShare(k)) return _boxScaleShare(this, k as Share<number>) as unknown as this;
-    const kf = reader(k as Val<number>);
-    return this.lens(
-      v => scale(v, kf()),
-      n => scale(n, 1 / kf()),
-    );
+    return lensWithParam(this as unknown as Writable<Box>, k, BOX_SCALE_ALG) as unknown as this;
   }
-  /** Symmetric expansion. `share(n)` @experimental makes `n` absorb the
-   *  signed expansion delta; `own(n)` @experimental adds symmetric
-   *  parent-edit routing through `n`. */
+  /** Symmetric expansion. With `share(n)`/`own(n)` @experimental, `n`
+   *  absorbs the signed expansion delta; receiver absorbs the residual. */
   expand(n: Param<number>): this {
-    if (isOwn(n)) return _boxExpandOwn(this as unknown as Writable<Box>, n as Own<number>) as unknown as this;
-    if (isShare(n)) return _boxExpandShare(this, n as Share<number>) as unknown as this;
-    const nf = reader(n as Val<number>);
-    return this.lens(
-      v => expand(v, nf()),
-      o => expand(o, -nf()),
-    );
+    return lensWithParam(this as unknown as Writable<Box>, n, BOX_EXPAND_ALG) as unknown as this;
   }
 
   lerp(b: Val<V>, t: Val<number>): Box {
@@ -273,136 +250,29 @@ export class Box extends Signal<V> {
  *  RO sources are rejected at the type level — use `Box.derive(...)`
  *  for reactive RO tracking, or `signal.value` to snapshot. Lock a
  *  component with `Num.pin(c)`. */
-// ─── @experimental — share()-parameter bwd helpers ──────────────────
-//
-// Box.scale: receiver × multiplier. share(k) makes k the writable
-//   handle (the receiver anchored when current_value !== zero).
-// Box.expand: receiver expanded by n. share(n) makes n absorb the
-//   expansion delta; the box's interior anchor (top-left) stays.
+// ─── @experimental — algebras for `lensWithParam` ───────────────────
 
-function _boxScaleShare(self: Box, k: Share<number>): Writable<Box> {
-  const wf = reader(k.weight);
-  return Box.lens(
-    [self, k.sig] as const,
-    ([bv, kv]) => scale(bv, kv),
-    (target, [bv, kv]) => {
-      const w = wf();
-      const curS = kv === 0 ? 1 : kv; // avoid div by 0
-      const wantK = (target.x !== 0 ? target.x / (bv.x || 1) :
-                     target.w !== 0 ? target.w / (bv.w || 1) :
-                     curS);
-      const newK = kv + (wantK - kv) * w;
-      // Receiver absorbs the residual via inverse scale.
-      const newB = scale(target, 1 / (newK === 0 ? 1 : newK));
-      return [newB, newK] as const;
-    },
-  );
-}
+const BOX_SCALE_ALG: LensAlgebra<V, number> = {
+  fwd: (b, k) => scale(b, k),
+  // Receiver from view + k: divide each coord by k (with k=0 guard).
+  solveA: (v, k) => (k === 0 ? v : scale(v, 1 / k)),
+  // Solve k from view + receiver: prefer the w/h ratio (avoids x=0/y=0
+  // collisions when the box is at origin). Falls back through coords.
+  solveP: (v, b) =>
+    b.w !== 0 ? v.w / b.w :
+    b.h !== 0 ? v.h / b.h :
+    b.x !== 0 ? v.x / b.x :
+    b.y !== 0 ? v.y / b.y :
+    1,
+};
 
-function _boxExpandShare(self: Box, n: Share<number>): Writable<Box> {
-  const selfRW = self as Writable<Box>;
-  const wf = reader(n.weight);
-  return Box.lens(
-    () => expand(self.value, n.sig.value),
-    (target: V) => {
-      batch(() => {
-        const bv = self.peek();
-        const nv = n.sig.peek();
-        const w = wf();
-        // Recover the implied n from target: target = expand(receiver, ?n).
-        // expand: x -= n, y -= n, w += 2n, h += 2n. So
-        //   n_implied = (bv.x - target.x + bv.y - target.y) / 2
-        // or equivalently from w/h growth. Use w-growth: 2*Δn = target.w - bv.w.
-        const wantN = nv + (target.w - (bv.w + 2 * nv)) / 2;
-        const desiredNChange = (wantN - nv) * w;
-        n.sig.value = nv + desiredNChange;
-        const actualN = n.sig.peek();
-        const residualN = wantN - actualN;
-        // The receiver absorbs the residual portion of expansion.
-        if (residualN !== 0) {
-          selfRW.value = expand(target, -actualN);
-        }
-      });
-    },
-  );
-}
-
-// ─── @experimental — own()-parameter bwd helpers ────────────────────
-
-function _boxScaleOwn(self: Writable<Box>, o: Own<number>): Writable<Box> {
-  const sig = o.sig as Writable<Num>;
-  const bIntended = { value: scale(self.peek(), sig.peek()) };
-  const lens = Box.lens(
-    () => scale(self.value, sig.value),
-    (target: V) => {
-      withinOwner(token, () => {
-        batch(() => {
-          bIntended.value = target;
-          const bv = self.peek();
-          // Solve k from one of the coords; prefer w (avoids x=0 collisions).
-          const wantK = bv.w !== 0 ? target.w / bv.w :
-                        bv.h !== 0 ? target.h / bv.h :
-                        bv.x !== 0 ? target.x / bv.x :
-                        bv.y !== 0 ? target.y / bv.y : sig.peek();
-          sig.value = wantK;
-          const actualK = sig.peek();
-          if (actualK !== 0) self.value = scale(target, 1 / actualK);
-        });
-      });
-    },
-  );
-  (lens as { _ownName?: string })._ownName = "Box.scale(own)";
-  const token = claim(o, lens as object);
-  network([self], dirty => {
-    if (dirty.size === 0) return;
-    if (!dirty.has(self as unknown as Signal<unknown>)) return;
-    withinOwner(token, () => {
-      const bv = self.peek();
-      const wantK = bv.w !== 0 ? bIntended.value.w / bv.w :
-                    bv.h !== 0 ? bIntended.value.h / bv.h : sig.peek();
-      sig.value = wantK;
-      const actual = sig.peek();
-      if (actual !== wantK) bIntended.value = scale(bv, actual);
-    });
-  });
-  return lens;
-}
-
-function _boxExpandOwn(self: Writable<Box>, o: Own<number>): Writable<Box> {
-  const sig = o.sig as Writable<Num>;
-  const bIntended = { value: expand(self.peek(), sig.peek()) };
-  const lens = Box.lens(
-    () => expand(self.value, sig.value),
-    (target: V) => {
-      withinOwner(token, () => {
-        batch(() => {
-          bIntended.value = target;
-          const bv = self.peek();
-          const nv = sig.peek();
-          const wantN = nv + (target.w - (bv.w + 2 * nv)) / 2;
-          sig.value = wantN;
-          const actualN = sig.peek();
-          const residualN = wantN - actualN;
-          if (residualN !== 0) self.value = expand(target, -actualN);
-        });
-      });
-    },
-  );
-  (lens as { _ownName?: string })._ownName = "Box.expand(own)";
-  const token = claim(o, lens as object);
-  network([self], dirty => {
-    if (dirty.size === 0) return;
-    if (!dirty.has(self as unknown as Signal<unknown>)) return;
-    withinOwner(token, () => {
-      const bv = self.peek();
-      const wantN = (bIntended.value.w - bv.w) / 2;
-      sig.value = wantN;
-      const actual = sig.peek();
-      if (actual !== wantN) bIntended.value = expand(bv, actual);
-    });
-  });
-  return lens;
-}
+const BOX_EXPAND_ALG: LensAlgebra<V, number> = {
+  fwd: (b, n) => expand(b, n),
+  // Receiver from view + n: invert expand by -n on the target.
+  solveA: (v, n) => expand(v, -n),
+  // Solve n from view + receiver: width grows by 2n, so n = (v.w - b.w)/2.
+  solveP: (v, b) => (v.w - b.w) / 2,
+};
 
 export function box(
   x: Init<Num> = 0,

@@ -23,9 +23,12 @@
 // unchanged.
 
 import {
+  batch,
   isSignal,
+  network,
   type Read,
-  type Signal,
+  reader,
+  Signal,
   type Val,
   type Writable,
   withinOwner as _withinOwner,
@@ -153,3 +156,166 @@ export function paramReader<T>(p: Param<T>): () => T {
 /** @experimental — re-exported from `./signal` for ergonomic access
  *  from `own()` integration code. See `withinOwner` in `signal.ts`. */
 export const withinOwner = _withinOwner;
+
+// ─── lensWithParam — the unifying primitive ─────────────────────────
+//
+// @experimental — the substrate-level helper that consumes a small
+// algebra spec (fwd + solveA + solveP) and emits the correct lens cell
+// for whatever flavor of param it sees (RO / share / own). Value-class
+// methods like `Num.add` / `Vec.right` / `Box.scale` reduce to a
+// 5–8 line call to this helper, vs the ~30–50 line per-method helpers
+// the prototype required.
+//
+// Algebra contract for `view = fwd(a, p)`:
+//   fwd     — forward computation. Pure function of (receiver, param).
+//   solveA  — given a target view and a current param, return the
+//             receiver that produces target. Used for residual flow.
+//   solveP  — given a target view and a current receiver, return the
+//             param that produces target. Used for view-write routing.
+//   blendP  — (optional) linear blend on param space. Used for share()
+//             with weight ≠ 1. Defaults to numeric lerp; supply your own
+//             for non-numeric P (e.g., vec lerp).
+
+/** @experimental — algebra spec consumed by `lensWithParam`. */
+export interface LensAlgebra<V, P> {
+  fwd: (a: V, p: P) => V;
+  solveA: (target: V, p: P) => V;
+  solveP: (target: V, a: V) => P;
+  blendP?: (p: P, q: P, w: number) => P;
+}
+
+function defaultBlend<P>(p: P, q: P, w: number): P {
+  // Numeric default — works for Num. For Vec/Pose/etc. supply your own.
+  if (typeof p === "number" && typeof q === "number") {
+    return (p + (q - p) * w) as unknown as P;
+  }
+  // Fallback: weight ≥ 0.5 picks target, else current. Not great, but
+  // honest about the lack of a defined blend for arbitrary P.
+  return w >= 0.5 ? q : p;
+}
+
+/** @experimental — the substrate-level lens builder. Dispatches to
+ *  RO / share / own based on the param's brand. */
+export function lensWithParam<V, P>(
+  self: Writable<Signal<V>>,
+  param: Param<P>,
+  alg: LensAlgebra<V, P>,
+): Writable<Signal<V>> {
+  if (isOwn(param)) return _ownPath(self, param as Own<P>, alg);
+  if (isShare(param)) return _sharePath(self, param as Share<P>, alg);
+  return _roPath(self, param as Val<P>, alg);
+}
+
+function _roPath<V, P>(
+  self: Writable<Signal<V>>,
+  param: Val<P>,
+  alg: LensAlgebra<V, P>,
+): Writable<Signal<V>> {
+  const pf = paramReader(param);
+  // Use the instance `.lens(fwd, bwd)` form so the chain fuses with
+  // receiver via `_fuse` — preserves `_fusedOf.parent` traversal that
+  // diamond-detection (and downstream consumers like field fast-paths)
+  // rely on. Bypassing `_fuse` with `Signal.install` directly would
+  // break both.
+  // biome-ignore lint/suspicious/noExplicitAny: cross-class instance method dispatch
+  return (self as any).lens(
+    (a: V) => alg.fwd(a, pf()),
+    (v: V) => alg.solveA(v, pf()),
+  ) as Writable<Signal<V>>;
+}
+
+function _sharePath<V, P>(
+  self: Writable<Signal<V>>,
+  shareArg: Share<P>,
+  alg: LensAlgebra<V, P>,
+): Writable<Signal<V>> {
+  const sig = shareArg.sig as Writable<Signal<P>>;
+  const wf = reader(shareArg.weight);
+  const blend = alg.blendP ?? defaultBlend;
+  const Cls = self.constructor as new (...args: never[]) => Signal<V>;
+  return Signal.install(
+    Cls,
+    () => alg.fwd(self.value, sig.value),
+    (target: V) => {
+      batch(() => {
+        const a = self.peek();
+        const p = sig.peek();
+        const w = wf();
+        const p_full = alg.solveP(target, a);
+        const p_desired = w === 1 ? p_full : blend(p, p_full, w);
+        sig.value = p_desired;
+        const p_actual = sig.peek();
+        // Receiver absorbs whatever's left to reach `target` given the
+        // sig value that actually landed (which may be clamped/quantized).
+        self.value = alg.solveA(target, p_actual);
+      });
+    },
+  ) as Writable<Signal<V>>;
+}
+
+function _ownPath<V, P>(
+  self: Writable<Signal<V>>,
+  ownArg: Own<P>,
+  alg: LensAlgebra<V, P>,
+): Writable<Signal<V>> {
+  const sig = ownArg.sig as Writable<Signal<P>>;
+  const bIntended = { value: alg.fwd(self.peek(), sig.peek()) };
+  const Cls = self.constructor as new (...args: never[]) => Signal<V>;
+
+  const setter = (target: V) => {
+    withinOwner(token, () => {
+      batch(() => {
+        bIntended.value = target;
+        const a = self.peek();
+        const p_full = alg.solveP(target, a);
+        sig.value = p_full;
+        const p_actual = sig.peek();
+        self.value = alg.solveA(target, p_actual);
+      });
+    });
+  };
+
+  const lens = Signal.install(
+    Cls,
+    () => alg.fwd(self.value, sig.value),
+    setter,
+  ) as Writable<Signal<V>>;
+  (lens as { _ownName?: string })._ownName = `lensWithParam(own)`;
+  const token = claim(ownArg, lens as object);
+
+  network([self], dirty => {
+    if (dirty.size === 0) return;
+    withinOwner(token, () => {
+      const a_now = self.peek();
+      const p_full = alg.solveP(bIntended.value, a_now);
+      sig.value = p_full;
+      const p_actual = sig.peek();
+      // Drift on saturation: if sig didn't take the full requested
+      // change (clamp at boundary OR already-at-boundary stuck), accept
+      // the new settled state. Without this, back-drags after a prior
+      // saturation get "stuck" — bIntended stays at an unreachable
+      // target and sig stays pinned at the boundary regardless of how
+      // the receiver moves.
+      //
+      // Trade-off: this rule also drifts on quantize-style snaps where
+      // actual ≠ desired but sig isn't truly saturated. For lenses
+      // whose bwd snaps to discrete values (quantize), this means
+      // bIntended tracks the snapped value rather than the requested
+      // one — discrete "detents" get smoothed out into continuous
+      // tracking. If you need detent behavior, use `share()` instead
+      // of `own()` for that param.
+      if (!sigEquals(sig, p_actual, p_full)) {
+        bIntended.value = alg.fwd(a_now, p_actual);
+      }
+    });
+  });
+
+  return lens;
+}
+
+/** Use the signal's own `_equals` if present, else `===`. Used to
+ *  detect whether sig took the full requested change. */
+function sigEquals<P>(sig: Signal<P>, a: P, b: P): boolean {
+  const eq = (sig as unknown as { _equals?: (a: P, b: P) => boolean })._equals;
+  return eq ? eq(a, b) : a === b;
+}

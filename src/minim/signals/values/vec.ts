@@ -11,16 +11,13 @@ import { type Tween, tween } from "../anim";
 import { batch, type Init, reader, readNow, Signal, type Val, type Writable } from "../signal";
 import type { Linear, Pack, Pivotal, TraitDict } from "../traits";
 import {
-  claim,
-  isOwn,
   isShare,
-  type Own,
+  type LensAlgebra,
+  lensWithParam,
   type Param,
   paramReader,
   type Share,
-  withinOwner,
 } from "../lens-params";
-import { network, type Signal as _Signal } from "../signal";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
 
@@ -110,33 +107,10 @@ export class Vec extends Signal<V> {
 
   // ── invertibles: return `: this`, propagating writability ──────────
   add(b: Param<V>): this {
-    if (isOwn(b)) return _vecAddOwn(this as unknown as Writable<Vec>, b as Own<V>) as unknown as this;
-    if (isShare(b)) return _vecAddShare(this, b as Share<V>) as unknown as this;
-    const bf = reader(b as Val<V>);
-    return this.lens(
-      v => {
-        const o = bf();
-        return { x: v.x + o.x, y: v.y + o.y };
-      },
-      n => {
-        const o = bf();
-        return { x: n.x - o.x, y: n.y - o.y };
-      },
-    );
+    return lensWithParam(this as unknown as Writable<Vec>, b, VEC_ADD_ALG) as unknown as this;
   }
   sub(b: Param<V>): this {
-    if (isShare(b)) return _vecSubShare(this, b as Share<V>) as unknown as this;
-    const bf = reader(b as Val<V>);
-    return this.lens(
-      v => {
-        const o = bf();
-        return { x: v.x - o.x, y: v.y - o.y };
-      },
-      n => {
-        const o = bf();
-        return { x: n.x + o.x, y: n.y + o.y };
-      },
-    );
+    return lensWithParam(this as unknown as Writable<Vec>, b, VEC_SUB_ALG) as unknown as this;
   }
   scale(k: Val<number>): this {
     const kf = reader(k);
@@ -163,48 +137,16 @@ export class Vec extends Signal<V> {
   }
   // Axis-aligned offset sugar — same fwd/bwd shape as offset.
   up(n: Param<number>): this {
-    if (isOwn(n))
-      return _vecAxisOwn(this as unknown as Writable<Vec>, n as Own<number>, "y", -1) as unknown as this;
-    if (isShare(n))
-      return _vecAxisShare(this, n as Share<number>, "y", -1) as unknown as this;
-    const f = reader(n as Val<number>);
-    return this.lens(
-      v => ({ x: v.x, y: v.y - f() }),
-      o => ({ x: o.x, y: o.y + f() }),
-    );
+    return lensWithParam(this as unknown as Writable<Vec>, n, VEC_UP_ALG) as unknown as this;
   }
   down(n: Param<number>): this {
-    if (isOwn(n))
-      return _vecAxisOwn(this as unknown as Writable<Vec>, n as Own<number>, "y", +1) as unknown as this;
-    if (isShare(n))
-      return _vecAxisShare(this, n as Share<number>, "y", +1) as unknown as this;
-    const f = reader(n as Val<number>);
-    return this.lens(
-      v => ({ x: v.x, y: v.y + f() }),
-      o => ({ x: o.x, y: o.y - f() }),
-    );
+    return lensWithParam(this as unknown as Writable<Vec>, n, VEC_DOWN_ALG) as unknown as this;
   }
   left(n: Param<number>): this {
-    if (isOwn(n))
-      return _vecAxisOwn(this as unknown as Writable<Vec>, n as Own<number>, "x", -1) as unknown as this;
-    if (isShare(n))
-      return _vecAxisShare(this, n as Share<number>, "x", -1) as unknown as this;
-    const f = reader(n as Val<number>);
-    return this.lens(
-      v => ({ x: v.x - f(), y: v.y }),
-      o => ({ x: o.x + f(), y: o.y }),
-    );
+    return lensWithParam(this as unknown as Writable<Vec>, n, VEC_LEFT_ALG) as unknown as this;
   }
   right(n: Param<number>): this {
-    if (isOwn(n))
-      return _vecAxisOwn(this as unknown as Writable<Vec>, n as Own<number>, "x", +1) as unknown as this;
-    if (isShare(n))
-      return _vecAxisShare(this, n as Share<number>, "x", +1) as unknown as this;
-    const f = reader(n as Val<number>);
-    return this.lens(
-      v => ({ x: v.x + f(), y: v.y }),
-      o => ({ x: o.x - f(), y: o.y }),
-    );
+    return lensWithParam(this as unknown as Writable<Vec>, n, VEC_RIGHT_ALG) as unknown as this;
   }
 
   // ── non-invertibles: explicit RO return ────────────────────────────
@@ -363,73 +305,62 @@ export function polar(
   return Signal.install(Vec, fwd, bwd);
 }
 
-// ─── Writable-parameter bwd helpers ─────────────────────────────────
+// ─── @experimental — algebras for `lensWithParam` ───────────────────
 //
-// Residual-aware: each helper writes its wrapped param(s) first, peeks
-// to observe what actually landed, and routes any unabsorbed residual
-// to the receiver. For primitive params this collapses to the
-// weight-only behaviour (residual = 0). For saturating-lens params
-// (e.g., `slack.clamp(min, max)`) the residual flows naturally,
-// producing the soft-spring-hard-stop pattern.
+// Each entry is the 3-closure algebra (fwd + solveA + solveP) the
+// generic `lensWithParam` helper consumes to emit RO / share() / own()
+// behaviors uniformly. Vec params: blendP is the component-wise lerp
+// (the default numeric blend would mis-handle Vec).
 
-function _vecAddShare(self: Vec, b: Share<V>): Writable<Vec> {
-  const selfRW = self as Writable<Vec>;
-  const wf = reader(b.weight);
-  return Vec.lens(
-    () => {
-      const nv = self.value;
-      const bv = b.sig.value;
-      return { x: nv.x + bv.x, y: nv.y + bv.y };
-    },
-    (target: V) => {
-      batch(() => {
-        const nv = self.peek();
-        const bv = b.sig.peek();
-        const w = wf();
-        const dx = target.x - (nv.x + bv.x);
-        const dy = target.y - (nv.y + bv.y);
-        const desired = { x: bv.x + dx * w, y: bv.y + dy * w };
-        b.sig.value = desired;
-        const after = b.sig.peek();
-        const residualX = desired.x - after.x;
-        const residualY = desired.y - after.y;
-        const rxx = dx * (1 - w) + residualX;
-        const ryy = dy * (1 - w) + residualY;
-        if (rxx !== 0 || ryy !== 0) selfRW.value = { x: nv.x + rxx, y: nv.y + ryy };
-      });
-    },
-  );
-}
+const vecBlend = (p: V, q: V, w: number): V => ({
+  x: p.x + (q.x - p.x) * w,
+  y: p.y + (q.y - p.y) * w,
+});
 
-function _vecSubShare(self: Vec, b: Share<V>): Writable<Vec> {
-  const selfRW = self as Writable<Vec>;
-  const wf = reader(b.weight);
-  return Vec.lens(
-    () => {
-      const nv = self.value;
-      const bv = b.sig.value;
-      return { x: nv.x - bv.x, y: nv.y - bv.y };
-    },
-    (target: V) => {
-      batch(() => {
-        const nv = self.peek();
-        const bv = b.sig.peek();
-        const w = wf();
-        const dx = target.x - (nv.x - bv.x);
-        const dy = target.y - (nv.y - bv.y);
-        // b absorbs negated delta.
-        const desired = { x: bv.x - dx * w, y: bv.y - dy * w };
-        b.sig.value = desired;
-        const after = b.sig.peek();
-        const residualXNeg = desired.x - after.x;
-        const residualYNeg = desired.y - after.y;
-        const rxx = dx * (1 - w) - residualXNeg;
-        const ryy = dy * (1 - w) - residualYNeg;
-        if (rxx !== 0 || ryy !== 0) selfRW.value = { x: nv.x + rxx, y: nv.y + ryy };
-      });
-    },
-  );
-}
+const VEC_ADD_ALG: LensAlgebra<V, V> = {
+  fwd: (a, b) => ({ x: a.x + b.x, y: a.y + b.y }),
+  solveA: (v, b) => ({ x: v.x - b.x, y: v.y - b.y }),
+  solveP: (v, a) => ({ x: v.x - a.x, y: v.y - a.y }),
+  blendP: vecBlend,
+};
+
+const VEC_SUB_ALG: LensAlgebra<V, V> = {
+  fwd: (a, b) => ({ x: a.x - b.x, y: a.y - b.y }),
+  solveA: (v, b) => ({ x: v.x + b.x, y: v.y + b.y }),
+  solveP: (v, a) => ({ x: a.x - v.x, y: a.y - v.y }),
+  blendP: vecBlend,
+};
+
+// Axis-aligned offsets: view.axis = a.axis + sign * scalar. The other
+// axis passes through (receiver absorbs y-changes for x-axis methods).
+
+const VEC_UP_ALG: LensAlgebra<V, number> = {
+  fwd: (a, n) => ({ x: a.x, y: a.y - n }),
+  solveA: (v, n) => ({ x: v.x, y: v.y + n }),
+  solveP: (v, a) => a.y - v.y,
+};
+
+const VEC_DOWN_ALG: LensAlgebra<V, number> = {
+  fwd: (a, n) => ({ x: a.x, y: a.y + n }),
+  solveA: (v, n) => ({ x: v.x, y: v.y - n }),
+  solveP: (v, a) => v.y - a.y,
+};
+
+const VEC_LEFT_ALG: LensAlgebra<V, number> = {
+  fwd: (a, n) => ({ x: a.x - n, y: a.y }),
+  solveA: (v, n) => ({ x: v.x + n, y: v.y }),
+  solveP: (v, a) => a.x - v.x,
+};
+
+const VEC_RIGHT_ALG: LensAlgebra<V, number> = {
+  fwd: (a, n) => ({ x: a.x + n, y: a.y }),
+  solveA: (v, n) => ({ x: v.x - n, y: v.y }),
+  solveP: (v, a) => v.x - a.x,
+};
+
+// `offset` still uses the bespoke multi-input helper below — two
+// writable params don't map cleanly onto the 2-input `lensWithParam`
+// shape yet.
 
 function _vecOffsetShare(self: Vec, dxP: Param<number>, dyP: Param<number>): Writable<Vec> {
   const selfRW = self as Writable<Vec>;
@@ -479,166 +410,3 @@ function _vecOffsetShare(self: Vec, dxP: Param<number>, dyP: Param<number>): Wri
   );
 }
 
-function _vecAxisShare(
-  self: Vec,
-  n: Share<number>,
-  axis: "x" | "y",
-  sign: 1 | -1,
-): Writable<Vec> {
-  const selfRW = self as Writable<Vec>;
-  const wf = reader(n.weight);
-  const other = axis === "x" ? "y" : "x";
-  return Vec.lens(
-    () => {
-      const nv = self.value;
-      const kv = n.sig.value;
-      const out = { x: nv.x, y: nv.y } as V;
-      out[axis] = nv[axis] + sign * kv;
-      return out;
-    },
-    (target: V) => {
-      batch(() => {
-        const nv = self.peek();
-        const kv = n.sig.peek();
-        const w = wf();
-        const cur = nv[axis] + sign * kv;
-        const d = target[axis] - cur;
-        // n absorbs along its axis with sign.
-        const desired_k = kv + sign * d * w;
-        n.sig.value = desired_k;
-        const actual_k_change = n.sig.peek() - kv;
-        // residual along axis (in receiver-relative direction)
-        const residual_axis = sign * (sign * d * w - actual_k_change);
-        const axisChange = d * (1 - w) + residual_axis;
-        const newReceiver = { x: nv.x, y: nv.y } as V;
-        newReceiver[axis] = nv[axis] + axisChange;
-        newReceiver[other] = target[other];
-        selfRW.value = newReceiver;
-      });
-    },
-  );
-}
-
-// ─── @experimental — Owned-parameter bwd helpers ────────────────────
-//
-// Each `_vec*Own` helper claims its sink, installs the same residual
-// flow as the `_vec*Share` sibling (forced weight=1, threaded through
-// `withinOwner(token)`), and additionally installs a `network()`
-// reaction subscribed to the non-sink parents — when `self` is edited,
-// the reaction writes the sink to maintain `bIntended` (set by the bwd
-// on view-writes). Saturation residual lands on the view via natural
-// fwd re-derivation.
-
-function _vecAddOwn(self: Writable<Vec>, o: Own<V>): Writable<Vec> {
-  const sig = o.sig as Writable<Vec>;
-  const initSelf = self.peek();
-  const initSig = sig.peek();
-  const bIntended = {
-    value: { x: initSelf.x + initSig.x, y: initSelf.y + initSig.y } as V,
-  };
-  const lens = Vec.lens(
-    () => {
-      const nv = self.value;
-      const bv = sig.value;
-      return { x: nv.x + bv.x, y: nv.y + bv.y };
-    },
-    (target: V) => {
-      withinOwner(token, () => {
-        batch(() => {
-          bIntended.value = target;
-          const nv = self.peek();
-          const bv = sig.peek();
-          const dx = target.x - (nv.x + bv.x);
-          const dy = target.y - (nv.y + bv.y);
-          sig.value = { x: bv.x + dx, y: bv.y + dy };
-          const after = sig.peek();
-          const rx = dx - (after.x - bv.x);
-          const ry = dy - (after.y - bv.y);
-          if (rx !== 0 || ry !== 0) self.value = { x: nv.x + rx, y: nv.y + ry };
-        });
-      });
-    },
-  );
-  (lens as { _ownName?: string })._ownName = "Vec.add(own)";
-  const token = claim(o, lens as object);
-  network([self], dirty => {
-    if (dirty.size === 0) return;
-    if (!dirty.has(self as unknown as _Signal<unknown>)) return;
-    withinOwner(token, () => {
-      const nv = self.peek();
-      const desired = { x: bIntended.value.x - nv.x, y: bIntended.value.y - nv.y };
-      sig.value = desired;
-      const actual = sig.peek();
-      // Saturation drift: accept the new settled state when sig couldn't
-      // absorb fully, so back-drags don't get "stuck" trying to undo.
-      if (actual.x !== desired.x || actual.y !== desired.y) {
-        bIntended.value = { x: nv.x + actual.x, y: nv.y + actual.y };
-      }
-    });
-  });
-  return lens;
-}
-
-function _vecAxisOwn(
-  self: Writable<Vec>,
-  o: Own<number>,
-  axis: "x" | "y",
-  sign: 1 | -1,
-): Writable<Vec> {
-  const sig = o.sig as Writable<Num>;
-  const initSelf = self.peek();
-  const initSig = sig.peek();
-  const other = axis === "x" ? "y" : "x";
-  const initView = { x: initSelf.x, y: initSelf.y } as V;
-  initView[axis] = initSelf[axis] + sign * initSig;
-  const bIntended = { value: initView };
-
-  const lens = Vec.lens(
-    () => {
-      const nv = self.value;
-      const kv = sig.value;
-      const out = { x: nv.x, y: nv.y } as V;
-      out[axis] = nv[axis] + sign * kv;
-      return out;
-    },
-    (target: V) => {
-      withinOwner(token, () => {
-        batch(() => {
-          bIntended.value = target;
-          const nv = self.peek();
-          const kv = sig.peek();
-          const d = target[axis] - (nv[axis] + sign * kv);
-          // sig absorbs along its axis with sign.
-          sig.value = kv + sign * d;
-          const actualK = sig.peek() - kv;
-          const residual = sign * (sign * d - actualK);
-          const newSelf = { x: nv.x, y: nv.y } as V;
-          newSelf[axis] = nv[axis] + residual;
-          newSelf[other] = target[other];
-          self.value = newSelf;
-        });
-      });
-    },
-  );
-  (lens as { _ownName?: string })._ownName = `Vec.${axis === "y" && sign === -1 ? "up" : axis === "y" ? "down" : axis === "x" && sign === -1 ? "left" : "right"}(own)`;
-  const token = claim(o, lens as object);
-  network([self], dirty => {
-    if (dirty.size === 0) return;
-    if (!dirty.has(self as unknown as _Signal<unknown>)) return;
-    withinOwner(token, () => {
-      const nv = self.peek();
-      // sig represents the axis-aligned offset under sign;
-      // want b_intended.axis = nv.axis + sign * sig → sig = (b_intended.axis - nv.axis) / sign
-      const desired = sign * (bIntended.value[axis] - nv[axis]);
-      sig.value = desired;
-      const actual = sig.peek();
-      // Saturation drift: accept the new settled state on the slack axis.
-      if (actual !== desired) {
-        const next = { x: bIntended.value.x, y: bIntended.value.y };
-        next[axis] = nv[axis] + sign * actual;
-        bIntended.value = next;
-      }
-    });
-  });
-  return lens;
-}

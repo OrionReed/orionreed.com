@@ -124,6 +124,8 @@ export { derived, field } from "./writable";
 export {
   isOwn,
   isShare,
+  type LensAlgebra,
+  lensWithParam,
   own,
   type Own,
   type Param,

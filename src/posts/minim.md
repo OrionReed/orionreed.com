@@ -62,6 +62,10 @@ const B = A.right(w(slack));
 
 The clamp acts as a natural hard-stop, the receiver as the fallback absorber, and the entire pattern is one line of composition over `w()` and `.clamp()` — no custom lens, no merge primitive, no constraint solver. Every existing saturating lens (`clamp`, `quantize`, `snap`, predicate bridges) composes into the residual flow the same way.
 
+Chain four boxes through three `own()`-claimed gaps with different dynamics — tight clamp, wide clamp, and a non-PG soft compress that progressively yields the residual to the receiver — and the same machinery cascades end-to-end in both directions:
+
+<md-slack-chain></md-slack-chain>
+
 The scene-graph idiom is one line per child: `child = parent.offset(w(dx), w(dy))`. Drag the parent — every child follows via forward propagation. Drag a child — only its local offset moves, parent and siblings unchanged:
 
 <md-scene-graph></md-scene-graph>
