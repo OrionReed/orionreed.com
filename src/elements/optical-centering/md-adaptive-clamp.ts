@@ -1,18 +1,18 @@
-// md-adaptive-clamp.ts — `clamp` with writable bounds via `w()`.
+// md-adaptive-clamp.ts — `clamp` with writable bounds via `share()`.
 //
 // Three rows on the same source `t`:
 //
-//   row 1 — t                            raw cell, no constraints
-//   row 2 — t.clamp(lo, hi)              classic clamp: projects writes
-//   row 3 — t.clamp(w(lo), w(hi))        bounds STRETCH to admit overflows
+//   row 1 — t                                  raw cell, no constraints
+//   row 2 — t.clamp(lo, hi)                    classic clamp: projects writes
+//   row 3 — t.clamp(share(lo), share(hi))      bounds STRETCH to admit overflows
 //
 // Drag the row-2 knob past a bound and the knob sticks at the bound
 // (classic projection — the bound rejects). Drag the row-3 knob past a
-// bound and the bound MOVES to admit it (wp-promotion via `w()` — the
-// bound is now a handle that absorbs).
+// bound and the bound MOVES to admit it (wp-promotion via `share()` —
+// the bound is now a handle that absorbs).
 //
 // Same `clamp` method, same value classes, same engine. The only
-// difference is wrapping the bound cells in `w()` at the call site.
+// difference is wrapping the bound cells in `share()` at the call site.
 
 import {
   Anchor,
@@ -27,8 +27,8 @@ import {
   num,
   range,
   rect,
+  share,
   vec,
-  w,
   type Writable,
 } from "../../minim";
 
@@ -51,7 +51,7 @@ export class MdAdaptiveClamp extends Diagram {
     const hiA = num(0.75);
 
     const tClassic = t.clamp(loC, hiC);
-    const tAdaptive = t.clamp(w(loA), w(hiA));
+    const tAdaptive = t.clamp(share(loA), share(hiA));
 
     s(
       label(
@@ -66,7 +66,7 @@ export class MdAdaptiveClamp extends Diagram {
       `[${loC.value.toFixed(2)}, ${hiC.value.toFixed(2)}]`,
     );
     this.shaded(s, ROWS.adaptive, loA, hiA);
-    this.row(s, ROWS.adaptive, "↳ .clamp(w(lo), w(hi))", tAdaptive, "#7ed321", () =>
+    this.row(s, ROWS.adaptive, "↳ .clamp(share(lo), share(hi))", tAdaptive, "#7ed321", () =>
       `[${loA.value.toFixed(2)}, ${hiA.value.toFixed(2)}]`,
     );
     // Render explicit pinch-handles on both clamp rows for the bounds.

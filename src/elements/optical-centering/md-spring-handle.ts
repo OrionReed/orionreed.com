@@ -1,7 +1,7 @@
-// md-spring-handle.ts — reactive split policy via `w(slack, {weight: stiffness})`.
+// md-spring-handle.ts — reactive split policy via `share(slack, {weight: stiffness})`.
 //
 // Two cells coupled by a writable offset: anchor A and slack n. The
-// handle B = A.right(w(n, {weight: stiffness})). Drag B; depending on
+// handle B = A.right(share(n, {weight: stiffness})). Drag B; depending on
 // stiffness, A absorbs (rigid coupling) or n absorbs (loose handle).
 //
 // Stiffness itself is a Num signal — drag the top slider to re-aim the
@@ -21,9 +21,9 @@ import {
   Num,
   num,
   range,
+  share,
   Vec,
   vec,
-  w,
 } from "../../minim";
 
 const W = 640;
@@ -46,7 +46,7 @@ export class MdSpringHandle extends Diagram {
     // Reactive stiffness: 0 = rigid coupling (A absorbs), 1 = loose handle (n absorbs).
     const stiffness = num(1);
     // Handle B = A + n along x, with absorption split by stiffness.
-    const B = A.right(w(n, { weight: stiffness }));
+    const B = A.right(share(n, { weight: stiffness }));
 
     s(label(view.top.down(14), "drag B → split between A and n absorbs delta · slider controls split"));
 

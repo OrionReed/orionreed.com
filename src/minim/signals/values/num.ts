@@ -18,7 +18,17 @@ import {
   type WritableBrand,
 } from "../signal";
 import type { Linear, Pack, TraitDict } from "../traits";
-import { isW, type Param, paramReader, type W } from "../wrap";
+import {
+  claim,
+  isOwn,
+  isShare,
+  type Own,
+  type Param,
+  paramReader,
+  type Share,
+  withinOwner,
+} from "../lens-params";
+import { network } from "../signal";
 import { Bool } from "./bool";
 
 type V = number;
@@ -54,11 +64,12 @@ export class Num extends Signal<V> {
   }
 
   /** Receiver + offset. With a bare `b` (literal or RO signal) the
-   *  receiver absorbs writes to the result. With `w(b)`, the wrapped
-   *  `b` absorbs instead; weight controls the split (default 1 = b
-   *  absorbs all). */
+   *  receiver absorbs writes to the result. With `share(b)` @experimental,
+   *  `b` absorbs (with optional weight). With `own(b)` @experimental,
+   *  `b` is owned and parent-edits route through `b` symmetrically. */
   add(b: Param<V>): this {
-    if (isW(b)) return _addW(this, b as W<V>) as unknown as this;
+    if (isOwn(b)) return _addOwn(this as unknown as Writable<Num>, b as Own<V>) as unknown as this;
+    if (isShare(b)) return _addShare(this, b as Share<V>) as unknown as this;
     const bv = b as Val<V>;
     const bf = reader(bv);
     return this.lens(
@@ -66,9 +77,10 @@ export class Num extends Signal<V> {
       n => n - bf(),
     );
   }
-  /** Symmetric to `add`. `w(b)` makes b absorb negated delta. */
+  /** Symmetric to `add`. `share(b)` makes b absorb negated delta. */
   sub(b: Param<V>): this {
-    if (isW(b)) return _subW(this, b as W<V>) as unknown as this;
+    if (isOwn(b)) return _subOwn(this as unknown as Writable<Num>, b as Own<V>) as unknown as this;
+    if (isShare(b)) return _subShare(this, b as Share<V>) as unknown as this;
     const bv = b as Val<V>;
     const bf = reader(bv);
     return this.lens(
@@ -76,10 +88,12 @@ export class Num extends Signal<V> {
       n => n + bf(),
     );
   }
-  /** Receiver × multiplier. `w(k)` makes the multiplier the handle
-   *  (a anchored; k := target/a, when a ≠ 0). */
+  /** Receiver × multiplier. `share(k)` makes the multiplier the handle
+   *  (a anchored; k := target/a, when a ≠ 0). `own(k)` adds symmetric
+   *  parent-edit routing through k. */
   scale(k: Param<number>): this {
-    if (isW(k)) return _scaleW(this, k as W<number>) as unknown as this;
+    if (isOwn(k)) return _scaleOwn(this as unknown as Writable<Num>, k as Own<number>) as unknown as this;
+    if (isShare(k)) return _scaleShare(this, k as Share<number>) as unknown as this;
     const kv = k as Val<number>;
     const kf = reader(kv);
     return this.lens(
@@ -91,9 +105,9 @@ export class Num extends Signal<V> {
    *  `.scale(k).add(off)` — the chain auto-fuses to one cell, so this
    *  is purely a readability alias. Sliders: `t.affine(width, x0)`
    *  maps `t ∈ [0,1]` to screen coords. Any parameter (k, off) may be
-   *  wrapped with `w()` to act as a writable handle. */
+   *  wrapped with `share()` to act as a writable handle. */
   affine(k: Param<number>, off: Param<number>): this {
-    if (isW(k) || isW(off)) return _affineW(this, k, off) as unknown as this;
+    if (isShare(k) || isShare(off)) return _affineShare(this, k, off) as unknown as this;
     const kf = reader(k as Val<number>);
     const of = reader(off as Val<number>);
     return this.lens(
@@ -108,12 +122,12 @@ export class Num extends Signal<V> {
    *  written one). Use for sliders, gauges, anywhere a value
    *  shouldn't escape its range.
    *
-   *  With `w(lo)` and/or `w(hi)`: the wrapped bound STRETCHES to admit
-   *  out-of-range writes instead of projecting back. `weight` controls
-   *  how much it absorbs (1 = fully stretch; 0 = behave as RO).
-   *  PutGet restored for overruns on stretched sides. */
+   *  With `share(lo)` and/or `share(hi)` @experimental: the wrapped
+   *  bound STRETCHES to admit out-of-range writes instead of projecting
+   *  back. `weight` controls how much it absorbs (1 = fully stretch;
+   *  0 = behave as RO). PutGet restored for overruns on stretched sides. */
   clamp(lo: Param<V>, hi: Param<V>): this {
-    if (isW(lo) || isW(hi)) return _clampW(this, lo, hi) as unknown as this;
+    if (isShare(lo) || isShare(hi)) return _clampShare(this, lo, hi) as unknown as this;
     const lf = reader(lo as Val<V>);
     const hf = reader(hi as Val<V>);
     const c = (v: V) => {
@@ -279,7 +293,7 @@ export class Num extends Signal<V> {
 // proper deps; the setter uses peek (untracked) since it isn't a
 // reactive context.
 
-function _addW(self: Num, b: W<V>): Writable<Num> {
+function _addShare(self: Num, b: Share<V>): Writable<Num> {
   const selfRW = self as Writable<Num>;
   const wf = reader(b.weight);
   return Num.lens(
@@ -301,7 +315,7 @@ function _addW(self: Num, b: W<V>): Writable<Num> {
   );
 }
 
-function _subW(self: Num, b: W<V>): Writable<Num> {
+function _subShare(self: Num, b: Share<V>): Writable<Num> {
   const selfRW = self as Writable<Num>;
   const wf = reader(b.weight);
   return Num.lens(
@@ -326,7 +340,7 @@ function _subW(self: Num, b: W<V>): Writable<Num> {
   );
 }
 
-function _scaleW(self: Num, k: W<number>): Writable<Num> {
+function _scaleShare(self: Num, k: Share<number>): Writable<Num> {
   const wf = reader(k.weight);
   return Num.lens(
     [self, k.sig] as const,
@@ -356,9 +370,9 @@ function _scaleW(self: Num, k: W<number>): Writable<Num> {
   );
 }
 
-function _affineW(self: Num, k: Param<number>, off: Param<number>): Writable<Num> {
-  const kWrap = isW(k) ? (k as W<number>) : undefined;
-  const oWrap = isW(off) ? (off as W<number>) : undefined;
+function _affineShare(self: Num, k: Param<number>, off: Param<number>): Writable<Num> {
+  const kWrap = isShare(k) ? (k as Share<number>) : undefined;
+  const oWrap = isShare(off) ? (off as Share<number>) : undefined;
   const kRead = paramReader(k);
   const oRead = paramReader(off);
   const kWeight = kWrap ? reader(kWrap.weight) : () => 0;
@@ -401,9 +415,9 @@ function _affineW(self: Num, k: Param<number>, off: Param<number>): Writable<Num
   );
 }
 
-function _clampW(self: Num, lo: Param<V>, hi: Param<V>): Writable<Num> {
-  const loWrap = isW(lo) ? (lo as W<V>) : undefined;
-  const hiWrap = isW(hi) ? (hi as W<V>) : undefined;
+function _clampShare(self: Num, lo: Param<V>, hi: Param<V>): Writable<Num> {
+  const loWrap = isShare(lo) ? (lo as Share<V>) : undefined;
+  const hiWrap = isShare(hi) ? (hi as Share<V>) : undefined;
   const loRead = paramReader(lo);
   const hiRead = paramReader(hi);
   const loWeight = loWrap ? reader(loWrap.weight) : () => 0;
@@ -455,6 +469,136 @@ function _clampW(self: Num, lo: Param<V>, hi: Param<V>): Writable<Num> {
       return out as never;
     }) as never,
   );
+}
+
+// ─── @experimental — Owned-parameter bwd helpers ────────────────────
+//
+// Companion to the `_*Share` family. Each `_*Own` helper:
+//   1. claims the `own()`-branded sink (single-writer; engine refuses
+//      external writes via `_ownerToken`),
+//   2. installs the same residual-flow bwd as `_*Share` with weight=1,
+//      threaded through `withinOwner(token)` so the bwd's writes to
+//      the sink pass the engine's ownership check,
+//   3. installs a `network()` reaction subscribed to the non-sink
+//      parents — when a parent is edited, the reaction writes the
+//      sink to maintain `bIntended` (the lens cell's last user-
+//      targeted value, set by the bwd on view-writes). Saturation
+//      residual lands on the view via natural fwd re-derivation.
+
+function _addOwn(self: Writable<Num>, o: Own<V>): Writable<Num> {
+  const sig = o.sig as Writable<Num>;
+  const bIntended = { value: self.peek() + sig.peek() };
+  const lens = Num.lens(
+    () => self.value + sig.value,
+    (target: V) => {
+      withinOwner(token, () => {
+        batch(() => {
+          bIntended.value = target;
+          const nv = self.peek();
+          const bv = sig.peek();
+          const delta = target - (nv + bv);
+          sig.value = bv + delta;
+          const residual = delta - (sig.peek() - bv);
+          if (residual !== 0) self.value = nv + residual;
+        });
+      });
+    },
+  );
+  (lens as { _ownName?: string })._ownName = "Num.add(own)";
+  const token = claim(o, lens as object);
+  network([self], dirty => {
+    if (dirty.size === 0) return;
+    if (!dirty.has(self as unknown as Signal<unknown>)) return;
+    withinOwner(token, () => {
+      const aNow = self.peek();
+      const desired = bIntended.value - aNow;
+      sig.value = desired;
+      const actual = sig.peek();
+      // Saturation drift: when sig couldn't absorb the parent-edit fully,
+      // accept the drift — update bIntended to match the new settled value.
+      // Otherwise the reaction would keep trying to undo the original target
+      // on subsequent drags, making back-drags feel "stuck."
+      if (actual !== desired) bIntended.value = aNow + actual;
+    });
+  });
+  return lens;
+}
+
+function _subOwn(self: Writable<Num>, o: Own<V>): Writable<Num> {
+  const sig = o.sig as Writable<Num>;
+  const bIntended = { value: self.peek() - sig.peek() };
+  const lens = Num.lens(
+    () => self.value - sig.value,
+    (target: V) => {
+      withinOwner(token, () => {
+        batch(() => {
+          bIntended.value = target;
+          const nv = self.peek();
+          const bv = sig.peek();
+          const delta = target - (nv - bv);
+          sig.value = bv - delta;
+          const actualB = -(sig.peek() - bv);
+          const residual = delta - actualB;
+          if (residual !== 0) self.value = nv + residual;
+        });
+      });
+    },
+  );
+  (lens as { _ownName?: string })._ownName = "Num.sub(own)";
+  const token = claim(o, lens as object);
+  network([self], dirty => {
+    if (dirty.size === 0) return;
+    if (!dirty.has(self as unknown as Signal<unknown>)) return;
+    withinOwner(token, () => {
+      const aNow = self.peek();
+      const desired = aNow - bIntended.value;
+      sig.value = desired;
+      const actual = sig.peek();
+      if (actual !== desired) bIntended.value = aNow - actual;
+    });
+  });
+  return lens;
+}
+
+function _scaleOwn(self: Writable<Num>, o: Own<number>): Writable<Num> {
+  const sig = o.sig as Writable<Num>;
+  const bIntended = { value: self.peek() * sig.peek() };
+  const lens = Num.lens(
+    () => self.value * sig.value,
+    (target: V) => {
+      withinOwner(token, () => {
+        batch(() => {
+          bIntended.value = target;
+          const nv = self.peek();
+          const kv = sig.peek();
+          if (nv === 0) {
+            if (target !== 0) self.value = target / (kv || 1);
+            return;
+          }
+          sig.value = target / nv;
+          const actualK = sig.peek();
+          const actualB = nv * actualK;
+          const residual = target - actualB;
+          if (residual !== 0 && actualK !== 0) self.value = target / actualK;
+        });
+      });
+    },
+  );
+  (lens as { _ownName?: string })._ownName = "Num.scale(own)";
+  const token = claim(o, lens as object);
+  network([self], dirty => {
+    if (dirty.size === 0) return;
+    if (!dirty.has(self as unknown as Signal<unknown>)) return;
+    withinOwner(token, () => {
+      const aNow = self.peek();
+      if (aNow === 0) return;
+      const desired = bIntended.value / aNow;
+      sig.value = desired;
+      const actual = sig.peek();
+      if (actual !== desired) bIntended.value = aNow * actual;
+    });
+  });
+  return lens;
 }
 
 /** Writable `Num`. Strict factory: `number | Writable<Num>` in,

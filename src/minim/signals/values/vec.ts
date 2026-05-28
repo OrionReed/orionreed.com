@@ -10,7 +10,17 @@ import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { batch, type Init, reader, readNow, Signal, type Val, type Writable } from "../signal";
 import type { Linear, Pack, Pivotal, TraitDict } from "../traits";
-import { isW, type Param, paramReader, type W } from "../wrap";
+import {
+  claim,
+  isOwn,
+  isShare,
+  type Own,
+  type Param,
+  paramReader,
+  type Share,
+  withinOwner,
+} from "../lens-params";
+import { network, type Signal as _Signal } from "../signal";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
 
@@ -100,7 +110,8 @@ export class Vec extends Signal<V> {
 
   // ── invertibles: return `: this`, propagating writability ──────────
   add(b: Param<V>): this {
-    if (isW(b)) return _vecAddW(this, b as W<V>) as unknown as this;
+    if (isOwn(b)) return _vecAddOwn(this as unknown as Writable<Vec>, b as Own<V>) as unknown as this;
+    if (isShare(b)) return _vecAddShare(this, b as Share<V>) as unknown as this;
     const bf = reader(b as Val<V>);
     return this.lens(
       v => {
@@ -114,7 +125,7 @@ export class Vec extends Signal<V> {
     );
   }
   sub(b: Param<V>): this {
-    if (isW(b)) return _vecSubW(this, b as W<V>) as unknown as this;
+    if (isShare(b)) return _vecSubShare(this, b as Share<V>) as unknown as this;
     const bf = reader(b as Val<V>);
     return this.lens(
       v => {
@@ -141,8 +152,8 @@ export class Vec extends Signal<V> {
     );
   }
   offset(dx: Param<number>, dy: Param<number>): this {
-    if (isW(dx) || isW(dy))
-      return _vecOffsetW(this, dx, dy) as unknown as this;
+    if (isShare(dx) || isShare(dy))
+      return _vecOffsetShare(this, dx, dy) as unknown as this;
     const xf = reader(dx as Val<number>);
     const yf = reader(dy as Val<number>);
     return this.lens(
@@ -152,7 +163,10 @@ export class Vec extends Signal<V> {
   }
   // Axis-aligned offset sugar — same fwd/bwd shape as offset.
   up(n: Param<number>): this {
-    if (isW(n)) return _vecAxisW(this, n as W<number>, "y", -1) as unknown as this;
+    if (isOwn(n))
+      return _vecAxisOwn(this as unknown as Writable<Vec>, n as Own<number>, "y", -1) as unknown as this;
+    if (isShare(n))
+      return _vecAxisShare(this, n as Share<number>, "y", -1) as unknown as this;
     const f = reader(n as Val<number>);
     return this.lens(
       v => ({ x: v.x, y: v.y - f() }),
@@ -160,7 +174,10 @@ export class Vec extends Signal<V> {
     );
   }
   down(n: Param<number>): this {
-    if (isW(n)) return _vecAxisW(this, n as W<number>, "y", +1) as unknown as this;
+    if (isOwn(n))
+      return _vecAxisOwn(this as unknown as Writable<Vec>, n as Own<number>, "y", +1) as unknown as this;
+    if (isShare(n))
+      return _vecAxisShare(this, n as Share<number>, "y", +1) as unknown as this;
     const f = reader(n as Val<number>);
     return this.lens(
       v => ({ x: v.x, y: v.y + f() }),
@@ -168,7 +185,10 @@ export class Vec extends Signal<V> {
     );
   }
   left(n: Param<number>): this {
-    if (isW(n)) return _vecAxisW(this, n as W<number>, "x", -1) as unknown as this;
+    if (isOwn(n))
+      return _vecAxisOwn(this as unknown as Writable<Vec>, n as Own<number>, "x", -1) as unknown as this;
+    if (isShare(n))
+      return _vecAxisShare(this, n as Share<number>, "x", -1) as unknown as this;
     const f = reader(n as Val<number>);
     return this.lens(
       v => ({ x: v.x - f(), y: v.y }),
@@ -176,7 +196,10 @@ export class Vec extends Signal<V> {
     );
   }
   right(n: Param<number>): this {
-    if (isW(n)) return _vecAxisW(this, n as W<number>, "x", +1) as unknown as this;
+    if (isOwn(n))
+      return _vecAxisOwn(this as unknown as Writable<Vec>, n as Own<number>, "x", +1) as unknown as this;
+    if (isShare(n))
+      return _vecAxisShare(this, n as Share<number>, "x", +1) as unknown as this;
     const f = reader(n as Val<number>);
     return this.lens(
       v => ({ x: v.x + f(), y: v.y }),
@@ -349,7 +372,7 @@ export function polar(
 // (e.g., `slack.clamp(min, max)`) the residual flows naturally,
 // producing the soft-spring-hard-stop pattern.
 
-function _vecAddW(self: Vec, b: W<V>): Writable<Vec> {
+function _vecAddShare(self: Vec, b: Share<V>): Writable<Vec> {
   const selfRW = self as Writable<Vec>;
   const wf = reader(b.weight);
   return Vec.lens(
@@ -378,7 +401,7 @@ function _vecAddW(self: Vec, b: W<V>): Writable<Vec> {
   );
 }
 
-function _vecSubW(self: Vec, b: W<V>): Writable<Vec> {
+function _vecSubShare(self: Vec, b: Share<V>): Writable<Vec> {
   const selfRW = self as Writable<Vec>;
   const wf = reader(b.weight);
   return Vec.lens(
@@ -408,10 +431,10 @@ function _vecSubW(self: Vec, b: W<V>): Writable<Vec> {
   );
 }
 
-function _vecOffsetW(self: Vec, dxP: Param<number>, dyP: Param<number>): Writable<Vec> {
+function _vecOffsetShare(self: Vec, dxP: Param<number>, dyP: Param<number>): Writable<Vec> {
   const selfRW = self as Writable<Vec>;
-  const xWrap = isW(dxP) ? (dxP as W<number>) : undefined;
-  const yWrap = isW(dyP) ? (dyP as W<number>) : undefined;
+  const xWrap = isShare(dxP) ? (dxP as Share<number>) : undefined;
+  const yWrap = isShare(dyP) ? (dyP as Share<number>) : undefined;
   const xRead = paramReader(dxP);
   const yRead = paramReader(dyP);
   const xWeight = xWrap ? reader(xWrap.weight) : () => 0;
@@ -456,9 +479,9 @@ function _vecOffsetW(self: Vec, dxP: Param<number>, dyP: Param<number>): Writabl
   );
 }
 
-function _vecAxisW(
+function _vecAxisShare(
   self: Vec,
-  n: W<number>,
+  n: Share<number>,
   axis: "x" | "y",
   sign: 1 | -1,
 ): Writable<Vec> {
@@ -494,4 +517,128 @@ function _vecAxisW(
       });
     },
   );
+}
+
+// ─── @experimental — Owned-parameter bwd helpers ────────────────────
+//
+// Each `_vec*Own` helper claims its sink, installs the same residual
+// flow as the `_vec*Share` sibling (forced weight=1, threaded through
+// `withinOwner(token)`), and additionally installs a `network()`
+// reaction subscribed to the non-sink parents — when `self` is edited,
+// the reaction writes the sink to maintain `bIntended` (set by the bwd
+// on view-writes). Saturation residual lands on the view via natural
+// fwd re-derivation.
+
+function _vecAddOwn(self: Writable<Vec>, o: Own<V>): Writable<Vec> {
+  const sig = o.sig as Writable<Vec>;
+  const initSelf = self.peek();
+  const initSig = sig.peek();
+  const bIntended = {
+    value: { x: initSelf.x + initSig.x, y: initSelf.y + initSig.y } as V,
+  };
+  const lens = Vec.lens(
+    () => {
+      const nv = self.value;
+      const bv = sig.value;
+      return { x: nv.x + bv.x, y: nv.y + bv.y };
+    },
+    (target: V) => {
+      withinOwner(token, () => {
+        batch(() => {
+          bIntended.value = target;
+          const nv = self.peek();
+          const bv = sig.peek();
+          const dx = target.x - (nv.x + bv.x);
+          const dy = target.y - (nv.y + bv.y);
+          sig.value = { x: bv.x + dx, y: bv.y + dy };
+          const after = sig.peek();
+          const rx = dx - (after.x - bv.x);
+          const ry = dy - (after.y - bv.y);
+          if (rx !== 0 || ry !== 0) self.value = { x: nv.x + rx, y: nv.y + ry };
+        });
+      });
+    },
+  );
+  (lens as { _ownName?: string })._ownName = "Vec.add(own)";
+  const token = claim(o, lens as object);
+  network([self], dirty => {
+    if (dirty.size === 0) return;
+    if (!dirty.has(self as unknown as _Signal<unknown>)) return;
+    withinOwner(token, () => {
+      const nv = self.peek();
+      const desired = { x: bIntended.value.x - nv.x, y: bIntended.value.y - nv.y };
+      sig.value = desired;
+      const actual = sig.peek();
+      // Saturation drift: accept the new settled state when sig couldn't
+      // absorb fully, so back-drags don't get "stuck" trying to undo.
+      if (actual.x !== desired.x || actual.y !== desired.y) {
+        bIntended.value = { x: nv.x + actual.x, y: nv.y + actual.y };
+      }
+    });
+  });
+  return lens;
+}
+
+function _vecAxisOwn(
+  self: Writable<Vec>,
+  o: Own<number>,
+  axis: "x" | "y",
+  sign: 1 | -1,
+): Writable<Vec> {
+  const sig = o.sig as Writable<Num>;
+  const initSelf = self.peek();
+  const initSig = sig.peek();
+  const other = axis === "x" ? "y" : "x";
+  const initView = { x: initSelf.x, y: initSelf.y } as V;
+  initView[axis] = initSelf[axis] + sign * initSig;
+  const bIntended = { value: initView };
+
+  const lens = Vec.lens(
+    () => {
+      const nv = self.value;
+      const kv = sig.value;
+      const out = { x: nv.x, y: nv.y } as V;
+      out[axis] = nv[axis] + sign * kv;
+      return out;
+    },
+    (target: V) => {
+      withinOwner(token, () => {
+        batch(() => {
+          bIntended.value = target;
+          const nv = self.peek();
+          const kv = sig.peek();
+          const d = target[axis] - (nv[axis] + sign * kv);
+          // sig absorbs along its axis with sign.
+          sig.value = kv + sign * d;
+          const actualK = sig.peek() - kv;
+          const residual = sign * (sign * d - actualK);
+          const newSelf = { x: nv.x, y: nv.y } as V;
+          newSelf[axis] = nv[axis] + residual;
+          newSelf[other] = target[other];
+          self.value = newSelf;
+        });
+      });
+    },
+  );
+  (lens as { _ownName?: string })._ownName = `Vec.${axis === "y" && sign === -1 ? "up" : axis === "y" ? "down" : axis === "x" && sign === -1 ? "left" : "right"}(own)`;
+  const token = claim(o, lens as object);
+  network([self], dirty => {
+    if (dirty.size === 0) return;
+    if (!dirty.has(self as unknown as _Signal<unknown>)) return;
+    withinOwner(token, () => {
+      const nv = self.peek();
+      // sig represents the axis-aligned offset under sign;
+      // want b_intended.axis = nv.axis + sign * sig → sig = (b_intended.axis - nv.axis) / sign
+      const desired = sign * (bIntended.value[axis] - nv[axis]);
+      sig.value = desired;
+      const actual = sig.peek();
+      // Saturation drift: accept the new settled state on the slack axis.
+      if (actual !== desired) {
+        const next = { x: bIntended.value.x, y: bIntended.value.y };
+        next[axis] = nv[axis] + sign * actual;
+        bIntended.value = next;
+      }
+    });
+  });
+  return lens;
 }

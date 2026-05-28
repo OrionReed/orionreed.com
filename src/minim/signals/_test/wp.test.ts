@@ -1,15 +1,15 @@
-// wp.test.ts — upstream `w()` writable-parameter behavior across
+// wp.test.ts — upstream `share()` writable-parameter behavior across
 // Num and Vec value methods.
 //
 // The contract: bare params behave as today (RO context); wrapped
-// params (`w(sig)`) become writable handles whose absorption is
+// params (`share(sig)`) become writable handles whose absorption is
 // controlled by `weight` (default 1 = full absorb). Reactive weights
 // are supported. Wrapping a non-writable signal throws at construction.
 
 import { describe, expect, it } from "vitest";
-import { num, vec, w } from "../index";
+import { num, share, vec } from "../index";
 
-describe("Num.add: w() promotion", () => {
+describe("Num.add: share() promotion", () => {
   it("bare param: receiver absorbs (today's behavior)", () => {
     const a = num(10);
     const b = num(5);
@@ -20,29 +20,29 @@ describe("Num.add: w() promotion", () => {
     expect(b.peek()).toBe(5);
   });
 
-  it("w(b): b absorbs (default weight=1)", () => {
+  it("share(b): b absorbs (default weight=1)", () => {
     const a = num(10);
     const b = num(5);
-    const c = a.add(w(b));
+    const c = a.add(share(b));
     expect(c.value).toBe(15);
     c.value = 30;
     expect(a.peek()).toBe(10);
     expect(b.peek()).toBe(20);
   });
 
-  it("w(b, {weight: 0.5}): symmetric split", () => {
+  it("share(b, {weight: 0.5}): symmetric split", () => {
     const a = num(10);
     const b = num(5);
-    const c = a.add(w(b, { weight: 0.5 }));
+    const c = a.add(share(b, { weight: 0.5 }));
     c.value = 25; // delta = 10; each gets +5
     expect(a.peek()).toBe(15);
     expect(b.peek()).toBe(10);
   });
 
-  it("w(b, {weight: 0}): equivalent to RO (no-op promotion)", () => {
+  it("share(b, {weight: 0}): equivalent to RO (no-op promotion)", () => {
     const a = num(10);
     const b = num(5);
-    const c = a.add(w(b, { weight: 0 }));
+    const c = a.add(share(b, { weight: 0 }));
     c.value = 30;
     expect(a.peek()).toBe(25);
     expect(b.peek()).toBe(5);
@@ -52,7 +52,7 @@ describe("Num.add: w() promotion", () => {
     const a = num(10);
     const b = num(5);
     const stiffness = num(1);
-    const c = a.add(w(b, { weight: stiffness }));
+    const c = a.add(share(b, { weight: stiffness }));
 
     c.value = 25; // weight=1: b absorbs full 10
     expect(a.peek()).toBe(10);
@@ -71,7 +71,7 @@ describe("Num.add: w() promotion", () => {
     const a = num(10);
     const b = num(5);
     const c1 = a.add(b);
-    const c2 = a.add(w(b));
+    const c2 = a.add(share(b));
     c1.value = 100;
     expect(c1.value).toBe(100);
     c2.value = 200;
@@ -79,7 +79,7 @@ describe("Num.add: w() promotion", () => {
   });
 });
 
-describe("Num.sub: w() promotion", () => {
+describe("Num.sub: share() promotion", () => {
   it("bare: receiver absorbs", () => {
     const a = num(20);
     const b = num(5);
@@ -89,17 +89,17 @@ describe("Num.sub: w() promotion", () => {
     expect(b.peek()).toBe(5);
   });
 
-  it("w(b): b absorbs (negated sign)", () => {
+  it("share(b): b absorbs (negated sign)", () => {
     const a = num(20);
     const b = num(5);
-    const c = a.sub(w(b));
+    const c = a.sub(share(b));
     c.value = 5; // delta = -10 from cur=15
     expect(a.peek()).toBe(20);
     expect(b.peek()).toBe(15); // b -= -10 = +10
   });
 });
 
-describe("Num.scale: w() promotion", () => {
+describe("Num.scale: share() promotion", () => {
   it("bare: receiver absorbs", () => {
     const a = num(10);
     const k = num(2);
@@ -109,26 +109,26 @@ describe("Num.scale: w() promotion", () => {
     expect(k.peek()).toBe(2);
   });
 
-  it("w(k): k absorbs (a anchored when a ≠ 0)", () => {
+  it("share(k): k absorbs (a anchored when a ≠ 0)", () => {
     const a = num(10);
     const k = num(2);
-    const c = a.scale(w(k));
+    const c = a.scale(share(k));
     c.value = 40;
     expect(a.peek()).toBe(10);
     expect(k.peek()).toBe(4); // 40 / 10
   });
 
-  it("w(k, {weight: 0}): equivalent to RO", () => {
+  it("share(k, {weight: 0}): equivalent to RO", () => {
     const a = num(10);
     const k = num(2);
-    const c = a.scale(w(k, { weight: 0 }));
+    const c = a.scale(share(k, { weight: 0 }));
     c.value = 40;
     expect(a.peek()).toBe(20);
     expect(k.peek()).toBe(2);
   });
 });
 
-describe("Num.clamp: w() stretches the bound", () => {
+describe("Num.clamp: share() stretches the bound", () => {
   it("bare: classic projection (out-of-range gets clamped)", () => {
     const t = num(50);
     const c = t.clamp(0, 100);
@@ -138,20 +138,20 @@ describe("Num.clamp: w() stretches the bound", () => {
     expect(c.value).toBe(100);
   });
 
-  it("w(hi): hi stretches to admit overruns", () => {
+  it("share(hi): hi stretches to admit overruns", () => {
     const t = num(50);
     const hi = num(100);
-    const c = t.clamp(0, w(hi));
+    const c = t.clamp(0, share(hi));
     c.value = 150;
     expect(hi.peek()).toBe(150); // stretched
     expect(t.peek()).toBe(150); // weight=1 → target written through
     expect(c.value).toBe(150); // PutGet restored
   });
 
-  it("w(lo): lo stretches downward", () => {
+  it("share(lo): lo stretches downward", () => {
     const t = num(50);
     const lo = num(0);
-    const c = t.clamp(w(lo), 100);
+    const c = t.clamp(share(lo), 100);
     c.value = -25;
     expect(lo.peek()).toBe(-25);
     expect(t.peek()).toBe(-25);
@@ -160,7 +160,7 @@ describe("Num.clamp: w() stretches the bound", () => {
   it("partial stretch: weight 0.5 absorbs half the overrun", () => {
     const t = num(50);
     const hi = num(100);
-    const c = t.clamp(0, w(hi, { weight: 0.5 }));
+    const c = t.clamp(0, share(hi, { weight: 0.5 }));
     c.value = 150;
     // Overrun = 50; hi gets +25 → 125; target lands on newHi (125).
     expect(hi.peek()).toBe(125);
@@ -170,14 +170,14 @@ describe("Num.clamp: w() stretches the bound", () => {
   it("in-range write: bounds unchanged", () => {
     const t = num(50);
     const hi = num(100);
-    const c = t.clamp(0, w(hi));
+    const c = t.clamp(0, share(hi));
     c.value = 75;
     expect(hi.peek()).toBe(100);
     expect(t.peek()).toBe(75);
   });
 });
 
-describe("Vec.right / .up / .down / .left: w() promotion", () => {
+describe("Vec.right / .up / .down / .left: share() promotion", () => {
   it("bare offset: receiver absorbs", () => {
     const a = vec(0, 0);
     const n = num(5);
@@ -186,29 +186,29 @@ describe("Vec.right / .up / .down / .left: w() promotion", () => {
     expect(a.peek()).toEqual({ x: 95, y: 0 });
   });
 
-  it("w(n): n absorbs x-delta", () => {
+  it("share(n): n absorbs x-delta", () => {
     const a = vec(0, 0);
     const n = num(5);
-    const b = a.right(w(n));
+    const b = a.right(share(n));
     b.value = { x: 100, y: 25 };
     expect(a.peek()).toEqual({ x: 0, y: 25 }); // x anchored; y written
     expect(n.peek()).toBe(100);
   });
 
-  it("w(n) on .up: n absorbs y-delta (with sign)", () => {
+  it("share(n) on .up: n absorbs y-delta (with sign)", () => {
     const a = vec(0, 0);
     const n = num(5);
-    const b = a.up(w(n));
+    const b = a.up(share(n));
     expect(b.value).toEqual({ x: 0, y: -5 });
     b.value = { x: 0, y: -50 };
     expect(a.peek()).toEqual({ x: 0, y: 0 });
     expect(n.peek()).toBe(50);
   });
 
-  it(".right(w(n, {weight: 0.5})): split absorption", () => {
+  it(".right(share(n, {weight: 0.5})): split absorption", () => {
     const a = vec(0, 0);
     const n = num(0);
-    const b = a.right(w(n, { weight: 0.5 }));
+    const b = a.right(share(n, { weight: 0.5 }));
     b.value = { x: 100, y: 0 };
     expect(a.peek()).toEqual({ x: 50, y: 0 });
     expect(n.peek()).toBe(50);
@@ -220,7 +220,7 @@ describe("Vec.offset (two-arg): mixed RO and wp params", () => {
     const a = vec(0, 0);
     const dx = num(0);
     const dy = num(0);
-    const b = a.offset(w(dx), w(dy));
+    const b = a.offset(share(dx), share(dy));
     b.value = { x: 100, y: 50 };
     expect(a.peek()).toEqual({ x: 0, y: 0 });
     expect(dx.peek()).toBe(100);
@@ -230,7 +230,7 @@ describe("Vec.offset (two-arg): mixed RO and wp params", () => {
   it("only dx wrapped: dx absorbs x, a absorbs y (RO dy)", () => {
     const a = vec(10, 20);
     const dx = num(0);
-    const b = a.offset(w(dx), 5);
+    const b = a.offset(share(dx), 5);
     expect(b.value).toEqual({ x: 10, y: 25 });
     b.value = { x: 100, y: 50 };
     // dx wrapped: absorbs x-delta. a's x anchored. a.y absorbs y delta.
@@ -239,10 +239,10 @@ describe("Vec.offset (two-arg): mixed RO and wp params", () => {
   });
 });
 
-describe("w() input validation", () => {
+describe("share() input validation", () => {
   it("throws for non-signal input", () => {
-    // @ts-expect-error — w() requires Writable<Signal<T>>
-    expect(() => w(5)).toThrow();
+    // @ts-expect-error — share() requires Writable<Signal<T>>
+    expect(() => share(5)).toThrow();
   });
 });
 
@@ -250,12 +250,12 @@ describe("Composition: wp + classical chain", () => {
   it("chain wp method then classical method preserves correctness", () => {
     const a = vec(0, 0);
     const n = num(5);
-    const b = a.right(w(n)).up(3); // up uses literal — classical
+    const b = a.right(share(n)).up(3); // up uses literal — classical
     expect(b.value).toEqual({ x: 5, y: -3 });
 
     b.value = { x: 100, y: -10 };
     // .up's bwd: receiver := { x: 100, y: -10 + 3 } = (100, -7). a.x stays.
-    // .right(w(n))'s bwd: a.x anchored; n := 100; a.y := -7.
+    // .right(share(n))'s bwd: a.x anchored; n := 100; a.y := -7.
     expect(a.peek()).toEqual({ x: 0, y: -7 });
     expect(n.peek()).toBe(100);
   });
@@ -264,7 +264,7 @@ describe("Composition: wp + classical chain", () => {
     const a = vec(0, 0);
     const n = num(5);
     const m = num(3);
-    const b = a.right(w(n)).up(w(m));
+    const b = a.right(share(n)).up(share(m));
     expect(b.value).toEqual({ x: 5, y: -3 });
 
     b.value = { x: 100, y: -50 };
@@ -274,12 +274,12 @@ describe("Composition: wp + classical chain", () => {
   });
 });
 
-describe("Invariant A (cycles): still impossible via w() alone", () => {
+describe("Invariant A (cycles): still impossible via share() alone", () => {
   it("a wrapped param must exist before the lens — no cycles", () => {
     // Structural test: TS forbids referencing a cell before construction.
     const a = num(0);
     const b = num(0);
-    const c = a.add(w(b));
+    const c = a.add(share(b));
     expect(c.value).toBe(0);
     // No way to make a or b reference c without effect().
   });
@@ -290,7 +290,7 @@ describe("Invariant B (writability inference): unchanged", () => {
     const a = num(10);
     const n = num(5);
     const c1 = a.add(n);    // Writable<Num>
-    const c2 = a.add(w(n)); // Writable<Num>
+    const c2 = a.add(share(n)); // Writable<Num>
     c1.value = 30;
     c2.value = 30;
     expect(c1.value).toBe(30);
@@ -309,7 +309,7 @@ describe("Num.add: wrapped param is a clamped lens — residual flows", () => {
   it("in-range write: clamp absorbs, receiver unchanged", () => {
     const a = num(100);
     const slack = num(50).clamp(10, 100);
-    const c = a.add(w(slack));
+    const c = a.add(share(slack));
     expect(c.value).toBe(150);
     c.value = 180; // delta = 30; slack tries 80; in range; clamp accepts 80
     expect(a.peek()).toBe(100);
@@ -319,7 +319,7 @@ describe("Num.add: wrapped param is a clamped lens — residual flows", () => {
   it("overflow above: clamp saturates, receiver absorbs the excess", () => {
     const a = num(100);
     const slack = num(50).clamp(10, 100);
-    const c = a.add(w(slack));
+    const c = a.add(share(slack));
     c.value = 250; // delta = 100; slack tries 150; clamps to 100 (delta=50); residual=50
     expect(slack.value).toBe(100);
     expect(a.peek()).toBe(150); // absorbed the 50 residual
@@ -329,7 +329,7 @@ describe("Num.add: wrapped param is a clamped lens — residual flows", () => {
   it("overflow below: clamp saturates to min; receiver absorbs the underflow", () => {
     const a = num(100);
     const slack = num(50).clamp(10, 100);
-    const c = a.add(w(slack));
+    const c = a.add(share(slack));
     c.value = 50; // delta = -100; slack tries -50; clamps to 10; residual=-60
     expect(slack.value).toBe(10);
     expect(a.peek()).toBe(40);
@@ -339,7 +339,7 @@ describe("Num.add: wrapped param is a clamped lens — residual flows", () => {
   it("repeated drags: receiver tracks every saturation event", () => {
     const a = num(100);
     const slack = num(50).clamp(10, 100);
-    const c = a.add(w(slack));
+    const c = a.add(share(slack));
 
     c.value = 250; // overflows by 50; a := 150
     expect(a.peek()).toBe(150);
@@ -354,7 +354,7 @@ describe("Num.add: wrapped param is a clamped lens — residual flows", () => {
     // saturator is in the chain.
     const a = num(100);
     const b = num(50);
-    const c = a.add(w(b));
+    const c = a.add(share(b));
     c.value = 250;
     expect(a.peek()).toBe(100);
     expect(b.peek()).toBe(150);
@@ -366,7 +366,7 @@ describe("Vec.right: bounded-slack pattern (the headline demo case)", () => {
   it("free in range; pushes receiver outside range", () => {
     const A = vec(100, 100);
     const slack = num(50).clamp(10, 100);
-    const B = A.right(w(slack));
+    const B = A.right(share(slack));
     expect(B.value).toEqual({ x: 150, y: 100 });
 
     // Free movement in range:
@@ -394,7 +394,7 @@ describe("Vec.right: bounded-slack pattern (the headline demo case)", () => {
   it("dragging A: B follows naturally via forward propagation", () => {
     const A = vec(100, 100);
     const slack = num(50).clamp(10, 100);
-    const B = A.right(w(slack));
+    const B = A.right(share(slack));
 
     A.value = { x: 200, y: 100 };
     expect(B.value).toEqual({ x: 250, y: 100 }); // B = 200 + 50
@@ -405,7 +405,7 @@ describe("Vec.right: bounded-slack pattern (the headline demo case)", () => {
   it("y-axis works independently — only x is bounded", () => {
     const A = vec(100, 100);
     const slack = num(50).clamp(10, 100);
-    const B = A.right(w(slack));
+    const B = A.right(share(slack));
     B.value = { x: 175, y: 250 };
     // y has no slack — should land on A
     expect(A.peek()).toEqual({ x: 100, y: 250 });
@@ -418,7 +418,7 @@ describe("Vec.offset: bounded-slack on both axes independently", () => {
     const A = vec(0, 0);
     const sx = num(50).clamp(0, 100);
     const sy = num(50).clamp(0, 100);
-    const B = A.offset(w(sx), w(sy));
+    const B = A.offset(share(sx), share(sy));
     expect(B.value).toEqual({ x: 50, y: 50 });
 
     B.value = { x: 200, y: 200 };

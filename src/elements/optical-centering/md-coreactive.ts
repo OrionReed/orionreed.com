@@ -5,7 +5,7 @@
 // RIGHT (topology): the same construction as a DAG of nodes the
 //                   user can actually point at — shapes, named lens
 //                   operators (midpoint, down), labels, lines.
-//                   Primitive Vecs (A, B) collapse into their shape
+//                   Primitive Vecs (A, B, H) collapse into their shape
 //                   (no transformation, no separate identity).
 //
 // Edges:
@@ -36,7 +36,7 @@ import {
   line,
   type Mount,
   midpointLens,
-  type Num,
+  Num,
   num,
   path,
   play,
@@ -52,10 +52,23 @@ const BLUE = "#5b8def";
 const GREEN = "#86b966";
 const ORANGE = "#f5a623";
 const MUTED = "var(--text-color, #888)";
+const INK = "var(--text-color, #333)";
+
+// H slider — track is centred on the scene pane (cx = 200).
+// `height = hKnob.x - SLIDER_OFFSET`, where SLIDER_OFFSET = TRACK_LO - H_MIN
+// so the visible track endpoints map cleanly to the clamp bounds.
+const H_MIN = 30;
+const H_MAX = 180;
+const H_INIT = 95;
+const TRACK_LO = 125; // 200 − (H_MAX − H_MIN) / 2
+const TRACK_HI = 275; // 200 + (H_MAX − H_MIN) / 2
+const SLIDER_Y = 400;
+const SLIDER_OFFSET = TRACK_LO - H_MIN; // 95
 
 const SCENE_R = 14; // Filled cell circle in the scene (drag target).
 const SHAPE_R = 12; // Filled cell circle in the topology — represents the cell.
 const NODE_R = SHAPE_R; // Implicit anchor radius for every topology node — lines stop here.
+const H_R = 6; // H is rendered as a smaller un-labelled dot in both panes.
 const LENS_W = 76; // Structural lens box (midpoint / down).
 const LENS_H = 24;
 const LABEL_SIZE = 15; // Body font size in the topology.
@@ -229,20 +242,31 @@ export class MdCoreactive extends Diagram {
     const A = vec(90, 150);
     const B = vec(290, 150);
     const M = midpointLens(A, B);
-    const D = M.down(95);
+    // H: slider knob on a horizontal track at SLIDER_Y. `Num.pin`
+    // absorbs y-writes, so standard `drag(knob, vec)` is axis-locked.
+    // The knob's x is clamped to the track range; `height = knob.x −
+    // SLIDER_OFFSET` exposes the writable height in px (clamped to
+    // [H_MIN, H_MAX]). `D = M.down(height)` propagates forward into D.
+    const hKnob = vec(
+      num(SLIDER_OFFSET + H_INIT).clamp(TRACK_LO, TRACK_HI),
+      Num.pin(SLIDER_Y),
+    );
+    const height = hKnob.x.sub(SLIDER_OFFSET);
+    const D = M.down(height);
 
     // Each cell has one topology position (its draggable shape).
-    // Primitive Vecs (A, B) collapse into their shape — they have no
-    // transformation of their own. Lens cells (M, D) keep an
+    // Primitive Vecs (A, B, H) collapse into their shape — they have
+    // no transformation of their own. Lens cells (M, D) keep an
     // explicit named operator node above their shape: `midpoint(A,B)`
-    // produces M, `M.down(95)` produces D.
+    // produces M, `M.down(H)` produces D.
     const cells = [
       { cell: A, color: BLUE, text: "A", shape: vec() },
       { cell: B, color: GREEN, text: "B", shape: vec() },
+      { cell: hKnob, color: INK, text: "H", shape: vec() },
       { cell: M, color: ORANGE, text: "M", shape: vec() },
       { cell: D, color: RED, text: "D", shape: vec() },
     ] as const;
-    const [cA, cB, cM, cD] = cells;
+    const [cA, cB, cH, cM, cD] = cells;
 
     // Topology positions for the lens operators and shape leaves.
     const tMidpoint = vec(),
@@ -266,6 +290,10 @@ export class MdCoreactive extends Diagram {
       [cA.shape, tMidpoint, true],
       [cB.shape, tMidpoint, true],
       [tMidpoint, cM.shape, true],
+      // H feeds into `down(...)` but doesn't receive writebacks from D
+      // (height has weight 0; D-drag is absorbed entirely by M). Forward-
+      // only edge matches that asymmetry: a black line, no red arc.
+      [cH.shape, tDown],
       [cM.shape, tDown, true],
       [tDown, cD.shape, true],
       [cA.shape, tLabA],
@@ -297,26 +325,38 @@ export class MdCoreactive extends Diagram {
     );
 
     // 2. Scene visuals: lines first (default style), then draggable
-    //    cells on top.
-    s(line(A, B), line(M, D));
+    //    cells on top. The slider track spans [TRACK_LO, TRACK_HI] —
+    //    horizontally centred on the scene pane.
+    s(
+      line(A, B),
+      line(M, D),
+      line(vec(TRACK_LO, SLIDER_Y), vec(TRACK_HI, SLIDER_Y), {
+        thin: true,
+        opacity: 0.3,
+        cap: "round",
+      }),
+    );
     for (const c of cells) {
+      const small = c === cH;
       const ch = s(
-        circle(c.cell, SCENE_R, {
+        circle(c.cell, small ? H_R + 1 : SCENE_R, {
           fill: c.color,
           stroke: "var(--bg-color, white)",
-          strokeWidth: 2,
+          strokeWidth: small ? 0 : 2,
         }),
       );
       drag(ch, c.cell);
       ch.on("pointerdown", () => {
         origin.value = c.shape;
       });
-      s(
-        label(c.text === "D" ? c.cell.down(24) : c.cell.up(24), c.text, {
-          size: LABEL_SIZE,
-          bold: true,
-        }),
-      );
+      if (!small) {
+        s(
+          label(c.text === "D" ? c.cell.down(24) : c.cell.up(24), c.text, {
+            size: LABEL_SIZE,
+            bold: true,
+          }),
+        );
+      }
     }
 
     // 3. Topology edges (under topology nodes). Forward = `path`,
@@ -334,10 +374,11 @@ export class MdCoreactive extends Diagram {
       };
     }
     const edgeAct = new Map<Edge, { fwd: Writable<Num>; rev?: Writable<Num> }>();
+    const anchorR = (n: Vec): number => (n === cH.shape ? H_R : NODE_R);
     for (const e of edges) {
       const [from, to, rev] = e;
-      const start = shrink(from, to, NODE_R);
-      const end = shrink(to, from, NODE_R);
+      const start = shrink(from, to, anchorR(from));
+      const end = shrink(to, from, anchorR(to));
       const fwdAct = num(0);
       s(path(start, fireProps(fwdAct, BLUE)).to(end));
       const revAct = rev ? num(0) : undefined;
@@ -355,7 +396,7 @@ export class MdCoreactive extends Diagram {
     // 4. Topology nodes — shape circles, structural lens boxes,
     //    line icons, and bare quoted-letter labels.
     for (const c of cells) {
-      s(circle(c.shape, SHAPE_R, { fill: c.color }));
+      s(circle(c.shape, c === cH ? H_R : SHAPE_R, { fill: c.color }));
     }
     const lenses: [Writable<Vec>, string][] = [
       [tMidpoint, "midpoint"],

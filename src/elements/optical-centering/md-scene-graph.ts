@@ -1,13 +1,13 @@
-// md-scene-graph.ts — parent / children via `w()`.
+// md-scene-graph.ts — parent / children via `share()`.
 //
-// A parent Vec; three children, each = parent.offset(w(dx), w(dy)).
+// A parent Vec; three children, each = parent.offset(share(dx), share(dy)).
 // Drag a child → only its local offset moves; parent and siblings
 // stay. Drag the parent → every child follows (forward propagation
 // through the offsets).
 //
 // This is the standard scene-graph idiom expressed in one line per
-// child: the child is just `parent.offset(w(localX), w(localY))`. No
-// special "scene graph" type; no derived `world` cell that has to be
+// child: the child is just `parent.offset(share(localX), share(localY))`.
+// No special "scene graph" type; no derived `world` cell that has to be
 // rewritten on parent move; no per-child manual sync code. The lens's
 // bwd cascade does the right thing in each direction.
 
@@ -21,8 +21,8 @@ import {
   type Mount,
   num,
   type Num,
+  share,
   vec,
-  w,
   type Writable,
 } from "../../minim";
 
@@ -57,13 +57,13 @@ export class MdSceneGraph extends Diagram {
 
     // Connector lines from parent to each child (purely visual).
     for (const c of children) {
-      const childPos = parent.offset(w(c.dx), w(c.dy));
+      const childPos = parent.offset(share(c.dx), share(c.dy));
       s(line(parent, childPos, { stroke: "#bcd9e8", strokeWidth: 1.5, cap: "round" }));
     }
 
     // Child handles.
     for (const c of children) {
-      const childPos = parent.offset(w(c.dx), w(c.dy));
+      const childPos = parent.offset(share(c.dx), share(c.dy));
       const handle = s(circle(childPos, 16, { fill: c.fill, stroke: "white", strokeWidth: 2 }));
       drag(handle, childPos);
       handle.el.style.cursor = "move";
@@ -93,7 +93,7 @@ export class MdSceneGraph extends Diagram {
     s(
       label(
         view.bottom.up(10),
-        "child = parent.offset(w(dx), w(dy)) — one line per child, full bidirectional behavior",
+        "child = parent.offset(share(dx), share(dy)) — one line per child, full bidirectional behavior",
         { size: 9.5 },
       ),
     );

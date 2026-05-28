@@ -1,13 +1,13 @@
-// md-bounded-slack.ts — `w()` on a saturating lens routes residuals.
+// md-bounded-slack.ts — `share()` on a saturating lens routes residuals.
 //
 // Two draggable boxes linked edge-to-edge. The relationship is written
 // directly between the shapes' writable anchors:
 //
-//     const bCenter = boxA.right.right(w(slack)).right(BOX_SIZE / 2);
+//     const bCenter = boxA.right.right(share(slack)).right(BOX_SIZE / 2);
 //     const boxB    = rect(bCenter, BOX_SIZE, BOX_SIZE);
 //
 // `boxA.right` is the parent-frame right-edge anchor (writes shift A's
-// translate). Shifting it by `w(slack)` lands on B's left edge; adding
+// translate). Shifting it by `share(slack)` lands on B's left edge; adding
 // half-width yields B's centre, which is what `rect(center, w, h)` wants.
 //
 // Drag A — B follows (forward propagation through the chain).
@@ -25,9 +25,9 @@ import {
   line,
   type Mount,
   num,
+  own,
   rect,
   vec,
-  w,
 } from "../../minim";
 
 const W = 660;
@@ -52,7 +52,7 @@ export class MdBoundedSlack extends Diagram {
     );
 
     // B's left edge = A's right edge + slack; centre = + half-width.
-    const bCenter = boxA.right.right(w(slack)).right(BOX_SIZE / 2);
+    const bCenter = boxA.right.right(own(slack)).right(BOX_SIZE / 2);
     const boxB = s(
       rect(bCenter, BOX_SIZE, BOX_SIZE, {
         fill: "#e25c5c",
@@ -100,7 +100,7 @@ export class MdBoundedSlack extends Diagram {
       label(boxB.center, "B", { fill: "white", bold: true, size: 16, align: Anchor.Center }),
       label(
         view.bottom.up(8),
-        "boxB.left = boxA.right.right(w(slack.clamp(30, 180))) — edge-to-edge gap; overflow routes to A",
+        "boxB.left = boxA.right.right(share(slack.clamp(30, 180))) — edge-to-edge gap; overflow routes to A",
         { size: 10, align: Anchor.Center },
       ),
     );
