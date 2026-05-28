@@ -17,7 +17,6 @@ import {
   type Writable,
   type WritableBrand,
 } from "../signal";
-import { type LensAlgebra, lensWithParam, type Param } from "../lens-params";
 import type { Linear, Pack, TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Bool } from "./bool";
@@ -146,16 +145,19 @@ export class Box extends Signal<V> {
       n => add(n, bf()),
     );
   }
-  /** Receiver × multiplier. With `share(k)`/`own(k)` @experimental,
-   *  `k` becomes the handle (receiver anchored on a non-zero axis;
-   *  receiver scales by inverse-k for residual flow). */
-  scale(k: Param<number>): this {
-    return lensWithParam(this as unknown as Writable<Box>, k, BOX_SCALE_ALG) as unknown as this;
+  scale(k: Val<number>): this {
+    const kf = reader(k);
+    return this.lens(
+      v => scale(v, kf()),
+      n => scale(n, 1 / kf()),
+    );
   }
-  /** Symmetric expansion. With `share(n)`/`own(n)` @experimental, `n`
-   *  absorbs the signed expansion delta; receiver absorbs the residual. */
-  expand(n: Param<number>): this {
-    return lensWithParam(this as unknown as Writable<Box>, n, BOX_EXPAND_ALG) as unknown as this;
+  expand(n: Val<number>): this {
+    const nf = reader(n);
+    return this.lens(
+      v => expand(v, nf()),
+      o => expand(o, -nf()),
+    );
   }
 
   lerp(b: Val<V>, t: Val<number>): Box {
@@ -250,30 +252,6 @@ export class Box extends Signal<V> {
  *  RO sources are rejected at the type level — use `Box.derive(...)`
  *  for reactive RO tracking, or `signal.value` to snapshot. Lock a
  *  component with `Num.pin(c)`. */
-// ─── @experimental — algebras for `lensWithParam` ───────────────────
-
-const BOX_SCALE_ALG: LensAlgebra<V, number> = {
-  fwd: (b, k) => scale(b, k),
-  // Receiver from view + k: divide each coord by k (with k=0 guard).
-  solveA: (v, k) => (k === 0 ? v : scale(v, 1 / k)),
-  // Solve k from view + receiver: prefer the w/h ratio (avoids x=0/y=0
-  // collisions when the box is at origin). Falls back through coords.
-  solveP: (v, b) =>
-    b.w !== 0 ? v.w / b.w :
-    b.h !== 0 ? v.h / b.h :
-    b.x !== 0 ? v.x / b.x :
-    b.y !== 0 ? v.y / b.y :
-    1,
-};
-
-const BOX_EXPAND_ALG: LensAlgebra<V, number> = {
-  fwd: (b, n) => expand(b, n),
-  // Receiver from view + n: invert expand by -n on the target.
-  solveA: (v, n) => expand(v, -n),
-  // Solve n from view + receiver: width grows by 2n, so n = (v.w - b.w)/2.
-  solveP: (v, b) => (v.w - b.w) / 2,
-};
-
 export function box(
   x: Init<Num> = 0,
   y: Init<Num> = 0,

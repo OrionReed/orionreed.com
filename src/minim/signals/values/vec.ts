@@ -10,14 +10,6 @@ import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import { batch, type Init, reader, readNow, Signal, type Val, type Writable } from "../signal";
 import type { Linear, Pack, Pivotal, TraitDict } from "../traits";
-import {
-  isShare,
-  type LensAlgebra,
-  lensWithParam,
-  type Param,
-  paramReader,
-  type Share,
-} from "../lens-params";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
 
@@ -106,11 +98,31 @@ export class Vec extends Signal<V> {
   }
 
   // ── invertibles: return `: this`, propagating writability ──────────
-  add(b: Param<V>): this {
-    return lensWithParam(this as unknown as Writable<Vec>, b, VEC_ADD_ALG) as unknown as this;
+  add(b: Val<V>): this {
+    const bf = reader(b);
+    return this.lens(
+      v => {
+        const o = bf();
+        return { x: v.x + o.x, y: v.y + o.y };
+      },
+      n => {
+        const o = bf();
+        return { x: n.x - o.x, y: n.y - o.y };
+      },
+    );
   }
-  sub(b: Param<V>): this {
-    return lensWithParam(this as unknown as Writable<Vec>, b, VEC_SUB_ALG) as unknown as this;
+  sub(b: Val<V>): this {
+    const bf = reader(b);
+    return this.lens(
+      v => {
+        const o = bf();
+        return { x: v.x - o.x, y: v.y - o.y };
+      },
+      n => {
+        const o = bf();
+        return { x: n.x + o.x, y: n.y + o.y };
+      },
+    );
   }
   scale(k: Val<number>): this {
     const kf = reader(k);
@@ -125,28 +137,42 @@ export class Vec extends Signal<V> {
       },
     );
   }
-  offset(dx: Param<number>, dy: Param<number>): this {
-    if (isShare(dx) || isShare(dy))
-      return _vecOffsetShare(this, dx, dy) as unknown as this;
-    const xf = reader(dx as Val<number>);
-    const yf = reader(dy as Val<number>);
+  offset(dx: Val<number>, dy: Val<number>): this {
+    const xf = reader(dx);
+    const yf = reader(dy);
     return this.lens(
       v => ({ x: v.x + xf(), y: v.y + yf() }),
       n => ({ x: n.x - xf(), y: n.y - yf() }),
     );
   }
   // Axis-aligned offset sugar — same fwd/bwd shape as offset.
-  up(n: Param<number>): this {
-    return lensWithParam(this as unknown as Writable<Vec>, n, VEC_UP_ALG) as unknown as this;
+  up(n: Val<number>): this {
+    const f = reader(n);
+    return this.lens(
+      v => ({ x: v.x, y: v.y - f() }),
+      o => ({ x: o.x, y: o.y + f() }),
+    );
   }
-  down(n: Param<number>): this {
-    return lensWithParam(this as unknown as Writable<Vec>, n, VEC_DOWN_ALG) as unknown as this;
+  down(n: Val<number>): this {
+    const f = reader(n);
+    return this.lens(
+      v => ({ x: v.x, y: v.y + f() }),
+      o => ({ x: o.x, y: o.y - f() }),
+    );
   }
-  left(n: Param<number>): this {
-    return lensWithParam(this as unknown as Writable<Vec>, n, VEC_LEFT_ALG) as unknown as this;
+  left(n: Val<number>): this {
+    const f = reader(n);
+    return this.lens(
+      v => ({ x: v.x - f(), y: v.y }),
+      o => ({ x: o.x + f(), y: o.y }),
+    );
   }
-  right(n: Param<number>): this {
-    return lensWithParam(this as unknown as Writable<Vec>, n, VEC_RIGHT_ALG) as unknown as this;
+  right(n: Val<number>): this {
+    const f = reader(n);
+    return this.lens(
+      v => ({ x: v.x + f(), y: v.y }),
+      o => ({ x: o.x - f(), y: o.y }),
+    );
   }
 
   // ── non-invertibles: explicit RO return ────────────────────────────
@@ -304,109 +330,3 @@ export function polar(
   }
   return Signal.install(Vec, fwd, bwd);
 }
-
-// ─── @experimental — algebras for `lensWithParam` ───────────────────
-//
-// Each entry is the 3-closure algebra (fwd + solveA + solveP) the
-// generic `lensWithParam` helper consumes to emit RO / share() / own()
-// behaviors uniformly. Vec params: blendP is the component-wise lerp
-// (the default numeric blend would mis-handle Vec).
-
-const vecBlend = (p: V, q: V, w: number): V => ({
-  x: p.x + (q.x - p.x) * w,
-  y: p.y + (q.y - p.y) * w,
-});
-
-const VEC_ADD_ALG: LensAlgebra<V, V> = {
-  fwd: (a, b) => ({ x: a.x + b.x, y: a.y + b.y }),
-  solveA: (v, b) => ({ x: v.x - b.x, y: v.y - b.y }),
-  solveP: (v, a) => ({ x: v.x - a.x, y: v.y - a.y }),
-  blendP: vecBlend,
-};
-
-const VEC_SUB_ALG: LensAlgebra<V, V> = {
-  fwd: (a, b) => ({ x: a.x - b.x, y: a.y - b.y }),
-  solveA: (v, b) => ({ x: v.x + b.x, y: v.y + b.y }),
-  solveP: (v, a) => ({ x: a.x - v.x, y: a.y - v.y }),
-  blendP: vecBlend,
-};
-
-// Axis-aligned offsets: view.axis = a.axis + sign * scalar. The other
-// axis passes through (receiver absorbs y-changes for x-axis methods).
-
-const VEC_UP_ALG: LensAlgebra<V, number> = {
-  fwd: (a, n) => ({ x: a.x, y: a.y - n }),
-  solveA: (v, n) => ({ x: v.x, y: v.y + n }),
-  solveP: (v, a) => a.y - v.y,
-};
-
-const VEC_DOWN_ALG: LensAlgebra<V, number> = {
-  fwd: (a, n) => ({ x: a.x, y: a.y + n }),
-  solveA: (v, n) => ({ x: v.x, y: v.y - n }),
-  solveP: (v, a) => v.y - a.y,
-};
-
-const VEC_LEFT_ALG: LensAlgebra<V, number> = {
-  fwd: (a, n) => ({ x: a.x - n, y: a.y }),
-  solveA: (v, n) => ({ x: v.x + n, y: v.y }),
-  solveP: (v, a) => a.x - v.x,
-};
-
-const VEC_RIGHT_ALG: LensAlgebra<V, number> = {
-  fwd: (a, n) => ({ x: a.x + n, y: a.y }),
-  solveA: (v, n) => ({ x: v.x - n, y: v.y }),
-  solveP: (v, a) => v.x - a.x,
-};
-
-// `offset` still uses the bespoke multi-input helper below — two
-// writable params don't map cleanly onto the 2-input `lensWithParam`
-// shape yet.
-
-function _vecOffsetShare(self: Vec, dxP: Param<number>, dyP: Param<number>): Writable<Vec> {
-  const selfRW = self as Writable<Vec>;
-  const xWrap = isShare(dxP) ? (dxP as Share<number>) : undefined;
-  const yWrap = isShare(dyP) ? (dyP as Share<number>) : undefined;
-  const xRead = paramReader(dxP);
-  const yRead = paramReader(dyP);
-  const xWeight = xWrap ? reader(xWrap.weight) : () => 0;
-  const yWeight = yWrap ? reader(yWrap.weight) : () => 0;
-
-  return Vec.lens(
-    () => {
-      const nv = self.value;
-      return {
-        x: nv.x + (xWrap ? xWrap.sig.value : xRead()),
-        y: nv.y + (yWrap ? yWrap.sig.value : yRead()),
-      };
-    },
-    (target: V) => {
-      batch(() => {
-        const nv = self.peek();
-        const xv = xWrap ? xWrap.sig.peek() : xRead();
-        const yv = yWrap ? yWrap.sig.peek() : yRead();
-        const dx = target.x - (nv.x + xv);
-        const dy = target.y - (nv.y + yv);
-        const wx = xWeight();
-        const wy = yWeight();
-
-        let residX = 0;
-        let residY = 0;
-        if (xWrap) {
-          const desired = xv + dx * wx;
-          xWrap.sig.value = desired;
-          residX = desired - xWrap.sig.peek();
-        }
-        if (yWrap) {
-          const desired = yv + dy * wy;
-          yWrap.sig.value = desired;
-          residY = desired - yWrap.sig.peek();
-        }
-
-        const rxx = dx * (1 - wx) + residX;
-        const ryy = dy * (1 - wy) + residY;
-        if (rxx !== 0 || ryy !== 0) selfRW.value = { x: nv.x + rxx, y: nv.y + ryy };
-      });
-    },
-  );
-}
-

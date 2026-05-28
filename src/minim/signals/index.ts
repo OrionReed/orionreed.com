@@ -62,7 +62,6 @@ export {
   signal,
   untracked,
   type Val,
-  withinOwner,
   type Writable,
   type WritableBrand,
 } from "./signal";
@@ -121,16 +120,3 @@ export { Tri, tri } from "./values/tri";
 export * as VecMath from "./values/vec";
 export { type PolarPolicy, polar, tangentPoint, Vec, vec } from "./values/vec";
 export { derived, field } from "./writable";
-export {
-  isOwn,
-  isShare,
-  type LensAlgebra,
-  lensWithParam,
-  own,
-  type Own,
-  type Param,
-  paramReader,
-  share,
-  type Share,
-  type ShareOpts,
-} from "./lens-params";

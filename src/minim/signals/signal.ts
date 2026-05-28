@@ -79,11 +79,6 @@ let activeSub: ReactiveNode | undefined;
  *  the same signal doesn't re-fire itself. Distinct from `activeSub`
  *  because regular `effect` bodies should NOT auto-self-exclude. */
 let activeNetwork: _NetworkNode | undefined;
-/** @experimental — Active owner token (set by `withinOwner` from
- *  `lens-params.ts`). When a signal carries `_ownerToken`, writes
- *  outside a matching owner context throw. This gates the `own()`
- *  brand's single-writer invariant at the engine level. */
-let currentOwnerToken: symbol | undefined;
 const queued: (Effect | _NetworkNode | undefined)[] = [];
 
 /** Frozen sentinel for the common case of "nothing dirty this run".
@@ -710,10 +705,10 @@ export class Signal<T = unknown> implements ReactiveNode {
     parent: Read<P>,
     fn: (v: P) => Inner<InstanceType<C>>,
   ): InstanceType<C>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static derive<
     C extends new (
       ...args: never[]
-      // biome-ignore lint/suspicious/noExplicitAny: variance escape
     ) => Signal<any>,
     P extends readonly Read<unknown>[],
   >(
@@ -787,10 +782,10 @@ export class Signal<T = unknown> implements ReactiveNode {
     parent: Read<P>,
     spec: SymmetricLensSpec1<P, Inner<InstanceType<C>>, COMP>,
   ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static lens<
     C extends new (
       ...args: never[]
-      // biome-ignore lint/suspicious/noExplicitAny: variance escape
     ) => Signal<any>,
     P extends readonly Read<unknown>[],
     COMP,
@@ -1092,12 +1087,12 @@ export class Signal<T = unknown> implements ReactiveNode {
    *
    *  Use via `field(parent, "key", Cls)` from `./writable.ts`; this
    *  static is the engine entry point. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors Cls.lens
   /** Typed field lens onto `parent.value[key]`. Dispatches on the
    *  parent's actual structure: writable parents (root signals, lens-
    *  fused chains) get a bidirectional field lens with spread-replace
    *  bwd; RO parents (derive-fused chains, computed views) get a RO
    *  derive view. Mirrors the type-level conditional in `field()`. */
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors Cls.lens
   static fieldOf<C extends new (...args: never[]) => Signal<any>>(
     // biome-ignore lint/suspicious/noExplicitAny: variance escape — concrete Signal<T> contravariant on setter
     parent: Signal<any>,
@@ -1134,20 +1129,10 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  defineProperty under the hood — no V8 perf delta.) */
   declare readonly value: T;
 
-  /** @experimental — when set, this signal is "owned" by the lens that
-   *  installed the token (via `lens-params.ts`'s `claim()`). Writes
-   *  outside an owner context with the matching token throw. */
-  _ownerToken?: symbol;
-
   /** @internal — write `next`, propagating to all subs except `excluding`.
    *  Used by the `value` setter (excludes activeNetwork) and
    *  engine-internal lens/field setters. */
   _setWithExclusion(next: T, excluding: ReactiveNode | undefined): void {
-    // @experimental — owned-signal write guard. Zero-cost when
-    // `_ownerToken` is unset (the common case).
-    if (this._ownerToken !== undefined && this._ownerToken !== currentOwnerToken) {
-      throw new TypeError("Owned signal: external writes not permitted (locked by `own()`)");
-    }
     // Computed/lens slow path — same as before, no exclusion concept
     // (writes go through a setter callback the user installed).
     if (this.getter !== undefined) {
@@ -2049,20 +2034,5 @@ export function untracked<R>(fn: () => R): R {
     return fn();
   } finally {
     activeSub = prev;
-  }
-}
-
-/** @experimental — run `fn` inside an "owner context." Writes to a
- *  signal whose `_ownerToken` matches `token` are permitted; writes
- *  outside this context (or with a mismatched token) throw. Used by
- *  `own()` lens factories in `./lens-params` to thread owner authority
- *  through bwd closures and `network()` reactions. Nests safely. */
-export function withinOwner<R>(token: symbol, fn: () => R): R {
-  const prev = currentOwnerToken;
-  currentOwnerToken = token;
-  try {
-    return fn();
-  } finally {
-    currentOwnerToken = prev;
   }
 }

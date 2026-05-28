@@ -49,27 +49,6 @@ The next class up is **idempotent**: edges with a closed-form projection. `clamp
 
 <md-clamp-quantize></md-clamp-quantize>
 
-Every parameter to a lens is read-only context by default. Wrap one in `w()` and it joins the bwd: writes to the result are routed through the wrapped parameter first, and any residual the parameter couldn't absorb flows to the receiver. For a bare-primitive parameter the residual is always zero — the parameter just absorbs. For a saturating parameter (a clamp, a quantize, anything with a projective `put`), the residual is the overflow, and the receiver catches it.
-
-This is the bounded-slack pattern: two boxes whose gap is intrinsically clamped to `[30, 180]`. Drag B in-range and the slack absorbs; drag past either bound and the slack saturates while A picks up the rest:
-
-```ts
-const slack = num(80).clamp(30, 180);
-const B = A.right(w(slack));
-```
-
-<md-bounded-slack></md-bounded-slack>
-
-The clamp acts as a natural hard-stop, the receiver as the fallback absorber, and the entire pattern is one line of composition over `w()` and `.clamp()` — no custom lens, no merge primitive, no constraint solver. Every existing saturating lens (`clamp`, `quantize`, `snap`, predicate bridges) composes into the residual flow the same way.
-
-Chain four boxes through three `own()`-claimed gaps with different dynamics — tight clamp, wide clamp, and a non-PG soft compress that progressively yields the residual to the receiver — and the same machinery cascades end-to-end in both directions:
-
-<md-slack-chain></md-slack-chain>
-
-The scene-graph idiom is one line per child: `child = parent.offset(w(dx), w(dy))`. Drag the parent — every child follows via forward propagation. Drag a child — only its local offset moves, parent and siblings unchanged:
-
-<md-scene-graph></md-scene-graph>
-
 The next is **residual**: edges that lose information, but the lost part is still live in the source, so `put` reads it back. The classical aggregate.
 
 `Cls.lens([parents], fwd, bwd)` is the N-ary form: reads aggregate through `fwd`, writes split via `bwd` and apply atomically. A centroid is one line of that pattern — `get` returns the mean, `put` distributes the delta evenly. Tweening it is a rigid group translate:
