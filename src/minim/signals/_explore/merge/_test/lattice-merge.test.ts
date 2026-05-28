@@ -2,13 +2,13 @@
 // idempotent fold (max / min) via the `.merge()` chain-position
 // instance method. This is the "cost gradient cheap path" from §3.
 //
-// Success criteria for the prototype:
-//   1. Order-of-arrival doesn't change the final value.
-//   2. The result matches the fold of all contributions in the
-//      cascade, not the last-write-wins clobber of the baseline.
-//   3. Sequential propagations don't bleed into each other.
-//   4. Multiple top-level writes are SEPARATE cascades, even when
-//      batched — combining requires structural fan-in.
+// ⚠ For the user-facing CONTRACT, see semantic-guarantees.test.ts.
+//   Tests here observe SPECIFIC arrival orders and per-arrival
+//   commit values (the `raw` and `committed` arrays). Those are
+//   implementation-detail observations preserved as regression
+//   guards for the current eager-fold engine — they are NOT
+//   semantic contract. The contract is "final value matches the
+//   commutative fold of the slot map" (G5).
 
 import { describe, expect, it } from "vitest";
 import {

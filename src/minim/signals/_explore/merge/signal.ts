@@ -67,38 +67,67 @@ const F = {
   Pending: 32,
 } as const;
 
+// ─── Engine globals ──────────────────────────────────────────────────
+//
+// Conceptually grouped by direction. The engine's forward direction
+// (reads, pull) is heavily flag-mediated (alien-signals' design);
+// the backward direction (writes, push-recursive) is comparatively
+// light — a setter cascade through closures, plus the cascade-id
+// bookkeeping the merge layer needs.
+//
+// FORWARD (reads, pull-based)
+//   activeSub      ── the node currently re-evaluating (computed
+//                     `_update` or effect body). Reads inside this
+//                     scope install a Link from `dep` to activeSub.
+//                     "I am reading; subscribe me."
+//   propagate()    ── walks subs, marks them Pending/Dirty.
+//   checkDirty()   ── walks deps upward to confirm Dirty, recomputes
+//                     transitive computeds en route.
+//   flush()        ── drains queued effects.
+//   runDepth       ── re-entry counter for `_update` / effect runs.
+//   batchDepth     ── nesting depth for `batch()`; suppresses fwd
+//                     flush until depth returns to 0.
+//   cycle          ── monotonic counter, incremented per _update/run.
+//                     Used by `link()`'s same-cycle skip-rule.
+//
+// BACKWARD (writes, push-recursive)
+//   activeBwdWriter ── the lens whose setter is currently on the
+//                      stack. "I am writing." Set during lens-mode
+//                      `_setWithExclusion` dispatch. Forward analog
+//                      is `activeSub`.
+//   bwdSetterCaller ── the value `activeBwdWriter` had BEFORE the
+//                      current setter pushed. "Who called me." Read
+//                      by merge nodes as their slot identity. No
+//                      forward analog needed (forward is pull-driven;
+//                      there's no caller stack in the same sense).
+//   bwdCascadeId    ── monotonic counter, bumped each time we enter
+//                      lens dispatch from no-cascade (activeBwdWriter
+//                      was undefined). One user-initiated `.value=`
+//                      call = one id. Forward analog is `cycle`
+//                      (both monotonic, both bump per scope entry).
+//
+// SPECIAL
+//   activeNetwork  ── set during `_NetworkNode._runBody` ONLY (not
+//                     regular effects). Used as `excluding` for
+//                     `propagate()` so the network's body doesn't
+//                     re-trigger itself from its own writes. Threads
+//                     through merge commits via the same `excluding`
+//                     parameter.
+
 let cycle = 0;
 let runDepth = 0;
 let batchDepth = 0;
 let notifyIndex = 0;
 let queuedLength = 0;
+
+// Forward
 let activeSub: ReactiveNode | undefined;
-/** Active `_NetworkNode` (only while a `network` body is running).
- *  When set, bare `signal.value =` writes self-exclude this node
- *  from the propagation walk — so a network body that reads + writes
- *  the same signal doesn't re-fire itself. Distinct from `activeSub`
- *  because regular `effect` bodies should NOT auto-self-exclude. */
+
+// Network self-exclusion (orthogonal to fwd/bwd direction)
 let activeNetwork: _NetworkNode | undefined;
-/** Active backward writer (only set while a lens's setter is on the
- *  call stack, mid-cascade). When a lens `L`'s `_setWithExclusion`
- *  dispatches to its installed setter, `activeBwdWriter` is set to
- *  `L` for the duration of the setter's body. Any `parent
- *  ._setWithExclusion(...)` call the setter makes therefore arrives
- *  at `parent` with `activeBwdWriter === L`. This is the
- *  bwd-direction analog of `activeSub`: a stack-managed identity
- *  that lets a downstream consumer (the merge layer) attribute each
- *  arriving contribution to the immediately-upstream lens that
- *  produced it, regardless of how that lens was constructed
- *  (`_fuse`, `_fanin`, `_symmetric`, `Signal.install`,
- *  user-authored). */
+
+// Backward
 let activeBwdWriter: ReactiveNode | undefined;
-/** The `activeBwdWriter` value that was current at the moment the
- *  CURRENT lens setter was invoked — i.e., the writer one frame UP
- *  the bwd stack from the running setter. A merge node's setter
- *  reads this as its slot identity: "which lens called me?". A
- *  plain lens setter doesn't read it; it's an opt-in side channel
- *  used by `.merge()` to attribute contributions to their immediate
- *  caller (the lens above the merge in the bwd chain). */
 let bwdSetterCaller: ReactiveNode | undefined;
 const queued: (Effect | _NetworkNode | undefined)[] = [];
 

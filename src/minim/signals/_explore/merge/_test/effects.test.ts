@@ -4,6 +4,13 @@
 // observe the committed value. The cascade boundary defined by
 // `bwdCascadeId` doesn't change effect scheduling.
 //
+// ⚠ See semantic-guarantees.test.ts for the user-facing contract.
+//   Some tests here assert specific `fires.length` counts. Those
+//   depend on the engine's batching/equality-short-circuit details
+//   and are NOT contract — the contract (N2) is "users should rely
+//   on FINAL VALUES, not fire counts". Fire-count assertions here
+//   are regression guards for the current scheduler.
+//
 // Cases covered:
 //   1. Effect subscribed to the merge cell.
 //   2. Effect subscribed to the underlying parent (below the merge).

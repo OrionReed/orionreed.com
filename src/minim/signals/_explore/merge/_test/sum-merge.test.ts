@@ -3,6 +3,12 @@
 // correct under arbitrary upstream lens authoring: any lens that
 // writes its parent multiple times in one cascade counts as one
 // contribution per slot (the last write).
+//
+// ⚠ See semantic-guarantees.test.ts for the user-facing contract.
+//   `raw`/`committed` arrays here observe per-arrival arrival order
+//   and intermediate fold values — both implementation details, not
+//   contract. The G4 (per-slot dedupe) and G5 (commutative fold)
+//   guarantees are what users should rely on.
 
 import { describe, expect, it } from "vitest";
 import { batch, Num, num, Signal, sumPolicy } from "../index";
