@@ -1,21 +1,20 @@
 // md-bounded-slack.ts — `w()` on a saturating lens routes residuals.
 //
-// Two draggable boxes, A and B. The horizontal gap between them is a
-// single Num clamped to [MIN, MAX]:
+// Two draggable boxes linked edge-to-edge. The relationship is written
+// directly between the shapes' writable anchors:
 //
-//     const slack = num(80).clamp(MIN, MAX);
-//     const B = A.right(w(slack));
+//     const bCenter = boxA.right.right(w(slack)).right(BOX_SIZE / 2);
+//     const boxB    = rect(bCenter, BOX_SIZE, BOX_SIZE);
 //
-// Drag A — B follows (forward propagation through the offset).
+// `boxA.right` is the parent-frame right-edge anchor (writes shift A's
+// translate). Shifting it by `w(slack)` lands on B's left edge; adding
+// half-width yields B's centre, which is what `rect(center, w, h)` wants.
+//
+// Drag A — B follows (forward propagation through the chain).
 // Drag B in-range — slack absorbs (A stays put).
-// Drag B past a bound — slack saturates at the bound; the unabsorbed
-// residual flows to A. The two boxes "stick together" at the bound
-// and move as one until you drag back into the slack range.
-//
-// The clamp acts as a natural hard-stop with A as the fallback
-// absorber. No custom lens — the behaviour falls out of composing
-// `w()` over a clamp. The wp helper writes the wrapped param first,
-// peeks to see what landed, and routes any residual to the receiver.
+// Drag B past a bound — slack saturates; the unabsorbed residual flows
+// up the chain into A. The two boxes "stick together" at the bound and
+// move as one until you drag back in.
 
 import {
   Anchor,
@@ -27,7 +26,6 @@ import {
   type Mount,
   num,
   rect,
-  Vec,
   vec,
   w,
 } from "../../minim";
@@ -42,41 +40,55 @@ const BOX_SIZE = 56;
 export class MdBoundedSlack extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(W, H);
-
-    // Anchor primitive A; slack is a clamped Num gap; B = A.right(w(slack)).
-    const A = vec(140, Y_REST);
     const slack = num(80).clamp(MIN, MAX);
-    const B = A.right(w(slack));
+
+    const boxA = s(
+      rect(vec(140, Y_REST), BOX_SIZE, BOX_SIZE, {
+        fill: "#5b8def",
+        stroke: "white",
+        strokeWidth: 2,
+        corner: 6,
+      }),
+    );
+
+    // B's left edge = A's right edge + slack; centre = + half-width.
+    const bCenter = boxA.right.right(w(slack)).right(BOX_SIZE / 2);
+    const boxB = s(
+      rect(bCenter, BOX_SIZE, BOX_SIZE, {
+        fill: "#e25c5c",
+        stroke: "white",
+        strokeWidth: 2,
+        corner: 6,
+      }),
+    );
+
+    drag(boxA, boxA.center);
+    drag(boxB, bCenter);
+    boxA.el.style.cursor = "move";
+    boxB.el.style.cursor = "move";
+
+    const atBound = derive(() => {
+      const sv = slack.value;
+      return sv <= MIN + 0.5 || sv >= MAX - 0.5;
+    });
+
+    // Connector drawn between the inner edges — it IS the slack gap.
+    s(
+      line(boxA.right, boxB.left, {
+        stroke: derive(() => (atBound.value ? "#e25c5c" : "var(--text-color, #888)")),
+        strokeWidth: derive(() => (atBound.value ? 3 : 1.5)),
+        cap: "round",
+        opacity: 0.7,
+      }),
+    );
 
     s(
       label(
         view.top.down(16),
         "drag B in-range → only slack moves · past a bound → A absorbs the residual",
       ),
-    );
-
-    // Connector line between the boxes — colour signals saturation
-    // (red at a bound, neutral in-range).
-    const atBound = derive(() => {
-      const sv = slack.value;
-      return sv <= MIN + 0.5 || sv >= MAX - 0.5;
-    });
-    const connector = line(A, B, {
-      stroke: derive(() => (atBound.value ? "#e25c5c" : "var(--text-color, #888)")),
-      strokeWidth: derive(() => (atBound.value ? 3 : 1.5)),
-      cap: "round",
-      opacity: 0.7,
-    });
-    s(connector);
-
-    // Midpoint label: shows current gap and bounds; turns red at limits.
-    const midPos = Vec.derive(() => ({
-      x: (A.value.x + B.value.x) / 2,
-      y: Y_REST - BOX_SIZE / 2 - 14,
-    }));
-    s(
       label(
-        midPos,
+        boxA.top.lerp(boxB.top, 0.5).up(14),
         derive(() => `gap: ${slack.value.toFixed(0)} px  ∈ [${MIN}, ${MAX}]`),
         {
           size: 11,
@@ -84,38 +96,11 @@ export class MdBoundedSlack extends Diagram {
           fill: derive(() => (atBound.value ? "#e25c5c" : "var(--text-color, #555)")),
         },
       ),
-    );
-
-    // Box A (rect top-left + drag target)
-    const boxA = s(
-      rect(A.left(BOX_SIZE / 2).x, A.up(BOX_SIZE / 2).y, BOX_SIZE, BOX_SIZE, {
-        fill: "#5b8def",
-        stroke: "white",
-        strokeWidth: 2,
-        corner: 6,
-      }),
-    );
-    drag(boxA, A);
-    boxA.el.style.cursor = "move";
-    s(label(A, "A", { fill: "white", bold: true, size: 16, align: Anchor.Center }));
-
-    // Box B
-    const boxB = s(
-      rect(B.left(BOX_SIZE / 2).x, B.up(BOX_SIZE / 2).y, BOX_SIZE, BOX_SIZE, {
-        fill: "#e25c5c",
-        stroke: "white",
-        strokeWidth: 2,
-        corner: 6,
-      }),
-    );
-    drag(boxB, B);
-    boxB.el.style.cursor = "move";
-    s(label(B, "B", { fill: "white", bold: true, size: 16, align: Anchor.Center }));
-
-    s(
+      label(boxA.center, "A", { fill: "white", bold: true, size: 16, align: Anchor.Center }),
+      label(boxB.center, "B", { fill: "white", bold: true, size: 16, align: Anchor.Center }),
       label(
         view.bottom.up(8),
-        "B = A.right(w(slack.clamp(30, 180))) — bounded slack; overflow routes to A",
+        "boxB.left = boxA.right.right(w(slack.clamp(30, 180))) — edge-to-edge gap; overflow routes to A",
         { size: 10, align: Anchor.Center },
       ),
     );

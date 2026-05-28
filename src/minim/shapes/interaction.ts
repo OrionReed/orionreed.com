@@ -118,10 +118,15 @@ export function draggable(
 }
 
 /** Bind pointer drag on `shape` directly to a writable `Vec` — no
- *  separate handle dot. Captures the grab offset on pointerdown so the
- *  pointer stays at the grab point during the drag. The optional
- *  `dragging` signal reports active/inactive (useful for `rate` on
- *  animators that should freeze during drag).
+ *  separate handle dot. `target` is interpreted in the SVG-root (world)
+ *  frame. Pointer coords are read via `shape.toWorld(...)`, so the drag
+ *  invariant holds even when `target`'s bwd chain writes back through
+ *  `shape.translate` (or any ancestor transform) — `toLocal` would put
+ *  the read frame in flux during the drag and break the grab offset.
+ *
+ *  Captures the grab offset on pointerdown so the pointer stays at the
+ *  grab point. The optional `dragging` signal reports active/inactive
+ *  (useful for `rate` on animators that should freeze during drag).
  *
  *  Sets `shape.el.style.cursor = "grab"` by default — callers that want
  *  a different cursor (e.g. `"ew-resize"`) assign after this call.
@@ -135,27 +140,41 @@ export function drag(
   if (!shape.el.style.cursor) shape.el.style.cursor = "grab";
   let dx = 0;
   let dy = 0;
-  const offDown = shape.on("pointerdown", e => {
-    const local = shape.toLocal(e as PointerEvent);
-    const v = target.value;
-    dx = local.x - v.x;
-    dy = local.y - v.y;
-  });
-  const offDrag = draggable(
-    shape,
-    local => {
-      target.value = { x: local.x - dx, y: local.y - dy };
-    },
-    dragging
-      ? active => {
-          dragging.value = active;
-        }
-      : undefined,
+  let pointerId = -1;
+  const offs: Array<() => void> = [];
+  offs.push(
+    shape.on("pointerdown", e => {
+      const pe = e as PointerEvent;
+      pointerId = pe.pointerId;
+      shape.el.setPointerCapture(pointerId);
+      const world = shape.toWorld(pe);
+      const v = target.value;
+      dx = world.x - v.x;
+      dy = world.y - v.y;
+      if (dragging) dragging.value = true;
+    }),
   );
-  return () => {
-    offDown();
-    offDrag();
+  offs.push(
+    shape.on("pointermove", e => {
+      if (pointerId === -1) return;
+      const world = shape.toWorld(e as PointerEvent);
+      target.value = { x: world.x - dx, y: world.y - dy };
+    }),
+  );
+  const stop = () => {
+    if (pointerId !== -1) {
+      try {
+        shape.el.releasePointerCapture(pointerId);
+      } catch {
+        /* ok */
+      }
+      pointerId = -1;
+    }
+    if (dragging) dragging.value = false;
   };
+  offs.push(shape.on("pointerup", stop));
+  offs.push(shape.on("pointercancel", stop));
+  return () => offs.forEach(d => d());
 }
 
 /** Wrap a `drag(shape, target)` call and return a local `dragging`
