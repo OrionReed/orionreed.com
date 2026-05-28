@@ -122,26 +122,46 @@ describe("idempotent merge: min", () => {
   });
 });
 
-describe("explicit batch over multiple top-level writes", () => {
-  it("combines them via the merge policy instead of last-wins", () => {
-    const { root, a, b, raw, committed } = mergedDiamond(1, maxPolicy);
-    batch(() => {
-      a.value = 7; // root via a.bwd = 6
-      b.value = 9; // root via b.bwd = 4.5
-    });
-    expect(raw).toEqual([6, 4.5]);
-    expect(committed).toEqual([6, 6]); // max(-Inf,6)=6; max(6,4.5)=6
-    expect(root.value).toBe(6);
-    void a;
-    void b;
+describe("multiple top-level writes are SEPARATE cascades (with or without batch)", () => {
+  // The cascade boundary is "one user-initiated `.value =` call",
+  // not "one batch". Batching is for FORWARD atomicity (subscribers
+  // see one final state); it does NOT bundle backward writes into
+  // a single merge cascade. To combine multiple lens writes into
+  // one cascade, the user must construct a fan-in lens — which is
+  // exactly the structural "add a merge node" contract.
+  //
+  // Conclusion: with or without batching, two top-level lens writes
+  // produce two cascades; the merge resets between them; the final
+  // root reflects only the second cascade's contribution.
+
+  it("two top-level writes without batch: each is its own cascade", () => {
+    const { root, a, b, committed } = mergedDiamond(1, maxPolicy);
+    a.value = 7; // root via a.bwd = 6
+    b.value = 9; // root via b.bwd = 4.5
+    expect(committed).toEqual([6, 4.5]);
+    expect(root.value).toBe(4.5);
   });
 
-  it("two propagations OUTSIDE a batch reset between them (no contamination)", () => {
+  it("two top-level writes INSIDE a batch: same outcome", () => {
+    // The batch is observable only via forward propagation — any
+    // subscriber sees one final fire. The merge sees two separate
+    // cascades nonetheless.
     const { root, a, b, raw, committed } = mergedDiamond(1, maxPolicy);
-    a.value = 7;
-    b.value = 9;
+    batch(() => {
+      a.value = 7;
+      b.value = 9;
+    });
     expect(raw).toEqual([6, 4.5]);
-    expect(committed).toEqual([6, 4.5]); // each cascade resets acc
+    expect(committed).toEqual([6, 4.5]);
     expect(root.value).toBe(4.5);
+  });
+
+  it("to combine multiple writes into one cascade, use a fan-in", () => {
+    // The structural way to express "combine these": wrap them
+    // in a lens. Then one user write → one cascade → all sub-
+    // writes share the cascade id → merge folds across slots.
+    const { root, sum } = mergedDiamond(1, maxPolicy);
+    sum.value = 10; // ONE user call, ONE cascade, TWO contributions
+    expect(root.value).toBe(4); // max(4, 2.5) — combined
   });
 });

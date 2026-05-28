@@ -2,8 +2,9 @@
 // for the subset we copied; adds the merge primitives.
 
 export {
+  _activeBwdWriter,
   _batchDepth,
-  _batchSession,
+  _bwdCascadeId,
   batch,
   derive,
   effect,
@@ -50,11 +51,14 @@ export { derived, field } from "./writable";
 export { Num, num } from "./num";
 export { Vec, vec } from "./vec";
 export {
+  DIRECT_SLOT,
   maxPolicy,
   meanPolicy,
+  meanScalarPolicy,
   type MergePolicy,
   minPolicy,
   peekMergeAcc,
+  peekMergeSlots,
   sumPolicy,
   withMerge,
 } from "./merge";

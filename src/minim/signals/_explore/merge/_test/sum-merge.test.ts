@@ -102,17 +102,19 @@ describe("sum merge: in-cascade behaviour", () => {
   });
 });
 
-describe("sum merge: limitation — same-source repeat is double-counted", () => {
-  it("if a single source writes twice in one cascade, sum double-counts", () => {
-    // Demonstrate the failure: a hand-rolled lens that writes to its
-    // parent TWICE inside one batch. Today's fan-in setter never
-    // does this (each parent gets one write per bwd call), but
-    // user-authored setters CAN. The sum merge sees both writes as
-    // independent contributions and adds them — which is wrong if
-    // the user's intent was "the lens contributes one value, not
-    // two snapshots."
+describe("sum merge: same-source repeats are dedupe'd, not double-counted", () => {
+  it("a lens that writes to its parent twice in one batch counts as ONE contribution", () => {
+    // A user-authored lens whose setter writes its parent multiple
+    // times inside a single bwd dispatch. The slot identity of
+    // ALL its writes is the lens itself (`activeBwdWriter` is set
+    // to it for the duration of its setter), so the merge's per-
+    // slot map records only the LATEST value — the prior write is
+    // overwritten, not summed alongside.
+    //
+    // This is the property that lets sum / mean be correct under
+    // arbitrary user lens authoring, not just under `_fanin`'s
+    // happens-to-be-one-write-per-parent contract.
     const root = withMerge(num(0), sumPolicy);
-    // A pathological "lens" that writes to root twice on each set.
     const naughty = installNumLens(
       () => root.value,
       v => {
@@ -123,12 +125,69 @@ describe("sum merge: limitation — same-source repeat is double-counted", () =>
       },
     );
     naughty.value = 5;
-    // Sum sees TWO contributions of 5, folds to 10.
-    expect(root.value).toBe(10);
-    // The "correct" semantics — if the user knew this was a single
-    // logical contribution — would be 5. The merge policy can't
-    // recover the user's intent without per-slot bookkeeping. This
-    // is what §3's "per-slot" caveat refers to, and what the next
-    // iteration of the prototype must address.
+    expect(root.value).toBe(5);
+  });
+
+  it("a single lens writing its parent multiple times keeps the last value (within its own cascade)", () => {
+    // ONE top-level call, lens writes parent three times in its
+    // setter. All three writes share the same cascade id (we never
+    // returned to `activeBwdWriter === undefined`), and they all
+    // share the same slot identity (the lens itself). So the slot
+    // map ends with one entry holding the LAST write; sum = that
+    // last value.
+    const root = withMerge(num(0), sumPolicy);
+    const lens = installNumLens(
+      () => root.value,
+      v => {
+        batch(() => {
+          root.value = v;
+          root.value = v + 1;
+          root.value = v + 2; // this one wins for this slot
+        });
+      },
+    );
+    lens.value = 1;
+    expect(root.value).toBe(3);
+  });
+
+  it("two SEPARATE top-level writes are separate cascades; merge resets between", () => {
+    // Each `lens.value = …` at top level bumps the cascade id, so
+    // the slot map clears. Use a fan-in to combine them.
+    const root = withMerge(num(0), sumPolicy);
+    const lensA = installNumLens(
+      () => root.value,
+      v => {
+        root.value = v;
+      },
+    );
+    const lensB = installNumLens(
+      () => root.value,
+      v => {
+        root.value = v * 10;
+      },
+    );
+    lensA.value = 1; // cascade 1: slot lensA = 1; commits 1
+    lensB.value = 2; // cascade 2: slot lensB = 20; commits 20 (reset)
+    expect(root.value).toBe(20);
+  });
+
+  it("re-entry of the same lens setter within one cascade is one slot", () => {
+    // Lens that writes the parent, then reads parent, then writes
+    // again based on what it read. Two writes to root through the
+    // same slot ⇒ second replaces first; final root reflects only
+    // the second write.
+    const root = withMerge(num(0), sumPolicy);
+    const lens = installNumLens(
+      () => root.value,
+      v => {
+        batch(() => {
+          root.value = v;
+          const observed = root.value; // already commits at this point
+          root.value = observed + 100;
+        });
+      },
+    );
+    lens.value = 7;
+    expect(root.value).toBe(107);
   });
 });

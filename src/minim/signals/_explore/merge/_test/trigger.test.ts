@@ -149,18 +149,24 @@ describe("eager fold breaks for ORDER-DEPENDENT policies", () => {
     expect(fwdValue).not.toBe(revValue);
   });
 
-  it("batch over two top-level writes ALSO depends on textual write order", () => {
-    const root = withMerge(num(1), firstWinsPolicy);
-    const a = root.add(1);
-    const b = root.scale(2);
+  it("two top-level writes are SEPARATE cascades, so first-wins applies cascade-locally, not globally", () => {
+    // Under the new cascade-id semantics, sequential top-level
+    // writes are two cascades. `first-wins` within ONE cascade
+    // (which has only one contribution) returns that contribution.
+    // Each cascade resets and commits, so the FINAL root reflects
+    // the LAST cascade's contribution — observable as last-wins,
+    // not first-wins.
+    //
+    // The user gets first-wins semantics only when multiple
+    // contributions converge in ONE cascade — i.e., via a fan-in.
     let result1: number;
     {
       const r = withMerge(num(1), firstWinsPolicy);
       const aa = r.add(1);
       const bb = r.scale(2);
       batch(() => {
-        aa.value = 7; // a.bwd(7) = 6 → root acc = 6
-        bb.value = 9; // b.bwd(9) = 4.5 → first-wins keeps 6
+        aa.value = 7;
+        bb.value = 9;
       });
       result1 = r.value;
     }
@@ -170,23 +176,48 @@ describe("eager fold breaks for ORDER-DEPENDENT policies", () => {
       const aa = r.add(1);
       const bb = r.scale(2);
       batch(() => {
-        bb.value = 9; // root acc = 4.5
-        aa.value = 7; // first-wins keeps 4.5
+        bb.value = 9;
+        aa.value = 7;
       });
       result2 = r.value;
     }
-    void root;
-    void a;
-    void b;
-    expect(result1).toBe(6);
-    expect(result2).toBe(4.5);
-    expect(result1).not.toBe(result2);
-    // CONCLUSION: order-dependent policy + eager arrival = the
-    // result is a function of TEXTUAL order, which is sensible
-    // for `first-wins` over explicit batched writes but NOT for
-    // structural arrival order from a fan-in. Conflating these
-    // is the symptom; the cure is the lazy trigger plus an
-    // explicit slot identity passed into `combine`.
+    // Both cases: 2nd cascade wins (4.5 in first ordering, 6 in
+    // second). Textual order matters because each write is its
+    // own cascade and the LAST one resets-then-commits.
+    expect(result1).toBe(4.5);
+    expect(result2).toBe(6);
+  });
+
+  it("WITHIN one cascade, first-wins still depends on arrival order (the original §7 problem)", () => {
+    // One user call → one cascade. The fan-in's bwd produces two
+    // contributions in some order. first-wins picks the first.
+    // The order is structural (fan-in's parent array order), not
+    // semantic — which is exactly the §7 hazard for non-
+    // commutative policies.
+    function diamondFirstWins(parentsOrder: "ab" | "ba") {
+      const root = withMerge(num(1), firstWinsPolicy);
+      const a = root.add(1);
+      const b = root.scale(2);
+      const parents = parentsOrder === "ab" ? ([a, b] as const) : ([b, a] as const);
+      const s = Num.lens(
+        parents,
+        ([x, y]) => x + y,
+        (target, [x, y]) => {
+          const tot = x + y || 1;
+          return [(target * x) / tot, (target * y) / tot];
+        },
+      );
+      return { root, s };
+    }
+    const fwd = diamondFirstWins("ab");
+    fwd.s.value = 10;
+    const rev = diamondFirstWins("ba");
+    rev.s.value = 10;
+    // Same data flow, same final view value. Different lens-array
+    // order ⇒ different "first" ⇒ different root value. This is
+    // the §7 hazard: arrival order is structural, the policy
+    // reading first-wins shouldn't be sensitive to it.
+    expect(fwd.root.value).not.toBe(rev.root.value);
   });
 });
 

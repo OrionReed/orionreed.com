@@ -79,6 +79,21 @@ let activeSub: ReactiveNode | undefined;
  *  the same signal doesn't re-fire itself. Distinct from `activeSub`
  *  because regular `effect` bodies should NOT auto-self-exclude. */
 let activeNetwork: _NetworkNode | undefined;
+/** Active backward writer (only set while a lens's setter is on the
+ *  call stack, mid-cascade). When a lens `L`'s `_setWithExclusion`
+ *  dispatches to its installed setter, `activeBwdWriter` is set to
+ *  `L` for the duration of the setter's body. Any `parent
+ *  ._setWithExclusion(...)` call the setter makes therefore arrives
+ *  at `parent` with `activeBwdWriter === L`. This is the
+ *  bwd-direction analog of `activeSub`: a stack-managed identity
+ *  that lets a downstream consumer (the merge layer in
+ *  `_explore/merge/`) attribute each arriving contribution to the
+ *  immediately-upstream lens that produced it, regardless of how
+ *  that lens was constructed (`_fuse`, `_fanin`, `_symmetric`,
+ *  `Signal.install`, user-authored). Without it, contributions
+ *  arrive anonymously and the merge cannot dedupe per-slot —
+ *  same-source repeats would double-count. */
+let activeBwdWriter: ReactiveNode | undefined;
 const queued: (Effect | _NetworkNode | undefined)[] = [];
 
 /** Frozen sentinel for the common case of "nothing dirty this run".
@@ -1138,7 +1153,30 @@ export class Signal<T = unknown> implements ReactiveNode {
     if (this.getter !== undefined) {
       const set = this.setter;
       if (set === undefined) throw new TypeError("Cannot write to a Computed");
-      set(next);
+      // Set THIS lens as the active backward writer for the duration
+      // of its setter. Nested cascades (lens-of-lens) rotate through
+      // this slot naturally: each layer's setter sees itself as the
+      // writer when it runs, and `parent._setWithExclusion(...)` calls
+      // it makes will arrive at parent with parent's caller (= this)
+      // as the active writer. The merge layer reads this on every
+      // arrival as the slot identity. Try/finally guards against
+      // user-thrown errors inside the setter leaving the global in
+      // an inconsistent state.
+      //
+      // The `prev === undefined` check defines a cascade BOUNDARY:
+      // this is the outermost lens whose setter is on the stack, so
+      // we bump `bwdCascadeId` exactly once per user-initiated
+      // top-level cascade. Inner dispatches (lens setters calling
+      // their parents, fan-in batches, nested lenses) all run with
+      // `prev !== undefined` and inherit the parent cascade's id.
+      const prev = activeBwdWriter;
+      if (prev === undefined) ++bwdCascadeId;
+      activeBwdWriter = this;
+      try {
+        set(next);
+      } finally {
+        activeBwdWriter = prev;
+      }
       return;
     }
     const prev = this.pendingValue;
@@ -2018,40 +2056,45 @@ export function effect(fn: () => void | (() => void)): () => void {
   return () => e._unwatched();
 }
 
-let batchSession = 0;
-
 export function batch<R>(fn: () => R): R {
   ++batchDepth;
   try {
     return fn();
   } finally {
-    if (!--batchDepth) {
-      // Bump session on EVERY transition from in-batch (depth>0)
-      // back to the top level (depth=0). The merge layer reads this
-      // counter to discriminate "first arrival of a new cascade"
-      // from "subsequent arrival of an ongoing one": within a single
-      // cascade (incl. fan-in's implicit batch), batchSession is
-      // constant; between cascades, it strictly increases.
-      ++batchSession;
-      flush();
-    }
+    if (!--batchDepth) flush();
   }
 }
 
+/** Monotonic id of the current backward cascade. Bumped each time
+ *  `_setWithExclusion` enters its lens-dispatch branch from a state
+ *  where no other lens setter is on the stack (`activeBwdWriter ===
+ *  undefined` before the push). Within a single cascade — i.e., one
+ *  user-initiated `lens.value = …` call, including all the
+ *  internally-dispatched writes its setter produces (fan-in's batch,
+ *  nested lens-of-lens, anything) — this id is constant. Between
+ *  cascades, it strictly increases. The merge layer uses this as
+ *  the "fresh-cascade" boundary to clear its per-slot map. */
+let bwdCascadeId = 0;
+
 /** @internal (prototype) — exposes engine `batchDepth` to the merge
- *  layer in `_explore/merge/`. `0` means the next write begins a fresh
- *  propagation; `> 0` means the write is part of an in-flight cascade
- *  (e.g. inside `_fanin`'s `batch(() => {...})` block, or a user
- *  `batch(...)`). */
+ *  layer in `_explore/merge/`. */
 export function _batchDepth(): number {
   return batchDepth;
 }
 
-/** @internal (prototype) — monotonic counter bumped on each
- *  batch-exit-to-depth-0. Used by the merge layer to detect the
- *  fresh-cascade boundary. See `batch()` above. */
-export function _batchSession(): number {
-  return batchSession;
+/** @internal (prototype) — current bwd-cascade id. See
+ *  `bwdCascadeId` above. */
+export function _bwdCascadeId(): number {
+  return bwdCascadeId;
+}
+
+/** @internal (prototype) — current `activeBwdWriter`, or `undefined`
+ *  outside any lens setter. Read by the merge layer as the slot
+ *  identity for an arriving contribution. Direct (non-lens) writes
+ *  at the user level have `undefined` here — the merge layer uses
+ *  a sentinel slot for "direct". */
+export function _activeBwdWriter(): unknown {
+  return activeBwdWriter;
 }
 
 export function untracked<R>(fn: () => R): R {
