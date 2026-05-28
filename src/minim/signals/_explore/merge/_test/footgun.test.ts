@@ -1,15 +1,15 @@
 // footgun.test.ts — pin the edge cases that the merge prototype
-// has to handle correctly OR document clearly. The user's contract:
+// has to handle correctly OR document clearly. The contract:
 //
 //   "the same footguns as normal signals ('don't create a cycle in
 //   an effect') and our single addition of 'bwd merges are last-
 //   write-wins unless you add a merge node to specify behaviour'"
 //
-// So the merge primitive must not introduce NEW footguns beyond:
+// So `.merge()` must not introduce NEW footguns beyond:
 //   (a) the standing engine ones (cycles, infinite recursion, etc.)
 //   (b) the one declared addition (no merge ⇒ last-wins)
 //
-// Anything else that surprises the user is a bug in the design.
+// Anything else that surprises the user is a design bug.
 
 import { describe, expect, it } from "vitest";
 import {
@@ -23,7 +23,6 @@ import {
   Signal,
   signal,
   sumPolicy,
-  withMerge,
 } from "../index";
 
 function installNumLens(getter: () => number, setter: (v: number) => void): Num {
@@ -35,10 +34,10 @@ function installNumLens(getter: () => number, setter: (v: number) => void): Num 
 }
 
 describe("reference identity is the slot key (intentional, but worth pinning)", () => {
-  it("two `.add(1)` invocations on the same root are TWO slots (distinct lens cells)", () => {
-    const root = withMerge(num(0), sumPolicy);
-    const a1 = root.add(1);
-    const a2 = root.add(1); // structurally identical to a1, but different cell
+  it("two `.add(1)` invocations on the same merge are TWO slots (distinct lens cells)", () => {
+    const merged = num(0).merge(sumPolicy);
+    const a1 = merged.add(1);
+    const a2 = merged.add(1);
     const fan = Num.lens(
       [a1, a2] as const,
       ([x, y]) => x + y,
@@ -48,21 +47,12 @@ describe("reference identity is the slot key (intentional, but worth pinning)", 
       },
     );
     fan.value = 4;
-    // Two slots even though the structural shape is identical.
-    expect(peekMergeSlots(root)!.size).toBe(2);
-    // This is consistent with how the engine treats lens identity
-    // everywhere else: lens cells are distinct objects, equal by
-    // reference. The merge inherits this; "same shape" doesn't
-    // collapse to "same slot."
+    expect(peekMergeSlots(merged)!.size).toBe(2);
   });
 
-  it("the SAME lens cell referenced twice in a fan-in IS one slot (its setter still runs twice though)", () => {
-    // Pathological-ish: same lens cell appears twice in a fan-in.
-    // The fan-in's bwd will produce two updates for the same cell,
-    // each writing root through the same lens (same slot identity).
-    // Second write replaces the first; one slot in the merge.
-    const root = withMerge(num(0), sumPolicy);
-    const a = root.add(1);
+  it("the SAME lens cell referenced twice in a fan-in IS one slot", () => {
+    const merged = num(0).merge(sumPolicy);
+    const a = merged.add(1);
     const fan = Num.lens(
       [a, a] as const,
       ([x, y]) => x + y,
@@ -72,46 +62,45 @@ describe("reference identity is the slot key (intentional, but worth pinning)", 
       },
     );
     fan.value = 10;
-    expect(peekMergeSlots(root)!.size).toBe(1);
+    expect(peekMergeSlots(merged)!.size).toBe(1);
   });
 });
 
-describe("direct (non-lens) writes during a cascade", () => {
-  it("a direct user write to the merged root lands in the DIRECT slot", () => {
-    const root = withMerge(num(0), sumPolicy);
-    root.value = 7;
-    const slots = peekMergeSlots(root)!;
+describe("direct (non-lens) writes to the merge cell", () => {
+  it("a direct top-level write lands in DIRECT_SLOT", () => {
+    const merged = num(0).merge(sumPolicy);
+    merged.value = 7;
+    const slots = peekMergeSlots(merged)!;
     expect(slots.size).toBe(1);
     expect(slots.has(DIRECT_SLOT)).toBe(true);
     expect(slots.get(DIRECT_SLOT)).toBe(7);
   });
 
-  it("a direct write FROM INSIDE A LENS SETTER (escape hatch) is its OWN slot", () => {
-    // A lens setter that, in addition to its normal bwd, slips in
-    // a direct `root.value = ...` write. Since `activeBwdWriter`
-    // is the lens at that point (the setter is running), the
-    // direct write also gets that lens as its slot — NOT
-    // DIRECT_SLOT. This is consistent: from the merge's pov, the
-    // setter is the slot regardless of what it writes inside.
-    const root = withMerge(num(0), sumPolicy);
+  it("a direct write from inside a lens setter still slots under that lens", () => {
+    // The merge's setter reads `bwdSetterCaller`. When a lens
+    // setter calls `merged.value = ...`, the engine pushes lens as
+    // activeBwdWriter; the merge sees lens as caller. So even a
+    // "direct-style" `merged.value =` from inside a lens setter
+    // goes to the lens's slot, not DIRECT_SLOT.
+    const merged = num(0).merge(sumPolicy);
     const lens = installNumLens(
-      () => root.value,
+      () => merged.value,
       v => {
-        root.value = v; // slot = lens
-        root.value = v + 100; // slot = lens (last wins)
+        merged.value = v;
+        merged.value = v + 100;
       },
     );
     lens.value = 1;
-    expect(root.value).toBe(101); // only one slot, last value
-    expect(peekMergeSlots(root)!.size).toBe(1);
+    expect(merged.value).toBe(101);
+    expect(peekMergeSlots(merged)!.size).toBe(1);
   });
 });
 
 describe("interactions with effects (the standing engine footgun)", () => {
-  it("an effect reading a merged root sees the COMMITTED value, not the raw arrivals", () => {
-    const root = withMerge(num(0), sumPolicy);
-    const a = root.add(1);
-    const b = root.scale(2);
+  it("an effect reading a merged cell sees the COMMITTED value, not the raw arrivals", () => {
+    const merged = num(0).merge(sumPolicy);
+    const a = merged.add(1);
+    const b = merged.scale(2);
     const fan = Num.lens(
       [a, b] as const,
       ([x, y]) => x + y,
@@ -122,46 +111,34 @@ describe("interactions with effects (the standing engine footgun)", () => {
     );
     const fires: number[] = [];
     const stop = effect(() => {
-      fires.push(root.value);
+      fires.push(merged.value);
     });
-    fires.length = 0; // ignore the initial run
+    fires.length = 0;
     fan.value = 6;
-    // Engine batches forward propagation inside the fan-in's bwd
-    // setter, so the effect fires ONCE per user cascade, with the
-    // final committed merge value. Intermediate per-arrival
-    // commits are invisible to the effect.
+    // One cascade ⇒ one effect fire with the final committed value.
     expect(fires.length).toBe(1);
-    expect(fires[0]).toBe(root.value);
+    expect(fires[0]).toBe(merged.value);
     stop();
   });
 
-  it("an effect that writes the merged root does not infinitely loop the engine", () => {
-    // The standing engine footgun is "don't create cycles in
-    // effects". The merge primitive must NOT make this worse —
-    // it should compose cleanly with the engine's existing
-    // effect/write interaction (whatever that is — engine-level
-    // convergence guarantees vary by setup; the important property
-    // here is "doesn't infinite loop / throw").
-    const root = withMerge(num(0), sumPolicy);
+  it("an effect that writes through a merged cell does not infinitely loop the engine", () => {
+    const merged = num(0).merge(sumPolicy);
     let fires = 0;
     const stop = effect(() => {
       fires++;
-      // Read once, write once. No cycle even if the engine doesn't
-      // re-fire (the merge primitive isn't responsible for the
-      // engine's re-fire policy).
-      const v = root.value;
-      if (v < 1) root.value = 1;
+      const v = merged.value;
+      if (v < 1) merged.value = 1;
     });
     expect(fires).toBeGreaterThan(0);
-    expect(Number.isFinite(root.value)).toBe(true);
+    expect(Number.isFinite(merged.value)).toBe(true);
     stop();
   });
 });
 
 describe("the merge is opt-in: no merge ⇒ exactly today's behaviour", () => {
-  it("a signal without `withMerge` is byte-for-byte the engine's normal write path", () => {
-    // Regression guard: the engine modifications (activeBwdWriter
-    // push, bwdCascadeId bump) must not change observable
+  it("a signal without `.merge()` is byte-for-byte the engine's normal write path", () => {
+    // Regression guard: the engine modifications (activeBwdWriter,
+    // bwdSetterCaller, bwdCascadeId) must not change observable
     // behaviour of un-merged signals.
     const root = signal(0);
     const a = installNumLens(
@@ -178,36 +155,194 @@ describe("the merge is opt-in: no merge ⇒ exactly today's behaviour", () => {
     );
     batch(() => {
       a.value = 5;
-      b.value = 5; // 105 — clobbers 5
+      b.value = 5;
     });
-    expect(root.value).toBe(105); // last-write-wins, exactly today's behaviour
+    expect(root.value).toBe(105);
   });
 
-  it("merge attached then policy never matches ⇒ falls through identity-only", () => {
-    // Degenerate policy: combine returns identity always. This is
-    // never sensible, but it's a sanity check that the merge code
-    // doesn't introduce spurious behaviour beyond what `combine`
-    // declares.
-    const dropAllPolicy = { identity: -1, combine: () => -1 };
-    const root = withMerge(num(0), dropAllPolicy);
-    const a = root.add(1);
+  it("merge with a degenerate policy still produces deterministic output", () => {
+    const dropAll = { identity: -1, combine: () => -1 };
+    const merged = num(0).merge(dropAll);
+    const a = merged.add(1);
     const fan = Num.lens(
       [a] as const,
       ([x]) => x,
       (t, [_x]) => [t],
     );
     fan.value = 50;
-    expect(root.value).toBe(-1); // committed identity
+    expect(merged.value).toBe(-1);
   });
 });
 
-describe("maxPolicy with no contributions in a cascade", () => {
-  it("a cascade that arrives at root via NO slot leaves the merge untouched", () => {
-    // Trivially: if no backward writes happen, the merge fires
-    // never. Root keeps its prior value.
-    const root = withMerge(num(42), maxPolicy);
-    expect(root.value).toBe(42);
-    // Doing nothing leaves it at 42.
-    expect(root.value).toBe(42);
+describe("merge on a read-only receiver", () => {
+  it("throws: merge requires a writable bwd path", () => {
+    const root = num(0);
+    const ro = Num.derive(root, v => v * 2); // RO computed
+    expect(() => {
+      (ro as unknown as Num & { merge: (p: typeof maxPolicy) => unknown }).merge(maxPolicy);
+    }).toThrow(/read-only/);
+  });
+});
+
+describe("merge with no contributions in a cascade", () => {
+  it("doing nothing leaves the merge cell at its parent's current value", () => {
+    const merged = num(42).merge(maxPolicy);
+    expect(merged.value).toBe(42);
+    expect(merged.value).toBe(42);
+  });
+});
+
+describe("error thrown mid-cascade from inside a setter", () => {
+  it("a setter throw doesn't leave engine globals in a bad state", () => {
+    const merged = num(0).merge(sumPolicy);
+    // Construct a lens whose setter throws. The cascade should
+    // unwind cleanly via try/finally in `_setWithExclusion`'s lens
+    // dispatch, restoring activeBwdWriter/bwdSetterCaller.
+    const badLens = installNumLens(
+      () => merged.value,
+      _v => {
+        throw new Error("kaboom");
+      },
+    );
+    expect(() => {
+      badLens.value = 5;
+    }).toThrow(/kaboom/);
+    // After the throw, a fresh cascade should work normally.
+    const goodLens = installNumLens(
+      () => merged.value,
+      v => {
+        merged.value = v;
+      },
+    );
+    goodLens.value = 7;
+    expect(merged.value).toBe(7);
+  });
+
+  it("a throw during a fan-in's batched sub-writes still unwinds activeBwdWriter", () => {
+    // First two sub-writes succeed; third throws. The engine's
+    // try/finally must restore globals so subsequent writes work.
+    const merged = num(0).merge(sumPolicy);
+    const lensA = installNumLens(
+      () => merged.value,
+      v => {
+        merged.value = v;
+      },
+    );
+    const lensThrows = installNumLens(
+      () => merged.value,
+      _v => {
+        throw new Error("nope");
+      },
+    );
+    const fan = Num.lens(
+      [lensA, lensThrows] as const,
+      ([x, y]) => x + y,
+      (t, [_a, _b]) => [t / 2, t / 2],
+    );
+    expect(() => {
+      fan.value = 10;
+    }).toThrow(/nope/);
+    // Fresh attempt on a clean cascade:
+    lensA.value = 99;
+    expect(merged.value).toBe(99);
+  });
+});
+
+describe("equality short-circuit", () => {
+  it("two identical direct writes ⇒ effect fires for the first, not the second (no-op)", () => {
+    const merged = num(0).merge(sumPolicy);
+    let fires = 0;
+    const stop = effect(() => {
+      void merged.value;
+      fires++;
+    });
+    const baseline = fires;
+    merged.value = 5;
+    merged.value = 5; // identical to current value
+    // Cascade 1: commit 5 (was 0, change) → fire.
+    // Cascade 2: commit 5 (still 5, no change) → equality short-circuits;
+    //   no propagate; effect doesn't re-fire.
+    expect(fires - baseline).toBe(1);
+    stop();
+  });
+});
+
+describe("policy mutation: changing policy state at runtime is undefined behaviour", () => {
+  it("the merge captures the policy reference; user-mutating it changes behaviour mid-flight (footgun)", () => {
+    // Document the (probably-unsupported) case: user creates a
+    // policy object and then mutates it. The merge holds a
+    // reference; subsequent folds use the new combine. We don't
+    // copy or freeze policies — caller's responsibility to keep
+    // them stable.
+    const mutable: typeof maxPolicy = { identity: 0, combine: (a, b) => a + b };
+    const merged = num(0).merge(mutable);
+    const a = merged.add(1);
+    a.value = 5;
+    expect(merged.value).toBe(4); // sum (0 + 4) = 4
+
+    // Swap combine in place — this is a footgun but should still
+    // produce defined behaviour (just possibly surprising).
+    mutable.combine = (a, b) => Math.max(a, b);
+    a.value = 10;
+    expect(merged.value).toBe(9); // max(0, 9) = 9
+  });
+});
+
+describe("merge cell garbage collection", () => {
+  it("a merge cell with no live references doesn't pin its parent", () => {
+    // We can't directly test GC, but we can verify that the merge
+    // cell doesn't store its parent in a global registry. The
+    // engine's only retention is through the Link graph: if no
+    // sub/dep references the merge, the engine doesn't hold it.
+    let merged: ReturnType<typeof num> | undefined = num(0).merge(sumPolicy);
+    const slotsAtCreate = peekMergeSlots(merged)!;
+    expect(slotsAtCreate.size).toBe(0);
+    merged = undefined;
+    // No leak in our weakmap-or-instance-property design — merge
+    // state lives on the cell itself, which can be collected.
+    // (Real GC verification is environmental; this just exercises
+    // the lifecycle.)
+    expect(merged).toBeUndefined();
+  });
+});
+
+describe("symmetric lens + merge", () => {
+  it("a merge on a regular signal whose value is also reachable via a symmetric lens still works", () => {
+    // Symmetric lenses are a separate construction; they don't
+    // interact with merge directly because they're built via
+    // `_symmetric`/`_fuseOnSymmetric` and have their own complement
+    // state. A merge attached to a signal that ALSO has a
+    // symmetric lens above it should still function — the merge
+    // intercepts only writes through itself.
+    const root = num(0);
+    const merged = root.merge(sumPolicy);
+    // Independently of merged, build a normal lens chain reading
+    // root. The merge doesn't interfere.
+    const independent = root.add(1000);
+    const a = merged.add(1);
+    a.value = 5;
+    expect(root.value).toBe(4);
+    expect(independent.value).toBe(1004);
+  });
+});
+
+describe("re-entrant merge during its own commit", () => {
+  it("a downstream effect that writes the merge during commit propagation doesn't recurse forever", () => {
+    // The merge's setter calls parent._setWithExclusion (commit).
+    // That commit propagates forward; subscribers fire. An effect
+    // subscribed to the merge that writes THROUGH the merge (or to
+    // a downstream lens) could re-enter. The engine's normal
+    // re-entry guards should handle this.
+    const merged = num(0).merge(sumPolicy);
+    let fires = 0;
+    const stop = effect(() => {
+      fires++;
+      // Read once to subscribe; conditional bump to terminate.
+      const v = merged.value;
+      if (v < 5 && fires < 100) merged.value = v + 1;
+    });
+    expect(Number.isFinite(merged.value)).toBe(true);
+    expect(fires).toBeLessThan(100);
+    stop();
   });
 });

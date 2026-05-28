@@ -86,14 +86,20 @@ let activeNetwork: _NetworkNode | undefined;
  *  ._setWithExclusion(...)` call the setter makes therefore arrives
  *  at `parent` with `activeBwdWriter === L`. This is the
  *  bwd-direction analog of `activeSub`: a stack-managed identity
- *  that lets a downstream consumer (the merge layer in
- *  `_explore/merge/`) attribute each arriving contribution to the
- *  immediately-upstream lens that produced it, regardless of how
- *  that lens was constructed (`_fuse`, `_fanin`, `_symmetric`,
- *  `Signal.install`, user-authored). Without it, contributions
- *  arrive anonymously and the merge cannot dedupe per-slot —
- *  same-source repeats would double-count. */
+ *  that lets a downstream consumer (the merge layer) attribute each
+ *  arriving contribution to the immediately-upstream lens that
+ *  produced it, regardless of how that lens was constructed
+ *  (`_fuse`, `_fanin`, `_symmetric`, `Signal.install`,
+ *  user-authored). */
 let activeBwdWriter: ReactiveNode | undefined;
+/** The `activeBwdWriter` value that was current at the moment the
+ *  CURRENT lens setter was invoked — i.e., the writer one frame UP
+ *  the bwd stack from the running setter. A merge node's setter
+ *  reads this as its slot identity: "which lens called me?". A
+ *  plain lens setter doesn't read it; it's an opt-in side channel
+ *  used by `.merge()` to attribute contributions to their immediate
+ *  caller (the lens above the merge in the bwd chain). */
+let bwdSetterCaller: ReactiveNode | undefined;
 const queued: (Effect | _NetworkNode | undefined)[] = [];
 
 /** Frozen sentinel for the common case of "nothing dirty this run".
@@ -427,6 +433,26 @@ export const isLens = (v: unknown): v is Signal<unknown> =>
 /** Runtime check: is this Signal in computed mode (getter, no setter)? */
 export const isComputed = (v: unknown): v is Signal<unknown> =>
   v instanceof Signal && v.getter !== undefined && v.setter === undefined;
+
+/** Merge policy for the `.merge(policy)` instance method (and the
+ *  legacy `withMerge` root-attached variant). `combine` should be
+ *  associative + commutative; `identity` is the fold seed for one
+ *  cascade. Non-commutative combines work for one-slot cascades but
+ *  the cross-slot fold order is unspecified — the engine does not
+ *  promise an arrival order, and a non-commutative policy will
+ *  produce arrival-order-sensitive results. */
+export interface MergePolicy<T> {
+  readonly identity: T;
+  combine(acc: T, x: T): T;
+}
+
+/** Sentinel slot identity used when a backward write arrives at a
+ *  merge cell from outside any lens cascade — i.e., a direct
+ *  `mergeCell.value = …` at the user level, or from inside a
+ *  non-lens context (effect body without a lens above). All such
+ *  arrivals share this slot; sequential direct writes are dedupe'd
+ *  to a single "direct" contribution per cascade. */
+export const DIRECT_SLOT: unique symbol = Symbol("merge:direct-slot");
 
 export interface SignalOptions<T = unknown> {
   /** First subscriber attached. */
@@ -940,6 +966,81 @@ export class Signal<T = unknown> implements ReactiveNode {
     ) as unknown as this;
   }
 
+  /** Backward-merge node placed at this position in the chain.
+   *
+   *  Returns a NEW cell (same class as `this`) that:
+   *    - forward: passes `this.value` through verbatim (identity view)
+   *    - backward: dedupes incoming writes by their immediately-
+   *      upstream lens identity (`bwdSetterCaller`), folds the
+   *      resulting per-slot map under `policy.combine`, and commits
+   *      the combined value to `this` via `this._setWithExclusion`.
+   *
+   *  The merge cell is a **fusion barrier**: subsequent `.lens()` /
+   *  `.merge()` / value-class invertibles built on top see the
+   *  merge cell as their parent (not `this`), so the merge stays a
+   *  real node in the bwd path. (`_fuse` checks `receiver._fusedOf`;
+   *  the merge cell leaves it unset.)
+   *
+   *  Slot identity = the lens whose setter was on the stack at the
+   *  moment our setter was called. For a fan-in above the merge,
+   *  each parent-write produces a distinct slot. For a single lens
+   *  above writing the merge multiple times in one cascade, the
+   *  repeats collapse to one slot (last-write-wins per slot, then
+   *  folded across slots).
+   *
+   *  Receiver constraint: must be writable. A pure RO computed
+   *  (getter without setter) throws — there is no bwd path for the
+   *  merge to use.
+   *
+   *  Polymorphic-this return preserves the receiver's class so
+   *  chains keep their typed surface: `vec(0,0).merge(p).add(...)`
+   *  is still a `Vec`. */
+  merge(this: Signal<T>, policy: MergePolicy<T>): this {
+    if (this.getter !== undefined && this.setter === undefined) {
+      throw new TypeError(
+        "merge: receiver is a read-only computed; merge requires a writable bwd path",
+      );
+    }
+    const parent = this as Signal<T>;
+    const Cls = this.constructor as new (...args: never[]) => Signal<T>;
+
+    const state: {
+      policy: MergePolicy<T>;
+      slots: Map<unknown, T>;
+      lastCascadeId: number;
+    } = {
+      policy,
+      slots: new Map<unknown, T>(),
+      // `-1` never matches `bwdCascadeId`'s non-negative range so
+      // the first arrival always trips the fresh-cascade branch.
+      lastCascadeId: -1,
+    };
+
+    const getter = (): T => parent.value;
+    const setter = (next: T): void => {
+      if (bwdCascadeId !== state.lastCascadeId) {
+        state.slots.clear();
+        state.lastCascadeId = bwdCascadeId;
+      }
+      // `bwdSetterCaller` is the writer one frame up the bwd stack
+      // — the lens that just called us. For a direct top-level
+      // write (no lens above), this is `undefined`; all such writes
+      // share `DIRECT_SLOT`.
+      const slot: unknown = bwdSetterCaller ?? DIRECT_SLOT;
+      state.slots.set(slot, next);
+      let acc: T = policy.identity;
+      for (const v of state.slots.values()) acc = policy.combine(acc, v);
+      parent._setWithExclusion(acc, activeNetwork);
+    };
+
+    const cell = Signal.install(Cls, getter, setter) as Signal<T>;
+    // No `_fusedOf` assignment → fusion barrier. Subsequent
+    // `.lens()` / `.merge()` on this cell start a fresh fused
+    // chain rooted at the merge.
+    (cell as Signal<T> & { _mergeState?: typeof state })._mergeState = state;
+    return cell as this;
+  }
+
   /** Internal fusion helper used by the instance `.lens()` (endo),
    *  `Cls.lens(parent, ...)`, `Cls.derive(parent, ...)`, and `field()`.
    *  Collapses receiver-anchored chains in value-space.
@@ -1153,29 +1254,33 @@ export class Signal<T = unknown> implements ReactiveNode {
     if (this.getter !== undefined) {
       const set = this.setter;
       if (set === undefined) throw new TypeError("Cannot write to a Computed");
-      // Set THIS lens as the active backward writer for the duration
-      // of its setter. Nested cascades (lens-of-lens) rotate through
-      // this slot naturally: each layer's setter sees itself as the
-      // writer when it runs, and `parent._setWithExclusion(...)` calls
-      // it makes will arrive at parent with parent's caller (= this)
-      // as the active writer. The merge layer reads this on every
-      // arrival as the slot identity. Try/finally guards against
-      // user-thrown errors inside the setter leaving the global in
-      // an inconsistent state.
+      // Stack management for `activeBwdWriter` and `bwdSetterCaller`.
       //
-      // The `prev === undefined` check defines a cascade BOUNDARY:
-      // this is the outermost lens whose setter is on the stack, so
-      // we bump `bwdCascadeId` exactly once per user-initiated
-      // top-level cascade. Inner dispatches (lens setters calling
-      // their parents, fan-in batches, nested lenses) all run with
-      // `prev !== undefined` and inherit the parent cascade's id.
+      // - `activeBwdWriter` is THIS lens for the duration of `set`,
+      //   so any `parent._setWithExclusion(...)` the setter makes
+      //   arrives at parent with `activeBwdWriter === this`.
+      // - `bwdSetterCaller` is the value `activeBwdWriter` had BEFORE
+      //   we pushed — i.e., the lens above us on the bwd stack. The
+      //   running setter can read this to learn "who called me",
+      //   which a merge node uses as its slot identity. Plain lens
+      //   setters ignore it.
+      // - `bwdCascadeId` bumps on the `undefined → lens` transition,
+      //   defining a cascade boundary: one user-initiated top-level
+      //   `.value = …` call (including all the writes its setter
+      //   dispatches through) shares a single id.
+      //
+      // The try/finally protects against user-thrown errors inside
+      // the setter leaving these globals in an inconsistent state.
       const prev = activeBwdWriter;
       if (prev === undefined) ++bwdCascadeId;
+      const prevCaller = bwdSetterCaller;
+      bwdSetterCaller = prev;
       activeBwdWriter = this;
       try {
         set(next);
       } finally {
         activeBwdWriter = prev;
+        bwdSetterCaller = prevCaller;
       }
       return;
     }
@@ -2088,13 +2193,17 @@ export function _bwdCascadeId(): number {
   return bwdCascadeId;
 }
 
-/** @internal (prototype) — current `activeBwdWriter`, or `undefined`
- *  outside any lens setter. Read by the merge layer as the slot
- *  identity for an arriving contribution. Direct (non-lens) writes
- *  at the user level have `undefined` here — the merge layer uses
- *  a sentinel slot for "direct". */
+/** @internal (prototype) — current `activeBwdWriter`. */
 export function _activeBwdWriter(): unknown {
   return activeBwdWriter;
+}
+
+/** @internal (prototype) — `activeBwdWriter` as it was BEFORE the
+ *  currently-running lens setter pushed onto the stack. A merge
+ *  node's setter reads this to attribute its arriving contribution
+ *  to the lens immediately above it on the bwd path. */
+export function _bwdSetterCaller(): unknown {
+  return bwdSetterCaller;
 }
 
 export function untracked<R>(fn: () => R): R {

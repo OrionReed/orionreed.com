@@ -1,22 +1,19 @@
 // trigger.test.ts — §10 step 3: distinguish eager (fold-on-arrival)
-// from lazy (deposit-then-resolve) merge triggers.
+// from lazy (deposit-then-resolve) merge triggers. The current
+// prototype implements ONLY eager fold-on-arrival.
 //
-// The current prototype implements ONLY eager fold-on-arrival.
-// These tests pin two things:
+// What these tests pin:
 //
 //   1. For order-independent policies, eager and lazy are
-//      observationally equivalent on the FINAL value. Where they
-//      differ is in INTERMEDIATE side-effects: the engine's write
-//      hook (and any downstream sub that bypasses batching) fires
-//      once per arrival under eager, once per cascade under lazy.
-//
-//   2. The current prototype CANNOT support an order-dependent
-//      policy correctly. Eager fold of a non-commutative combine
-//      depends on the engine's arrival order — which is determined
-//      by lens construction order, not by anything semantically
-//      meaningful. Tests assert this is broken today, so that
-//      adding the lazy trigger is recognised as a precondition for
-//      non-commutative policies, not a free addition.
+//      observationally equivalent on the FINAL value (recorded so
+//      a future lazy implementation can diff).
+//   2. Where they differ: per-arrival side effects under eager
+//      vs. once-per-cascade under lazy. The engine's writeHook is
+//      the most accessible probe.
+//   3. The current prototype CANNOT support an order-dependent
+//      policy correctly — arrival order is structural, not
+//      semantic. Tests assert this is broken, so the lazy trigger
+//      is recognised as a precondition for non-commutative policies.
 
 import { describe, expect, it } from "vitest";
 import {
@@ -28,13 +25,13 @@ import {
   setSignalWriteHook,
   type Signal,
   sumPolicy,
-  withMerge,
 } from "../index";
 
 function diamond(policy: MergePolicy<number>, rootInit = 1) {
-  const root = withMerge(num(rootInit), policy);
-  const a = root.add(1);
-  const b = root.scale(2);
+  const root = num(rootInit);
+  const merged = root.merge(policy);
+  const a = merged.add(1);
+  const b = merged.scale(2);
   const s = Num.lens(
     [a, b] as const,
     ([av, bv]) => av + bv,
@@ -44,42 +41,28 @@ function diamond(policy: MergePolicy<number>, rootInit = 1) {
       return [(target * av) / tot, (target * bv) / tot];
     },
   );
-  return { root, a, b, s };
+  return { root, merged, a, b, s };
 }
 
 describe("eager fold-on-arrival: side-effect timing", () => {
-  it("writeHook fires once per VALUE-CHANGING arrival (NOT once per cascade)", () => {
-    // Use `sum` because under `max` the second arrival's folded
-    // value equals the first (2.5 < 4 → max stays 4), so the
-    // engine's equality short-circuit suppresses the second
-    // writeHook even though the merge intercept ran twice. The
-    // sum policy doesn't have that property — both arrivals
-    // change the acc, both fire writeHook.
-    const calls: { sig: Signal<unknown> }[] = [];
+  it("writeHook fires once per VALUE-CHANGING arrival on the underlying root", () => {
+    const calls: Signal<unknown>[] = [];
     const unhook = setSignalWriteHook(sig => {
-      calls.push({ sig });
+      calls.push(sig);
     });
     try {
       const { root, s } = diamond(sumPolicy);
       s.value = 10;
-      const rootCalls = calls.filter(c => c.sig === root);
-      // Two cascade arrivals, both change acc (0→4, then 4→6.5),
-      // both fire writeHook. The lazy trigger would fire ONCE
-      // per cascade no matter how many arrivals.
+      const rootCalls = calls.filter(c => c === root);
+      // Two arrivals, both change acc (0→4, then 4→6.5), both
+      // fire writeHook on the underlying root.
       expect(rootCalls.length).toBe(2);
     } finally {
       unhook();
     }
   });
 
-  it("the engine's equality short-circuit hides arrivals that don't change acc", () => {
-    // Useful corollary: for IDEMPOTENT folds (max/min/union),
-    // arrivals that don't move the acc are invisible to
-    // downstream — the engine treats them as no-ops. This is
-    // why §3 promises "the existing equality short-circuit
-    // converges it" for the cheap path: the engine ALREADY
-    // does the right thing structurally; merge just needs to
-    // not get in the way.
+  it("idempotent policies: engine equality short-circuit hides redundant arrivals", () => {
     const calls: Signal<unknown>[] = [];
     const unhook = setSignalWriteHook(sig => {
       calls.push(sig);
@@ -87,20 +70,15 @@ describe("eager fold-on-arrival: side-effect timing", () => {
     try {
       const { root, s } = diamond(maxPolicy);
       s.value = 10;
+      // Two arrivals (4 then 2.5); max keeps 4 on second; equality
+      // short-circuit suppresses the second writeHook on root.
       expect(calls.filter(s => s === root).length).toBe(1);
     } finally {
       unhook();
     }
   });
 
-  it("final value matches the lazy trigger for any order-independent policy", () => {
-    // We don't have a lazy implementation to compare against, so
-    // this test is conditional: for ANY order-independent fold,
-    // the final value is determined entirely by the multiset of
-    // arrivals and the fold. Eager and lazy agree on multisets,
-    // so they agree on the final value. The test simply records
-    // the value the prototype produces, so a future lazy
-    // implementation can diff against it.
+  it("final value matches what a lazy trigger would produce for order-independent policies", () => {
     const { root, s } = diamond(maxPolicy);
     s.value = 10;
     expect(root.value).toBe(4);
@@ -108,96 +86,18 @@ describe("eager fold-on-arrival: side-effect timing", () => {
 });
 
 describe("eager fold breaks for ORDER-DEPENDENT policies", () => {
-  /** Non-commutative policy: "first writer wins". Eager fold-on-
-   *  arrival reads this as `combine(acc, x) = acc === identity ? x
-   *  : acc` — sensitive to which arrival is first. */
+  /** Non-commutative policy: "first writer wins". */
   const firstWinsPolicy: MergePolicy<number> = {
-    identity: Number.NaN, // sentinel: "no first yet"
+    identity: Number.NaN,
     combine: (acc, x) => (Number.isNaN(acc) ? x : acc),
   };
 
   it("the result depends on cascade arrival order (which is structural, not semantic)", () => {
-    // Forward fan-in order: [a, b] → cascade arrives a first.
-    const fwd = diamond(firstWinsPolicy);
-    fwd.s.value = 10;
-    const fwdValue = fwd.root.value;
-
-    // Reversed fan-in order: [b, a] → cascade arrives b first.
-    const root = withMerge(num(1), firstWinsPolicy);
-    const a = root.add(1);
-    const b = root.scale(2);
-    const sReversed = Num.lens(
-      [b, a] as const,
-      ([bv, av]) => av + bv,
-      (target, [bv, av]) => {
-        const tot = av + bv;
-        if (tot === 0) return [target / 2, target / 2];
-        return [(target * bv) / tot, (target * av) / tot];
-      },
-    );
-    sReversed.value = 10;
-    const revValue = root.value;
-
-    // The order-dependent policy yields DIFFERENT values for the
-    // two fan-in orders. The user wrote `[a, b]` vs `[b, a]` as a
-    // construction-time choice, but the resulting reactive
-    // behaviour disagrees. The lazy trigger would buffer both
-    // arrivals and let the user's policy receive them as an
-    // unordered set — at which point the policy's "first" has to
-    // come from somewhere other than arrival order (e.g. an
-    // explicit slot identity).
-    expect(fwdValue).not.toBe(revValue);
-  });
-
-  it("two top-level writes are SEPARATE cascades, so first-wins applies cascade-locally, not globally", () => {
-    // Under the new cascade-id semantics, sequential top-level
-    // writes are two cascades. `first-wins` within ONE cascade
-    // (which has only one contribution) returns that contribution.
-    // Each cascade resets and commits, so the FINAL root reflects
-    // the LAST cascade's contribution — observable as last-wins,
-    // not first-wins.
-    //
-    // The user gets first-wins semantics only when multiple
-    // contributions converge in ONE cascade — i.e., via a fan-in.
-    let result1: number;
-    {
-      const r = withMerge(num(1), firstWinsPolicy);
-      const aa = r.add(1);
-      const bb = r.scale(2);
-      batch(() => {
-        aa.value = 7;
-        bb.value = 9;
-      });
-      result1 = r.value;
-    }
-    let result2: number;
-    {
-      const r = withMerge(num(1), firstWinsPolicy);
-      const aa = r.add(1);
-      const bb = r.scale(2);
-      batch(() => {
-        bb.value = 9;
-        aa.value = 7;
-      });
-      result2 = r.value;
-    }
-    // Both cases: 2nd cascade wins (4.5 in first ordering, 6 in
-    // second). Textual order matters because each write is its
-    // own cascade and the LAST one resets-then-commits.
-    expect(result1).toBe(4.5);
-    expect(result2).toBe(6);
-  });
-
-  it("WITHIN one cascade, first-wins still depends on arrival order (the original §7 problem)", () => {
-    // One user call → one cascade. The fan-in's bwd produces two
-    // contributions in some order. first-wins picks the first.
-    // The order is structural (fan-in's parent array order), not
-    // semantic — which is exactly the §7 hazard for non-
-    // commutative policies.
     function diamondFirstWins(parentsOrder: "ab" | "ba") {
-      const root = withMerge(num(1), firstWinsPolicy);
-      const a = root.add(1);
-      const b = root.scale(2);
+      const root = num(1);
+      const merged = root.merge(firstWinsPolicy);
+      const a = merged.add(1);
+      const b = merged.scale(2);
       const parents = parentsOrder === "ab" ? ([a, b] as const) : ([b, a] as const);
       const s = Num.lens(
         parents,
@@ -213,18 +113,45 @@ describe("eager fold breaks for ORDER-DEPENDENT policies", () => {
     fwd.s.value = 10;
     const rev = diamondFirstWins("ba");
     rev.s.value = 10;
-    // Same data flow, same final view value. Different lens-array
-    // order ⇒ different "first" ⇒ different root value. This is
-    // the §7 hazard: arrival order is structural, the policy
-    // reading first-wins shouldn't be sensitive to it.
     expect(fwd.root.value).not.toBe(rev.root.value);
+  });
+
+  it("two top-level writes are SEPARATE cascades; first-wins applies cascade-locally", () => {
+    let result1: number;
+    {
+      const r = num(1);
+      const m = r.merge(firstWinsPolicy);
+      const aa = m.add(1);
+      const bb = m.scale(2);
+      batch(() => {
+        aa.value = 7;
+        bb.value = 9;
+      });
+      result1 = r.value;
+    }
+    let result2: number;
+    {
+      const r = num(1);
+      const m = r.merge(firstWinsPolicy);
+      const aa = m.add(1);
+      const bb = m.scale(2);
+      batch(() => {
+        bb.value = 9;
+        aa.value = 7;
+      });
+      result2 = r.value;
+    }
+    // Each write is its own cascade; the SECOND wins (since each
+    // cascade resets and commits its single contribution).
+    expect(result1).toBe(4.5);
+    expect(result2).toBe(6);
   });
 });
 
-describe("the lazy trigger \u2014 NOT IMPLEMENTED, but here's what it would test", () => {
+describe("the lazy trigger — NOT IMPLEMENTED, but here's what it would test", () => {
   it.todo("lazy: writeHook fires ONCE per cascade, regardless of arrival count");
   it.todo("lazy + order-independent: same final value as eager (oracle equivalence)");
   it.todo("lazy + order-dependent: combine receives an unordered set, not a sequence");
   it.todo("lazy: effects subscribed to root fire once per cascade (not per arrival)");
-  it.todo("lazy: peek() between writes within a batch sees the merge as Pending, resolves on read");
+  it.todo("lazy: peek() between writes within a batch sees the merge as Pending");
 });

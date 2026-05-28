@@ -1,27 +1,13 @@
-// topology.test.ts — the merge primitive against a representative
-// sample of DAG shapes and lens kinds, NOT just the canonical
-// `_fanin` diamond.
+// topology.test.ts — the `.merge()` chain method against a
+// representative sample of DAG shapes and lens kinds, NOT just the
+// canonical `_fanin` diamond.
 //
 // The premise: the merge must work uniformly across all the ways a
 // user can construct lenses. The slot identity is the upstream lens
-// cell, so any lens that goes through the engine's `_setWithExclusion`
-// path (which is all of them, since that's the only legal write
-// route) inherits the dedupe-by-slot guarantee.
-//
-// Cases covered:
-//   1. Asymmetric paths — same DAG, different bwd-depth per slot.
-//   2. Field lenses — `Cls.fieldOf` / `field()` writes back via
-//      spread-replace; each field cell is its own slot.
-//   3. Multiple fan-ins to the same root — distinct fan-in cells,
-//      distinct slots, no cross-contamination.
-//   4. Nested fan-ins — `c = lens([d, e])` where `d = lens([a, b])`;
-//      writes through the nested structure produce contributions
-//      whose slots are the IMMEDIATELY-upstream lens, not the
-//      originating one.
-//   5. Raw `Signal.install` user-authored lenses — should be
-//      indistinguishable from engine-built ones for merge purposes.
-//   6. Vec field lenses (`.x` / `.y`) — both project onto the same
-//      Vec root, distinct slots, sum policy combines coordinate-wise.
+// cell (caller of the merge cell's setter), so any lens that goes
+// through the engine's `_setWithExclusion` path — which is all of
+// them, since that's the only legal write route — inherits the
+// dedupe-by-slot guarantee.
 
 import { describe, expect, it } from "vitest";
 import {
@@ -32,13 +18,12 @@ import {
   num,
   peekMergeSlots,
   Signal,
+  spreadPolicy,
   sumPolicy,
   Vec,
   vec,
-  withMerge,
 } from "../index";
 
-/** Local convenience: same as in sum-merge.test.ts. */
 function installNumLens(getter: () => number, setter: (v: number) => void): Num {
   return Signal.install(
     Num as unknown as new (...args: never[]) => Signal<number>,
@@ -47,11 +32,11 @@ function installNumLens(getter: () => number, setter: (v: number) => void): Num 
   ) as unknown as Num;
 }
 
-describe("1. asymmetric bwd paths to the same root", () => {
+describe("1. asymmetric bwd paths through the merge", () => {
   it("a short path (1 lens) and a long path (3 fused lenses) compose distinct slots", () => {
-    const root = withMerge(num(10), maxPolicy);
-    const short = root.add(1); // 1 hop in fused chain
-    const long = root.add(1).scale(2).add(5); // 3 hops, fuses to 1 cell
+    const merged = num(10).merge(maxPolicy);
+    const short = merged.add(1); // 1 hop in fused chain
+    const long = merged.add(1).scale(2).add(5); // 3 hops, fuses to 1 cell
     const sum = Num.lens(
       [short, long] as const,
       ([s, l]) => s + l,
@@ -61,89 +46,76 @@ describe("1. asymmetric bwd paths to the same root", () => {
       },
     );
     sum.value = 60;
-    // Two slots (short and long, distinct lens cells). Max picks
-    // the bigger contribution. Whatever value max picks, the
-    // observable invariant is: order-independence (we test that
-    // separately) and slot count.
-    const slots = peekMergeSlots(root)!;
-    expect(slots.size).toBe(2);
+    expect(peekMergeSlots(merged)!.size).toBe(2);
   });
 
-  it("asymmetric: writes to root through one slot don't poison another's slot", () => {
-    // Construct two lenses with different depths, then write them
-    // both, separately, in sequence. Each write is its own cascade
-    // → slot map clears between. Whether max picks the same or
-    // different value isn't the point; the point is no
-    // contamination.
-    const root = withMerge(num(0), maxPolicy);
-    const short = root.add(1);
-    const long = root.scale(2).add(3);
+  it("sequential writes to different-depth lenses don't poison each other's slot", () => {
+    const merged = num(0).merge(maxPolicy);
+    const short = merged.add(1);
+    const long = merged.scale(2).add(3);
     short.value = 50;
-    expect(root.value).toBe(49); // 50 - 1
+    expect(merged.value).toBe(49); // 50 - 1
     long.value = 100;
     // Fresh cascade; max sees only the one new contribution
-    // (which came from long: root via long.bwd = (100 - 3) / 2 = 48.5).
-    expect(root.value).toBe(48.5);
+    // (merged via long.bwd = (100 - 3) / 2 = 48.5).
+    expect(merged.value).toBe(48.5);
   });
 });
 
-describe("2. field lenses via field() and Vec.x / Vec.y", () => {
-  it("two field lenses on the same object root are distinct slots", () => {
-    // root: { hp, mana }. Two field lenses. Each writes the root
-    // via spread-replace setter (`fieldOf`). They are distinct
-    // lens cells ⇒ distinct slots ⇒ no double-counting.
-    const root = withMerge(
-      num({ hp: 100, mana: 50 }) as Signal<{ hp: number; mana: number }> & {
-        value: { hp: number; mana: number };
-        _setWithExclusion: (v: { hp: number; mana: number }, e: unknown) => void;
+describe("2. field lenses via field() composed with .merge()", () => {
+  it("two field lenses on the same object merge cell are distinct slots", () => {
+    // Use spreadPolicy: each field write spreads against the
+    // current root, producing a full object as its raw arrival.
+    // Per-slot dedupe + spread fold preserves both partial updates.
+    type Stats = { hp: number; mana: number };
+    const root = num<Stats>({ hp: 100, mana: 50 });
+    const merged = root.merge(spreadPolicy<Stats>({ hp: 100, mana: 50 }));
+    const hp = field(merged as unknown as Signal<Stats>, "hp", Num);
+    const mana = field(merged as unknown as Signal<Stats>, "mana", Num);
+    const fan = Signal.install(
+      Num as unknown as new (...args: never[]) => Signal<number>,
+      () => hp.value + mana.value,
+      (_t: number) => {
+        // Distribute trivially: write 75 to hp, 30 to mana.
+        // The exact target shape doesn't matter for this test;
+        // we want both field-lens setters to fire in one cascade.
+        batch(() => {
+          hp.value = 75;
+          mana.value = 30;
+        });
       },
-      {
-        // Custom policy: object-spread merge, "last-writer per slot".
-        identity: { hp: 100, mana: 50 } as { hp: number; mana: number },
-        combine: (a, b) => ({ ...a, ...b }),
-      },
-    );
-    // Two field lenses.
-    const hp = field(root as unknown as Signal<{ hp: number; mana: number }>, "hp", Num);
-    const mana = field(root as unknown as Signal<{ hp: number; mana: number }>, "mana", Num);
-    batch(() => {
-      hp.value = 75;
-      mana.value = 30;
-    });
-    // Each field write spreads against root, so the raw arrivals
-    // are full objects `{hp:75, mana:50}` and `{hp:75, mana:30}`.
-    // Per-slot dedupe keeps both; merge folds by combine: spread.
-    // Result: { hp: 75, mana: 30 }.
+    ) as unknown as Num;
+    fan.value = 105;
     expect(root.value).toEqual({ hp: 75, mana: 30 });
   });
 
-  it("Vec.x and Vec.y as slots; numeric merge per axis", () => {
-    // Vec root, two field lenses (x and y). Write both inside a
-    // batch. Each field lens is a slot. Spread-replace by slot ⇒
-    // both updates land on the root without clobbering each other.
-    const root = withMerge(vec(0, 0) as unknown as Signal<{ x: number; y: number }>, {
-      identity: { x: 0, y: 0 },
-      combine: (a, b) => ({ ...a, ...b }),
-    });
-    const v = root as unknown as Vec;
-    batch(() => {
-      v.x.value = 7;
-      v.y.value = 9;
-    });
+  it("Vec.x and Vec.y as slots; spread merge per axis", () => {
+    type V = { x: number; y: number };
+    const root = vec(0, 0) as unknown as Signal<V>;
+    const merged = root.merge(spreadPolicy<V>({ x: 0, y: 0 }));
+    const v = merged as unknown as Vec;
+    const fan = Signal.install(
+      Vec as unknown as new (...args: never[]) => Signal<V>,
+      () => v.value,
+      (_t: V) => {
+        batch(() => {
+          v.x.value = 7;
+          v.y.value = 9;
+        });
+      },
+    ) as unknown as Vec;
+    fan.value = { x: 7, y: 9 };
     expect(root.value).toEqual({ x: 7, y: 9 });
   });
 });
 
-describe("3. multiple fan-ins to the same root", () => {
-  it("two separate fan-ins are TWO cascades; each cascade has its own slot set", () => {
-    // Each `fan.value = …` is its own cascade. Inside one cascade
-    // the fan's bwd produces N slot contributions; the merge folds
-    // them and commits. The next cascade resets.
-    const root = withMerge(num(1), sumPolicy);
-    const a = root.add(1);
-    const b = root.scale(2);
-    const c = root.add(10);
-    const d = root.scale(3);
+describe("3. multiple fan-ins through the same merge", () => {
+  it("two separate top-level fan-in writes are TWO cascades", () => {
+    const merged = num(1).merge(sumPolicy);
+    const a = merged.add(1);
+    const b = merged.scale(2);
+    const c = merged.add(10);
+    const d = merged.scale(3);
     const fanAB = Num.lens(
       [a, b] as const,
       ([av, bv]) => av + bv,
@@ -164,21 +136,17 @@ describe("3. multiple fan-ins to the same root", () => {
       fanAB.value = 4;
       fanCD.value = 26;
     });
-    // At the END of the batch the slot map reflects only the LAST
-    // cascade's slots (fanCD's → c, d).
-    expect(peekMergeSlots(root)!.size).toBe(2);
+    // After the batch, slot map reflects ONLY the LAST cascade's
+    // slots (fanCD's → c, d).
+    expect(peekMergeSlots(merged)!.size).toBe(2);
   });
 
-  it("two fan-ins composed under a SINGLE outer fan-in: one cascade, all slots present", () => {
-    // The structural way to "merge two fan-ins' worth of writes"
-    // in one cascade: combine them under one outer fan-in whose
-    // bwd writes through both. Now ONE user call cascades through
-    // both inner structures, all four leaf-slots present.
-    const root = withMerge(num(1), sumPolicy);
-    const a = root.add(1);
-    const b = root.scale(2);
-    const c = root.add(10);
-    const d = root.scale(3);
+  it("two fan-ins composed under a SINGLE outer fan-in: one cascade, four slots", () => {
+    const merged = num(1).merge(sumPolicy);
+    const a = merged.add(1);
+    const b = merged.scale(2);
+    const c = merged.add(10);
+    const d = merged.scale(3);
     const fanAB = Num.lens(
       [a, b] as const,
       ([av, bv]) => av + bv,
@@ -204,14 +172,13 @@ describe("3. multiple fan-ins to the same root", () => {
       },
     );
     outer.value = 50;
-    // One cascade → four leaf slots (a, b, c, d) all present.
-    expect(peekMergeSlots(root)!.size).toBe(4);
+    expect(peekMergeSlots(merged)!.size).toBe(4);
   });
 
-  it("the SAME fan-in fired twice in one batch dedupes per-slot (each slot's last write wins)", () => {
-    const root = withMerge(num(1), sumPolicy);
-    const a = root.add(1);
-    const b = root.scale(2);
+  it("the SAME fan-in fired twice in one batch dedupes per-slot", () => {
+    const merged = num(1).merge(sumPolicy);
+    const a = merged.add(1);
+    const b = merged.scale(2);
     const fan = Num.lens(
       [a, b] as const,
       ([av, bv]) => av + bv,
@@ -222,27 +189,25 @@ describe("3. multiple fan-ins to the same root", () => {
     );
     batch(() => {
       fan.value = 4;
-      fan.value = 6; // second fan call overwrites a's and b's slot
+      fan.value = 6;
     });
-    // Still exactly 2 slots (a, b), each holding its LATEST
-    // contribution from the second `fan.value = 6` call.
-    expect(peekMergeSlots(root)!.size).toBe(2);
+    // Even after the batch (which contains 2 separate cascades),
+    // the slot map at the END holds 2 entries (a, b) with values
+    // from the LAST cascade (fan.value = 6).
+    expect(peekMergeSlots(merged)!.size).toBe(2);
   });
 });
 
 describe("4. nested fan-ins", () => {
-  it("inner fan-in's outputs are slots; outer fan-in distributes through them", () => {
-    // Topology:
-    //   root → a, b, c (via three lenses)
-    //   inner = lens([a, b]) — 2-arity fan-in
-    //   outer = lens([inner, c]) — 2-arity fan-in, one parent is itself a fan-in
-    // Writing outer cascades: outer's bwd writes to inner (which
-    // is itself a lens) and c. inner's setter then distributes to
-    // a and b. Slots at root: a, b, c. Three distinct slots.
-    const root = withMerge(num(1), sumPolicy);
-    const a = root.add(1);
-    const b = root.scale(2);
-    const c = root.add(10);
+  it("inner fan-in's outputs are NOT slots — only leaf-most writers above merge are", () => {
+    // outer.bwd splits to (inner, c). inner.bwd then splits to
+    // (a, b). All three (a, b, c) end up writing through `merged`,
+    // each as their own slot. `inner` ISN'T a slot — it never
+    // writes merged directly; it dispatches further to a and b.
+    const merged = num(1).merge(sumPolicy);
+    const a = merged.add(1);
+    const b = merged.scale(2);
+    const c = merged.add(10);
     const inner = Num.lens(
       [a, b] as const,
       ([av, bv]) => av + bv,
@@ -260,22 +225,20 @@ describe("4. nested fan-ins", () => {
       },
     );
     outer.value = 100;
-    expect(peekMergeSlots(root)!.size).toBe(3);
+    expect(peekMergeSlots(merged)!.size).toBe(3);
   });
 });
 
 describe("5. raw Signal.install user-authored lenses", () => {
-  it("a hand-rolled lens is a slot just like an engine-built one (when both share one cascade)", () => {
-    // The hand-rolled lens and the engine-built one must share ONE
-    // cascade for the merge to combine them — combine via a fan-in.
-    const root = withMerge(num(0), sumPolicy);
+  it("a hand-rolled lens is a slot like an engine-built one (when both share one cascade)", () => {
+    const merged = num(0).merge(sumPolicy);
     const handRolled = installNumLens(
-      () => root.value * 2,
+      () => merged.value * 2,
       v => {
-        root.value = v / 2;
+        merged.value = v / 2;
       },
     );
-    const engineBuilt = root.add(10); // engine-built via _fuse
+    const engineBuilt = merged.add(10);
     const fan = Num.lens(
       [handRolled, engineBuilt] as const,
       ([h, e]) => h + e,
@@ -284,53 +247,40 @@ describe("5. raw Signal.install user-authored lenses", () => {
         return [(t * h) / tot, (t * e) / tot];
       },
     );
-    fan.value = 33; // ONE cascade → both slots active
-    // Two slots populated; sum is what the merge folds.
-    expect(peekMergeSlots(root)!.size).toBe(2);
-    // Specific value depends on the distribution, but it must be
-    // finite and combine both contributions (≠ either individual).
-    expect(Number.isFinite(root.value)).toBe(true);
+    fan.value = 33;
+    expect(peekMergeSlots(merged)!.size).toBe(2);
+    expect(Number.isFinite(merged.value)).toBe(true);
   });
 
-  it("a hand-rolled lens that calls itself recursively still has a single slot identity", () => {
-    // Setter does extra writes through another lens. The other
-    // lens has ITS OWN slot identity — so even when the cascade
-    // crosses multiple lenses, each one contributes under its own
-    // identity, not the originator's.
-    const root = withMerge(num(0), sumPolicy);
+  it("a hand-rolled lens that calls another lens has TWO slots", () => {
+    // outer's setter writes merged twice: once through `inner` (slot
+    // identity = inner) and once directly (slot identity = outer).
+    // Two distinct slots, both contribute.
+    const merged = num(0).merge(sumPolicy);
     const inner = installNumLens(
-      () => root.value,
+      () => merged.value,
       v => {
-        root.value = v;
+        merged.value = v;
       },
     );
     const outer = installNumLens(
-      () => root.value,
+      () => merged.value,
       v => {
-        // outer's setter writes root via inner. While `inner.value =`
-        // runs, activeBwdWriter rotates to `inner` for that nested
-        // setter — so root sees the contribution under inner's slot,
-        // NOT outer's. Outer ALSO writes root directly afterward
-        // under its own slot. Two distinct slots, both alive.
-        inner.value = v;
-        root.value = v + 100;
+        inner.value = v; // contributes under slot `inner`
+        merged.value = v + 100; // contributes under slot `outer`
       },
     );
     outer.value = 1;
-    // inner's slot: 1; outer's slot: 101. Sum: 102.
-    expect(root.value).toBe(102);
-    expect(peekMergeSlots(root)!.size).toBe(2);
+    expect(merged.value).toBe(102); // inner: 1, outer: 101
+    expect(peekMergeSlots(merged)!.size).toBe(2);
   });
 });
 
 describe("6. coverage: every test produces a deterministic value", () => {
-  it("all topologies above commit a finite, non-NaN root value (smoke)", () => {
-    // Sanity: re-run a sample and confirm we don't accidentally
-    // produce NaN or Infinity from bad fold ordering. Specific
-    // values are asserted in the per-test blocks above.
-    const root = withMerge(num(1), sumPolicy);
-    const a = root.add(1);
-    const b = root.scale(2);
+  it("a smoke run produces finite values, not NaN/Infinity", () => {
+    const merged = num(1).merge(sumPolicy);
+    const a = merged.add(1);
+    const b = merged.scale(2);
     const fan = Num.lens(
       [a, b] as const,
       ([av, bv]) => av + bv,
@@ -340,6 +290,6 @@ describe("6. coverage: every test produces a deterministic value", () => {
       },
     );
     fan.value = 10;
-    expect(Number.isFinite(root.value)).toBe(true);
+    expect(Number.isFinite(merged.value)).toBe(true);
   });
 });

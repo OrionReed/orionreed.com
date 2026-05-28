@@ -5,6 +5,7 @@ export {
   _activeBwdWriter,
   _batchDepth,
   _bwdCascadeId,
+  _bwdSetterCaller,
   batch,
   derive,
   effect,
@@ -20,6 +21,8 @@ export {
   type Read,
   reader,
   readNow,
+  DIRECT_SLOT,
+  type MergePolicy,
   Signal,
   type SignalOptions,
   setSignalWriteHook,
@@ -51,14 +54,10 @@ export { derived, field } from "./writable";
 export { Num, num } from "./num";
 export { Vec, vec } from "./vec";
 export {
-  DIRECT_SLOT,
   maxPolicy,
-  meanPolicy,
-  meanScalarPolicy,
-  type MergePolicy,
   minPolicy,
   peekMergeAcc,
   peekMergeSlots,
+  spreadPolicy,
   sumPolicy,
-  withMerge,
 } from "./merge";
