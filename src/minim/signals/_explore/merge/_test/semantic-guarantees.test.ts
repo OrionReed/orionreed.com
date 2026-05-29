@@ -78,8 +78,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  _activeBwdWriter,
-  _bwdSetterCaller,
+  _bwdCascadeId,
   batch,
   DIRECT_SLOT,
   effect,
@@ -612,25 +611,32 @@ describe("G8: non-commutative policies have unspecified cross-slot order", () =>
 });
 
 // ════════════════════════════════════════════════════════════════
-// G9 — Engine-global quiescence
+// G9 — Cascade-id is the sole bwd engine global; subsequent writes
+//      remain attributable after exceptions
 // ════════════════════════════════════════════════════════════════
+//
+// Contract: the engine maintains exactly ONE piece of global state
+// for bwd cascades — `bwdCascadeId`, a monotonic counter bumped per
+// user `.value=`. Caller-identity for merges is stored per-cell
+// (`_lastCaller`), so no try/finally-guarded global stacks exist on
+// the bwd path. The user-observable invariant is: even after a
+// setter throws, future writes attribute correctly to merge slots.
 
-describe("G9: activeBwdWriter / bwdSetterCaller are undefined outside cascades", () => {
-  it("before any write, both are undefined", () => {
-    expect(_activeBwdWriter()).toBeUndefined();
-    expect(_bwdSetterCaller()).toBeUndefined();
+describe("G9: cascade id advances monotonically; correctness preserved across exceptions", () => {
+  it("each user-facing write advances bwdCascadeId", () => {
+    const r = signal(0);
+    const id0 = _bwdCascadeId();
+    r.value = 1;
+    const id1 = _bwdCascadeId();
+    r.value = 2;
+    const id2 = _bwdCascadeId();
+    expect(id1).toBeGreaterThan(id0);
+    expect(id2).toBeGreaterThan(id1);
   });
 
-  it("after a cascade completes, both return to undefined", () => {
+  it("after a thrown setter, subsequent writes still attribute correctly to merge slots", () => {
     const merged = num(0).merge(sumPolicy);
     const a = merged.add(1);
-    a.value = 5;
-    expect(_activeBwdWriter()).toBeUndefined();
-    expect(_bwdSetterCaller()).toBeUndefined();
-  });
-
-  it("after an exception during a cascade, both return to undefined (try/finally guarantee)", () => {
-    const merged = num(0).merge(sumPolicy);
     const bad = installNumLens(
       () => merged.value,
       _v => {
@@ -640,8 +646,18 @@ describe("G9: activeBwdWriter / bwdSetterCaller are undefined outside cascades",
     expect(() => {
       bad.value = 5;
     }).toThrow(/oops/);
-    expect(_activeBwdWriter()).toBeUndefined();
-    expect(_bwdSetterCaller()).toBeUndefined();
+
+    // The merge cell's `_lastCaller` may carry whatever the throwing
+    // lens stashed, but the NEXT cascade's first stash overwrites
+    // it. Validate end-to-end: a follow-up write through `a` still
+    // produces the correct slot attribution.
+    a.value = 7;
+    expect(merged.value).toBe(7 - 1); // bwd: subtract 1
+    // Slot map keyed by `a`, not by `bad` (no leak from the thrown
+    // call).
+    const slots = peekMergeSlots(merged);
+    expect(slots).toBeDefined();
+    expect(slots!.size).toBe(1);
   });
 });
 

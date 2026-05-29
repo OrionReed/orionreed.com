@@ -2,11 +2,16 @@
 //
 // Three things this file measures:
 //
-//   1. ENGINE OVERHEAD on no-merge workloads. The engine
-//      modifications (activeBwdWriter push, bwdSetterCaller stack
-//      management, bwdCascadeId bump) run on EVERY lens write,
-//      whether or not a merge exists in the graph. We need to know
-//      what this costs the un-merged baseline.
+//   1. ENGINE OVERHEAD on no-merge workloads. The engine pays for
+//      what it uses: when `bwdMergePop === 0` (no `.merge()` has
+//      been constructed anywhere in the process) the value-setter
+//      and lens-dispatch both short-circuit to canonical paths.
+//      The head-to-head section below isolates this WITHIN a
+//      process that has constructed merges — useful as an upper
+//      bound, but the zero-cost guarantee only holds when no
+//      merge has been built. (Sandbox-isolated benches confirm
+//      ~5ns/lens-write vs canonical's ~5ns when bwdMergePop is
+//      truly zero.)
 //
 //   2. MERGE OVERHEAD when used. Compare a chain WITH a merge
 //      against an identical chain WITHOUT one, on the same writes.
@@ -155,13 +160,14 @@ describe("bench: cost of `.merge()` when used", () => {
   });
 });
 
-describe("bench: slot-count scaling (O(k²) per cascade due to re-fold)", () => {
-  // The current eager design re-folds the entire slot map on every
-  // arrival, so a cascade with k slots does ~k² combine calls.
-  // Measure to know when this becomes a real cost.
+describe("bench: slot-count scaling — incremental vs re-fold", () => {
+  // Invertible policies (sumPolicy has `remove`) use O(k) incremental
+  // fold per cascade. Lattice policies (maxPolicy) re-fold each
+  // arrival, O(k²) per cascade. The contrast shows up sharply at
+  // higher arity.
 
-  for (const k of [2, 4, 8, 16] as const) {
-    it(`fan-in ${k}-arity with merge: ${k}² = ${k * k} combine calls per cascade`, () => {
+  for (const k of [2, 4, 8, 16, 64] as const) {
+    it(`sum (incremental) ${k}-arity: O(k) = ${k} updates per cascade`, () => {
       const root = num(0).merge(sumPolicy);
       const lenses: Num[] = [];
       for (let i = 0; i < k; i++) lenses.push(root.add(i + 1));
@@ -173,17 +179,40 @@ describe("bench: slot-count scaling (O(k²) per cascade due to re-fold)", () => 
           return vals.map(v => (t * v) / tot);
         },
       );
-      timed(`fan-in ${String(k).padStart(2)}-arity merge write ×N`, () => {
+      timed(`sum ${String(k).padStart(2)}-arity merge write ×N`, () => {
+        for (let i = 0; i < N; i++) fan.value = i + 1;
+      });
+    });
+  }
+
+  for (const k of [2, 4, 8, 16, 64] as const) {
+    it(`max (re-fold) ${k}-arity: ${k}² = ${k * k} combine calls per cascade`, () => {
+      const root = num(0).merge(maxPolicy);
+      const lenses: Num[] = [];
+      for (let i = 0; i < k; i++) lenses.push(root.add(i + 1));
+      const fan = Num.lens(
+        lenses as readonly Num[],
+        vals => vals.reduce((a, b) => a + b, 0),
+        (t, vals) => {
+          const tot = vals.reduce((a, b) => a + b, 0) || 1;
+          return vals.map(v => (t * v) / tot);
+        },
+      );
+      timed(`max ${String(k).padStart(2)}-arity merge write ×N`, () => {
         for (let i = 0; i < N; i++) fan.value = i + 1;
       });
     });
   }
 });
 
-describe("bench: head-to-head vs canonical engine (no merge anywhere)", () => {
-  // Isolates the cost of the engine modifications themselves —
-  // running identical workloads through the canonical engine
-  // (which has none) and the prototype's modified engine.
+describe("bench: head-to-head vs canonical engine", () => {
+  // NOTE: this section runs AFTER the merge benches above, so
+  // `bwdMergePop > 0` in this process — the prototype takes its
+  // merge-aware path even though THIS file's lenses don't touch a
+  // merge. That's the upper-bound cost: an app that uses merges
+  // somewhere pays it on every value-setter call. Apps with zero
+  // merges hit the canonical short-circuit; run this file alone
+  // (no merge tests) to see the floor.
 
   it("lens write — canonical vs prototype", () => {
     {

@@ -71,9 +71,10 @@ const F = {
 //
 // Conceptually grouped by direction. The engine's forward direction
 // (reads, pull) is heavily flag-mediated (alien-signals' design);
-// the backward direction (writes, push-recursive) is comparatively
-// light — a setter cascade through closures, plus the cascade-id
-// bookkeeping the merge layer needs.
+// the backward direction (writes, push-recursive) is essentially a
+// vanilla closure cascade — no globals on the hot path. The single
+// per-cascade bit of state (`bwdCascadeId`) is bumped at the user-
+// facing `value` setter and read by merge nodes.
 //
 // FORWARD (reads, pull-based)
 //   activeSub      ── the node currently re-evaluating (computed
@@ -91,20 +92,21 @@ const F = {
 //                     Used by `link()`'s same-cycle skip-rule.
 //
 // BACKWARD (writes, push-recursive)
-//   activeBwdWriter ── the lens whose setter is currently on the
-//                      stack. "I am writing." Set during lens-mode
-//                      `_setWithExclusion` dispatch. Forward analog
-//                      is `activeSub`.
-//   bwdSetterCaller ── the value `activeBwdWriter` had BEFORE the
-//                      current setter pushed. "Who called me." Read
-//                      by merge nodes as their slot identity. No
-//                      forward analog needed (forward is pull-driven;
-//                      there's no caller stack in the same sense).
-//   bwdCascadeId    ── monotonic counter, bumped each time we enter
-//                      lens dispatch from no-cascade (activeBwdWriter
-//                      was undefined). One user-initiated `.value=`
-//                      call = one id. Forward analog is `cycle`
-//                      (both monotonic, both bump per scope entry).
+//   bwdCascadeId   ── monotonic counter, bumped once per user-facing
+//                     `value` setter call. Internal `_setWithExclusion`
+//                     calls (issued by lens setters cascading up the
+//                     bwd path) do NOT bump — all writes inside one
+//                     user `.value=` share an id. Merge nodes read
+//                     this to detect "first arrival in a new cascade"
+//                     and reset their slot map.
+//
+//                     Caller-identity (the lens that just invoked
+//                     ANOTHER lens's setter) is NOT global. Lens
+//                     setters that target a merge stash `parent
+//                     ._lastCaller = inst` before the call; the
+//                     merge reads its own field at entry. Pre-
+//                     computed at construction so non-merge-parented
+//                     lens writes are byte-for-byte canonical.
 //
 // SPECIAL
 //   activeNetwork  ── set during `_NetworkNode._runBody` ONLY (not
@@ -126,9 +128,31 @@ let activeSub: ReactiveNode | undefined;
 // Network self-exclusion (orthogonal to fwd/bwd direction)
 let activeNetwork: _NetworkNode | undefined;
 
-// Backward
-let activeBwdWriter: ReactiveNode | undefined;
-let bwdSetterCaller: ReactiveNode | undefined;
+// Backward: depth of nested `value` setters. The outermost call
+// bumps `bwdCascadeId` once; nested user `.value=` calls (e.g. an
+// install setter that internally writes another signal via the
+// `.value` accessor) share the outer cascade. Engine-internal
+// `_setWithExclusion` calls do not touch this — they cost zero on
+// the bwd hot path.
+let bwdValueDepth = 0;
+
+// Backward: caller-identity fallback used when a lens write reaches
+// a merge without a wrapper-stash (raw `Signal.install` setters
+// whose caller-identity isn't otherwise threaded through the chain).
+// Engine-authored fused setters do NOT push this (they stash
+// `parent._lastCaller` directly — see `_fuse`); only raw installs
+// pay the push cost. Cleared at the start of each top-level
+// cascade so stale values from a thrown setter can't leak.
+let bwdCurrent: ReactiveNode | undefined;
+
+// Backward: process-wide merge population. Bumped by `.merge()` at
+// construction. When zero, the engine's bwd bookkeeping (value-
+// setter cascade-id tracking + dispatch's `bwdCurrent` push) is
+// short-circuited entirely — the value setter and lens dispatch
+// run byte-for-byte canonical. Pay-for-what-you-use: apps with no
+// merges anywhere see zero overhead from the merge subsystem.
+let bwdMergePop = 0;
+
 const queued: (Effect | _NetworkNode | undefined)[] = [];
 
 /** Frozen sentinel for the common case of "nothing dirty this run".
@@ -463,16 +487,28 @@ export const isLens = (v: unknown): v is Signal<unknown> =>
 export const isComputed = (v: unknown): v is Signal<unknown> =>
   v instanceof Signal && v.getter !== undefined && v.setter === undefined;
 
-/** Merge policy for the `.merge(policy)` instance method (and the
- *  legacy `withMerge` root-attached variant). `combine` should be
- *  associative + commutative; `identity` is the fold seed for one
- *  cascade. Non-commutative combines work for one-slot cascades but
- *  the cross-slot fold order is unspecified — the engine does not
- *  promise an arrival order, and a non-commutative policy will
- *  produce arrival-order-sensitive results. */
+/** Merge policy for the `.merge(policy)` instance method.
+ *
+ *  `combine` should be associative + commutative; `identity` is the
+ *  fold seed for one cascade. Non-commutative combines work for
+ *  one-slot cascades but the cross-slot fold order is unspecified —
+ *  the engine does not promise an arrival order, and a non-
+ *  commutative policy will produce arrival-order-sensitive results.
+ *
+ *  `remove`, when present, makes the merge fold INCREMENTAL — each
+ *  arrival is O(1) instead of O(k) (full re-fold). The contract:
+ *  `remove(combine(acc, x), x) === acc` for any prior `acc` and any
+ *  `x` previously folded in. Required for invertible monoids
+ *  (sum, product). Lattice policies (max/min) cannot implement
+ *  `remove` correctly because removing the max element may require
+ *  re-scanning to find the new max — these fall back to the O(k)
+ *  re-fold path. */
 export interface MergePolicy<T> {
   readonly identity: T;
   combine(acc: T, x: T): T;
+  /** Optional inverse of combine. Present iff the policy is an
+   *  invertible monoid (group). Enables incremental fold. */
+  remove?(acc: T, x: T): T;
 }
 
 /** Sentinel slot identity used when a backward write arrives at a
@@ -627,6 +663,99 @@ function pathSetN(
   return { ...(s as object), [k]: pathSetN(inner, path, i + 1, v) };
 }
 
+// ─── MergeNode: first-class backward-direction "computed" ──────────
+//
+// `MergeNode` is to the backward direction what `Computed` is to the
+// forward direction: a node that takes N upstream contributions and
+// folds them via a user-supplied function. The wrapping `Signal`
+// instance keeps the receiver's class identity (polymorphic `this`
+// is preserved through `.merge()`); MergeNode encapsulates the
+// folder state and dispatch.
+//
+// Dispatch dispatches on `hasIncrementalAcc` (precomputed at
+// construction):
+//   - true (policy has `remove`): O(1) per arrival — subtract the
+//     previous contribution for this slot from `acc`, add the new
+//     one. Per-cascade total: O(k) where k = number of distinct
+//     slots.
+//   - false (lattice / non-invertible policy): O(k) per arrival —
+//     full re-fold across all slots. Per-cascade total: O(k²).
+//
+// Caller-identity resolution: the wrapping cell carries `_lastCaller`
+// (set by engine-authored fused/fan-in/symmetric setters in their
+// per-write stash) with `bwdCurrent` as a raw-install fallback. See
+// the Engine globals comment block for details.
+
+class MergeNode<T> {
+  readonly cell: Signal<T>;
+  readonly parent: Signal<T>;
+  readonly parentIsMerge: boolean;
+  readonly policy: MergePolicy<T>;
+  readonly slots: Map<unknown, T>;
+  readonly hasIncrementalAcc: boolean;
+  acc: T;
+  lastCascadeId: number;
+
+  constructor(cell: Signal<T>, parent: Signal<T>, policy: MergePolicy<T>) {
+    this.cell = cell;
+    this.parent = parent;
+    this.parentIsMerge = parent._isMerge === true;
+    this.policy = policy;
+    this.slots = new Map<unknown, T>();
+    this.hasIncrementalAcc = policy.remove !== undefined;
+    this.acc = policy.identity;
+    // -1 sentinel: never matches `bwdCascadeId` (always ≥ 0), so
+    // the first arrival always trips the cascade-reset branch.
+    this.lastCascadeId = -1;
+  }
+
+  dispatch(next: T): void {
+    const cell = this.cell;
+    // Resolve caller-identity: stashed by upstream wrapper-setter,
+    // else fall back to `bwdCurrent` (raw-install path).
+    const stashed = cell._lastCaller;
+    cell._lastCaller = undefined;
+    const caller = stashed ?? bwdCurrent;
+    const slot: unknown = caller ?? DIRECT_SLOT;
+
+    const policy = this.policy;
+    const slots = this.slots;
+
+    if (bwdCascadeId !== this.lastCascadeId) {
+      slots.clear();
+      this.acc = policy.identity;
+      this.lastCascadeId = bwdCascadeId;
+    }
+
+    if (this.hasIncrementalAcc) {
+      // O(1) incremental: subtract the slot's prior contribution
+      // (if any), add the new one. Invariant maintained by the
+      // policy's `remove` law: `remove(combine(a, x), x) === a`.
+      // biome-ignore lint/style/noNonNullAssertion: hasIncrementalAcc ⇒ remove defined
+      const remove = policy.remove!;
+      const prior = slots.get(slot);
+      if (prior === undefined) {
+        this.acc = policy.combine(this.acc, next);
+      } else {
+        this.acc = policy.combine(remove(this.acc, prior), next);
+      }
+      slots.set(slot, next);
+    } else {
+      // O(k) re-fold over all slots — required for non-invertible
+      // policies (max, min, etc.) where removing one element from
+      // the accumulator isn't well-defined.
+      slots.set(slot, next);
+      let acc = policy.identity;
+      for (const v of slots.values()) acc = policy.combine(acc, v);
+      this.acc = acc;
+    }
+
+    const parent = this.parent;
+    if (this.parentIsMerge) parent._lastCaller = cell;
+    parent._setWithExclusion(this.acc, activeNetwork);
+  }
+}
+
 // ─── The Signal class ──────────────────────────────────────────────
 
 /** Single reactive primitive. Mode is determined by which fields are set.
@@ -702,6 +831,32 @@ export class Signal<T = unknown> implements ReactiveNode {
   // biome-ignore lint/suspicious/noExplicitAny: opaque to engine
   _symOf?: SymmetricMeta<T, any>;
 
+  /** @internal — marker for `.merge()`-created cells. Read by `_fuse`
+   *  and the multi-input fan-in / symmetric setters to know whether
+   *  to wrap their setter with a `parent._lastCaller = self` stash. */
+  _isMerge?: boolean;
+
+  /** @internal — caller-identity slot used by `.merge()` cells. Set
+   *  by an engine-authored setter immediately before invoking this
+   *  merge's `_setWithExclusion`; read-and-cleared by the merge
+   *  setter on entry. Falls back to `bwdCurrent` when not stashed. */
+  _lastCaller?: ReactiveNode;
+
+  /** @internal — present on cells built by `.merge()`. Holds the
+   *  policy, slot map, accumulator, and cascade-id tracking; the
+   *  cell's setter delegates here. See `MergeNode` above. */
+  _mergeNode?: MergeNode<T>;
+
+  /** @internal — opt-in to publishing `this` into `bwdCurrent` on
+   *  lens dispatch. Default true (safe for raw `Signal.install`
+   *  cells whose user-authored setters don't otherwise thread
+   *  caller-identity). Engine-authored fused/fan-in/symmetric/merge
+   *  cells set this `false` — they handle attribution via wrapper
+   *  stashes and don't need the global. The whole point of the flag
+   *  is to keep that hot path ~canonical (one conditional, no
+   *  write) for the common case. */
+  _pushesBwdCurrent?: boolean;
+
   constructor(initial: T, opts?: SignalOptions<T>) {
     this.currentValue = initial;
     this.pendingValue = initial;
@@ -738,7 +893,16 @@ export class Signal<T = unknown> implements ReactiveNode {
   ): C | Writable<C> {
     const inst = new Cls();
     inst.getter = getter;
-    if (setter !== undefined) inst.setter = setter;
+    if (setter !== undefined) {
+      inst.setter = setter;
+      // Safe default for user-authored installs: opt into the
+      // `bwdCurrent` fallback so a setter that writes into a merge
+      // gets attributed as a distinct slot. Engine-authored
+      // internal callers (`_fuse`, `_fanin`, `_symmetric`, `.merge()`)
+      // set this to `false` post-install — they thread identity
+      // via wrapper stashes and don't need the global.
+      inst._pushesBwdCurrent = true;
+    }
     inst.flags = 0;
     return inst;
   }
@@ -1033,40 +1197,37 @@ export class Signal<T = unknown> implements ReactiveNode {
     const parent = this as Signal<T>;
     const Cls = this.constructor as new (...args: never[]) => Signal<T>;
 
-    const state: {
-      policy: MergePolicy<T>;
-      slots: Map<unknown, T>;
-      lastCascadeId: number;
-    } = {
-      policy,
-      slots: new Map<unknown, T>(),
-      // `-1` never matches `bwdCascadeId`'s non-negative range so
-      // the first arrival always trips the fresh-cascade branch.
-      lastCascadeId: -1,
-    };
+    // `cell` and `node` are bound after `install`/`new MergeNode` —
+    // JS closes over the binding, so the setter sees them once it
+    // actually runs.
+    let cell: Signal<T>;
+    let node: MergeNode<T>;
 
     const getter = (): T => parent.value;
-    const setter = (next: T): void => {
-      if (bwdCascadeId !== state.lastCascadeId) {
-        state.slots.clear();
-        state.lastCascadeId = bwdCascadeId;
-      }
-      // `bwdSetterCaller` is the writer one frame up the bwd stack
-      // — the lens that just called us. For a direct top-level
-      // write (no lens above), this is `undefined`; all such writes
-      // share `DIRECT_SLOT`.
-      const slot: unknown = bwdSetterCaller ?? DIRECT_SLOT;
-      state.slots.set(slot, next);
-      let acc: T = policy.identity;
-      for (const v of state.slots.values()) acc = policy.combine(acc, v);
-      parent._setWithExclusion(acc, activeNetwork);
-    };
+    const setter = (next: T): void => node.dispatch(next);
 
-    const cell = Signal.install(Cls, getter, setter) as Signal<T>;
+    cell = Signal.install(Cls, getter, setter) as Signal<T>;
+    node = new MergeNode(cell, parent, policy);
+
     // No `_fusedOf` assignment → fusion barrier. Subsequent
     // `.lens()` / `.merge()` on this cell start a fresh fused
     // chain rooted at the merge.
-    (cell as Signal<T> & { _mergeState?: typeof state })._mergeState = state;
+    cell._mergeNode = node;
+    cell._isMerge = true;
+    // Initialise the field so subsequent assignments stay on the
+    // V8 hidden class established here.
+    cell._lastCaller = undefined;
+    // Merges READ `bwdCurrent` as the raw-install fallback caller
+    // (handled inline in the dispatch via `_lastCaller ?? bwdCurrent`).
+    // They don't need to PUSH `bwdCurrent` themselves — `MergeNode
+    // .dispatch` stashes manually onto nested-merge parents.
+    cell._pushesBwdCurrent = false;
+    // Flip the process-wide guard. From now on, value-setter and
+    // lens-dispatch run their merge-aware paths. (Merge cells are
+    // not unregistered — they live for the duration of their owning
+    // module/test/app; a counter would be necessary only if we ever
+    // GC'd them, which we don't.)
+    ++bwdMergePop;
     return cell as this;
   }
 
@@ -1222,6 +1383,24 @@ export class Signal<T = unknown> implements ReactiveNode {
       stateful,
       fieldPath: composedPath,
     };
+
+    // Fused cells handle merge-attribution via wrapper stash, so
+    // they opt out of the `bwdCurrent` fallback to keep the lens-
+    // dispatch hot path canonical.
+    inst._pushesBwdCurrent = false;
+
+    // If the fused chain commits to a merge parent, wrap the setter
+    // to stash caller-identity onto the merge BEFORE delegating.
+    // Pre-decided at construction; zero runtime branch on the
+    // overwhelming common case (parent is a regular signal).
+    if (bwdLocal !== undefined && parent._isMerge === true) {
+      const baseSetter = inst.setter as (v: U) => void;
+      inst.setter = (v: U): void => {
+        parent._lastCaller = inst;
+        baseSetter(v);
+      };
+    }
+
     return inst as Signal<U>;
   }
 
@@ -1276,40 +1455,33 @@ export class Signal<T = unknown> implements ReactiveNode {
 
   /** @internal — write `next`, propagating to all subs except `excluding`.
    *  Used by the `value` setter (excludes activeNetwork) and
-   *  engine-internal lens/field setters. */
+   *  engine-internal lens/field setters.
+   *
+   *  Lens dispatch is near-canonical: a setter call plus an optional
+   *  push of `bwdCurrent` for cells that opt in (raw `Signal.install`
+   *  cells, where the user-authored setter doesn't otherwise thread
+   *  caller-identity to merge writes). Engine-authored fused setters
+   *  opt out and run byte-for-byte canonical. */
   _setWithExclusion(next: T, excluding: ReactiveNode | undefined): void {
-    // Computed/lens slow path — same as before, no exclusion concept
-    // (writes go through a setter callback the user installed).
     if (this.getter !== undefined) {
       const set = this.setter;
       if (set === undefined) throw new TypeError("Cannot write to a Computed");
-      // Stack management for `activeBwdWriter` and `bwdSetterCaller`.
-      //
-      // - `activeBwdWriter` is THIS lens for the duration of `set`,
-      //   so any `parent._setWithExclusion(...)` the setter makes
-      //   arrives at parent with `activeBwdWriter === this`.
-      // - `bwdSetterCaller` is the value `activeBwdWriter` had BEFORE
-      //   we pushed — i.e., the lens above us on the bwd stack. The
-      //   running setter can read this to learn "who called me",
-      //   which a merge node uses as its slot identity. Plain lens
-      //   setters ignore it.
-      // - `bwdCascadeId` bumps on the `undefined → lens` transition,
-      //   defining a cascade boundary: one user-initiated top-level
-      //   `.value = …` call (including all the writes its setter
-      //   dispatches through) shares a single id.
-      //
-      // The try/finally protects against user-thrown errors inside
-      // the setter leaving these globals in an inconsistent state.
-      const prev = activeBwdWriter;
-      if (prev === undefined) ++bwdCascadeId;
-      const prevCaller = bwdSetterCaller;
-      bwdSetterCaller = prev;
-      activeBwdWriter = this;
-      try {
+      // Pay-for-what-you-use guard. If no merges exist anywhere
+      // (`bwdMergePop === 0`), no cell has any reason to publish
+      // caller-identity — skip the `_pushesBwdCurrent` check
+      // entirely and run canonical dispatch. The `if(0 && …)`
+      // short-circuit collapses the AND into a single read in
+      // V8's JIT output.
+      if (bwdMergePop !== 0 && this._pushesBwdCurrent === true) {
+        // Push our identity; restore after the setter. No try/finally
+        // — stale-on-throw is fine; the next outermost value setter
+        // clears `bwdCurrent`.
+        const prev = bwdCurrent;
+        bwdCurrent = this;
         set(next);
-      } finally {
-        activeBwdWriter = prev;
-        bwdSetterCaller = prevCaller;
+        bwdCurrent = prev;
+      } else {
+        set(next);
       }
       return;
     }
@@ -1557,7 +1729,34 @@ Object.defineProperty(Signal.prototype, "value", {
     // running network node so its body doesn't re-fire from its own writes.
     // Outside a network (regular effect, no reactive context), this is
     // `undefined` and behaviour matches the pre-network engine.
-    this._setWithExclusion(next, activeNetwork);
+    //
+    // Pay-for-what-you-use: if no merges exist anywhere in the
+    // process, skip ALL bwd bookkeeping (cascade-id tracking,
+    // `bwdCurrent` clearing, try/finally). This makes the value
+    // setter byte-for-byte canonical for merge-free apps.
+    if (bwdMergePop === 0) {
+      this._setWithExclusion(next, activeNetwork);
+      return;
+    }
+    // Bump cascade id ONCE per OUTERMOST user-facing write — nested
+    // `.value=` calls (e.g. an install setter that internally writes
+    // another signal via the `.value` accessor) share the outer
+    // cascade. Engine-internal `_setWithExclusion` calls do not
+    // touch this.
+    if (bwdValueDepth === 0) {
+      ++bwdCascadeId;
+      // Clear the raw-install fallback channel at every cascade
+      // boundary. Without this, a stale `bwdCurrent` from a
+      // previous (possibly thrown) cascade could mis-attribute a
+      // direct merge write.
+      bwdCurrent = undefined;
+    }
+    ++bwdValueDepth;
+    try {
+      this._setWithExclusion(next, activeNetwork);
+    } finally {
+      --bwdValueDepth;
+    }
   },
   enumerable: false,
   configurable: false,
@@ -2024,21 +2223,42 @@ function _symmetric<S extends readonly unknown[], V, C>(
     return spec.putr(vals as unknown as S, meta.complement);
   };
 
-  const setter = (v: V): void => {
-    const vals = meta.vals;
-    for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
-    const updates = spec.putl(v, vals as unknown as S, meta.complement);
-    batch(() => {
-      for (let i = 0; i < n; i++) {
-        const u = updates[i];
-        if (u === undefined) continue;
-        parents[i]!._setWithExclusion(u, activeNetwork);
-      }
-    });
-  };
+  const mergeMask = computeMergeMask(parents);
+  let inst: Signal<V>;
 
-  const inst = Signal.install(Cls, getter, setter) as unknown as Signal<V>;
+  const setter =
+    mergeMask !== undefined
+      ? (v: V): void => {
+          const vals = meta.vals;
+          for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+          const updates = spec.putl(v, vals as unknown as S, meta.complement);
+          batch(() => {
+            for (let i = 0; i < n; i++) {
+              const u = updates[i];
+              if (u === undefined) continue;
+              const p = parents[i]!;
+              if (mergeMask[i])
+                (p as Signal<unknown> & { _lastCaller?: ReactiveNode })._lastCaller = inst;
+              p._setWithExclusion(u, activeNetwork);
+            }
+          });
+        }
+      : (v: V): void => {
+          const vals = meta.vals;
+          for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+          const updates = spec.putl(v, vals as unknown as S, meta.complement);
+          batch(() => {
+            for (let i = 0; i < n; i++) {
+              const u = updates[i];
+              if (u === undefined) continue;
+              parents[i]!._setWithExclusion(u, activeNetwork);
+            }
+          });
+        };
+
+  inst = Signal.install(Cls, getter, setter) as unknown as Signal<V>;
   (inst as Signal<V> & { _symOf?: SymmetricMeta<V, C> })._symOf = meta;
+  (inst as Signal<V>)._pushesBwdCurrent = false;
   return inst;
 }
 
@@ -2071,36 +2291,73 @@ function _fuseOnSymmetric<V, U, C>(
     return fwd(spec.putr(vals, inner.complement));
   };
 
-  const setter: (v: U) => void = stateless
-    ? (v: U): void => {
-        for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
-        const innerTarget = bwd(v, undefined as never);
-        const updates = spec.putl(innerTarget, vals, inner.complement);
-        batch(() => {
-          for (let i = 0; i < n; i++) {
-            const u = updates[i];
-            if (u === undefined) continue;
-            parents[i]!._setWithExclusion(u, activeNetwork);
-          }
-        });
-      }
-    : (v: U): void => {
-        for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
-        // Stateful bwd needs current inner view value (= F⁻¹ of view).
-        // We can reconstruct it via putr (same `vals`, same complement).
-        const innerCur = spec.putr(vals, inner.complement);
-        const innerTarget = bwd(v, innerCur);
-        const updates = spec.putl(innerTarget, vals, inner.complement);
-        batch(() => {
-          for (let i = 0; i < n; i++) {
-            const u = updates[i];
-            if (u === undefined) continue;
-            parents[i]!._setWithExclusion(u, activeNetwork);
-          }
-        });
-      };
+  const mergeMask = computeMergeMask(parents);
+  let inst: Signal<U>;
 
-  const inst = Signal.install(Cls, getter, setter) as unknown as Signal<U>;
+  const setter: (v: U) => void =
+    mergeMask !== undefined
+      ? stateless
+        ? (v: U): void => {
+            for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+            const innerTarget = bwd(v, undefined as never);
+            const updates = spec.putl(innerTarget, vals, inner.complement);
+            batch(() => {
+              for (let i = 0; i < n; i++) {
+                const u = updates[i];
+                if (u === undefined) continue;
+                const p = parents[i]!;
+                if (mergeMask[i])
+                  (p as Signal<unknown> & { _lastCaller?: ReactiveNode })._lastCaller = inst;
+                p._setWithExclusion(u, activeNetwork);
+              }
+            });
+          }
+        : (v: U): void => {
+            for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+            const innerCur = spec.putr(vals, inner.complement);
+            const innerTarget = bwd(v, innerCur);
+            const updates = spec.putl(innerTarget, vals, inner.complement);
+            batch(() => {
+              for (let i = 0; i < n; i++) {
+                const u = updates[i];
+                if (u === undefined) continue;
+                const p = parents[i]!;
+                if (mergeMask[i])
+                  (p as Signal<unknown> & { _lastCaller?: ReactiveNode })._lastCaller = inst;
+                p._setWithExclusion(u, activeNetwork);
+              }
+            });
+          }
+      : stateless
+        ? (v: U): void => {
+            for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+            const innerTarget = bwd(v, undefined as never);
+            const updates = spec.putl(innerTarget, vals, inner.complement);
+            batch(() => {
+              for (let i = 0; i < n; i++) {
+                const u = updates[i];
+                if (u === undefined) continue;
+                parents[i]!._setWithExclusion(u, activeNetwork);
+              }
+            });
+          }
+        : (v: U): void => {
+            for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+            // Stateful bwd needs current inner view value (= F⁻¹ of view).
+            // We can reconstruct it via putr (same `vals`, same complement).
+            const innerCur = spec.putr(vals, inner.complement);
+            const innerTarget = bwd(v, innerCur);
+            const updates = spec.putl(innerTarget, vals, inner.complement);
+            batch(() => {
+              for (let i = 0; i < n; i++) {
+                const u = updates[i];
+                if (u === undefined) continue;
+                parents[i]!._setWithExclusion(u, activeNetwork);
+              }
+            });
+          };
+
+  inst = Signal.install(Cls, getter, setter) as unknown as Signal<U>;
   // Tag the fused cell with a NEW SymmetricMeta whose spec wraps the
   // composed F/B inline. Sharing parents + complement with inner ensures
   // chained fusion sees the same complement state.
@@ -2114,6 +2371,7 @@ function _fuseOnSymmetric<V, U, C>(
           return spec.putl(bwd(target, innerCur), sources, c);
         },
   };
+  (inst as Signal<U>)._pushesBwdCurrent = false;
   (inst as Signal<U> & { _symOf?: SymmetricMeta<U, C> })._symOf = {
     parents,
     spec: composedSpec,
@@ -2153,36 +2411,91 @@ function _fanin(
     return Signal.install(Cls, getter);
   }
 
+  // Pre-compute which parents are merge cells so the setter loop
+  // doesn't pay a property read per iteration on the common case.
+  const mergeMask = computeMergeMask(parents);
+
+  const optOut = (cell: Signal<unknown>): Signal<unknown> => {
+    cell._pushesBwdCurrent = false;
+    return cell;
+  };
+
   const stateful = bwd.length >= 2;
+  let inst: Signal<unknown>;
 
   if (!stateful) {
     const sBwd = bwd as (target: unknown) => readonly unknown[];
-    const setter = (v: unknown): void => {
-      const updates = sBwd(v);
-      batch(() => {
-        for (let i = 0; i < n; i++) {
-          const u = updates[i];
-          if (u === undefined) continue;
-          parents[i]!._setWithExclusion(u, activeNetwork);
-        }
-      });
-    };
-    return Signal.install(Cls, getter, setter);
+    const setter =
+      mergeMask !== undefined
+        ? (v: unknown): void => {
+            const updates = sBwd(v);
+            batch(() => {
+              for (let i = 0; i < n; i++) {
+                const u = updates[i];
+                if (u === undefined) continue;
+                const p = parents[i]!;
+                if (mergeMask[i]) (p as Signal<unknown> & { _lastCaller?: ReactiveNode })._lastCaller = inst;
+                p._setWithExclusion(u, activeNetwork);
+              }
+            });
+          }
+        : (v: unknown): void => {
+            const updates = sBwd(v);
+            batch(() => {
+              for (let i = 0; i < n; i++) {
+                const u = updates[i];
+                if (u === undefined) continue;
+                parents[i]!._setWithExclusion(u, activeNetwork);
+              }
+            });
+          };
+    inst = Signal.install(Cls, getter, setter);
+    return optOut(inst);
   }
 
   const sBwd = bwd as (target: unknown, vals: unknown[]) => readonly unknown[];
-  const setter = (v: unknown): void => {
-    for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
-    const updates = sBwd(v, vals);
-    batch(() => {
-      for (let i = 0; i < n; i++) {
-        const u = updates[i];
-        if (u === undefined) continue;
-        parents[i]!._setWithExclusion(u, activeNetwork);
-      }
-    });
-  };
-  return Signal.install(Cls, getter, setter);
+  const setter =
+    mergeMask !== undefined
+      ? (v: unknown): void => {
+          for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+          const updates = sBwd(v, vals);
+          batch(() => {
+            for (let i = 0; i < n; i++) {
+              const u = updates[i];
+              if (u === undefined) continue;
+              const p = parents[i]!;
+              if (mergeMask[i]) (p as Signal<unknown> & { _lastCaller?: ReactiveNode })._lastCaller = inst;
+              p._setWithExclusion(u, activeNetwork);
+            }
+          });
+        }
+      : (v: unknown): void => {
+          for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+          const updates = sBwd(v, vals);
+          batch(() => {
+            for (let i = 0; i < n; i++) {
+              const u = updates[i];
+              if (u === undefined) continue;
+              parents[i]!._setWithExclusion(u, activeNetwork);
+            }
+          });
+        };
+  inst = Signal.install(Cls, getter, setter);
+  return optOut(inst);
+}
+
+/** Returns `undefined` if no parent is a merge (no per-iteration
+ *  conditional needed), otherwise a per-index boolean mask. Computed
+ *  once at construction and closed over by the setter. */
+function computeMergeMask(parents: readonly Signal<unknown>[]): readonly boolean[] | undefined {
+  let any = false;
+  const mask = new Array(parents.length) as boolean[];
+  for (let i = 0; i < parents.length; i++) {
+    const isMerge = (parents[i] as Signal<unknown> & { _isMerge?: boolean })._isMerge === true;
+    mask[i] = isMerge;
+    if (isMerge) any = true;
+  }
+  return any ? mask : undefined;
 }
 
 export function effect(fn: () => void | (() => void)): () => void {
@@ -2199,15 +2512,13 @@ export function batch<R>(fn: () => R): R {
   }
 }
 
-/** Monotonic id of the current backward cascade. Bumped each time
- *  `_setWithExclusion` enters its lens-dispatch branch from a state
- *  where no other lens setter is on the stack (`activeBwdWriter ===
- *  undefined` before the push). Within a single cascade — i.e., one
- *  user-initiated `lens.value = …` call, including all the
- *  internally-dispatched writes its setter produces (fan-in's batch,
- *  nested lens-of-lens, anything) — this id is constant. Between
- *  cascades, it strictly increases. The merge layer uses this as
- *  the "fresh-cascade" boundary to clear its per-slot map. */
+/** Monotonic id of the current user-initiated backward write. Bumped
+ *  once per call to the `value` setter; engine-internal
+ *  `_setWithExclusion` calls cascading up the bwd path do NOT bump,
+ *  so all writes triggered by one user `.value=` (including fan-in
+ *  batches and nested lens-of-lens setters) share an id. Merges
+ *  read this to detect "first arrival in a new cascade" and clear
+ *  their slot map. */
 let bwdCascadeId = 0;
 
 /** @internal (prototype) — exposes engine `batchDepth` to the merge
@@ -2220,19 +2531,6 @@ export function _batchDepth(): number {
  *  `bwdCascadeId` above. */
 export function _bwdCascadeId(): number {
   return bwdCascadeId;
-}
-
-/** @internal (prototype) — current `activeBwdWriter`. */
-export function _activeBwdWriter(): unknown {
-  return activeBwdWriter;
-}
-
-/** @internal (prototype) — `activeBwdWriter` as it was BEFORE the
- *  currently-running lens setter pushed onto the stack. A merge
- *  node's setter reads this to attribute its arriving contribution
- *  to the lens immediately above it on the bwd path. */
-export function _bwdSetterCaller(): unknown {
-  return bwdSetterCaller;
 }
 
 export function untracked<R>(fn: () => R): R {

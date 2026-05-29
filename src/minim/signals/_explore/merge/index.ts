@@ -2,10 +2,8 @@
 // for the subset we copied; adds the merge primitives.
 
 export {
-  _activeBwdWriter,
   _batchDepth,
   _bwdCascadeId,
-  _bwdSetterCaller,
   batch,
   derive,
   effect,
@@ -58,6 +56,7 @@ export {
   minPolicy,
   peekMergeAcc,
   peekMergeSlots,
+  productPolicy,
   spreadPolicy,
   sumPolicy,
 } from "./merge";
