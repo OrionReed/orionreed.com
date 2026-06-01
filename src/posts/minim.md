@@ -37,6 +37,10 @@ The same machinery generalises to the Poincaré disc, where geodesics are circle
 
 <md-solar-system></md-solar-system>
 
+Circles are the easy case. Swap them for *real* Kepler ellipses and nothing about the invertibility story changes — because the only transcendental step lives on the read path. The forward chain solves `M = E − e·sin E` for the eccentric anomaly by Newton; the drag direction is the closed-form inverse `M = E − e·sin E`, and `dM/dE = 1 − e·cos E > 0` keeps it a bijection. So `time → M → E → pos` reads through Kepler's equation and `pos → E → M → time` writes back through its inverse. The speed-up at periapsis is Kepler's second law, free:
+
+<md-kepler-system></md-kepler-system>
+
 Same idea meshed: `g[i+1] = g[i].scale(-teeth_i / teeth_{i+1})` chained. Drag anywhere on a gear; the click point becomes an ephemeral grab handle. The drive integrator pauses while any gear is dragged:
 
 <md-gears></md-gears>
