@@ -44,6 +44,19 @@
 // the contributions it received (slots reset per settle); batching
 // (one settle) coalesces multiple writes, last-write-wins per slot.
 //
+// FAN-OUT — backward dual of fan-in
+// ─────────────────────────────────
+// A getter reading N parents is forward fan-in. Its backward dual is a
+// write that distributes to N parents: `_bwdFn(target)` returns a
+// per-parent update array and `cascadeBwd` FORKS into each parent
+// (`cascadeFanout`). This single primitive subsumes both `_fanin`
+// (N→M coupled writables, e.g. mean/diff, procrustes) and symmetric /
+// complement lenses. The "complement" — private lens memory that lets
+// lossy writes recover discarded info — is NOT a node: it is closure-
+// captured state in the getter/`_bwdFn`, with no subs, no dirty bits,
+// no propagation. Eager fan-out coalesces its N commits under one flush
+// (shared-ancestor merges still accumulate all contributions first).
+//
 // BATCHING
 //   * Outside batch: a write cascades eagerly and flushes — matching
 //     alien's synchronous per-write semantics.
@@ -301,6 +314,25 @@ export interface MergePolicy<T> {
   remove?(acc: T, x: T): T;
 }
 
+/** Spec for a complement-carrying symmetric lens over N parents.
+ *
+ *  The `complement` is private lens memory: information the view alone
+ *  discards (a collapsed cluster's shape, a multiplied-away sign), kept
+ *  so lossy writes can be recovered. It is NOT a graph node — it never
+ *  fans out, is never observed, and needs no subscriptions or dirty
+ *  bookkeeping. The engine stores it as nothing at all; `putr`/`putl`
+ *  close over it and mutate it in place. `putr` may refresh it on each
+ *  read (forward reads are NOT pure for symmetric lenses — that is the
+ *  defining property), and `putl` consults it to undo information loss.
+ *
+ *  `putr` returns the view; `putl` returns per-parent updates
+ *  (`undefined` ⇒ leave that parent untouched). */
+export interface SymmetricLensSpecN<S extends readonly unknown[], V, C> {
+  missing: C;
+  putr: (sources: S, complement: C) => V;
+  putl: (target: V, sources: S, complement: C) => ReadonlyArray<S[number] | undefined>;
+}
+
 export const DIRECT_SLOT: unique symbol = Symbol("merge:direct-slot");
 
 class MergeNode<T> {
@@ -363,10 +395,21 @@ export class Signal<T = unknown> implements ReactiveNode {
   currentValue: T;
   pendingValue: T;
 
-  /** Backward chain: the cell whose `put` produces this cell's upstream. */
+  /** Backward chain: the cell whose `put` produces this cell's upstream.
+   *  Single-parent lenses and merges use this. */
   _bwdParent: Signal<unknown> | undefined;
 
-  /** Lens `put`. Arity distinguishes `(t)=>p` from `(t,current)=>p`. */
+  /** Multi-output backward: the N direct parents a fan-in / symmetric
+   *  lens distributes writes to. When set, `_bwdParent` is unused and
+   *  `_bwdFn(target)` returns a per-parent update array (the dual of a
+   *  getter reading N parents). The cascade FORKS into each parent.
+   *  Any private lens state (a "complement") is closure-captured by the
+   *  getter/`_bwdFn` — it needs no node, no subs, no bookkeeping. */
+  _bwdParents: Signal<unknown>[] | undefined;
+
+  /** Lens `put`. Arity distinguishes `(t)=>p` from `(t,current)=>p`.
+   *  For multi-output cells, `_bwdFn(target)` returns an update array
+   *  and `_bwdFnArity` is irrelevant (the peek is baked into the fn). */
   // biome-ignore lint/suspicious/noExplicitAny: bwd fn is opaque shape
   _bwdFn: ((target: any, current?: any) => any) | undefined;
   _bwdFnArity: 1 | 2;
@@ -390,6 +433,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     this.depsTail = undefined;
     this.getter = undefined;
     this._bwdParent = undefined;
+    this._bwdParents = undefined;
     this._bwdFn = undefined;
     this._bwdFnArity = 1;
     this._mergeNode = undefined;
@@ -505,6 +549,67 @@ export class Signal<T = unknown> implements ReactiveNode {
     cell._isMerge = true;
     return cell;
   }
+
+  /** N-input lens (fan-in). Forward: `fwd(vals)` over the N parents'
+   *  values (auto-linked as deps — forward fan-in is just a getter
+   *  reading N cells). Backward: `bwd(target, vals?)` returns a
+   *  per-parent update array; the cascade forks into each parent.
+   *  Arity-dispatched — stateless `(t)=>updates` skips the parent peek;
+   *  stateful `(t, vals)=>updates` gets the current parent values.
+   *  Omit `bwd` for a read-only N-input derive. One scratch `vals`
+   *  array allocated, reused for read and write. */
+  static fanin<R>(
+    parents: readonly Signal<unknown>[],
+    fwd: (vals: readonly unknown[]) => R,
+    bwd?: (target: R, vals?: readonly unknown[]) => ReadonlyArray<unknown>,
+  ): Signal<R> {
+    const n = parents.length;
+    const vals = new Array<unknown>(n);
+    const cell = new Signal<R>(undefined as never);
+    cell.flags = F.Mutable | F.Dirty;
+    cell.getter = (): R => {
+      for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
+      return fwd(vals);
+    };
+    if (bwd === undefined) return cell; // read-only derive-N
+    cell._bwdParents = parents as Signal<unknown>[];
+    cell._bwdFn =
+      bwd.length >= 2
+        ? (target: unknown): unknown => {
+            for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+            return (bwd as (t: R, v: readonly unknown[]) => ReadonlyArray<unknown>)(
+              target as R,
+              vals,
+            );
+          }
+        : (target: unknown): unknown => (bwd as (t: R) => ReadonlyArray<unknown>)(target as R);
+    return cell;
+  }
+
+  /** N-input symmetric lens carrying a private complement. Sugar over
+   *  `fanin` where `putr`/`putl` share closure-captured complement
+   *  state (`spec.missing`, mutated in place). The complement is NOT a
+   *  cell — see `SymmetricLensSpecN`. */
+  static symmetric<R, C>(
+    parents: readonly Signal<unknown>[],
+    spec: SymmetricLensSpecN<readonly unknown[], R, C>,
+  ): Signal<R> {
+    const n = parents.length;
+    const vals = new Array<unknown>(n);
+    const complement = spec.missing;
+    const cell = new Signal<R>(undefined as never);
+    cell.flags = F.Mutable | F.Dirty;
+    cell.getter = (): R => {
+      for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
+      return spec.putr(vals, complement);
+    };
+    cell._bwdParents = parents as Signal<unknown>[];
+    cell._bwdFn = (target: unknown): unknown => {
+      for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+      return spec.putl(target as R, vals, complement);
+    };
+    return cell;
+  }
 }
 
 // Install `value` on the prototype (alien-signals pattern). V8 JITs a
@@ -596,6 +701,15 @@ function cascadeBwd(start: Signal<unknown>, target: unknown, deferred: boolean):
   let cell = start;
   let v = target;
   while (true) {
+    // Multi-output (fan-in / symmetric): compute the per-parent update
+    // array and FORK the cascade into each parent. This is the dual of
+    // a getter reading N parents — instead of one upstream value, the
+    // `put` yields N. The recursion handles each branch (source, lens,
+    // merge, or nested fan-in) uniformly.
+    if (cell._bwdParents !== undefined) {
+      cascadeFanout(cell, v, deferred);
+      return;
+    }
     const parent = cell._bwdParent!;
     let push: unknown;
     if (cell._isMerge) {
@@ -623,6 +737,50 @@ function cascadeBwd(start: Signal<unknown>, target: unknown, deferred: boolean):
     // Parent is a lens: keep walking, carrying its new view value.
     cell = parent;
     v = push;
+  }
+}
+
+/** Fork a multi-output cell's write into its N parents. `_bwdFn(target)`
+ *  returns the per-parent update array (`undefined` ⇒ leave parent
+ *  untouched); each defined update recurses via `cascadeBwd`.
+ *
+ *  Eager (unbatched) forks coalesce under a single flush: the N source
+ *  commits batch into one effect pass, and shared-ancestor merges
+ *  accumulate all contributions before folding — same guarantee
+ *  `batch()` gives. (A multi-output cell may be reached eagerly as the
+ *  start of a write OR mid-chain from an outer single lens, so the
+ *  coalescing must live here, not at the write entry point.) */
+function cascadeFanout(cell: Signal<unknown>, target: unknown, deferred: boolean): void {
+  const parents = cell._bwdParents!;
+  const updates = cell._bwdFn!(target) as ReadonlyArray<unknown>;
+  const n = parents.length;
+  if (deferred) {
+    forkInto(parents, updates, n);
+    return;
+  }
+  ++batchDepth;
+  try {
+    forkInto(parents, updates, n);
+  } finally {
+    if (!--batchDepth) flush();
+  }
+}
+
+/** Route each defined update to its parent. A source parent commits
+ *  directly (it has no backward chain to walk); a lens / fan-in / merge
+ *  parent re-enters the cascade. Always called under a bumped
+ *  `batchDepth`, so commits coalesce into one flush. */
+function forkInto(
+  parents: Signal<unknown>[],
+  updates: ReadonlyArray<unknown>,
+  n: number,
+): void {
+  for (let i = 0; i < n; i++) {
+    const u = updates[i];
+    if (u === undefined) continue;
+    const parent = parents[i]!;
+    if (parent.getter === undefined) parent._writeSource(u);
+    else cascadeBwd(parent, u, true);
   }
 }
 

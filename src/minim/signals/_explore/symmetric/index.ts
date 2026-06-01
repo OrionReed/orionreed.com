@@ -8,6 +8,7 @@ export {
   batch,
   untracked,
   type MergePolicy,
+  type SymmetricLensSpecN,
   DIRECT_SLOT,
 } from "./signal";
 
