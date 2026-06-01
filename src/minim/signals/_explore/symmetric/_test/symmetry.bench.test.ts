@@ -14,22 +14,24 @@
 //   - CANONICAL EXPLICIT: `Signal.install` with raw closures, no
 //                         fusion. Apples-to-apples vs symmetric.
 //   - MERGE PROTOTYPE:    Direction A+B (signal/index.ts in merge).
-//   - SYMMETRIC (lazy):   Direction C. Writes deposit + queue
-//                         only. Cascade deferred to next READ
-//                         (dual of fwd's lazy _update).
+//   - SYMMETRIC:          Direction C, pivot model. A bwd write walks
+//                         up applying `put`, commits the source via the
+//                         forward write path, then the SINGLE forward
+//                         propagate refreshes views. Eager outside a
+//                         batch (matches alien per-write semantics);
+//                         coalesced inside a batch.
 //
 // Workload variants tell different parts of the story:
 //
-//   PURE WRITES:        Writes only, no reads. Lazy bwd defers
-//                       cascade indefinitely → cheapest possible
-//                       per-write cost.
-//   1-WRITE + 1-READ:   Most common UI shape. Each cycle pays
-//                       deposit + cascade + lazy fwd resolve.
-//   10-WRITES + 1-READ: Write-heavy (animations, frame updates).
-//                       Lazy bwd coalesces N writes into one
-//                       cascade — natural batching.
-//   BATCHED:            Explicit batch() block with 10 writes.
-//                       Both engines coalesce.
+//   PURE WRITES:        Writes only, no reads. Eager cascade to the
+//                       source per write; views recompute lazily.
+//   1-WRITE + 1-READ:   Most common UI shape. Each cycle pays the
+//                       put-walk (commit source) + lazy fwd resolve.
+//   10-WRITES + 1-READ: Write-heavy (animations). Unbatched ⇒ each
+//                       write cascades (alien semantics). Batch to
+//                       coalesce.
+//   BATCHED:            Explicit batch() block with 10 writes. Writes
+//                       coalesce (last-write-wins per cell).
 
 import { describe, it } from "vitest";
 import * as canonical from "../../../index";
@@ -278,9 +280,10 @@ describe("BWD coalescing: 10 writes/batch on 5-deep chain", () => {
 
 // ─── Write-THEN-read patterns ───────────────────────────────────
 //
-// Lazy bwd defers cascades. Pure write benches understate the
-// total cost (deferred work isn't measured). These benches include
-// reads, showing what happens when commits are actually demanded.
+// A bwd write commits the source (put-walk); the following read
+// re-derives the views forward (get-walk). So a write+read pays ~2N
+// transforms — the principled cost for state-based lenses, where a
+// view is always `get(source)` and never a stashed bwd value.
 
 describe("write-then-read: 5-deep chain, 1 write + 1 read per iter", () => {
   it("CANONICAL EXPLICIT", () => {
@@ -294,7 +297,7 @@ describe("write-then-read: 5-deep chain, 1 write + 1 read per iter", () => {
     });
   });
 
-  it("SYMMETRIC (lazy)", () => {
+  it("SYMMETRIC", () => {
     const root = sym.signal(0);
     let cell: sym.Signal<number> = root;
     for (let i = 0; i < CHAIN; i++) {
@@ -328,7 +331,7 @@ describe("write-MANY-then-read: 10 writes followed by 1 read", () => {
     });
   });
 
-  it("SYMMETRIC (lazy — writes coalesce naturally)", () => {
+  it("SYMMETRIC (unbatched — each write cascades, alien semantics)", () => {
     const root = sym.signal(0);
     let cell: sym.Signal<number> = root;
     for (let i = 0; i < CHAIN; i++) {
@@ -339,7 +342,7 @@ describe("write-MANY-then-read: 10 writes followed by 1 read", () => {
       );
     }
     void cell.value;
-    timed("symmetric  10w+1r (no batch needed) ×N/10", () => {
+    timed("symmetric  10w+1r (no batch) ×N/10", () => {
       for (let b = 0; b < ITER; b++) {
         for (let i = 0; i < 10; i++) cell.value = i;
         void cell.value;

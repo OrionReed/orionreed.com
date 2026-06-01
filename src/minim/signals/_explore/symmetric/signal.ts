@@ -1,71 +1,85 @@
-// signal.ts — symmetric bidirectional engine prototype (v2).
+// signal.ts — symmetric bidirectional engine prototype.
 //
-// DESIGN PILLARS
-// ──────────────
-// 1. Forward and backward use the SAME primitive: flag-mediated
-//    propagation + lazy resolution + worklist drain at boundary.
-//    Both paths look symmetric in structure: write → mark → queue
-//    → flush.
+// GOAL
+// ────
+// Compete with alien-signals (the engine canonical is built on) on
+// absolute per-op cost in BOTH directions, while making backward
+// propagation as architecturally first-class as forward — and 100%
+// correct (passes the reactive-framework-test-suite forward).
 //
-// 2. Backward dispatch cost per cell ≤ forward dispatch cost per
-//    cell. Both are: flag check + queue push. No closure cascade
-//    at write time, no try/finally on hot path, no globals to
-//    push/pop.
+// DESIGN — the central realization
+// ────────────────────────────────
+// A backward write is NOT a separate propagation mechanism. It is a
+// *compiler* from a view-edit into source-edits. The walk up the
+// `_bwdParent` chain applies each lens's `put` to compute what the
+// SOURCE(s) must become; once committed, the EXACT SAME forward
+// machinery (propagate + value-gated checkDirty) refreshes every
+// downstream view. So:
 //
-// 3. Setters DO NOT run at write time. They run during flush, at
-//    most ONCE per cascade per lens. Multiple writes to the same
-//    lens within one cascade naturally coalesce — the latest
-//    pendingBwdValue wins, the setter sees only that.
+//   * Forward is alien-signals, verbatim. (link/propagate/checkDirty/
+//     shallowPropagate, Dirty/Pending/Recursed flags, lazy pull.)
+//   * Backward = "walk up, put, commit sources, then it's a forward
+//     write." No per-node propagation during the walk, no fusion,
+//     no second propagation engine.
 //
-// 4. No fusion. Each lens cell is a real, observable, addressable
-//    node. Fusion was a workaround for expensive eager dispatch;
-//    cheap dispatch makes it unnecessary complexity.
+// CONSEQUENCES (all desirable)
+//   * Views are never sticky: a view is always `get(source)`. Writing
+//     `a` through a lens commits `put(a, src)` to the source, and the
+//     view re-reads to `get(put(a, src))`. For well-behaved (PutGet)
+//     lenses that's `a`; for lossy lenses the view "snaps" — the
+//     principled behavior for state-based asymmetric lenses.
+//   * Short-circuit is free and value-gated: if the source delta is a
+//     no-op, the forward write no-ops, nothing fires. The "furthest
+//     upward changed node" (the pivot) is the source for chains, or a
+//     merge where contributions cancel.
+//   * Backward cost ≤ forward cost: the walk is N puts; the refresh is
+//     the same lazy, value-gated pull forward already pays. Reads that
+//     don't observe a node never recompute it.
 //
-// 5. Merge is the natural dual of Computed. Computed = N→1 forward
-//    derivation. Merge = N→1 backward aggregation. Both use the
-//    same machinery: dispatch fires once at flush, reads
-//    accumulated state, computes single value, deposits forward.
+// MERGE — backward dual of computed
+// ─────────────────────────────────
+// Computed = N→1 forward derivation. Merge = N→1 backward aggregation.
+// Contributions land in a slot map keyed by contributor identity and
+// fold via a user policy. Within one settle a merge re-aggregates only
+// the contributions it received (slots reset per settle); batching
+// (one settle) coalesces multiple writes, last-write-wins per slot.
 //
-// WORKLIST ALGORITHM
-// ──────────────────
-// At write time:
-//   - Deposit pending value at the cell.
-//   - Mark BwdPending + queue self.
-//   - That's it. NO ancestor walk.
-//
-// At flush:
-//   - Drain bwd queue in FIFO order (leaves first because written
-//     first). Each cell's setter (or merge fold) deposits at
-//     parent, which queues parent if not yet queued. Queue grows
-//     until quiescent.
-//   - Then drain fwd queue (effects).
-//
-// This naturally handles:
-//   - Multi-write coalescing (each cell drained once).
-//   - Topological correctness (parents drain after children).
-//   - Merges (contributions accumulate before parent fires).
-//   - Cascades from lens→merge→merge→signal of any shape.
+// BATCHING
+//   * Outside batch: a write cascades eagerly and flushes — matching
+//     alien's synchronous per-write semantics.
+//   * Inside batch / during flush: lens writes deposit their latest
+//     value and queue (last-write-wins via `_queueIdx`); merge folds
+//     defer to the queue drain so all contributors land first. The
+//     flush loop alternates bwd-drain / effect-drain to a fixpoint.
 
-// ─── Flags ────────────────────────────────────────────────────────
+// ─── Flags (alien-signals v2) ─────────────────────────────────────
 
 const F = {
   None: 0,
   Mutable: 1,
   Watching: 2,
-  Pending: 4,
-  Dirty: 8,
-  BwdPending: 16,
-  InBwdQueue: 32,
-  InFwdQueue: 64,
+  RecursedCheck: 4,
+  Recursed: 8,
+  Dirty: 16,
+  Pending: 32,
+  /** Backward-only: cell has a pending backward contribution queued. */
+  BwdQueued: 64,
 } as const;
 
-// ─── Engine globals ──────────────────────────────────────────────
+// ─── Engine globals ───────────────────────────────────────────────
 
+let cycle = 0;
+let runDepth = 0;
+let batchDepth = 0;
+let notifyIndex = 0;
+let queuedLength = 0;
 let activeSub: ReactiveNode | undefined;
-let writeDepth = 0;
-const bwdQueue: Signal<unknown>[] = [];
-const fwdQueue: ReactiveNode[] = [];
 let flushing = false;
+const queued: (Effect | undefined)[] = [];
+
+/** Backward worklist. Holds lens cells with deferred writes and merge
+ *  cells awaiting fold. Drained (to a fixpoint with effects) by flush. */
+const bwdQueue: Signal<unknown>[] = [];
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -77,73 +91,208 @@ interface ReactiveNode {
   subsTail: Link | undefined;
   _update(): boolean;
   _notify(): void;
+  _unwatched(): void;
 }
 
 interface Link {
+  version: number;
   dep: ReactiveNode;
   sub: ReactiveNode;
-  prevDep: Link | undefined;
-  nextDep: Link | undefined;
   prevSub: Link | undefined;
   nextSub: Link | undefined;
+  prevDep: Link | undefined;
+  nextDep: Link | undefined;
 }
 
-// ─── Linking / propagate / shallowDirty ──────────────────────────
+interface Stack<T> {
+  value: T;
+  prev: Stack<T> | undefined;
+}
 
-function link(dep: ReactiveNode, sub: ReactiveNode): void {
+// ─── alien-signals algorithm — link / unlink / propagate / etc. ───
+
+function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
   const prevDep = sub.depsTail;
   if (prevDep !== undefined && prevDep.dep === dep) return;
-  // Slower de-dup: scan deps. For prototype OK.
-  let scan = sub.deps;
-  while (scan !== undefined) {
-    if (scan.dep === dep) return;
-    scan = scan.nextDep;
+  const nextDep = prevDep !== undefined ? prevDep.nextDep : sub.deps;
+  if (nextDep !== undefined && nextDep.dep === dep) {
+    nextDep.version = version;
+    sub.depsTail = nextDep;
+    return;
   }
-  const l: Link = {
-    dep,
-    sub,
-    prevDep,
-    nextDep: undefined,
-    prevSub: dep.subsTail,
-    nextSub: undefined,
-  };
-  if (prevDep !== undefined) prevDep.nextDep = l;
-  else sub.deps = l;
-  sub.depsTail = l;
-  if (dep.subsTail !== undefined) dep.subsTail.nextSub = l;
-  else dep.subs = l;
-  dep.subsTail = l;
+  const prevSub = dep.subsTail;
+  if (prevSub !== undefined && prevSub.version === version && prevSub.sub === sub) return;
+  const newLink: Link =
+    (sub.depsTail =
+    dep.subsTail =
+      {
+        version,
+        dep,
+        sub,
+        prevDep,
+        nextDep,
+        prevSub,
+        nextSub: undefined,
+      });
+  if (nextDep !== undefined) nextDep.prevDep = newLink;
+  if (prevDep !== undefined) prevDep.nextDep = newLink;
+  else sub.deps = newLink;
+  if (prevSub !== undefined) prevSub.nextSub = newLink;
+  else dep.subs = newLink;
 }
 
-function propagate(start: Link): void {
+function unlink(l: Link, sub: ReactiveNode = l.sub): Link | undefined {
+  const { dep, prevDep, nextDep, nextSub, prevSub } = l;
+  if (nextDep !== undefined) nextDep.prevDep = prevDep;
+  else sub.depsTail = prevDep;
+  if (prevDep !== undefined) prevDep.nextDep = nextDep;
+  else sub.deps = nextDep;
+  if (nextSub !== undefined) nextSub.prevSub = prevSub;
+  else dep.subsTail = prevSub;
+  if (prevSub !== undefined) prevSub.nextSub = nextSub;
+  else if ((dep.subs = nextSub) === undefined) dep._unwatched();
+  return nextDep;
+}
+
+function propagate(start: Link, innerWrite: boolean): void {
   let l: Link | undefined = start;
-  while (l !== undefined) {
+  let next: Link | undefined = start.nextSub;
+  let stack: Stack<Link | undefined> | undefined;
+  top: do {
+    const sub: ReactiveNode = l!.sub;
+    let flags = sub.flags;
+    if (!(flags & (F.RecursedCheck | F.Recursed | F.Dirty | F.Pending))) {
+      sub.flags = flags | F.Pending;
+      if (innerWrite) sub.flags |= F.Recursed;
+    } else if (!(flags & (F.RecursedCheck | F.Recursed))) {
+      flags = F.None;
+    } else if (!(flags & F.RecursedCheck)) {
+      sub.flags = (flags & ~F.Recursed) | F.Pending;
+    } else if (!(flags & (F.Dirty | F.Pending)) && isValidLink(l!, sub)) {
+      sub.flags = flags | (F.Recursed | F.Pending);
+      flags &= F.Mutable;
+    } else {
+      flags = F.None;
+    }
+    if (flags & F.Watching) sub._notify();
+    if (flags & F.Mutable) {
+      const subSubs: Link | undefined = sub.subs;
+      if (subSubs !== undefined) {
+        const nextSub = (l = subSubs).nextSub;
+        if (nextSub !== undefined) {
+          stack = { value: next, prev: stack };
+          next = nextSub;
+        }
+        continue;
+      }
+    }
+    if ((l = next!) !== undefined) {
+      next = l.nextSub;
+      continue;
+    }
+    while (stack !== undefined) {
+      l = stack.value;
+      stack = stack.prev;
+      if (l !== undefined) {
+        next = l.nextSub;
+        continue top;
+      }
+    }
+    break;
+  } while (true);
+}
+
+function checkDirty(startLink: Link, startSub: ReactiveNode): boolean {
+  let l = startLink,
+    sub = startSub;
+  let stack: Stack<Link> | undefined;
+  let checkDepth = 0,
+    dirty = false;
+  top: do {
+    const dep = l.dep;
+    const flags = dep.flags;
+    if (sub.flags & F.Dirty) dirty = true;
+    else if ((flags & (F.Mutable | F.Dirty)) === (F.Mutable | F.Dirty)) {
+      const subs = dep.subs!;
+      if (dep._update()) {
+        if (subs.nextSub !== undefined) shallowPropagate(subs);
+        dirty = true;
+      }
+    } else if ((flags & (F.Mutable | F.Pending)) === (F.Mutable | F.Pending)) {
+      stack = { value: l, prev: stack };
+      l = dep.deps!;
+      sub = dep;
+      ++checkDepth;
+      continue;
+    }
+    if (!dirty) {
+      const nextDep = l.nextDep;
+      if (nextDep !== undefined) {
+        l = nextDep;
+        continue;
+      }
+    }
+    while (checkDepth--) {
+      l = stack!.value;
+      stack = stack!.prev;
+      if (dirty) {
+        const subs = sub.subs!;
+        if (sub._update()) {
+          if (subs.nextSub !== undefined) shallowPropagate(subs);
+          sub = l.sub;
+          continue;
+        }
+        dirty = false;
+      } else {
+        sub.flags &= ~F.Pending;
+      }
+      sub = l.sub;
+      const nextDep = l.nextDep;
+      if (nextDep !== undefined) {
+        l = nextDep;
+        continue top;
+      }
+    }
+    return dirty && !!sub.flags;
+  } while (true);
+}
+
+function shallowPropagate(l: Link): void {
+  do {
     const sub = l.sub;
     const flags = sub.flags;
-    if (!(flags & (F.Pending | F.Dirty))) {
-      sub.flags = flags | F.Pending;
-      if (flags & F.Watching && !(flags & F.InFwdQueue)) {
-        sub.flags |= F.InFwdQueue;
-        fwdQueue.push(sub);
-      }
-      if (sub.subs !== undefined) propagate(sub.subs);
+    if ((flags & (F.Pending | F.Dirty)) === F.Pending) {
+      sub.flags = flags | F.Dirty;
+      if ((flags & (F.Watching | F.RecursedCheck)) === F.Watching) sub._notify();
     }
-    l = l.nextSub;
-  }
+  } while ((l = l.nextSub!) !== undefined);
 }
 
-function shallowDirty(start: Link): void {
-  let l: Link | undefined = start;
+function isValidLink(checkLink: Link, sub: ReactiveNode): boolean {
+  let l = sub.depsTail;
   while (l !== undefined) {
-    const sub = l.sub;
-    if ((sub.flags & (F.Pending | F.Dirty)) === F.Pending) {
-      sub.flags = (sub.flags & ~F.Pending) | F.Dirty;
-    }
-    l = l.nextSub;
+    if (l === checkLink) return true;
+    l = l.prevDep;
+  }
+  return false;
+}
+
+function purgeDeps(sub: ReactiveNode): void {
+  const depsTail = sub.depsTail;
+  let dep = depsTail !== undefined ? depsTail.nextDep : sub.deps;
+  while (dep !== undefined) dep = unlink(dep, sub);
+}
+
+function disposeAllDepsInReverse(sub: ReactiveNode): void {
+  let l = sub.depsTail;
+  while (l !== undefined) {
+    const prev = l.prevDep;
+    unlink(l, sub);
+    l = prev;
   }
 }
 
-// ─── MergeNode ───────────────────────────────────────────────────
+// ─── MergeNode — backward fan-in ──────────────────────────────────
 
 export interface MergePolicy<T> {
   readonly identity: T;
@@ -155,15 +304,13 @@ export interface MergePolicy<T> {
 export const DIRECT_SLOT: unique symbol = Symbol("merge:direct-slot");
 
 class MergeNode<T> {
-  readonly cell: Signal<T>;
   readonly parent: Signal<T>;
   readonly policy: MergePolicy<T>;
   readonly slots: Map<unknown, T> = new Map();
   readonly hasIncrementalAcc: boolean;
   acc: T;
 
-  constructor(cell: Signal<T>, parent: Signal<T>, policy: MergePolicy<T>) {
-    this.cell = cell;
+  constructor(parent: Signal<T>, policy: MergePolicy<T>) {
     this.parent = parent;
     this.policy = policy;
     this.hasIncrementalAcc = policy.remove !== undefined;
@@ -172,7 +319,6 @@ class MergeNode<T> {
 
   receive(slot: unknown, next: T): void {
     if (this.hasIncrementalAcc) {
-      // biome-ignore lint/style/noNonNullAssertion: gated by hasIncrementalAcc
       const remove = this.policy.remove!;
       const prior = this.slots.get(slot);
       if (prior === undefined) this.acc = this.policy.combine(this.acc, next);
@@ -194,31 +340,7 @@ class MergeNode<T> {
   }
 }
 
-// ─── Helper: deposit + queue ─────────────────────────────────────
-
-function bwdDeposit(cell: Signal<unknown>, value: unknown): void {
-  if (cell.getter === undefined) {
-    cell.pendingValue = value;
-  } else {
-    cell._pendingBwdValue = value;
-  }
-  if (!(cell.flags & F.InBwdQueue)) {
-    cell.flags |= F.BwdPending | F.InBwdQueue;
-    bwdQueue.push(cell);
-  }
-}
-
-function bwdContribute(merge: Signal<unknown>, slot: unknown, value: unknown): void {
-  // biome-ignore lint/style/noNonNullAssertion: caller checks _mergeNode
-  merge._mergeNode!.receive(slot, value);
-  if (!(merge.flags & F.InBwdQueue)) {
-    merge.flags |= F.BwdPending | F.InBwdQueue;
-    bwdQueue.push(merge);
-  }
-}
-
-
-// ─── Signal class ────────────────────────────────────────────────
+// ─── Signal class ─────────────────────────────────────────────────
 
 export class Signal<T = unknown> implements ReactiveNode {
   flags: number = F.Mutable;
@@ -227,159 +349,185 @@ export class Signal<T = unknown> implements ReactiveNode {
   deps: Link | undefined;
   depsTail: Link | undefined;
 
+  /** Forward derivation (computed/lens/merge). `undefined` ⇒ source. */
   getter: (() => T) | undefined;
-  setter: ((v: T) => void) | undefined;
 
-  currentValue!: T;
-  pendingValue!: T;
-  cachedValue!: T;
+  /** Source-mode value cells. `cachedValue` is the computed-mode cell. */
+  currentValue: T;
+  pendingValue: T;
+  cachedValue: T;
 
-  _bwdParent?: Signal<unknown>;
-  _bwdParents?: readonly Signal<unknown>[];
-  _pendingBwdValue?: T;
+  /** Backward chain: the cell whose `put` produces this cell's upstream. */
+  _bwdParent: Signal<unknown> | undefined;
+  /** Deferred (batched) backward write target for this lens. */
+  _pendingBwdValue: T | undefined;
 
-  /** Engine-only queue-mode setter. Lens cells set this alongside
-   *  `setter` (eager). Separating eliminates a runtime branch on
-   *  every call: `setter` is invoked only in eager mode, `_qSetter`
-   *  only from inside flush. */
-  _qSetter?: (target: T) => void;
+  /** Lens `put`. Arity distinguishes `(t)=>p` from `(t,current)=>p`. */
+  // biome-ignore lint/suspicious/noExplicitAny: bwd fn is opaque shape
+  _bwdFn: ((target: any, current?: any) => any) | undefined;
+  _bwdFnArity: 1 | 2;
 
-  _mergeNode?: MergeNode<T>;
-  _isMerge?: boolean;
+  _mergeNode: MergeNode<T> | undefined;
+  _isMerge: boolean;
+
+  /** Index in `bwdQueue` of this cell's LATEST push. The drain skips
+   *  entries whose `_queueIdx` ≠ their position, so each cell cascades
+   *  once per flush in last-write order. */
+  _queueIdx: number;
 
   constructor(initial: T) {
     this.currentValue = initial;
     this.pendingValue = initial;
     this.cachedValue = initial;
+    // Pre-init every optional slot so the V8 hidden class is stable
+    // across signal / computed / lens / merge variants.
+    this.subs = undefined;
+    this.subsTail = undefined;
+    this.deps = undefined;
+    this.depsTail = undefined;
+    this.getter = undefined;
+    this._bwdParent = undefined;
+    this._pendingBwdValue = undefined;
+    this._bwdFn = undefined;
+    this._bwdFnArity = 1;
+    this._mergeNode = undefined;
+    this._isMerge = false;
+    this._queueIdx = -1;
   }
 
-  // ── Forward read ──
+  // ── Forward read (alien-signals verbatim) ──
 
   get value(): T {
-    if (activeSub !== undefined) link(this, activeSub);
-    // Lazy bwd: if any cell in the system has a pending bwd write
-    // (cheap to check via a global counter alternative — for now,
-    // just check own BwdPending and rely on dependents being marked
-    // transitively). Flush drains the bwd queue first.
-    if (bwdQueue.length > 0 && !flushing) flush();
+    const flags = this.flags;
     if (this.getter !== undefined) {
-      if (this.flags & (F.Pending | F.Dirty)) this._update();
+      if (flags & F.RecursedCheck) {
+        throw new RangeError(
+          `Cyclic computed: ${(this.constructor as { name?: string }).name ?? "?"} read its own value`,
+        );
+      }
+      if (
+        flags & F.Dirty ||
+        (flags & F.Pending &&
+          (checkDirty(this.deps!, this) || ((this.flags = flags & ~F.Pending), false)))
+      ) {
+        if (this._update()) {
+          const subs = this.subs;
+          if (subs !== undefined) shallowPropagate(subs);
+        }
+      } else if (!flags) {
+        // First read: lazy init.
+        this.flags = F.Mutable | F.RecursedCheck;
+        const prev = activeSub;
+        activeSub = this;
+        let threw = true;
+        try {
+          this.cachedValue = this.getter!();
+          threw = false;
+        } finally {
+          activeSub = prev;
+          this.flags = threw ? F.Mutable | F.Dirty : this.flags & ~F.RecursedCheck;
+        }
+      }
+      if (activeSub !== undefined) link(this, activeSub, cycle);
       return this.cachedValue;
     }
+    // Signal path.
+    if (flags & F.Dirty) {
+      this.flags = F.Mutable;
+      if (this.currentValue !== (this.currentValue = this.pendingValue)) {
+        const subs = this.subs;
+        if (subs !== undefined) shallowPropagate(subs);
+      }
+    }
+    if (activeSub !== undefined) link(this, activeSub, cycle);
     return this.currentValue;
   }
 
-  // ── Backward write entry ──
-  //
-  // HYBRID DISPATCH MODEL
-  //
-  //   Outside any batch/flush, single writes take an EAGER fast
-  //   path that matches canonical's shape: signals commit + propagate
-  //   inline; lenses synchronously cascade their setters; merges
-  //   receive + fold + cascade. Per-cell cost matches canonical.
-  //
-  //   Inside a batch or during a flush, writes take the QUEUE
-  //   slow path: deposit + mark + enqueue. The outer flush drains
-  //   in worklist order, coalescing multi-writes (each cell's setter
-  //   runs at most once per cascade).
-  //
-  //   This preserves canonical's per-write semantics outside batches
-  //   while delivering the coalescing payoff inside batches.
-
-  // ── Backward write entry — FULLY LAZY ──
-  //
-  // True dual of fwd: writes JUST deposit + queue. The setter
-  // cascade is deferred and runs at most once per cell per
-  // cascade (regardless of how many writes hit it).
-  //
-  // FLUSH TRIGGERS (cascade actually runs at one of these):
-  //   1. A subsequent READ of any BwdPending cell.
-  //   2. End of an explicit `batch()` block.
-  //   3. Subscriber Watching (effect) re-fire — only if writes
-  //      propagated Pending into subs requiring an immediate
-  //      effect run (auto-flushed at writeDepth → 0).
-  //
-  // Per-write cost (no subs): ~10ns — just deposit + queue.
-  // Symmetric to fwd write cost. Cascade amortizes across reads.
+  // ── Write entry — forward (source) or backward (lens/merge) ──
 
   set value(next: T) {
-    if (this._isMerge === true) {
-      bwdContribute(this as Signal<unknown>, DIRECT_SLOT, next);
-    } else if (this.getter === undefined) {
-      if (this._equalsCheck(this.pendingValue, next)) return;
-      this.pendingValue = next;
-      if (!(this.flags & F.InBwdQueue)) {
-        this.flags |= F.BwdPending | F.InBwdQueue;
-        bwdQueue.push(this as Signal<unknown>);
-      }
-    } else if (this.setter === undefined) {
-      throw new TypeError("Cannot write to a computed");
-    } else {
-      this._pendingBwdValue = next;
-      if (!(this.flags & F.InBwdQueue)) {
-        this.flags |= F.BwdPending | F.InBwdQueue;
-        bwdQueue.push(this as Signal<unknown>);
-      }
-    }
-    // Notify downstream readers that the value here will change.
-    // Effects get queued in fwdQueue; computeds/lenses get marked
-    // Dirty so their next read re-derives. The bwd commit itself
-    // is deferred until a read or the auto-flush below.
-    if (this.subs !== undefined) {
-      propagate(this.subs);
-      shallowDirty(this.subs);
-    }
-    // Auto-flush effects at top-level write boundary (so effects
-    // fire predictably, alien-style). Effects re-run, read deps;
-    // reads trigger bwd cascade on demand.
-    if (writeDepth === 0 && !flushing && fwdQueue.length > 0) flush();
-  }
-
-  _setWithExclusion(next: T): void {
-    // Identical to set value's deposit logic, but without the
-    // boundary-flush. Used internally during flush by setters
-    // depositing at their parents.
-    if (this._isMerge === true) {
-      bwdContribute(this as Signal<unknown>, DIRECT_SLOT, next);
-      return;
-    }
     if (this.getter === undefined) {
-      if (this._equalsCheck(this.pendingValue, next)) return;
-      this.pendingValue = next;
-      if (!(this.flags & F.InBwdQueue)) {
-        this.flags |= F.BwdPending | F.InBwdQueue;
-        bwdQueue.push(this as Signal<unknown>);
-      }
+      this._writeSource(next);
       return;
     }
-    if (this.setter === undefined) throw new TypeError("Cannot write to a computed");
-    this._pendingBwdValue = next;
-    if (!(this.flags & F.InBwdQueue)) {
-      this.flags |= F.BwdPending | F.InBwdQueue;
-      bwdQueue.push(this as Signal<unknown>);
+    // Backward write. Deferred while batching / flushing so that
+    // repeated writes coalesce (last-write-wins) and merge folds wait
+    // for all contributors; eager + synchronous otherwise.
+    const deferred = batchDepth > 0 || flushing;
+    if (this._isMerge) {
+      this._mergeNode!.receive(DIRECT_SLOT, next);
+      if (deferred) this._enqueueBwd();
+      else cascadeBwd(this as Signal<unknown>, undefined, false);
+    } else if (this._bwdFn === undefined) {
+      throw new TypeError("Cannot write to a computed");
+    } else if (deferred) {
+      this._pendingBwdValue = next;
+      this._enqueueBwd();
+    } else {
+      cascadeBwd(this as Signal<unknown>, next, false);
     }
   }
 
-  _equalsCheck(a: T, b: T): boolean {
-    return a === b;
+  _enqueueBwd(): void {
+    this.flags |= F.BwdQueued;
+    this._queueIdx = bwdQueue.length;
+    bwdQueue.push(this as Signal<unknown>);
+  }
+
+  /** Source write — alien-signals' signal setter, sans exclusion. */
+  _writeSource(next: T): void {
+    const prev = this.pendingValue;
+    this.pendingValue = next;
+    if (prev !== next) {
+      this.flags = F.Mutable | F.Dirty;
+      const subs = this.subs;
+      if (subs !== undefined) propagate(subs, runDepth > 0);
+      if (batchDepth === 0 && !flushing && subs !== undefined) flush();
+    }
   }
 
   _update(): boolean {
+    if (this.getter !== undefined) {
+      // Computed / lens / merge: re-run the forward derivation.
+      this.depsTail = undefined;
+      this.flags = F.Mutable | F.RecursedCheck;
+      const prev = activeSub;
+      activeSub = this;
+      let threw = true;
+      try {
+        ++cycle;
+        const old = this.cachedValue;
+        const next = (this.cachedValue = this.getter());
+        threw = false;
+        return old !== next;
+      } finally {
+        activeSub = prev;
+        this.flags = threw ? F.Mutable | F.Dirty : this.flags & ~F.RecursedCheck;
+        purgeDeps(this);
+      }
+    }
+    this.flags = F.Mutable;
+    return this.currentValue !== (this.currentValue = this.pendingValue);
+  }
+
+  _notify(): void {}
+
+  _unwatched(): void {
+    if (this.getter !== undefined && this.depsTail !== undefined) {
+      this.flags = F.Mutable | F.Dirty;
+      disposeAllDepsInReverse(this);
+    }
+  }
+
+  peek(): T {
     const prev = activeSub;
-    activeSub = this;
+    activeSub = undefined;
     try {
-      // biome-ignore lint/style/noNonNullAssertion: getter set in computed/lens mode
-      const next = this.getter!();
-      this.flags = (this.flags & ~(F.Pending | F.Dirty)) | F.Mutable;
-      if (this._equalsCheck(this.cachedValue, next)) return false;
-      this.cachedValue = next;
-      return true;
+      return this.value;
     } finally {
       activeSub = prev;
     }
   }
-
-  _notify(): void {}
 
   // ── Construction helpers ──
 
@@ -388,74 +536,83 @@ export class Signal<T = unknown> implements ReactiveNode {
     fwd: (v: P) => R,
     bwd: (target: R, current: P) => P,
   ): Signal<R> {
-    const cell = new Signal<R>(fwd(parent.peek()));
-    cell.flags |= F.Dirty; // force first read to run getter and establish fwd links
+    const cell = new Signal<R>(undefined as never);
+    cell.flags = F.Mutable | F.Dirty;
     cell.getter = (): R => fwd(parent.value as P);
-    // Eager setter: synchronous cascade. Branchless for the common
-    // case (no merge): peek + bwd + cascade. Merge-rare path is
-    // inline for monomorphic JIT.
-    cell.setter = (target: R): void => {
-      const upstream = bwd(target, parent.peek());
-      const p = parent as Signal<unknown>;
-      const m = p._mergeNode;
-      if (m === undefined) p._commitEager(upstream as never);
-      else {
-        m.receive(cell, upstream);
-        const acc = m.fold();
-        m.reset();
-        (m.parent as Signal<unknown>)._commitEager(acc);
-      }
-    };
-    // Queue setter: deferred, reads parent's pending if mid-flush.
-    cell._qSetter = (target: R): void => {
-      const p = parent as Signal<unknown>;
-      const current =
-        p._pendingBwdValue !== undefined ? (p._pendingBwdValue as P) : (parent.peek() as P);
-      const upstream = bwd(target, current);
-      if (p._mergeNode !== undefined) bwdContribute(p, cell, upstream);
-      else bwdDeposit(p, upstream);
-    };
+    cell._bwdFn = bwd as (target: unknown, current?: unknown) => unknown;
+    cell._bwdFnArity = bwd.length >= 2 ? 2 : 1;
     cell._bwdParent = parent as Signal<unknown>;
     return cell;
   }
 
   static derive<P, R>(parent: Signal<P>, fn: (v: P) => R): Signal<R> {
-    const cell = new Signal<R>(fn(parent.peek()));
-    cell.flags |= F.Dirty;
+    const cell = new Signal<R>(undefined as never);
+    cell.flags = F.Mutable | F.Dirty;
     cell.getter = (): R => fn(parent.value as P);
     return cell;
   }
 
-  /** Backward-aggregating node. Bwd dual of Computed.
-   *  Receives contributions from upstream lenses (via slot map)
-   *  and from direct writes (under DIRECT_SLOT). Folds at flush. */
+  /** Backward-aggregating node — bwd dual of computed. Forward, it is
+   *  the identity view of its parent; backward, it folds contributions
+   *  from upstream lenses (slot-keyed) and direct writes (DIRECT_SLOT). */
   merge(this: Signal<T>, policy: MergePolicy<T>): Signal<T> {
-    // Receiver must be writable: either a Signal source, a Lens
-    // (getter+setter), or another Merge (writes via _isMerge path).
-    if (this.getter !== undefined && this.setter === undefined && this._isMerge !== true) {
-      throw new TypeError("merge: receiver is RO");
+    if (this.getter !== undefined && this._bwdFn === undefined && !this._isMerge) {
+      throw new TypeError("merge: receiver is read-only");
     }
     const parent = this as Signal<T>;
-    const cell = new Signal<T>(parent.peek());
-    cell.flags |= F.Dirty;
+    const cell = new Signal<T>(undefined as never);
+    cell.flags = F.Mutable | F.Dirty;
     cell.getter = (): T => parent.value;
-    cell.setter = undefined; // direct writes go via _setWithExclusion → bwdContribute
     cell._bwdParent = parent as Signal<unknown>;
-    cell._mergeNode = new MergeNode<T>(cell, parent, policy);
+    cell._mergeNode = new MergeNode<T>(parent, policy);
     cell._isMerge = true;
     return cell;
   }
+}
 
-  peek(): T {
-    if (this.getter !== undefined) {
-      if (this.flags & (F.Pending | F.Dirty)) this._update();
-      return this.cachedValue;
+// ─── Backward cascade ─────────────────────────────────────────────
+//
+// Walk up `_bwdParent`, applying `put` at each lens / folding at each
+// merge, until a source is committed (via the forward write path) or a
+// parent merge is reached. `deferred` (inside batch / flush) stops at a
+// parent merge after depositing — the merge folds later, once all
+// contributors have landed. Eager folds merges inline.
+
+function cascadeBwd(start: Signal<unknown>, target: unknown, deferred: boolean): void {
+  let cell = start;
+  let v = target;
+  while (true) {
+    const parent = cell._bwdParent!;
+    let push: unknown;
+    if (cell._isMerge) {
+      const node = cell._mergeNode!;
+      push = node.fold();
+      node.reset();
+    } else {
+      push = cell._bwdFnArity === 1 ? cell._bwdFn!(v) : cell._bwdFn!(v, parent.peek());
     }
-    return this.currentValue;
+
+    if (parent._isMerge) {
+      parent._mergeNode!.receive(cell, push);
+      if (deferred) {
+        if (!(parent.flags & F.BwdQueued)) parent._enqueueBwd();
+        return;
+      }
+      cell = parent;
+      continue;
+    }
+    if (parent.getter === undefined) {
+      // Source: commit + forward-propagate. This IS the forward write.
+      parent._writeSource(push);
+      return;
+    }
+    // Parent is a lens: keep walking, carrying its new view value.
+    cell = parent;
+    v = push;
   }
 }
 
-// ─── factories ───────────────────────────────────────────────────
+// ─── factories ────────────────────────────────────────────────────
 
 export function signal<T>(initial: T): Signal<T> {
   return new Signal(initial);
@@ -463,165 +620,174 @@ export function signal<T>(initial: T): Signal<T> {
 
 export function computed<T>(fn: () => T): Signal<T> {
   const cell = new Signal<T>(undefined as never);
+  cell.flags = F.Mutable | F.Dirty;
   cell.getter = fn;
-  cell.flags |= F.Dirty;
   return cell;
 }
 
-// ─── Effect ───────────────────────────────────────────────────────
+// ─── Effect (alien-signals verbatim) ──────────────────────────────
 
 class Effect implements ReactiveNode {
-  flags: number = F.Watching;
-  subs: Link | undefined;
-  subsTail: Link | undefined;
-  deps: Link | undefined;
-  depsTail: Link | undefined;
-  fn: () => void;
+  flags: number = F.Watching | F.RecursedCheck;
+  subs: Link | undefined = undefined;
+  subsTail: Link | undefined = undefined;
+  deps: Link | undefined = undefined;
+  depsTail: Link | undefined = undefined;
+  fn: () => (() => void) | void;
+  cleanup: (() => void) | undefined = undefined;
 
-  constructor(fn: () => void) {
+  constructor(fn: () => (() => void) | void) {
     this.fn = fn;
-    this._run();
-  }
-
-  _run(): void {
     const prev = activeSub;
     activeSub = this;
     try {
-      this.fn();
+      ++runDepth;
+      const ret = fn();
+      this.cleanup = typeof ret === "function" ? ret : undefined;
     } finally {
+      --runDepth;
       activeSub = prev;
-      this.flags &= ~(F.Pending | F.Dirty);
+      this.flags &= ~F.RecursedCheck;
     }
   }
 
   _update(): boolean {
-    this._run();
-    return false;
+    this.flags = F.Mutable;
+    return true;
   }
 
   _notify(): void {
-    if (!(this.flags & F.InFwdQueue)) {
-      this.flags |= F.InFwdQueue;
-      fwdQueue.push(this);
+    let e: Effect = this;
+    let insertIndex = queuedLength;
+    const firstInsertedIndex = insertIndex;
+    do {
+      queued[insertIndex++] = e;
+      e.flags &= ~F.Watching;
+      const next = e.subs?.sub as Effect | undefined;
+      if (next === undefined || !(next.flags & F.Watching)) break;
+      e = next;
+    } while (true);
+    queuedLength = insertIndex;
+    let idx = insertIndex,
+      firstIdx = firstInsertedIndex;
+    while (firstIdx < --idx) {
+      const left = queued[firstIdx];
+      queued[firstIdx++] = queued[idx];
+      queued[idx] = left;
+    }
+  }
+
+  _unwatched(): void {
+    this.flags = F.None;
+    disposeAllDepsInReverse(this);
+    const sub = this.subs;
+    if (sub !== undefined) unlink(sub);
+    if (this.cleanup) this._runCleanup();
+  }
+
+  _run(): void {
+    const flags = this.flags;
+    if (flags & F.Dirty || (flags & F.Pending && checkDirty(this.deps!, this))) {
+      if (this.cleanup) {
+        this._runCleanup();
+        if (!this.flags) return;
+      }
+      this.depsTail = undefined;
+      this.flags = F.Watching | F.RecursedCheck;
+      const prev = activeSub;
+      activeSub = this;
+      try {
+        ++cycle;
+        ++runDepth;
+        const ret = this.fn();
+        this.cleanup = typeof ret === "function" ? ret : undefined;
+      } finally {
+        --runDepth;
+        activeSub = prev;
+        this.flags &= ~F.RecursedCheck;
+        purgeDeps(this);
+      }
+    } else if (this.deps !== undefined) {
+      this.flags = F.Watching;
+    }
+  }
+
+  _runCleanup(): void {
+    const c = this.cleanup!;
+    this.cleanup = undefined;
+    const prev = activeSub;
+    activeSub = undefined;
+    try {
+      c();
+    } finally {
+      activeSub = prev;
     }
   }
 }
 
-export function effect(fn: () => void): () => void {
+export function effect(fn: () => (() => void) | void): () => void {
   const e = new Effect(fn);
-  return () => {
-    e.flags = F.None;
-  };
+  return () => e._unwatched();
 }
 
-// ─── Flush ────────────────────────────────────────────────────────
-
-/** Drain ONLY the fwd queue. Used by the signal-write fast path
- *  when there's nothing in bwd queue. Sets `flushing = true` so
- *  nested writes from effects take the slow path. */
-function drainFwdOnly(): void {
-  if (flushing) return;
-  flushing = true;
-  try {
-    let j = 0;
-    // Outer loop: effects may write signals, which adds to bwdQueue;
-    // those need draining too. Loop until quiescent.
-    while (j < fwdQueue.length || bwdQueue.length > 0) {
-      while (j < fwdQueue.length) {
-        const sub = fwdQueue[j++]!;
-        sub.flags &= ~F.InFwdQueue;
-        if (sub.flags & (F.Pending | F.Dirty)) sub._update();
-      }
-      if (bwdQueue.length > 0) {
-        // Demote to full flush.
-        flushing = false;
-        flush();
-        return;
-      }
-    }
-    fwdQueue.length = 0;
-  } finally {
-    flushing = false;
-  }
-}
+// ─── Flush / batch / untracked ────────────────────────────────────
+//
+// Alternates backward-drain and effect-drain to a fixpoint: backward
+// commits source values (which queue effects); effects may write
+// (forward → more effects, or backward → more bwd entries). Loops
+// until both queues are exhausted.
 
 function flush(): void {
   if (flushing) return;
   flushing = true;
-  let bwdI = 0;
-  let fwdI = 0;
+  let bwdIndex = 0;
   try {
-    // Drain both queues until quiescent. Effects writing signals
-    // grow bwdQueue; bwd commits grow fwdQueue. Loop until both
-    // are stable.
-    while (true) {
-      const startedBwd = bwdI;
-      const startedFwd = fwdI;
-
-      while (bwdI < bwdQueue.length) {
-        const cell = bwdQueue[bwdI++]!;
-        cell.flags &= ~(F.BwdPending | F.InBwdQueue);
-
-        if (cell._isMerge === true) {
-          // biome-ignore lint/style/noNonNullAssertion: _isMerge implies _mergeNode
-          const node = cell._mergeNode!;
-          const acc = node.fold();
-          // Reset slot map for the NEXT cascade. Current cascade
-          // contributions have all arrived (we're being drained).
-          node.reset();
-          cell.flags |= F.Dirty;
-          if (cell.subs !== undefined) {
-            propagate(cell.subs);
-            shallowDirty(cell.subs);
-          }
-          const parent = node.parent as Signal<unknown>;
-          if (parent._mergeNode !== undefined) {
-            bwdContribute(parent, cell, acc as never);
-          } else {
-            bwdDeposit(parent, acc as never);
-          }
-        } else if (cell._qSetter !== undefined) {
-          // biome-ignore lint/style/noNonNullAssertion: deposited at write time
-          const v = cell._pendingBwdValue!;
-          cell._pendingBwdValue = undefined;
-          cell._qSetter(v);
-          cell.flags |= F.Dirty;
-          if (cell.subs !== undefined) {
-            propagate(cell.subs);
-            shallowDirty(cell.subs);
-          }
+    do {
+      while (bwdIndex < bwdQueue.length) {
+        const cell = bwdQueue[bwdIndex]!;
+        if (cell._queueIdx !== bwdIndex || !(cell.flags & F.BwdQueued)) {
+          bwdIndex++;
+          continue;
+        }
+        bwdIndex++;
+        cell.flags &= ~F.BwdQueued;
+        if (cell._isMerge) {
+          cascadeBwd(cell, undefined, true);
         } else {
-          const next = cell.pendingValue;
-          if (cell.currentValue !== next) {
-            cell.currentValue = next;
-            if (cell.subs !== undefined) {
-              propagate(cell.subs);
-              shallowDirty(cell.subs);
-            }
-          }
+          const v = cell._pendingBwdValue;
+          cell._pendingBwdValue = undefined;
+          cascadeBwd(cell, v, true);
         }
       }
-
-      while (fwdI < fwdQueue.length) {
-        const sub = fwdQueue[fwdI++]!;
-        sub.flags &= ~F.InFwdQueue;
-        if (sub.flags & (F.Pending | F.Dirty)) sub._update();
+      while (notifyIndex < queuedLength) {
+        const e = queued[notifyIndex]!;
+        queued[notifyIndex++] = undefined;
+        e._run();
       }
-
-      if (bwdI === startedBwd && fwdI === startedFwd) break;
-    }
-    bwdQueue.length = 0;
-    fwdQueue.length = 0;
+    } while (bwdIndex < bwdQueue.length || notifyIndex < queuedLength);
   } finally {
+    bwdQueue.length = 0;
+    notifyIndex = 0;
+    queuedLength = 0;
     flushing = false;
   }
 }
 
 export function batch<R>(fn: () => R): R {
-  ++writeDepth;
+  ++batchDepth;
   try {
     return fn();
   } finally {
-    if (--writeDepth === 0 && !flushing) flush();
+    if (!--batchDepth) flush();
+  }
+}
+
+export function untracked<R>(fn: () => R): R {
+  const prev = activeSub;
+  activeSub = undefined;
+  try {
+    return fn();
+  } finally {
+    activeSub = prev;
   }
 }

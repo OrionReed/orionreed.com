@@ -236,10 +236,10 @@ describe("symmetric: cost-shape invariants", () => {
     void cell.value;
     expect(getterCalls).toBe(N);
 
-    // Backward cascade: single write, each setter runs exactly once.
+    // Backward cascade: single (unbatched) write cascades eagerly,
+    // each put runs exactly once.
     setterCalls = 0;
     cell.value = 100;
-    // Lazy bwd: cascade deferred. Trigger commit via read.
     void cell.value;
     expect(setterCalls).toBe(N);
   });

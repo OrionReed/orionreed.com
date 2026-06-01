@@ -160,10 +160,12 @@ describe("symmetric engine: coalescing (the design payoff)", () => {
     expect(root.value).toBe(3);
   });
 
-  it("LAZY: setter does NOT run until a read or batch boundary", () => {
-    // Lazy bwd: writes deposit, cascade is deferred to first read
-    // (dual of forward's lazy resolution). Each "logical" cascade
-    // runs the setter exactly once.
+  it("HYBRID: eager cascade outside batch, lazy inside", () => {
+    // Hybrid dispatch (perf-driven):
+    //   * Unbatched writes cascade immediately (matches alien-speed).
+    //   * Batched writes deposit + coalesce; one setter call per
+    //     cell at batch exit, regardless of write count.
+    // Both yield the same settled state by the next observation.
     const root = signal(0);
     const setterCalls = vi.fn();
     const l = Signal.lens(
@@ -174,17 +176,21 @@ describe("symmetric engine: coalescing (the design payoff)", () => {
         return target;
       },
     );
+    // Unbatched: cascade is immediate.
     l.value = 5;
-    // Setter has NOT run yet — cascade deferred.
-    expect(setterCalls).toHaveBeenCalledTimes(0);
-    // Read triggers cascade.
-    expect(root.value).toBe(5);
     expect(setterCalls).toHaveBeenCalledTimes(1);
+    expect(root.value).toBe(5);
 
-    l.value = 10;
-    expect(setterCalls).toHaveBeenCalledTimes(1); // still deferred
-    expect(root.value).toBe(10);
+    // Batched: cascade deferred until batch exit; multiple writes
+    // collapse to one setter run.
+    batch(() => {
+      l.value = 6;
+      l.value = 7;
+      l.value = 8;
+      expect(setterCalls).toHaveBeenCalledTimes(1);
+    });
     expect(setterCalls).toHaveBeenCalledTimes(2);
+    expect(root.value).toBe(8);
   });
 
   it("effects fire ONCE for a batch of bwd writes through a chain", () => {

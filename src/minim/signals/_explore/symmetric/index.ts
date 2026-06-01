@@ -6,6 +6,7 @@ export {
   computed,
   effect,
   batch,
+  untracked,
   type MergePolicy,
   DIRECT_SLOT,
 } from "./signal";
