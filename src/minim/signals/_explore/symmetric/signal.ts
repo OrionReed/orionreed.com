@@ -352,15 +352,19 @@ export class Signal<T = unknown> implements ReactiveNode {
   /** Forward derivation (computed/lens/merge). `undefined` ⇒ source. */
   getter: (() => T) | undefined;
 
-  /** Source-mode value cells. `cachedValue` is the computed-mode cell. */
+  /** The node's current value. A node is EITHER a source (uses
+   *  `currentValue` = committed, `pendingValue` = staged write) OR a
+   *  getter cell (uses `currentValue` = last derived cache, and reuses
+   *  `pendingValue` for its deferred backward target — see `set value`).
+   *  The two roles never coexist on one node, so two fields suffice for
+   *  what would naively be four. This reuse is the fwd/bwd duality made
+   *  concrete: "value pending commit" means staged-forward for a source
+   *  and target-pending-cascade for a lens. */
   currentValue: T;
   pendingValue: T;
-  cachedValue: T;
 
   /** Backward chain: the cell whose `put` produces this cell's upstream. */
   _bwdParent: Signal<unknown> | undefined;
-  /** Deferred (batched) backward write target for this lens. */
-  _pendingBwdValue: T | undefined;
 
   /** Lens `put`. Arity distinguishes `(t)=>p` from `(t,current)=>p`. */
   // biome-ignore lint/suspicious/noExplicitAny: bwd fn is opaque shape
@@ -378,7 +382,6 @@ export class Signal<T = unknown> implements ReactiveNode {
   constructor(initial: T) {
     this.currentValue = initial;
     this.pendingValue = initial;
-    this.cachedValue = initial;
     // Pre-init every optional slot so the V8 hidden class is stable
     // across signal / computed / lens / merge variants.
     this.subs = undefined;
@@ -387,7 +390,6 @@ export class Signal<T = unknown> implements ReactiveNode {
     this.depsTail = undefined;
     this.getter = undefined;
     this._bwdParent = undefined;
-    this._pendingBwdValue = undefined;
     this._bwdFn = undefined;
     this._bwdFnArity = 1;
     this._mergeNode = undefined;
@@ -395,78 +397,13 @@ export class Signal<T = unknown> implements ReactiveNode {
     this._queueIdx = -1;
   }
 
-  // ── Forward read (alien-signals verbatim) ──
-
-  get value(): T {
-    const flags = this.flags;
-    if (this.getter !== undefined) {
-      if (flags & F.RecursedCheck) {
-        throw new RangeError(
-          `Cyclic computed: ${(this.constructor as { name?: string }).name ?? "?"} read its own value`,
-        );
-      }
-      if (
-        flags & F.Dirty ||
-        (flags & F.Pending &&
-          (checkDirty(this.deps!, this) || ((this.flags = flags & ~F.Pending), false)))
-      ) {
-        if (this._update()) {
-          const subs = this.subs;
-          if (subs !== undefined) shallowPropagate(subs);
-        }
-      } else if (!flags) {
-        // First read: lazy init.
-        this.flags = F.Mutable | F.RecursedCheck;
-        const prev = activeSub;
-        activeSub = this;
-        let threw = true;
-        try {
-          this.cachedValue = this.getter!();
-          threw = false;
-        } finally {
-          activeSub = prev;
-          this.flags = threw ? F.Mutable | F.Dirty : this.flags & ~F.RecursedCheck;
-        }
-      }
-      if (activeSub !== undefined) link(this, activeSub, cycle);
-      return this.cachedValue;
-    }
-    // Signal path.
-    if (flags & F.Dirty) {
-      this.flags = F.Mutable;
-      if (this.currentValue !== (this.currentValue = this.pendingValue)) {
-        const subs = this.subs;
-        if (subs !== undefined) shallowPropagate(subs);
-      }
-    }
-    if (activeSub !== undefined) link(this, activeSub, cycle);
-    return this.currentValue;
-  }
-
-  // ── Write entry — forward (source) or backward (lens/merge) ──
-
-  set value(next: T) {
-    if (this.getter === undefined) {
-      this._writeSource(next);
-      return;
-    }
-    // Backward write. Deferred while batching / flushing so that
-    // repeated writes coalesce (last-write-wins) and merge folds wait
-    // for all contributors; eager + synchronous otherwise.
-    const deferred = batchDepth > 0 || flushing;
-    if (this._isMerge) {
-      this._mergeNode!.receive(DIRECT_SLOT, next);
-      if (deferred) this._enqueueBwd();
-      else cascadeBwd(this as Signal<unknown>, undefined, false);
-    } else if (this._bwdFn === undefined) {
-      throw new TypeError("Cannot write to a computed");
-    } else if (deferred) {
-      this._pendingBwdValue = next;
-      this._enqueueBwd();
-    } else {
-      cascadeBwd(this as Signal<unknown>, next, false);
-    }
-  }
+  // ── Forward read / write ──
+  //
+  // The `value` accessor is installed on the prototype via
+  // `Object.defineProperty` after the class body (see below), matching
+  // alien-signals. V8 optimizes the prototype accessor better than a
+  // class `get/set` here — ~5 ns/node on a computed chain.
+  declare value: T;
 
   _enqueueBwd(): void {
     this.flags |= F.BwdQueued;
@@ -496,8 +433,8 @@ export class Signal<T = unknown> implements ReactiveNode {
       let threw = true;
       try {
         ++cycle;
-        const old = this.cachedValue;
-        const next = (this.cachedValue = this.getter());
+        const old = this.currentValue;
+        const next = (this.currentValue = this.getter());
         threw = false;
         return old !== next;
       } finally {
@@ -569,6 +506,83 @@ export class Signal<T = unknown> implements ReactiveNode {
     return cell;
   }
 }
+
+// Install `value` on the prototype (alien-signals pattern). V8 JITs a
+// prototype accessor noticeably better than a class `get/set value` for
+// this hot path.
+Object.defineProperty(Signal.prototype, "value", {
+  get(this: Signal<unknown>): unknown {
+    const flags = this.flags;
+    if (this.getter !== undefined) {
+      if (flags & F.RecursedCheck) {
+        throw new RangeError(
+          `Cyclic computed: ${(this.constructor as { name?: string }).name ?? "?"} read its own value`,
+        );
+      }
+      if (
+        flags & F.Dirty ||
+        (flags & F.Pending &&
+          (checkDirty(this.deps!, this) || ((this.flags = flags & ~F.Pending), false)))
+      ) {
+        if (this._update()) {
+          const subs = this.subs;
+          if (subs !== undefined) shallowPropagate(subs);
+        }
+      } else if (!flags) {
+        // First read: lazy init.
+        this.flags = F.Mutable | F.RecursedCheck;
+        const prev = activeSub;
+        activeSub = this;
+        let threw = true;
+        try {
+          this.currentValue = this.getter();
+          threw = false;
+        } finally {
+          activeSub = prev;
+          this.flags = threw ? F.Mutable | F.Dirty : this.flags & ~F.RecursedCheck;
+        }
+      }
+      if (activeSub !== undefined) link(this, activeSub, cycle);
+      return this.currentValue;
+    }
+    // Signal path.
+    if (flags & F.Dirty) {
+      this.flags = F.Mutable;
+      if (this.currentValue !== (this.currentValue = this.pendingValue)) {
+        const subs = this.subs;
+        if (subs !== undefined) shallowPropagate(subs);
+      }
+    }
+    if (activeSub !== undefined) link(this, activeSub, cycle);
+    return this.currentValue;
+  },
+  set(this: Signal<unknown>, next: unknown): void {
+    if (this.getter === undefined) {
+      this._writeSource(next);
+      return;
+    }
+    // Backward write. Deferred while batching / flushing so repeated
+    // writes coalesce (last-write-wins) and merge folds wait for all
+    // contributors; eager + synchronous otherwise.
+    const deferred = batchDepth > 0 || flushing;
+    if (this._isMerge) {
+      this._mergeNode!.receive(DIRECT_SLOT, next);
+      if (deferred) this._enqueueBwd();
+      else cascadeBwd(this, undefined, false);
+    } else if (this._bwdFn === undefined) {
+      throw new TypeError("Cannot write to a computed");
+    } else if (deferred) {
+      // Reuse `pendingValue` (unused by a getter cell's forward path)
+      // as the deferred backward target. Drained by flush.
+      this.pendingValue = next;
+      this._enqueueBwd();
+    } else {
+      cascadeBwd(this, next, false);
+    }
+  },
+  enumerable: false,
+  configurable: false,
+});
 
 // ─── Backward cascade ─────────────────────────────────────────────
 //
@@ -742,7 +756,11 @@ function flush(): void {
   flushing = true;
   let bwdIndex = 0;
   try {
-    do {
+    // Head-checked: when both queues are already drained (the common
+    // case — a source write with no watching subscribers still calls
+    // flush), the loop body never runs. A `do/while` would pay the
+    // empty-drain cost on every write.
+    while (bwdIndex < bwdQueue.length || notifyIndex < queuedLength) {
       while (bwdIndex < bwdQueue.length) {
         const cell = bwdQueue[bwdIndex]!;
         if (cell._queueIdx !== bwdIndex || !(cell.flags & F.BwdQueued)) {
@@ -754,9 +772,7 @@ function flush(): void {
         if (cell._isMerge) {
           cascadeBwd(cell, undefined, true);
         } else {
-          const v = cell._pendingBwdValue;
-          cell._pendingBwdValue = undefined;
-          cascadeBwd(cell, v, true);
+          cascadeBwd(cell, cell.pendingValue, true);
         }
       }
       while (notifyIndex < queuedLength) {
@@ -764,7 +780,7 @@ function flush(): void {
         queued[notifyIndex++] = undefined;
         e._run();
       }
-    } while (bwdIndex < bwdQueue.length || notifyIndex < queuedLength);
+    }
   } finally {
     bwdQueue.length = 0;
     notifyIndex = 0;

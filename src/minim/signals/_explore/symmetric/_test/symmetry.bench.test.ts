@@ -80,16 +80,44 @@ function buildCanonExplicit(n: number): {
   return { root, tip: cell };
 }
 
+/** Fair apples-to-apples canonical chain: each cell applies an identity
+ *  transform fn in BOTH directions, exactly mirroring the symmetric lens
+ *  shape (`() => fwd(parent.value)` / `(t) => bwd(t)`). Isolates the
+ *  per-layer transform-call cost from any engine difference. */
+function buildCanonExplicitFn(n: number): {
+  root: canonical.Signal<number>;
+  tip: canonical.Signal<number>;
+} {
+  const id = (v: number): number => v;
+  const root = canonical.signal(0);
+  let cell: canonical.Signal<number> = root;
+  for (let i = 0; i < n; i++) {
+    const p = cell;
+    cell = CanonSignal.install(
+      CanonSignal as new (...args: never[]) => CanonSignal<number>,
+      () => id(p.value as number),
+      (v: number) => {
+        (p as { value: number }).value = id(v);
+      },
+    );
+  }
+  return { root, tip: cell };
+}
+
 function timed(label: string, fn: () => void): number {
-  // 3-run warmup, 1 measured.
-  fn();
-  fn();
-  fn();
-  const t0 = performance.now();
-  fn();
-  const t1 = performance.now();
-  const ms = t1 - t0;
-  // biome-ignore lint/suspicious/noConsole: bench output
+  // Warm up the JIT, then take the MIN of several measured runs.
+  // Min is the robust microbench estimator: it filters GC pauses,
+  // scheduler interrupts, and other one-sided noise that inflate the
+  // mean. Single-run timing on this machine swings >2× — useless for
+  // grounding micro-decisions.
+  for (let w = 0; w < 5; w++) fn();
+  let ms = Number.POSITIVE_INFINITY;
+  for (let r = 0; r < 8; r++) {
+    const t0 = performance.now();
+    fn();
+    const t1 = performance.now();
+    if (t1 - t0 < ms) ms = t1 - t0;
+  }
   console.info(
     `  ${label.padEnd(72)}  ${ms.toFixed(2).padStart(8)}ms  ${((ms * 1e6) / N_OPS).toFixed(0).padStart(4)} ns/op`,
   );
@@ -141,6 +169,17 @@ describe("BWD ≤ FWD: 5-deep identity chain", () => {
     });
   });
 
+  it("CANONICAL EXPLICIT+fn: fwd cascade (identity transform per layer)", () => {
+    const { root, tip } = buildCanonExplicitFn(CHAIN);
+    void tip.value;
+    timed("canonical (EXPLICIT+fn) FWD  (root.value=i; void tip.value) ×N", () => {
+      for (let i = 0; i < N_OPS; i++) {
+        (root as { value: number }).value = i;
+        void tip.value;
+      }
+    });
+  });
+
   it("SYMMETRIC: fwd cascade", () => {
     const root = sym.signal(0);
     let cell: sym.Signal<number> = root;
@@ -153,6 +192,45 @@ describe("BWD ≤ FWD: 5-deep identity chain", () => {
     }
     void cell.value;
     timed("symmetric  FWD  (root.value=i; void tip.value) ×N", () => {
+      for (let i = 0; i < N_OPS; i++) {
+        root.value = i;
+        void cell.value;
+      }
+    });
+  });
+});
+
+// ─── Forward: pure COMPUTED chain (no lens, no install) ─────────
+// Isolates the forward engine from lens/install construction. If the
+// symmetric and canonical computed chains match, the forward engine is
+// at parity and any lens-chain delta is the bidirectional-cell cost.
+
+describe("FWD parity: 5-deep COMPUTED chain", () => {
+  it("CANONICAL derive chain", () => {
+    const root = canonical.signal(0);
+    let cell: canonical.Signal<number> = root;
+    for (let i = 0; i < CHAIN; i++) {
+      const p = cell;
+      cell = canonical.derive(() => (p.value as number) + 1);
+    }
+    void cell.value;
+    timed("canonical  computed-chain FWD ×N", () => {
+      for (let i = 0; i < N_OPS; i++) {
+        (root as { value: number }).value = i;
+        void cell.value;
+      }
+    });
+  });
+
+  it("SYMMETRIC computed chain", () => {
+    const root = sym.signal(0);
+    let cell: sym.Signal<number> = root;
+    for (let i = 0; i < CHAIN; i++) {
+      const p = cell;
+      cell = sym.computed(() => p.value + 1);
+    }
+    void cell.value;
+    timed("symmetric  computed-chain FWD ×N", () => {
       for (let i = 0; i < N_OPS; i++) {
         root.value = i;
         void cell.value;
@@ -189,6 +267,14 @@ describe("BWD ≤ FWD: 5-deep identity chain — backward pass", () => {
     void cell.value;
     timed("merge proto BWD  (tip.value=i) ×N", () => {
       for (let i = 0; i < N_OPS; i++) cell.value = i;
+    });
+  });
+
+  it("CANONICAL EXPLICIT+fn: bwd cascade (identity transform per layer)", () => {
+    const { tip } = buildCanonExplicitFn(CHAIN);
+    void tip.value;
+    timed("canonical (EXPLICIT+fn) BWD  (tip.value=i) ×N", () => {
+      for (let i = 0; i < N_OPS; i++) (tip as { value: number }).value = i;
     });
   });
 
@@ -297,6 +383,17 @@ describe("write-then-read: 5-deep chain, 1 write + 1 read per iter", () => {
     });
   });
 
+  it("CANONICAL EXPLICIT+fn", () => {
+    const { tip } = buildCanonExplicitFn(CHAIN);
+    void tip.value;
+    timed("canonical EXPLICIT+fn 1-write + 1-read ×N", () => {
+      for (let i = 0; i < N_OPS; i++) {
+        (tip as { value: number }).value = i;
+        void tip.value;
+      }
+    });
+  });
+
   it("SYMMETRIC", () => {
     const root = sym.signal(0);
     let cell: sym.Signal<number> = root;
@@ -324,6 +421,17 @@ describe("write-MANY-then-read: 10 writes followed by 1 read", () => {
     const { tip } = buildCanonExplicit(CHAIN);
     void tip.value;
     timed("canonical EXPLICIT 10w+1r (no batch) ×N/10", () => {
+      for (let b = 0; b < ITER; b++) {
+        for (let i = 0; i < 10; i++) (tip as { value: number }).value = i;
+        void tip.value;
+      }
+    });
+  });
+
+  it("CANONICAL EXPLICIT+fn (no batch)", () => {
+    const { tip } = buildCanonExplicitFn(CHAIN);
+    void tip.value;
+    timed("canonical EXPLICIT+fn 10w+1r (no batch) ×N/10", () => {
       for (let b = 0; b < ITER; b++) {
         for (let i = 0; i < 10; i++) (tip as { value: number }).value = i;
         void tip.value;
