@@ -10,14 +10,7 @@
 //     observable (no fusion to root).
 
 import { describe, expect, it, vi } from "vitest";
-import {
-  Signal,
-  batch,
-  computed,
-  effect,
-  signal,
-  sumPolicy,
-} from "../index";
+import { batch, computed, derive, effect, lens, signal, sumPolicy } from "../index";
 
 describe("symmetric engine: forward basics", () => {
   it("signal read/write", () => {
@@ -29,7 +22,7 @@ describe("symmetric engine: forward basics", () => {
 
   it("derive recomputes lazily on read", () => {
     const s = signal(2);
-    const d = Signal.derive(s, (v) => v * 10);
+    const d = derive(s, (v) => v * 10);
     expect(d.value).toBe(20);
     s.value = 3;
     expect(d.value).toBe(30);
@@ -77,7 +70,7 @@ describe("symmetric engine: forward basics", () => {
 describe("symmetric engine: lens basics", () => {
   it("lens read forwards, write backwards", () => {
     const s = signal(5);
-    const l = Signal.lens(
+    const l = lens(
       s,
       (v) => v * 2,
       (target) => target / 2,
@@ -90,12 +83,12 @@ describe("symmetric engine: lens basics", () => {
 
   it("two-deep lens chain commits to root", () => {
     const root = signal(1);
-    const a = Signal.lens(
+    const a = lens(
       root,
       (v) => v + 10,
       (target) => target - 10,
     );
-    const b = Signal.lens(
+    const b = lens(
       a,
       (v) => v * 2,
       (target) => target / 2,
@@ -112,12 +105,12 @@ describe("symmetric engine: lens basics", () => {
     // Each lens is a real node. Subscribing to the middle of a chain
     // works without forcing a re-derive of all layers.
     const root = signal(1);
-    const mid = Signal.lens(
+    const mid = lens(
       root,
       (v) => v + 100,
       (target) => target - 100,
     );
-    const tip = Signal.lens(
+    const tip = lens(
       mid,
       (v) => v * 2,
       (target) => target / 2,
@@ -141,7 +134,7 @@ describe("symmetric engine: coalescing (the design payoff)", () => {
   it("setter runs ONCE per cascade even with multiple writes", () => {
     const root = signal(0);
     const setterCalls = vi.fn();
-    const l = Signal.lens(
+    const l = lens(
       root,
       (v) => v,
       (target) => {
@@ -168,7 +161,7 @@ describe("symmetric engine: coalescing (the design payoff)", () => {
     // Both yield the same settled state by the next observation.
     const root = signal(0);
     const setterCalls = vi.fn();
-    const l = Signal.lens(
+    const l = lens(
       root,
       (v) => v,
       (target) => {
@@ -195,17 +188,17 @@ describe("symmetric engine: coalescing (the design payoff)", () => {
 
   it("effects fire ONCE for a batch of bwd writes through a chain", () => {
     const root = signal(0);
-    const l1 = Signal.lens(
+    const l1 = lens(
       root,
       (v) => v,
       (target) => target,
     );
-    const l2 = Signal.lens(
+    const l2 = lens(
       l1,
       (v) => v,
       (target) => target,
     );
-    const l3 = Signal.lens(
+    const l3 = lens(
       l2,
       (v) => v,
       (target) => target,
@@ -233,17 +226,17 @@ describe("symmetric engine: merge basics", () => {
   it("merge aggregates contributions from multiple lenses", () => {
     const root = signal(0);
     const m = root.merge(sumPolicy);
-    const a = Signal.lens(
+    const a = lens(
       m,
       (v) => v,
       (target) => target,
     );
-    const b = Signal.lens(
+    const b = lens(
       m,
       (v) => v,
       (target) => target,
     );
-    const c = Signal.lens(
+    const c = lens(
       m,
       (v) => v,
       (target) => target,
@@ -261,12 +254,12 @@ describe("symmetric engine: merge basics", () => {
   it("merge re-write to same slot replaces (not double-counts)", () => {
     const root = signal(0);
     const m = root.merge(sumPolicy);
-    const a = Signal.lens(
+    const a = lens(
       m,
       (v) => v,
       (target) => target,
     );
-    const b = Signal.lens(
+    const b = lens(
       m,
       (v) => v,
       (target) => target,

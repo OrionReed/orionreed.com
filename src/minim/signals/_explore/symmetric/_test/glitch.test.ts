@@ -8,9 +8,7 @@
 // no-op writes).
 
 import { describe, expect, it, vi } from "vitest";
-import { Signal, batch, computed, effect, signal, sumPolicy } from "../index";
-
-const lens = Signal.lens;
+import { batch, computed, effect, lens, signal, sumPolicy } from "../index";
 
 describe("backward glitch-freedom", () => {
   it("diamond: effect reading two views of one source fires ONCE per bwd write", () => {

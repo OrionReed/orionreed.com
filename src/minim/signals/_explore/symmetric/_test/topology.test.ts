@@ -3,10 +3,7 @@
 // merge-of-merge, deep nesting, and effect-driven re-cascade.
 
 import { describe, expect, it, vi } from "vitest";
-import { Signal, batch, effect, signal, sumPolicy } from "../index";
-
-// Tiny helpers.
-const lens = Signal.lens;
+import { type Signal, batch, effect, lens, signal, sumPolicy } from "../index";
 const lin = (m: number, b: number) =>
   ({ fwd: (v: number) => m * v + b, bwd: (t: number) => (t - b) / m });
 

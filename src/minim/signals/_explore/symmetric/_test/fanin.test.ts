@@ -16,14 +16,14 @@
 //   - Symmetric complement: putl threads private memory; trap recovery.
 
 import { describe, expect, it, vi } from "vitest";
-import { Signal, effect, signal, sumPolicy } from "../index";
+import { type Signal, effect, fanin, lens, signal, symmetric, sumPolicy } from "../index";
 
 describe("forward fan-in (read N)", () => {
   it("derive-N recomputes when any parent changes", () => {
     const a = signal(1);
     const b = signal(2);
     const c = signal(3);
-    const sum = Signal.fanin([a, b, c], (v) => (v[0] as number) + (v[1] as number) + (v[2] as number));
+    const sum = fanin([a, b, c], (v) => (v[0] as number) + (v[1] as number) + (v[2] as number));
     expect(sum.value).toBe(6);
     b.value = 20;
     expect(sum.value).toBe(24);
@@ -32,7 +32,7 @@ describe("forward fan-in (read N)", () => {
   it("read-only fan-in rejects writes", () => {
     const a = signal(1);
     const b = signal(2);
-    const sum = Signal.fanin([a, b], (v) => (v[0] as number) + (v[1] as number));
+    const sum = fanin([a, b], (v) => (v[0] as number) + (v[1] as number));
     expect(() => {
       (sum as Signal<number>).value = 9;
     }).toThrow();
@@ -43,7 +43,7 @@ describe("multi-output backward", () => {
   it("stateless bwd splits a write across parents", () => {
     const a = signal(0);
     const b = signal(0);
-    const total = Signal.fanin(
+    const total = fanin(
       [a, b],
       (v) => (v[0] as number) + (v[1] as number),
       (t) => [(t as number) / 2, (t as number) / 2], // arity 1 → no peek
@@ -57,7 +57,7 @@ describe("multi-output backward", () => {
   it("stateful bwd reads current parent values (meanDiff isomorphism)", () => {
     const a = signal(10);
     const b = signal(4);
-    const mean = Signal.fanin(
+    const mean = fanin(
       [a, b],
       (v) => ((v[0] as number) + (v[1] as number)) / 2,
       (t, v) => {
@@ -65,7 +65,7 @@ describe("multi-output backward", () => {
         return [(t as number) + d / 2, (t as number) - d / 2];
       },
     );
-    const diff = Signal.fanin(
+    const diff = fanin(
       [a, b],
       (v) => (v[0] as number) - (v[1] as number),
       (t, v) => {
@@ -92,12 +92,12 @@ describe("multi-output backward", () => {
   it("undefined update leaves a parent untouched", () => {
     const a = signal(1);
     const b = signal(2);
-    const lens = Signal.fanin(
+    const cell = fanin(
       [a, b],
       (v) => (v[0] as number) + (v[1] as number),
       (t) => [t, undefined], // only write a
     );
-    lens.value = 99;
+    cell.value = 99;
     expect(a.value).toBe(99);
     expect(b.value).toBe(2);
   });
@@ -107,7 +107,7 @@ describe("fan-out coalescing", () => {
   it("one fan-out write fires downstream effects once", () => {
     const a = signal(0);
     const b = signal(0);
-    const total = Signal.fanin(
+    const total = fanin(
       [a, b],
       (v) => (v[0] as number) + (v[1] as number),
       (t) => [(t as number) / 2, (t as number) / 2],
@@ -130,17 +130,17 @@ describe("shared ancestor under a fan-out", () => {
     // Both outputs route to the same root via plain lenses. No merge ⇒
     // the documented last-write-wins footgun.
     const root = signal(0);
-    const viaA = Signal.lens(
+    const viaA = lens(
       root,
       (v) => v,
       (t) => t,
     );
-    const viaB = Signal.lens(
+    const viaB = lens(
       root,
       (v) => v,
       (t) => t,
     );
-    const fork = Signal.fanin(
+    const fork = fanin(
       [viaA, viaB],
       (v) => (v[0] as number) + (v[1] as number),
       (t) => [(t as number) + 1, (t as number) + 100],
@@ -152,17 +152,17 @@ describe("shared ancestor under a fan-out", () => {
   it("two parents sharing a MERGE: contributions combine", () => {
     const root = signal(0);
     const m = root.merge(sumPolicy);
-    const viaA = Signal.lens(
+    const viaA = lens(
       m,
       (v) => v,
       (t) => t,
     );
-    const viaB = Signal.lens(
+    const viaB = lens(
       m,
       (v) => v,
       (t) => t,
     );
-    const fork = Signal.fanin(
+    const fork = fanin(
       [viaA, viaB],
       (v) => (v[0] as number) + (v[1] as number),
       (t) => [(t as number) + 1, (t as number) + 100],
@@ -175,7 +175,7 @@ describe("shared ancestor under a fan-out", () => {
 describe("symmetric lens — complement is private closure state", () => {
   it("putl threads complement (monotonic snap)", () => {
     const src = signal(0);
-    const snapped = Signal.symmetric<number, { last: number }>([src], {
+    const snapped = symmetric<number, { last: number }>([src], {
       missing: { last: 0 },
       putr: (s, c) => {
         c.last = s[0] as number;
@@ -201,7 +201,7 @@ describe("symmetric lens — complement is private closure state", () => {
     const p0 = signal<V>({ x: 1, y: 0 });
     const p1 = signal<V>({ x: -1, y: 0 });
 
-    const spread = Signal.symmetric<number, C>([p0, p1], {
+    const spread = symmetric<number, C>([p0, p1], {
       missing: { units: [{ x: 0, y: 0 }, { x: 0, y: 0 }], centroid: { x: 0, y: 0 } },
       putr: (positions, c) => {
         const pos = positions as V[];

@@ -184,7 +184,7 @@ describe("BWD ≤ FWD: 5-deep identity chain", () => {
     const root = sym.signal(0);
     let cell: sym.Signal<number> = root;
     for (let i = 0; i < CHAIN; i++) {
-      cell = sym.Signal.lens(
+      cell = sym.lens(
         cell,
         (v) => v,
         (t) => t,
@@ -282,7 +282,7 @@ describe("BWD ≤ FWD: 5-deep identity chain — backward pass", () => {
     const root = sym.signal(0);
     let cell: sym.Signal<number> = root;
     for (let i = 0; i < CHAIN; i++) {
-      cell = sym.Signal.lens(
+      cell = sym.lens(
         cell,
         (v) => v,
         (t) => t,
@@ -347,7 +347,7 @@ describe("BWD coalescing: 10 writes/batch on 5-deep chain", () => {
     const root = sym.signal(0);
     let cell: sym.Signal<number> = root;
     for (let i = 0; i < CHAIN; i++) {
-      cell = sym.Signal.lens(
+      cell = sym.lens(
         cell,
         (v) => v,
         (t) => t,
@@ -398,7 +398,7 @@ describe("write-then-read: 5-deep chain, 1 write + 1 read per iter", () => {
     const root = sym.signal(0);
     let cell: sym.Signal<number> = root;
     for (let i = 0; i < CHAIN; i++) {
-      cell = sym.Signal.lens(
+      cell = sym.lens(
         cell,
         (v) => v,
         (t) => t,
@@ -443,7 +443,7 @@ describe("write-MANY-then-read: 10 writes followed by 1 read", () => {
     const root = sym.signal(0);
     let cell: sym.Signal<number> = root;
     for (let i = 0; i < CHAIN; i++) {
-      cell = sym.Signal.lens(
+      cell = sym.lens(
         cell,
         (v) => v,
         (t) => t,

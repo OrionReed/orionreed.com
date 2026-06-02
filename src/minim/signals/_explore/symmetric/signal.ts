@@ -115,7 +115,14 @@ let notifyIndex = 0;
 let queuedLength = 0;
 let activeSub: ReactiveNode | undefined;
 let flushing = false;
-const queued: (Effect | undefined)[] = [];
+/** The `_NetworkNode` currently running its body, if any. Source writes
+ *  self-exclude it so a network that reads+writes a signal doesn't
+ *  re-trigger itself. `undefined` outside a network body — then writes
+ *  behave exactly as the pre-network engine. */
+let activeNetwork: _NetworkNode | undefined;
+const queued: (Effect | _NetworkNode | undefined)[] = [];
+
+const EMPTY_DIRTY: ReadonlySet<Signal<unknown>> = new Set();
 
 /** Backward worklist. Holds lens cells with deferred writes and merge
  *  cells awaiting fold. Drained (to a fixpoint with effects) by flush. */
@@ -162,6 +169,7 @@ function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
   }
   const prevSub = dep.subsTail;
   if (prevSub !== undefined && prevSub.version === version && prevSub.sub === sub) return;
+  const isFirstSub = dep.subs === undefined;
   const newLink: Link =
     (sub.depsTail =
     dep.subsTail =
@@ -179,6 +187,11 @@ function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
   else sub.deps = newLink;
   if (prevSub !== undefined) prevSub.nextSub = newLink;
   else dep.subs = newLink;
+  // First-subscriber lifecycle hook (dual: last-sub in `_unwatched`).
+  if (isFirstSub && dep instanceof Signal) {
+    const hook = dep._watched;
+    if (hook !== undefined) hook.call(dep);
+  }
 }
 
 function unlink(l: Link, sub: ReactiveNode = l.sub): Link | undefined {
@@ -194,36 +207,42 @@ function unlink(l: Link, sub: ReactiveNode = l.sub): Link | undefined {
   return nextDep;
 }
 
-function propagate(start: Link, innerWrite: boolean): void {
+function propagate(start: Link, innerWrite: boolean, excluding?: ReactiveNode): void {
   let l: Link | undefined = start;
   let next: Link | undefined = start.nextSub;
   let stack: Stack<Link | undefined> | undefined;
   top: do {
     const sub: ReactiveNode = l!.sub;
-    let flags = sub.flags;
-    if (!(flags & (F.RecursedCheck | F.Recursed | F.Dirty | F.Pending))) {
-      sub.flags = flags | F.Pending;
-      if (innerWrite) sub.flags |= F.Recursed;
-    } else if (!(flags & (F.RecursedCheck | F.Recursed))) {
-      flags = F.None;
-    } else if (!(flags & F.RecursedCheck)) {
-      sub.flags = (flags & ~F.Recursed) | F.Pending;
-    } else if (!(flags & (F.Dirty | F.Pending)) && isValidLink(l!, sub)) {
-      sub.flags = flags | (F.Recursed | F.Pending);
-      flags &= F.Mutable;
-    } else {
-      flags = F.None;
-    }
-    if (flags & F.Watching) sub._notify();
-    if (flags & F.Mutable) {
-      const subSubs: Link | undefined = sub.subs;
-      if (subSubs !== undefined) {
-        const nextSub = (l = subSubs).nextSub;
-        if (nextSub !== undefined) {
-          stack = { value: next, prev: stack };
-          next = nextSub;
+    // `excluding` skips one subscriber from notification — used by
+    // `network()` so a body that writes a signal it subscribes to
+    // doesn't re-trigger itself. The advance/stack-pop logic below runs
+    // unchanged, so other subs are visited normally.
+    if (sub !== excluding) {
+      let flags = sub.flags;
+      if (!(flags & (F.RecursedCheck | F.Recursed | F.Dirty | F.Pending))) {
+        sub.flags = flags | F.Pending;
+        if (innerWrite) sub.flags |= F.Recursed;
+      } else if (!(flags & (F.RecursedCheck | F.Recursed))) {
+        flags = F.None;
+      } else if (!(flags & F.RecursedCheck)) {
+        sub.flags = (flags & ~F.Recursed) | F.Pending;
+      } else if (!(flags & (F.Dirty | F.Pending)) && isValidLink(l!, sub)) {
+        sub.flags = flags | (F.Recursed | F.Pending);
+        flags &= F.Mutable;
+      } else {
+        flags = F.None;
+      }
+      if (flags & F.Watching) sub._notify();
+      if (flags & F.Mutable) {
+        const subSubs: Link | undefined = sub.subs;
+        if (subSubs !== undefined) {
+          const nextSub = (l = subSubs).nextSub;
+          if (nextSub !== undefined) {
+            stack = { value: next, prev: stack };
+            next = nextSub;
+          }
+          continue;
         }
-        continue;
       }
     }
     if ((l = next!) !== undefined) {
@@ -360,6 +379,13 @@ export interface SymmetricLensSpecN<S extends readonly unknown[], V, C> {
   putl: (target: V, sources: S, complement: C) => ReadonlyArray<S[number] | undefined>;
 }
 
+/** Single-input symmetric spec (sugar; lifted to N-form internally). */
+export interface SymmetricLensSpec1<S, V, C> {
+  missing: C;
+  putr: (source: S, complement: C) => V;
+  putl: (target: V, source: S, complement: C) => S | undefined;
+}
+
 export const DIRECT_SLOT: unique symbol = Symbol("merge:direct-slot");
 
 class MergeNode<T> {
@@ -399,7 +425,90 @@ class MergeNode<T> {
   }
 }
 
+// ─── Public types (writability layer) ─────────────────────────────
+
+/** Plain T or any read-shape. Permissive consumer input — `readNow(v)`
+ *  for a snapshot, `reader(v)` for a per-call closure. */
+export type Val<T> = T | Read<T>;
+
+/** Covariant read-only surface. */
+export interface Read<out T> {
+  readonly value: T;
+  peek(): T;
+}
+
+/** Brand for writable receivers; the discriminator for conditional
+ *  writability-propagating return types. */
+declare const WRITABLE: unique symbol;
+export interface WritableBrand {
+  readonly [WRITABLE]: never;
+}
+
+/** Value type carried by a reactive read shape. */
+export type Inner<R> = R extends Signal<infer T> ? T : R extends Read<infer T> ? T : never;
+
+/** The writable form of R: adds the brand + a settable `value`. */
+export type Writable<R> = R & WritableBrand & { value: Inner<R> };
+
+/** Strict factory input: a literal, or an existing `Writable<Cls>`. */
+// biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors `Inner`
+export type Init<C extends Signal<any>> = Inner<C> | Writable<C>;
+
+/** Snapshot a `Val<T>` to plain `T` (one-shot, no tracking). */
+export function readNow<T>(v: Val<T>): T {
+  if (v instanceof Signal) return v.value as T;
+  return v as T;
+}
+
+/** Resolve a `Val<T>` to a `() => T` closure that unwraps on each call. */
+export function reader<T>(v: Val<T>): () => T {
+  if (v instanceof Signal) return () => v.value as T;
+  return () => v as T;
+}
+
+/** Self-rewriting lazy getter: first call computes + installs an own
+ *  non-enumerable property under `key`; later reads shadow this getter. */
+export function lazy<R>(self: object, key: string | symbol, make: () => R): R {
+  const v = make();
+  Object.defineProperty(self, key, {
+    value: v,
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
+  return v;
+}
+
+export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signal;
+
+/** Lens mode: a derived cell that can be written back (has a `put` or
+ *  is a merge). The dual-direction analog of the main engine's
+ *  getter+setter check. */
+export const isLens = (v: unknown): v is Signal<unknown> =>
+  v instanceof Signal &&
+  v.getter !== undefined &&
+  (v._put !== undefined || v._mergeNode !== undefined);
+
+/** Computed mode: derived + read-only (no backward path). */
+export const isComputed = (v: unknown): v is Signal<unknown> =>
+  v instanceof Signal &&
+  v.getter !== undefined &&
+  v._put === undefined &&
+  v._mergeNode === undefined;
+
 // ─── Signal class ─────────────────────────────────────────────────
+
+export interface SignalOptions<T = unknown> {
+  /** First subscriber attached (lifecycle: start a spring, attach a
+   *  resource). Fired from `link` when a node gains its first sub. */
+  watched?: () => void;
+  /** Last subscriber detached. Fired from `_unwatched`. */
+  unwatched?: () => void;
+  /** Per-instance value equality; falls back to `===` when omitted.
+   *  Value classes thread their own through `super(v, { equals })`.
+   *  Hot-read on every write/recompute — the engine stays trait-blind. */
+  equals?: (a: T, b: T) => boolean;
+}
 
 export class Signal<T = unknown> implements ReactiveNode {
   flags: number = F.Mutable;
@@ -410,6 +519,13 @@ export class Signal<T = unknown> implements ReactiveNode {
 
   /** Forward derivation (computed/lens/merge). `undefined` ⇒ source. */
   getter: (() => T) | undefined;
+
+  /** Per-instance equality (from `opts.equals`); `undefined` ⇒ `===`.
+   *  Hot-read on every write. */
+  _equals: ((a: T, b: T) => boolean) | undefined;
+  /** First-subscriber / last-subscriber lifecycle hooks. */
+  _watched: (() => void) | undefined;
+  _unwatchedHook: (() => void) | undefined;
 
   /** The node's current value. A node is EITHER a source (uses
    *  `currentValue` = committed, `pendingValue` = staged write) OR a
@@ -452,7 +568,7 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  once per flush in last-write order. */
   _queueIdx: number;
 
-  constructor(initial: T) {
+  constructor(initial: T, opts?: SignalOptions<T>) {
     this.currentValue = initial;
     this.pendingValue = initial;
     // Pre-init every optional slot so the V8 hidden class is stable
@@ -462,12 +578,20 @@ export class Signal<T = unknown> implements ReactiveNode {
     this.deps = undefined;
     this.depsTail = undefined;
     this.getter = undefined;
+    this._equals = undefined;
+    this._watched = undefined;
+    this._unwatchedHook = undefined;
     this._bwdParent = undefined;
     this._bwdParents = undefined;
     this._put = undefined;
     this._putArity = 1;
     this._mergeNode = undefined;
     this._queueIdx = -1;
+    if (opts !== undefined) {
+      if (opts.equals !== undefined) this._equals = opts.equals;
+      if (opts.watched !== undefined) this._watched = opts.watched;
+      if (opts.unwatched !== undefined) this._unwatchedHook = opts.unwatched;
+    }
   }
 
   // ── Forward read / write ──
@@ -484,14 +608,18 @@ export class Signal<T = unknown> implements ReactiveNode {
     bwdQueue.push(this as Signal<unknown>);
   }
 
-  /** Source write — alien-signals' signal setter, sans exclusion. */
+  /** Source write — alien-signals' signal setter. Self-excludes the
+   *  active network (if any) so a network body writing its own dep
+   *  doesn't re-trigger itself; `activeNetwork` is `undefined` outside a
+   *  network body, so the exclusion is a no-op in the common case. */
   _writeSource(next: T): void {
     const prev = this.pendingValue;
     this.pendingValue = next;
-    if (prev !== next) {
+    const eq = this._equals;
+    if (eq !== undefined ? !eq(prev, next) : prev !== next) {
       this.flags = F.Mutable | F.Dirty;
       const subs = this.subs;
-      if (subs !== undefined) propagate(subs, runDepth > 0);
+      if (subs !== undefined) propagate(subs, runDepth > 0, activeNetwork);
       if (batchDepth === 0 && !flushing && subs !== undefined) flush();
     }
   }
@@ -509,7 +637,8 @@ export class Signal<T = unknown> implements ReactiveNode {
         const old = this.currentValue;
         const next = (this.currentValue = this.getter());
         threw = false;
-        return old !== next;
+        const eq = this._equals;
+        return eq !== undefined ? !eq(old, next) : old !== next;
       } finally {
         activeSub = prev;
         this.flags = threw ? F.Mutable | F.Dirty : this.flags & ~F.RecursedCheck;
@@ -517,7 +646,10 @@ export class Signal<T = unknown> implements ReactiveNode {
       }
     }
     this.flags = F.Mutable;
-    return this.currentValue !== (this.currentValue = this.pendingValue);
+    const prevV = this.currentValue;
+    const eq = this._equals;
+    this.currentValue = this.pendingValue;
+    return eq !== undefined ? !eq(prevV, this.currentValue) : prevV !== this.currentValue;
   }
 
   _notify(): void {}
@@ -526,7 +658,9 @@ export class Signal<T = unknown> implements ReactiveNode {
     if (this.getter !== undefined && this.depsTail !== undefined) {
       this.flags = F.Mutable | F.Dirty;
       disposeAllDepsInReverse(this);
+      return;
     }
+    if (this._unwatchedHook !== undefined) this._unwatchedHook();
   }
 
   peek(): T {
@@ -539,105 +673,316 @@ export class Signal<T = unknown> implements ReactiveNode {
     }
   }
 
+  /** Footgun guard: silent coercion to string/number is almost always a bug. */
+  [Symbol.toPrimitive](hint: string): never {
+    throw new TypeError(`Signal cannot be coerced to ${hint} — use \`.value\``);
+  }
+
   // ── Construction helpers ──
+  //
+  // All build via `new this()` so a subclass static (`Vec.lens(...)`)
+  // yields a `Vec`, inheriting its constructor-set equality. No `_fuse`,
+  // no closure-setter form — every lens has a structural backward target
+  // (`_bwdParent`/`_bwdParents`/merge parent), which is what makes the
+  // cascade well-defined.
 
-  static lens<P, R>(
-    parent: Signal<P>,
-    fwd: (v: P) => R,
-    bwd: (target: R, current: P) => P,
-  ): Signal<R> {
-    const cell = new Signal<R>(undefined as never);
-    cell.flags = F.Mutable | F.Dirty;
-    cell.getter = (): R => fwd(parent.value as P);
-    cell._put = bwd as (target: unknown, current?: unknown) => unknown;
-    cell._putArity = bwd.length >= 2 ? 2 : 1;
-    cell._bwdParent = parent as Signal<unknown>;
-    return cell;
+  /** Endomorphic instance lens: `this : Signal<T>` → `this`. The bread-
+   *  and-butter value-class chaining primitive (`num.add(1).scale(2)`).
+   *  Cross-type projections use the static `OtherCls.lens(this, …)`. */
+  lens(this: Signal<T>, fwd: (v: T) => T, bwd: (target: T, current: T) => T): this {
+    return buildLens1(
+      this.constructor as SignalCtor<Signal<T>>,
+      this as Signal<unknown>,
+      fwd as (v: unknown) => unknown,
+      bwd as (t: unknown, s?: unknown) => unknown,
+    ) as this;
   }
 
-  static derive<P, R>(parent: Signal<P>, fn: (v: P) => R): Signal<R> {
-    const cell = new Signal<R>(undefined as never);
-    cell.flags = F.Mutable | F.Dirty;
-    cell.getter = (): R => fn(parent.value as P);
-    return cell;
-  }
-
-  /** Backward-aggregating node — bwd dual of computed. Forward, it is
-   *  the identity view of its parent; backward, it folds contributions
-   *  from upstream lenses (slot-keyed) and direct writes (DIRECT_SLOT). */
+  /** Backward-aggregating node — bwd dual of computed. Forward, the
+   *  identity view of its parent; backward, folds contributions from
+   *  upstream lenses (slot-keyed) and direct writes (DIRECT_SLOT). */
   merge(this: Signal<T>, policy: MergePolicy<T>): Signal<T> {
     if (this.getter !== undefined && this._put === undefined && this._mergeNode === undefined) {
       throw new TypeError("merge: receiver is read-only");
     }
     const parent = this as Signal<T>;
-    const cell = new Signal<T>(undefined as never);
+    const cell = new (this.constructor as SignalCtor<Signal<T>>)();
     cell.flags = F.Mutable | F.Dirty;
     cell.getter = (): T => parent.value;
     cell._bwdParent = parent as Signal<unknown>;
     cell._mergeNode = new MergeNode<T>(parent, policy);
-    return cell;
+    return cell as Signal<T>;
   }
 
-  /** N-input lens (fan-in). Forward: `fwd(vals)` over the N parents'
-   *  values (auto-linked as deps — forward fan-in is just a getter
-   *  reading N cells). Backward: `bwd(target, vals?)` returns a
-   *  per-parent update array; the cascade forks into each parent.
-   *  Arity-dispatched — stateless `(t)=>updates` skips the parent peek;
-   *  stateful `(t, vals)=>updates` gets the current parent values.
-   *  Omit `bwd` for a read-only N-input derive. One scratch `vals`
-   *  array allocated, reused for read and write. */
-  static fanin<R>(
-    parents: readonly Signal<unknown>[],
-    fwd: (vals: readonly unknown[]) => R,
-    bwd?: (target: R, vals?: readonly unknown[]) => ReadonlyArray<unknown>,
-  ): Signal<R> {
-    const n = parents.length;
-    const vals = new Array<unknown>(n);
-    const cell = new Signal<R>(undefined as never);
-    cell.flags = F.Mutable | F.Dirty;
-    cell.getter = (): R => {
-      for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
-      return fwd(vals);
-    };
-    if (bwd === undefined) return cell; // read-only derive-N
-    cell._bwdParents = parents as Signal<unknown>[];
-    cell._put =
-      bwd.length >= 2
-        ? (target: unknown): unknown => {
-            for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
-            return (bwd as (t: R, v: readonly unknown[]) => ReadonlyArray<unknown>)(
-              target as R,
-              vals,
-            );
-          }
-        : (target: unknown): unknown => (bwd as (t: R) => ReadonlyArray<unknown>)(target as R);
-    return cell;
+  /** Read-only typed view. `Cls.derive(parent, fn)` (1-input),
+   *  `Cls.derive(parents, fn)` (N-input), or `Cls.derive(fn)` (closure).
+   *  Polymorphic-`this`: `Vec.derive(...)` → `Vec`. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static derive<C extends new (...args: never[]) => Signal<any>, P>(
+    this: C,
+    parent: Read<P>,
+    fn: (v: P) => Inner<InstanceType<C>>,
+  ): InstanceType<C>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static derive<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    parents: readonly Read<unknown>[],
+    fn: (vals: readonly unknown[]) => Inner<InstanceType<C>>,
+  ): InstanceType<C>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static derive<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    fn: () => Inner<InstanceType<C>>,
+  ): InstanceType<C>;
+  // biome-ignore lint/suspicious/noExplicitAny: dispatch
+  static derive(this: any, ...args: any[]): any {
+    if (args.length === 1) return buildComputed(this, args[0]);
+    const [parent, fn] = args;
+    if (Array.isArray(parent)) return buildFanin(this, parent, fn);
+    return buildComputed(this, () => fn((parent as Signal<unknown>).value));
   }
 
-  /** N-input symmetric lens carrying a private complement. Sugar over
-   *  `fanin` where `putr`/`putl` share closure-captured complement
-   *  state (`spec.missing`, mutated in place). The complement is NOT a
-   *  cell — see `SymmetricLensSpecN`. */
-  static symmetric<R, C>(
-    parents: readonly Signal<unknown>[],
-    spec: SymmetricLensSpecN<readonly unknown[], R, C>,
-  ): Signal<R> {
-    const n = parents.length;
-    const vals = new Array<unknown>(n);
-    const complement = spec.missing;
-    const cell = new Signal<R>(undefined as never);
-    cell.flags = F.Mutable | F.Dirty;
-    cell.getter = (): R => {
-      for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
-      return spec.putr(vals, complement);
-    };
-    cell._bwdParents = parents as Signal<unknown>[];
-    cell._put = (target: unknown): unknown => {
-      for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
-      return spec.putl(target as R, vals, complement);
-    };
-    return cell;
+  /** Read-write typed lens. Dispatched at runtime:
+   *    Cls.lens(parent,  fwd, bwd)  — 1-input.
+   *    Cls.lens(parents, fwd, bwd)  — N-input fan-out.
+   *    Cls.lens(parent,  spec)      — 1-input symmetric (complement).
+   *    Cls.lens(parents, spec)      — N-input symmetric.
+   *  Polymorphic-`this`: `Vec.lens(...)` → `Writable<Vec>`. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static lens<C extends new (...args: never[]) => Signal<any>, P>(
+    this: C,
+    parent: Read<P>,
+    fwd: (v: P) => Inner<InstanceType<C>>,
+    bwd: (target: Inner<InstanceType<C>>, v: P) => P,
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static lens<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    parents: readonly Read<unknown>[],
+    fwd: (vals: readonly unknown[]) => Inner<InstanceType<C>>,
+    bwd: (
+      target: Inner<InstanceType<C>>,
+      vals: readonly unknown[],
+    ) => ReadonlyArray<unknown>,
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static lens<C extends new (...args: never[]) => Signal<any>, P, COMP>(
+    this: C,
+    parent: Read<P>,
+    spec: SymmetricLensSpec1<P, Inner<InstanceType<C>>, COMP>,
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static lens<C extends new (...args: never[]) => Signal<any>, COMP>(
+    this: C,
+    parents: readonly Read<unknown>[],
+    spec: SymmetricLensSpecN<readonly unknown[], Inner<InstanceType<C>>, COMP>,
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: dispatch
+  static lens(this: any, ...args: any[]): any {
+    if (args.length === 2) {
+      // (parent | parents, spec). Signals/arrays aren't functions, so a
+      // 2-arg call is always a symmetric spec — no closure-setter form.
+      const [first, spec] = args;
+      if (Array.isArray(first)) return buildSymmetric(this, first, spec);
+      return buildSymmetric(this, [first], _liftSpec1(spec));
+    }
+    const [parent, fwd, bwd] = args;
+    if (Array.isArray(parent)) return buildFanin(this, parent, fwd, bwd);
+    return buildLens1(this, parent, fwd, bwd);
   }
+
+  /** N-input fan-in. Forward `fwd(vals)` over N parents (auto-linked);
+   *  backward `bwd(target, vals?)` returns a per-parent update array.
+   *  Omit `bwd` for a read-only N-input derive. Polymorphic-`this`. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static fanin<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    parents: readonly Read<unknown>[],
+    fwd: (vals: readonly unknown[]) => Inner<InstanceType<C>>,
+    bwd?: (
+      target: Inner<InstanceType<C>>,
+      vals?: readonly unknown[],
+    ) => ReadonlyArray<unknown>,
+  ): InstanceType<C> {
+    return buildFanin(
+      this as unknown as SignalCtor<Signal<unknown>>,
+      parents as Signal<unknown>[],
+      fwd as (vals: readonly unknown[]) => unknown,
+      bwd as ((target: unknown, vals?: readonly unknown[]) => ReadonlyArray<unknown>) | undefined,
+    ) as InstanceType<C>;
+  }
+
+  /** N-input symmetric lens carrying a private complement (closure-
+   *  captured, not a cell). Polymorphic-`this`. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static symmetric<C extends new (...args: never[]) => Signal<any>, COMP>(
+    this: C,
+    parents: readonly Read<unknown>[],
+    spec: SymmetricLensSpecN<readonly unknown[], Inner<InstanceType<C>>, COMP>,
+  ): Writable<InstanceType<C>> {
+    return buildSymmetric(
+      this as unknown as SignalCtor<Signal<unknown>>,
+      parents as Signal<unknown>[],
+      spec as unknown as SymmetricLensSpecN<readonly unknown[], unknown, COMP>,
+    ) as Writable<InstanceType<C>>;
+  }
+
+  /** Permissive consumer-layer lift — `Val<Inner<Cls>>` → `Cls`.
+   *  Instance → identity; RO signal → tracked `derive`; literal → fresh
+   *  seed. Return type is `Cls` (writability not assumed). */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static from<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    v: Val<Inner<InstanceType<C>>>,
+  ): InstanceType<C> {
+    if (v instanceof this) return v as InstanceType<C>;
+    if (v instanceof Signal) {
+      // biome-ignore lint/suspicious/noExplicitAny: dispatch
+      return (this as any).derive(() => readNow(v)) as InstanceType<C>;
+    }
+    return new (this as unknown as new (init?: Inner<InstanceType<C>>) => InstanceType<C>)(
+      v as Inner<InstanceType<C>>,
+    ) as InstanceType<C>;
+  }
+
+  /** Constant-projection: a `Writable<this>` that always reads `v` and
+   *  absorbs writes (parentless sink lens). The writable-shaped constant
+   *  for APIs demanding bidirectionality. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static pin<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    v: Inner<InstanceType<C>>,
+  ): Writable<InstanceType<C>> {
+    const cell = new (this as unknown as SignalCtor<Signal<unknown>>)();
+    cell.flags = F.Mutable | F.Dirty;
+    cell.getter = (): unknown => v;
+    cell._put = (): unknown => undefined; // absorb (no parent → sink)
+    cell._putArity = 1;
+    return cell as unknown as Writable<InstanceType<C>>;
+  }
+
+  /** Typed field lens onto `parent.value[key]`. Dispatches on the
+   *  parent's mode: a read-only computed parent yields a RO derive
+   *  view; any writable parent (source / lens / merge / fan-out) yields
+   *  a bidirectional field lens with spread-replace `put`. Mirrors the
+   *  writability-propagating conditional in `field()`. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static fieldOf<C extends new (...args: never[]) => Signal<any>>(
+    // biome-ignore lint/suspicious/noExplicitAny: parent is contravariant on put
+    parent: Signal<any>,
+    key: string | number | symbol,
+    Cls: C,
+  ): InstanceType<C> {
+    const ctor = Cls as unknown as SignalCtor<Signal<unknown>>;
+    const get = (s: unknown): unknown => (s as Record<string | number | symbol, unknown>)[key];
+    const ro =
+      parent.getter !== undefined &&
+      parent._put === undefined &&
+      parent._mergeNode === undefined &&
+      parent._bwdParents === undefined;
+    if (ro) {
+      return buildComputed(ctor, () => get(parent.value)) as InstanceType<C>;
+    }
+    return buildLens1(ctor, parent as Signal<unknown>, get, (v, s) => ({
+      ...(s as object),
+      [key]: v,
+    })) as InstanceType<C>;
+  }
+}
+
+// ─── Cell builders (install pattern) ──────────────────────────────
+//
+// Each `new Cls()` instantiates the right subclass (so `Vec.lens(...)`
+// returns a `Vec` with Vec equality from its constructor), then sets
+// the mode fields. Module-level so the class statics can call them.
+
+// biome-ignore lint/suspicious/noExplicitAny: variance escape for subclass ctors (contravariant _equals)
+type SignalCtor<C extends Signal<any>> = new (...args: never[]) => C;
+
+// biome-ignore lint/suspicious/noExplicitAny: variance escape
+function buildComputed<C extends Signal<any>>(Cls: SignalCtor<C>, getter: () => unknown): C {
+  const cell = new Cls();
+  cell.getter = getter as () => never;
+  cell.flags = F.Mutable | F.Dirty;
+  return cell;
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: variance escape
+function buildLens1<C extends Signal<any>>(
+  Cls: SignalCtor<C>,
+  parent: Signal<unknown>,
+  fwd: (v: unknown) => unknown,
+  bwd: (t: unknown, s?: unknown) => unknown,
+): C {
+  const cell = new Cls();
+  cell.flags = F.Mutable | F.Dirty;
+  cell.getter = (() => fwd(parent.value)) as () => never;
+  cell._put = bwd;
+  cell._putArity = bwd.length >= 2 ? 2 : 1;
+  cell._bwdParent = parent;
+  return cell;
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: variance escape
+function buildFanin<C extends Signal<any>>(
+  Cls: SignalCtor<C>,
+  parents: Signal<unknown>[],
+  fwd: (vals: readonly unknown[]) => unknown,
+  bwd?: (target: unknown, vals?: readonly unknown[]) => ReadonlyArray<unknown>,
+): C {
+  const n = parents.length;
+  const vals = new Array<unknown>(n);
+  const cell = new Cls();
+  cell.flags = F.Mutable | F.Dirty;
+  cell.getter = (() => {
+    for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
+    return fwd(vals);
+  }) as () => never;
+  if (bwd === undefined) return cell; // read-only derive-N
+  cell._bwdParents = parents;
+  cell._put =
+    bwd.length >= 2
+      ? (target: unknown): unknown => {
+          for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+          return bwd(target, vals);
+        }
+      : (target: unknown): unknown => bwd(target);
+  return cell;
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: variance escape
+function buildSymmetric<C extends Signal<any>>(
+  Cls: SignalCtor<C>,
+  parents: Signal<unknown>[],
+  // biome-ignore lint/suspicious/noExplicitAny: complement is opaque to engine
+  spec: SymmetricLensSpecN<readonly unknown[], unknown, any>,
+): C {
+  const n = parents.length;
+  const vals = new Array<unknown>(n);
+  const complement = spec.missing;
+  const cell = new Cls();
+  cell.flags = F.Mutable | F.Dirty;
+  cell.getter = (() => {
+    for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
+    return spec.putr(vals, complement);
+  }) as () => never;
+  cell._bwdParents = parents;
+  cell._put = (target: unknown): unknown => {
+    for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+    return spec.putl(target, vals, complement);
+  };
+  return cell;
+}
+
+/** Lift a 1-input symmetric spec into the canonical N-input form. */
+function _liftSpec1<S, V, C>(
+  spec: SymmetricLensSpec1<S, V, C>,
+): SymmetricLensSpecN<readonly S[], V, C> {
+  return {
+    missing: spec.missing,
+    putr: (sources, c) => spec.putr(sources[0]!, c),
+    putl: (target, sources, c) => [spec.putl(target, sources[0]!, c)],
+  };
 }
 
 // Install `value` on the prototype (alien-signals pattern). V8 JITs a
@@ -681,7 +1026,10 @@ Object.defineProperty(Signal.prototype, "value", {
     // Signal path.
     if (flags & F.Dirty) {
       this.flags = F.Mutable;
-      if (this.currentValue !== (this.currentValue = this.pendingValue)) {
+      const prevV = this.currentValue;
+      const eq = this._equals;
+      this.currentValue = this.pendingValue;
+      if (eq !== undefined ? !eq(prevV, this.currentValue) : prevV !== this.currentValue) {
         const subs = this.subs;
         if (subs !== undefined) shallowPropagate(subs);
       }
@@ -742,15 +1090,21 @@ function cascadeBwd(start: Signal<unknown>, target: unknown, deferred: boolean):
       cascadeFanout(cell, v, deferred);
       return;
     }
-    const parent = cell._bwdParent!;
+    const parent = cell._bwdParent;
     let push: unknown;
     if (cell._mergeNode !== undefined) {
       const node = cell._mergeNode;
       push = node.fold();
       node.reset();
+    } else if (cell._putArity === 1 || parent === undefined) {
+      push = cell._put!(v);
     } else {
-      push = cell._putArity === 1 ? cell._put!(v) : cell._put!(v, parent.peek());
+      push = cell._put!(v, parent.peek());
     }
+
+    // Parentless lens (e.g. `pin`): the `put` ran for its effect, but
+    // there is no upstream — the write is absorbed. Terminal sink.
+    if (parent === undefined) return;
 
     if (parent._mergeNode !== undefined) {
       parent._mergeNode.receive(cell, push);
@@ -818,8 +1172,8 @@ function forkInto(
 
 // ─── factories ────────────────────────────────────────────────────
 
-export function signal<T>(initial: T): Signal<T> {
-  return new Signal(initial);
+export function signal<T>(initial: T, opts?: SignalOptions<T>): Signal<T> {
+  return new Signal(initial, opts);
 }
 
 export function computed<T>(fn: () => T): Signal<T> {
@@ -827,6 +1181,87 @@ export function computed<T>(fn: () => T): Signal<T> {
   cell.flags = F.Mutable | F.Dirty;
   cell.getter = fn;
   return cell;
+}
+
+// Bare (untyped) factories — the dual of `computed`. These construct a
+// plain `Signal`, so `R` is inferred from the closures (the polymorphic-
+// `this` `Signal.lens` statics return `Signal<unknown>` on the base
+// class, and are meant for typed subclasses like `Vec.lens`).
+
+const SIGNAL_CTOR = Signal as unknown as SignalCtor<Signal<unknown>>;
+
+/** Untyped read-only view: `derive(parent, fn)`, `derive(parents, fn)`,
+ *  or `derive(fn)` (closure). */
+export function derive<P, R>(parent: Read<P>, fn: (v: P) => R): Signal<R>;
+export function derive<R>(
+  parents: readonly Read<unknown>[],
+  fn: (vals: readonly unknown[]) => R,
+): Signal<R>;
+export function derive<R>(fn: () => R): Signal<R>;
+// biome-ignore lint/suspicious/noExplicitAny: dispatch
+export function derive(...args: any[]): any {
+  if (args.length === 1) return buildComputed(SIGNAL_CTOR, args[0]);
+  const [parent, fn] = args;
+  if (Array.isArray(parent)) return buildFanin(SIGNAL_CTOR, parent, fn);
+  return buildComputed(SIGNAL_CTOR, () => fn((parent as Signal<unknown>).value));
+}
+
+/** Untyped read-write lens. Dispatches like `Signal.lens` but infers
+ *  `R` from the closures. */
+export function lens<P, R>(
+  parent: Read<P>,
+  fwd: (v: P) => R,
+  bwd: (target: R, v: P) => P,
+): Writable<Signal<R>>;
+export function lens<R>(
+  parents: readonly Read<unknown>[],
+  fwd: (vals: readonly unknown[]) => R,
+  bwd: (target: R, vals: readonly unknown[]) => ReadonlyArray<unknown>,
+): Writable<Signal<R>>;
+export function lens<P, R, C>(
+  parent: Read<P>,
+  spec: SymmetricLensSpec1<P, R, C>,
+): Writable<Signal<R>>;
+export function lens<R, C>(
+  parents: readonly Read<unknown>[],
+  spec: SymmetricLensSpecN<readonly unknown[], R, C>,
+): Writable<Signal<R>>;
+// biome-ignore lint/suspicious/noExplicitAny: dispatch
+export function lens(...args: any[]): any {
+  if (args.length === 2) {
+    const [first, spec] = args;
+    if (Array.isArray(first)) return buildSymmetric(SIGNAL_CTOR, first, spec);
+    return buildSymmetric(SIGNAL_CTOR, [first], _liftSpec1(spec));
+  }
+  const [parent, fwd, bwd] = args;
+  if (Array.isArray(parent)) return buildFanin(SIGNAL_CTOR, parent, fwd, bwd);
+  return buildLens1(SIGNAL_CTOR, parent, fwd, bwd);
+}
+
+/** Untyped N-input fan-in (`bwd` optional ⇒ read-only derive-N). */
+export function fanin<R>(
+  parents: readonly Read<unknown>[],
+  fwd: (vals: readonly unknown[]) => R,
+  bwd?: (target: R, vals?: readonly unknown[]) => ReadonlyArray<unknown>,
+): Signal<R> {
+  return buildFanin(
+    SIGNAL_CTOR,
+    parents as Signal<unknown>[],
+    fwd as (vals: readonly unknown[]) => unknown,
+    bwd as ((target: unknown, vals?: readonly unknown[]) => ReadonlyArray<unknown>) | undefined,
+  ) as Signal<R>;
+}
+
+/** Untyped N-input symmetric lens (complement closure-captured). */
+export function symmetric<R, C>(
+  parents: readonly Read<unknown>[],
+  spec: SymmetricLensSpecN<readonly unknown[], R, C>,
+): Writable<Signal<R>> {
+  return buildSymmetric(
+    SIGNAL_CTOR,
+    parents as Signal<unknown>[],
+    spec as unknown as SymmetricLensSpecN<readonly unknown[], unknown, C>,
+  ) as Writable<Signal<R>>;
 }
 
 // ─── Effect (alien-signals verbatim) ──────────────────────────────
@@ -996,4 +1431,212 @@ export function untracked<R>(fn: () => R): R {
   } finally {
     activeSub = prev;
   }
+}
+
+// ─── network() — reactive sub-DAG with self-excluded writes ───────
+//
+// A `_NetworkNode` is a watching node (like an Effect) whose body fires
+// when any SUBSCRIBED dep changes, but whose own writes self-exclude the
+// node (via `activeNetwork` threaded into `propagate`) so it doesn't
+// re-trigger itself. Topology is explicit: the deps array plus later
+// subscribe/unsubscribe — reads inside the body do NOT add deps. This is
+// the building block for constraint networks (fixed topology, structural
+// termination) as opposed to effects (implicit, auto-tracked deps).
+
+/** Handle to a `network` invocation. */
+export interface Network {
+  /** Tear down: unsubscribe from every signal, drop internal state. */
+  dispose(): void;
+  /** Run the body now (manual mode's only advance mechanism; a no-op in
+   *  auto mode when nothing changed). */
+  flush(): void;
+  /** Add signals to the topology (idempotent; does NOT fire the body). */
+  // biome-ignore lint/suspicious/noExplicitAny: deps come in many flavours
+  subscribe(...sigs: Signal<any>[]): void;
+  /** Remove signals from the topology (idempotent; does NOT fire). */
+  // biome-ignore lint/suspicious/noExplicitAny: deps come in many flavours
+  unsubscribe(...sigs: Signal<any>[]): void;
+}
+
+type NetworkBody = (dirty: ReadonlySet<Signal<unknown>>, handle: Network) => void;
+
+class _NetworkNode implements ReactiveNode {
+  subs: Link | undefined = undefined;
+  subsTail: Link | undefined = undefined;
+  deps: Link | undefined = undefined;
+  depsTail: Link | undefined = undefined;
+  flags: number = F.Watching | F.RecursedCheck;
+  body: NetworkBody;
+  manual: boolean;
+  /** Per-instance last-seen dep values; used to compute `dirty`. */
+  lastValues: Map<Signal<unknown>, unknown> = new Map();
+  pending = false;
+  disposed = false;
+  private _running = false;
+  private _ownCycle = 0;
+  private _depsSet: Set<Signal<unknown>> = new Set();
+  private _handle!: Network;
+
+  constructor(body: NetworkBody, manual: boolean) {
+    this.body = body;
+    this.manual = manual;
+  }
+
+  /** Two-phase init so the body sees its own handle on the first fire. */
+  _initWithHandle(handle: Network, initialDeps: readonly Signal<unknown>[]): void {
+    this._handle = handle;
+    this._linkBatch(initialDeps);
+    this._runBody(EMPTY_DIRTY);
+  }
+
+  _update(): boolean {
+    this.flags = F.Mutable;
+    return true;
+  }
+
+  _notify(): void {
+    if (this.manual) {
+      this.pending = true;
+      this.flags |= F.Watching;
+      return;
+    }
+    queued[queuedLength++] = this;
+    this.flags &= ~F.Watching;
+  }
+
+  _unwatched(): void {
+    this.disposed = true;
+    this.flags = F.None;
+    disposeAllDepsInReverse(this);
+    const sub = this.subs;
+    if (sub !== undefined) unlink(sub);
+    this.lastValues.clear();
+  }
+
+  _run(): void {
+    if (this.disposed) return;
+    const flags = this.flags;
+    if (flags & F.Dirty || (flags & F.Pending && checkDirty(this.deps!, this))) {
+      this._runBody(this._computeDirty());
+    } else if (this.deps !== undefined) {
+      this.flags = F.Watching;
+    }
+  }
+
+  private _computeDirty(): ReadonlySet<Signal<unknown>> {
+    let dirty: Set<Signal<unknown>> | undefined;
+    for (const [sig, lastVal] of this.lastValues) {
+      if (sig.peek() !== lastVal) {
+        if (dirty === undefined) dirty = new Set();
+        dirty.add(sig);
+      }
+    }
+    return dirty ?? EMPTY_DIRTY;
+  }
+
+  private _runBody(dirty: ReadonlySet<Signal<unknown>>): void {
+    this.flags = F.Watching | F.RecursedCheck;
+    this._running = true;
+    const prevSettler = activeNetwork;
+    activeNetwork = this;
+    try {
+      ++cycle;
+      ++runDepth;
+      ++batchDepth;
+      try {
+        this.body(dirty, this._handle);
+      } finally {
+        if (!--batchDepth) flush();
+      }
+    } finally {
+      --runDepth;
+      activeNetwork = prevSettler;
+      this.flags &= ~F.RecursedCheck;
+      this._running = false;
+      this.lastValues.clear();
+      let l = this.deps;
+      while (l !== undefined) {
+        const sig = l.dep as Signal<unknown>;
+        this.lastValues.set(sig, sig.peek());
+        l = l.nextDep;
+      }
+    }
+    this.pending = false;
+  }
+
+  flush(): void {
+    if (this.disposed) return;
+    if (this._running) {
+      throw new Error(
+        "network: flush() called from inside body — would recurse infinitely. " +
+          "Return from the body and let the next dep change drive the next fire.",
+      );
+    }
+    this._runBody(this._computeDirty());
+  }
+
+  subscribe(sigs: readonly Signal<unknown>[]): void {
+    if (this.disposed) return;
+    this._linkBatch(sigs);
+  }
+
+  unsubscribe(sigs: readonly Signal<unknown>[]): void {
+    if (this.disposed) return;
+    const set = this._depsSet;
+    for (const s of sigs) {
+      if (!set.has(s)) continue;
+      set.delete(s);
+      let l = this.deps;
+      while (l !== undefined) {
+        if (l.dep === s) {
+          unlink(l, this);
+          break;
+        }
+        l = l.nextDep;
+      }
+    }
+  }
+
+  private _linkBatch(sigs: readonly Signal<unknown>[]): void {
+    const set = this._depsSet;
+    let tail = this.deps;
+    if (tail !== undefined) {
+      while (tail.nextDep !== undefined) tail = tail.nextDep;
+    }
+    this.depsTail = tail;
+    for (const s of sigs) {
+      if (set.has(s)) continue;
+      set.add(s);
+      link(s as ReactiveNode, this, ++this._ownCycle);
+    }
+  }
+}
+
+/** Build a reactive sub-DAG node with explicit topology.
+ *
+ *  Promises:
+ *  - Body fires when any subscribed dep changes; `dirty` is the subset
+ *    that changed since the last fire.
+ *  - `signal.value =` writes inside the body self-exclude THIS network
+ *    so it doesn't re-trigger itself.
+ *  - Body runs inside `batch()`; writes commit atomically.
+ *  - Topology is exactly the deps array + later subscribe/unsubscribe —
+ *    reads inside the body do NOT add deps.
+ *  - `flush()` from inside the body throws (would recurse infinitely).
+ *  - `manual: true` defers auto-firing; only `flush()` advances. */
+export function network(
+  // biome-ignore lint/suspicious/noExplicitAny: deps come in many flavours
+  deps: readonly Signal<any>[],
+  body: (dirty: ReadonlySet<Signal<unknown>>, handle: Network) => void,
+  opts?: { manual?: boolean },
+): Network {
+  const node = new _NetworkNode(body, opts?.manual ?? false);
+  const handle: Network = {
+    dispose: () => node._unwatched(),
+    flush: () => node.flush(),
+    subscribe: (...sigs) => node.subscribe(sigs),
+    unsubscribe: (...sigs) => node.unsubscribe(sigs),
+  };
+  node._initWithHandle(handle, deps as readonly Signal<unknown>[]);
+  return handle;
 }
