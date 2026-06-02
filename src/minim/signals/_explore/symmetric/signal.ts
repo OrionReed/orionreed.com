@@ -47,15 +47,42 @@
 // FAN-OUT — backward dual of fan-in
 // ─────────────────────────────────
 // A getter reading N parents is forward fan-in. Its backward dual is a
-// write that distributes to N parents: `_bwdFn(target)` returns a
+// write that distributes to N parents: `_put(target)` returns a
 // per-parent update array and `cascadeBwd` FORKS into each parent
 // (`cascadeFanout`). This single primitive subsumes both `_fanin`
 // (N→M coupled writables, e.g. mean/diff, procrustes) and symmetric /
 // complement lenses. The "complement" — private lens memory that lets
 // lossy writes recover discarded info — is NOT a node: it is closure-
-// captured state in the getter/`_bwdFn`, with no subs, no dirty bits,
+// captured state in the getter/`_put`, with no subs, no dirty bits,
 // no propagation. Eager fan-out coalesces its N commits under one flush
 // (shared-ancestor merges still accumulate all contributions first).
+//
+// GET / PUT, TRACKED / DECLARED — the core asymmetry
+// ──────────────────────────────────────────────────
+// Forward and backward are duals but NOT mirror images. A cell `get`s
+// its value forward (the `getter`) and `put`s edits backward (`_put`).
+// The asymmetry that matters:
+//
+//   * Forward dependencies are IMPLICIT — auto-tracked by reading
+//     `.value` under an `activeSub` (link/propagate/`deps`). You never
+//     declare what a getter reads; the engine discovers it each run.
+//   * Backward targets are EXPLICIT — declared at construction
+//     (`_bwdParent` / `_bwdParents` / a merge's parent). There is no
+//     `activeBwdWrite` global precisely because backward is structural,
+//     not ambient.
+//
+// MODE TABLE — a cell's role is fully determined by which fields are set
+// (exactly like the forward signal/computed/lens distinction):
+//
+//   source      getter undefined                 (truth in currentValue)
+//   computed    getter,  no _put, no _mergeNode
+//   lens 1→1    getter + _put + _bwdParent
+//   fan-out     getter + _put + _bwdParents       (1→N / N→M backward)
+//   merge       getter + _mergeNode               (N→1 backward fold)
+//
+// `pendingValue` has a dual role keyed off this table: for a source it
+// is the staged forward write; for a getter cell it is the deferred
+// backward target awaiting cascade (the two never coexist on a node).
 //
 // BATCHING
 //   * Outside batch: a write cascades eagerly and flushes — matching
@@ -401,21 +428,24 @@ export class Signal<T = unknown> implements ReactiveNode {
 
   /** Multi-output backward: the N direct parents a fan-in / symmetric
    *  lens distributes writes to. When set, `_bwdParent` is unused and
-   *  `_bwdFn(target)` returns a per-parent update array (the dual of a
+   *  `_put(target)` returns a per-parent update array (the dual of a
    *  getter reading N parents). The cascade FORKS into each parent.
    *  Any private lens state (a "complement") is closure-captured by the
-   *  getter/`_bwdFn` — it needs no node, no subs, no bookkeeping. */
+   *  getter/`_put` — it needs no node, no subs, no bookkeeping. */
   _bwdParents: Signal<unknown>[] | undefined;
 
-  /** Lens `put`. Arity distinguishes `(t)=>p` from `(t,current)=>p`.
-   *  For multi-output cells, `_bwdFn(target)` returns an update array
-   *  and `_bwdFnArity` is irrelevant (the peek is baked into the fn). */
-  // biome-ignore lint/suspicious/noExplicitAny: bwd fn is opaque shape
-  _bwdFn: ((target: any, current?: any) => any) | undefined;
-  _bwdFnArity: 1 | 2;
+  /** Lens `put` — the backward derivation (dual of `getter`). Arity
+   *  distinguishes `(t)=>p` from `(t,current)=>p`. For multi-output
+   *  cells, `_put(target)` returns a per-parent update array and
+   *  `_putArity` is irrelevant (the peek is baked into the fn). */
+  // biome-ignore lint/suspicious/noExplicitAny: put fn is opaque shape
+  _put: ((target: any, current?: any) => any) | undefined;
+  _putArity: 1 | 2;
 
+  /** Backward fan-in (dual of a multi-dep computed). When set, this
+   *  cell folds contributions via a policy instead of applying a `put`.
+   *  Presence of `_mergeNode` IS the "merge mode" discriminant. */
   _mergeNode: MergeNode<T> | undefined;
-  _isMerge: boolean;
 
   /** Index in `bwdQueue` of this cell's LATEST push. The drain skips
    *  entries whose `_queueIdx` ≠ their position, so each cell cascades
@@ -434,10 +464,9 @@ export class Signal<T = unknown> implements ReactiveNode {
     this.getter = undefined;
     this._bwdParent = undefined;
     this._bwdParents = undefined;
-    this._bwdFn = undefined;
-    this._bwdFnArity = 1;
+    this._put = undefined;
+    this._putArity = 1;
     this._mergeNode = undefined;
-    this._isMerge = false;
     this._queueIdx = -1;
   }
 
@@ -520,8 +549,8 @@ export class Signal<T = unknown> implements ReactiveNode {
     const cell = new Signal<R>(undefined as never);
     cell.flags = F.Mutable | F.Dirty;
     cell.getter = (): R => fwd(parent.value as P);
-    cell._bwdFn = bwd as (target: unknown, current?: unknown) => unknown;
-    cell._bwdFnArity = bwd.length >= 2 ? 2 : 1;
+    cell._put = bwd as (target: unknown, current?: unknown) => unknown;
+    cell._putArity = bwd.length >= 2 ? 2 : 1;
     cell._bwdParent = parent as Signal<unknown>;
     return cell;
   }
@@ -537,7 +566,7 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  the identity view of its parent; backward, it folds contributions
    *  from upstream lenses (slot-keyed) and direct writes (DIRECT_SLOT). */
   merge(this: Signal<T>, policy: MergePolicy<T>): Signal<T> {
-    if (this.getter !== undefined && this._bwdFn === undefined && !this._isMerge) {
+    if (this.getter !== undefined && this._put === undefined && this._mergeNode === undefined) {
       throw new TypeError("merge: receiver is read-only");
     }
     const parent = this as Signal<T>;
@@ -546,7 +575,6 @@ export class Signal<T = unknown> implements ReactiveNode {
     cell.getter = (): T => parent.value;
     cell._bwdParent = parent as Signal<unknown>;
     cell._mergeNode = new MergeNode<T>(parent, policy);
-    cell._isMerge = true;
     return cell;
   }
 
@@ -573,7 +601,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     };
     if (bwd === undefined) return cell; // read-only derive-N
     cell._bwdParents = parents as Signal<unknown>[];
-    cell._bwdFn =
+    cell._put =
       bwd.length >= 2
         ? (target: unknown): unknown => {
             for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
@@ -604,7 +632,7 @@ export class Signal<T = unknown> implements ReactiveNode {
       return spec.putr(vals, complement);
     };
     cell._bwdParents = parents as Signal<unknown>[];
-    cell._bwdFn = (target: unknown): unknown => {
+    cell._put = (target: unknown): unknown => {
       for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
       return spec.putl(target as R, vals, complement);
     };
@@ -670,11 +698,11 @@ Object.defineProperty(Signal.prototype, "value", {
     // writes coalesce (last-write-wins) and merge folds wait for all
     // contributors; eager + synchronous otherwise.
     const deferred = batchDepth > 0 || flushing;
-    if (this._isMerge) {
-      this._mergeNode!.receive(DIRECT_SLOT, next);
+    if (this._mergeNode !== undefined) {
+      this._mergeNode.receive(DIRECT_SLOT, next);
       if (deferred) this._enqueueBwd();
       else cascadeBwd(this, undefined, false);
-    } else if (this._bwdFn === undefined) {
+    } else if (this._put === undefined) {
       throw new TypeError("Cannot write to a computed");
     } else if (deferred) {
       // Reuse `pendingValue` (unused by a getter cell's forward path)
@@ -696,6 +724,10 @@ Object.defineProperty(Signal.prototype, "value", {
 // parent merge is reached. `deferred` (inside batch / flush) stops at a
 // parent merge after depositing — the merge folds later, once all
 // contributors have landed. Eager folds merges inline.
+//
+// This is NOT a second propagation engine: every path terminates in
+// `_writeSource` (the forward write). Backward "compiles" a view-edit
+// into source-edits; the forward machinery does the rest.
 
 function cascadeBwd(start: Signal<unknown>, target: unknown, deferred: boolean): void {
   let cell = start;
@@ -712,16 +744,16 @@ function cascadeBwd(start: Signal<unknown>, target: unknown, deferred: boolean):
     }
     const parent = cell._bwdParent!;
     let push: unknown;
-    if (cell._isMerge) {
-      const node = cell._mergeNode!;
+    if (cell._mergeNode !== undefined) {
+      const node = cell._mergeNode;
       push = node.fold();
       node.reset();
     } else {
-      push = cell._bwdFnArity === 1 ? cell._bwdFn!(v) : cell._bwdFn!(v, parent.peek());
+      push = cell._putArity === 1 ? cell._put!(v) : cell._put!(v, parent.peek());
     }
 
-    if (parent._isMerge) {
-      parent._mergeNode!.receive(cell, push);
+    if (parent._mergeNode !== undefined) {
+      parent._mergeNode.receive(cell, push);
       if (deferred) {
         if (!(parent.flags & F.BwdQueued)) parent._enqueueBwd();
         return;
@@ -740,7 +772,7 @@ function cascadeBwd(start: Signal<unknown>, target: unknown, deferred: boolean):
   }
 }
 
-/** Fork a multi-output cell's write into its N parents. `_bwdFn(target)`
+/** Fork a multi-output cell's write into its N parents. `_put(target)`
  *  returns the per-parent update array (`undefined` ⇒ leave parent
  *  untouched); each defined update recurses via `cascadeBwd`.
  *
@@ -752,7 +784,7 @@ function cascadeBwd(start: Signal<unknown>, target: unknown, deferred: boolean):
  *  coalescing must live here, not at the write entry point.) */
 function cascadeFanout(cell: Signal<unknown>, target: unknown, deferred: boolean): void {
   const parents = cell._bwdParents!;
-  const updates = cell._bwdFn!(target) as ReadonlyArray<unknown>;
+  const updates = cell._put!(target) as ReadonlyArray<unknown>;
   const n = parents.length;
   if (deferred) {
     forkInto(parents, updates, n);
@@ -927,7 +959,7 @@ function flush(): void {
         }
         bwdIndex++;
         cell.flags &= ~F.BwdQueued;
-        if (cell._isMerge) {
+        if (cell._mergeNode !== undefined) {
           cascadeBwd(cell, undefined, true);
         } else {
           cascadeBwd(cell, cell.pendingValue, true);
