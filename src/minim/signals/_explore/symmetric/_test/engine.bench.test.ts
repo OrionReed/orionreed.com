@@ -211,32 +211,32 @@ describe("BWD: field lens round-trip (vec.x write)", () => {
   });
 });
 
-describe("BWD: explicit fan-in (2 parents), GENUINE writes — gate overhead", () => {
-  it("SYMMETRIC scalar view (=== compare)", () => {
+describe("BWD: explicit multi-parent (2 parents), GENUINE writes — equality-check overhead", () => {
+  it("SYMMETRIC scalar view (Object.is compare)", () => {
     const a = sym.signal(0);
     const b = sym.signal(0);
-    const v = sym.lens(
+    const v = sym.iso(
       [a, b],
       (vals) => (vals[0] as number) + (vals[1] as number),
       (t) => [(t as number) / 2, (t as number) / 2],
     );
     void v.value;
-    timed("symmetric  fan-in scalar genuine-write ×N", () => {
+    timed("symmetric  multi-parent scalar genuine-write ×N", () => {
       for (let i = 0; i < N; i++) {
-        (v as { value: number }).value = i; // always changes ⇒ never gated
+        (v as { value: number }).value = i; // always changes ⇒ never absorbed
       }
     });
   });
-  it("SYMMETRIC object view (=== compare, never absorbs)", () => {
+  it("SYMMETRIC object view (Object.is compare, never absorbs)", () => {
     const a = sym.signal(0);
     const b = sym.signal(0);
-    const v = sym.lens(
+    const v = sym.iso(
       [a, b],
       (vals) => ({ x: vals[0] as number, y: vals[1] as number }),
       (t) => [(t as { x: number }).x, (t as { y: number }).y],
     );
     void v.value;
-    timed("symmetric  fan-in object genuine-write ×N", () => {
+    timed("symmetric  multi-parent object genuine-write ×N", () => {
       for (let i = 0; i < N; i++) {
         (v as { value: { x: number; y: number } }).value = { x: i, y: i + 1 };
       }
@@ -244,7 +244,7 @@ describe("BWD: explicit fan-in (2 parents), GENUINE writes — gate overhead", (
   });
 });
 
-describe("BWD: polar drag (3-parent fan-in, trig fwd) — gate worst case", () => {
+describe("BWD: polar drag (3-parent, trig fwd) — equality-check worst case", () => {
   it("SYMMETRIC", () => {
     const p = polar(vec(0, 0), 5, 0, "rotate");
     void p.value;

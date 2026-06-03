@@ -1,24 +1,22 @@
-// lossy-stress.test.ts — adversarial probing of the BACKWARD VALUE-GATE
-// across lens arities (1→1, N→1 merge, 1→N / N→M fan-out) and edge cases.
+// lossy-stress.test.ts — adversarial probing of the BACKWARD EQUALITY
+// CHECK across lens arities (1→1, N→1 merge, 1→N / N→M split) and edges.
 //
-// The gate's rule (postit-sized): a backward write that does NOT change a
-// lens's own projected view is absorbed — the source (and whatever the
-// lens hides) is left intact. This is the dual of the forward rule ("a
-// node fires only when its value changes").
+// The rule (postit-sized): a backward write that does NOT change a lens's
+// own projected view is absorbed — the source (and whatever the lens
+// hides) is left intact. This is the dual of the forward rule ("a node
+// fires only when its value changes").
 //
-// Each `desired:` test asserts that rule UNIFORMLY. Where the engine only
-// gates one arity, the others fall through and SNAP. These tests pin which
-// arities are covered today and which expose the gap.
+// Each `desired:` test asserts that rule UNIFORMLY across arities.
 
 import { describe, expect, it, vi } from "vitest";
-import { batch, effect, fanin, lens, signal, symmetric } from "../index";
+import { batch, effect, iso, lens, signal } from "../index";
 import { num } from "../values/num";
 
 const qf = (step: number) => (v: number) => Math.round(v / step) * step;
 
-// ── 1→1: covered by the per-step `_fwd` gate (Route B) ──────────────
+// ── 1→1: covered by the per-step `_fwd` equality check (Route B) ────
 
-describe("1→1 lossy lens (baseline, gated)", () => {
+describe("1→1 lossy lens (baseline, equality-checked)", () => {
   it("within-bucket batched writes preserve the off-grid source", () => {
     const b = num(13);
     const c = b.quantize(10); // view 10, hidden remainder 3
@@ -35,29 +33,29 @@ describe("1→1 lossy lens (baseline, gated)", () => {
   });
 });
 
-// ── N→1 merge: composes via the gate on its (1→1) parent ────────────
+// ── N→1 merge: composes via the equality check on its (1→1) parent ──
 
 describe("N→1 merge folding into a lossy 1→1 parent", () => {
   it("fold whose quantize is unchanged is absorbed (source preserved)", () => {
     const root = signal(13); // off-grid
-    const q = lens(root, qf(10), (t) => t); // view 10
+    const q = iso(root, qf(10), (t) => t); // view 10
     const m = q.merge({ identity: 0, combine: (a, b) => a + b, remove: (a, b) => a - b });
-    const a = lens(m, (v) => v, (t) => t);
-    const b = lens(m, (v) => v, (t) => t);
+    const a = iso(m, (v) => v, (t) => t);
+    const b = iso(m, (v) => v, (t) => t);
     void m.value;
     batch(() => {
       a.value = 4;
-      b.value = 8; // fold = 12; q.put(12)=12; q.fwd(12)=10 == view ⇒ gate
+      b.value = 8; // fold = 12; q.put(12)=12; q.fwd(12)=10 == view ⇒ absorbed
     });
-    expect(root.value).toBe(13); // preserved through merge → lens gate
+    expect(root.value).toBe(13); // preserved through merge → lens check
   });
 
   it("fold whose quantize changes propagates to the source", () => {
     const root = signal(13);
-    const q = lens(root, qf(10), (t) => t);
+    const q = iso(root, qf(10), (t) => t);
     const m = q.merge({ identity: 0, combine: (a, b) => a + b, remove: (a, b) => a - b });
-    const a = lens(m, (v) => v, (t) => t);
-    const b = lens(m, (v) => v, (t) => t);
+    const a = iso(m, (v) => v, (t) => t);
+    const b = iso(m, (v) => v, (t) => t);
     void m.value;
     batch(() => {
       a.value = 10;
@@ -68,13 +66,13 @@ describe("N→1 merge folding into a lossy 1→1 parent", () => {
   });
 });
 
-// ── 1→N / N→M fan-out: source-gate only; the cell-level gate is the GAP ──
+// ── 1→N / N→M split: per-parent source check + cell-level equality check ──
 
-describe("lossless fan-out (axes) — source gate suffices", () => {
+describe("lossless split (axes) — per-parent source check suffices", () => {
   it("rewriting the current view fires nothing", () => {
     const x = signal(3);
     const y = signal(4);
-    const v = fanin(
+    const v = iso(
       [x, y],
       (vals) => ({ x: vals[0] as number, y: vals[1] as number }),
       (t) => [(t as { x: number }).x, (t as { y: number }).y],
@@ -86,21 +84,21 @@ describe("lossless fan-out (axes) — source gate suffices", () => {
     });
     effect(fn);
     expect(fn).toHaveBeenCalledTimes(1);
-    v.value = { x: 3, y: 4 }; // same → per-parent source gate stops both
+    v.value = { x: 3, y: 4 }; // same → per-parent source check stops both
     expect(x.value).toBe(3);
     expect(y.value).toBe(4);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("LOSSY fan-out (N→M) over off-grid parents — desired vs current", () => {
+describe("LOSSY split (N→M) over off-grid parents — desired vs current", () => {
   // view = quantize(a+b, 5); a redistributing put = [t/2, t/2]. The
   // aggregate view is lossy AND the put discards the per-parent split, so
   // a within-bucket write moves a parent even though the view is unchanged.
   const build = () => {
     const a = signal(3);
     const b = signal(4);
-    const v = fanin(
+    const v = iso(
       [a, b],
       (vals) => qf(5)((vals[0] as number) + (vals[1] as number)),
       (t) => [(t as number) / 2, (t as number) / 2],
@@ -147,24 +145,25 @@ describe("LOSSY fan-out (N→M) over off-grid parents — desired vs current", (
   });
 });
 
-// ── N→M symmetric (complement-carrying) — lossless by design ────────
+// ── N→M source-reading lens — lossless by design ────────────────────
 
-describe("symmetric N-input lens (complement) sidesteps the gap", () => {
+describe("source-reading N-input lens sidesteps the gap", () => {
   it("rewriting the current view preserves both parents", () => {
     const a = signal(3);
     const b = signal(5);
-    // view = a+b; complement = a-b (captured), so the inverse is exact.
-    const v = symmetric([a, b], {
-      missing: 0,
-      putr: (vals) => (vals[0] as number) + (vals[1] as number),
-      putl: (target, vals) => {
+    // view = a+b; the put reads the current parents to recover the diff,
+    // so the inverse is exact — no private memory needed.
+    const v = lens(
+      [a, b],
+      (vals) => (vals[0] as number) + (vals[1] as number),
+      (target, vals) => {
         const diff = (vals[0] as number) - (vals[1] as number);
         return [((target as number) + diff) / 2, ((target as number) - diff) / 2];
       },
-    });
+    );
     expect(v.value).toBe(8);
     void v.value;
-    v.value = 8; // same → putl reproduces [3,5] → source gate, no change
+    v.value = 8; // same → put reproduces [3,5] → source check, no change
     expect(a.value).toBe(3);
     expect(b.value).toBe(5);
     v.value = 10; // genuine → [4,6]
@@ -173,13 +172,13 @@ describe("symmetric N-input lens (complement) sidesteps the gap", () => {
   });
 });
 
-// ── edge cases of the equality used by the gate ─────────────────────
+// ── edge cases of the equality check (Object.is) ────────────────────
 
-describe("gate equality edge cases", () => {
-  it("calls fwd exactly once extra on a gated (absorbed) write — fwd must be pure", () => {
+describe("equality-check edge cases", () => {
+  it("calls fwd exactly once extra on an absorbed write — fwd must be pure", () => {
     let calls = 0;
     const s = signal(7);
-    const l = lens(
+    const l = iso(
       s,
       (v) => {
         calls++;
@@ -189,20 +188,31 @@ describe("gate equality edge cases", () => {
     );
     void l.value; // view = 10
     const before = calls;
-    l.value = 12; // within bucket; gate evaluates fwd(put(12)) once
+    l.value = 12; // within bucket; the check evaluates fwd(put(12)) once
     expect(calls).toBe(before + 1); // exactly one extra projection call
     expect(s.value).toBe(7); // absorbed
   });
 
-  it("NaN view writes are never gated (NaN !== NaN) and always reach the source", () => {
+  it("a NaN write to a non-NaN view propagates (views differ)", () => {
     const s = signal(0);
-    const l = lens(s, (v) => v + 0, (t) => t);
-    void l.value;
+    const l = iso(s, (v) => v + 0, (t) => t);
+    void l.value; // view = 0
     const fn = vi.fn(() => void s.value);
     effect(fn);
     expect(fn).toHaveBeenCalledTimes(1);
-    l.value = Number.NaN; // fwd(NaN)=NaN, NaN===NaN is false ⇒ not absorbed
+    l.value = Number.NaN; // fwd(NaN)=NaN; Object.is(0, NaN) is false ⇒ propagates
     expect(Number.isNaN(s.value)).toBe(true);
     expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("a repeated NaN write to a NaN view is absorbed (Object.is dedupes NaN)", () => {
+    const s = signal(Number.NaN);
+    const l = iso(s, (v) => v + 0, (t) => t);
+    void l.value; // view = NaN
+    const fn = vi.fn(() => void s.value);
+    effect(fn);
+    expect(fn).toHaveBeenCalledTimes(1);
+    l.value = Number.NaN; // fwd(NaN)=NaN; Object.is(NaN, NaN) is true ⇒ absorbed
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 });

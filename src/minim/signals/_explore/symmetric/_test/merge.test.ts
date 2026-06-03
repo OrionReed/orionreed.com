@@ -2,7 +2,7 @@
 // multi-dep computed). Complements topology.test.ts: focuses on policy
 // variants, incremental vs full fold, glitch-free fire counts, eager vs
 // batched folding, mixed direct/lens contributions, and interaction with
-// the view-level equality gate.
+// the view-level equality check.
 
 import { describe, expect, it, vi } from "vitest";
 import { type MergePolicy, batch, computed, effect, lens, signal } from "../index";
@@ -155,7 +155,7 @@ describe("merge contributor whose source resolves unchanged", () => {
     const fn = vi.fn(() => void root.value);
     effect(fn);
     expect(fn).toHaveBeenCalledTimes(1);
-    // a=2 + b=4 = 6 == current root → source gate stops propagation.
+    // a=2 + b=4 = 6 == current root → source check stops propagation.
     batch(() => {
       a.value = 2;
       b.value = 4;

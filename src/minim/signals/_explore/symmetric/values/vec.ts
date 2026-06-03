@@ -1,10 +1,11 @@
 // vec.ts — reactive 2D point (symmetric-engine port).
 //
-// Invertibles return `: this` and ride `Signal#lens(fwd, bwd)`. Field
-// getters use `field()` (writability-propagating); `derived()` wraps RO
-// views. `axes()` / `polar()` are multi-output lenses — in this engine
-// they are expressed as `fanin` (structural backward into N parents),
-// REPLACING the old closure-setter `install(Cls, g, s)` footgun.
+// Invertibles return `: this` and ride `Signal#iso` (put reconstructs the
+// source from the view alone). Field getters use `field()` (writability-
+// propagating); `derived()` wraps RO views. `axes()` / `polar()` are
+// multi-parent lenses — backward splits into N parents. `axes` is an `iso`
+// (split ignores the parents); `polar` is a `lens` (its policy reads the
+// current parents). These replace the old closure-setter `install` footgun.
 //
 // NOTE: the consumer-layer `to()` tween-builder is omitted in this port.
 
@@ -75,7 +76,7 @@ export class Vec extends Signal<V> {
   // ── invertibles: return `: this`, propagating writability ──────────
   add(b: Val<V>): this {
     const bf = reader(b);
-    return this.lens(
+    return this.iso(
       (v) => {
         const o = bf();
         return { x: v.x + o.x, y: v.y + o.y };
@@ -88,7 +89,7 @@ export class Vec extends Signal<V> {
   }
   sub(b: Val<V>): this {
     const bf = reader(b);
-    return this.lens(
+    return this.iso(
       (v) => {
         const o = bf();
         return { x: v.x - o.x, y: v.y - o.y };
@@ -101,7 +102,7 @@ export class Vec extends Signal<V> {
   }
   scale(k: Val<number>): this {
     const kf = reader(k);
-    return this.lens(
+    return this.iso(
       (v) => {
         const s = kf();
         return { x: v.x * s, y: v.y * s };
@@ -115,7 +116,7 @@ export class Vec extends Signal<V> {
   offset(dx: Val<number>, dy: Val<number>): this {
     const xf = reader(dx);
     const yf = reader(dy);
-    return this.lens(
+    return this.iso(
       (v) => ({ x: v.x + xf(), y: v.y + yf() }),
       (n) => ({ x: n.x - xf(), y: n.y - yf() }),
     );
@@ -148,11 +149,10 @@ export class Vec extends Signal<V> {
 }
 
 /** @internal — bidirectional 2-input lens over two writable `Num`s.
- *  Expressed as `fanin`: forward reads both axes, backward splits the
- *  target into a per-parent `[x, y]` update array. (The old engine used
- *  a closure-setter `install`; here the backward target is structural.) */
+ *  An `iso`: forward reads both axes, backward splits the target into a
+ *  per-parent `[x, y]` update array (the split ignores the parents). */
 function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
-  return Vec.fanin(
+  return Vec.iso(
     [x, y],
     (vals) => ({ x: vals[0] as number, y: vals[1] as number }),
     (target) => [(target as V).x, (target as V).y],
@@ -170,8 +170,9 @@ export function vec(x: Init<Num> = 0, y: Init<Num> = 0): Writable<Vec> {
 export type PolarPolicy = "rotate" | "translate" | "radial" | "circular";
 
 /** Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`.
- *  Bidirectional via `fanin` over `[center, r, a]`; `policy` selects
- *  which parents absorb writes (others get `undefined` ⇒ untouched). */
+ *  A source-reading multi-parent `lens` over `[center, r, a]`; `policy`
+ *  selects which parents absorb writes (others get `undefined` ⇒
+ *  untouched), reading the current parent values to do so. */
 export function polar(
   center: Init<Vec>,
   r: Init<Num>,
@@ -189,7 +190,7 @@ export function polar(
     return { x: c.x + rv * Math.cos(av), y: c.y + rv * Math.sin(av) };
   };
 
-  // Stateful (arity-2) backward: `vals` are the current parent values.
+  // Source-reading backward: `vals` are the current parent values.
   // Returns [centerUpdate?, rUpdate?, aUpdate?] — `undefined` leaves a
   // parent untouched.
   const bwd = (target: V, vals?: readonly unknown[]): ReadonlyArray<unknown> => {
@@ -218,5 +219,5 @@ export function polar(
     }
   };
 
-  return Vec.fanin([cSig, rSig, aSig], fwd, bwd) as unknown as Writable<Vec>;
+  return Vec.lens([cSig, rSig, aSig], fwd, bwd) as unknown as Writable<Vec>;
 }

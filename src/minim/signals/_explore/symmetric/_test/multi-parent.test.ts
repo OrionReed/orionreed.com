@@ -1,38 +1,33 @@
-// fanin.test.ts — multi-output backward + complement-carrying lenses.
+// multi-parent.test.ts — forward multi-dep reads + backward splits.
 //
-// The one load-bearing engine gap beyond single-chain lenses: a write
-// that fans OUT to N parents (the dual of a getter reading N parents).
-// This subsumes both `_fanin` (N→M coupled writables) and symmetric /
-// complement lenses (private per-lens memory). The complement needs ZERO
-// engine support — it is closure-captured state in putr/putl, never a
-// node, never subscribed.
-//
-// Covered:
-//   - Forward fan-in (read N) — plain derive-N.
-//   - Multi-output backward: stateless + stateful (arity-dispatched).
-//   - Cross-channel invariance (meanDiff isomorphism).
-//   - Coalescing: one fan-out write → effects fire once.
-//   - Shared ancestor: last-write-wins without a merge; combines WITH one.
-//   - Symmetric complement: putl threads private memory; trap recovery.
+// The one load-bearing engine shape beyond single-chain lenses: a write
+// that SPLITS across N parents (the dual of a getter reading N parents).
+//   - derive([...])      — read-only N-input view.
+//   - iso([...], …)      — split ignores the parents (source-independent).
+//   - lens([...], …)     — split reads the current parents (source-reading).
+// Degeneracy memory — info the source can't hold across a singularity —
+// lives in a `hold` (eager scan = signal + effect) the put reads, NOT in a
+// bespoke engine kind. The last two tests are the old "complement lens"
+// cases rebuilt from `hold` + `lens` to prove the recipe covers them.
 
 import { describe, expect, it, vi } from "vitest";
-import { type Signal, effect, fanin, lens, signal, symmetric, sumPolicy } from "../index";
+import { type Signal, derive, effect, hold, iso, lens, signal, sumPolicy } from "../index";
 
-describe("forward fan-in (read N)", () => {
+describe("forward multi-dep read (derive-N)", () => {
   it("derive-N recomputes when any parent changes", () => {
     const a = signal(1);
     const b = signal(2);
     const c = signal(3);
-    const sum = fanin([a, b, c], (v) => (v[0] as number) + (v[1] as number) + (v[2] as number));
+    const sum = derive([a, b, c], (v) => (v[0] as number) + (v[1] as number) + (v[2] as number));
     expect(sum.value).toBe(6);
     b.value = 20;
     expect(sum.value).toBe(24);
   });
 
-  it("read-only fan-in rejects writes", () => {
+  it("read-only derive-N rejects writes", () => {
     const a = signal(1);
     const b = signal(2);
-    const sum = fanin([a, b], (v) => (v[0] as number) + (v[1] as number));
+    const sum = derive([a, b], (v) => (v[0] as number) + (v[1] as number));
     expect(() => {
       (sum as Signal<number>).value = 9;
     }).toThrow();
@@ -40,13 +35,13 @@ describe("forward fan-in (read N)", () => {
 });
 
 describe("multi-output backward", () => {
-  it("stateless bwd splits a write across parents", () => {
+  it("iso split distributes a write across parents (source-independent)", () => {
     const a = signal(0);
     const b = signal(0);
-    const total = fanin(
+    const total = iso(
       [a, b],
       (v) => (v[0] as number) + (v[1] as number),
-      (t) => [(t as number) / 2, (t as number) / 2], // arity 1 → no peek
+      (t) => [(t as number) / 2, (t as number) / 2],
     );
     total.value = 10;
     expect(a.value).toBe(5);
@@ -54,22 +49,22 @@ describe("multi-output backward", () => {
     expect(total.value).toBe(10);
   });
 
-  it("stateful bwd reads current parent values (meanDiff isomorphism)", () => {
+  it("lens split reads current parents (meanDiff isomorphism)", () => {
     const a = signal(10);
     const b = signal(4);
-    const mean = fanin(
+    const mean = lens(
       [a, b],
       (v) => ((v[0] as number) + (v[1] as number)) / 2,
       (t, v) => {
-        const d = (v![0] as number) - (v![1] as number);
+        const d = (v[0] as number) - (v[1] as number);
         return [(t as number) + d / 2, (t as number) - d / 2];
       },
     );
-    const diff = fanin(
+    const diff = lens(
       [a, b],
       (v) => (v[0] as number) - (v[1] as number),
       (t, v) => {
-        const m = ((v![0] as number) + (v![1] as number)) / 2;
+        const m = ((v[0] as number) + (v[1] as number)) / 2;
         return [m + (t as number) / 2, m - (t as number) / 2];
       },
     );
@@ -92,7 +87,7 @@ describe("multi-output backward", () => {
   it("undefined update leaves a parent untouched", () => {
     const a = signal(1);
     const b = signal(2);
-    const cell = fanin(
+    const cell = iso(
       [a, b],
       (v) => (v[0] as number) + (v[1] as number),
       (t) => [t, undefined], // only write a
@@ -103,11 +98,11 @@ describe("multi-output backward", () => {
   });
 });
 
-describe("fan-out coalescing", () => {
-  it("one fan-out write fires downstream effects once", () => {
+describe("split coalescing", () => {
+  it("one split write fires downstream effects once", () => {
     const a = signal(0);
     const b = signal(0);
-    const total = fanin(
+    const total = iso(
       [a, b],
       (v) => (v[0] as number) + (v[1] as number),
       (t) => [(t as number) / 2, (t as number) / 2],
@@ -125,22 +120,22 @@ describe("fan-out coalescing", () => {
   });
 });
 
-describe("shared ancestor under a fan-out", () => {
+describe("shared ancestor under a split", () => {
   it("two parents sharing a source: last-write-wins without a merge", () => {
-    // Both outputs route to the same root via plain lenses. No merge ⇒
-    // the documented last-write-wins footgun.
+    // Both outputs route to the same root via plain isos. No merge ⇒ the
+    // documented last-write-wins footgun.
     const root = signal(0);
-    const viaA = lens(
+    const viaA = iso(
       root,
       (v) => v,
       (t) => t,
     );
-    const viaB = lens(
+    const viaB = iso(
       root,
       (v) => v,
       (t) => t,
     );
-    const fork = fanin(
+    const fork = iso(
       [viaA, viaB],
       (v) => (v[0] as number) + (v[1] as number),
       (t) => [(t as number) + 1, (t as number) + 100],
@@ -152,17 +147,17 @@ describe("shared ancestor under a fan-out", () => {
   it("two parents sharing a MERGE: contributions combine", () => {
     const root = signal(0);
     const m = root.merge(sumPolicy);
-    const viaA = lens(
+    const viaA = iso(
       m,
       (v) => v,
       (t) => t,
     );
-    const viaB = lens(
+    const viaB = iso(
       m,
       (v) => v,
       (t) => t,
     );
-    const fork = fanin(
+    const fork = iso(
       [viaA, viaB],
       (v) => (v[0] as number) + (v[1] as number),
       (t) => [(t as number) + 1, (t as number) + 100],
@@ -172,24 +167,25 @@ describe("shared ancestor under a fan-out", () => {
   });
 });
 
-describe("symmetric lens — complement is private closure state", () => {
-  it("putl threads complement (monotonic snap)", () => {
+// ── degeneracy memory via `hold` (no bespoke complement kind) ────────
+
+describe("hold + lens recovers info the source cannot hold", () => {
+  it("running-max memory (monotonic snap)", () => {
     const src = signal(0);
-    const snapped = symmetric<number, { last: number }>([src], {
-      missing: { last: 0 },
-      putr: (s, c) => {
-        c.last = s[0] as number;
-        return s[0] as number;
-      },
-      putl: (t, _s, c) => {
-        const next = t < c.last ? c.last : t;
-        c.last = next;
-        return [next];
-      },
-    });
+    // Memory = running max of the source. Every accepted write flows
+    // through src, so the scan stays current.
+    const high = hold(
+      () => src.value,
+      (obs, prev) => (prev === undefined ? obs : Math.max(obs, prev)),
+    );
+    const snapped = iso(
+      src,
+      (s) => s,
+      (t) => Math.max(t as number, high.value),
+    );
     snapped.value = 5;
     expect(src.value).toBe(5);
-    snapped.value = 3; // below last → snaps up to 5
+    snapped.value = 3; // below the running max → snaps up to 5
     expect(src.value).toBe(5);
     snapped.value = 8;
     expect(src.value).toBe(8);
@@ -197,14 +193,15 @@ describe("symmetric lens — complement is private closure state", () => {
 
   it("trap recovery: scale-to-zero round trip restores directions", () => {
     type V = { x: number; y: number };
-    type C = { units: V[]; centroid: V };
     const p0 = signal<V>({ x: 1, y: 0 });
     const p1 = signal<V>({ x: -1, y: 0 });
 
-    const spread = symmetric<number, C>([p0, p1], {
-      missing: { units: [{ x: 0, y: 0 }, { x: 0, y: 0 }], centroid: { x: 0, y: 0 } },
-      putr: (positions, c) => {
-        const pos = positions as V[];
+    // Memory = per-point unit directions + centroid, recomputed from the
+    // positions — but at a singularity (r≈0) the previous directions are
+    // retained. THIS is the degeneracy memory the source destroys.
+    const shape = hold(
+      () => [p0.value, p1.value] as V[],
+      (pos, prev) => {
         const n = pos.length;
         let cx = 0;
         let cy = 0;
@@ -214,35 +211,42 @@ describe("symmetric lens — complement is private closure state", () => {
         }
         cx /= n;
         cy /= n;
-        c.centroid.x = cx;
-        c.centroid.y = cy;
-        let sum = 0;
+        const units: V[] = [];
         for (let i = 0; i < n; i++) {
           const dx = pos[i]!.x - cx;
           const dy = pos[i]!.y - cy;
           const r = Math.hypot(dx, dy);
-          sum += r;
-          if (r > 1e-9) {
-            c.units[i]!.x = dx / r;
-            c.units[i]!.y = dy / r;
-          }
+          units.push(r > 1e-9 ? { x: dx / r, y: dy / r } : (prev?.units[i] ?? { x: 0, y: 0 }));
         }
-        return sum / n;
+        return { centroid: { x: cx, y: cy }, units };
       },
-      putl: (target, positions, c) => {
-        const n = (positions as V[]).length;
-        const out: V[] = [];
-        for (let i = 0; i < n; i++) {
-          out.push({
-            x: c.centroid.x + c.units[i]!.x * (target as number),
-            y: c.centroid.y + c.units[i]!.y * (target as number),
-          });
-        }
-        return out;
-      },
-    });
+    );
 
-    // Read once to populate the complement (units + centroid).
+    const spread = lens(
+      [p0, p1],
+      (pos) => {
+        const ps = pos as V[];
+        let cx = 0;
+        let cy = 0;
+        for (const p of ps) {
+          cx += p.x;
+          cy += p.y;
+        }
+        cx /= ps.length;
+        cy /= ps.length;
+        let sum = 0;
+        for (const p of ps) sum += Math.hypot(p.x - cx, p.y - cy);
+        return sum / ps.length;
+      },
+      (target) => {
+        const { centroid, units } = shape.value;
+        return units.map((u) => ({
+          x: centroid.x + u.x * (target as number),
+          y: centroid.y + u.y * (target as number),
+        }));
+      },
+    );
+
     expect(spread.value).toBeCloseTo(1);
 
     // Collapse: a plain lens would destroy the directions here.
@@ -250,7 +254,7 @@ describe("symmetric lens — complement is private closure state", () => {
     expect(p0.value).toEqual({ x: 0, y: 0 });
     expect(p1.value).toEqual({ x: 0, y: 0 });
 
-    // Re-inflate: directions recovered from the complement.
+    // Re-inflate: directions recovered from the hold's memory.
     spread.value = 2;
     expect(p0.value).toEqual({ x: 2, y: 0 });
     expect(p1.value).toEqual({ x: -2, y: 0 });

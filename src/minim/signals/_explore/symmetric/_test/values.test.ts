@@ -1,8 +1,8 @@
 // values.test.ts — value classes (Num/Vec/Bool) on the symmetric
 // engine. Proves the engine supports the full value-class authoring
 // surface: endo lens chains, custom equality dedup, field lenses,
-// derived views, cross-type predicate bridges, and multi-output
-// (fan-in) aggregate lenses (axes/polar).
+// derived views, cross-type predicate bridges, and multi-parent
+// aggregate lenses (axes/polar).
 
 import { describe, expect, it, vi } from "vitest";
 import { effect } from "../index";
@@ -86,7 +86,7 @@ describe("Bool — invertibles + derived", () => {
   });
 });
 
-describe("Vec — fields, derived, fan-in aggregates", () => {
+describe("Vec — fields, derived, multi-parent aggregates", () => {
   it("field lens round-trips through x/y", () => {
     const p = vec(3, 4);
     expect(p.x.value).toBe(3);

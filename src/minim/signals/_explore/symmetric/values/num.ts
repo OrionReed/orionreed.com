@@ -1,9 +1,10 @@
 // num.ts — reactive scalar (symmetric-engine port).
 //
-// All invertible methods ride the base `Signal#lens(fwd, bwd)` and
-// return `: this`, so chains preserve receiver writability. (No fusion
-// in this engine — chains are plain lens cells, short-circuited by
-// value-equality like any forward computed.)
+// Source-independent invertibles (put reconstructs the source from the
+// view alone) ride `Signal#iso`; source-reading ones (put consults the
+// current value, e.g. `cyclic`) ride `Signal#lens`. All return `: this`,
+// so chains preserve receiver writability. (No fusion in this engine —
+// chains are plain lens cells, short-circuited by value-equality.)
 //
 // NOTE: the consumer-layer `to()` tween-builder is omitted in this
 // port — it is animation glue, orthogonal to engine capability.
@@ -54,21 +55,21 @@ export class Num extends Signal<V> {
 
   add(b: Val<V>): this {
     const bf = reader(b);
-    return this.lens(
+    return this.iso(
       (v) => v + bf(),
       (n) => n - bf(),
     );
   }
   sub(b: Val<V>): this {
     const bf = reader(b);
-    return this.lens(
+    return this.iso(
       (v) => v - bf(),
       (n) => n + bf(),
     );
   }
   scale(k: Val<number>): this {
     const kf = reader(k);
-    return this.lens(
+    return this.iso(
       (v) => v * kf(),
       (n) => n / kf(),
     );
@@ -77,13 +78,13 @@ export class Num extends Signal<V> {
   affine(k: Val<number>, off: Val<number>): this {
     const kf = reader(k);
     const of = reader(off);
-    return this.lens(
+    return this.iso(
       (v) => v * kf() + of(),
       (n) => (n - of()) / kf(),
     );
   }
 
-  /** Clamp reads + writes to `[lo, hi]` (PutGet-only lens). */
+  /** Clamp reads + writes to `[lo, hi]`. Put depends only on the view. */
   clamp(lo: Val<V>, hi: Val<V>): this {
     const lf = reader(lo);
     const hf = reader(hi);
@@ -92,7 +93,7 @@ export class Num extends Signal<V> {
       const h = hf();
       return v < l ? l : v > h ? h : v;
     };
-    return this.lens(c, c);
+    return this.iso(c, c);
   }
 
   /** Snap reads + writes to the nearest multiple of `step`. */
@@ -102,13 +103,12 @@ export class Num extends Signal<V> {
       const s = sf();
       return Math.round(v / s) * s;
     };
-    return this.lens(q, q);
+    return this.iso(q, q);
   }
 
   /** Cyclic-coordinate lens: reads pass through; writes pick the
-   *  representative closest to the current value modulo `period`. The
-   *  2-arg bwd is arity-detected as stateful — the engine threads the
-   *  current source value through `s`. */
+   *  representative closest to the current value modulo `period`. Source-
+   *  reading (`lens`) — the engine threads the current value through `s`. */
   cyclic(period: Val<number>): this {
     const pf = reader(period);
     return this.lens(

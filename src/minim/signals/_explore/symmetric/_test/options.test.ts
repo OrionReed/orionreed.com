@@ -18,7 +18,7 @@ describe("custom equality", () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
-  it("equals gates computed recompute propagation", () => {
+  it("equals short-circuits computed recompute propagation", () => {
     const a = signal(2);
     // Bucket by tens; many distinct `a` map to the same view, so the
     // derived value-equality must stop downstream effects from refiring.

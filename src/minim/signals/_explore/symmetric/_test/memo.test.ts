@@ -4,7 +4,7 @@
 //
 // Thesis: a lens that must remember information the source can destroy
 // (the `spreadOf` → 0 collapse in md-traits-cross-domain) decomposes into
-//   (1) a PURE lens (forward is a pure projection ⇒ fully gated/normal), and
+//   (1) a PURE lens (forward is a pure projection ⇒ fully equality-checked), and
 //   (2) an eager `hold` — a scan node (value evolves from its own previous
 //       value + reactive inputs), built from `signal` + `effect`.
 //
@@ -131,7 +131,7 @@ describe("stateful lens via pure-lens + hold (no engine kind, no idempotence)", 
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
-  it("PURE FORWARD: rewriting the current spread fires nothing (source gate)", () => {
+  it("PURE FORWARD: rewriting the current spread fires nothing (source check)", () => {
     const s = scene(1, 2, 3);
     void s.spread.value;
     const fn = vi.fn(() => {

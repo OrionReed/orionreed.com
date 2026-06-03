@@ -1,9 +1,10 @@
 // bool.ts — reactive boolean (symmetric-engine port).
 //
-// `not()` / `xor(b)` are writable invertibles riding the endo
-// `.lens(fwd, bwd)`. `and`/`or`/`implies`/`eq`/`nand`/`nor` are lossy
-// fan-ins → bare RO `Bool` (lift via `Bool.lens([a, b], …)` for a
-// writable form with an explicit redistribution policy).
+// `not()` / `xor(b)` are writable invertibles riding the endo `.iso`
+// (their put reconstructs the source from the view alone). `and`/`or`/
+// `implies`/`eq`/`nand`/`nor` are lossy multi-input views → bare RO
+// `Bool` (lift via `Bool.lens([a, b], …)` for a writable form with an
+// explicit redistribution policy).
 
 import type { Linear, TraitDict } from "../../../traits";
 import { type Init, Signal, type Val, type Writable, reader } from "../signal";
@@ -32,13 +33,13 @@ export class Bool extends Signal<V> {
 
   /** Logical negation. Involution — its own inverse. */
   not(): this {
-    return this.lens(not, not);
+    return this.iso(not, not);
   }
 
   /** Symmetric difference / parity. `a ^ b = c ↔ a = c ^ b`. */
   xor(b: Val<V>): this {
     const bf = reader(b);
-    return this.lens(
+    return this.iso(
       (v) => v !== bf(),
       (n) => n !== bf(),
     );

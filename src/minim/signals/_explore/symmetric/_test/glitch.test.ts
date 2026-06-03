@@ -1,6 +1,6 @@
 // glitch.test.ts — the payoff of the pivot model: a backward write is
 // compiled to source edits, then the SINGLE forward propagate (with
-// value-gated checkDirty) refreshes views. So backward writes inherit
+// equality-checked checkDirty) refreshes views. So backward writes inherit
 // forward's glitch-freedom and short-circuiting for free.
 //
 // These tests fail under the old "propagate per node during the bwd
@@ -8,7 +8,7 @@
 // no-op writes).
 
 import { describe, expect, it, vi } from "vitest";
-import { batch, computed, effect, lens, signal, sumPolicy } from "../index";
+import { batch, computed, effect, iso, lens, signal, sumPolicy } from "../index";
 
 describe("backward glitch-freedom", () => {
   it("diamond: effect reading two views of one source fires ONCE per bwd write", () => {
@@ -41,10 +41,10 @@ describe("backward glitch-freedom", () => {
     expect(b.value).toBe(40);
   });
 
-  it("value-gated: bwd write that resolves to an unchanged source fires nothing", () => {
+  it("equality-checked: bwd write that resolves to an unchanged source fires nothing", () => {
     const root = signal(4);
     // Lossy lens: floor to even. put(t) snaps to nearest lower even.
-    const evenView = lens(
+    const evenView = iso(
       root,
       (v) => v - (v % 2),
       (t) => t - (t % 2),
@@ -63,7 +63,7 @@ describe("backward glitch-freedom", () => {
     expect(evenView.value).toBe(4);
   });
 
-  it("value-gated downstream: source changes but a boolean view stays put", () => {
+  it("equality-checked downstream: source changes but a boolean view stays put", () => {
     // root ─→ isPos = root > 0 ─→ effect. Backward-writing root from 5
     // to 3 changes root but NOT isPos, so the effect must not re-fire.
     const root = signal(5);

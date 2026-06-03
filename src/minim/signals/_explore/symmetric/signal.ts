@@ -49,13 +49,13 @@
 // A getter reading N parents is a forward multi-dep node. Its backward
 // dual is a write that SPLITS across N parents: `_put(target)` returns a
 // per-parent update array and `propagateBwd` splits into each parent
-// (`propagateSplit`). This single primitive subsumes both coupled
-// writables (N→M, e.g. mean/diff, procrustes) and symmetric / complement
-// lenses. The "complement" — private lens memory that lets lossy writes
-// recover discarded info — is NOT a node: it is closure-captured state in
-// the getter/`_put`, with no subs, no dirty bits, no propagation. An
-// eager split coalesces its N commits under one flush (shared-ancestor
-// merges still accumulate all contributions first).
+// (`propagateSplit`). This one primitive covers coupled writables (N→M,
+// e.g. mean/diff, procrustes). When a lossy write must recover info the
+// source can't hold (a collapsed cluster's directions), the memory lives
+// in a `hold` (an eager scan, built from signal + effect) that the `put`
+// reads — NOT in a bespoke engine kind. An eager split coalesces its N
+// commits under one flush (shared-ancestor merges still accumulate all
+// contributions first).
 //
 // GET / PUT, TRACKED / DECLARED — the core asymmetry
 // ──────────────────────────────────────────────────
@@ -361,32 +361,6 @@ export interface MergePolicy<T> {
   remove?(acc: T, x: T): T;
 }
 
-/** Spec for a complement-carrying symmetric lens over N parents.
- *
- *  The `complement` is private lens memory: information the view alone
- *  discards (a collapsed cluster's shape, a multiplied-away sign), kept
- *  so lossy writes can be recovered. It is NOT a graph node — it never
- *  fans out, is never observed, and needs no subscriptions or dirty
- *  bookkeeping. The engine stores it as nothing at all; `putr`/`putl`
- *  close over it and mutate it in place. `putr` may refresh it on each
- *  read (forward reads are NOT pure for symmetric lenses — that is the
- *  defining property), and `putl` consults it to undo information loss.
- *
- *  `putr` returns the view; `putl` returns per-parent updates
- *  (`undefined` ⇒ leave that parent untouched). */
-export interface SymmetricLensSpecN<S extends readonly unknown[], V, C> {
-  missing: C;
-  putr: (sources: S, complement: C) => V;
-  putl: (target: V, sources: S, complement: C) => ReadonlyArray<S[number] | undefined>;
-}
-
-/** Single-input symmetric spec (sugar; lifted to N-form internally). */
-export interface SymmetricLensSpec1<S, V, C> {
-  missing: C;
-  putr: (source: S, complement: C) => V;
-  putl: (target: V, source: S, complement: C) => S | undefined;
-}
-
 export const DIRECT_SLOT: unique symbol = Symbol("merge:direct-slot");
 
 class MergeNode<T> {
@@ -546,8 +520,9 @@ export class Signal<T = unknown> implements ReactiveNode {
    *    • a `Signal[]` — a multi-parent lens whose `_put(target)` returns
    *      a per-parent update array (the dual of a getter reading N
    *      parents); the backward pass splits into each parent.
-   *  Any private lens state (a "complement") is closure-captured by the
-   *  getter/`_put` — it needs no node, no subs, no bookkeeping. */
+   *  Any private state a multi-parent `_put` needs is closure-captured
+   *  (params it reads, or a `hold` for degeneracy memory) — no node, no
+   *  subs, no bookkeeping. */
   _bwdParent: Signal<unknown> | Signal<unknown>[] | undefined;
 
   /** Lens `put` — the backward derivation (dual of `getter`). For multi-
@@ -556,11 +531,12 @@ export class Signal<T = unknown> implements ReactiveNode {
   // biome-ignore lint/suspicious/noExplicitAny: put fn is opaque shape
   _put: ((target: any, current?: any) => any) | undefined;
 
-  /** Put arity: `1` for `(t)=>p`, `2` for `(t,current)=>p`. A cached SMI
-   *  field — reading `_put.length` in the backward pass instead costs ~7ns/step
-   *  (a function-`.length` load is far slower than a small-int field), so
-   *  the arity is snapshotted at build time. Irrelevant for multi-output
-   *  cells (the peek is baked into `_put`). */
+  /** Put arity, set by the factory (NOT inferred from the `bwd` function):
+   *  `1` for `iso` (source-independent put `(view)=>src`), `2` for `lens`
+   *  (source-reading put `(view, src)=>src`, engine peeks the parent). A
+   *  cached SMI field — branching on it in the backward pass is far cheaper
+   *  than a `_put.length` load. Irrelevant for multi-output cells (the peek
+   *  is baked into `_put`). */
   _putArity: 1 | 2;
 
   /** Raw forward projection, kept separate from `getter` (which closes
@@ -697,15 +673,29 @@ export class Signal<T = unknown> implements ReactiveNode {
   // (`_bwdParent` single/array/merge parent), which is what makes the
   // backward pass well-defined.
 
-  /** Endomorphic instance lens: `this : Signal<T>` → `this`. The bread-
-   *  and-butter value-class chaining primitive (`num.add(1).scale(2)`).
-   *  Cross-type projections use the static `OtherCls.lens(this, …)`. */
+  /** Endomorphic source-independent lens (`iso`): `put` reconstructs the
+   *  source from the view alone. The bread-and-butter chaining primitive
+   *  (`num.add(1).scale(2)`). Cross-type uses static `OtherCls.iso(this, …)`. */
+  iso(this: Signal<T>, fwd: (v: T) => T, bwd: (target: T) => T): this {
+    return buildLens1(
+      this.constructor as SignalCtor<Signal<T>>,
+      this as Signal<unknown>,
+      fwd as (v: unknown) => unknown,
+      bwd as (t: unknown) => unknown,
+      false,
+    ) as this;
+  }
+
+  /** Endomorphic source-reading lens: `put(view, current)` consults the
+   *  current source (to preserve a complement-in-source, e.g. nearest
+   *  representative). Cross-type uses static `OtherCls.lens(this, …)`. */
   lens(this: Signal<T>, fwd: (v: T) => T, bwd: (target: T, current: T) => T): this {
     return buildLens1(
       this.constructor as SignalCtor<Signal<T>>,
       this as Signal<unknown>,
       fwd as (v: unknown) => unknown,
       bwd as (t: unknown, s?: unknown) => unknown,
+      true,
     ) as this;
   }
 
@@ -749,15 +739,14 @@ export class Signal<T = unknown> implements ReactiveNode {
   static derive(this: any, ...args: any[]): any {
     if (args.length === 1) return buildComputed(this, args[0]);
     const [parent, fn] = args;
-    if (Array.isArray(parent)) return buildFanin(this, parent, fn);
+    if (Array.isArray(parent)) return buildLensN(this, parent, fn, undefined, false);
     return buildComputed(this, () => fn((parent as Signal<unknown>).value));
   }
 
-  /** Read-write typed lens. Dispatched at runtime:
-   *    Cls.lens(parent,  fwd, bwd)  — 1-input.
-   *    Cls.lens(parents, fwd, bwd)  — N-input fan-out.
-   *    Cls.lens(parent,  spec)      — 1-input symmetric (complement).
-   *    Cls.lens(parents, spec)      — N-input symmetric.
+  /** Source-reading lens: `put` consults the current source(s). Runtime-
+   *  dispatched on arity:
+   *    Cls.lens(parent,  fwd, bwd)  — 1-input;  bwd `(view, src) => src`.
+   *    Cls.lens(parents, fwd, bwd)  — N-input;  bwd `(view, srcs) => srcs[]`.
    *  Polymorphic-`this`: `Vec.lens(...)` → `Writable<Vec>`. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static lens<C extends new (...args: never[]) => Signal<any>, P>(
@@ -776,66 +765,37 @@ export class Signal<T = unknown> implements ReactiveNode {
       vals: readonly unknown[],
     ) => ReadonlyArray<unknown>,
   ): Writable<InstanceType<C>>;
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static lens<C extends new (...args: never[]) => Signal<any>, P, COMP>(
-    this: C,
-    parent: Read<P>,
-    spec: SymmetricLensSpec1<P, Inner<InstanceType<C>>, COMP>,
-  ): Writable<InstanceType<C>>;
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static lens<C extends new (...args: never[]) => Signal<any>, COMP>(
-    this: C,
-    parents: readonly Read<unknown>[],
-    spec: SymmetricLensSpecN<readonly unknown[], Inner<InstanceType<C>>, COMP>,
-  ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: dispatch
   static lens(this: any, ...args: any[]): any {
-    if (args.length === 2) {
-      // (parent | parents, spec). Signals/arrays aren't functions, so a
-      // 2-arg call is always a symmetric spec — no closure-setter form.
-      const [first, spec] = args;
-      if (Array.isArray(first)) return buildSymmetric(this, first, spec);
-      return buildSymmetric(this, [first], _liftSpec1(spec));
-    }
     const [parent, fwd, bwd] = args;
-    if (Array.isArray(parent)) return buildFanin(this, parent, fwd, bwd);
-    return buildLens1(this, parent, fwd, bwd);
+    if (Array.isArray(parent)) return buildLensN(this, parent, fwd, bwd, true);
+    return buildLens1(this, parent, fwd, bwd, true);
   }
 
-  /** N-input fan-in. Forward `fwd(vals)` over N parents (auto-linked);
-   *  backward `bwd(target, vals?)` returns a per-parent update array.
-   *  Omit `bwd` for a read-only N-input derive. Polymorphic-`this`. */
+  /** Source-independent lens (`iso`): `put` reconstructs the source from
+   *  the view alone — no peek. Runtime-dispatched on arity:
+   *    Cls.iso(parent,  fwd, bwd)  — 1-input;  bwd `(view) => src`.
+   *    Cls.iso(parents, fwd, bwd)  — N-input;  bwd `(view) => srcs[]`.
+   *  Polymorphic-`this`: `Vec.iso(...)` → `Writable<Vec>`. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static fanin<C extends new (...args: never[]) => Signal<any>>(
+  static iso<C extends new (...args: never[]) => Signal<any>, P>(
+    this: C,
+    parent: Read<P>,
+    fwd: (v: P) => Inner<InstanceType<C>>,
+    bwd: (target: Inner<InstanceType<C>>) => P,
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static iso<C extends new (...args: never[]) => Signal<any>>(
     this: C,
     parents: readonly Read<unknown>[],
     fwd: (vals: readonly unknown[]) => Inner<InstanceType<C>>,
-    bwd?: (
-      target: Inner<InstanceType<C>>,
-      vals?: readonly unknown[],
-    ) => ReadonlyArray<unknown>,
-  ): InstanceType<C> {
-    return buildFanin(
-      this as unknown as SignalCtor<Signal<unknown>>,
-      parents as Signal<unknown>[],
-      fwd as (vals: readonly unknown[]) => unknown,
-      bwd as ((target: unknown, vals?: readonly unknown[]) => ReadonlyArray<unknown>) | undefined,
-    ) as InstanceType<C>;
-  }
-
-  /** N-input symmetric lens carrying a private complement (closure-
-   *  captured, not a cell). Polymorphic-`this`. */
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static symmetric<C extends new (...args: never[]) => Signal<any>, COMP>(
-    this: C,
-    parents: readonly Read<unknown>[],
-    spec: SymmetricLensSpecN<readonly unknown[], Inner<InstanceType<C>>, COMP>,
-  ): Writable<InstanceType<C>> {
-    return buildSymmetric(
-      this as unknown as SignalCtor<Signal<unknown>>,
-      parents as Signal<unknown>[],
-      spec as unknown as SymmetricLensSpecN<readonly unknown[], unknown, COMP>,
-    ) as Writable<InstanceType<C>>;
+    bwd: (target: Inner<InstanceType<C>>) => ReadonlyArray<unknown>,
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: dispatch
+  static iso(this: any, ...args: any[]): any {
+    const [parent, fwd, bwd] = args;
+    if (Array.isArray(parent)) return buildLensN(this, parent, fwd, bwd, false);
+    return buildLens1(this, parent, fwd, bwd, false);
   }
 
   /** Permissive consumer-layer lift — `Val<Inner<Cls>>` → `Cls`.
@@ -874,7 +834,7 @@ export class Signal<T = unknown> implements ReactiveNode {
 
   /** Typed field lens onto `parent.value[key]`. Dispatches on the
    *  parent's mode: a read-only computed parent yields a RO derive
-   *  view; any writable parent (source / lens / merge / fan-out) yields
+   *  view; any writable parent (source / lens / merge / multi-parent) yields
    *  a bidirectional field lens with spread-replace `put`. Mirrors the
    *  writability-propagating conditional in `field()`. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
@@ -886,9 +846,9 @@ export class Signal<T = unknown> implements ReactiveNode {
   ): InstanceType<C> {
     const ctor = Cls as unknown as SignalCtor<Signal<unknown>>;
     const get = (s: unknown): unknown => (s as Record<string | number | symbol, unknown>)[key];
-    // Read-only ⇔ a computed/derive (getter, no put, no merge). A fan-in
-    // lens always has `_put`, so the `_put === undefined` clause already
-    // excludes the multi-output case — no need to check `_bwdParent`.
+    // Read-only ⇔ a computed/derive (getter, no put, no merge). A multi-
+    // parent lens always has `_put`, so the `_put === undefined` clause
+    // already excludes the multi-output case — no need to check `_bwdParent`.
     const ro =
       parent.getter !== undefined &&
       parent._put === undefined &&
@@ -896,10 +856,14 @@ export class Signal<T = unknown> implements ReactiveNode {
     if (ro) {
       return buildComputed(ctor, () => get(parent.value)) as InstanceType<C>;
     }
-    return buildLens1(ctor, parent as Signal<unknown>, get, (v, s) => ({
-      ...(s as object),
-      [key]: v,
-    })) as InstanceType<C>;
+    // Spread-replace reads the current source ⇒ source-reading (lens) form.
+    return buildLens1(
+      ctor,
+      parent as Signal<unknown>,
+      get,
+      (v, s) => ({ ...(s as object), [key]: v }),
+      true,
+    ) as InstanceType<C>;
   }
 }
 
@@ -926,23 +890,25 @@ function buildLens1<C extends Signal<any>>(
   parent: Signal<unknown>,
   fwd: (v: unknown) => unknown,
   bwd: (t: unknown, s?: unknown) => unknown,
+  readsSource: boolean,
 ): C {
   const cell = new Cls();
   cell.flags = F.Mutable | F.Dirty;
   cell.getter = (() => fwd(parent.value)) as () => never;
   cell._fwd = fwd;
   cell._put = bwd;
-  cell._putArity = bwd.length >= 2 ? 2 : 1;
+  cell._putArity = readsSource ? 2 : 1;
   cell._bwdParent = parent;
   return cell;
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
-function buildFanin<C extends Signal<any>>(
+function buildLensN<C extends Signal<any>>(
   Cls: SignalCtor<C>,
   parents: Signal<unknown>[],
   fwd: (vals: readonly unknown[]) => unknown,
-  bwd?: (target: unknown, vals?: readonly unknown[]) => ReadonlyArray<unknown>,
+  bwd: ((target: unknown, vals?: readonly unknown[]) => ReadonlyArray<unknown>) | undefined,
+  readsSource: boolean,
 ): C {
   const n = parents.length;
   const vals = new Array<unknown>(n);
@@ -955,50 +921,13 @@ function buildFanin<C extends Signal<any>>(
   if (bwd === undefined) return cell; // read-only derive-N
   cell._fwd = fwd as (v: unknown) => unknown; // N-ary projection for the equality check
   cell._bwdParent = parents;
-  cell._put =
-    bwd.length >= 2
-      ? (target: unknown): unknown => {
-          for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
-          return bwd(target, vals);
-        }
-      : (target: unknown): unknown => bwd(target);
+  cell._put = readsSource
+    ? (target: unknown): unknown => {
+        for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+        return bwd(target, vals);
+      }
+    : (target: unknown): unknown => bwd(target);
   return cell;
-}
-
-// biome-ignore lint/suspicious/noExplicitAny: variance escape
-function buildSymmetric<C extends Signal<any>>(
-  Cls: SignalCtor<C>,
-  parents: Signal<unknown>[],
-  // biome-ignore lint/suspicious/noExplicitAny: complement is opaque to engine
-  spec: SymmetricLensSpecN<readonly unknown[], unknown, any>,
-): C {
-  const n = parents.length;
-  const vals = new Array<unknown>(n);
-  const complement = spec.missing;
-  const cell = new Cls();
-  cell.flags = F.Mutable | F.Dirty;
-  cell.getter = (() => {
-    for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
-    return spec.putr(vals, complement);
-  }) as () => never;
-  cell._fwd = ((cand: readonly unknown[]) => spec.putr(cand, complement)) as (v: unknown) => unknown;
-  cell._bwdParent = parents;
-  cell._put = (target: unknown): unknown => {
-    for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
-    return spec.putl(target, vals, complement);
-  };
-  return cell;
-}
-
-/** Lift a 1-input symmetric spec into the canonical N-input form. */
-function _liftSpec1<S, V, C>(
-  spec: SymmetricLensSpec1<S, V, C>,
-): SymmetricLensSpecN<readonly S[], V, C> {
-  return {
-    missing: spec.missing,
-    putr: (sources, c) => spec.putr(sources[0]!, c),
-    putl: (target, sources, c) => [spec.putl(target, sources[0]!, c)],
-  };
 }
 
 // Install `value` on the prototype (alien-signals pattern). V8 JITs a
@@ -1267,12 +1196,12 @@ export function derive<R>(fn: () => R): Signal<R>;
 export function derive(...args: any[]): any {
   if (args.length === 1) return buildComputed(SIGNAL_CTOR, args[0]);
   const [parent, fn] = args;
-  if (Array.isArray(parent)) return buildFanin(SIGNAL_CTOR, parent, fn);
+  if (Array.isArray(parent)) return buildLensN(SIGNAL_CTOR, parent, fn, undefined, false);
   return buildComputed(SIGNAL_CTOR, () => fn((parent as Signal<unknown>).value));
 }
 
-/** Untyped read-write lens. Dispatches like `Signal.lens` but infers
- *  `R` from the closures. */
+/** Untyped source-reading lens (`put` consults the source). Dispatches
+ *  like `Signal.lens` but infers `R` from the closures. */
 export function lens<P, R>(
   parent: Read<P>,
   fwd: (v: P) => R,
@@ -1283,50 +1212,30 @@ export function lens<R>(
   fwd: (vals: readonly unknown[]) => R,
   bwd: (target: R, vals: readonly unknown[]) => ReadonlyArray<unknown>,
 ): Writable<Signal<R>>;
-export function lens<P, R, C>(
-  parent: Read<P>,
-  spec: SymmetricLensSpec1<P, R, C>,
-): Writable<Signal<R>>;
-export function lens<R, C>(
-  parents: readonly Read<unknown>[],
-  spec: SymmetricLensSpecN<readonly unknown[], R, C>,
-): Writable<Signal<R>>;
 // biome-ignore lint/suspicious/noExplicitAny: dispatch
 export function lens(...args: any[]): any {
-  if (args.length === 2) {
-    const [first, spec] = args;
-    if (Array.isArray(first)) return buildSymmetric(SIGNAL_CTOR, first, spec);
-    return buildSymmetric(SIGNAL_CTOR, [first], _liftSpec1(spec));
-  }
   const [parent, fwd, bwd] = args;
-  if (Array.isArray(parent)) return buildFanin(SIGNAL_CTOR, parent, fwd, bwd);
-  return buildLens1(SIGNAL_CTOR, parent, fwd, bwd);
+  if (Array.isArray(parent)) return buildLensN(SIGNAL_CTOR, parent, fwd, bwd, true);
+  return buildLens1(SIGNAL_CTOR, parent, fwd, bwd, true);
 }
 
-/** Untyped N-input fan-in (`bwd` optional ⇒ read-only derive-N). */
-export function fanin<R>(
+/** Untyped source-independent lens (`iso`): `put` reconstructs the source
+ *  from the view alone. Infers `R` from the closures. */
+export function iso<P, R>(
+  parent: Read<P>,
+  fwd: (v: P) => R,
+  bwd: (target: R) => P,
+): Writable<Signal<R>>;
+export function iso<R>(
   parents: readonly Read<unknown>[],
   fwd: (vals: readonly unknown[]) => R,
-  bwd?: (target: R, vals?: readonly unknown[]) => ReadonlyArray<unknown>,
-): Signal<R> {
-  return buildFanin(
-    SIGNAL_CTOR,
-    parents as Signal<unknown>[],
-    fwd as (vals: readonly unknown[]) => unknown,
-    bwd as ((target: unknown, vals?: readonly unknown[]) => ReadonlyArray<unknown>) | undefined,
-  ) as Signal<R>;
-}
-
-/** Untyped N-input symmetric lens (complement closure-captured). */
-export function symmetric<R, C>(
-  parents: readonly Read<unknown>[],
-  spec: SymmetricLensSpecN<readonly unknown[], R, C>,
-): Writable<Signal<R>> {
-  return buildSymmetric(
-    SIGNAL_CTOR,
-    parents as Signal<unknown>[],
-    spec as unknown as SymmetricLensSpecN<readonly unknown[], unknown, C>,
-  ) as Writable<Signal<R>>;
+  bwd: (target: R) => ReadonlyArray<unknown>,
+): Writable<Signal<R>>;
+// biome-ignore lint/suspicious/noExplicitAny: dispatch
+export function iso(...args: any[]): any {
+  const [parent, fwd, bwd] = args;
+  if (Array.isArray(parent)) return buildLensN(SIGNAL_CTOR, parent, fwd, bwd, false);
+  return buildLens1(SIGNAL_CTOR, parent, fwd, bwd, false);
 }
 
 // ─── Effect (alien-signals verbatim) ──────────────────────────────
