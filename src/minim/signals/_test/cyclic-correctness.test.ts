@@ -34,12 +34,17 @@ describe("cyclic correctness — engine-supplied state argument", () => {
     expect(a.value).toBeCloseTo(10 * Math.PI + 0.1, 6);
   });
 
-  it("cyclic above clamp: bwd sees clamped intermediate", () => {
+  it("cyclic above clamp: a no-op at the clamp view is absorbed", () => {
+    // Pivot semantics: writing 10.1 maps through cyclic to ~10.1 at the
+    // clamp's input, which clamps back to 10 — the clamp's projected view
+    // is unchanged, so the backward edit is absorbed (the off-range
+    // source is left intact). `c` re-reads to the clamped value.
     const a = num(50);
     const c = a.clamp(0, 10).cyclic(TAU);
     expect(c.value).toBe(10);
     c.value = 10.1;
-    expect(a.value).toBeCloseTo(10, 6);
+    expect(a.value).toBe(50); // absorbed — source untouched
+    expect(c.value).toBe(10); // view snaps back to the clamped projection
   });
 
   it("two cyclics stacked: outer sees inner's identity-fwd state", () => {

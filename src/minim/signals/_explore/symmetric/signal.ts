@@ -157,6 +157,26 @@ interface Stack<T> {
   prev: Stack<T> | undefined;
 }
 
+// ─── Write hook (for assert/record attribution) ───────────────────
+//
+// Fires when a SOURCE commits a value-change (the one place truth
+// mutates). Backward writes reach it via `_writeSource`, so lens edits
+// attribute to the source they resolve to.
+
+let writeHook: ((sig: Signal<unknown>) => void) | undefined;
+
+/** Install a hook fired on every source value-change. Returns a restore
+ *  function. Used by assert/record to attribute mutations. */
+export function setSignalWriteHook(
+  fn: ((sig: Signal<unknown>) => void) | undefined,
+): () => void {
+  const prev = writeHook;
+  writeHook = fn;
+  return () => {
+    writeHook = prev;
+  };
+}
+
 // ─── alien-signals algorithm — link / unlink / propagate / etc. ───
 
 function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
@@ -607,6 +627,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     this.pendingValue = next;
     if (!this._equals(prev, next)) {
       this.flags = F.Mutable | F.Dirty;
+      if (writeHook !== undefined) writeHook(this as Signal<unknown>);
       const subs = this.subs;
       if (subs !== undefined) propagate(subs, runDepth > 0, activeNetwork);
       if (batchDepth === 0 && !flushing && subs !== undefined) flush();

@@ -19,6 +19,7 @@ export {
   lazy,
   reader,
   readNow,
+  setSignalWriteHook,
   type Init,
   type Inner,
   type MergePolicy,

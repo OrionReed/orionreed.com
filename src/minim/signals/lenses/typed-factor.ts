@@ -318,23 +318,31 @@ export function factor<
     ) as Writable<Signal<unknown>> & { setter?: (v: unknown) => void };
 
     // ── Auto-converge wrapper ────────────────────────────────────────
-    // Wrap the single-Newton-step setter with an iter loop until the
-    // channel's reading is within tol of target. Linear-fwd cases
-    // converge in 1 iter (overhead is one re-peek + distance check);
-    // non-linear cases converge in 3-25 depending on geometry.
+    // Iterate the single-Newton backward step until the channel's reading
+    // is within tol of target. Linear-fwd cases converge in 1 iter
+    // (overhead is one re-peek + distance check); non-linear cases
+    // converge in 3-25 depending on geometry. Installed as the cell's
+    // backward sink (`_legacySetter`): it writes the inputs directly each
+    // iteration rather than going through the cell's structural `put`.
     if (converge) {
-      const originalSetter = cell.setter!;
       const outPack = outputPacks[idx]!;
       const outDim = outputDims[idx]!;
       const targetBuf = new Float64Array(outDim);
       const currentBuf = new Float64Array(outDim);
-      cell.setter = (target: unknown) => {
+      // biome-ignore lint/suspicious/noExplicitAny: opaque input cells
+      const inCells = inputs as readonly any[];
+      const step = (target: unknown): void => {
+        const vals = inCells.map(s => s.peek());
+        const updates = computeBwd(idx, target, vals);
+        for (let i = 0; i < inCells.length; i++) {
+          if (updates[i] !== undefined) inCells[i].value = updates[i];
+        }
+      };
+      (cell as { _legacySetter?: (v: unknown) => void })._legacySetter = (target: unknown) => {
         batch(() => {
-          // Pack target once
           outPack.read(target as never, targetBuf as unknown as Float64Array, 0);
           for (let it = 0; it < maxIters; it++) {
-            originalSetter(target);
-            // Re-read current value via the cell's getter
+            step(target);
             const cur = (cell as { peek(): unknown }).peek();
             outPack.read(cur as never, currentBuf as unknown as Float64Array, 0);
             let sumSq = 0;
