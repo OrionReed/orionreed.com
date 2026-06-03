@@ -9,6 +9,7 @@ export {
   fanin,
   symmetric,
   effect,
+  hold,
   batch,
   untracked,
   network,
@@ -35,7 +36,9 @@ export {
 // Test helpers (peek bwd state).
 import type { Signal } from "./signal";
 
-export function peekBwdParent(cell: Signal<unknown>): Signal<unknown> | undefined {
+export function peekBwdParent(
+  cell: Signal<unknown>,
+): Signal<unknown> | Signal<unknown>[] | undefined {
   return cell._bwdParent;
 }
 
