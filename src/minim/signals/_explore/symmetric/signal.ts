@@ -67,7 +67,7 @@
 //     `.value` under an `activeSub` (link/propagate/`deps`). You never
 //     declare what a getter reads; the engine discovers it each run.
 //   * Backward targets are EXPLICIT — declared at construction
-//     (`_bwdParent` / `_bwdParents` / a merge's parent). There is no
+//     (`_bwdParent`, single or array, or a merge's parent). There is no
 //     `activeBwdWrite` global precisely because backward is structural,
 //     not ambient.
 //
@@ -76,8 +76,8 @@
 //
 //   source      getter undefined                 (truth in currentValue)
 //   computed    getter,  no _put, no _mergeNode
-//   lens 1→1    getter + _put + _bwdParent
-//   fan-out     getter + _put + _bwdParents       (1→N / N→M backward)
+//   lens 1→1    getter + _put + _bwdParent (Signal)
+//   fan-out     getter + _put + _bwdParent (Signal[])  (1→N / N→M bwd)
 //   merge       getter + _mergeNode               (N→1 backward fold)
 //
 // `pendingValue` has a dual role keyed off this table: for a source it
@@ -538,25 +538,37 @@ export class Signal<T = unknown> implements ReactiveNode {
   currentValue: T;
   pendingValue: T;
 
-  /** Backward chain: the cell whose `put` produces this cell's upstream.
-   *  Single-parent lenses and merges use this. */
-  _bwdParent: Signal<unknown> | undefined;
-
-  /** Multi-output backward: the N direct parents a fan-in / symmetric
-   *  lens distributes writes to. When set, `_bwdParent` is unused and
-   *  `_put(target)` returns a per-parent update array (the dual of a
-   *  getter reading N parents). The cascade FORKS into each parent.
+  /** Backward target: the upstream this cell's `put` writes through. One
+   *  field, two shapes:
+   *    • a single `Signal` — a 1→1 lens or a merge's parent.
+   *    • a `Signal[]` — a fan-in / symmetric lens whose `_put(target)`
+   *      returns a per-parent update array (the dual of a getter reading
+   *      N parents); the cascade FORKS into each parent.
    *  Any private lens state (a "complement") is closure-captured by the
    *  getter/`_put` — it needs no node, no subs, no bookkeeping. */
-  _bwdParents: Signal<unknown>[] | undefined;
+  _bwdParent: Signal<unknown> | Signal<unknown>[] | undefined;
 
-  /** Lens `put` — the backward derivation (dual of `getter`). Arity
-   *  distinguishes `(t)=>p` from `(t,current)=>p`. For multi-output
-   *  cells, `_put(target)` returns a per-parent update array and
-   *  `_putArity` is irrelevant (the peek is baked into the fn). */
+  /** Lens `put` — the backward derivation (dual of `getter`). For multi-
+   *  output cells, `_put(target)` returns a per-parent update array (the
+   *  peek is baked into the fn). */
   // biome-ignore lint/suspicious/noExplicitAny: put fn is opaque shape
   _put: ((target: any, current?: any) => any) | undefined;
+
+  /** Put arity: `1` for `(t)=>p`, `2` for `(t,current)=>p`. A cached SMI
+   *  field — reading `_put.length` in the cascade instead costs ~7ns/step
+   *  (a function-`.length` load is far slower than a small-int field), so
+   *  the arity is snapshotted at build time. Irrelevant for multi-output
+   *  cells (the peek is baked into `_put`). */
   _putArity: 1 | 2;
+
+  /** Raw forward projection, kept separate from `getter` (which closes
+   *  over `parent.value`) so the backward value-gate can evaluate this
+   *  cell's view against CANDIDATE parent value(s) — `_fwd(push)` — without
+   *  committing. Set for plain (1→1) lenses and fan-in / symmetric lenses
+   *  (N-ary, over a candidate vals array); undefined for sources /
+   *  computeds / merges. */
+  // biome-ignore lint/suspicious/noExplicitAny: fwd fn is opaque shape
+  _fwd: ((parentValue: any) => any) | undefined;
 
   /** Backward fan-in (dual of a multi-dep computed). When set, this
    *  cell folds contributions via a policy instead of applying a `put`.
@@ -582,9 +594,9 @@ export class Signal<T = unknown> implements ReactiveNode {
     this._watched = undefined;
     this._unwatchedHook = undefined;
     this._bwdParent = undefined;
-    this._bwdParents = undefined;
     this._put = undefined;
     this._putArity = 1;
+    this._fwd = undefined;
     this._mergeNode = undefined;
     this._queueIdx = -1;
     if (opts !== undefined) {
@@ -683,7 +695,7 @@ export class Signal<T = unknown> implements ReactiveNode {
   // All build via `new this()` so a subclass static (`Vec.lens(...)`)
   // yields a `Vec`, inheriting its constructor-set equality. No `_fuse`,
   // no closure-setter form — every lens has a structural backward target
-  // (`_bwdParent`/`_bwdParents`/merge parent), which is what makes the
+  // (`_bwdParent` single/array/merge parent), which is what makes the
   // cascade well-defined.
 
   /** Endomorphic instance lens: `this : Signal<T>` → `this`. The bread-
@@ -875,11 +887,13 @@ export class Signal<T = unknown> implements ReactiveNode {
   ): InstanceType<C> {
     const ctor = Cls as unknown as SignalCtor<Signal<unknown>>;
     const get = (s: unknown): unknown => (s as Record<string | number | symbol, unknown>)[key];
+    // Read-only ⇔ a computed/derive (getter, no put, no merge). A fan-in
+    // lens always has `_put`, so the `_put === undefined` clause already
+    // excludes the multi-output case — no need to check `_bwdParent`.
     const ro =
       parent.getter !== undefined &&
       parent._put === undefined &&
-      parent._mergeNode === undefined &&
-      parent._bwdParents === undefined;
+      parent._mergeNode === undefined;
     if (ro) {
       return buildComputed(ctor, () => get(parent.value)) as InstanceType<C>;
     }
@@ -917,6 +931,7 @@ function buildLens1<C extends Signal<any>>(
   const cell = new Cls();
   cell.flags = F.Mutable | F.Dirty;
   cell.getter = (() => fwd(parent.value)) as () => never;
+  cell._fwd = fwd;
   cell._put = bwd;
   cell._putArity = bwd.length >= 2 ? 2 : 1;
   cell._bwdParent = parent;
@@ -939,7 +954,8 @@ function buildFanin<C extends Signal<any>>(
     return fwd(vals);
   }) as () => never;
   if (bwd === undefined) return cell; // read-only derive-N
-  cell._bwdParents = parents;
+  cell._fwd = fwd as (v: unknown) => unknown; // N-ary projection for the gate
+  cell._bwdParent = parents;
   cell._put =
     bwd.length >= 2
       ? (target: unknown): unknown => {
@@ -966,7 +982,8 @@ function buildSymmetric<C extends Signal<any>>(
     for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
     return spec.putr(vals, complement);
   }) as () => never;
-  cell._bwdParents = parents;
+  cell._fwd = ((cand: readonly unknown[]) => spec.putr(cand, complement)) as (v: unknown) => unknown;
+  cell._bwdParent = parents;
   cell._put = (target: unknown): unknown => {
     for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
     return spec.putl(target, vals, complement);
@@ -1050,9 +1067,16 @@ Object.defineProperty(Signal.prototype, "value", {
       this._mergeNode.receive(DIRECT_SLOT, next);
       if (deferred) this._enqueueBwd();
       else cascadeBwd(this, undefined, false);
-    } else if (this._put === undefined) {
+      return;
+    }
+    if (this._put === undefined) {
       throw new TypeError("Cannot write to a computed");
-    } else if (deferred) {
+    }
+    // The backward value-gate lives in `cascadeBwd` (per step), where it
+    // can compare this lens's PROJECTED view against a candidate parent
+    // value. That subsumes the old entry-level `next === currentView`
+    // check: a no-op write is caught there once the cascade runs.
+    if (deferred) {
       // Reuse `pendingValue` (unused by a getter cell's forward path)
       // as the deferred backward target. Drained by flush.
       this.pendingValue = next;
@@ -1086,11 +1110,12 @@ function cascadeBwd(start: Signal<unknown>, target: unknown, deferred: boolean):
     // a getter reading N parents — instead of one upstream value, the
     // `put` yields N. The recursion handles each branch (source, lens,
     // merge, or nested fan-in) uniformly.
-    if (cell._bwdParents !== undefined) {
+    const target = cell._bwdParent;
+    if (Array.isArray(target)) {
       cascadeFanout(cell, v, deferred);
       return;
     }
-    const parent = cell._bwdParent;
+    const parent = target;
     let push: unknown;
     if (cell._mergeNode !== undefined) {
       const node = cell._mergeNode;
@@ -1105,6 +1130,26 @@ function cascadeBwd(start: Signal<unknown>, target: unknown, deferred: boolean):
     // Parentless lens (e.g. `pin`): the `put` ran for its effect, but
     // there is no upstream — the write is absorbed. Terminal sink.
     if (parent === undefined) return;
+
+    // BACKWARD VALUE-GATE — the dual of the forward value-gate ("a node
+    // notifies only when its value changes"). If committing `push`
+    // upstream would NOT change this lens's own projected value, the
+    // edit is absorbed: the source (and any information the lens hides,
+    // e.g. an off-grid remainder under quantize) is left intact. Reuses
+    // the same equality the forward path uses, evaluated on the
+    // candidate `_fwd(push)`. Plain lenses with a trustworthy (clean)
+    // cache only; merges / fan-outs (no `_fwd`) and dirty caches fall
+    // through and cascade as before.
+    const fwd = cell._fwd;
+    if (fwd !== undefined) {
+      const cf = cell.flags;
+      if (!(cf & (F.Dirty | F.Pending)) && cf !== F.None) {
+        const newView = fwd(push);
+        const cur = cell.currentValue;
+        const eq = cell._equals;
+        if (eq !== undefined ? eq(cur, newView) : cur === newView) return;
+      }
+    }
 
     if (parent._mergeNode !== undefined) {
       parent._mergeNode.receive(cell, push);
@@ -1137,9 +1182,34 @@ function cascadeBwd(start: Signal<unknown>, target: unknown, deferred: boolean):
  *  start of a write OR mid-chain from an outer single lens, so the
  *  coalescing must live here, not at the write entry point.) */
 function cascadeFanout(cell: Signal<unknown>, target: unknown, deferred: boolean): void {
-  const parents = cell._bwdParents!;
+  const parents = cell._bwdParent as Signal<unknown>[];
   const updates = cell._put!(target) as ReadonlyArray<unknown>;
   const n = parents.length;
+
+  // BACKWARD VALUE-GATE (multi-output form) — the dual of the forward
+  // gate, generalized over N parents: if applying these updates would
+  // leave this cell's own projected view unchanged, absorb the whole
+  // write. Keeps any per-parent information the projection hides (the
+  // off-grid story, but spread across parents) intact. Same trustworthy-
+  // cache precondition as the 1→1 gate. Effective only when the view's
+  // equality can see "unchanged" — scalar views via `===`, structured
+  // views (Vec, …) via the cell's `_equals`.
+  const fwd = cell._fwd;
+  if (fwd !== undefined) {
+    const cf = cell.flags;
+    if (!(cf & (F.Dirty | F.Pending)) && cf !== F.None) {
+      const cand = new Array<unknown>(n);
+      for (let i = 0; i < n; i++) {
+        const u = updates[i];
+        cand[i] = u === undefined ? parents[i]!.peek() : u;
+      }
+      const newView = fwd(cand);
+      const cur = cell.currentValue;
+      const eq = cell._equals;
+      if (eq !== undefined ? eq(cur, newView) : cur === newView) return;
+    }
+  }
+
   if (deferred) {
     forkInto(parents, updates, n);
     return;
@@ -1472,7 +1542,6 @@ class _NetworkNode implements ReactiveNode {
   lastValues: Map<Signal<unknown>, unknown> = new Map();
   pending = false;
   disposed = false;
-  private _running = false;
   private _ownCycle = 0;
   private _depsSet: Set<Signal<unknown>> = new Set();
   private _handle!: Network;
@@ -1535,8 +1604,8 @@ class _NetworkNode implements ReactiveNode {
   }
 
   private _runBody(dirty: ReadonlySet<Signal<unknown>>): void {
+    // RecursedCheck doubles as the "body is running" guard (see flush()).
     this.flags = F.Watching | F.RecursedCheck;
-    this._running = true;
     const prevSettler = activeNetwork;
     activeNetwork = this;
     try {
@@ -1552,7 +1621,6 @@ class _NetworkNode implements ReactiveNode {
       --runDepth;
       activeNetwork = prevSettler;
       this.flags &= ~F.RecursedCheck;
-      this._running = false;
       this.lastValues.clear();
       let l = this.deps;
       while (l !== undefined) {
@@ -1566,7 +1634,7 @@ class _NetworkNode implements ReactiveNode {
 
   flush(): void {
     if (this.disposed) return;
-    if (this._running) {
+    if (this.flags & F.RecursedCheck) {
       throw new Error(
         "network: flush() called from inside body — would recurse infinitely. " +
           "Return from the body and let the next dep change drive the next fire.",
