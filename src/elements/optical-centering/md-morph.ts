@@ -8,8 +8,8 @@ import {
   loop,
   type Mount,
   Path,
-  Signal,
-  signal,
+  Cell,
+  cell,
   type Tween,
   tween,
   type Val,
@@ -56,7 +56,7 @@ const polygonLerp = (a: PolygonValue, b: PolygonValue, t: number): PolygonValue 
   return { vertices: out };
 };
 
-class Polygon extends Signal<PolygonValue> {
+class Polygon extends Cell<PolygonValue> {
   static traits = {
     lerp: polygonLerp,
     equals: polygonEquals,
@@ -163,7 +163,7 @@ export class MdMorph extends Diagram {
       );
     }
 
-    const status = signal<Content>(KEYFRAMES[0].name);
+    const status = cell<Content>(KEYFRAMES[0].name);
     s(label(view.top.down(46), status));
 
     this.anim.start(

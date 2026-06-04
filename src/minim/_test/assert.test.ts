@@ -5,7 +5,7 @@
 // fluent claim builder, intervals(), and firstOf event ordering.
 
 import { Anim, type Animator } from "@minim/core";
-import { derive, num, signal, spring, tween } from "@minim/signals";
+import { derive, num, cell, spring, tween } from "@minim/signals";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   activeRecorder,
@@ -145,7 +145,7 @@ describe("write attribution", () => {
   });
 
   it("records signals touched by a span", () => {
-    const sig = signal(0);
+    const sig = cell(0);
     const work = scope(function* work(): Animator<void> {
       sig.value = 1;
       yield 0.01;
@@ -159,7 +159,7 @@ describe("write attribution", () => {
   });
 
   it("authorOf reports the most recent writer", () => {
-    const sig = signal(0);
+    const sig = cell(0);
     const author = authorOf(sig);
     const work = scope("work", function* (): Animator<void> {
       sig.value = 1;
@@ -172,7 +172,7 @@ describe("write attribution", () => {
   });
 
   it("touchedDeep includes descendant writes", () => {
-    const sig = signal(0);
+    const sig = cell(0);
     const inner = scope(function* inner(): Animator<void> {
       sig.value = 1;
       yield 0.01;
@@ -190,7 +190,7 @@ describe("write attribution", () => {
 
 describe("latch — invariant & liveness", () => {
   it("safety: holds true until pred is observed false", () => {
-    const x = signal(5);
+    const x = cell(5);
     const safe = latch(inRange(x, [0, 10]), true);
     expect(safe.value).toBe(true);
     x.value = 7;
@@ -202,7 +202,7 @@ describe("latch — invariant & liveness", () => {
   });
 
   it("liveness: holds false until pred is observed true", () => {
-    const x = signal(0);
+    const x = cell(0);
     const reaches = latch(inRange(x, [10, 20]), false);
     expect(reaches.value).toBe(false);
     x.value = 5;
@@ -214,8 +214,8 @@ describe("latch — invariant & liveness", () => {
   });
 
   it("re-arms on scope rising edge", () => {
-    const x = signal(0);
-    const open = signal(false);
+    const x = cell(0);
+    const open = cell(false);
     const safe = latch(inRange(x, [0, 1]), true, open);
     open.value = true;
     expect(safe.value).toBe(true);
@@ -228,8 +228,8 @@ describe("latch — invariant & liveness", () => {
   });
 
   it("does not re-arm if predicate still violated on scope re-entry", () => {
-    const x = signal(0);
-    const open = signal(false);
+    const x = cell(0);
+    const open = cell(false);
     const safe = latch(inRange(x, [0, 1]), true, open);
     open.value = true;
     x.value = 100;
@@ -242,7 +242,7 @@ describe("latch — invariant & liveness", () => {
 
 describe("claim() — fluent builder", () => {
   it("stays.in([0,1]) latches false on overshoot", () => {
-    const x = signal(0);
+    const x = cell(0);
     const c = claim(x).stays.in([0, 1]);
     expect(c.value).toBe(true);
     x.value = 0.5;
@@ -252,7 +252,7 @@ describe("claim() — fluent builder", () => {
   });
 
   it("becomes.above(n) flips true on first crossing", () => {
-    const x = signal(0);
+    const x = cell(0);
     const c = claim(x).becomes.above(0.5);
     expect(c.value).toBe(false);
     x.value = 0.4;
@@ -262,7 +262,7 @@ describe("claim() — fluent builder", () => {
   });
 
   it("never.above(n) latches false on first violation", () => {
-    const x = signal(0);
+    const x = cell(0);
     const c = claim(x).never.above(1);
     expect(c.value).toBe(true);
     x.value = 0.9;
@@ -272,7 +272,7 @@ describe("claim() — fluent builder", () => {
   });
 
   it(".and / .or compose claims", () => {
-    const x = signal(0.5);
+    const x = cell(0.5);
     const a = claim(x).stays.above(0);
     const b = claim(x).stays.below(1);
     const both = a.and(b);
@@ -284,7 +284,7 @@ describe("claim() — fluent builder", () => {
   it(".during(scope) gates the claim and re-arms on scope re-entry", () => {
     const anim = new Anim();
     const rec = record(anim);
-    const sig = signal(0);
+    const sig = cell(0);
     const work = scope(function* work(): Animator<void> {
       sig.value = 0.5;
       yield 0.05;
@@ -412,8 +412,8 @@ describe("intervals & firstOf", () => {
   it("firstOf records the first event to fire and its time", () => {
     const anim = new Anim();
     const rec = record(anim);
-    const a = signal(false);
-    const b = signal(false);
+    const a = cell(false);
+    const b = cell(false);
     const winner = firstOf(a, b);
     expect(winner.value).toBeUndefined();
     // Bump the clock first, then fire the event directly. `firstOf`'s

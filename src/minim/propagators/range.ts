@@ -14,7 +14,7 @@
 // system can propagate partial info internally while exposing exact
 // signals to renderers / drag handlers / lens chains.
 
-import { type Signal, signal, type Writable } from "../signals";
+import { type Cell, cell, type Writable } from "../signals";
 import { type Propagator, propagator } from "./propagator";
 
 // ─── Range type + helpers ───────────────────────────────────────
@@ -51,14 +51,14 @@ export function rangeWidth(r: Range): number {
 
 // ─── Range cell ──────────────────────────────────────────────────
 
-export type RangeCell = Writable<Signal<Range>>;
+export type RangeCell = Writable<Cell<Range>>;
 
 /** Construct a Range cell. Optionally seed with bounds. */
 export function rangeCell(
   lo: number = Number.NEGATIVE_INFINITY,
   hi: number = Number.POSITIVE_INFINITY,
 ): RangeCell {
-  return signal<Range>([lo, hi], { equals: rangeEq });
+  return cell<Range>([lo, hi], { equals: rangeEq });
 }
 
 /** Merge `partial` into `cell` via lattice intersection. Throws on
@@ -175,7 +175,7 @@ export function intervalSum(parts: readonly RangeCell[], total: RangeCell): Prop
  *  midpoint; writing the Num forces the Range to that singleton
  *  (which may contradict a narrower existing bound). For wiring a
  *  Range cell into a UI. */
-export function snap(rangeC: RangeCell, exact: Writable<Signal<number>>): Propagator[] {
+export function snap(rangeC: RangeCell, exact: Writable<Cell<number>>): Propagator[] {
   return [
     // range → exact midpoint
     propagator([rangeC], [exact], () => {

@@ -10,8 +10,8 @@ import {
   loop,
   type Mount,
   polar,
-  type Signal,
-  signal,
+  type Cell,
+  cell,
   snapshot,
 } from "../minim";
 import { grey, ink, stroke } from "./color";
@@ -35,8 +35,8 @@ const T = {
 };
 
 export class MdQrtpProtocol extends Diagram {
-  @attr.num(60) declare cells: Signal<number>;
-  @attr.bool() declare backchannel: Signal<boolean>;
+  @attr.num(60) declare cells: Cell<number>;
+  @attr.bool() declare backchannel: Cell<boolean>;
 
   protected scene(s: Mount): void {
     const N = this.cells.value;
@@ -51,10 +51,10 @@ export class MdQrtpProtocol extends Diagram {
     const center = view.center;
 
     const state = {
-      cells: signal(new Map<number, CellState>()),
-      overrides: signal(new Map<number, string>()),
-      broadcast: signal(0),
-      lastBroadcast: signal(-1),
+      cells: cell(new Map<number, CellState>()),
+      overrides: cell(new Map<number, string>()),
+      broadcast: cell(0),
+      lastBroadcast: cell(-1),
     };
 
     // Precedence: override > broadcast highlight > state. Null hides the cell.
@@ -147,10 +147,10 @@ export class MdQrtpProtocol extends Diagram {
       const flood = ink("blue").mod(0.7).toString();
 
       for (const component of components) {
-        for (const signal of component) {
-          if (signal !== state.lastBroadcast.peek()) {
+        for (const cell of component) {
+          if (cell !== state.lastBroadcast.peek()) {
             const next = new Map(state.overrides.peek());
-            next.set(signal, flood);
+            next.set(cell, flood);
             state.overrides.value = next;
           }
           yield T.floodCellStep;

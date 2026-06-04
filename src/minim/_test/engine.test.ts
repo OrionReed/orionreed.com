@@ -5,10 +5,10 @@
 //   - peek() honors Dirty
 //   - Constructor takes plain T (binding via the `bind` free fn)
 //   - bind(target, source) — the binding API
-//   - isSignal brand: prototype-based, not structural
+//   - isCell brand: prototype-based, not structural
 //   - readNow() unwraps reactives without footgunning plain {value: …}
 
-import { derive, effect, isSignal, Num, readNow, Signal, signal } from "@minim/signals";
+import { derive, effect, isCell, Num, readNow, Cell, cell } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 
@@ -16,7 +16,7 @@ describe("engine", () => {
   it("all checks", () => {
     section("peek() honors Dirty flag");
     {
-      const s = signal(0);
+      const s = cell(0);
       let effectVal = -1;
       const stop = effect(() => {
         effectVal = s.value;
@@ -29,14 +29,14 @@ describe("engine", () => {
 
     section("Constructor: plain T only");
     {
-      const s = new Signal(7);
+      const s = new Cell(7);
       check("plain init", s.value === 7);
     }
 
     section("effect-driven mirror — auto-updates with disposer");
     {
-      const a = signal(2);
-      const s = signal(0);
+      const a = cell(2);
+      const s = cell(0);
       const stop = effect(() => {
         s.value = a.value * 10;
       });
@@ -48,10 +48,10 @@ describe("engine", () => {
       check("after dispose, no update", s.value === 50);
     }
 
-    section("effect mirror with signal source");
+    section("effect mirror with cell source");
     {
-      const src = signal(100);
-      const t = signal(0);
+      const src = cell(100);
+      const t = cell(0);
       const stop = effect(() => {
         t.value = src.value;
       });
@@ -65,29 +65,29 @@ describe("engine", () => {
       stop();
     }
 
-    section("isSignal brand: branded prototypes, not structural .value");
-    check("isSignal(signal)", isSignal(signal(0)));
-    check("isSignal(computed)", isSignal(derive(() => 0)));
+    section("isCell brand: branded prototypes, not structural .value");
+    check("isCell(cell)", isCell(cell(0)));
+    check("isCell(computed)", isCell(derive(() => 0)));
     check(
-      "isSignal(lens)",
-      isSignal(
+      "isCell(lens)",
+      isCell(
         Num.lens(
-          [signal(0)] as const,
+          [cell(0)] as const,
           ([n]) => n,
           () => [undefined] as const,
         ),
       ),
     );
-    check("isSignal(plain {value: 5})", !isSignal({ value: 5 }));
-    check("isSignal(plain {value: 5, name: 'a'})", !isSignal({ value: 5, name: "a" }));
-    check("isSignal(number)", !isSignal(5));
-    check("isSignal(fn)", !isSignal(() => 5));
-    check("isSignal(null)", !isSignal(null));
+    check("isCell(plain {value: 5})", !isCell({ value: 5 }));
+    check("isCell(plain {value: 5, name: 'a'})", !isCell({ value: 5, name: "a" }));
+    check("isCell(number)", !isCell(5));
+    check("isCell(fn)", !isCell(() => 5));
+    check("isCell(null)", !isCell(null));
 
     section("readNow() unwraps via brand, not structural shape");
     {
       check("readNow(5)", readNow(5) === 5);
-      check("readNow(signal(15))", readNow(signal(15)) === 15);
+      check("readNow(cell(15))", readNow(cell(15)) === 15);
       const plainT = { value: 5, name: "alice" };
       check("plain T with .value is preserved", readNow(plainT as any) === plainT);
     }

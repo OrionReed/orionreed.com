@@ -1,6 +1,6 @@
 // extensibility.test.ts — confirm the value-class authoring story
 // works end-to-end for USER-DEFINED classes with ZERO library
-// changes. The pattern: extend Signal<V>, declare invertibles with
+// changes. The pattern: extend Cell<V>, declare invertibles with
 // `: this` returns, and use the `field()` / `derived()` helpers for
 // getter bodies.
 
@@ -10,7 +10,7 @@ import {
   type Linear,
   Num,
   reader,
-  Signal,
+  Cell,
   type TraitDict,
   type Val,
   type Writable,
@@ -20,7 +20,7 @@ import {
 //
 // Made of three numeric fields (h, s, l). Authoring template:
 //   1. pure value-space functions (incl. `equals` for change detection)
-//   2. class extends Signal<V>
+//   2. class extends Cell<V>
 //   3. static traits dict (with `satisfies TraitDict<V>`)
 //   4. `declare readonly _t: typeof Cls.traits` (carries the dict at
 //      the type level for trait-constraint checking)
@@ -43,7 +43,7 @@ const hslEquals = (a: V, b: V) => a.h === b.h && a.s === b.s && a.l === b.l;
 
 const linearImpl: Linear<V> = { add: hslAdd, sub: hslSub, scale: hslScale };
 
-class Hsl extends Signal<V> {
+class Hsl extends Cell<V> {
   static traits = {
     linear: linearImpl,
     lerp: hslLerp,

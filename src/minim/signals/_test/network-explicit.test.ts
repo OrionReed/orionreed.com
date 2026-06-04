@@ -121,7 +121,7 @@ describe("explicit-deps: subscribe / unsubscribe", () => {
     n.dispose();
   });
 
-  it("unsubscribe a signal not in deps is no-op", () => {
+  it("unsubscribe a cell not in deps is no-op", () => {
     const a = num(0);
     const b = num(0);
     const n = network([a], () => {});
@@ -129,7 +129,7 @@ describe("explicit-deps: subscribe / unsubscribe", () => {
     n.dispose();
   });
 
-  it("subscribe a non-dep signal then unsubscribe brings deps back to original", () => {
+  it("subscribe a non-dep cell then unsubscribe brings deps back to original", () => {
     const a = num(0);
     const b = num(0);
     let fires = 0;
@@ -169,7 +169,7 @@ describe("explicit-deps: subscribe / unsubscribe", () => {
 // ─── 3. Reads inside body ──────────────────────────────────────────
 
 describe("explicit-deps: reads inside body don't auto-subscribe", () => {
-  it("reading a non-dep signal in body doesn't add it to deps", () => {
+  it("reading a non-dep cell in body doesn't add it to deps", () => {
     const a = num(0);
     const b = num(0);
     let fires = 0;
@@ -232,7 +232,7 @@ describe("explicit-deps: self-exclusion", () => {
     n.dispose();
   });
 
-  it("body writing a NON-dep signal that downstream observers subscribe to", () => {
+  it("body writing a NON-dep cell that downstream observers subscribe to", () => {
     const trigger = num(0);
     const out = num(0); // not a dep of n
     let outObs = 0;
@@ -546,7 +546,7 @@ describe("explicit-deps: edge cases", () => {
     netRef.dispose();
   });
 
-  it("two networks both subscribing to the same signal", () => {
+  it("two networks both subscribing to the same cell", () => {
     const a = num(0);
     let fires1 = 0;
     let fires2 = 0;
@@ -570,7 +570,7 @@ describe("explicit-deps: edge cases", () => {
     n2.dispose();
   });
 
-  it("network writing a signal that's another network's dep", () => {
+  it("network writing a cell that's another network's dep", () => {
     const a = num(0);
     const b = num(0);
     let n2Fires = 0;
@@ -589,7 +589,7 @@ describe("explicit-deps: edge cases", () => {
     n2.dispose();
   });
 
-  it("custom-equality signal: writes that don't change value don't fire", () => {
+  it("custom-equality cell: writes that don't change value don't fire", () => {
     const eqSet = (a: ReadonlySet<number>, b: ReadonlySet<number>) =>
       a.size === b.size && [...a].every(v => b.has(v));
     const s = cell<ReadonlySet<number>>(new Set([1, 2]), { equals: eqSet });
@@ -634,7 +634,7 @@ describe("explicit-deps: re-entry & timing", () => {
     expect(fires).toBe(0);
   });
 
-  it("subscribe between body fires: signal NOT in dirty until next change", () => {
+  it("subscribe between body fires: cell NOT in dirty until next change", () => {
     const a = num(0);
     const b = num(0);
     const dirties: Array<ReadonlySet<unknown>> = [];
@@ -679,7 +679,7 @@ describe("explicit-deps: re-entry & timing", () => {
     n.dispose();
   });
 
-  it("repeated subscribe of same signal is idempotent at link level", () => {
+  it("repeated subscribe of same cell is idempotent at link level", () => {
     const a = num(0);
     let fires = 0;
     const n = network([], () => {
@@ -715,7 +715,7 @@ describe("explicit-deps: re-entry & timing", () => {
 // ─── 12. Computed body internals ───────────────────────────────────
 
 describe("explicit-deps: Computed reads in body don't leak into network's deps", () => {
-  it("body reads a Computed that depends on a non-dep signal — non-dep stays out", () => {
+  it("body reads a Computed that depends on a non-dep cell — non-dep stays out", () => {
     const a = num(0); // dep
     const b = num(0); // NOT a dep
     const sum = a.add(b); // Computed
@@ -802,7 +802,7 @@ describe("explicit-deps: stress", () => {
 // ─── 14. Cross-network ─────────────────────────────────────────────
 
 describe("explicit-deps: cross-network", () => {
-  it("network A writes a non-dep signal observed by an effect — effect fires", () => {
+  it("network A writes a non-dep cell observed by an effect — effect fires", () => {
     const trigger = num(0);
     const observed = num(0);
     let effectFires = 0;
@@ -867,7 +867,7 @@ describe("explicit-deps: cross-network", () => {
 // ─── 15. Multi-manual coordination ────────────────────────────────
 
 describe("multi-manual: shared deps, varied flush order", () => {
-  it("two manual networks observing the same signal — flush order independent", () => {
+  it("two manual networks observing the same cell — flush order independent", () => {
     const x = num(0);
     const seenA: { value: number; dirtyHas: boolean }[] = [];
     const seenB: { value: number; dirtyHas: boolean }[] = [];

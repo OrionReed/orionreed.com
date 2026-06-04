@@ -13,7 +13,7 @@
 //     tween on Kept lines; opacity fades for Lost/Gained); there's no
 //     drive loop or DOM rebuild.
 
-import { type Content, css, Diagram, label, loop, type Mount, signal } from "../../minim";
+import { type Content, css, Diagram, label, loop, type Mount, cell } from "../../minim";
 import { type CodeShape, code, codeStyles, type Part } from "../../minim/code";
 
 const STATES = [
@@ -110,7 +110,7 @@ export class MdCode extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(680, 400);
 
-    const status = signal<Content>("");
+    const status = cell<Content>("");
 
     s(
       label(view.top.down(20), "code — morph + token animation"),

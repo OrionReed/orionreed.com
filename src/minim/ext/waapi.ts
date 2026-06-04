@@ -3,7 +3,7 @@
 // listener serves them all. Range names mirror CSS `view-timeline`.
 
 import { type Animator, suspend } from "@minim/core";
-import { type Signal, signal } from "@minim/signals";
+import { type Cell, cell } from "@minim/signals";
 
 /** WAAPI animation as a minim Animator. Bare-number `opts` is seconds;
  *  object `opts` passes through to `Element.animate` (ms). */
@@ -125,9 +125,9 @@ function unwatchTick(cb: () => void): void {
   if (subscribers.size === 0) detach();
 }
 
-function scrollSignal<T>(read: () => T, initial: T): Signal<T> {
+function scrollSignal<T>(read: () => T, initial: T): Cell<T> {
   let pull: (() => void) | undefined;
-  const sig = signal<T>(initial, {
+  const sig = cell<T>(initial, {
     watched() {
       pull = () => {
         sig.value = read();
@@ -144,7 +144,7 @@ function scrollSignal<T>(read: () => T, initial: T): Signal<T> {
 }
 
 /** Global page scroll progress in `[0, 1]`; `0` if page doesn't scroll. */
-export function scrollProgress(): Signal<number> {
+export function scrollProgress(): Cell<number> {
   return scrollSignal(() => (pageTotal > 0 ? clamp01(window.scrollY / pageTotal) : 0), 0);
 }
 
@@ -185,10 +185,10 @@ function rangeProgress(rect: DOMRect, vp: number, range: ViewRange): number {
 
 // Memoize `viewProgress` by (el, range) so N readers share one layout
 // read per tick. WeakMap GCs when el is dropped.
-const viewCache = new WeakMap<Element, Partial<Record<ViewRange, Signal<number>>>>();
+const viewCache = new WeakMap<Element, Partial<Record<ViewRange, Cell<number>>>>();
 
 /** Element view-progress in `[0, 1]` over `range` (default `cover`). */
-export function viewProgress(el: Element, range: ViewRange = "cover"): Signal<number> {
+export function viewProgress(el: Element, range: ViewRange = "cover"): Cell<number> {
   let entry = viewCache.get(el);
   if (!entry) viewCache.set(el, (entry = {}));
   return (entry[range] ??= scrollSignal(
@@ -204,9 +204,9 @@ function elInViewport(el: Element): boolean {
 
 /** Reactive boolean; `true` while `el` intersects the viewport. Seeded
  *  synchronously from rect, then maintained by IntersectionObserver. */
-export function inView(el: Element, opts?: IntersectionObserverInit): Signal<boolean> {
+export function inView(el: Element, opts?: IntersectionObserverInit): Cell<boolean> {
   let observer: IntersectionObserver | undefined;
-  const sig = signal<boolean>(false, {
+  const sig = cell<boolean>(false, {
     watched() {
       sig.value = elInViewport(el);
       observer = new IntersectionObserver(entries => {

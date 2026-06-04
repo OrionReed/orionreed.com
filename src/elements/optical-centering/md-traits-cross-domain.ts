@@ -31,7 +31,7 @@ import {
   pose,
   rect,
   rgba,
-  type Signal,
+  type Cell,
   Vec,
   vec,
   type Writable,
@@ -82,7 +82,7 @@ export class MdTraitsCrossDomain extends Diagram {
       pose({ x: VX + 4 * VSP, y: PY, theta: 0.5 }),
     ];
     const { mean: poseMean, spread: poseSpread } = paletteLens(poses as never) as unknown as {
-      mean: Writable<Signal<PoseV>>;
+      mean: Writable<Cell<PoseV>>;
       spread: Writable<Num>;
     };
 

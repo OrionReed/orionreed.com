@@ -20,7 +20,7 @@ import {
   propagators,
   type SetCell,
 } from "@minim/propagators";
-import { Diagram, derive, label, line, loop, type Mount, rect, signal } from "../../minim";
+import { Diagram, derive, label, line, loop, type Mount, rect, cell } from "../../minim";
 
 const BASE_PUZZLE =
   "53..7...." +
@@ -40,7 +40,7 @@ const eqSet = (a: ReadonlySet<number>, b: ReadonlySet<number>): boolean => {
   return true;
 };
 const setCell = (init: Iterable<number>): SetCell<number> =>
-  signal<ReadonlySet<number>>(new Set(init), { equals: eqSet });
+  cell<ReadonlySet<number>>(new Set(init), { equals: eqSet });
 
 const GIVEN = "var(--text)";
 const SOLVED = "#5b8def";
@@ -54,7 +54,7 @@ export class MdPropSudoku extends Diagram {
     const cells: SetCell<number>[][] = Array.from({ length: 9 }, () =>
       Array.from({ length: 9 }, () => setCell(ALL_9)),
     );
-    const givenAt = signal(new Set<number>());
+    const givenAt = cell(new Set<number>());
 
     const p = propagators({ manual: true });
     for (let r = 0; r < 9; r++) p.add(allDifferent(...cells[r]!));
@@ -121,8 +121,8 @@ export class MdPropSudoku extends Diagram {
       );
     }
 
-    const stepCount = signal(0);
-    const solved = signal(false);
+    const stepCount = cell(0);
+    const solved = cell(false);
 
     s(
       label(

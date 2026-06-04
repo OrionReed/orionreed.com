@@ -1,7 +1,7 @@
 // transform.ts — reactive 2D transform.
 //
 // Invertibles (`add`, `sub`) return `: this` and ride on
-// `Signal#lens(fwd, bwd)`; chained calls auto-fuse. Field-lens getters
+// `Cell#lens(fwd, bwd)`; chained calls auto-fuse. Field-lens getters
 // use `field()`, so writability propagates through nested chains
 // (`Transform.translate.x.value = 5` works on writable receivers).
 

@@ -393,7 +393,7 @@ describe("Bool — effect tracking", () => {
   });
 });
 
-// ─── Stress: deep chains, signal sharing ──────────────────────────
+// ─── Stress: deep chains, cell sharing ──────────────────────────
 
 describe("Bool — stress", () => {
   it("not().xor(b).not().xor(c).not() compositions write through", () => {
@@ -440,8 +440,8 @@ describe("Bool — stress", () => {
     dispose();
   });
 
-  it("signal<boolean> can still be wrapped in derive — back-compat with the loose use", () => {
-    // Confirms Bool doesn't break the pre-existing Signal<boolean> usage
+  it("cell<boolean> can still be wrapped in derive — back-compat with the loose use", () => {
+    // Confirms Bool doesn't break the pre-existing Cell<boolean> usage
     // that the codebase already has in many places.
     const raw = cell(false);
     const b = Bool.derive(() => raw.value);

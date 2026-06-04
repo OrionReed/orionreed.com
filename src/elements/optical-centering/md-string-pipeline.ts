@@ -11,7 +11,7 @@
 //
 // Editing rules per pane:
 //
-//   Source        — plain writable signal, baseline.
+//   Source        — plain writable cell, baseline.
 //   Trimmed       — strip leading/trailing whitespace; writes restore
 //                   the original padding via complement.
 //   Lowercased    — lowercases each word; writes apply the SOURCE's
@@ -155,7 +155,7 @@ export class MdStringPipeline extends BaseElement {
     void rot.value;
 
     const panes: PaneSpec[] = [
-      { name: "Source", kind: "writable signal", cell: source },
+      { name: "Source", kind: "writable cell", cell: source },
       { name: "Trimmed", kind: "symmetric · trim", cell: trimmed },
       { name: "Lowercased", kind: "symmetric · per-word case mask", cell: lowered },
       { name: "Words", kind: "symmetric · separator preservation", cell: words },

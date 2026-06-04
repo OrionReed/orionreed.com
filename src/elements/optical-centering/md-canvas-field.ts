@@ -9,7 +9,7 @@ import {
   loop,
   type Num,
   num,
-  signal,
+  cell,
   type Vec,
   vec,
   type Writable,
@@ -90,11 +90,11 @@ export class MdCanvasField extends HTMLElement {
 
   private phaseIdx = num(0);
   private hueBase: Writable<Num> = num(210);
-  private hueSpread = signal(80);
-  private size = signal(2.1);
+  private hueSpread = cell(80);
+  private size = cell(2.1);
   private pointer: Writable<Vec> = vec(W / 2, H / 2);
-  private statusText = signal("");
-  private fpsSmoothed = signal(0);
+  private statusText = cell("");
+  private fpsSmoothed = cell(0);
 
   // Typed arrays: 1500 reactives would be wasteful — reactivity lives in the knobs.
   private px = new Float32Array(N);

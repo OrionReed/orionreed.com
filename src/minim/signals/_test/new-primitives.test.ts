@@ -1,7 +1,7 @@
 // new-primitives.test.ts — primitives natural under N-input lenses.
 
 import { describe, expect, it } from "vitest";
-import { num, signal, vec } from "../index";
+import { num, cell, vec } from "../index";
 import {
   angleLens,
   bezier2,
@@ -66,7 +66,7 @@ describe("vecLerp", () => {
   it("read: linear interpolation between two vecs", () => {
     const a = vec(0, 0);
     const b = vec(10, 20);
-    const t = signal(0.5);
+    const t = cell(0.5);
     const m = vecLerp(a, b, t);
     expect(m.value).toEqual({ x: 5, y: 10 });
     t.value = 0.25;
@@ -76,7 +76,7 @@ describe("vecLerp", () => {
   it("write: drag the interpolated point shifts both endpoints", () => {
     const a = vec(0, 0);
     const b = vec(10, 20);
-    const t = signal(0.5);
+    const t = cell(0.5);
     const m = vecLerp(a, b, t);
     (m as unknown as { value: { x: number; y: number } }).value = { x: 100, y: 100 };
     // Both endpoints shifted by (95, 90).
@@ -138,7 +138,7 @@ describe("bezier2 / bezier3", () => {
     const p0 = vec(0, 0);
     const p1 = vec(10, 10);
     const p2 = vec(20, 0);
-    const t = signal(0.5);
+    const t = cell(0.5);
     const b = bezier2(p0, p1, p2, t);
     expect(b.value).toEqual({ x: 10, y: 5 });
   });
@@ -148,7 +148,7 @@ describe("bezier2 / bezier3", () => {
     const p1 = vec(1, 5);
     const p2 = vec(9, 5);
     const p3 = vec(10, 0);
-    const t = signal(0);
+    const t = cell(0);
     const b = bezier3(p0, p1, p2, p3, t);
     expect(b.value).toEqual({ x: 0, y: 0 });
     t.value = 1;

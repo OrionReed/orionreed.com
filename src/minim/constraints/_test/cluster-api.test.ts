@@ -218,7 +218,7 @@ describe("API — mutable parameters", () => {
     // Verify initial rest distance
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(5, 1);
 
-    // Mutate rest length — `r.rest` is a Signal<number>.
+    // Mutate rest length — `r.rest` is a Cell<number>.
     r.rest.value = 10;
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(10, 1);
 
@@ -226,7 +226,7 @@ describe("API — mutable parameters", () => {
     expect(Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y)).toBeCloseTo(3, 1);
   });
 
-  it("clamp.lo / clamp.hi mutation via signal `.value`", () => {
+  it("clamp.lo / clamp.hi mutation via cell `.value`", () => {
     const s = constraints({ iterations: 30 });
     const x = num(5);
     const r = s.add(clamp(x, 0, 10));

@@ -8,8 +8,8 @@ import {
   loop,
   type Mount,
   rect,
-  type Signal,
-  signal,
+  type Cell,
+  cell,
   snapshot,
   split,
   t,
@@ -41,7 +41,7 @@ function initialChunks(prefix: string, n: number): ChunkState[] {
 }
 
 export class MdQrtpHandshake extends Diagram {
-  @attr.num(4) declare chunks: Signal<number>;
+  @attr.num(4) declare chunks: Cell<number>;
 
   protected scene(s: Mount): void {
     const N = this.chunks.value;
@@ -50,8 +50,8 @@ export class MdQrtpHandshake extends Diagram {
     this.view(W + 50, H + 2 * PAD_Y);
 
     const state = {
-      A: signal(initialChunks("A", N)),
-      B: signal(initialChunks("B", N)),
+      A: cell(initialChunks("A", N)),
+      B: cell(initialChunks("B", N)),
     };
 
     const buildRow = (device: "A" | "B", y: number) =>

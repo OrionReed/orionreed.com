@@ -12,7 +12,7 @@ import {
   type Num,
   num,
   play,
-  signal,
+  cell,
   vec,
   type Writable,
   wave,
@@ -34,7 +34,7 @@ export class MdCancel extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(380, 160);
 
-    const status = signal<Content>("running");
+    const status = cell<Content>("running");
     s(label(view.top.down(STATUS_Y), status));
 
     type Slot = {
@@ -52,8 +52,8 @@ export class MdCancel extends Diagram {
       slots.push({ x, y, shape });
     }
 
-    const stop = signal(false);
-    const hardStop = signal(false);
+    const stop = cell(false);
+    const hardStop = cell(false);
 
     s(
       button(

@@ -89,7 +89,7 @@ describe("composition: non-coloring", () => {
     p.dispose();
   });
 
-  it("a Vec signal's `.x` lens participates in a propagator", () => {
+  it("a Vec cell's `.x` lens participates in a propagator", () => {
     // Demonstrates: a Vec's field-lens is just a Writable<Num>. The
     // propagator doesn't know it's a Vec field; it sees a Num.
     // Writes to vec.x via the propagator update vec.value's x.
@@ -199,7 +199,7 @@ describe("composition: non-coloring", () => {
 });
 
 describe("composition: typed cells without explicit Cell wrapper", () => {
-  it("a Num signal IS a usable propagator cell — no Cell type needed", () => {
+  it("a Num cell IS a usable propagator cell — no Cell type needed", () => {
     // The whole point of non-coloring: I can take an existing Num
     // signal (e.g. one I'm already using elsewhere in my diagram)
     // and make it participate in a propagator network without
@@ -216,7 +216,7 @@ describe("composition: typed cells without explicit Cell wrapper", () => {
     p.dispose();
   });
 
-  it("Vec.lens-derived signal works as a propagator cell", () => {
+  it("Vec.lens-derived cell works as a propagator cell", () => {
     const root = vec(10, 20);
     // A custom Vec.lens: derive a vec offset by some constant.
     const offset = Vec.lens(

@@ -22,8 +22,8 @@ import {
   type Num as NumSignal,
   num,
   readNow,
-  type Signal,
-  signal,
+  type Cell,
+  cell,
   type Val,
   type Vec,
   vec,
@@ -117,9 +117,9 @@ function measureFont(size: number, family: string): { w: number; h: number } {
 
 /** A Shape rendering monospace source code as a list of `Part`s. */
 export class CodeShape extends Shape {
-  readonly source: Writable<Signal<string>>;
-  readonly width: Writable<Signal<number>>;
-  readonly height: Writable<Signal<number>>;
+  readonly source: Writable<Cell<string>>;
+  readonly width: Writable<Cell<number>>;
+  readonly height: Writable<Cell<number>>;
   readonly language: string;
   /** Host wrapper (`position: relative`) for the absolute parts. */
   readonly wrapper: HTMLDivElement;
@@ -145,8 +145,8 @@ export class CodeShape extends Shape {
     const lines = initialStr.split("\n");
     const initW = lines.reduce((a, l) => Math.max(a, l.length), 0) * charW;
     const initH = lines.length * lineH;
-    const w = signal(initW);
-    const h = signal(initH);
+    const w = cell(initW);
+    const h = cell(initH);
 
     super("foreignObject", () => ({ x: 0, y: 0, w: w.value, h: h.value }), opts, {
       origin: derive(() => ({ x: w.value / 2, y: h.value / 2 })),
@@ -155,7 +155,7 @@ export class CodeShape extends Shape {
     this.width = w;
     this.height = h;
     this.language = language;
-    this.source = signal(initialStr);
+    this.source = cell(initialStr);
     this.charW = charW;
     this.lineH = lineH;
 

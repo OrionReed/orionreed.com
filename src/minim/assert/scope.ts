@@ -12,14 +12,14 @@
 // `touchedDeep`) hang off the wrapper as lazy signal getters.
 
 import type { Animator, Tick, Yieldable } from "@minim/core";
-import { derive, type Read, type Signal, signal } from "@minim/signals";
+import { derive, type Read, type Cell, cell } from "@minim/signals";
 import { closeSpan, currentSpan, notifySpanOpen, openSpan, type Span, withSpan } from "./span";
 
 /** Factory function shape. */
 type AnyFactory = (...args: any[]) => Animator<any>;
 
 /** Bumped by record() on each open/close so derived signals refresh. */
-const traceVersion = signal(0);
+const traceVersion = cell(0);
 
 /** Bump so `alive` / `last` / `runs` etc. recompute. Called by record(). */
 export function bumpTraceVersion(): void {
@@ -56,10 +56,10 @@ export interface Scoped<F extends AnyFactory> {
    *  contribute up to the current clock. */
   readonly duration: Read<number>;
   /** Signals written during the most recent invocation (self only). */
-  readonly touched: Read<readonly Signal<unknown>[]>;
+  readonly touched: Read<readonly Cell<unknown>[]>;
   /** Signals written during the most recent invocation, plus its
    *  descendants. */
-  readonly touchedDeep: Read<readonly Signal<unknown>[]>;
+  readonly touchedDeep: Read<readonly Cell<unknown>[]>;
 }
 
 /** Wrap `fn` so its invocations open Spans with identity = fn.
@@ -172,8 +172,8 @@ export function scope<F extends AnyFactory>(...args: [F] | [string, F]): Scoped<
 
 /** Union of `touched` over `root` and its descendants (via `parent`
  *  back-links). */
-function collectTouchedDeep(root: Span): Signal<unknown>[] {
-  const out = new Set<Signal<unknown>>(root.touched);
+function collectTouchedDeep(root: Span): Cell<unknown>[] {
+  const out = new Set<Cell<unknown>>(root.touched);
   // `parent` is a back-link, so walk every span and test ancestry.
   // `descends(s, root)` is O(depth); traces are small in practice.
   for (const arr of allFactoryLists()) {

@@ -15,7 +15,7 @@ import {
   num,
   orbit,
   play,
-  signal,
+  cell,
   snapshot,
   splay,
   stagger,
@@ -71,7 +71,7 @@ export class MdChoreography extends Diagram {
       ),
     );
 
-    const phase = signal<Content>("assemble (row)");
+    const phase = cell<Content>("assemble (row)");
     const c = centroid(...shapes);
     const r = meanRotation(...shapes);
     const k = meanScale(...shapes);

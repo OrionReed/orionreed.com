@@ -3,7 +3,7 @@
 // properties get flattened. Useful at the top of `loop(...)` bodies so
 // each iteration starts from a known baseline.
 
-import { type Read, Signal, type Writable } from "@minim/signals";
+import { type Read, Cell, type Writable } from "@minim/signals";
 
 /** Capture current values; return a reset function. Args are signals or
  *  records whose signal-valued properties get flattened.
@@ -15,14 +15,14 @@ import { type Read, Signal, type Writable } from "@minim/signals";
 export function snapshot(
   ...args: ReadonlyArray<Read<unknown> | Record<string, unknown>>
 ): () => void {
-  const sigs: Writable<Signal<unknown>>[] = [];
+  const sigs: Writable<Cell<unknown>>[] = [];
   for (const arg of args) {
-    if (arg instanceof Signal) {
-      sigs.push(arg as Writable<Signal<unknown>>);
+    if (arg instanceof Cell) {
+      sigs.push(arg as Writable<Cell<unknown>>);
       continue;
     }
     for (const v of Object.values(arg)) {
-      if (v instanceof Signal) sigs.push(v as Writable<Signal<unknown>>);
+      if (v instanceof Cell) sigs.push(v as Writable<Cell<unknown>>);
     }
   }
   const initials = sigs.map(s => s.peek());

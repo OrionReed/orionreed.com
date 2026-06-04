@@ -7,7 +7,7 @@
 // ~1944 propagators total.
 
 import { describe, expect, it } from "vitest";
-import { signal } from "../../signals";
+import { cell } from "../../signals";
 import { allDifferent, propagators, type SetCell } from "..";
 
 const eqSet = (a: ReadonlySet<number>, b: ReadonlySet<number>): boolean => {
@@ -17,7 +17,7 @@ const eqSet = (a: ReadonlySet<number>, b: ReadonlySet<number>): boolean => {
 };
 
 const setCell = (init: Iterable<number>): SetCell<number> =>
-  signal<ReadonlySet<number>>(new Set(init), { equals: eqSet });
+  cell<ReadonlySet<number>>(new Set(init), { equals: eqSet });
 
 const ALL_9 = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 

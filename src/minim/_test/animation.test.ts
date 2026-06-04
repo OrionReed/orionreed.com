@@ -11,7 +11,7 @@ import {
   not,
   num,
   play,
-  signal,
+  cell,
   spring,
   Tween,
   toward,
@@ -103,7 +103,7 @@ describe("animation", () => {
     {
       const anim = new Anim();
       const x = num(0);
-      const dur = signal(1.0);
+      const dur = cell(1.0);
       anim.start(
         (function* () {
           yield* x.to(100, dur, linear);
@@ -183,11 +183,11 @@ describe("animation", () => {
       check("losing tween was cancelled (x partial, < 100)", x.value < 100);
     }
 
-    section("play().until(p) — terminate on signal-truthy");
+    section("play().until(p) — terminate on cell-truthy");
     {
       const anim = new Anim();
       const x = num(0);
-      const stop = signal(false);
+      const stop = cell(false);
       let endedEarly = false;
       anim.start(
         (function* () {
@@ -206,7 +206,7 @@ describe("animation", () => {
     {
       const anim = new Anim();
       const x = num(0);
-      const phase = signal("idle");
+      const phase = cell("idle");
       anim.start(
         (function* () {
           yield* play(x.to(50, 0.1, linear)).then(x.to(0, 0.1, linear));
@@ -282,7 +282,7 @@ describe("animation", () => {
       const anim = new Anim();
       const a = num(10);
       const b = num(0);
-      const stop = signal(false);
+      const stop = cell(false);
       anim.start(
         (function* () {
           yield* race(
@@ -341,18 +341,18 @@ describe("animation", () => {
       check("play(thunk): factory invoked once", factoryCalls === 1);
     }
 
-    section("not(sig) — reactive negation returns a Signal");
+    section("not(sig) — reactive negation returns a Cell");
     {
       const anim = new Anim();
-      const flag = signal(false);
+      const flag = cell(false);
       const neg = not(flag);
       check(
-        "not(sig) is a reactive signal with peek/value",
+        "not(sig) is a reactive cell with peek/value",
         neg.peek() === true && neg.value === true,
       );
       flag.value = true;
       check("not(sig) flips with source", neg.value === false);
-      // Also: not(sig) must be acceptable as a play-trigger (instanceof Signal).
+      // Also: not(sig) must be acceptable as a play-trigger (instanceof Cell).
       let woke = false;
       anim.start(
         (function* () {
@@ -376,7 +376,7 @@ describe("animation", () => {
       // time-scale the running animator continuously by the guard.
       const anim = new Anim();
       const x = num(0);
-      const drag = signal(false);
+      const drag = cell(false);
       anim.start(
         spring(x, 100, {
           omega: 14,

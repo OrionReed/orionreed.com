@@ -6,7 +6,7 @@
 //   1. Factory gantt — bars per scoped factory (intro / fadeIn /
 //      nudge / fadeOut). `yield*` calls now appear as their own
 //      bars; that's the redesign's headline win.
-//   2. Signal plot — c.opacity over time, line color encodes
+//   2. Cell plot — c.opacity over time, line color encodes
 //      `authorOf(c.opacity)` at each sample (i.e. who wrote it).
 //   3. Claim strips — pass/fail bar per claim, aligned with the
 //      time axis. Red gaps mark violation windows.
@@ -37,7 +37,7 @@ import {
   pathD,
   type Read,
   rect,
-  signal,
+  cell,
   type Val,
   Vec,
   vec,
@@ -147,8 +147,8 @@ export class MdDebugger extends Diagram {
     this.view(W, H);
 
     // ─── transport state ─────────────────────────────────────
-    const playing = signal(true);
-    const speed = signal(1);
+    const playing = cell(true);
+    const speed = cell(1);
     let stepBudget = 0;
 
     // Override `anim.step` so RAF still fires but our gate decides
@@ -186,7 +186,7 @@ export class MdDebugger extends Diagram {
     const author = authorOf(c.opacity);
 
     // ─── samples (per RAF tick) ─────────────────────────────
-    const samples = signal<readonly Sample[]>([]);
+    const samples = cell<readonly Sample[]>([]);
     this.anim.onStep(() => {
       const arr = samples.peek();
       const next: Sample[] =

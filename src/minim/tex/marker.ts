@@ -1,7 +1,7 @@
 // Named reactive identity linking diagram parts to prose. Prefer the
 // scoped registration on `Diagram` over the global registry below.
 
-import { derive, type Signal, signal, type Writable } from "@minim/signals";
+import { derive, type Cell, cell, type Writable } from "@minim/signals";
 
 const registry = new Map<string, Marker>();
 
@@ -15,16 +15,16 @@ export function registerMarker(id: string, m: Marker): void {
 
 /** Identity shared across renderings; `active` is OR over bound locals. */
 export type Marker = {
-  color: Writable<Signal<string | null>>;
-  active: Signal<boolean>;
-  bind(local: Writable<Signal<boolean>>): () => void;
+  color: Writable<Cell<string | null>>;
+  active: Cell<boolean>;
+  bind(local: Writable<Cell<boolean>>): () => void;
   register(id: string): Marker;
 };
 
 export function marker(color?: string): Marker {
-  const colorCell = signal<string | null>(color ?? null);
-  const locals = new Set<Signal<boolean>>();
-  const v = signal(0);
+  const colorCell = cell<string | null>(color ?? null);
+  const locals = new Set<Cell<boolean>>();
+  const v = cell(0);
   const active = derive(() => {
     v.value;
     for (const s of locals) if (s.value) return true;
@@ -62,7 +62,7 @@ export const highlightTint = (color: string): string =>
 
 /** Wire a DOM element's hover into a Marker. */
 export function hover(el: Element, m: Marker): () => void {
-  const local = signal(false);
+  const local = cell(false);
   const unbind = m.bind(local);
   const on = (): void => {
     local.value = true;

@@ -18,7 +18,7 @@ import {
   label,
   line,
   type Mount,
-  signal,
+  cell,
   type Vec,
   vec,
   type Writable,
@@ -45,7 +45,7 @@ export class MdSketchpad extends Diagram {
     const cluster = constraints({ iterations: 20 });
     cluster.add(distance(A, B, 160), distance(B, C, 120), distance(C, D, 160), distance(D, A, 120));
 
-    const braced = signal(true);
+    const braced = cell(true);
     cluster.addWhile(braced, distance(A, C, diagLen));
 
     s(line(A, B));

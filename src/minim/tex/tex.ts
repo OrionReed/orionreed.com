@@ -1,7 +1,7 @@
 // LaTeX → MathML shape, rendered via Temml.
 
 import { Shape, type ShapeOpts, tokens } from "@minim/shapes";
-import { Box, derive, type Inner, type Signal, signal, type Writable } from "@minim/signals";
+import { Box, derive, type Inner, type Cell, cell, type Writable } from "@minim/signals";
 import temml from "temml";
 import { Part, type PartList, PartMarker } from "./parts";
 
@@ -157,9 +157,9 @@ const measureMathML = (mathml: string, fontSize: number, fontFamily: string): Me
 export class TexShape<Names extends string = string> extends Shape {
   readonly parts: PartList<Names>;
   /** Width in local-frame user units (the rendered MathML bounding rect). */
-  readonly width: Signal<number>;
+  readonly width: Cell<number>;
   /** Height in local-frame user units. */
-  readonly height: Signal<number>;
+  readonly height: Cell<number>;
 
   constructor(
     strings: TemplateStringsArray | readonly string[],
@@ -174,8 +174,8 @@ export class TexShape<Names extends string = string> extends Shape {
     const { source, markers } = compileTemplate(strings, values);
     const initialMathml = renderToMathML(source, { displayMode });
     const measured = measureMathML(initialMathml, fontSize, fontFamily);
-    const w = signal(measured.width);
-    const h = signal(measured.height);
+    const w = cell(measured.width);
+    const h = cell(measured.height);
 
     super("foreignObject", () => ({ x: 0, y: 0, w: w.value, h: h.value }), opts, {
       origin: derive(() => ({ x: w.value / 2, y: h.value / 2 })),

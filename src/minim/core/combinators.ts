@@ -1,4 +1,4 @@
-// Signal-free combinators over `Anim`. Concurrency rules are expressed
+// Cell-free combinators over `Anim`. Concurrency rules are expressed
 // per-kid via `cut(v)` — no engine-side strategy abstraction.
 
 import {

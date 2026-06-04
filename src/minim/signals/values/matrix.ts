@@ -2,7 +2,7 @@
 //
 // Sparse-trait: only `equals`. Element-wise linear combine / lerp don't
 // decompose for matrices, so `spring`/`tween`/`mean` reject Matrix at
-// compile time. Two invertibles, both `: this` via `Signal#lens`:
+// compile time. Two invertibles, both `: this` via `Cell#lens`:
 //   - `multiply(b)` — inverse multiplies by `invert(b)`
 //   - `invert()`    — its own inverse
 
@@ -147,7 +147,7 @@ export class Matrix extends Cell<V> {
  *  Each entry is a literal `number` (lifted to a fresh seed) or an existing
  *  `Writable<Num>` (identity passthrough). RO sources are rejected at the
  *  type level — use `Matrix.derive(...)` for reactive RO tracking, or
- *  `signal.value` to snapshot. Lock an entry with `Num.pin(c)`. */
+ *  `cell.value` to snapshot. Lock an entry with `Num.pin(c)`. */
 export function matrix(
   a: Init<Num> = 1,
   b: Init<Num> = 0,

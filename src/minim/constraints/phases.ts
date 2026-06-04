@@ -8,7 +8,7 @@
 // Specialised factories (`physics`, `world`, …) declare their own
 // pipelines, interleaving these with integration / contact phases.
 
-import type { Pack, Signal, Writable } from "../signals";
+import type { Pack, Cell, Writable } from "../signals";
 import type { Constraints } from "./cluster";
 
 /** A single step in the `Constraints` pipeline. */
@@ -16,7 +16,7 @@ export type Phase = (c: Constraints, dt: number) => void;
 
 interface Binding {
   // biome-ignore lint/suspicious/noExplicitAny: heterogeneous binding registry
-  readonly sig: Signal<any>;
+  readonly sig: Cell<any>;
   // biome-ignore lint/suspicious/noExplicitAny: same
   readonly pack: Pack<any>;
 }
@@ -59,7 +59,7 @@ export const writeback: Phase = c => {
     const b = bindings[id];
     if (!b) continue;
     // biome-ignore lint/suspicious/noExplicitAny: dynamic pack
-    (b.sig as Writable<Signal<any>>).value = b.pack.write(solver.positions, solver.offsets[id]!);
+    (b.sig as Writable<Cell<any>>).value = b.pack.write(solver.positions, solver.offsets[id]!);
   }
 };
 

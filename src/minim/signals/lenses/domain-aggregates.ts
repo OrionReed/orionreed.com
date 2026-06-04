@@ -14,7 +14,7 @@ import {
   type Linear,
   type Metric,
   Num,
-  type Signal,
+  type Cell,
   type Traits,
   Vec,
   type Writable,
@@ -34,7 +34,7 @@ export function meanOf<S extends Traits<any, "linear">>(
 ): Writable<S> {
   if (inputs.length === 0) throw new Error("meanOf: need ≥ 1 input");
   // biome-ignore lint/suspicious/noExplicitAny: dynamic class lookup
-  const Cls = (inputs[0] as any).constructor as new (...args: never[]) => Signal<any>;
+  const Cls = (inputs[0] as any).constructor as new (...args: never[]) => Cell<any>;
   // biome-ignore lint/suspicious/noExplicitAny: dynamic trait lookup
   const lin = (Cls as any).traits?.linear as Linear<any> | undefined;
   if (!lin)
@@ -98,7 +98,7 @@ export function meanColor(
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
 export function spreadOf<
   T extends NonNullable<unknown>,
-  S extends Signal<T> & Traits<T, "linear" | "metric">,
+  S extends Cell<T> & Traits<T, "linear" | "metric">,
 >(inputs: readonly Writable<S>[]): Writable<Num> {
   const K = inputs.length;
   if (K < 1) throw new Error("spreadOf: need ≥ 1 input");
@@ -130,7 +130,7 @@ export function spreadOf<
   };
 
   // biome-ignore lint/suspicious/noExplicitAny: variance escape — spec is checked structurally
-  return (Num as any).lens(inputs as unknown as readonly Writable<Signal<T>>[], {
+  return (Num as any).lens(inputs as unknown as readonly Writable<Cell<T>>[], {
     init: (vals: readonly T[]): C => {
       const ctr = centroid(vals);
       const mean = meanSpread(vals, ctr);
@@ -168,7 +168,7 @@ export function spreadOf<
 // biome-ignore lint/suspicious/noExplicitAny: variance escape on value class
 export function paletteLens<
   T extends NonNullable<unknown>,
-  S extends Signal<T> & Traits<T, "linear" | "metric">,
+  S extends Cell<T> & Traits<T, "linear" | "metric">,
 >(colors: readonly Writable<S>[]): { mean: Writable<S>; spread: Writable<Num> } {
   return {
     mean: meanOf(colors as never) as Writable<S>,

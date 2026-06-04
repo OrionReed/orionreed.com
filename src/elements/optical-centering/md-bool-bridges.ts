@@ -31,7 +31,7 @@ import {
   type Mount,
   num,
   rect,
-  type Signal,
+  type Cell,
   Vec,
   vec,
   type Writable,
@@ -288,7 +288,7 @@ export class MdBoolBridges extends Diagram {
         });
       });
       // Readout above the slider.
-      const readout: Signal<string> = derive(() => `n = ${Math.round(snapped.value)}`);
+      const readout: Cell<string> = derive(() => `n = ${Math.round(snapped.value)}`);
       s(
         line(vec(trackX0, trackY), vec(trackX1, trackY), { thin: true, opacity: 0.4 }),
         ...ticks,

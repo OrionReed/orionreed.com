@@ -21,8 +21,8 @@ import {
   type Pack,
   type Read,
   requirePack,
-  type Signal,
-  signal,
+  type Cell,
+  cell,
   type Writable,
 } from "../signals";
 import { when } from "../signals/network-utils";
@@ -39,7 +39,7 @@ export interface Relation {
 
 interface Binding {
   // biome-ignore lint/suspicious/noExplicitAny: dynamic pack typing
-  readonly sig: Signal<any>;
+  readonly sig: Cell<any>;
   // biome-ignore lint/suspicious/noExplicitAny: same
   readonly pack: Pack<any>;
 }
@@ -55,7 +55,7 @@ export class Constraints {
   pipeline: Phase[];
 
   // biome-ignore lint/suspicious/noExplicitAny: heterogeneous binding registry
-  private readonly _sigToCell = new Map<Signal<any>, number>();
+  private readonly _sigToCell = new Map<Cell<any>, number>();
   private readonly _bindings: (Binding | undefined)[] = [];
   /** Active-relation disposers, keyed by relation reference. */
   private readonly _disposers = new Map<Relation, () => void>();
@@ -64,7 +64,7 @@ export class Constraints {
   private readonly _addHooks: Set<(rel: Relation) => void> = new Set();
   private readonly _removeHooks: Set<(rel: Relation) => void> = new Set();
   /** Bumped on structural change so the reactive driver re-fires. */
-  private readonly _gen: Writable<Signal<number>>;
+  private readonly _gen: Writable<Cell<number>>;
   /** Reactive driver: a network calling `step()` on signal change.
    *  Lazy-installed on first `_bind`; permanently silenced once
    *  `dispose()`d (e.g. when physics/world take the time loop). */
@@ -73,7 +73,7 @@ export class Constraints {
 
   constructor(opts: SolverOpts = {}) {
     this.solver = new Solver(opts);
-    this._gen = signal(0);
+    this._gen = cell(0);
     this.pipeline = reactivePipeline.slice();
   }
 
@@ -199,7 +199,7 @@ export class Constraints {
   /** @internal — bind a signal as a cell. Idempotent (same signal →
    *  same id); cells are append-only for the cluster's lifetime. */
   // biome-ignore lint/suspicious/noExplicitAny: see header
-  _bind(sig: Signal<any>): number {
+  _bind(sig: Cell<any>): number {
     const existing = this._sigToCell.get(sig);
     if (existing !== undefined) return existing;
     const pack = requirePack(sig as never) as Pack<unknown>;
@@ -222,13 +222,13 @@ export class Constraints {
    *  mutating the param wouldn't fire the network (body reads don't
    *  auto-track). Called from relations with reactive params. */
   // biome-ignore lint/suspicious/noExplicitAny: heterogeneous params
-  _trackParam(sig: Signal<any>): void {
+  _trackParam(sig: Cell<any>): void {
     if (this._network !== undefined) this._network.subscribe(sig);
     else this._pendingParamDeps.push(sig);
   }
   /** Params bound before the network existed; folded in at install. */
   // biome-ignore lint/suspicious/noExplicitAny: same
-  private _pendingParamDeps: Signal<any>[] = [];
+  private _pendingParamDeps: Cell<any>[] = [];
 
   // ─── Reactive driver wiring ─────────────────────────────────────
 
@@ -236,9 +236,9 @@ export class Constraints {
     const gen = this._gen;
     // Initial deps: gen, every bound cell signal, and params
     // registered before the network came up.
-    const initialDeps: Signal<unknown>[] = [gen as Signal<unknown>];
-    for (const [sig] of this._sigToCell) initialDeps.push(sig as Signal<unknown>);
-    for (const sig of this._pendingParamDeps) initialDeps.push(sig as Signal<unknown>);
+    const initialDeps: Cell<unknown>[] = [gen as Cell<unknown>];
+    for (const [sig] of this._sigToCell) initialDeps.push(sig as Cell<unknown>);
+    for (const sig of this._pendingParamDeps) initialDeps.push(sig as Cell<unknown>);
     this._pendingParamDeps.length = 0;
     this._network = network(initialDeps, () => {
       // Explicit-deps mode: body reads don't subscribe; deps come from

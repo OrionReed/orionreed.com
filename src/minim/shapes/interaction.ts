@@ -1,6 +1,6 @@
 // DOM input → signal-world bridges that bind to scene-graph shapes.
 
-import { type Inner, type Num, type Signal, signal, Vec, type Writable } from "@minim/signals";
+import { type Inner, type Num, type Cell, cell, Vec, type Writable } from "@minim/signals";
 
 type ClientPoint = { clientX: number; clientY: number };
 
@@ -8,10 +8,10 @@ import type { AnyShape } from "./shape";
 
 // Shared page-pointer state for `cursor()`: one lazy window listener feeding
 // one signal. `null` until the first `pointermove`. Never disposed.
-let _clientPointer: Signal<ClientPoint | null> | null = null;
-function pageClientPointer(): Signal<ClientPoint | null> {
+let _clientPointer: Cell<ClientPoint | null> | null = null;
+function pageClientPointer(): Cell<ClientPoint | null> {
   if (_clientPointer) return _clientPointer;
-  const sig = signal<ClientPoint | null>(null);
+  const sig = cell<ClientPoint | null>(null);
   window.addEventListener("pointermove", (e: PointerEvent) => {
     sig.value = { clientX: e.clientX, clientY: e.clientY };
   });
@@ -24,7 +24,7 @@ const wrapToPi = (x: number) => x - TAU * Math.round(x / TAU);
 
 /** Set `sig` true/false from `mouseenter`/`mouseleave` on `shape`; returns a
  *  disposer. Lower-level than `hover(el, marker)` — writes the signal directly. */
-export function hoverSignal(shape: AnyShape, sig: Writable<Signal<boolean>>): () => void {
+export function hoverSignal(shape: AnyShape, sig: Writable<Cell<boolean>>): () => void {
   const off1 = shape.on("mouseenter", () => {
     sig.value = true;
   });
@@ -100,7 +100,7 @@ export function draggable(
 export function drag(
   shape: AnyShape,
   target: Writable<Vec>,
-  dragging?: Writable<Signal<boolean>>,
+  dragging?: Writable<Cell<boolean>>,
 ): () => void {
   if (!shape.el.style.cursor) shape.el.style.cursor = "grab";
   let dx = 0;
@@ -143,13 +143,13 @@ export function drag(
 }
 
 /** Wrap a `drag(shape, target)` call and return a local `dragging`
- *  Signal<boolean>. Sugar for "give me a drag handle that exposes its
+ *  Cell<boolean>. Sugar for "give me a drag handle that exposes its
  *  own state." */
 export function dragWithState(
   shape: AnyShape,
   target: Writable<Vec>,
-): { dragging: Signal<boolean>; dispose: () => void } {
-  const dragging = signal(false);
+): { dragging: Cell<boolean>; dispose: () => void } {
+  const dragging = cell(false);
   const dispose = drag(shape, target, dragging);
   return { dragging, dispose };
 }
@@ -160,7 +160,7 @@ export function dragWithState(
 export function dragRotate(
   shape: AnyShape,
   angle: Writable<Num>,
-  dragging?: Writable<Signal<boolean>>,
+  dragging?: Writable<Cell<boolean>>,
 ): () => void {
   if (!shape.el.style.cursor) shape.el.style.cursor = "grab";
   let grabAngle = 0;

@@ -5,7 +5,7 @@
 //   4.2  vec(reactiveX, reactiveY) glitches without batching
 // Plus the Symbol.toPrimitive footgun guard.
 
-import { batch, derive, effect, type Inner, num, signal, type Vec, vec } from "@minim/signals";
+import { batch, derive, effect, type Inner, num, cell, type Vec, vec } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 
@@ -13,7 +13,7 @@ describe("correctness", () => {
   it("all checks", () => {
     section("1.1 Computed rethrows getter errors + retries");
     {
-      const a = signal(0);
+      const a = cell(0);
       let shouldThrow = true;
       const c = derive(() => {
         if (shouldThrow) throw new Error("boom");
@@ -56,9 +56,9 @@ describe("correctness", () => {
       check("real change fires", runs === initial + 1);
     }
 
-    section("per-instance equals via SignalOptions");
+    section("per-instance equals via CellOptions");
     {
-      const s = signal(0, { equals: (a, b) => Math.abs(a - b) < 0.01 });
+      const s = cell(0, { equals: (a, b) => Math.abs(a - b) < 0.01 });
       let runs = 0;
       effect(() => {
         void s.value;

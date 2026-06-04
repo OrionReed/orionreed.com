@@ -4,12 +4,12 @@
 // writes Jacobian / Hessian column norms into `J[ci]` / `HCols[ci]`.
 //
 // Mutable numeric parameters (rest lengths, bounds, …) are held as
-// `Signal<number>` and cached in `initialize()` (called once per
+// `Cell<number>` and cached in `initialize()` (called once per
 // `solve()`), so the inner per-iteration methods stay signal-free.
 // Subscription happens at the cluster layer: the network body reads
 // each param signal, so mutating it triggers a re-solve.
 
-import { type Signal, signal, type Writable } from "../signals";
+import { type Cell, cell, type Writable } from "../signals";
 import type { Solver } from "./solver";
 import { Term } from "./term";
 
@@ -110,9 +110,9 @@ export class LensNumTerm extends Term {
 
 export class DistanceTerm extends Term {
   /** Rest-length signal; cached in `initialize()`. */
-  readonly rest: Signal<number>;
+  readonly rest: Cell<number>;
   /** Optional mutable stiffness signal (only set when `hard=false`). */
-  readonly stiffnessSig?: Signal<number>;
+  readonly stiffnessSig?: Cell<number>;
   private _restCached = 0;
   private _cachedNx = 0;
   private _cachedNy = 0;
@@ -123,18 +123,18 @@ export class DistanceTerm extends Term {
     solver: Solver,
     a: number,
     b: number,
-    rest: number | Writable<Signal<number>>,
+    rest: number | Writable<Cell<number>>,
     hard = true,
-    stiffness?: number | Writable<Signal<number>>,
+    stiffness?: number | Writable<Cell<number>>,
   ) {
     if (solver.dims[a]! !== 2 || solver.dims[b]! !== 2) {
       throw new Error("distance: both cells must be Vec (dim=2)");
     }
     super(solver, [a, b], 1);
-    this.rest = signal(rest);
+    this.rest = cell(rest);
     this._restCached = this.rest.peek();
     if (!hard) {
-      this.stiffnessSig = signal(stiffness ?? 1e6);
+      this.stiffnessSig = cell(stiffness ?? 1e6);
       this.stiffness.fill(this.stiffnessSig.peek());
     }
   }
@@ -201,21 +201,21 @@ export class DistanceTerm extends Term {
 // ─── 1D bounds (clamp) ───────────────────────────────────────────────
 
 export class BoundsTerm extends Term {
-  readonly lo: Signal<number>;
-  readonly hi: Signal<number>;
+  readonly lo: Cell<number>;
+  readonly hi: Cell<number>;
   private _loCached = 0;
   private _hiCached = 0;
 
   constructor(
     solver: Solver,
-    cell: number,
-    lo: number | Writable<Signal<number>>,
-    hi: number | Writable<Signal<number>>,
+    cellIdx: number,
+    lo: number | Writable<Cell<number>>,
+    hi: number | Writable<Cell<number>>,
   ) {
-    if (solver.dims[cell]! !== 1) throw new Error("clamp: cell must be Num (dim=1)");
-    super(solver, [cell], 2);
-    this.lo = signal(lo);
-    this.hi = signal(hi);
+    if (solver.dims[cellIdx]! !== 1) throw new Error("clamp: cell must be Num (dim=1)");
+    super(solver, [cellIdx], 2);
+    this.lo = cell(lo);
+    this.hi = cell(hi);
     this._loCached = this.lo.peek();
     this._hiCached = this.hi.peek();
     this.lambdaMax[0]! = 0;

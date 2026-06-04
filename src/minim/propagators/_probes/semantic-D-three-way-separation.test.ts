@@ -20,12 +20,12 @@
 //     scale uniformly, projected gradient, …).
 
 import { describe, expect, it } from "vitest";
-import { num, type Signal, vec, type Writable } from "../../signals";
+import { num, type Cell, vec, type Writable } from "../../signals";
 import { Num } from "../../signals/values/num";
 import { propagator, propagators } from "..";
 
 type V = { x: number; y: number };
-type WVec = Writable<Signal<V>>;
+type WVec = Writable<Cell<V>>;
 
 describe("Semantic probe D: three-way separation", () => {
   it("definition swap: same constraint, different area formula", () => {
@@ -123,7 +123,7 @@ describe("Semantic probe D: three-way separation", () => {
       return Math.abs((av.x * (bv.y - cv.y) + bv.x * (cv.y - av.y) + cv.x * (av.y - bv.y)) / 2);
     });
 
-    function makePropagator(residualSig: Signal<number>, targetSig: typeof target1) {
+    function makePropagator(residualSig: Cell<number>, targetSig: typeof target1) {
       return propagator([residualSig, a, b, targetSig], [c], () => {
         if (Math.abs(residualSig.value) < 0.01) return;
         const baseLen = Math.hypot(b.value.x - a.value.x, b.value.y - a.value.y);

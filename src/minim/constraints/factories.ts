@@ -1,7 +1,7 @@
 // factories.ts — free constraint factories returning `Relation`s.
 //
 // Each returns a plain object with a `bind(c)` (→ disposer) plus
-// `Signal` fields for mutable params. Pass a number (wrapped in a
+// `Cell` fields for mutable params. Pass a number (wrapped in a
 // fresh signal) or your own signal (used directly, so UI bindings
 // flow through):
 //
@@ -20,7 +20,7 @@
 //     independent by the FD path — use `rightAngle(A, B, C)`, not
 //     `perpendicular(A, B, B, C)`.
 
-import { type Signal, signal, type Writable } from "../signals";
+import { type Cell, cell, type Writable } from "../signals";
 import type { Constraints, Relation } from "./cluster";
 import {
   BoundsTerm,
@@ -35,8 +35,8 @@ import {
 
 export { Strength };
 
-// biome-ignore lint/suspicious/noExplicitAny: Signal value type is checked at runtime via the pack trait
-type S = Signal<any>;
+// biome-ignore lint/suspicious/noExplicitAny: Cell value type is checked at runtime via the pack trait
+type S = Cell<any>;
 
 // ─── Pin (the only "structural" relation) ────────────────────────────
 
@@ -73,20 +73,20 @@ export function eq(a: S, b: S): Relation {
  *  `stiffness` for a Hooke spring. `rest` and `stiffness` are mutable
  *  signals on the returned relation. */
 export interface DistanceRelation extends Relation {
-  readonly rest: Writable<Signal<number>>;
+  readonly rest: Writable<Cell<number>>;
   /** Present only for the spring (finite-stiffness) variant. */
-  readonly stiffness?: Writable<Signal<number>>;
+  readonly stiffness?: Writable<Cell<number>>;
 }
 
 export function distance(
   a: S,
   b: S,
-  rest: number | Writable<Signal<number>>,
-  opts?: { stiffness?: number | Writable<Signal<number>> },
+  rest: number | Writable<Cell<number>>,
+  opts?: { stiffness?: number | Writable<Cell<number>> },
 ): DistanceRelation {
-  const rest_ = signal(rest);
+  const rest_ = cell(rest);
   const hard = opts?.stiffness === undefined;
-  const stiff_ = hard ? undefined : signal(opts.stiffness!);
+  const stiff_ = hard ? undefined : cell(opts.stiffness!);
   return {
     rest: rest_,
     stiffness: stiff_,
@@ -105,8 +105,8 @@ export function distance(
 export function spring(
   a: S,
   b: S,
-  rest: number | Writable<Signal<number>>,
-  stiffness: number | Writable<Signal<number>>,
+  rest: number | Writable<Cell<number>>,
+  stiffness: number | Writable<Cell<number>>,
 ): DistanceRelation {
   return distance(a, b, rest, { stiffness });
 }
@@ -127,11 +127,11 @@ export function lensNum(a: S, b: S, fwd: (x: number) => number): Relation {
 /** Hard 1D range `lo ≤ x ≤ hi`. `r.lo` / `r.hi` are mutable signals. */
 export function clamp(
   x: S,
-  lo: number | Writable<Signal<number>>,
-  hi: number | Writable<Signal<number>>,
-): Relation & { lo: Writable<Signal<number>>; hi: Writable<Signal<number>> } {
-  const lo_ = signal(lo);
-  const hi_ = signal(hi);
+  lo: number | Writable<Cell<number>>,
+  hi: number | Writable<Cell<number>>,
+): Relation & { lo: Writable<Cell<number>>; hi: Writable<Cell<number>> } {
+  const lo_ = cell(lo);
+  const hi_ = cell(hi);
   return {
     lo: lo_,
     hi: hi_,

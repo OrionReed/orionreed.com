@@ -86,7 +86,7 @@ export class Bool extends Cell<V> {
 
 /** Writable `Bool`. Literal seeds a fresh cell; existing `Writable<Bool>`
  *  passes through by identity. RO sources are rejected at the type level —
- *  use `Bool.derive(...)` for reactive RO tracking, or `signal.value` to
+ *  use `Bool.derive(...)` for reactive RO tracking, or `cell.value` to
  *  snapshot. */
 export function bool(v: Init<Bool> = false): Writable<Bool> {
   if (v instanceof Bool) return v as Writable<Bool>;

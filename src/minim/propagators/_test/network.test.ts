@@ -1,7 +1,7 @@
 // network.test.ts — `propagators()`, `propagate()`, manual mode, step().
 
 import { describe, expect, it } from "vitest";
-import { num, signal } from "../../signals";
+import { num, cell } from "../../signals";
 import { add, allDifferent, propagate, propagators, type SetCell } from "..";
 
 const eqSet = (a: ReadonlySet<number>, b: ReadonlySet<number>): boolean => {
@@ -10,7 +10,7 @@ const eqSet = (a: ReadonlySet<number>, b: ReadonlySet<number>): boolean => {
   return true;
 };
 const setCell = (init: Iterable<number>): SetCell<number> =>
-  signal<ReadonlySet<number>>(new Set(init), { equals: eqSet });
+  cell<ReadonlySet<number>>(new Set(init), { equals: eqSet });
 
 describe("Propagators.add chainable", () => {
   it("returns this so add() can be chained / stored as expression", () => {

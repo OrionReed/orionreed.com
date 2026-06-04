@@ -7,7 +7,7 @@ import {
   loop,
   type Mount,
   rect,
-  type Signal,
+  type Cell,
   stagger,
   Vec,
 } from "../../minim";
@@ -21,7 +21,7 @@ export class MdWaapiDemo extends Diagram {
     const X = 56;
     const BW = 440;
 
-    const bar = (y: number, name: string, p: Signal<number>): void => {
+    const bar = (y: number, name: string, p: Cell<number>): void => {
       s(
         label(
           view

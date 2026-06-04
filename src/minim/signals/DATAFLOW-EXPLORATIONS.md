@@ -134,8 +134,8 @@ User-supplied `lattice(spec)` is the escape hatch; misuse is on them.
 ### Bridging discrete and lattice
 
 ```ts
-snapshot(l: Lattice<T>): Signal<T>          // explicit "leaving the safe zone"
-liftToLattice(s: Signal<T>, spec): Lattice<T>   // explicit "entering"
+snapshot(l: Lattice<T>): Cell<T>          // explicit "leaving the safe zone"
+liftToLattice(s: Cell<T>, spec): Lattice<T>   // explicit "entering"
 ```
 
 The CALM rule expressed in the type system: stay monotonic and you stay
@@ -285,7 +285,7 @@ guidance.
 ### B — Lattice cells (Tier 3) as a sibling type
 
 `lattice.set<T>()`, `lattice.max(n)`, etc. Implementation: ~150-line
-`Signal<T>` subclass with merge-on-set semantics. Curated constructors
+`Cell<T>` subclass with merge-on-set semantics. Curated constructors
 verified by hand. Optional `isBounded` annotation.
 
 Migrate `propagators/` and `constraints/` set-narrowing code to use

@@ -1,7 +1,7 @@
 // color.ts — reactive RGBA color.
 //
 // Invertibles (`add`, `sub`, `scale`) return `: this` and ride on
-// `Signal#lens(fwd, bwd)`. Chained calls auto-fuse.
+// `Cell#lens(fwd, bwd)`. Chained calls auto-fuse.
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";

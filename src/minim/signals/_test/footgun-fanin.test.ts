@@ -2,13 +2,13 @@
 // surface (`Cls.lens([...], ...)` / `Cls.derive([...], ...)`).
 
 import { describe, expect, it } from "vitest";
-import { effect, Num, num, signal } from "../index";
+import { effect, Num, num, cell } from "../index";
 
 describe("N-input lens: reactive args inside fwd", () => {
-  it("fwd reads an external signal: tracked, re-fires on its change", () => {
+  it("fwd reads an external cell: tracked, re-fires on its change", () => {
     const a = num(1);
     const b = num(2);
-    const k = signal(1);
+    const k = cell(1);
     const sum = Num.derive([a, b] as const, vals => vals[0] + vals[1] * k.value);
     let observed = -1;
     const stop = effect(() => {
@@ -24,7 +24,7 @@ describe("N-input lens: reactive args inside fwd", () => {
 
   it("FOOTGUN: untracked-read in fwd via .peek skips the dep", () => {
     const a = num(1);
-    const k = signal(0);
+    const k = cell(0);
     const result = Num.derive([a] as const, vals => vals[0] + k.peek());
     let observed = -1;
     const stop = effect(() => {

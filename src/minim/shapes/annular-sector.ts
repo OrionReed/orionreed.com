@@ -1,14 +1,14 @@
-import { derive, Num, type Signal, type Val, type Vec } from "@minim/signals";
+import { derive, Num, type Cell, type Val, type Vec } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 
 export interface AnnularSectorOpts extends CommonOpts {}
 
 /** Pie wedge with a hole — between two radii swept across two angles. */
 export class AnnularSector<O extends AnnularSectorOpts = AnnularSectorOpts> extends Shape<O> {
-  readonly rOuter: Signal<number>;
-  readonly rInner: Signal<number>;
-  readonly a0: Signal<number>;
-  readonly a1: Signal<number>;
+  readonly rOuter: Cell<number>;
+  readonly rInner: Cell<number>;
+  readonly a0: Cell<number>;
+  readonly a1: Cell<number>;
 
   constructor(
     center: Vec,

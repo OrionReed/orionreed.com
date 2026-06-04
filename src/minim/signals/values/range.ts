@@ -220,7 +220,7 @@ export function span(at: Writable<Num>, dur: Writable<Num>): Writable<Range> {
 /** Writable `Range` over `[lo, hi]`. Each endpoint is a literal `number`
  *  (lifted to a fresh seed) or an existing `Writable<Num>` (identity
  *  passthrough). RO sources are rejected at the type level — use
- *  `Range.derive(...)` for reactive RO tracking, or `signal.value` to
+ *  `Range.derive(...)` for reactive RO tracking, or `cell.value` to
  *  snapshot. Lock an endpoint with `Num.pin(c)`. */
 export function range(lo: Init<Num> = 0, hi: Init<Num> = 1): Writable<Range> {
   if (typeof lo === "number" && typeof hi === "number") {

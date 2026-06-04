@@ -73,8 +73,8 @@ export type TraitKey = keyof TraitDict<unknown>;
 
 /** "A reactive whose class declares the listed traits." `_t` is a
  *  phantom slot typed against `typeof Cls.traits`; listed keys must
- *  resolve to non-null. Pure constraint — doesn't imply `Signal<T>`;
- *  intersect with `Writable<Signal<T>>` / `Read<T>` for capability.
+ *  resolve to non-null. Pure constraint — doesn't imply `Cell<T>`;
+ *  intersect with `Writable<Cell<T>>` / `Read<T>` for capability.
  *
  *      function spring<T>(sig: Traits<T, "linear" | "metric">, target: Val<T>)
  *      function tween<T>(sig: Traits<T, "lerp">, target: T, dur: Val<number>) */
@@ -84,7 +84,7 @@ export type Traits<T, K extends TraitKey = never> = {
 
 // ─── Runtime lookup helpers ──────────────────────────────────────────
 
-/** Class-level traits dictionary for any Signal subclass. */
+/** Class-level traits dictionary for any Cell subclass. */
 const dictOf = <T>(s: object): TraitDict<T> =>
   (s as { constructor?: { traits?: TraitDict<T> } }).constructor?.traits ?? {};
 

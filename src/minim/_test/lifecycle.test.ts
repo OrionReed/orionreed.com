@@ -1,7 +1,7 @@
 // lifecycle.test.ts — disposal, dispose-fn idempotence, equals-skip,
 // large-scale unwatch.
 
-import { effect, signal, vec } from "@minim/signals";
+import { effect, cell, vec } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 
@@ -9,8 +9,8 @@ describe("lifecycle", () => {
   it("all checks", () => {
     section("effect-mirror: dispose severs the binding");
     {
-      const src = signal(0);
-      const t = signal(0);
+      const src = cell(0);
+      const t = cell(0);
       const stop = effect(() => {
         t.value = src.value;
       });
@@ -21,8 +21,8 @@ describe("lifecycle", () => {
 
     section("Effect after mirror disposed: no propagation");
     {
-      const src = signal(0);
-      const t = signal(0);
+      const src = cell(0);
+      const t = cell(0);
       const stop = effect(() => {
         t.value = src.value;
       });
@@ -40,8 +40,8 @@ describe("lifecycle", () => {
 
     section("Dispose fn is idempotent");
     {
-      const src = signal(0);
-      const t = signal(0);
+      const src = cell(0);
+      const t = cell(0);
       const stop = effect(() => {
         t.value = src.value;
       });
@@ -72,10 +72,10 @@ describe("lifecycle", () => {
 
     section("100 effect-mirrors on one source: clean unwatch leaves no subs");
     {
-      const src = signal(0);
+      const src = cell(0);
       const stops: Array<() => void> = [];
       for (let i = 0; i < 100; i++) {
-        const t = signal(0);
+        const t = cell(0);
         stops.push(
           effect(() => {
             t.value = src.value;

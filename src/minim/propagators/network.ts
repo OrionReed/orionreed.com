@@ -14,11 +14,11 @@
 // The network body self-excludes its own writes; external writes
 // re-fire it normally.
 
-import { network as makeNetwork, type Network, type Signal, transitiveDeps } from "../signals";
+import { network as makeNetwork, type Network, type Cell, transitiveDeps } from "../signals";
 import type { Propagator } from "./propagator";
 
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous signal registry
-type AnySignal = Signal<any>;
+type AnySignal = Cell<any>;
 
 interface Entry {
   p: Propagator;
@@ -115,7 +115,7 @@ export class Propagators {
       for (const s of expanded) allDeps.add(s);
     }
     this._network = makeNetwork(
-      [...allDeps] as readonly Signal<unknown>[],
+      [...allDeps] as readonly Cell<unknown>[],
       dirty => {
         // 1) First-fire any propagators that were just added.
         for (const p of this._firstFireQueue) {
@@ -155,7 +155,7 @@ export class Propagators {
       this._pendingFresh = new Set<AnySignal>();
       throw new PropagatorDivergedError(
         `Propagators: did not converge after ${this._maxIterations} iterations. ` +
-          `${stuck.size} signal(s) still changing.`,
+          `${stuck.size} cell(s) still changing.`,
         stuck,
       );
     }

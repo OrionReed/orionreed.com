@@ -393,7 +393,7 @@ A separate exploration of "higher-order lenses" surfaced four readings,
 of which two are genuinely orthogonal extensions and two reduce to
 substrate features the engine already has:
 
-- **Signal-of-lens**: trivial; a signal whose value is a lens. Reduces
+- **Cell-of-lens**: trivial; a signal whose value is a lens. Reduces
   to first-order with first-class values.
 - **Lens-with-cell-fwd/bwd**: live-swappable behavior. Genuine
   higher-order; an interesting research direction; subtle

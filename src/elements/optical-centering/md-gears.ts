@@ -8,7 +8,7 @@ import {
   type Num,
   num,
   Shape,
-  signal,
+  cell,
   type Vec,
   vec,
   type Writable,
@@ -80,7 +80,7 @@ export class MdGears extends Diagram {
     }
 
     // Pause the drive while any gear is being dragged.
-    const dragging = signal(false);
+    const dragging = cell(false);
     const omega = TAU * 0.15;
     this.anim.start(
       drive(tick => {

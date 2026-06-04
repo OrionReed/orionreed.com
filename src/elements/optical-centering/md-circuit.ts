@@ -14,7 +14,7 @@ import {
   play,
   readNow,
   rect,
-  signal,
+  cell,
   tokens,
   type Val,
   Vec,
@@ -44,7 +44,7 @@ export class MdCircuit extends Diagram {
     /** Counting sink — live count + scale-pulse on each fire. */
     const sink = (x: number, y: number, lbl: string, ev: string) => {
       const c = circle(vec(x, y), 18);
-      const tick = signal(0);
+      const tick = cell(0);
       bus.on(ev, () => {
         tick.value++;
       });
@@ -158,8 +158,8 @@ export class MdCircuit extends Diagram {
 
     /** AND-sync: when both evA/evB have ≥1 pending, fire `out` and consume one each. */
     const andSync = (evA: string, evB: string, out: string, gate: AnyShape) => {
-      const a = signal(0);
-      const b = signal(0);
+      const a = cell(0);
+      const b = cell(0);
       gate.add(
         lit(
           gate.center.offset(-14, 14),
@@ -195,7 +195,7 @@ export class MdCircuit extends Diagram {
       out: string,
       gate: AnyShape,
     ) => {
-      const holding = signal(false);
+      const holding = cell(false);
       gate.add(lit(gate.center.down(6), holding));
       anim.start(
         loop(function* () {

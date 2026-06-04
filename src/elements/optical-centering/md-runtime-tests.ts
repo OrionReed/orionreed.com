@@ -26,7 +26,7 @@ import {
   play,
   race,
   rect,
-  signal,
+  cell,
   splay,
   spring,
   swap,
@@ -588,7 +588,7 @@ const TESTS: TestCase[] = [
     name: ".until: cancels work on trigger, sequel runs",
     run: assert => {
       const a = new Anim();
-      const stop = signal(false);
+      const stop = cell(false);
       let phase = 0;
       startFn(a, function* () {
         yield* play(
@@ -655,9 +655,9 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "signal equals option suppresses no-op writes",
+    name: "cell equals option suppresses no-op writes",
     run: assert => {
-      const s = signal({ x: 1, y: 2 }, { equals: (a, b) => a.x === b.x && a.y === b.y });
+      const s = cell({ x: 1, y: 2 }, { equals: (a, b) => a.x === b.x && a.y === b.y });
       let fires = 0;
       effect(() => {
         void s.value;
@@ -671,9 +671,9 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "signal.lens reads through and writes back",
+    name: "cell.lens reads through and writes back",
     run: assert => {
-      const parent = signal({ a: 1, b: 2 });
+      const parent = cell({ a: 1, b: 2 });
       const lensA = Num.lens(
         [parent] as const,
         ([p]) => p.a,
@@ -687,10 +687,10 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "signal.lens aggregates multiple parents (centroid-style)",
+    name: "cell.lens aggregates multiple parents (centroid-style)",
     run: assert => {
-      const a = signal(0);
-      const b = signal(10);
+      const a = cell(0);
+      const b = cell(10);
       const avg = Num.lens(
         [a, b] as const,
         ([av, bv]) => (av + bv) / 2,
@@ -831,7 +831,7 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "Point: assign value from another signal copies once",
+    name: "Point: assign value from another cell copies once",
     run: assert => {
       const a = vec(0, 0);
       const b = vec(10, 20);
@@ -1053,10 +1053,10 @@ const TESTS: TestCase[] = [
     },
   },
   {
-    name: "untilChange: wakes on next signal change",
+    name: "untilChange: wakes on next cell change",
     run: assert => {
       const a = new Anim();
-      const sig = signal(0);
+      const sig = cell(0);
       let woke = false;
       startFn(a, function* () {
         yield untilChange(sig);
@@ -1073,7 +1073,7 @@ const TESTS: TestCase[] = [
     name: "untilChange: ignores baseline read",
     run: assert => {
       const a = new Anim();
-      const sig = signal(42);
+      const sig = cell(42);
       let woke = false;
       startFn(a, function* () {
         yield untilChange(sig);
@@ -1146,9 +1146,9 @@ export class MdRuntimeTests extends Diagram {
     const H = HEADER_H + TESTS.length * ROW_H + 36;
     this.view(W, H);
 
-    const statuses = TESTS.map(() => signal<Status>("pending"));
-    const messages = TESTS.map(() => signal<string>(""));
-    const summary = signal<string>("");
+    const statuses = TESTS.map(() => cell<Status>("pending"));
+    const messages = TESTS.map(() => cell<string>(""));
+    const summary = cell<string>("");
 
     s(label(vec(PAD_X, 18), "minim runtime tests", { size: 14, bold: true, align: Anchor.Left }));
     s(label(vec(W - PAD_X, 18), summary, { align: Anchor.Right }));

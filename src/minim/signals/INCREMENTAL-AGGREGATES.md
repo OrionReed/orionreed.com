@@ -124,7 +124,7 @@ function groupAggregate<T, U>(
   inputs: readonly Read<T>[],
   group: Group<U>,
   project: (t: T) => U,
-): Signal<U>;
+): Cell<U>;
 ```
 
 O(1) per change. Body maintains `contribs[i] = project(inputs[i].value)`
@@ -133,9 +133,9 @@ across fires; when input `i` changes, updates `acc ← add(sub(acc, old), new)`.
 ### Compensated variants
 
 ```ts
-function kahanSum(inputs: readonly Read<number>[]): Signal<number>;
-function kahanSumOf<T>(inputs: readonly Read<T>[], project: (t: T) => number): Signal<number>;
-function kahanCentroid(inputs: readonly Read<{ x: number; y: number }>[]): Signal<{ x: number; y: number }>;
+function kahanSum(inputs: readonly Read<number>[]): Cell<number>;
+function kahanSumOf<T>(inputs: readonly Read<T>[], project: (t: T) => number): Cell<number>;
+function kahanCentroid(inputs: readonly Read<{ x: number; y: number }>[]): Cell<{ x: number; y: number }>;
 ```
 
 Use when the workload accumulates many updates AND float precision matters.
@@ -227,7 +227,7 @@ End-to-end win: modest (~25% on N=10000 compensated). Nothing dramatic.
 
 ### Why simple read-skipping breaks
 
-The natural next step: add `_writeVersion` to Signal, bumped on actual
+The natural next step: add `_writeVersion` to Cell, bumped on actual
 value change. Then `_fanin`'s getter could skip `.value` reads for
 parents whose version hasn't advanced:
 
@@ -269,13 +269,13 @@ construction, exempt from `purgeDeps`.
 
 **Required changes** (~80-100 LOC):
 
-1. **`Signal._staticDeps: boolean`** (new field).
-2. **`_writeVersion: number`** on Signal. Bumped in
+1. **`Cell._staticDeps: boolean`** (new field).
+2. **`_writeVersion: number`** on Cell. Bumped in
    `_setWithExclusion` (signal mode) when value actually changes, and
    in `_update` (computed/lens mode) when it returns true. *Not* bumped
    in signal-mode `_update` (the setter already did it).
 3. **`purgeDeps`** branches on `_staticDeps`: skip when true.
-4. **`Signal.installStatic(Cls, parents, getter, setter?)`** — new
+4. **`Cell.installStatic(Cls, parents, getter, setter?)`** — new
    construction path. Walks `parents`, calls `link(parents[i], cell, sentinelVersion)`
    for each. Sets `cell._staticDeps = true`.
 5. **`_fanin`'s arity-2 getter** uses version-skip:
@@ -322,8 +322,8 @@ Each input gets its own `effect()` that tracks just that input; when it
 fires, it computes the delta and writes to a single output signal:
 
 ```ts
-function groupAggregate(inputs, group, project): Signal<U> {
-  const cell = signal(group.empty);
+function groupAggregate(inputs, group, project): Cell<U> {
+  const cell = cell(group.empty);
   const contribs = new Array(inputs.length).fill(group.empty);
   for (let i = 0; i < inputs.length; i++) {
     effect(() => {
@@ -378,7 +378,7 @@ doesn't flag it, so the accumulator is wrong AND nothing fires.
 
 ```ts
 // BAD — silent corruption with incremental aggregates
-const cell = signal({ value: 1 });
+const cell = cell({ value: 1 });
 const sum = groupAggregate([cell], NumGroup, p => p.value);
 sum.value;                       // = 1
 cell.value.value = 100;          // mutation in place; engine doesn't see it

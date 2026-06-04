@@ -2,7 +2,7 @@
 // geometric + set narrowing).
 
 import { describe, expect, it } from "vitest";
-import { num, signal, vec } from "../../signals";
+import { num, cell, vec } from "../../signals";
 import {
   add,
   align,
@@ -186,7 +186,7 @@ describe("eq (any value type)", () => {
 });
 
 describe("constant", () => {
-  it("pins a signal; external writes restore", () => {
+  it("pins a cell; external writes restore", () => {
     const s = num(0);
     const p = propagators();
     p.add(constant(s, 42));
@@ -258,7 +258,7 @@ describe("keepDistance", () => {
     p.dispose();
   });
 
-  it("reactive distance signal", () => {
+  it("reactive distance cell", () => {
     const a = vec(0, 0);
     const b = vec(10, 0);
     const d = num(10);
@@ -327,9 +327,9 @@ describe("allDifferent", () => {
       return true;
     };
     const cells: SetCell<number>[] = [
-      signal<ReadonlySet<number>>(new Set([1]), { equals: eqSet }), // pinned
-      signal<ReadonlySet<number>>(new Set([1, 2, 3, 4]), { equals: eqSet }),
-      signal<ReadonlySet<number>>(new Set([1, 2, 3, 4]), { equals: eqSet }),
+      cell<ReadonlySet<number>>(new Set([1]), { equals: eqSet }), // pinned
+      cell<ReadonlySet<number>>(new Set([1, 2, 3, 4]), { equals: eqSet }),
+      cell<ReadonlySet<number>>(new Set([1, 2, 3, 4]), { equals: eqSet }),
     ];
 
     const p = propagators();

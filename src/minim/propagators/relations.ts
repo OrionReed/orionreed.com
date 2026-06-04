@@ -9,14 +9,14 @@
 // trait, so `add(a, b, c)` works for `Num`, `Vec`, `Box`, `Pose`,
 // anything `Linear<T>`.
 
-import type { Num, Signal, Traits, Val, Vec, Writable } from "../signals";
-import { isSignal, reader, requireLinear } from "../signals";
+import type { Num, Cell, Traits, Val, Vec, Writable } from "../signals";
+import { isCell, reader, requireLinear } from "../signals";
 import { type Propagator, propagator } from "./propagator";
 
-type AnyW = Writable<Signal<any>>;
+type AnyW = Writable<Cell<any>>;
 /** Writable carrying T with the `Linear` trait — what arithmetic
  *  combinators (`add`, `sub`, `mid`, `centroid`) require. */
-type LinearW<T> = Writable<Signal<T>> & Traits<T, "linear">;
+type LinearW<T> = Writable<Cell<T>> & Traits<T, "linear">;
 
 // ─── Arithmetic (Num + Vec + anything Linear) ──────────────────────
 
@@ -156,7 +156,7 @@ export function sum(parts: readonly Writable<Num>[], total: Writable<Num>): Prop
 // ─── Universal ──────────────────────────────────────────────────────
 
 /** `a = b`. Bidirectional. Works for any value type. */
-export function eq<T>(a: Writable<Signal<T>>, b: Writable<Signal<T>>): Propagator[] {
+export function eq<T>(a: Writable<Cell<T>>, b: Writable<Cell<T>>): Propagator[] {
   return [
     propagator([a], [b], () => {
       b.value = a.value;
@@ -169,7 +169,7 @@ export function eq<T>(a: Writable<Signal<T>>, b: Writable<Signal<T>>): Propagato
 
 /** Pin a signal to a fixed value. Subscribes to its own target so
  *  external writes that diverge from the constant get restored. */
-export function constant<T>(s: Writable<Signal<T>>, v: T): Propagator {
+export function constant<T>(s: Writable<Cell<T>>, v: T): Propagator {
   return propagator([s], [s], () => {
     s.value = v;
   });
@@ -177,7 +177,7 @@ export function constant<T>(s: Writable<Signal<T>>, v: T): Propagator {
 
 /** Variadic mutual equality: all cells share the same value. Drag
  *  any one → others follow. N(N-1) propagators. */
-export function align<T>(...cells: Writable<Signal<T>>[]): Propagator[] {
+export function align<T>(...cells: Writable<Cell<T>>[]): Propagator[] {
   const props: Propagator[] = [];
   for (let i = 0; i < cells.length; i++) {
     for (let j = 0; j < cells.length; j++) {
@@ -258,7 +258,7 @@ export function between(
  *  a computed (e.g. `|p − q|` driven by other points), or a closure. */
 export function keepDistance(a: WVec, b: WVec, d: Val<number>): Propagator[] {
   const dRead = reader(d);
-  const dDeps = isSignal(d) ? [d] : [];
+  const dDeps = isCell(d) ? [d] : [];
   return [
     propagator([a.x, a.y, ...dDeps], [b.x as AnyW, b.y as AnyW], () => {
       const dx = b.x.value - a.x.value;
@@ -304,7 +304,7 @@ export function onLine(p: WVec, a: WVec, b: WVec): Propagator {
  *  number, a Num signal, a computed, or a closure. */
 export function onCircle(p: WVec, c: WVec, r: Val<number>): Propagator {
   const rRead = reader(r);
-  const rDeps = isSignal(r) ? [r] : [];
+  const rDeps = isCell(r) ? [r] : [];
   return propagator([p.x, p.y, c.x, c.y, ...rDeps], [p.x as AnyW, p.y as AnyW], () => {
     const dx = p.x.value - c.x.value;
     const dy = p.y.value - c.y.value;
@@ -373,7 +373,7 @@ export function reflect(src: WVec, a: WVec, b: WVec, dst: WVec): Propagator[] {
 /** A signal whose value is a `Set<T>`. Narrowing propagators
  *  intersect with new evidence. Termination is structural: finite-
  *  height lattice (sets only shrink). */
-export type SetCell<T> = Writable<Signal<ReadonlySet<T>>>;
+export type SetCell<T> = Writable<Cell<ReadonlySet<T>>>;
 
 /** "These cells must contain DIFFERENT values." If any cell is a
  *  singleton {v}, eliminate v from the others. */

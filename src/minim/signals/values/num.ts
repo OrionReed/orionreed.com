@@ -1,6 +1,6 @@
 // num.ts — reactive scalar.
 //
-// Invertibles return `: this` and ride on `Signal#lens(fwd, bwd)`;
+// Invertibles return `: this` and ride on `Cell#lens(fwd, bwd)`;
 // chained calls auto-fuse to one cell.
 
 import type { Easing } from "../../core";

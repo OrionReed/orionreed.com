@@ -5,7 +5,7 @@ mechanism, the invariants it preserves, the optimizations it performs, and
 the failure modes it catches (or doesn't).
 
 It is a reference for library authors and engine maintainers, not a tutorial.
-For usage patterns see the `Signal` and value-class docstrings in
+For usage patterns see the `Cell` and value-class docstrings in
 [`signal.ts`](./signal.ts), [`values/`](./values/), and the test suites
 under [`_test/`](./_test/).
 
@@ -13,7 +13,7 @@ under [`_test/`](./_test/).
 
 ## 1. Overview
 
-A `Signal<T>` is a single reactive cell that can be in one of three modes,
+A `Cell<T>` is a single reactive cell that can be in one of three modes,
 determined by which fields are populated:
 
 | Mode       | `getter` | `setter` | Truth lives in        |
@@ -22,10 +22,10 @@ determined by which fields are populated:
 | computed   | set      | unset    | `cachedValue` (lazy)  |
 | **lens**   | set      | **set**  | parent's stored value |
 
-A **lens** is a Signal in the third mode: a writable view onto another
-Signal (or onto an aggregate over several). Reads compute through the
+A **lens** is a Cell in the third mode: a writable view onto another
+Cell (or onto an aggregate over several). Reads compute through the
 `getter`; writes flow through the `setter`. The lens itself stores no
-state — it is a pure view, with the truth held by the root signal(s)
+state — it is a pure view, with the truth held by the root cell(s)
 it ultimately derives from.
 
 The defining property: writing through a lens is a value-space inversion
@@ -37,7 +37,7 @@ became, and on the next read recomputes the lens value from there.
 Lenses are constructed three ways:
 
 ```ts
-// 1. Endo-lens: same-class transform on a Signal of T → Signal of T
+// 1. Endo-lens: same-class transform on a Cell of T → Cell of T
 n.lens(v => v + 1, n => n - 1)            // Num → Num via add/sub-1
 
 // 2. Cross-class: parent of type P → derived cell of type C
@@ -50,7 +50,7 @@ Num.lens([a, b], vs => vs[0] + vs[1], (t, vs) => [...redistribute...])
 Plus three engine-internal lens shapes built on top of `Cls.lens`:
 
 - **`field(parent, "key", Cls)`** — `Writable<Cls>` projecting one
-  property of an object-typed Signal. Spread-replace setter.
+  property of an object-typed Cell. Spread-replace setter.
 - **`Cls.derive(parent, fn)`** — read-only computed view. Same machinery
   as `Cls.lens` but with no setter installed.
 - Value-class methods like `n.add(k)`, `v.scale(k)`, `t.translate.x` —
@@ -66,7 +66,7 @@ are conventional reactive recomputation; writes do the inversion.
 ### 2.1 Entry point
 
 The public API is `lens.value = v`, which dispatches through the
-prototype setter installed on `Signal.prototype`. That setter calls
+prototype setter installed on `Cell.prototype`. That setter calls
 `this._setWithExclusion(v, activeNetwork)`. The `excluding` parameter
 exists so a network body can write a signal it subscribes to without
 re-firing itself; outside a `network()`, `activeNetwork === undefined`
@@ -203,7 +203,7 @@ const c = b.add(5);                  // c is ALSO one cell, parent = a
 ```
 
 Each `.add(k)` / `.sub(k)` / `.scale(k)` / `.lens(f, b)` runs through
-`Signal.prototype.lens`, which calls `_fuse` with the receiver and the
+`Cell.prototype.lens`, which calls `_fuse` with the receiver and the
 new local `(fwd, bwd)`. `_fuse` looks at the receiver's `_fusedOf` tag;
 if present, the new cell takes the receiver's `parent` and composes
 fwd/bwd into the existing chain. The intermediate cells from
@@ -250,7 +250,7 @@ peek is an untracked read; for a fused chain it's cheap, but
 
 `Cls.lens(parent, fwd, bwd)` and `Cls.derive(parent, fn)` go through
 the same `_fuse` machinery as endo `.lens`. The composed cell is
-constructed via `Signal.install(Cls, getter, setter?)` so it has the
+constructed via `Cell.install(Cls, getter, setter?)` so it has the
 correct type, even though it shares the root with its parent.
 
 ### 3.5 RO-receiver guard
@@ -260,7 +260,7 @@ install a writable lens on top of a fused read-only chain:
 
 ```ts
 if (bwdLocal !== undefined && prior !== undefined && prior.bwd === undefined) {
-  throw new TypeError("Signal: cannot install a writable view on top of …");
+  throw new TypeError("Cell: cannot install a writable view on top of …");
 }
 ```
 
@@ -475,7 +475,7 @@ propagators, hand-rolled bidirectional relations — the `network(body)`
 primitive (signal.ts:1445) provides:
 
 1. Auto-tracking of every signal read in `body` (subscribes).
-2. **Self-exclusion**: bare `signal.value = …` writes inside the body
+2. **Self-exclusion**: bare `cell.value = …` writes inside the body
    self-exclude the network node from the propagation walk, so the
    body doesn't re-fire from its own writes.
 3. **Auto-batching**: the body runs inside `batch()`, so all writes

@@ -33,7 +33,7 @@ type Seg<T> =
   | { readonly kind: "pose"; readonly target: T }
   | { readonly kind: "to"; readonly target: T; readonly dur: Val<number>; readonly ease?: Easing };
 
-/** Chainable Animator over a writable signal: `.to(...).to(...).from(start)`
+/** Chainable Animator over a writable cell: `.to(...).to(...).from(start)`
  *  reads naturally. `.to`/`.from` are pure data — segments accumulate at
  *  construction; the executor generator runs them in order on iteration. */
 export class Tween<T> implements Animator<void> {
@@ -271,13 +271,13 @@ export function* driven<T>(
 
 // ─── Play / play / when / loop / every ───────────────────────────────
 
-// `Read<unknown>` (covariant) accepts any Signal<T> / value-class signal;
-// `Signal<unknown>` doesn't (invariant in T). `playableGen` narrows back
-// to Signal at runtime.
+// `Read<unknown>` (covariant) accepts any Cell<T> / value-class cell;
+// `Cell<unknown>` doesn't (invariant in T). `playableGen` narrows back
+// to Cell at runtime.
 type PlayTrigger = Yieldable | Read<unknown>;
 
 export interface Play<R = void> extends Animator<R> {
-  /** End when `p` fires (truthy signal / animator completion / sleep). */
+  /** End when `p` fires (truthy cell / animator completion / sleep). */
   until(p: PlayTrigger): Play<R>;
   /** Sequence: this, then `next`. */
   then(next: PlayTrigger): Play<unknown>;
@@ -320,7 +320,7 @@ class PlayImpl<R> implements Play<R> {
   }
 }
 
-/** Lift any yieldable / signal-trigger / animator-factory into a Play. */
+/** Lift any yieldable / cell-trigger / animator-factory into a Play. */
 export function play<R>(g: Animator<R> | (() => Animator<R>)): Play<R>;
 export function play(p: PlayTrigger | (() => Animator)): Play<unknown>;
 export function play(p: PlayTrigger | (() => Animator)): Play<unknown> {
@@ -358,7 +358,7 @@ export function when(sig: Read<unknown>): Animator<void> {
   });
 }
 
-/** Reactive boolean negation as a `Signal<boolean>` (RO). */
+/** Reactive boolean negation as a `Cell<boolean>` (RO). */
 export function not(sig: Read<unknown>): Cell<boolean> {
   return derive(() => !sig.value);
 }

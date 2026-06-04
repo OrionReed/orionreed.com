@@ -196,7 +196,7 @@ is a property of the relationships themselves, not of the API.
 
 ## 5. The lens cell
 
-There is no separate `Lens` class. A `Signal<T>` is one cell in one of
+There is no separate `Lens` class. A `Cell<T>` is one cell in one of
 three modes, determined by which fields are populated:
 
 | Mode     | `getter` | `setter` | Truth                     |
@@ -211,7 +211,7 @@ computed value (§7), and a `getter`/`setter` pair.
 
 Every lens operation — `.add(x)`, `.lens(f, g)`, `field(p, "k", C)`,
 `Cls.derive(...)` — returns a **real, first-class, fully-installed
-`Signal`**. It has its own value, type, getter, setter, cache, and
+`Cell`**. It has its own value, type, getter, setter, cache, and
 subscriber list. There is no deferred or virtual cell, and no
 "materialise" step. `a.add(x)` is a real node the instant it returns.
 
@@ -337,7 +337,7 @@ A `put` to a depth-`D` fused chain costs:
 - **Root write + equality check** — `O(1)`.
 - **Forward-cone refresh** — `O(|genuinely-changed cone|)`. The only
   unbounded term, and it is *not* a cost of bidirectionality: a one-way
-  `signal.value = x` observed by the same `k` nodes pays the identical
+  `cell.value = x` observed by the same `k` nodes pays the identical
   `O(k)`. It is the cost of the answer being different.
 
 So: a `put` is `O(D + |changed cone|)`, `D` syntactic-small, the cone
@@ -367,10 +367,10 @@ moved.
 
 ### 9.2 Allocation
 
-A depth-`N` chain currently allocates: `N` full `Signal` objects, `N`
+A depth-`N` chain currently allocates: `N` full `Cell` objects, `N`
 `_fusedOf` records, `2N` leaf closures, `2N` composed closures, `N`
 subscriber links into the root. All `O(N)`, nothing quadratic — but in
-the chained-expression case `N−1` of the `Signal` objects are
+the chained-expression case `N−1` of the `Cell` objects are
 *immediately unreachable garbage* (constructed, wired as a root
 subscriber, never referenced). The composed getter is also a closure
 stack `N`-deep — fusion removes node-hop indirection but the composed
@@ -388,10 +388,10 @@ stack `N`-deep — fusion removes node-hop indirection but the composed
 
 - **Descriptor / lazy-materialisation.** In `a.add(f).add(f).add(f)` as
   a single expression, the intermediates are *provably unreferenceable*
-  — no binding escapes. They need not be built as real `Signal`s at
+  — no binding escapes. They need not be built as real `Cell`s at
   all. `.add` / `.lens` could return a lightweight **pending-lens
   descriptor** (just the composed `{parent, fwd, bwd, stateful}`),
-  accumulating under chaining, and **reify to a real `Signal` lazily**
+  accumulating under chaining, and **reify to a real `Cell` lazily**
   on first observation as a node (read in an effect/computed, `.value`
   touched, passed to an animator/propagator). Forcing must be memoised
   so a descriptor used twice still reifies once.

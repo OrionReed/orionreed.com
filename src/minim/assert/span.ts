@@ -10,7 +10,7 @@
 // a single module slot; `withSpan` push/pop is correct around any
 // synchronous gen body (used by `scope` and `record`).
 
-import type { Signal } from "@minim/signals";
+import type { Cell } from "@minim/signals";
 
 export type SpanStatus = "open" | "settled" | "cancelled" | "errored";
 
@@ -31,7 +31,7 @@ export interface Span {
   status: SpanStatus;
   /** Signals written while this span (not its descendants) was on top
    *  of the stack. Populated by the recorder; empty otherwise. */
-  readonly touched: Set<Signal<unknown>>;
+  readonly touched: Set<Cell<unknown>>;
 }
 
 /** Top-of-stack span; read by `scope` (parent capture) and `record`

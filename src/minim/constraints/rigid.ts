@@ -14,7 +14,7 @@
 // https://github.com/savant117/avbd-demo2d/blob/main/source/collide.cpp
 
 import {
-  isSignal,
+  isCell,
   Num,
   num as numSig,
   type Pose,
@@ -986,10 +986,10 @@ export class BodyAnchor implements Relation {
     target: Writable<Vec> | { x: number; y: number },
     stiffness: Writable<Num> | number,
   ) {
-    this.target = isSignal(target)
+    this.target = isCell(target)
       ? (target as Writable<Vec>)
       : (vec(target.x, target.y) as Writable<Vec>);
-    this.stiffness = isSignal(stiffness)
+    this.stiffness = isCell(stiffness)
       ? (stiffness as Writable<Num>)
       : (numSig(stiffness) as Writable<Num>);
   }

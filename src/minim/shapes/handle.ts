@@ -4,8 +4,8 @@ import {
   centroidLens,
   midpointLens,
   polar as polarLens,
-  type Signal,
-  signal,
+  type Cell,
+  cell,
   type Val,
   Vec,
   type Writable,
@@ -29,7 +29,7 @@ export interface HandleOpts {
 /** Draggable circular handle. A `Circle` plus a `dragging` signal (true
  *  between pointerdown and pointerup/cancel) for coordinating animations. */
 export class Handle extends Circle {
-  readonly dragging: Writable<Signal<boolean>>;
+  readonly dragging: Writable<Cell<boolean>>;
   constructor(target: Writable<Vec>, opts: HandleOpts = {}) {
     const circleOpts: CircleOpts = {
       fill: opts.fill ?? COLOR,
@@ -40,7 +40,7 @@ export class Handle extends Circle {
     };
     super(target, opts.r ?? 6, circleOpts);
     this.el.style.cursor = opts.cursor ?? "grab";
-    this.dragging = signal(false);
+    this.dragging = cell(false);
     this.disposers.push(drag(this, target, this.dragging));
   }
 }
@@ -100,7 +100,7 @@ const scaleHandle = (shape: AnyShape & Has<"scale">, radius = 40, opts?: HandleO
 
 /** Handle constrained to a Path: each drag projects the pointer onto the path
  *  and sets `t` to the nearest parameter (re-projects, so animated paths work). */
-const tOnPath = (p: Path, t: Signal<number>, opts?: HandleOpts & { samples?: number }): Handle => {
+const tOnPath = (p: Path, t: Cell<number>, opts?: HandleOpts & { samples?: number }): Handle => {
   const N = opts?.samples ?? 64;
   const project = (target: { x: number; y: number }) => {
     let bestT = 0;

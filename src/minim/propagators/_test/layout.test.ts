@@ -66,7 +66,7 @@ describe("hstack", () => {
     p.dispose();
   });
 
-  it("reactive gap signal", () => {
+  it("reactive gap cell", () => {
     const c = box(0, 0, 300, 100);
     const items = [box(), box()];
     const gap = num(20);

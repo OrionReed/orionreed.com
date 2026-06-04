@@ -10,7 +10,7 @@
 //     because the unit deviations live in the complement.
 
 import { describe, expect, it } from "vitest";
-import { effect, lens, signal } from "../index";
+import { effect, lens, cell } from "../index";
 import { Num, num } from "../values/num";
 import { vec } from "../values/vec";
 
@@ -200,8 +200,8 @@ describe("backward pass is untracked", () => {
     // ONLY — never pick up `b` through the backward walk. If it did, a
     // later edit to `b` would spuriously re-run the effect (and a write
     // back into `b` from within would self-trigger).
-    const a = signal(0);
-    const b = signal(100);
+    const a = cell(0);
+    const b = cell(100);
     const view = lens(
       [b] as const,
       ([bv]) => bv,

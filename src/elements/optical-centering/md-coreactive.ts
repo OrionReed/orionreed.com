@@ -41,7 +41,7 @@ import {
   path,
   play,
   rect,
-  signal,
+  cell,
   Vec,
   vec,
   type Writable,
@@ -304,7 +304,7 @@ export class MdCoreactive extends Diagram {
     ];
 
     // Drag origin: the topology Vec being driven (or null).
-    const origin = signal<Vec | null>(null);
+    const origin = cell<Vec | null>(null);
     const anim = this.anim;
 
     // ─── Mount order matters (no z-order, no groups) ─────────────

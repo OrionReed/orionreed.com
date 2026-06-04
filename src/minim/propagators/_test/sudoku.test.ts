@@ -1,13 +1,13 @@
 // sudoku.test.ts — concrete demo of set-narrowing propagators.
 //
 // 4×4 sudoku (rows: each digit 1-4 exactly once; same for cols and
-// 2×2 boxes). Each cell is a Signal<ReadonlySet<number>> starting at
+// 2×2 boxes). Each cell is a Cell<ReadonlySet<number>> starting at
 // {1,2,3,4}; givens are pre-narrowed to singletons. Narrowing
 // propagators eliminate digits across rows/cols/boxes. Termination
 // is structural: monotone narrowing of finite sets.
 
 import { describe, expect, it } from "vitest";
-import { signal } from "../../signals";
+import { cell } from "../../signals";
 import { allDifferent, propagators, type SetCell } from "..";
 
 // Custom equality so set-equality writes don't notify when two
@@ -20,7 +20,7 @@ function eqSet(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
 }
 
 function setCell(initial: Iterable<number>): SetCell<number> {
-  return signal<ReadonlySet<number>>(new Set(initial), { equals: eqSet });
+  return cell<ReadonlySet<number>>(new Set(initial), { equals: eqSet });
 }
 
 function showCell(c: SetCell<number>): string {

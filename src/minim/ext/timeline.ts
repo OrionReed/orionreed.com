@@ -10,7 +10,7 @@ import {
   Num,
   num,
   Range,
-  type Signal,
+  type Cell,
   span,
   type Writable,
 } from "@minim/signals";
@@ -27,7 +27,7 @@ export type Clip<A = number, D = number> = {
   readonly span: ResolvedSpan<A, D>;
   /** Progress: 0 before `at`, 0..1 within, 1 after `end`. */
   readonly t: Num;
-  readonly active: Signal<boolean>;
+  readonly active: Cell<boolean>;
 };
 
 // Writability narrowing: `number`/`Writable<Num>` → `Writable<Num>`,

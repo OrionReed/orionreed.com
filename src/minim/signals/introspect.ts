@@ -1,4 +1,4 @@
-// introspect.ts — read-only inspection of a signal's dependency graph.
+// introspect.ts — read-only inspection of a cell's dependency graph.
 //
 // Used by `Propagators` to expand declared reads into their transitive
 // parent set, so a propagator reading a lens chain reacts to writes that
@@ -14,7 +14,7 @@ interface DepLink {
   nextDep: DepLink | undefined;
 }
 
-/** Every signal `s` transitively depends on, including itself. Raw cells
+/** Every cell `s` transitively depends on, including itself. Raw cells
  *  return `{s}`; lens chains return the chain plus all parents. BFS,
  *  peeking each Computed to populate deps; the `seen` set breaks cycles. */
 export function transitiveDeps(s: Cell<unknown>): Set<Cell<unknown>> {
@@ -24,7 +24,7 @@ export function transitiveDeps(s: Cell<unknown>): Set<Cell<unknown>> {
     const cur = queue.shift()!;
     if (seen.has(cur)) continue;
     seen.add(cur);
-    // Cast to reach engine fields the typed Signal<T> shape doesn't surface.
+    // Cast to reach engine fields the typed Cell<T> shape doesn't surface.
     const c = cur as unknown as {
       getter?: () => unknown;
       deps?: DepLink | undefined;

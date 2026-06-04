@@ -121,7 +121,7 @@ export class MdTrails extends Diagram {
 
     s(
       label(view.top.down(22), "per-property springs · pause translate or rotate independently"),
-      label(view.top.down(40), "each rate is a separate signal · master cycles them out of phase", {
+      label(view.top.down(40), "each rate is a separate cell · master cycles them out of phase", {
         size: 10,
       }),
     );

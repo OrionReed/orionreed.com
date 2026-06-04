@@ -17,7 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Writable } from "../../index";
-import { centroidLens, meanLens, Num, num, signal, type Vec, vec } from "../../index";
+import { centroidLens, meanLens, Num, num, cell, type Vec, vec } from "../../index";
 import {
   bboxLens,
   bundleLens,
@@ -562,7 +562,7 @@ describe("§9 Edge cases", () => {
 
 describe("§10 bundleLens (1→M coupled bundle)", () => {
   it("rotation-write rotates around the pivot (not around origin)", () => {
-    const pose = signal({ x: 10, y: 0, theta: 0 });
+    const pose = cell({ x: 10, y: 0, theta: 0 });
     const pivot = { x: 0, y: 0 };
     const { rotation, position } = bundleLens(pose, pivot);
     expect(position.value).toEqual({ x: 10, y: 0 });
@@ -573,7 +573,7 @@ describe("§10 bundleLens (1→M coupled bundle)", () => {
   });
 
   it("position-write is independent of rotation", () => {
-    const pose = signal({ x: 0, y: 0, theta: 0.7 });
+    const pose = cell({ x: 0, y: 0, theta: 0.7 });
     const { rotation, position } = bundleLens(pose, { x: 0, y: 0 });
     position.value = { x: 5, y: 5 };
     expect(rotation.value).toBeCloseTo(0.7, 9);

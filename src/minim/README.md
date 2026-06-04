@@ -22,7 +22,7 @@ import { Diagram, circle } from "@minim/minim";
 
 class Demo extends Diagram {
   scene() {
-    const r = signal(40);
+    const r = cell(40);
     effect(() => console.log("r =", r.value));
     return circle({ r });
   }

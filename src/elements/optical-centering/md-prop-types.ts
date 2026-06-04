@@ -22,7 +22,7 @@
 // error, rendered red.
 
 import { propagator, propagators, type SetCell } from "@minim/propagators";
-import { Diagram, derive, label, line, loop, type Mount, rect, signal, vec } from "../../minim";
+import { Diagram, derive, label, line, loop, type Mount, rect, cell, vec } from "../../minim";
 
 // ─── Type language ─────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ const eqTagSet = (a: ReadonlySet<Tag>, b: ReadonlySet<Tag>): boolean => {
 };
 
 const tagCell = (init: Iterable<Tag>): SetCell<Tag> =>
-  signal<ReadonlySet<Tag>>(new Set(init), { equals: eqTagSet });
+  cell<ReadonlySet<Tag>>(new Set(init), { equals: eqTagSet });
 
 interface TypeNode {
   tag: SetCell<Tag>;
@@ -334,8 +334,8 @@ export class MdPropTypes extends Diagram {
 
     // Pre-build each expression. They coexist; visibility gates which
     // is on screen this cycle.
-    const current = signal(0);
-    const stepCount = signal(0);
+    const current = cell(0);
+    const stepCount = cell(0);
 
     const stages = EXPRESSIONS.map((expr, exprIdx) => {
       const inf = infer(expr);
@@ -354,7 +354,7 @@ export class MdPropTypes extends Diagram {
         n.y += treeTop;
       }
 
-      const visible = signal(exprIdx === 0);
+      const visible = cell(exprIdx === 0);
       const opacity = derive(() => (visible.value ? 1 : 0));
 
       // Render each AST node as a small card: label + type below.

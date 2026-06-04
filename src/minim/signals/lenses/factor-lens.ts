@@ -18,7 +18,7 @@
 // `bundleLens` sketches the 1→M dual (single source → M coupled views).
 // =====================================================================
 
-import { Num, type Signal, Vec, type Writable } from "../index";
+import { Num, type Cell, Vec, type Writable } from "../index";
 
 // ─── 1. factorLens — generic Jacobian-LSQ N→M ──────────────────────────
 //
@@ -68,7 +68,7 @@ export function factorLens(
       (vals: readonly number[]) => forwards[idx]!(vals),
       (target: number, valsReadonly: readonly number[]) => {
         // Snapshot inputs into a mutable scratch so FD perturbations
-        // don't leak into upstream signal state.
+        // don't leak into upstream cell state.
         const xs = valsReadonly as readonly number[];
         const xsm = xs.slice();
         for (let j = 0; j < M; j++) ys[j] = forwards[j]!(xsm);
@@ -506,7 +506,7 @@ export function procrustesJacobianLens(points: readonly Writable<Vec>[]): {
 type PoseV = { x: number; y: number; theta: number };
 
 export function bundleLens(
-  pose: Writable<Signal<PoseV>>,
+  pose: Writable<Cell<PoseV>>,
   rotateAbout: { x: number; y: number },
 ): { position: Writable<Vec>; rotation: Writable<Num> } {
   const position = Vec.lens(

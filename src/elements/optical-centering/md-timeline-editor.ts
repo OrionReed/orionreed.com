@@ -10,7 +10,7 @@ import {
   type Mount,
   rect,
   sequential,
-  signal,
+  cell,
   snapshot,
   timeline,
   Vec,
@@ -33,7 +33,7 @@ export class MdTimelineEditor extends Diagram {
       return tl.clock.value >= tl.duration.value ? "rest" : PHASES[0];
     });
     const bus = new EventBus();
-    const taps = signal(0);
+    const taps = cell(0);
     bus.on("ping", () => {
       taps.value = taps.peek() + 1;
     });

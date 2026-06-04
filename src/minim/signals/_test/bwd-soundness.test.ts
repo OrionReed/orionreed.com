@@ -10,7 +10,7 @@
 // post-write view from a stale candidate); it must stay at zero failures.
 
 import { describe, expect, it } from "vitest";
-import { derive, lens, signal } from "../index";
+import { derive, lens, cell } from "../index";
 
 // ── seeded PRNG (mulberry32) ─────────────────────────────────────────
 function rng(seed: number): () => number {
@@ -38,8 +38,8 @@ function derivedMirror(src: N, depth: number): N {
 
 describe("backward soundness: targeted breakers", () => {
   it("multi-parent lens whose fwd reads an UNDECLARED derived node (depth 1)", () => {
-    const base = signal(10);
-    const S = signal(5);
+    const base = cell(10);
+    const S = cell(5);
     const D = derive([S] as const, ([s]) => s);
     const L = lens(
       [base, S] as const,
@@ -53,8 +53,8 @@ describe("backward soundness: targeted breakers", () => {
   });
 
   it("undeclared read of a DEEP derived chain (depth 3)", () => {
-    const base = signal(0);
-    const S = signal(1);
+    const base = cell(0);
+    const S = cell(1);
     const d3 = derivedMirror(S, 3); // == S
     const L = lens(
       [base, S] as const,
@@ -78,7 +78,7 @@ describe("backward soundness: PutGet fuzz over random anchor-style DAGs", () => 
     for (let iter = 0; iter < N; iter++) {
       const m = int(r, 1, 3);
       const sources: N[] = [];
-      for (let i = 0; i < m; i++) sources.push(signal(int(r, -5, 5)) as unknown as N);
+      for (let i = 0; i < m; i++) sources.push(cell(int(r, -5, 5)) as unknown as N);
 
       // read terms (coef +1); at least one depends on the written source 0.
       interface Term {

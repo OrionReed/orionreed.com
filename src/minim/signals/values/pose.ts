@@ -83,7 +83,7 @@ export class Pose extends Cell<V> {
 
 /** Writable `Pose`. Literal seeds a fresh cell; existing `Pose` passes
  *  through by identity. RO sources are rejected at the type level — use
- *  `Pose.derive(...)` for reactive RO tracking, or `signal.value` to
+ *  `Pose.derive(...)` for reactive RO tracking, or `cell.value` to
  *  snapshot. */
 export function pose(v: Init<Pose> = { x: 0, y: 0, theta: 0 }): Writable<Pose> {
   if (v instanceof Pose) return v as Writable<Pose>;

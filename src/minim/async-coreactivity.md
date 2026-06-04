@@ -70,13 +70,13 @@ Bob Nystrom's "what color is your function?" critique is the wrong
 framing for signal substrates. The colors are not `sync`/`async`. The
 colors are *signal types*:
 
-- `Signal<T>` — synchronously available
-- `Signal<Promise<T>>` — almost always wrong (Promise *identity* is
+- `Cell<T>` — synchronously available
+- `Cell<Promise<T>>` — almost always wrong (Promise *identity* is
   distinct from resolved value; subscribers fire on the wrong event)
 - `AsyncSignal<T>` / `Resource<T>` — available eventually, with
   `loading`/`error`
 - `Stream<T>` / `Observable<T>` — values arrive over time
-- `Signal<Loading | Ready<T> | Error>` — discriminated union, every
+- `Cell<Loading | Ready<T> | Error>` — discriminated union, every
   consumer must pattern-match
 
 Each of these is a different type. Combinators don't compose across
@@ -168,7 +168,7 @@ is UI:
    performs the read you pass it and returns whether any value read by
    that function is currently pending." The pending bit does not live
    on the cell; it is discovered by walking the read graph. This is the
-   move that keeps `Signal<T>` from becoming `Signal<Loading | T>`.
+   move that keeps `Cell<T>` from becoming `Cell<Loading | T>`.
 
 4. **`latest(fn)` for stale-value access.** Read the last known good
    through the same read path that normally suspends. Same shape as

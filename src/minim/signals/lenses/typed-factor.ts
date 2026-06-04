@@ -22,7 +22,7 @@ import {
   Num,
   type Pack,
   type Read,
-  type Signal,
+  type Cell,
   type Traits,
   Vec,
   type Writable,
@@ -30,7 +30,7 @@ import {
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
-/** Input cell: writable signal whose value class declares the `pack`
+/** Input cell: writable cell whose value class declares the `pack`
  *  trait. Vec, Num, Pose, Box, Color, Range all satisfy this. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
 export type PackedInput<T = any> = Writable<Read<T> & Traits<T, "pack">>;
@@ -38,7 +38,7 @@ export type PackedInput<T = any> = Writable<Read<T> & Traits<T, "pack">>;
 /** Output specification: a target class + a fwd from typed inputs to
  *  the value the class wraps. Optional analytical Jacobian skips FD. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
-export interface OutputSpec<C extends new (...args: never[]) => Signal<any>> {
+export interface OutputSpec<C extends new (...args: never[]) => Cell<any>> {
   Cls: C;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape on input values
   fwd: (inputs: ReadonlyArray<any>) => Inner<InstanceType<C>>;
@@ -328,7 +328,7 @@ export function factor<
       converge
         ? (target: unknown, vals: ReadonlyArray<unknown>) => convergeBwd(target, vals)
         : (target: unknown, vals: ReadonlyArray<unknown>) => computeBwd(idx, target, vals),
-    ) as Writable<Signal<unknown>>;
+    ) as Writable<Cell<unknown>>;
 
     result[key] = cell;
   }

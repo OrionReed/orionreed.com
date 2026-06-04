@@ -12,7 +12,7 @@ import {
   not,
   pathD,
   play,
-  signal,
+  cell,
   tokens,
   Vec,
   vec,
@@ -94,7 +94,7 @@ export class MdOscillator extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(600, 208);
 
-    const t = signal(0);
+    const t = cell(0);
     this.anim.start(
       drive(tick => {
         t.value = (t.value + tick.dt) % T_LOOP;

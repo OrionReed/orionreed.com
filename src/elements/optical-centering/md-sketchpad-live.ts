@@ -53,8 +53,8 @@ import {
   line,
   type Mount,
   rect,
-  type Signal,
-  signal,
+  type Cell,
+  cell,
   type Val,
   type Vec,
   vec,
@@ -67,8 +67,8 @@ interface Point {
   readonly kind: "point";
   readonly id: number;
   readonly pos: Writable<Vec>;
-  readonly pinned: Writable<Signal<boolean>>;
-  readonly dragging: Writable<Signal<boolean>>;
+  readonly pinned: Writable<Cell<boolean>>;
+  readonly dragging: Writable<Cell<boolean>>;
   /** Disposers fired when the point is removed (currently the pin
    *  `addWhile` lifecycle). Lets us cleanly tear down per-point
    *  cluster bindings on delete. */
@@ -272,13 +272,13 @@ export class MdSketchpadLive extends Diagram {
     let nextLineId = 1;
     let nextConstraintId = 1;
 
-    const points = signal<readonly Point[]>([]);
-    const lines = signal<readonly Line[]>([]);
-    const constraintList = signal<readonly Constraint[]>([]);
-    const tool = signal<CreationTool>(null);
-    const selection = signal<readonly Entity[]>([]);
+    const points = cell<readonly Point[]>([]);
+    const lines = cell<readonly Line[]>([]);
+    const constraintList = cell<readonly Constraint[]>([]);
+    const tool = cell<CreationTool>(null);
+    const selection = cell<readonly Entity[]>([]);
     /** First endpoint of an in-progress `line` tool placement. */
-    const linePending = signal<Point | null>(null);
+    const linePending = cell<Point | null>(null);
 
     // ─── mutators ────────────────────────────────────────────────────
 
@@ -287,8 +287,8 @@ export class MdSketchpadLive extends Diagram {
         kind: "point",
         id: nextPointId++,
         pos: vec(at.x, at.y),
-        pinned: signal(false),
-        dragging: signal(false),
+        pinned: cell(false),
+        dragging: cell(false),
         disposers: [],
       };
       // Pin while pinned-toggle is on OR the user is actively dragging
@@ -551,8 +551,8 @@ export class MdSketchpadLive extends Diagram {
 function renderPoint(
   p: Point,
   _cluster: Constraints,
-  selection: Signal<readonly Entity[]>,
-  linePending: Signal<Point | null>,
+  selection: Cell<readonly Entity[]>,
+  linePending: Cell<Point | null>,
   onClick: (e: Entity, evt: PointerEvent) => void,
 ): AnyShape {
   const selected = derive(() => selection.value.includes(p));
@@ -610,8 +610,8 @@ function renderPoint(
 
 function renderLine(
   l: Line,
-  selection: Signal<readonly Entity[]>,
-  linePending: Signal<Point | null>,
+  selection: Cell<readonly Entity[]>,
+  linePending: Cell<Point | null>,
   onClick: (e: Entity, evt: PointerEvent) => void,
 ): AnyShape {
   const selected = derive(() => selection.value.includes(l));
@@ -666,7 +666,7 @@ function offsetMid(
   a: Writable<Vec>,
   b: Writable<Vec>,
   side: 1 | -1 = 1,
-): Signal<{ x: number; y: number }> {
+): Cell<{ x: number; y: number }> {
   return derive(() => {
     const av = a.value;
     const bv = b.value;
@@ -750,12 +750,12 @@ function twoLineBadges(c: Constraint, onRemove: (c: Constraint) => void): AnySha
 /** Small clickable badge with a glyph; click removes the constraint.
  *  Hover swaps the glyph to `×` so the action is unambiguous. */
 function badge(
-  pos: Signal<{ x: number; y: number }>,
+  pos: Cell<{ x: number; y: number }>,
   glyph: string,
   c: Constraint,
   onRemove: (c: Constraint) => void,
 ): AnyShape {
-  const hovered = signal(false);
+  const hovered = cell(false);
   const fill = derive(() => (hovered.value ? SELECTED : "var(--bg-color, white)"));
   const fg = derive(() => (hovered.value ? "white" : "var(--text-color, #222)"));
   const text = derive(() => (hovered.value ? "×" : glyph));
@@ -800,7 +800,7 @@ function layoutRow<T>(
 function toolBtn(
   pos: Vec,
   text: string,
-  active: Signal<boolean>,
+  active: Cell<boolean>,
   onClick: () => void,
   width: number,
 ): AnyShape {
@@ -827,7 +827,7 @@ function toolBtn(
 function actionBtn(
   pos: Vec,
   text: string,
-  enabled: Signal<boolean>,
+  enabled: Cell<boolean>,
   onClick: () => void,
   width: number,
 ): AnyShape {

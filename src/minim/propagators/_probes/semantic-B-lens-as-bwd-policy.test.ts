@@ -28,7 +28,7 @@ import {
   type Inner,
   midpointLens,
   num,
-  signal,
+  cell,
   Vec,
   vec,
   type Writable,
@@ -132,7 +132,7 @@ describe("Semantic probe B: lens encodes WRITE POLICY", () => {
     const cv = cent.value;
 
     // Mean radius (read-only proxy).
-    const meanRadius = signal<number>(
+    const meanRadius = cell<number>(
       verts.reduce(
         (acc: number, v: Writable<Vec>) => acc + Math.hypot(v.value.x - cv.x, v.value.y - cv.y),
         0,

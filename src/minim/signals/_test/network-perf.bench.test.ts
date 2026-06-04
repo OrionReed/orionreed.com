@@ -5,7 +5,7 @@
 // records actual cost for inspection.
 
 import { describe, expect, it } from "vitest";
-import { batch, network, signal } from "../index";
+import { batch, network, cell } from "../index";
 
 function bench(label: string, runs: number, fn: () => void): number {
   for (let i = 0; i < Math.min(100, Math.floor(runs / 10)); i++) fn();
@@ -21,7 +21,7 @@ function bench(label: string, runs: number, fn: () => void): number {
 
 describe("network — per-fire allocation cost", () => {
   it("simple network, single dep, no value change — flush() roundtrip", () => {
-    const a = signal(0);
+    const a = cell(0);
     const handle = network([a], () => {});
     const ns = bench("flush() with 1 dep, no change", 10_000, () => {
       handle.flush();
@@ -31,7 +31,7 @@ describe("network — per-fire allocation cost", () => {
   });
 
   it("network with 100 deps, single change per fire", () => {
-    const sigs = Array.from({ length: 100 }, (_, i) => signal(i));
+    const sigs = Array.from({ length: 100 }, (_, i) => cell(i));
     let driverIdx = 0;
     const handle = network(sigs, () => {});
     const ns = bench("100 deps, 1 changes per fire", 1_000, () => {
@@ -43,7 +43,7 @@ describe("network — per-fire allocation cost", () => {
   });
 
   it("network with 1000 deps, batch update of 10 per fire", () => {
-    const sigs = Array.from({ length: 1000 }, (_, i) => signal(i));
+    const sigs = Array.from({ length: 1000 }, (_, i) => cell(i));
     const handle = network(sigs, () => {});
     let bursts = 0;
     const ns = bench("1000 deps, 10 changes per fire (batched)", 200, () => {
@@ -60,7 +60,7 @@ describe("network — per-fire allocation cost", () => {
   });
 
   it("manual-mode network, repeated flush", () => {
-    const a = signal(0);
+    const a = cell(0);
     const handle = network([a], () => {}, { manual: true });
     const ns = bench("manual flush, 1 dep, no change", 10_000, () => {
       handle.flush();
@@ -70,7 +70,7 @@ describe("network — per-fire allocation cost", () => {
   });
 
   it("auto-fire: 100 deps, network reads them all on each fire", () => {
-    const sigs = Array.from({ length: 100 }, (_, i) => signal(i));
+    const sigs = Array.from({ length: 100 }, (_, i) => cell(i));
     const handle = network(sigs, () => {
       let sum = 0;
       for (const s of sigs) sum += s.value;

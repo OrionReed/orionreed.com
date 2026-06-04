@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import { batch, effect, Num, num as numSig, Vec, vec as vecSig } from "../../signals";
 import { constraints, distance, eq, leq, pin } from "../index";
 
-describe("AVBD reactive — basic signal binding", () => {
+describe("AVBD reactive — basic cell binding", () => {
   it("eq(sigA, sigB) settles to a common value when both are free", () => {
     const s = constraints({ iterations: 20 });
     const a = numSig(3);
@@ -104,7 +104,7 @@ describe("AVBD reactive — basic signal binding", () => {
     dispose();
   });
 
-  it("batch coalesces multiple signal writes into one solve", () => {
+  it("batch coalesces multiple cell writes into one solve", () => {
     const s = constraints({ iterations: 20 });
     const a = numSig(0);
     const b = numSig(0);

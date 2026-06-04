@@ -12,7 +12,7 @@ import {
   num,
   rect,
   rgb,
-  Signal,
+  Cell,
   type TraitDict,
   type Tween,
   tween,
@@ -38,7 +38,7 @@ const stringLerp: Lerp<string> = (a, b, t) => {
 };
 
 /** Reactive string with a `lerp` trait. */
-class Text extends Signal<string> {
+class Text extends Cell<string> {
   static traits: TraitDict<string> & { lerp: Lerp<string> } = { lerp: stringLerp };
   to(target: string, dur: Val<number>, ease?: Easing): Tween<string> {
     return tween(this as never, target, dur, ease);

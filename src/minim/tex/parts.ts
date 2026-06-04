@@ -7,8 +7,8 @@ import {
   derive,
   effect,
   num,
-  Signal,
-  signal,
+  Cell,
+  cell,
   type Val,
   type Writable,
 } from "@minim/signals";
@@ -32,7 +32,7 @@ const effectiveColor = (m: PartMarker): string | null => {
  *  Reach into `part.box` for axes/cardinals. */
 export class Part<N extends string = string> {
   /** Background-tint highlight; written by `highlight()` and `bindParts()`. */
-  readonly highlighted: Writable<Signal<boolean>> = signal(false);
+  readonly highlighted: Writable<Cell<boolean>> = cell(false);
   readonly opacity = num(1);
 
   readonly box: Box;
@@ -42,7 +42,7 @@ export class Part<N extends string = string> {
 
   constructor(
     readonly name: N,
-    readonly content: Signal<string>,
+    readonly content: Cell<string>,
     box: Box,
     readonly marker: PartMarker,
     readonly host: TexShape,
@@ -86,8 +86,8 @@ export class Part<N extends string = string> {
  *  Group members share one inner `Marker` so they share identity. */
 export class PartMarker<N extends string = string> {
   /** Per-instance color; `null` walks up the group chain. */
-  readonly color: Writable<Signal<string | null>> = signal<string | null>(null);
-  readonly content: Signal<string>;
+  readonly color: Writable<Cell<string | null>> = cell<string | null>(null);
+  readonly content: Cell<string>;
 
   /** Shared inner Marker; all group members alias the root's instance. */
   #m: Marker;
@@ -98,21 +98,21 @@ export class PartMarker<N extends string = string> {
     readonly group: PartMarker | null = null,
   ) {
     this.content =
-      source instanceof Signal
+      source instanceof Cell
         ? source
         : typeof source === "function"
           ? derive(source)
-          : signal(source as string);
+          : cell(source as string);
     this.#m = group ? group.#m : marker();
   }
 
   /** True when any rendering of this identity (prose/shape/anim) is active. */
-  get active(): Signal<boolean> {
+  get active(): Cell<boolean> {
     return this.#m.active;
   }
 
   /** Bind a local boolean signal to this marker's identity. */
-  bind(local: Writable<Signal<boolean>>): () => void {
+  bind(local: Writable<Cell<boolean>>): () => void {
     return this.#m.bind(local);
   }
 
@@ -163,7 +163,7 @@ type NameOf<S> = S extends string ? S : S extends Record<infer K, PartContent> ?
 /** Set the same color on N markers at once. */
 export function tint(
   color: string | null,
-  ...markers: readonly { color: Writable<Signal<string | null>> }[]
+  ...markers: readonly { color: Writable<Cell<string | null>> }[]
 ): void {
   for (const m of markers) m.color.value = color;
 }

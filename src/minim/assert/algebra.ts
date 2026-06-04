@@ -5,7 +5,7 @@
 //   latch(p, init, sc) — invariant/liveness latch, auto re-arm on `sc`.
 //   firstOf(...e)      — event ordering over bool signals.
 
-import { derive, effect, type Read, signal } from "@minim/signals";
+import { derive, effect, type Read, cell } from "@minim/signals";
 import { activeRecorder } from "./record";
 import type { Scoped } from "./scope";
 import type { Span } from "./span";
@@ -38,7 +38,7 @@ export function latch(
   init: boolean,
   scope: Read<boolean> = ALWAYS_TRUE,
 ): Read<boolean> {
-  const held = signal(init);
+  const held = cell(init);
   let prevScope = false;
 
   effect(() => {
@@ -63,7 +63,7 @@ export function latch(
 export function firstOf(
   ...events: Read<boolean>[]
 ): Read<{ first: number; at: number } | undefined> {
-  const result = signal<{ first: number; at: number } | undefined>(undefined);
+  const result = cell<{ first: number; at: number } | undefined>(undefined);
   const prev = events.map(e => e.peek());
 
   effect(() => {

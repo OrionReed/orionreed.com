@@ -6,7 +6,7 @@
 // inside fwd/bwd, and a few sequencing hazards.
 
 import { describe, expect, it } from "vitest";
-import { derive, effect, lens, Num, num, signal, transform, Vec, vec } from "../index";
+import { derive, effect, lens, Num, num, cell, transform, Vec, vec } from "../index";
 import { Cell } from "../signal";
 import { field } from "../writable";
 
@@ -17,7 +17,7 @@ describe("footgun: field on top of a structural lens", () => {
     // The lens projects `root.value.a` and spreads it back on write. A
     // field on top composes its put into the lens's bwd, which should run
     // once and land the edit in the root.
-    const root = signal({ a: { x: 1, y: 2 } });
+    const root = cell({ a: { x: 1, y: 2 } });
     let bwdCalls = 0;
     const aLens = Vec.lens(
       root,
@@ -37,7 +37,7 @@ describe("footgun: field on top of a structural lens", () => {
   });
 
   it("two fields on a structural lens: deeper path composes through one bwd", () => {
-    const root = signal({ vals: { x: 1, y: 2 } });
+    const root = cell({ vals: { x: 1, y: 2 } });
     let bwdCalls = 0;
     const mLens = lens(
       root,
@@ -141,7 +141,7 @@ describe("footgun: effect cleanup across field-fast-path", () => {
 describe("footgun: reactive args in field chains", () => {
   it("through(f, g) with reactive arg inside f tracks the arg correctly", () => {
     const a = num(1);
-    const k = signal(2);
+    const k = cell(2);
     const c = a.lens(
       v => v * k.value,
       v => v / k.value,
@@ -160,7 +160,7 @@ describe("footgun: reactive args in field chains", () => {
 
   it("write to reactive-arg-using through inverts using current arg", () => {
     const a = num(1);
-    const k = signal(2);
+    const k = cell(2);
     const c = a.lens(
       v => v * k.value,
       v => v / k.value,
@@ -195,7 +195,7 @@ describe("footgun: multi-parent short-circuit with a DERIVED parent", () => {
     // the write. The engine must detect the derived parent and propagate.
     // (This is exactly shape.center: write the anchor → shift translate.)
     const translate = vec(0, 0);
-    const box = signal({ x: 50, y: 70, w: 100, h: 60 });
+    const box = cell({ x: 50, y: 70, w: 100, h: 60 });
     const frame = derive([translate] as const, ([t]) => ({ dx: t.x, dy: t.y }));
 
     const center = Vec.lens(

@@ -1,4 +1,4 @@
-import { derive, type Signal, type Val, Vec } from "@minim/signals";
+import { derive, type Cell, type Val, Vec } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 
 export interface LineOpts extends CommonOpts {}
@@ -38,8 +38,8 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
   // for API symmetry with Path but ignored. Cached lazily.
   #tangent?: Vec;
   #normal?: Vec;
-  #angle?: Signal<number>;
-  #length?: Signal<number>;
+  #angle?: Cell<number>;
+  #length?: Cell<number>;
 
   /** Position at fraction `t` (0=from, 1=to). Symmetric with
    *  `Path.pointAt`. */
@@ -59,13 +59,13 @@ export class Line<O extends LineOpts = LineOpts> extends Shape<O> {
     return (this.#normal ??= this.tangentAt().perp());
   }
 
-  angleAt(_t: Val<number> = 0): Signal<number> {
+  angleAt(_t: Val<number> = 0): Cell<number> {
     if (this.#angle) return this.#angle;
     const tan = this.tangentAt();
     return (this.#angle = derive(() => Math.atan2(tan.y.value, tan.x.value)));
   }
 
-  length(): Signal<number> {
+  length(): Cell<number> {
     return (this.#length ??= derive(() => {
       const a = this.from.value;
       const b = this.to.value;

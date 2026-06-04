@@ -5,11 +5,11 @@
 // path fast path and law-driven setter dispatch preserve it.
 
 import { describe, expect, it } from "vitest";
-import { derive, effect, Num, num, signal, transform } from "../index";
+import { derive, effect, Num, num, cell, transform } from "../index";
 
 describe("glitch-free: diamond shapes", () => {
   it("classic diamond: a → b1, a → b2, leaf reads (b1, b2)", () => {
-    const a = signal(0);
+    const a = cell(0);
     const b1 = derive(() => a.value + 1);
     const b2 = derive(() => a.value * 10);
     const observed: { b1: number; b2: number; aviabranches: number }[] = [];

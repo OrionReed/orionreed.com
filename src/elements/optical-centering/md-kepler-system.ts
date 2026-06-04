@@ -7,7 +7,7 @@ import {
   label,
   type Mount,
   num,
-  signal,
+  cell,
   Vec,
   vec,
   type Writable,
@@ -62,7 +62,7 @@ export class MdKeplerSystem extends Diagram {
     const view = this.view(600, 460);
 
     const time = num(0);
-    const dragging = signal(false);
+    const dragging = cell(false);
     const star = vec(view.center.value.x, view.center.value.y);
 
     /** A body on a Keplerian ellipse about `parent` (the focus). */

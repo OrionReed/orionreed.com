@@ -4,7 +4,7 @@
 // by integer cell id. No per-cell allocation; the hot loop streams
 // contiguous memory.
 //
-// Signal-free. Cells are integer handles from `addCell`; terms read
+// Cell-free. Cells are integer handles from `addCell`; terms read
 // positions via `positions[offsets[id] + k]`. Reactive integration
 // layers on top in `cluster.ts`; physics factories (`physics`,
 // `world`) mutate `anchors` between `prepare()` and `solve(dt)`.

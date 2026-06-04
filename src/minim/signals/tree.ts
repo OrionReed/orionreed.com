@@ -1,8 +1,8 @@
 // tree.ts — hierarchical structure of (typically reactive) values.
 //
 // A `TreeNode<T>` is the structural relationship between values, not a
-// single big `Signal<TreeShape>`. Each node's value is typically a
-// Signal subclass or a compound of cells; writes flow through the
+// single big `Cell<TreeShape>`. Each node's value is typically a
+// Cell subclass or a compound of cells; writes flow through the
 // individual cells with the engine's usual O(1) incrementality.
 //
 // Two bidirectional patterns layer on top (as free factory functions):

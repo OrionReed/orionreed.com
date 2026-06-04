@@ -1,7 +1,7 @@
 // box.ts — reactive axis-aligned rectangle.
 //
 // Invertibles (`add`, `sub`, `scale`, `expand`) return `: this` and ride
-// on `Signal#lens(fwd, bwd)`. Chained calls auto-fuse.
+// on `Cell#lens(fwd, bwd)`. Chained calls auto-fuse.
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
@@ -242,7 +242,7 @@ export class Box extends Cell<V> {
 /** Writable `Box` at `(x, y, w, h)`. Each component is a literal `number`
  *  (lifted to a fresh seed) or an existing `Writable<Num>` (identity
  *  passthrough). RO sources are rejected at the type level — use
- *  `Box.derive(...)` for reactive RO tracking, or `signal.value` to
+ *  `Box.derive(...)` for reactive RO tracking, or `cell.value` to
  *  snapshot. Lock a component with `Num.pin(c)`. */
 export function box(
   x: Init<Num> = 0,

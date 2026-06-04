@@ -14,7 +14,7 @@ import {
   type Mount,
   race,
   rect,
-  signal,
+  cell,
   untilEvent,
   vec,
   zoomOut,
@@ -44,9 +44,9 @@ export class MdReact extends Diagram {
       }),
     );
 
-    const hits = signal(0);
-    const misses = signal(0);
-    const status = signal<Content>("running");
+    const hits = cell(0);
+    const misses = cell(0);
+    const status = cell<Content>("running");
 
     s(
       label(

@@ -11,13 +11,13 @@
 //                        its mass so contacts push back on the drag.
 
 import type { AnyShape } from "@minim/shapes";
-import { type Signal, signal, type Vec, type Writable } from "@minim/signals";
+import { type Cell, cell, type Vec, type Writable } from "@minim/signals";
 import { type Body, type BodyAnchor, bodyAnchor } from "./rigid";
 import type { World } from "./world";
 
 interface DragHandle {
   /** True while mid-drag; for wiring animator `rate` / cluster gating. */
-  readonly dragging: Signal<boolean>;
+  readonly dragging: Cell<boolean>;
   /** Tear down listeners (and the soft anchor, if any). Idempotent. */
   dispose(): void;
 }
@@ -32,10 +32,10 @@ interface PointerDragCore {
 /** Shared pointer wiring: `onStart`/`onMove`/`onStop` with cursor in
  *  world coords (via `shape.toWorld`, stable under rotation). */
 function bindPointerDrag(core: PointerDragCore): {
-  dragging: Writable<Signal<boolean>>;
+  dragging: Writable<Cell<boolean>>;
   dispose(): void;
 } {
-  const dragging = signal(false);
+  const dragging = cell(false);
   let pointerId = -1;
   const offDown = core.shape.on("pointerdown", e => {
     const pe = e as PointerEvent;

@@ -7,7 +7,7 @@ import {
   type Mount,
   num,
   polar,
-  signal,
+  cell,
   type Vec,
   vec,
   type Writable,
@@ -25,7 +25,7 @@ export class MdSolarSystem extends Diagram {
     // writes back through affine to time. So dragging ANY body scrubs
     // time; every other body recomputes. One scalar, every visual.
     const time = num(0);
-    const dragging = signal(false);
+    const dragging = cell(false);
 
     const sun = vec(view.center.value.x, view.center.value.y);
 

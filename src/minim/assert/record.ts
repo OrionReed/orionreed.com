@@ -9,9 +9,9 @@ import type { Anim } from "@minim/core";
 import {
   derive,
   type Read,
-  type Signal,
-  setSignalWriteHook,
-  signal,
+  type Cell,
+  setCellWriteHook,
+  cell,
   type Writable,
 } from "@minim/signals";
 import { bumpTraceVersion } from "./scope";
@@ -34,13 +34,13 @@ const recorders = new Set<Recorder>();
 let removeWriteHook: (() => void) | undefined;
 
 /** Per-signal "current writer", lazily created by `authorOf`. GC-safe via WeakMap. */
-const writerOf = new WeakMap<Signal<unknown>, Writable<Signal<Span | undefined>>>();
+const writerOf = new WeakMap<Cell<unknown>, Writable<Cell<Span | undefined>>>();
 
 /** Begin recording. Concurrent sessions each receive every span (filter
  *  by anim yourself). Stamps start/end from `anim.clock` on open/close. */
 export function record(anim: Anim): Recorder {
   const list: Span[] = [];
-  const ver = signal(0);
+  const ver = cell(0);
 
   const removeListener = addSpanListener(
     s => {
@@ -58,7 +58,7 @@ export function record(anim: Anim): Recorder {
 
   // Install the write hook on first recorder; remove on last stop.
   if (recorders.size === 0) {
-    removeWriteHook = setSignalWriteHook(sig => {
+    removeWriteHook = setCellWriteHook(sig => {
       const s = currentSpan;
       if (s) s.touched.add(sig);
       const writer = writerOf.get(sig);
@@ -95,12 +95,12 @@ export function activeRecorder(): Recorder | undefined {
 }
 
 /** Most recent span that wrote to `sig`, or undefined. One memoized
- *  Signal per asked-about Signal. */
-export function authorOf<T>(sig: Signal<T>): Read<Span | undefined> {
-  let writer = writerOf.get(sig as Signal<unknown>);
+ *  Cell per asked-about Cell. */
+export function authorOf<T>(sig: Cell<T>): Read<Span | undefined> {
+  let writer = writerOf.get(sig as Cell<unknown>);
   if (!writer) {
-    writer = signal<Span | undefined>(undefined);
-    writerOf.set(sig as Signal<unknown>, writer);
+    writer = cell<Span | undefined>(undefined);
+    writerOf.set(sig as Cell<unknown>, writer);
   }
   return writer;
 }

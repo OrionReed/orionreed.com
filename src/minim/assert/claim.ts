@@ -72,7 +72,7 @@ export interface Predicates<T> {
 
 function predicates<T>(sig: Read<T>, mood: Mood, lbl: string | undefined): Predicates<T> {
   const build = (pred: Read<boolean>, what: string): Claim => {
-    const label = `${lbl ?? "signal"} ${mood} ${what}`;
+    const label = `${lbl ?? "cell"} ${mood} ${what}`;
     // "never": operative predicate is `¬pred`. Carry operative predicate
     // and init through to `during()`.
     switch (mood) {

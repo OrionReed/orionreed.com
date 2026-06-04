@@ -134,7 +134,7 @@ const tree = folder("Tasks", [
 
 Every folder is just another reactive cell of the same shape as a leaf. Rendering is then a uniform loop — bind each checkbox's `.checked` and `.indeterminate` to its cell, write `cb.checked` back on change. No recursive aggregate-state computation per render, no `useEffect` for the `indeterminate` flag, no manual cascade walk. Click a folder; the Tri's bwd broadcasts to every descendant in one batched propagation, and the engine refreshes ancestor aggregates in the same pass.
 
-The pattern generalises. A `TreeNode<T>` is a graph of cells with parent-child structure; reactive behaviour is layered on top via the existing `Cls.lens` / `Cls.derive` primitives. There's no `Signal<TreeShape>` anywhere — the tree value is the cell graph itself, so writes go through individual cells at the engine's normal O(1) field-lens cost, not O(N) tree-copy cost. Two canonical patterns over a `TreeNode<T>` cover most use cases: an AGGREGATE direction (bottom-up: each internal node is a lens that reads as the merge of descendants and writes by redistributing) and a PROPAGATE direction (top-down: each node has a local cell, the world view at each node composes parent-world with local). Two demos, same primitive.
+The pattern generalises. A `TreeNode<T>` is a graph of cells with parent-child structure; reactive behaviour is layered on top via the existing `Cls.lens` / `Cls.derive` primitives. There's no `Cell<TreeShape>` anywhere — the tree value is the cell graph itself, so writes go through individual cells at the engine's normal O(1) field-lens cost, not O(N) tree-copy cost. Two canonical patterns over a `TreeNode<T>` cover most use cases: an AGGREGATE direction (bottom-up: each internal node is a lens that reads as the merge of descendants and writes by redistributing) and a PROPAGATE direction (top-down: each node has a local cell, the world view at each node composes parent-world with local). Two demos, same primitive.
 
 Budget rollup is the aggregate direction. Each leaf is a writable `num()`; each category is `Num.lens([children], sum, redistributeProportional)`; the root is `Num.lens([categories], sum, …)`. Three nested stacked bars show one tree level each; widths are proportional to value cells, so the invariant `Σ leaves = Σ categories = total` is visible at a glance. Drag any boundary to reapportion the two adjacent cells; sibling shares update, the parent's total reflects the new sum, downstream rows redraw — all from the lens chain, no manual recomputation per row:
 
@@ -160,12 +160,12 @@ Some relationships aren't function-shaped at all. A four-bar linkage, a cloth, a
 
 ### Constraints
 
-`Constraints` binds any number of `Signal`s and runs an [Augmented Vertex Block Descent](https://graphics.cs.utah.edu/research/projects/avbd/) solve on every write. Constraints are ordinary factory calls — `distance`, `perpendicular`, `rightAngle`, `parallel`, `angle`, `onCircle`, `equalDist`, `clamp`, `leq`, plus `generic` for anything you can write a residual for — and they compose. Cluster membership is reactive too: `addWhile(flag, rel)` keeps a relation alive only while a signal is truthy, flipping structural shape at runtime.
+`Constraints` binds any number of `Cell`s and runs an [Augmented Vertex Block Descent](https://graphics.cs.utah.edu/research/projects/avbd/) solve on every write. Constraints are ordinary factory calls — `distance`, `perpendicular`, `rightAngle`, `parallel`, `angle`, `onCircle`, `equalDist`, `clamp`, `leq`, plus `generic` for anything you can write a residual for — and they compose. Cluster membership is reactive too: `addWhile(flag, rel)` keeps a relation alive only while a signal is truthy, flipping structural shape at runtime.
 
 The quad below is four side constraints — one internal DOF, the shape flexes when dragged — with a fifth diagonal-distance riding on `addWhile`. Click the dot on the diagonal to add or remove the brace and the quad snaps between rigid and flexible:
 
 ```ts
-const braced = signal(true);
+const braced = cell(true);
 const c = constraints({ iterations: 20 });
 c.add(
   distance(A, B, 160),
@@ -238,7 +238,7 @@ The substrate is the right tool for layout. `hstack(container, items, opts)` is 
 
 <md-prop-flex></md-prop-flex>
 
-It scales the other way too. Set-narrowing propagators on `Signal<Set<T>>` cells solve a 9×9 sudoku in half a millisecond. Same `network()` underneath; what changes is the value type and the merge rule:
+It scales the other way too. Set-narrowing propagators on `Cell<Set<T>>` cells solve a 9×9 sudoku in half a millisecond. Same `network()` underneath; what changes is the value type and the merge rule:
 
 <md-prop-sudoku></md-prop-sudoku>
 
@@ -261,7 +261,7 @@ The demo below cycles through four expressions, stepping one fixpoint wave at a 
 
 ## Shapes
 
-Every shape property is a Signal, so the rendering layer composes with everything above for free. Reactive geometry, curves, TeX, code morphing.
+Every shape property is a Cell, so the rendering layer composes with everything above for free. Reactive geometry, curves, TeX, code morphing.
 
 `Path` is a reactive polyline; the sibling `Curve` carries the same plumbing but with `ellipseArc` segments via SVG's native `A` command. The standalone `ellipse(center, a, b, rotation?)` accepts `Val<>` on every parameter, so a family of confocal conics — five ellipses through fixed eccentricities, four hyperbola pairs — falls out of two loops driven by two draggable foci:
 
@@ -284,7 +284,7 @@ yield* eq.parts.M.translate.to({ x: 0, y: -20 }, 0.4);
 
 <md-tex-live></md-tex-live>
 
-Marker identity extends past the diagram. `marker.register("id")` puts a marker into a global lookup; `<md-marker sym="id">` finds it on connect and shares one `marker.active` signal — a derived OR over every bound rendering. Because it's a `Signal<boolean>`, the suspension vocabulary applies: `yield* play(marker.active)` pauses a generator until any rendering is activated.
+Marker identity extends past the diagram. `marker.register("id")` puts a marker into a global lookup; `<md-marker sym="id">` finds it on connect and shares one `marker.active` signal — a derived OR over every bound rendering. Because it's a `Cell<boolean>`, the suspension vocabulary applies: `yield* play(marker.active)` pauses a generator until any rendering is activated.
 
 Hover <md-marker sym="osc:gamma">damping</md-marker> to reveal the decay envelope, <md-marker sym="osc:A">amplitude</md-marker> for the bounds, <md-marker sym="osc:omega">frequency</md-marker> for the period tick marks:
 
@@ -400,7 +400,7 @@ yield* tl;
 
 <md-timeline-editor></md-timeline-editor>
 
-A `claim` is a labeled `Signal<boolean>` over a predicate: `true` while it holds, `false` on violation. Claims compose with `.and`, `.or`, `.not`, `.during(scope)`, `.before(other)` — because they *are* signals. Wrap a factory with `scope(fn)` and attach a claim to its lifetime via `.during(fn)`:
+A `claim` is a labeled `Cell<boolean>` over a predicate: `true` while it holds, `false` on violation. Claims compose with `.and`, `.or`, `.not`, `.during(scope)`, `.before(other)` — because they *are* signals. Wrap a factory with `scope(fn)` and attach a claim to its lifetime via `.during(fn)`:
 
 ```ts
 const fadeIn = scope("fadeIn", function* (s, dur) { /* ... */ });
@@ -422,7 +422,7 @@ The debugger below pairs the trace (gantt of factory invocations, `yield*` calls
 Adding a value type is one class with a single trait dictionary:
 
 ```ts
-class Polygon extends Signal<PolygonValue> {
+class Polygon extends Cell<PolygonValue> {
   static traits = {
     lerp: lerpPolygon,
     equals: equalsPolygon,

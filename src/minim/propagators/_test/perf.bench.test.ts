@@ -1,7 +1,7 @@
 // perf.bench.test.ts — propagator network performance benchmarks.
 
 import { describe, expect, it } from "vitest";
-import { num, signal } from "../../signals";
+import { num, cell } from "../../signals";
 import { add, align, allDifferent, box, hstack, propagators, type SetCell } from "..";
 
 const eqSet = (a: ReadonlySet<number>, b: ReadonlySet<number>): boolean => {
@@ -10,7 +10,7 @@ const eqSet = (a: ReadonlySet<number>, b: ReadonlySet<number>): boolean => {
   return true;
 };
 const setCell = (init: Iterable<number>): SetCell<number> =>
-  signal<ReadonlySet<number>>(new Set(init), { equals: eqSet });
+  cell<ReadonlySet<number>>(new Set(init), { equals: eqSet });
 
 describe("propagator perf", () => {
   it("layout: 100-cell add chain, drag head 1000x", () => {

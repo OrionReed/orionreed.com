@@ -12,7 +12,7 @@ import { Cell, type Inner, lazy, type Writable, type WritableBrand } from "./sig
 /** Bidirectional field lens onto `parent.value[key]`; write spread-
  *  replaces the composite. Cached per (instance, key). Return type is
  *  conditional: `Writable<Cls>` on a writable parent, bare `Cls` on RO
- *  (runtime dispatch in `Signal.fieldOf` mirrors this).
+ *  (runtime dispatch in `Cell.fieldOf` mirrors this).
  *
  *      get x() { return field(this, "x", Num); } */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.lens

@@ -1,7 +1,7 @@
 // network-utils.test.ts — `each`, `when`.
 
 import { describe, expect, it } from "vitest";
-import { each, signal } from "../index";
+import { each, cell } from "../index";
 import { when as whenLifecycle } from "../network-utils";
 
 describe("each — reactive collection lifecycle", () => {
@@ -10,7 +10,7 @@ describe("each — reactive collection lifecycle", () => {
     const e1: Edge = { a: 1, b: 2 };
     const e2: Edge = { a: 3, b: 4 };
     const e3: Edge = { a: 5, b: 6 };
-    const items = signal<Edge[]>([e1, e2]);
+    const items = cell<Edge[]>([e1, e2]);
     const built: Edge[] = [];
     const removed: Edge[] = [];
     const handle = each(items, item => {
@@ -41,7 +41,7 @@ describe("each — reactive collection lifecycle", () => {
   it("identity is by reference, not by structural equality", () => {
     const e1 = { id: 1 };
     const e1Copy = { id: 1 }; // same shape, different object
-    const items = signal<{ id: number }[]>([e1]);
+    const items = cell<{ id: number }[]>([e1]);
     let builds = 0;
     let cleanups = 0;
     const handle = each(items, () => {
@@ -62,7 +62,7 @@ describe("each — reactive collection lifecycle", () => {
   });
 
   it("dispose on empty collection cleans up zero items", () => {
-    const items = signal<number[]>([]);
+    const items = cell<number[]>([]);
     let builds = 0;
     const handle = each(items, () => {
       builds++;
@@ -75,7 +75,7 @@ describe("each — reactive collection lifecycle", () => {
 
 describe("when — boolean lifecycle", () => {
   it("body runs while truthy, cleanup on falsy", () => {
-    const flag = signal(false);
+    const flag = cell(false);
     let active = 0;
     const handle = whenLifecycle(flag, () => {
       active++;
@@ -99,7 +99,7 @@ describe("when — boolean lifecycle", () => {
   });
 
   it("multiple flips while same body runs once per truthy span", () => {
-    const flag = signal(true);
+    const flag = cell(true);
     let builds = 0;
     let cleanups = 0;
     const handle = whenLifecycle(flag, () => {
@@ -125,24 +125,24 @@ describe("when — boolean lifecycle", () => {
   });
 });
 
-describe("signal — strict factory with identity passthrough", () => {
-  it("plain value is wrapped in a fresh signal", () => {
-    const p = signal(42);
+describe("cell — strict factory with identity passthrough", () => {
+  it("plain value is wrapped in a fresh cell", () => {
+    const p = cell(42);
     expect(p.value).toBe(42);
     p.value = 99;
     expect(p.value).toBe(99);
   });
 
-  it("existing signal is returned untouched", () => {
-    const original = signal(7);
-    const p = signal(original);
+  it("existing cell is returned untouched", () => {
+    const original = cell(7);
+    const p = cell(original);
     expect(p).toBe(original); // same reference
     original.value = 8;
     expect(p.value).toBe(8); // mutations propagate
   });
 
   it("works for non-numeric types", () => {
-    const p = signal({ x: 1, y: 2 });
+    const p = cell({ x: 1, y: 2 });
     expect(p.value).toEqual({ x: 1, y: 2 });
   });
 });

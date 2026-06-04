@@ -1,6 +1,6 @@
 // vec.ts — reactive 2D point.
 //
-// Invertibles return `: this` and ride on `Signal#lens(fwd, bwd)`;
+// Invertibles return `: this` and ride on `Cell#lens(fwd, bwd)`;
 // chained calls auto-fuse. Field-lens getters use `field()` (propagates
 // writability); `derived()` wraps RO views.
 
@@ -213,7 +213,7 @@ function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
 /** Writable `Vec` at `(x, y)`. Each axis is a literal `number` (lifted
  *  to a fresh seed) or an existing `Writable<Num>` (identity passthrough).
  *  RO sources are rejected at the type level — use `Vec.derive(...)` for
- *  reactive RO tracking, or `signal.value` to snapshot. Lock an axis with
+ *  reactive RO tracking, or `cell.value` to snapshot. Lock an axis with
  *  `Num.pin(c)`: `vec(slider, Num.pin(100))`. */
 export function vec(x: Init<Num> = 0, y: Init<Num> = 0): Writable<Vec> {
   if (typeof x === "number" && typeof y === "number") {
@@ -232,7 +232,7 @@ export type PolarPolicy = "rotate" | "translate" | "radial" | "circular";
 
 /** Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`.
  *  Bidirectional; each input is a literal (lifted to a fresh seed) or an
- *  existing writable signal. RO inputs are rejected at the type level.
+ *  existing writable cell. RO inputs are rejected at the type level.
  *  `policy` selects which inputs absorb writes; lock one with
  *  `Num.pin(c)`: `polar(c, Num.pin(100), a)`. */
 export function polar(

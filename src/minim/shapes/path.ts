@@ -2,8 +2,8 @@ import {
   derive,
   type Read,
   reader,
-  type Signal,
-  signal,
+  type Cell,
+  cell,
   type Val,
   Vec,
   type Writable,
@@ -19,7 +19,7 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /** Geometry sampler over a reactive list of Points. `pts` is tracked
  *  by every computed, so mutating the list re-runs sampling. */
-function sampler(pts: Signal<readonly Vec[]>) {
+function sampler(pts: Cell<readonly Vec[]>) {
   const cumLen = derive(() => {
     const points = pts.value;
     const lens = [0];
@@ -31,7 +31,7 @@ function sampler(pts: Signal<readonly Vec[]>) {
     return lens;
   });
 
-  const length: Signal<number> = derive(() => {
+  const length: Cell<number> = derive(() => {
     const lens = cumLen.value;
     return lens[lens.length - 1] ?? 0;
   });
@@ -49,7 +49,7 @@ function sampler(pts: Signal<readonly Vec[]>) {
     return { i: i - 1, segT };
   };
 
-  const sampleAt = (ds: Signal<number>): Vec =>
+  const sampleAt = (ds: Cell<number>): Vec =>
     Vec.derive(() => {
       const points = pts.value;
       if (points.length === 0) return { x: 0, y: 0 };
@@ -89,7 +89,7 @@ function sampler(pts: Signal<readonly Vec[]>) {
 
   const normalAt = (t: Val<number>): Vec => tangentAt(t).perp();
 
-  const angleAt = (t: Val<number>): Signal<number> => {
+  const angleAt = (t: Val<number>): Cell<number> => {
     const tan = tangentAt(t);
     return derive(() => Math.atan2(tan.y.value, tan.x.value));
   };
@@ -106,21 +106,21 @@ function sampler(pts: Signal<readonly Vec[]>) {
  *  place and return `this`. The `d` attribute and all sampling methods
  *  react to point changes automatically. */
 export class Path<O extends PathOpts = PathOpts> extends Shape<O> {
-  private readonly _points: Writable<Signal<readonly Vec[]>>;
+  private readonly _points: Writable<Cell<readonly Vec[]>>;
   readonly closed: boolean;
 
-  readonly length: Signal<number>;
+  readonly length: Cell<number>;
   /** Sample at `t ∈ [0, 1]`. Named to avoid shadowing the Box `at(u, v)`
    *  anchor — same symmetry as `tangentAt` / `normalAt` / `angleAt`. */
   readonly pointAt: (t: Val<number>) => Vec;
   readonly atDistance: (d: Val<number>) => Vec;
   readonly tangentAt: (t: Val<number>) => Vec;
   readonly normalAt: (t: Val<number>) => Vec;
-  readonly angleAt: (t: Val<number>) => Signal<number>;
+  readonly angleAt: (t: Val<number>) => Cell<number>;
 
   constructor(start: Vec | readonly Vec[] = [], opts: O = {} as O) {
     const init: readonly Vec[] = start instanceof Vec ? [start] : start;
-    const points = signal<readonly Vec[]>(init);
+    const points = cell<readonly Vec[]>(init);
     const closed = opts.closed ?? false;
 
     super(

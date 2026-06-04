@@ -15,7 +15,7 @@ import {
   loop,
   type Mount,
   rand,
-  signal,
+  cell,
   snapshot,
   vec,
 } from "../../minim";
@@ -89,7 +89,7 @@ export class MdRand extends Diagram {
   protected scene(s: Mount): void {
     this.view(600, 280);
 
-    const current = signal<Pick | null>(null);
+    const current = cell<Pick | null>(null);
     const currentName = derive<Content>(() => current.value?.name ?? "—");
     const currentColor = derive(() => current.value?.color ?? "#1a1a1a");
 

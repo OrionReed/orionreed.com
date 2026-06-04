@@ -1,6 +1,6 @@
 // hooks.test.ts — watched/unwatched lifecycle hooks.
 
-import { derive, effect, Signal } from "@minim/signals";
+import { derive, effect, Cell } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 
@@ -9,7 +9,7 @@ describe("hooks", () => {
     section("watched fires on first subscriber");
     {
       let watchedCount = 0;
-      const s = new Signal(0, {
+      const s = new Cell(0, {
         watched: () => {
           watchedCount++;
         },
@@ -30,7 +30,7 @@ describe("hooks", () => {
     section("unwatched fires on last subscriber detach");
     {
       let unwatchedCount = 0;
-      const s = new Signal(0, {
+      const s = new Cell(0, {
         unwatched: () => {
           unwatchedCount++;
         },
@@ -52,7 +52,7 @@ describe("hooks", () => {
     {
       let watched = 0,
         unwatched = 0;
-      const s = new Signal(0, {
+      const s = new Cell(0, {
         watched: () => {
           watched++;
         },
@@ -74,10 +74,10 @@ describe("hooks", () => {
       check("re-unwatched (unwatched=2)", watched === 2 && unwatched === 2);
     }
 
-    section("hook fires for computed → signal too");
+    section("hook fires for computed → cell too");
     {
       let watched = 0;
-      const s = new Signal(0, {
+      const s = new Cell(0, {
         watched: () => {
           watched++;
         },

@@ -13,7 +13,7 @@
 
 import {
   type Box,
-  isSignal,
+  isCell,
   type Num as NumClass,
   type Read,
   readNow,
@@ -26,7 +26,7 @@ const asW = (n: Num): Writable<NumClass> => n as unknown as Writable<NumClass>;
 type ValOrSig = number | Read<number>;
 
 function readDeps(...vs: ValOrSig[]): Num[] {
-  return vs.filter(isSignal) as Num[];
+  return vs.filter(isCell) as Num[];
 }
 
 function clamp(v: number, lo: number, hi: number): number {

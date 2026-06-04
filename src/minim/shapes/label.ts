@@ -1,4 +1,4 @@
-import { derive, type Inner, Num, Signal, signal, type Val, type Vec } from "@minim/signals";
+import { derive, type Inner, Num, Cell, cell, type Val, type Vec } from "@minim/signals";
 
 import { Shape, type ShapeOpts } from "./shape";
 import { type Content, flattenText, renderContent } from "./text";
@@ -24,12 +24,12 @@ export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
   readonly anchor: Vec;
 
   constructor(anchor: Vec, content: Val<Content>, opts: O = {} as O) {
-    const contentSig: Signal<Content> =
-      content instanceof Signal
+    const contentSig: Cell<Content> =
+      content instanceof Cell
         ? content
         : typeof content === "function"
           ? derive(content)
-          : signal(content as Content);
+          : cell(content as Content);
     const sizeSig = Num.from(opts.size ?? tokens.fontSize);
     const a = opts.align ?? { x: 0.5, y: 0.5 };
     super(

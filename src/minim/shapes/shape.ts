@@ -12,8 +12,8 @@ import {
   meanLens,
   Num,
   readNow,
-  Signal,
-  signal,
+  Cell,
+  cell,
   toMatrixString,
   transformBox,
   transformPoint,
@@ -94,7 +94,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   readonly opacity: Writable<Num>;
 
   /** Composed local-frame matrix: `T(t) T(p) R(r) S(s) T(-p)`. */
-  readonly localFrame: Signal<Inner<Matrix>>;
+  readonly localFrame: Cell<Inner<Matrix>>;
 
   /** Local-frame box; reach into `.x`, `.center`, `.at(u,v)`, etc. */
   readonly box: Box;
@@ -123,8 +123,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
   protected disposers: (() => void)[] = [];
 
-  // Signal (not array) so the default group `boxFn` re-unions on add/remove.
-  private readonly _children = signal<readonly AnyShape[]>([]);
+  // Cell (not array) so the default group `boxFn` re-unions on add/remove.
+  private readonly _children = cell<readonly AnyShape[]>([]);
 
   /** Back-link set by `add()`; cleared by `dispose()`. Non-reactive. */
   parent: AnyShape | null = null;
@@ -248,7 +248,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     target: "intrinsic" | "wrapper" = "intrinsic",
   ): void {
     const el = target === "intrinsic" && this.intrinsic ? this.intrinsic : this.el;
-    if (val instanceof Signal || typeof val === "function") {
+    if (val instanceof Cell || typeof val === "function") {
       this.disposers.push(effect(() => el.setAttribute(name, String(readNow(val)))));
     } else {
       el.setAttribute(name, String(val));
@@ -438,14 +438,14 @@ export function meanScale(...shapes: { scale: Writable<Vec> }[]): Writable<Vec> 
  *  Writable passes through; literal seeds a cell; signal/thunk drives it via
  *  a disposer-tracked effect. The library's only effect-driven RO mirror,
  *  tolerated because the surface must stay writable for tween/drag/write. */
-function liftAnimatable<T, C extends Signal<T>>(
+function liftAnimatable<T, C extends Cell<T>>(
   src: Val<T>,
   Cls: new (v?: T) => C,
   disposers: (() => void)[],
 ): Writable<C> {
   if (src instanceof Cls) return src as Writable<C>;
   const target = new Cls() as Writable<C>;
-  if (src instanceof Signal || typeof src === "function") {
+  if (src instanceof Cell || typeof src === "function") {
     disposers.push(
       effect(() => {
         target.value = readNow(src) as Inner<C>;

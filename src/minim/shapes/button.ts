@@ -5,8 +5,8 @@ import {
   Anchor,
   derive,
   Num,
-  type Signal,
-  signal,
+  type Cell,
+  cell,
   type Val,
   type Vec,
   vec,
@@ -24,7 +24,7 @@ export interface ButtonOpts {
   height?: number;
   size?: Val<number>;
   /** Externally-controlled hover signal — share across shapes if needed. */
-  hovered?: Writable<Signal<boolean>>;
+  hovered?: Writable<Cell<boolean>>;
 }
 
 /** A clickable, labelled region positioned at `pos` (top-left). The
@@ -39,7 +39,7 @@ export function button(
   const w = opts.width ?? 80;
   const h = opts.height ?? 26;
   const size = Num.from(opts.size ?? 11);
-  const hovered = opts.hovered ?? signal(false);
+  const hovered = opts.hovered ?? cell(false);
 
   // Hover tint behind the border so outline weight stays constant.
   const g = group(

@@ -1,7 +1,7 @@
 // types.test.ts — compile-time guarantees for Writable<R>.
 
 import { describe, expect, it } from "vitest";
-import { derive, num, type Signal, type Traits, Vec, vec, type Writable } from "../index";
+import { derive, num, type Cell, type Traits, Vec, vec, type Writable } from "../index";
 
 describe("compile-time guarantees", () => {
   it("placeholder — checks fire at tsc", () => {
@@ -15,7 +15,7 @@ function _probes(): void {
   v.value = { x: 0, y: 0 };
   v.x.value = 5; // field lens lifted to Writable<Num>
 
-  // Bare-value-class direct writes ERROR at the type level. `Signal`
+  // Bare-value-class direct writes ERROR at the type level. `Cell`
   // declares `value` as `readonly` (the runtime accessor is installed
   // on the prototype after class declaration); `Writable<R>` adds a
   // settable `value` via intersection.
@@ -44,10 +44,10 @@ function _probes(): void {
   // traits dict at the type level, so `Traits<T, "linear" | "metric">`
   // can verify presence at compile time. Bare RO Vec is rejected
   // through the brand (separate axis from traits).
-  function spring<T>(s: Writable<Signal<T>> & Traits<T, "linear" | "metric">, target: T): void {
+  function spring<T>(s: Writable<Cell<T>> & Traits<T, "linear" | "metric">, target: T): void {
     s.value = target;
   }
-  spring(v, { x: 0, y: 0 }); // Writable<Vec> ⊆ Writable<Signal<V>>
+  spring(v, { x: 0, y: 0 }); // Writable<Vec> ⊆ Writable<Cell<V>>
   spring(num(5), 10);
   // @ts-expect-error — bare Vec has no WritableBrand
   spring(ro, { x: 0, y: 0 });
@@ -67,12 +67,12 @@ function _probes(): void {
   void readVec(ro); // ✓ bare Vec
   void readVec({ value: { x: 0, y: 0 }, peek: () => ({ x: 0, y: 0 }) });
 
-  // ─── Computed factory returns bare Signal — RO ─────────────────
+  // ─── Computed factory returns bare Cell — RO ─────────────────
   const c = derive(() => 1);
-  // @ts-expect-error — bare `Signal<T>` is RO at the type level
+  // @ts-expect-error — bare `Cell<T>` is RO at the type level
   // (the class declares `readonly value: T`; the runtime accessor is
-  // installed on the prototype). `signal(...)` returns
-  // `Writable<Signal<T>>` for writable sources.
+  // installed on the prototype). `cell(...)` returns
+  // `Writable<Cell<T>>` for writable sources.
   c.value = 5;
 
   void chain;

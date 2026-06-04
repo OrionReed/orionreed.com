@@ -427,7 +427,7 @@ export class Str extends Cell<V> {
 /** Writable `Str`. Strict factory: literal seeds a fresh cell;
  *  existing `Writable<Str>` passes through by identity. RO sources
  *  are rejected at the type level — use `Str.derive(...)` for
- *  reactive RO tracking, or `signal.value` to snapshot. */
+ *  reactive RO tracking, or `cell.value` to snapshot. */
 export function str(v: Init<Str> = ""): Writable<Str> {
   if (v instanceof Str) return v as Writable<Str>;
   return new Str(v) as Writable<Str>;

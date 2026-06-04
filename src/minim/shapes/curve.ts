@@ -13,8 +13,8 @@ import {
   type Inner,
   reader,
   readNow,
-  type Signal,
-  signal,
+  type Cell,
+  cell,
   type Val,
   Vec,
   type Writable,
@@ -138,17 +138,17 @@ export type CurveInit = readonly CurveSegment[] | (() => readonly CurveSegment[]
 
 /** Piecewise curve with line and ellipse-arc segments. */
 export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
-  private readonly _segments: Signal<readonly CurveSegment[]>;
+  private readonly _segments: Cell<readonly CurveSegment[]>;
   /** True if segments are reactive (computed); fluent methods then no-op. */
   private readonly _reactive: boolean;
   readonly closed: boolean;
-  readonly length: Signal<number>;
+  readonly length: Cell<number>;
 
   constructor(init: CurveInit = [], opts: O = {} as O) {
     const reactive = typeof init === "function";
-    const segs: Signal<readonly CurveSegment[]> = reactive
+    const segs: Cell<readonly CurveSegment[]> = reactive
       ? derive(init)
-      : signal<readonly CurveSegment[]>(init);
+      : cell<readonly CurveSegment[]>(init);
     const closed = opts.closed ?? false;
 
     const cumLen = derive(() => {
@@ -299,8 +299,8 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
     if (this._reactive) {
       throw new Error("Curve(builder): fluent .to/.ellipseArc unavailable on reactive curves");
     }
-    // _segments is a writable signal in this branch.
-    (this._segments as Writable<Signal<readonly CurveSegment[]>>).value = [
+    // _segments is a writable cell in this branch.
+    (this._segments as Writable<Cell<readonly CurveSegment[]>>).value = [
       ...this._segments.peek(),
       seg,
     ];

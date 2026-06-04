@@ -1,7 +1,7 @@
 // Derived shapes that decorate a tex Part (tracks `part.box` reactively).
 
 import { Shape, tokens } from "@minim/shapes";
-import { type Box, derive, type Inner, type Signal } from "@minim/signals";
+import { type Box, derive, type Inner, type Cell } from "@minim/signals";
 import type { Part } from "./parts";
 
 export interface DecorationOpts {
@@ -24,7 +24,7 @@ const applyStroke = (s: Shape, opts: DecorationOpts) => {
 };
 
 /** A `<rect>` whose attrs and Box derive from one layout signal. */
-function rectFromBox(layout: Signal<Inner<Box>>): Shape {
+function rectFromBox(layout: Cell<Inner<Box>>): Shape {
   const s = new Shape("rect", () => layout.value);
   s.attrs({
     x: derive(() => layout.value.x),
@@ -43,7 +43,7 @@ interface LineEnds {
 }
 
 /** A `<line>` whose endpoints and Box derive from one layout signal. */
-function lineFromEnds(layout: Signal<LineEnds>): Shape {
+function lineFromEnds(layout: Cell<LineEnds>): Shape {
   const s = new Shape("line", () => {
     const e = layout.value;
     const x = Math.min(e.x1, e.x2);

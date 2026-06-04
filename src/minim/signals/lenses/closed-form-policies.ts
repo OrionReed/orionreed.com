@@ -18,7 +18,7 @@ import {
   Num,
   type Pivotal,
   type Read,
-  type Signal,
+  type Cell,
   type Traits,
   Vec,
   type Writable,
@@ -58,7 +58,7 @@ export function rigidTranslate(points: readonly Writable<Vec>[]): Writable<Vec> 
 // biome-ignore lint/suspicious/noExplicitAny: variance escape — T constrained at run by Pivotal lookup
 export function rotateAbout<T extends { x: number; y: number }>(
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  points: readonly Writable<Traits<T, "pivotal"> & Signal<T>>[],
+  points: readonly Writable<Traits<T, "pivotal"> & Cell<T>>[],
   pivot: Read<V>,
 ): Writable<Num> {
   const K = points.length;
@@ -97,7 +97,7 @@ export function rotateAbout<T extends { x: number; y: number }>(
  *  (only spatial offset is stored). */
 export function scaleAbout<T extends { x: number; y: number }>(
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  points: readonly Writable<Traits<T, "pivotal"> & Signal<T>>[],
+  points: readonly Writable<Traits<T, "pivotal"> & Cell<T>>[],
   pivot: Read<V>,
 ): Writable<Num> {
   const K = points.length;
@@ -117,7 +117,7 @@ export function scaleAbout<T extends { x: number; y: number }>(
     });
 
   // biome-ignore lint/suspicious/noExplicitAny: variance escape — spec is checked structurally
-  return (Num as any).lens(points as unknown as readonly Writable<Signal<T>>[], {
+  return (Num as any).lens(points as unknown as readonly Writable<Cell<T>>[], {
     init: (vals: readonly T[]): C => {
       const p = pivot.peek();
       return { devs: vals.map(v => ({ x: v.x - p.x, y: v.y - p.y })) };

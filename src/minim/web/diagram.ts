@@ -3,7 +3,7 @@
 // (`--d-w`/`--d-h`).
 //
 // Visibility-gated rAF: the per-instance Anim ticks only while near the
-// viewport (IntersectionObserver). Signal-driven updates keep working —
+// viewport (IntersectionObserver). Cell-driven updates keep working —
 // only the animator clock pauses and resumes, so `anim.clock` tracks
 // on-screen time. Opt out via `always-animate`; eager-attach when
 // IntersectionObserver is absent (SSR/tests).
