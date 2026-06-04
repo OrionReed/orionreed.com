@@ -5,7 +5,7 @@
 //   4.2  vec(reactiveX, reactiveY) glitches without batching
 // Plus the Symbol.toPrimitive footgun guard.
 
-import { batch, derive, effect, type Inner, num, cell, type Vec, vec } from "@minim/signals";
+import { batch, cell, derive, effect, type Inner, num, type Vec, vec } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 

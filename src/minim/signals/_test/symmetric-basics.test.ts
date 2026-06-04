@@ -10,7 +10,7 @@
 //     because the unit deviations live in the complement.
 
 import { describe, expect, it } from "vitest";
-import { effect, lens, cell } from "../index";
+import { cell, effect, lens } from "../index";
 import { Num, num } from "../values/num";
 import { vec } from "../values/vec";
 

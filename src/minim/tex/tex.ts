@@ -1,7 +1,7 @@
 // LaTeX → MathML shape, rendered via Temml.
 
 import { Shape, type ShapeOpts, tokens } from "@minim/shapes";
-import { Box, derive, type Inner, type Cell, cell, type Writable } from "@minim/signals";
+import { Box, type Cell, cell, derive, type Inner, type Writable } from "@minim/signals";
 import temml from "temml";
 import { Part, type PartList, PartMarker } from "./parts";
 

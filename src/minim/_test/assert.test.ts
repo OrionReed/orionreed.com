@@ -5,7 +5,7 @@
 // fluent claim builder, intervals(), and firstOf event ordering.
 
 import { Anim, type Animator } from "@minim/core";
-import { derive, num, cell, spring, tween } from "@minim/signals";
+import { cell, derive, num, spring, tween } from "@minim/signals";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   activeRecorder,

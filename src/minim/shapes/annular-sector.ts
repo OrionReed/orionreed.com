@@ -1,4 +1,4 @@
-import { derive, Num, type Cell, type Val, type Vec } from "@minim/signals";
+import { type Cell, derive, Num, type Val, type Vec } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 
 export interface AnnularSectorOpts extends CommonOpts {}

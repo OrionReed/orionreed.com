@@ -10,7 +10,7 @@
 // post-write view from a stale candidate); it must stay at zero failures.
 
 import { describe, expect, it } from "vitest";
-import { derive, lens, cell } from "../index";
+import { cell, derive, lens } from "../index";
 
 // ── seeded PRNG (mulberry32) ─────────────────────────────────────────
 function rng(seed: number): () => number {

@@ -3,13 +3,13 @@
 import { attachRaf } from "@minim/web";
 import {
   Anim,
+  cell,
   drive,
   effect,
   every,
   loop,
   type Num,
   num,
-  cell,
   type Vec,
   vec,
   type Writable,

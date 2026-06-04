@@ -19,6 +19,7 @@
 // "black-hole" trap is structurally absent.
 
 import {
+  type Cell,
   type Color,
   Diagram,
   handle,
@@ -31,7 +32,6 @@ import {
   pose,
   rect,
   rgba,
-  type Cell,
   Vec,
   vec,
   type Writable,

@@ -11,10 +11,10 @@
 // =====================================================================
 
 import {
+  type Cell,
   type Linear,
   type Metric,
   Num,
-  type Cell,
   type Traits,
   Vec,
   type Writable,
@@ -78,7 +78,6 @@ type ColorV = { r: number; g: number; b: number; a: number };
 
 /** Mean color of a palette; write shifts every color by the delta
  *  (rigid translate in RGBA). Via `meanOf`. */
-// biome-ignore lint/suspicious/noExplicitAny: variance escape
 export function meanColor(
   colors: readonly Writable<Traits<ColorV, "linear">>[],
 ): Writable<Traits<ColorV, "linear">> {
@@ -95,7 +94,6 @@ export function meanColor(
  *  and a collapse (spread → 0) reinflates the original SHAPE. Centroid is
  *  recomputed every read/write, so an intervening mean translate is not
  *  stale. */
-// biome-ignore lint/suspicious/noExplicitAny: variance escape
 export function spreadOf<
   T extends NonNullable<unknown>,
   S extends Cell<T> & Traits<T, "linear" | "metric">,
@@ -165,7 +163,6 @@ export function spreadOf<
 /** Palette decomposition: K values → {mean, spread}, i.e. centroid +
  *  uniform scale about it. `meanOf` ∘ `spreadOf`; works for any
  *  Linear + Metric class. */
-// biome-ignore lint/suspicious/noExplicitAny: variance escape on value class
 export function paletteLens<
   T extends NonNullable<unknown>,
   S extends Cell<T> & Traits<T, "linear" | "metric">,

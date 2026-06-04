@@ -2,7 +2,7 @@
 // geometric + set narrowing).
 
 import { describe, expect, it } from "vitest";
-import { num, cell, vec } from "../../signals";
+import { cell, num, vec } from "../../signals";
 import {
   add,
   align,

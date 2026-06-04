@@ -1,4 +1,4 @@
-import { derive, type Cell, type Val, Vec } from "@minim/signals";
+import { type Cell, derive, type Val, Vec } from "@minim/signals";
 import { type CommonOpts, type Segment, Shape } from "./shape";
 
 export interface LineOpts extends CommonOpts {}

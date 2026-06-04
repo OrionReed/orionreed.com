@@ -6,12 +6,12 @@
 
 import { Anim, detach, linear, race, suspend } from "@minim/core";
 import {
+  cell,
   driven,
   effect,
   not,
   num,
   play,
-  cell,
   spring,
   Tween,
   toward,

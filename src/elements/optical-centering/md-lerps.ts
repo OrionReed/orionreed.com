@@ -1,6 +1,7 @@
 import {
   Anchor,
   box,
+  Cell,
   circle,
   Diagram,
   derive,
@@ -12,7 +13,6 @@ import {
   num,
   rect,
   rgb,
-  Cell,
   type TraitDict,
   type Tween,
   tween,

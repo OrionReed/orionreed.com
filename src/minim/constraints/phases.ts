@@ -8,7 +8,7 @@
 // Specialised factories (`physics`, `world`, …) declare their own
 // pipelines, interleaving these with integration / contact phases.
 
-import type { Pack, Cell, Writable } from "../signals";
+import type { Cell, Pack, Writable } from "../signals";
 import type { Constraints } from "./cluster";
 
 /** A single step in the `Constraints` pipeline. */

@@ -9,12 +9,12 @@
 // factory uses the reactive form so all params accept `Val<>`.
 
 import {
+  type Cell,
+  cell,
   derive,
   type Inner,
   reader,
   readNow,
-  type Cell,
-  cell,
   type Val,
   Vec,
   type Writable,

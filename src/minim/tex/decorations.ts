@@ -1,7 +1,7 @@
 // Derived shapes that decorate a tex Part (tracks `part.box` reactively).
 
 import { Shape, tokens } from "@minim/shapes";
-import { type Box, derive, type Inner, type Cell } from "@minim/signals";
+import { type Box, type Cell, derive, type Inner } from "@minim/signals";
 import type { Part } from "./parts";
 
 export interface DecorationOpts {

@@ -1,7 +1,7 @@
 // network.test.ts — `propagators()`, `propagate()`, manual mode, step().
 
 import { describe, expect, it } from "vitest";
-import { num, cell } from "../../signals";
+import { cell, num } from "../../signals";
 import { add, allDifferent, propagate, propagators, type SetCell } from "..";
 
 const eqSet = (a: ReadonlySet<number>, b: ReadonlySet<number>): boolean => {

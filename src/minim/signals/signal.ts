@@ -704,10 +704,10 @@ export class Cell<T = unknown> implements ReactiveNode {
     parent: Read<P>,
     spec: StatefulLensSpec<readonly [P], Inner<InstanceType<C>>, Cm>,
   ): Writable<InstanceType<C>>;
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static lens<
     C extends new (
       ...args: never[]
+      // biome-ignore lint/suspicious/noExplicitAny: variance escape
     ) => Cell<any>,
     P extends readonly Read<unknown>[],
     Cm,
@@ -1181,10 +1181,7 @@ function forkInto(parents: Cell<unknown>[], updates: ReadonlyArray<unknown>, n: 
 // ─── factories ────────────────────────────────────────────────────
 
 /** Writable source; passes an existing `Writable` through (idempotent). */
-export function cell<T>(
-  initial: T | Writable<Cell<T>>,
-  opts?: CellOptions<T>,
-): Writable<Cell<T>> {
+export function cell<T>(initial: T | Writable<Cell<T>>, opts?: CellOptions<T>): Writable<Cell<T>> {
   if (initial instanceof Cell) return initial as Writable<Cell<T>>;
   return new Cell(initial as T, opts) as Writable<Cell<T>>;
 }

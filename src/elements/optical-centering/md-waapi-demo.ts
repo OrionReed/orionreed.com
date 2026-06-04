@@ -1,5 +1,6 @@
 import {
   Anchor,
+  type Cell,
   circle,
   Diagram,
   derive,
@@ -7,7 +8,6 @@ import {
   loop,
   type Mount,
   rect,
-  type Cell,
   stagger,
   Vec,
 } from "../../minim";

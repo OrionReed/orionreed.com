@@ -1,6 +1,7 @@
 import {
   assemble,
   type Content,
+  cell,
   centroid,
   circle,
   Diagram,
@@ -15,7 +16,6 @@ import {
   num,
   orbit,
   play,
-  cell,
   snapshot,
   splay,
   stagger,

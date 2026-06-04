@@ -1,7 +1,7 @@
 // footgun-paths.test.ts — field-path edge cases.
 
 import { describe, expect, it } from "vitest";
-import { Num, Cell, cell } from "../index";
+import { Cell, cell, Num } from "../index";
 
 describe("footgun: deep field paths (4+)", () => {
   it("4-deep field chain hits the loop fallback in makeFieldGetter/Setter", () => {
@@ -63,13 +63,7 @@ describe("footgun: numeric / symbol keys", () => {
     const root = cell<S>({ items: [10, 20, 30] });
     // Note: field expects `keyof S[K]` so numeric index requires
     // careful typing. Use Cell.fieldOf which is more permissive.
-    const itemsLens = Cell.fieldOf(
-      root,
-      "items",
-      Cell as new (
-        ...args: never[]
-      ) => Cell<number[]>,
-    );
+    const itemsLens = Cell.fieldOf(root, "items", Cell as new (...args: never[]) => Cell<number[]>);
     const idx0 = Cell.fieldOf(itemsLens, 0, Num);
 
     expect(idx0.value).toBe(10);
@@ -109,13 +103,7 @@ describe("footgun: spread on arrays (semantic difference)", () => {
   it("FOOTGUN: writing through field path ON AN ARRAY converts to object", () => {
     type S = { items: number[] };
     const root = cell<S>({ items: [10, 20, 30] });
-    const itemsLens = Cell.fieldOf(
-      root,
-      "items",
-      Cell as new (
-        ...args: never[]
-      ) => Cell<number[]>,
-    );
+    const itemsLens = Cell.fieldOf(root, "items", Cell as new (...args: never[]) => Cell<number[]>);
     const idx0 = Cell.fieldOf(itemsLens, 0, Num);
 
     expect(Array.isArray(root.value.items)).toBe(true);

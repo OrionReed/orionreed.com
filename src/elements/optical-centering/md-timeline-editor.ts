@@ -1,4 +1,5 @@
 import {
+  cell,
   circle,
   Diagram,
   derive,
@@ -10,7 +11,6 @@ import {
   type Mount,
   rect,
   sequential,
-  cell,
   snapshot,
   timeline,
   Vec,

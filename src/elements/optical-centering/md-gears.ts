@@ -1,4 +1,5 @@
 import {
+  cell,
   circle,
   Diagram,
   dragRotate,
@@ -8,7 +9,6 @@ import {
   type Num,
   num,
   Shape,
-  cell,
   type Vec,
   vec,
   type Writable,

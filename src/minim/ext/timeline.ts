@@ -4,13 +4,13 @@
 
 import type { Animator } from "@minim/core";
 import {
+  type Cell,
   derive,
   type Init,
   isComputed,
   Num,
   num,
   Range,
-  type Cell,
   span,
   type Writable,
 } from "@minim/signals";

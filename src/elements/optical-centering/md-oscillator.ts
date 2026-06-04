@@ -1,6 +1,7 @@
 // Damped oscillator x(t) = Ae^{-γt}cos(ωt); A/γ/ω markers cross-reference formula, diagram, prose.
 
 import {
+  cell,
   circle,
   Diagram,
   derive,
@@ -12,7 +13,6 @@ import {
   not,
   pathD,
   play,
-  cell,
   tokens,
   Vec,
   vec,

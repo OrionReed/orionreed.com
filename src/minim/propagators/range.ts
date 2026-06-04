@@ -6,7 +6,7 @@
 // structural (a bounded finite-height lattice; every fire shrinks
 // an interval or no-ops).
 //
-// A Range cell is just `signal<[number, number]>` with custom
+// A Range cell is just `cell<[number, number]>` with custom
 // equality — no new type. The "merge not replace" semantic lives in
 // each combinator's step body.
 //

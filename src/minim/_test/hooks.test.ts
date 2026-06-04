@@ -1,6 +1,6 @@
 // hooks.test.ts — watched/unwatched lifecycle hooks.
 
-import { derive, effect, Cell } from "@minim/signals";
+import { Cell, derive, effect } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 

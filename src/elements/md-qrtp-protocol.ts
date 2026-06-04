@@ -2,6 +2,8 @@ import {
   type Animator,
   annularSector,
   attr,
+  type Cell,
+  cell,
   circle,
   Diagram,
   derive,
@@ -10,8 +12,6 @@ import {
   loop,
   type Mount,
   polar,
-  type Cell,
-  cell,
   snapshot,
 } from "../minim";
 import { grey, ink, stroke } from "./color";

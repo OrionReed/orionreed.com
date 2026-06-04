@@ -2,6 +2,8 @@ import { type Animator, suspend } from "@minim/core";
 import {
   Box,
   BoxMath,
+  Cell,
+  cell,
   centroidLens,
   compose,
   derive,
@@ -12,8 +14,6 @@ import {
   meanLens,
   Num,
   readNow,
-  Cell,
-  cell,
   toMatrixString,
   transformBox,
   transformPoint,

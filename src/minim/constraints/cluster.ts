@@ -15,14 +15,14 @@
 // calls the disposer.
 
 import {
+  type Cell,
+  cell,
   type Lifecycle,
   type Network,
   network,
   type Pack,
   type Read,
   requirePack,
-  type Cell,
-  cell,
   type Writable,
 } from "../signals";
 import { when } from "../signals/network-utils";

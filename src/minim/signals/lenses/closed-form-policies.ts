@@ -14,11 +14,11 @@
 // =====================================================================
 
 import {
+  type Cell,
   centroidLens,
   Num,
   type Pivotal,
   type Read,
-  type Cell,
   type Traits,
   Vec,
   type Writable,
@@ -55,16 +55,13 @@ export function rigidTranslate(points: readonly Writable<Vec>[]): Writable<Vec> 
  *  distances, so scale-about-pivot reads unchanged. `pivot` is reactive
  *  (re-read per write); pass `centroidLens(points)` for rotation about
  *  the cluster's own centroid. */
-// biome-ignore lint/suspicious/noExplicitAny: variance escape — T constrained at run by Pivotal lookup
 export function rotateAbout<T extends { x: number; y: number }>(
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
   points: readonly Writable<Traits<T, "pivotal"> & Cell<T>>[],
   pivot: Read<V>,
 ): Writable<Num> {
   const K = points.length;
   if (K < 1) throw new Error("rotateAbout: need ≥ 1 point");
   const pv = pivotalOf<T>(points[0]!);
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape on Num.lens
   return Num.lens(
     points as never,
     (vals: readonly T[]) => {
@@ -96,7 +93,6 @@ export function rotateAbout<T extends { x: number; y: number }>(
  *  reinflates from the stored shape. Pose `theta` survives the round-trip
  *  (only spatial offset is stored). */
 export function scaleAbout<T extends { x: number; y: number }>(
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
   points: readonly Writable<Traits<T, "pivotal"> & Cell<T>>[],
   pivot: Read<V>,
 ): Writable<Num> {

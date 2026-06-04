@@ -1,7 +1,7 @@
 // Named reactive identity linking diagram parts to prose. Prefer the
 // scoped registration on `Diagram` over the global registry below.
 
-import { derive, type Cell, cell, type Writable } from "@minim/signals";
+import { type Cell, cell, derive, type Writable } from "@minim/signals";
 
 const registry = new Map<string, Marker>();
 

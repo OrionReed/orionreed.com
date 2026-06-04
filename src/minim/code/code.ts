@@ -17,13 +17,13 @@
 import type { Animator, Easing } from "@minim/core";
 import { Shape, type ShapeOpts } from "@minim/shapes";
 import {
+  type Cell,
+  cell,
   derive,
   effect,
   type Num as NumSignal,
   num,
   readNow,
-  type Cell,
-  cell,
   type Val,
   type Vec,
   vec,

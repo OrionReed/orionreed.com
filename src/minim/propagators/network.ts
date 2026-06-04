@@ -14,7 +14,7 @@
 // The network body self-excludes its own writes; external writes
 // re-fire it normally.
 
-import { network as makeNetwork, type Network, type Cell, transitiveDeps } from "../signals";
+import { type Cell, network as makeNetwork, type Network, transitiveDeps } from "../signals";
 import type { Propagator } from "./propagator";
 
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous signal registry

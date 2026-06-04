@@ -15,8 +15,8 @@ import { Cell, type Inner, lazy, type Writable, type WritableBrand } from "./sig
  *  (runtime dispatch in `Cell.fieldOf` mirrors this).
  *
  *      get x() { return field(this, "x", Num); } */
-// biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.lens
 export function field<
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.lens
   S extends Cell<any>,
   K extends keyof Inner<S>,
   C extends new (

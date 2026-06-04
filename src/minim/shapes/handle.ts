@@ -1,11 +1,11 @@
 // handle.* — writable derived shapes (draggable circles wired to a Vec).
 
 import {
+  type Cell,
+  cell,
   centroidLens,
   midpointLens,
   polar as polarLens,
-  type Cell,
-  cell,
   type Val,
   Vec,
   type Writable,

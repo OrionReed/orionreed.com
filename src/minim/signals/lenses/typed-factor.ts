@@ -18,11 +18,11 @@
 // =====================================================================
 
 import {
+  type Cell,
   type Inner,
   Num,
   type Pack,
   type Read,
-  type Cell,
   type Traits,
   Vec,
   type Writable,

@@ -6,11 +6,11 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  Cell,
   field,
   type Linear,
   Num,
   reader,
-  Cell,
   type TraitDict,
   type Val,
   type Writable,

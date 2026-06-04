@@ -7,11 +7,11 @@
 
 import type { Anim } from "@minim/core";
 import {
+  type Cell,
+  cell,
   derive,
   type Read,
-  type Cell,
   setCellWriteHook,
-  cell,
   type Writable,
 } from "@minim/signals";
 import { bumpTraceVersion } from "./scope";

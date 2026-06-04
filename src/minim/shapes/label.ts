@@ -1,4 +1,4 @@
-import { derive, type Inner, Num, Cell, cell, type Val, type Vec } from "@minim/signals";
+import { Cell, cell, derive, type Inner, Num, type Val, type Vec } from "@minim/signals";
 
 import { Shape, type ShapeOpts } from "./shape";
 import { type Content, flattenText, renderContent } from "./text";

@@ -18,7 +18,7 @@
 // `bundleLens` sketches the 1→M dual (single source → M coupled views).
 // =====================================================================
 
-import { Num, type Cell, Vec, type Writable } from "../index";
+import { type Cell, Num, Vec, type Writable } from "../index";
 
 // ─── 1. factorLens — generic Jacobian-LSQ N→M ──────────────────────────
 //

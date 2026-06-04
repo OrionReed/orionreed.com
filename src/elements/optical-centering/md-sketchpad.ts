@@ -11,6 +11,7 @@
 
 import { constraints, distance, pin } from "@minim/constraints";
 import {
+  cell,
   circle,
   Diagram,
   derive,
@@ -18,7 +19,6 @@ import {
   label,
   line,
   type Mount,
-  cell,
   type Vec,
   vec,
   type Writable,

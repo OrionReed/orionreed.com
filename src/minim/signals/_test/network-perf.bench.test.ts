@@ -5,7 +5,7 @@
 // records actual cost for inspection.
 
 import { describe, expect, it } from "vitest";
-import { batch, network, cell } from "../index";
+import { batch, cell, network } from "../index";
 
 function bench(label: string, runs: number, fn: () => void): number {
   for (let i = 0; i < Math.min(100, Math.floor(runs / 10)); i++) fn();

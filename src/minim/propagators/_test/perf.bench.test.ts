@@ -1,7 +1,7 @@
 // perf.bench.test.ts — propagator network performance benchmarks.
 
 import { describe, expect, it } from "vitest";
-import { num, cell } from "../../signals";
+import { cell, num } from "../../signals";
 import { add, align, allDifferent, box, hstack, propagators, type SetCell } from "..";
 
 const eqSet = (a: ReadonlySet<number>, b: ReadonlySet<number>): boolean => {

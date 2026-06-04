@@ -8,7 +8,7 @@
 //   - isCell brand: prototype-based, not structural
 //   - readNow() unwraps reactives without footgunning plain {value: …}
 
-import { derive, effect, isCell, Num, readNow, Cell, cell } from "@minim/signals";
+import { Cell, cell, derive, effect, isCell, Num, readNow } from "@minim/signals";
 import { describe, it } from "vitest";
 import { check, section } from "./_check";
 

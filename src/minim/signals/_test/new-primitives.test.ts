@@ -1,7 +1,7 @@
 // new-primitives.test.ts — primitives natural under N-input lenses.
 
 import { describe, expect, it } from "vitest";
-import { num, cell, vec } from "../index";
+import { cell, num, vec } from "../index";
 import {
   angleLens,
   bezier2,

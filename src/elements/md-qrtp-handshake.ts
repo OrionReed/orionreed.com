@@ -1,6 +1,8 @@
 import {
   arrow,
   attr,
+  type Cell,
+  cell,
   Diagram,
   derive,
   label,
@@ -8,8 +10,6 @@ import {
   loop,
   type Mount,
   rect,
-  type Cell,
-  cell,
   snapshot,
   split,
   t,

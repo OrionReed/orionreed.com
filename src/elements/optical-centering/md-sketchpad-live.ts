@@ -42,7 +42,9 @@ import {
 } from "@minim/constraints";
 import {
   type AnyShape,
+  type Cell,
   type Content,
+  cell,
   circle,
   Diagram,
   derive,
@@ -53,8 +55,6 @@ import {
   line,
   type Mount,
   rect,
-  type Cell,
-  cell,
   type Val,
   type Vec,
   vec,

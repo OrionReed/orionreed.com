@@ -3,6 +3,7 @@ import {
   type Animator,
   bounceIn,
   type Content,
+  cell,
   circle,
   Diagram,
   derive,
@@ -15,7 +16,6 @@ import {
   loop,
   type Mount,
   rand,
-  cell,
   snapshot,
   vec,
 } from "../../minim";

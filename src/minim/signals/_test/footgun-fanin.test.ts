@@ -2,7 +2,7 @@
 // surface (`Cls.lens([...], ...)` / `Cls.derive([...], ...)`).
 
 import { describe, expect, it } from "vitest";
-import { effect, Num, num, cell } from "../index";
+import { cell, effect, Num, num } from "../index";
 
 describe("N-input lens: reactive args inside fwd", () => {
   it("fwd reads an external cell: tracked, re-fires on its change", () => {

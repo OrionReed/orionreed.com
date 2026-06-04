@@ -9,7 +9,7 @@
 // trait, so `add(a, b, c)` works for `Num`, `Vec`, `Box`, `Pose`,
 // anything `Linear<T>`.
 
-import type { Num, Cell, Traits, Val, Vec, Writable } from "../signals";
+import type { Cell, Num, Traits, Val, Vec, Writable } from "../signals";
 import { isCell, reader, requireLinear } from "../signals";
 import { type Propagator, propagator } from "./propagator";
 

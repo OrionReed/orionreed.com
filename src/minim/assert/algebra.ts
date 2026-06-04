@@ -5,7 +5,7 @@
 //   latch(p, init, sc) — invariant/liveness latch, auto re-arm on `sc`.
 //   firstOf(...e)      — event ordering over bool signals.
 
-import { derive, effect, type Read, cell } from "@minim/signals";
+import { cell, derive, effect, type Read } from "@minim/signals";
 import { activeRecorder } from "./record";
 import type { Scoped } from "./scope";
 import type { Span } from "./span";

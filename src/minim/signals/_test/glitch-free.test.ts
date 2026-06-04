@@ -5,7 +5,7 @@
 // path fast path and law-driven setter dispatch preserve it.
 
 import { describe, expect, it } from "vitest";
-import { derive, effect, Num, num, cell, transform } from "../index";
+import { cell, derive, effect, Num, num, transform } from "../index";
 
 describe("glitch-free: diamond shapes", () => {
   it("classic diamond: a → b1, a → b2, leaf reads (b1, b2)", () => {

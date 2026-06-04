@@ -160,7 +160,7 @@ Some relationships aren't function-shaped at all. A four-bar linkage, a cloth, a
 
 ### Constraints
 
-`Constraints` binds any number of `Cell`s and runs an [Augmented Vertex Block Descent](https://graphics.cs.utah.edu/research/projects/avbd/) solve on every write. Constraints are ordinary factory calls — `distance`, `perpendicular`, `rightAngle`, `parallel`, `angle`, `onCircle`, `equalDist`, `clamp`, `leq`, plus `generic` for anything you can write a residual for — and they compose. Cluster membership is reactive too: `addWhile(flag, rel)` keeps a relation alive only while a signal is truthy, flipping structural shape at runtime.
+`Constraints` binds any number of `Cell`s and runs an [Augmented Vertex Block Descent](https://graphics.cs.utah.edu/research/projects/avbd/) solve on every write. Constraints are ordinary factory calls — `distance`, `perpendicular`, `rightAngle`, `parallel`, `angle`, `onCircle`, `equalDist`, `clamp`, `leq`, plus `generic` for anything you can write a residual for — and they compose. Cluster membership is reactive too: `addWhile(flag, rel)` keeps a relation alive only while a cell is truthy, flipping structural shape at runtime.
 
 The quad below is four side constraints — one internal DOF, the shape flexes when dragged — with a fifth diagonal-distance riding on `addWhile`. Click the dot on the diagonal to add or remove the brace and the quad snaps between rigid and flexible:
 
@@ -178,7 +178,7 @@ c.addWhile(braced, distance(A, C, diag));
 
 <md-sketchpad></md-sketchpad>
 
-Push further and the sketchpad is the editor. Two reactive collections — `signal<Point[]>` and `signal<Constraint[]>` — drive `forEach` blocks that mount and unmount visuals as you click; every solver step picks up whatever force set is current:
+Push further and the sketchpad is the editor. Two reactive collections — `cell<Point[]>` and `cell<Constraint[]>` — drive `forEach` blocks that mount and unmount visuals as you click; every solver step picks up whatever force set is current:
 
 <md-sketchpad-live></md-sketchpad-live>
 
@@ -284,7 +284,7 @@ yield* eq.parts.M.translate.to({ x: 0, y: -20 }, 0.4);
 
 <md-tex-live></md-tex-live>
 
-Marker identity extends past the diagram. `marker.register("id")` puts a marker into a global lookup; `<md-marker sym="id">` finds it on connect and shares one `marker.active` signal — a derived OR over every bound rendering. Because it's a `Cell<boolean>`, the suspension vocabulary applies: `yield* play(marker.active)` pauses a generator until any rendering is activated.
+Marker identity extends past the diagram. `marker.register("id")` puts a marker into a global lookup; `<md-marker sym="id">` finds it on connect and shares one `marker.active` cell — a derived OR over every bound rendering. Because it's a `Cell<boolean>`, the suspension vocabulary applies: `yield* play(marker.active)` pauses a generator until any rendering is activated.
 
 Hover <md-marker sym="osc:gamma">damping</md-marker> to reveal the decay envelope, <md-marker sym="osc:A">amplitude</md-marker> for the bounds, <md-marker sym="osc:omega">frequency</md-marker> for the period tick marks:
 
@@ -400,7 +400,7 @@ yield* tl;
 
 <md-timeline-editor></md-timeline-editor>
 
-A `claim` is a labeled `Cell<boolean>` over a predicate: `true` while it holds, `false` on violation. Claims compose with `.and`, `.or`, `.not`, `.during(scope)`, `.before(other)` — because they *are* signals. Wrap a factory with `scope(fn)` and attach a claim to its lifetime via `.during(fn)`:
+A `claim` is a labeled `Cell<boolean>` over a predicate: `true` while it holds, `false` on violation. Claims compose with `.and`, `.or`, `.not`, `.during(scope)`, `.before(other)` — because they *are* cells. Wrap a factory with `scope(fn)` and attach a claim to its lifetime via `.during(fn)`:
 
 ```ts
 const fadeIn = scope("fadeIn", function* (s, dur) { /* ... */ });

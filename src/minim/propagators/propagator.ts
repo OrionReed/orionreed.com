@@ -24,8 +24,8 @@ export interface Propagator {
 }
 
 /** Convenience constructor. */
-// biome-ignore lint/suspicious/noExplicitAny: see header
 export function propagator(
+  // biome-ignore lint/suspicious/noExplicitAny: see header
   reads: readonly Cell<any>[],
   // biome-ignore lint/suspicious/noExplicitAny: see header
   writes: readonly Writable<Cell<any>>[],

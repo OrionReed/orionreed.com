@@ -3,10 +3,10 @@
 
 import {
   Anchor,
-  derive,
-  Num,
   type Cell,
   cell,
+  derive,
+  Num,
   type Val,
   type Vec,
   vec,

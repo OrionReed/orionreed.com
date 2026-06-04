@@ -1,5 +1,7 @@
 import {
+  Cell,
   type Content,
+  cell,
   circle,
   Diagram,
   type Easing,
@@ -8,8 +10,6 @@ import {
   loop,
   type Mount,
   Path,
-  Cell,
-  cell,
   type Tween,
   tween,
   type Val,

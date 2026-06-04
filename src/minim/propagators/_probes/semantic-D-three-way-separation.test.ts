@@ -20,7 +20,7 @@
 //     scale uniformly, projected gradient, …).
 
 import { describe, expect, it } from "vitest";
-import { num, type Cell, vec, type Writable } from "../../signals";
+import { type Cell, num, vec, type Writable } from "../../signals";
 import { Num } from "../../signals/values/num";
 import { propagator, propagators } from "..";
 

@@ -6,7 +6,7 @@
 // inside fwd/bwd, and a few sequencing hazards.
 
 import { describe, expect, it } from "vitest";
-import { derive, effect, lens, Num, num, cell, transform, Vec, vec } from "../index";
+import { cell, derive, effect, lens, Num, num, transform, Vec, vec } from "../index";
 import { Cell } from "../signal";
 import { field } from "../writable";
 

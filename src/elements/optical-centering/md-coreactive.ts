@@ -24,6 +24,7 @@
 import { propagate, propagator } from "@minim/propagators";
 import {
   type CurveSegment,
+  cell,
   circle,
   curve,
   Diagram,
@@ -41,7 +42,6 @@ import {
   path,
   play,
   rect,
-  cell,
   Vec,
   vec,
   type Writable,

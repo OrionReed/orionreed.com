@@ -1,13 +1,13 @@
 import {
   Anchor,
   attr,
+  type Cell,
   Diagram,
   label,
   line,
   type Mount,
   path,
   rect,
-  type Cell,
   split,
   t,
 } from "../minim";

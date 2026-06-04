@@ -2,11 +2,11 @@
 
 import {
   type Content,
+  cell,
   Diagram,
   label,
   loop,
   type Mount,
-  cell,
   snapshot,
   stagger,
 } from "../../minim";

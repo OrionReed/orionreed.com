@@ -1,4 +1,5 @@
 import {
+  cell,
   circle,
   Diagram,
   drag,
@@ -7,7 +8,6 @@ import {
   label,
   type Mount,
   num,
-  cell,
   Vec,
   vec,
   type Writable,

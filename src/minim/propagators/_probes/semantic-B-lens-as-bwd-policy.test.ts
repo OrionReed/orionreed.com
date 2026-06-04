@@ -24,11 +24,11 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  cell,
   centroidLens,
   type Inner,
   midpointLens,
   num,
-  cell,
   Vec,
   vec,
   type Writable,

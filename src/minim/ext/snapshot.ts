@@ -3,7 +3,7 @@
 // properties get flattened. Useful at the top of `loop(...)` bodies so
 // each iteration starts from a known baseline.
 
-import { type Read, Cell, type Writable } from "@minim/signals";
+import { Cell, type Read, type Writable } from "@minim/signals";
 
 /** Capture current values; return a reset function. Args are signals or
  *  records whose signal-valued properties get flattened.

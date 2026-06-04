@@ -1,5 +1,6 @@
 import {
   type AnyShape,
+  cell,
   circle,
   Diagram,
   derive,
@@ -14,7 +15,6 @@ import {
   play,
   readNow,
   rect,
-  cell,
   tokens,
   type Val,
   Vec,

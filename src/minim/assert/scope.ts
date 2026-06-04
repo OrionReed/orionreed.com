@@ -12,7 +12,7 @@
 // `touchedDeep`) hang off the wrapper as lazy signal getters.
 
 import type { Animator, Tick, Yieldable } from "@minim/core";
-import { derive, type Read, type Cell, cell } from "@minim/signals";
+import { type Cell, cell, derive, type Read } from "@minim/signals";
 import { closeSpan, currentSpan, notifySpanOpen, openSpan, type Span, withSpan } from "./span";
 
 /** Factory function shape. */

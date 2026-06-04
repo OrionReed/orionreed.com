@@ -1,9 +1,9 @@
 import {
+  type Cell,
+  cell,
   derive,
   type Read,
   reader,
-  type Cell,
-  cell,
   type Val,
   Vec,
   type Writable,
