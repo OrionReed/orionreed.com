@@ -29,6 +29,7 @@
 //   lens 1→1    getter + _bwd{ put, parent: Cell }
 //   multi-out   getter + _bwd{ put, parent: Cell[] }   (1→N / N→M bwd)
 //   merge       getter + _bwd{ merge }            (N→1 backward fold)
+//   stateful    getter + _bwd{ put, parent, stateful } (complement-carrying)
 // A cell is writable iff `_bwd !== undefined` (the backward sidecar; see
 // `BwdSpec`). `pendingValue` is dual-keyed: a staged forward write for a
 // source, a deferred backward target for a getter cell (never both).
@@ -362,38 +363,61 @@ class MergeNode<T> {
 // Every cell carries the forward fields (links, getter, value cache).
 // Only a WRITABLE derived cell — 1→1 lens, multi-output lens, merge,
 // stateful lens, or `pin` — needs a backward target and the closures to
-// drive it. Those nine fields live here, off a single `_bwd` pointer,
-// rather than inline on `Cell`, so a source/computed stays lean: the
-// forward hot path never touches them, and a plain node drops ~64 B
-// (9 slots → 1). The cost is one pointer hop on the backward/write path
-// and ~88 B for the sidecar on each writable node. A cell is writable
-// iff `_bwd !== undefined`.
+// drive it. Those fields live here, off a single `_bwd` pointer, rather
+// than inline on `Cell`, so a source/computed stays lean: the forward hot
+// path never touches them, and a plain node drops ~64 B. A cell is
+// writable iff `_bwd !== undefined`.
+//
+// Two mode payloads hang off named fields rather than one union, so each
+// stays distinctly typed: `merge` (the N→1 fold node) and `stateful` (the
+// complement machinery of a complement-carrying lens). Both are rare, so
+// a plain 1→1 / multi-out lens leaves them `undefined` and pays only
+// `parent` + `put` + `queueIdx`.
 class BwdSpec {
   /** Backward target(s): one `Cell` (1→1 / merge) or `Cell[]` (multi-out). */
   parent: Cell<unknown> | Cell<unknown>[] | undefined = undefined;
-  /** Lens `put` — backward derivation (dual of `getter`). Multi-output:
-   *  returns a per-parent update array. */
+  /** Lens `put` — backward derivation (dual of `getter`). Always called by
+   *  the engine in 1-arg form `put(target)`; a source-reading lens bakes
+   *  `settled(parent)` into this closure at build time. Multi-output:
+   *  returns a per-parent update array. Stateful: the spec's `bwd`. */
   // biome-ignore lint/suspicious/noExplicitAny: put fn is opaque shape
   put: ((target: any, current?: any) => any) | undefined = undefined;
-  /** `put` arity: `1` source-independent `(view)=>src`, `2` source-reading
-   *  `(view, src)=>src`. A cached SMI, cheaper to branch on than `.length`. */
-  putArity: 1 | 2 = 1;
-  /** Stateful: raw forward projection over `(vals, complement)`. */
-  // biome-ignore lint/suspicious/noExplicitAny: fwd fn is opaque shape
-  fwd: ((parentValue: any) => any) | undefined = undefined;
   /** Backward aggregation node; presence IS the merge-mode discriminant. */
   merge: MergeNode<unknown> | undefined = undefined;
-  /** Stateful-lens complement: memory the view discards. Engine-owned. */
-  complement: unknown = undefined;
-  /** Stateful complement advance; presence IS the stateful-mode
-   *  discriminant. `step(vals, c, external)` returns the next complement. */
-  // biome-ignore lint/suspicious/noExplicitAny: opaque step shape
-  step: ((vals: any, complement: any, external: boolean) => any) | undefined = undefined;
-  /** Source values a stateful cell last wrote back (own-vs-external test). */
-  lastBwd: unknown[] | undefined = undefined;
+  /** Complement machinery; presence IS the stateful-mode discriminant. */
+  stateful: StatefulCore | undefined = undefined;
   /** Index in `bwdQueue` of this cell's latest push; the drain skips stale
    *  entries so each cell propagates backward once per flush, last-write. */
   queueIdx = -1;
+}
+
+/** Runtime state of a stateful (complement-carrying) lens — the rare
+ *  backward mode, kept off `BwdSpec` so plain lenses don't carry its slots.
+ *  `put` (the spec's `bwd`) and `parent` stay on `BwdSpec`; this holds the
+ *  complement and the closures that project from / advance it. */
+class StatefulCore {
+  /** Engine-owned memory the view discards. */
+  complement: unknown;
+  /** Forward projection `fwd(sources, complement) → view`. */
+  // biome-ignore lint/suspicious/noExplicitAny: opaque fwd shape
+  fwd: (sources: any, complement: any) => any;
+  /** Advance the complement: `step(sources, complement, external)`. */
+  // biome-ignore lint/suspicious/noExplicitAny: opaque step shape
+  step: (sources: any, complement: any, external: boolean) => any;
+  /** Source values last written back (own-vs-external test); `undefined`
+   *  until the first back-write. */
+  lastBwd: unknown[] | undefined = undefined;
+  constructor(
+    complement: unknown,
+    // biome-ignore lint/suspicious/noExplicitAny: opaque fwd shape
+    fwd: (sources: any, complement: any) => any,
+    // biome-ignore lint/suspicious/noExplicitAny: opaque step shape
+    step: (sources: any, complement: any, external: boolean) => any,
+  ) {
+    this.complement = complement;
+    this.fwd = fwd;
+    this.step = step;
+  }
 }
 
 // ─── Public types (writability layer) ─────────────────────────────
@@ -814,8 +838,9 @@ function buildLens1<C extends Cell<any>>(
   cell.flags = F.Mutable | F.Dirty;
   cell.getter = (() => fwd(parent.value)) as () => never;
   const b = (cell._bwd = new BwdSpec());
-  b.put = bwd;
-  b.putArity = readsSource ? 2 : 1;
+  // Source-reading lenses bake the (non-committing) current source into the
+  // closure so the engine always calls the 1-arg form (no arity branch).
+  b.put = readsSource ? (t: unknown): unknown => bwd(t, settled(parent)) : bwd;
   b.parent = parent;
   return cell;
 }
@@ -893,9 +918,11 @@ function buildStateful<C extends Cell<any>>(
   const b = (cell._bwd = new BwdSpec());
   const seed = new Array<unknown>(n);
   for (let i = 0; i < n; i++) seed[i] = parents[i]!.peek();
-  b.complement = spec.init(seed);
-  b.step = spec.step;
-  b.fwd = spec.fwd as (v: unknown) => unknown;
+  const sc = (b.stateful = new StatefulCore(
+    spec.init(seed),
+    spec.fwd as (s: unknown, c: unknown) => unknown,
+    spec.step,
+  ));
   b.put = spec.bwd as (t: unknown, c?: unknown) => unknown;
   b.parent = parents;
   cell.getter = (() => {
@@ -903,7 +930,7 @@ function buildStateful<C extends Cell<any>>(
     // External unless the live sources still equal this lens's own last
     // back-write.
     let external = true;
-    const lb = b.lastBwd;
+    const lb = sc.lastBwd;
     if (lb !== undefined) {
       external = false;
       for (let i = 0; i < n; i++) {
@@ -913,8 +940,8 @@ function buildStateful<C extends Cell<any>>(
         }
       }
     }
-    b.complement = b.step!(vals, b.complement, external);
-    return (b.fwd as (s: unknown, c: unknown) => unknown)(vals, b.complement);
+    sc.complement = sc.step(vals, sc.complement, external);
+    return sc.fwd(vals, sc.complement);
   }) as () => never;
   return cell;
 }
@@ -989,7 +1016,7 @@ Object.defineProperty(Cell.prototype, "value", {
       else bwdUntracked(this, undefined, false);
       return;
     }
-    if (deferred && (Array.isArray(b.parent) || b.step !== undefined)) {
+    if (deferred && (Array.isArray(b.parent) || b.stateful !== undefined)) {
       // Multi-parent / stateful: defer to flush so a split coalesces, a
       // merge folds after all contributors land, and a complement steps
       // once. Reuse `pendingValue` (unused by a getter's forward path) as
@@ -1067,10 +1094,10 @@ function propagateBwd(start: Cell<unknown>, target: unknown, deferred: boolean):
       const node = cb.merge;
       push = node.fold();
       node.reset();
-    } else if (cb.putArity === 1 || parent === undefined) {
-      push = cb.put!(v);
     } else {
-      push = cb.put!(v, settled(parent));
+      // Single-arg always: a source-reading lens baked `settled(parent)`
+      // into `put` at build time (see `buildLens1`); `pin` ignores `v`.
+      push = cb.put!(v);
     }
 
     // Parentless lens (e.g. `pin`): no upstream, write absorbed. Sink.
@@ -1120,7 +1147,8 @@ function propagateSplit(cell: Cell<unknown>, target: unknown, deferred: boolean)
   // updates plus the post-write complement. We commit the stepped
   // complement and fork the source updates; absorption is the lens's job
   // (its `bwd` returns `undefined` updates, forked as no-ops).
-  if (b.step !== undefined) {
+  const sc = b.stateful;
+  if (sc !== undefined) {
     // Bring the complement current with the sources before the back-write
     // (a source may have changed without the view being read, leaving
     // `step` un-run). Untracked, so reading `.value` adds no dependency.
@@ -1130,7 +1158,7 @@ function propagateSplit(cell: Cell<unknown>, target: unknown, deferred: boolean)
     const res = (b.put as (t: unknown, s: unknown, c: unknown) => StatefulBwd<unknown[], unknown>)(
       target,
       vals,
-      b.complement,
+      sc.complement,
     );
     const updates = res.updates as ReadonlyArray<unknown>;
     const cand = new Array<unknown>(n);
@@ -1144,14 +1172,13 @@ function propagateSplit(cell: Cell<unknown>, target: unknown, deferred: boolean)
         anyWrite = true;
       }
     }
-    const cStep = b.step(cand, res.complement, false);
-    b.complement = cStep;
+    sc.complement = sc.step(cand, res.complement, false);
     if (!anyWrite) {
       // Complement-only change (no source moves): mark dirty for a correct next read.
       cell.flags = F.Mutable | F.Dirty;
       return;
     }
-    b.lastBwd = cand;
+    sc.lastBwd = cand;
     if (deferred) {
       forkInto(parents, updates, n);
       return;

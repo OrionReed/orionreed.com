@@ -115,11 +115,15 @@ const minimLensPair = perNode(() => {
 // V8 object size is a function of field count, not behavior, so these
 // field-faithful mocks pin the shapes exactly. `FatCell` mirrors the
 // PRE-split `Cell` (all 20 slots in every node) — the "before". `LeanCell`
-// is the shipped shape: 11 forward slots + one `_bwd` pointer, the 9
+// is the shipped shape: 11 forward slots + one `_bwd` pointer, the
 // backward fields moved into a `BwdSpec` allocated only for writable
-// derived cells. Real minim source should now match `LeanCell`; a lens
-// pays `LeanCell + BwdSpec`. (Whether the net is a win depends on the
-// graph's source:lens ratio — leaner read-only nodes, heavier lenses.)
+// derived cells. `BwdSpec` itself is now 5 fields (parent, put, merge,
+// stateful, queueIdx): `putArity` was folded into the `put` closure and
+// the four stateful fields moved to a `StatefulCore` allocated only for
+// complement-carrying lenses. Real minim source matches `LeanCell`; a
+// plain lens pays `LeanCell + BwdSpec`. (Whether the net is a win depends
+// on the graph's source:lens ratio — leaner read-only nodes, heavier
+// lenses.)
 
 class FatCell {
   flags = 1;
@@ -168,15 +172,11 @@ class LeanCell {
 }
 
 class BwdSpec {
-  _bwdParent: unknown = undefined;
-  _put: unknown = undefined;
-  _putArity = 1;
-  _fwd: unknown = undefined;
-  _mergeNode: unknown = undefined;
-  _complement: unknown = undefined;
-  _step: unknown = undefined;
-  _lastBwd: unknown = undefined;
-  _queueIdx = -1;
+  parent: unknown = undefined;
+  put: unknown = undefined;
+  merge: unknown = undefined;
+  stateful: unknown = undefined;
+  queueIdx = -1;
 }
 
 const fatSource = perNode(() => new FatCell(0));
