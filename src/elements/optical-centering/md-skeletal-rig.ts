@@ -40,8 +40,8 @@ import {
   type TreeNode,
   treeNode,
   Vec,
-  walkTree,
   type Writable,
+  walkTree,
 } from "../../minim";
 
 type PoseV = Inner<Pose>;
@@ -129,9 +129,8 @@ function bone(name: string, localPose: PoseV, parent: Bone | null): Bone {
     );
   } else {
     // Non-root: world is the compose chain.
-    world = Pose.derive(
-      [parent.world, local] as const,
-      ([pw, l]: readonly [PoseV, PoseV]) => compose(pw, l),
+    world = Pose.derive([parent.world, local] as const, ([pw, l]: readonly [PoseV, PoseV]) =>
+      compose(pw, l),
     );
     posHandle = Vec.lens(
       [parent.world, local] as const,
@@ -227,8 +226,7 @@ function buildRig(): RigNode {
   const rFoot = bone("R foot", LOCAL.RFOOT, rKnee);
 
   const leaf = (b: Bone): RigNode => treeNode(b) as RigNode;
-  const branch = (b: Bone, children: RigNode[]): RigNode =>
-    treeNode(b, children) as RigNode;
+  const branch = (b: Bone, children: RigNode[]): RigNode => treeNode(b, children) as RigNode;
 
   return branch(torso, [
     leaf(head),

@@ -247,10 +247,7 @@ export class MdCoreactive extends Diagram {
     // The knob's x is clamped to the track range; `height = knob.x −
     // SLIDER_OFFSET` exposes the writable height in px (clamped to
     // [H_MIN, H_MAX]). `D = M.down(height)` propagates forward into D.
-    const hKnob = vec(
-      num(SLIDER_OFFSET + H_INIT).clamp(TRACK_LO, TRACK_HI),
-      Num.pin(SLIDER_Y),
-    );
+    const hKnob = vec(num(SLIDER_OFFSET + H_INIT).clamp(TRACK_LO, TRACK_HI), Num.pin(SLIDER_Y));
     const height = hKnob.x.sub(SLIDER_OFFSET);
     const D = M.down(height);
 

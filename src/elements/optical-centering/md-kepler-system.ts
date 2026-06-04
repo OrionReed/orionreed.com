@@ -146,10 +146,7 @@ export class MdKeplerSystem extends Diagram {
     );
 
     s(
-      label(
-        view.top.down(20),
-        "drag any body — real elliptical orbits, faster near the star",
-      ),
+      label(view.top.down(20), "drag any body — real elliptical orbits, faster near the star"),
       label(
         view.bottom.up(16),
         "pos ← E ← Kepler(M = τ·time/period + φ) · drag inverts via M = E − e·sin E",

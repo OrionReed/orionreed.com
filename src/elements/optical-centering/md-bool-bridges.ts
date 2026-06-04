@@ -22,8 +22,8 @@ import {
   Anchor,
   Bool,
   box,
-  derive,
   Diagram,
+  derive,
   group,
   handle,
   label,
@@ -92,12 +92,16 @@ function boolIndicator(
       stroke: "#666",
       thin: true,
     }),
-    label(vec(IND_W / 2, IND_H / 2), derive(() => (b.value ? trueLabel : falseLabel)), {
-      size: 11,
-      bold: true,
-      align: Anchor.Center,
-      fill: derive(() => (b.value ? "#fff" : "#333")),
-    }),
+    label(
+      vec(IND_W / 2, IND_H / 2),
+      derive(() => (b.value ? trueLabel : falseLabel)),
+      {
+        size: 11,
+        bold: true,
+        align: Anchor.Center,
+        fill: derive(() => (b.value ? "#fff" : "#333")),
+      },
+    ),
   );
   g.el.style.cursor = "pointer";
   g.on("click", () => {
@@ -119,10 +123,17 @@ export class MdBoolBridges extends Diagram {
     const LABEL_Y = 205;
 
     s(
-      label(view.top.down(18), "Bool bridges: a continuous source projected through a boolean predicate"),
-      label(view.bottom.up(12), "click any indicator — the lens's bwd flips the source into the requested state", {
-        size: 10,
-      }),
+      label(
+        view.top.down(18),
+        "Bool bridges: a continuous source projected through a boolean predicate",
+      ),
+      label(
+        view.bottom.up(12),
+        "click any indicator — the lens's bwd flips the source into the requested state",
+        {
+          size: 10,
+        },
+      ),
     );
 
     // ─── Demo 1: Point in box (Vec → Bool) ────────────────────

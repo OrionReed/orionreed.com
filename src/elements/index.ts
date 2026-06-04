@@ -64,12 +64,12 @@ import { MdSliderCrank } from "./optical-centering/md-slider-crank";
 import { MdSolarSystem } from "./optical-centering/md-solar-system";
 import { MdStringPipeline } from "./optical-centering/md-string-pipeline";
 import { MdTexDemo } from "./optical-centering/md-tex-demo";
-import { MdTriTree } from "./optical-centering/md-tri-tree";
 import { MdTexLive } from "./optical-centering/md-tex-live";
 import { MdTimelineEditor } from "./optical-centering/md-timeline-editor";
 import { MdTrails } from "./optical-centering/md-trails";
 import { MdTraitsCrossDomain } from "./optical-centering/md-traits-cross-domain";
 import { MdTransitions } from "./optical-centering/md-transitions";
+import { MdTriTree } from "./optical-centering/md-tri-tree";
 import { MdWaapiDemo } from "./optical-centering/md-waapi-demo";
 
 DarkModeToggle.define();
