@@ -22,6 +22,27 @@ function pageClientPointer(): Cell<ClientPoint | null> {
 const TAU = Math.PI * 2;
 const wrapToPi = (x: number) => x - TAU * Math.round(x / TAU);
 
+/** Stop a touch that lands on a draggable element from scrolling/zooming
+ *  the page. Set on both the `<g>` and its intrinsic (the actual hit
+ *  target on iOS Safari) so the gesture is owned by the drag, not the
+ *  page. Non-draggable scenery keeps `touch-action: auto`, so swiping
+ *  past a diagram still scrolls. */
+function ownTouchGesture(shape: AnyShape): void {
+  shape.el.style.touchAction = "none";
+  if (shape.intrinsic) shape.intrinsic.style.touchAction = "none";
+}
+
+/** iOS Safari ignores `touch-action` on inner SVG nodes, so a drag that
+ *  starts on a handle still pans the page. For the lifetime of an active
+ *  drag we also `preventDefault` a non-passive document `touchmove`,
+ *  which reliably suppresses scroll/zoom in every browser. Returns a
+ *  disposer that re-enables scrolling; call it on pointerup/cancel. */
+function blockPageScroll(): () => void {
+  const onMove = (e: TouchEvent) => e.preventDefault();
+  document.addEventListener("touchmove", onMove, { passive: false });
+  return () => document.removeEventListener("touchmove", onMove);
+}
+
 /** Set `sig` true/false from `mouseenter`/`mouseleave` on `shape`; returns a
  *  disposer. Lower-level than `hover(el, marker)` — writes the signal directly. */
 export function hoverSignal(shape: AnyShape, sig: Writable<Cell<boolean>>): () => void {
@@ -58,6 +79,8 @@ export function draggable(
 ): () => void {
   let dragging = false;
   let pointerId = -1;
+  let unblock: (() => void) | null = null;
+  ownTouchGesture(handle);
   const offs: Array<() => void> = [];
   offs.push(
     handle.on("pointerdown", e => {
@@ -65,6 +88,7 @@ export function draggable(
       dragging = true;
       pointerId = pe.pointerId;
       handle.el.setPointerCapture(pointerId);
+      unblock = blockPageScroll();
       onState?.(true);
       onDrag(handle.toLocal(pe));
     }),
@@ -85,6 +109,8 @@ export function draggable(
     }
     dragging = false;
     pointerId = -1;
+    unblock?.();
+    unblock = null;
     onState?.(false);
   };
   offs.push(handle.on("pointerup", stop));
@@ -103,15 +129,18 @@ export function drag(
   dragging?: Writable<Cell<boolean>>,
 ): () => void {
   if (!shape.el.style.cursor) shape.el.style.cursor = "grab";
+  ownTouchGesture(shape);
   let dx = 0;
   let dy = 0;
   let pointerId = -1;
+  let unblock: (() => void) | null = null;
   const offs: Array<() => void> = [];
   offs.push(
     shape.on("pointerdown", e => {
       const pe = e as PointerEvent;
       pointerId = pe.pointerId;
       shape.el.setPointerCapture(pointerId);
+      unblock = blockPageScroll();
       const world = shape.toWorld(pe);
       const v = target.value;
       dx = world.x - v.x;
@@ -135,6 +164,8 @@ export function drag(
       }
       pointerId = -1;
     }
+    unblock?.();
+    unblock = null;
     if (dragging) dragging.value = false;
   };
   offs.push(shape.on("pointerup", stop));

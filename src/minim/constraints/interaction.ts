@@ -37,10 +37,22 @@ function bindPointerDrag(core: PointerDragCore): {
 } {
   const dragging = cell(false);
   let pointerId = -1;
+  let unblock: (() => void) | null = null;
+  // Own the touch gesture so a drag doesn't scroll/zoom the page.
+  core.shape.el.style.touchAction = "none";
+  if (core.shape.intrinsic) core.shape.intrinsic.style.touchAction = "none";
+  // iOS ignores `touch-action` on inner SVG nodes; block scroll for the
+  // drag's lifetime via a non-passive document `touchmove`.
+  const blockScroll = (): (() => void) => {
+    const onMove = (e: TouchEvent) => e.preventDefault();
+    document.addEventListener("touchmove", onMove, { passive: false });
+    return () => document.removeEventListener("touchmove", onMove);
+  };
   const offDown = core.shape.on("pointerdown", e => {
     const pe = e as PointerEvent;
     pointerId = pe.pointerId;
     core.shape.el.setPointerCapture(pointerId);
+    unblock = blockScroll();
     core.onStart(core.shape.toWorld(pe));
     dragging.value = true;
   });
@@ -57,6 +69,8 @@ function bindPointerDrag(core: PointerDragCore): {
       }
       pointerId = -1;
     }
+    unblock?.();
+    unblock = null;
     if (dragging.peek()) {
       core.onStop();
       dragging.value = false;

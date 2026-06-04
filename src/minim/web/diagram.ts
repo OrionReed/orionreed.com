@@ -88,7 +88,12 @@ export class Diagram extends HTMLElement {
     ::slotted(details.diagram-source) {
       margin-top: 0.5rem;
       font-size: 0.85em;
-      min-width: 90ch;
+      /* Wide enough for code on desktop, but never wider than the
+         column — a fixed 90ch overflowed narrow viewports and gave the
+         page a horizontal scroll. */
+      min-width: min(90ch, 100%);
+      max-width: 100%;
+      box-sizing: border-box;
       margin: 0 auto;
       color: var(--text-secondary, #888);
     }

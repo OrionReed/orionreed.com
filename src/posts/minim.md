@@ -70,6 +70,10 @@ The lens *is* the read/write end of a UI primitive. `handle(point)` is a few lin
 
 <md-handles></md-handles>
 
+A backward function is just a closure, so it can *peek* at any other cell to decide how to distribute a write — no pin primitive, no extra graph. Each handle already exposes a `dragging` cell; a midpoint lens whose bwd reads them becomes context-aware. With multitouch, hold one endpoint and drag the midpoint: the held point is pinned, the free one absorbs. Hold both and the midpoint locks. Same lens, the policy follows the gesture:
+
+<md-multitouch></md-multitouch>
+
 Aggregates aren't only N→1. An N→M decomposition gives M coupled writable views — each a closed-form group action on the cluster — and cross-channel invariance follows from action commutativity, exact by construction. A bounding box is `{center, size}`; drag a corner to scale about the center:
 
 <md-bbox-handles></md-bbox-handles>
