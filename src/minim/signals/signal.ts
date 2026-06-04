@@ -1166,11 +1166,14 @@ Object.defineProperty(Signal.prototype, "value", {
     if (this._put === undefined) {
       throw new TypeError("Cannot write to a computed");
     }
-    // The backward equality check lives in `propagateBwd` (per step),
-    // where it can compare this lens's PROJECTED view against a candidate
-    // parent value. That subsumes the old entry-level `next ===
-    // currentView` check: a no-op write is caught there once the
-    // backward pass runs.
+    // Entry-level no-op (GetPut): writing the current view changes
+    // nothing. Sound and O(1) — a concrete comparison of the target to
+    // the live view, no speculation — so the common idempotent re-assert
+    // never starts a backward walk. Deeper no-ops are caught concretely
+    // as the walk reaches each unchanged parent; lossy lenses encode
+    // their own absorption in `put` (return the current source when the
+    // edit re-projects to the current view).
+    if (this._equals(next, this.peek())) return;
     if (deferred) {
       // Reuse `pendingValue` (unused by a getter cell's forward path)
       // as the deferred backward target. Drained by flush.
@@ -1241,23 +1244,15 @@ function propagateBwd(start: Signal<unknown>, target: unknown, deferred: boolean
     // there is no upstream — the write is absorbed. Terminal sink.
     if (parent === undefined) return;
 
-    // BACKWARD EQUALITY-CHECK SHORT-CIRCUIT — the dual of the forward one
-    // ("a node notifies only when its value changes"). If committing
-    // `push` upstream would NOT change this lens's own projected view, the
-    // write stops here: the source (and any information the lens hides,
-    // e.g. an off-grid remainder under quantize) is left untouched. Reuses
-    // the same equality the forward path uses, evaluated on the candidate
-    // `_fwd(push)`. Plain lenses with a trustworthy (clean) cache only;
-    // merges / multi-parent lenses (no `_fwd`) and dirty caches fall
-    // through and propagate as before.
-    const fwd = cell._fwd;
-    if (fwd !== undefined) {
-      const cf = cell.flags;
-      if (!(cf & (F.Dirty | F.Pending)) && cf !== F.None) {
-        const newView = fwd(push);
-        if (cell._equals(cell.currentValue, newView)) return;
-      }
-    }
+    // CONCRETE NO-OP STOP — the dual of the forward "notify only on
+    // change", but evaluated on a real value, not a prediction. If the
+    // parent already holds `push`, committing it changes nothing upstream,
+    // so the walk stops. This is sound for ANY topology (no speculative
+    // re-projection of a candidate that may read stale derived nodes).
+    // A lossy lens that wants to hide an off-grid edit returns the CURRENT
+    // source from `put`; that lands here as `push === parent` and stops.
+    // Merge parents fold instead, so they skip this check.
+    if (parent._mergeNode === undefined && parent._equals(push, parent.peek())) return;
 
     if (parent._mergeNode !== undefined) {
       parent._mergeNode.receive(cell, push);
@@ -1293,28 +1288,13 @@ function propagateSplit(cell: Signal<unknown>, target: unknown, deferred: boolea
   const parents = cell._bwdParent as Signal<unknown>[];
   const n = parents.length;
 
-  // The candidate-substitution short-circuit below replaces the written
-  // parents and PEEKS the rest. That is sound only when the parents are
-  // independent roots: if an unwritten parent is DERIVED from a written
-  // one (e.g. a shape's `localFrame` computed from `translate`, while the
-  // lens writes `translate`), its peeked value is stale and `fwd(cand)`
-  // mispredicts the post-commit view — wrongly absorbing a real change.
-  // With a derived parent in the mix we can't cheaply predict the view, so
-  // skip the short-circuit and let the write propagate.
-  let allSources = true;
-  for (let i = 0; i < n; i++) {
-    if (parents[i]!.getter !== undefined) {
-      allSources = false;
-      break;
-    }
-  }
-
   // STATEFUL lens: `bwd` reads the complement and returns the per-parent
-  // updates plus the post-write complement. The equality-check short-
-  // circuit is complement-aware — it predicts the resulting view with the
-  // stepped complement `c'` (so a write that lands back on the current
-  // view stops here, leaving sources and complement untouched). Only on a
-  // real view change do we commit `c'` and the source updates.
+  // updates plus the post-write complement. No speculation — we commit the
+  // stepped complement and fork the source updates. Absorption (a write
+  // that should leave the cluster put) is the lens's job: its `bwd`
+  // returns `undefined` updates, which fork as no-ops. Real source moves
+  // re-project through the forward pass, which prunes if the view is
+  // unchanged.
   if (cell._step !== undefined) {
     // Bring the complement (and cached view) current with the sources
     // before the back-write: a source may have changed without the view
@@ -1342,11 +1322,6 @@ function propagateSplit(cell: Signal<unknown>, target: unknown, deferred: boolea
       }
     }
     const cStep = cell._step(cand, res.complement, false);
-    const cf = cell.flags;
-    if (allSources && !(cf & (F.Dirty | F.Pending)) && cf !== F.None) {
-      const newView = (cell._fwd as (s: unknown, c: unknown) => unknown)(cand, cStep);
-      if (cell._equals(cell.currentValue, newView)) return;
-    }
     cell._complement = cStep;
     if (!anyWrite) {
       // Complement-only change (e.g. writing a direction onto a collapsed
@@ -1370,28 +1345,11 @@ function propagateSplit(cell: Signal<unknown>, target: unknown, deferred: boolea
 
   const updates = cell._put!(target) as ReadonlyArray<unknown>;
 
-  // BACKWARD EQUALITY-CHECK SHORT-CIRCUIT (multi-parent form) — the dual
-  // of the forward one, generalized over N parents: if applying these
-  // updates would leave this cell's own projected view unchanged, the
-  // write stops here. Keeps any per-parent information the projection
-  // hides (the off-grid story, spread across parents) intact. Same
-  // trustworthy-cache precondition as the 1→1 form. Effective only when
-  // the view's equality can see "unchanged" — scalar views via
-  // `Object.is`, structured views (Vec, …) via the cell's `_equals`.
-  const fwd = cell._fwd;
-  if (fwd !== undefined && allSources) {
-    const cf = cell.flags;
-    if (!(cf & (F.Dirty | F.Pending)) && cf !== F.None) {
-      const cand = new Array<unknown>(n);
-      for (let i = 0; i < n; i++) {
-        const u = updates[i];
-        cand[i] = u === undefined ? parents[i]!.peek() : u;
-      }
-      const newView = fwd(cand);
-      if (cell._equals(cell.currentValue, newView)) return;
-    }
-  }
-
+  // No speculative short-circuit: each defined update is forked to its
+  // parent, where `_writeSource`'s equality check prunes a no-op at the
+  // source and the forward pass prunes any view that ends up unchanged.
+  // A multi-parent lens that wants to absorb an off-grid edit returns
+  // `undefined` updates (or the current source values) from its `put`.
   if (deferred) {
     forkInto(parents, updates, n);
     return;

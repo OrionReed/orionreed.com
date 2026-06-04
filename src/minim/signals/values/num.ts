@@ -98,7 +98,13 @@ export class Num extends Signal<V> {
         h = hf();
       return v < l ? l : v > h ? h : v;
     };
-    return this.lens(c, c);
+    // Lossy absorption: a write whose clamped projection matches the
+    // current view leaves the source untouched (the off-range source is
+    // preserved). `s` is the live source value.
+    return this.lens(c, (v, s) => {
+      const cv = c(v);
+      return cv === c(s) ? s : cv;
+    });
   }
 
   /** Lossy lens that snaps reads and writes to the nearest multiple
@@ -109,7 +115,12 @@ export class Num extends Signal<V> {
       const s = sf();
       return Math.round(v / s) * s;
     };
-    return this.lens(q, q);
+    // Lossy absorption: a write that snaps to the current bucket leaves
+    // the source untouched (the off-grid remainder is preserved).
+    return this.lens(q, (v, src) => {
+      const qv = q(v);
+      return qv === q(src) ? src : qv;
+    });
   }
 
   /** Cyclic-coordinate lens. Reads pass through (the source's

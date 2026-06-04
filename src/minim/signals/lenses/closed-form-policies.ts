@@ -160,6 +160,10 @@ export function scaleAbout<T extends { x: number; y: number }>(
     },
     bwd: (target: number, vals: readonly T[], c: C) => {
       const p = pivot.peek();
+      // Lossy magnitude view: |−r| = r, so a same-magnitude target
+      // re-projects to the current radius and is absorbed (sources put).
+      const rNow = Math.hypot(vals[0]!.x - p.x, vals[0]!.y - p.y);
+      if (Math.abs(target) === rNow) return { updates: vals.map(() => undefined), complement: c };
       const d0 = c.devs[0]!;
       const r0 = Math.hypot(d0.x, d0.y);
       if (r0 < 1e-12) return { updates: vals.map(() => undefined), complement: c };
@@ -444,6 +448,9 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
     bwd: (target: number, vals: readonly V[], c: C) => {
       const ctr = centroidOf(vals);
       const mean = meanRadius(vals, ctr);
+      // Lossy magnitude view: a same-magnitude target re-projects to the
+      // current mean radius and is absorbed (the cluster is left put).
+      if (Math.abs(target) === mean) return { updates: vals.map(() => undefined), complement: c };
       if (mean > 1e-9) {
         const k = target / mean;
         const out = vals.map(v => ({ x: ctr.x + (v.x - ctr.x) * k, y: ctr.y + (v.y - ctr.y) * k }));
@@ -633,6 +640,9 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
       bwd: (target: number, vals: readonly V[], c: AxisC) => {
         const d = decompose(vals);
         if (d && c.lenThis > 1e-12) {
+          // Lossy magnitude view: a same-magnitude target re-projects to
+          // the current axis length and is absorbed (cluster left put).
+          if (Math.abs(target) === c.lenThis) return { updates: vals.map(() => undefined), complement: c };
           // Non-degenerate fast path: scale current cluster along axis.
           const k = target / c.lenThis;
           return { updates: scaleAlongAxis(vals, d.cx, d.cy, c.uX, c.uY, k), complement: c };
