@@ -1,21 +1,14 @@
-// Span — one factory invocation. The single nominal data type of the
-// assert package; everything else is a function over Spans and Signals.
+// Span — one factory invocation. The assert package's single nominal
+// data type; everything else is a function over Spans and Signals.
 //
-// Identity is `fn` (the factory function reference). A Span instance
-// represents a *particular* call: one start, one end, possibly nested
-// inside another span. The wrapper installed by `scope()` opens the
-// span on first `.next()`, captures its parent at construction, and
-// closes it on completion / cancellation / error.
+// Identity is `fn` (the factory reference); a Span is one particular
+// call, possibly nested. `scope()`'s wrapper opens it on first `.next()`,
+// captures parent at construction, closes on settle/cancel/error.
 //
-// Time:  this module does not stamp `start` / `end`. The recorder
-//        owns its anim and writes them on the open/close listener
-//        — keeps the engine free of assert-specific state.
-//
-// Stack: `currentSpan` is a single module-level slot. JS is single-
-//        threaded; `withSpan(s, fn)` push/pop is correct around any
-//        synchronous gen body (including nested `yield*`). Used by
-//        `scope` for parent capture and by `record` for write
-//        attribution.
+// This module never stamps `start` / `end` — the recorder does, on the
+// open/close listener, keeping the engine assert-free. `currentSpan` is
+// a single module slot; `withSpan` push/pop is correct around any
+// synchronous gen body (used by `scope` and `record`).
 
 import type { Signal } from "@minim/signals";
 
@@ -26,10 +19,8 @@ export interface Span {
   readonly id: number;
   /** Factory reference; the canonical identity. */
   readonly fn: Function;
-  /** Display name; resolved by `scope()` from its explicit arg or
-   *  `fn.name`. Independent of `fn.name` so bundlers that rename
-   *  named function expressions (`function* fadeIn` next to
-   *  `const fadeIn`) don't bleed into observable identity. */
+  /** Display name from `scope()`'s arg or `fn.name`. Kept separate so
+   *  bundler renames of named function expressions don't leak in. */
   readonly name: string;
   readonly args: readonly unknown[];
   readonly parent?: Span;
@@ -38,20 +29,17 @@ export interface Span {
   /** Set by the recorder on close. */
   end?: number;
   status: SpanStatus;
-  /** Signals whose `set value` fired while this exact span was on
-   *  top of the stack (not its descendants). Populated lazily by the
-   *  recorder; remains empty when no recorder is active. */
+  /** Signals written while this span (not its descendants) was on top
+   *  of the stack. Populated by the recorder; empty otherwise. */
   readonly touched: Set<Signal<unknown>>;
 }
 
-/** Top-of-stack span (synchronous, single-slot). Read by:
- *   - `scope` at factory-call time to capture parent.
- *   - `record`'s write hook to attribute signal writes. */
+/** Top-of-stack span; read by `scope` (parent capture) and `record`
+ *  (write attribution). */
 export let currentSpan: Span | undefined;
 
-/** Replace the current span and run `fn`; restore on exit. The push
- *  pattern around `gen.next()` (inside scope wrappers) keeps the
- *  stack consistent through `yield`, `yield*`, and re-entrant calls. */
+/** Run `fn` with `currentSpan = s`, restoring on exit. Keeps the stack
+ *  consistent through `yield`, `yield*`, and re-entrant calls. */
 export function withSpan<T>(s: Span | undefined, fn: () => T): T {
   const prev = currentSpan;
   currentSpan = s;
@@ -62,10 +50,8 @@ export function withSpan<T>(s: Span | undefined, fn: () => T): T {
   }
 }
 
-/** Listeners registered by `record()`. Each `record()` adds a pair;
- *  multiple recorders coexist (e.g. two demos on the same page). The
- *  recorder is responsible for stamping `s.start` / `s.end` from its
- *  anim's clock — this module is engine-agnostic. */
+/** Lifecycle listeners; each `record()` adds a pair. Multiple recorders
+ *  coexist. They stamp `s.start` / `s.end`; this module is engine-agnostic. */
 const openListeners = new Set<(s: Span) => void>();
 const closeListeners = new Set<(s: Span) => void>();
 
@@ -81,11 +67,8 @@ export function addSpanListener(open: (s: Span) => void, close: (s: Span) => voi
 
 let nextId = 1;
 
-/** Create a span object. `start` is left at `0`; the recorder stamps
- *  it from `anim.clock` when `notifySpanOpen` reaches the listener.
- *  Does NOT notify listeners — the caller must finish bookkeeping
- *  (e.g. `recordFactorySpan`) first and then call `notifySpanOpen(s)`
- *  so downstream computeds see the new span when they re-evaluate. */
+/** Create a span (`start` = 0; recorder stamps it). Does NOT notify —
+ *  finish bookkeeping, then call `notifySpanOpen(s)`. */
 export function openSpan(
   fn: Function,
   name: string,
@@ -104,16 +87,13 @@ export function openSpan(
   };
 }
 
-/** Notify all active recorders that `s` was opened. Call AFTER any
- *  per-factory bookkeeping that downstream observers might want to
- *  read (e.g. `spansByFactory`). */
+/** Notify recorders that `s` opened. Call AFTER per-factory bookkeeping
+ *  downstream observers may read. */
 export function notifySpanOpen(s: Span): void {
   for (const cb of openListeners) cb(s);
 }
 
-/** Mark `s` as ended with the given status. No-op if already closed.
- *  Listeners fire after the status is updated; the recorder stamps
- *  `s.end` inside its listener. */
+/** End `s` with `status` (no-op if already closed); fires close listeners. */
 export function closeSpan(s: Span, status: Exclude<SpanStatus, "open">): void {
   if (s.status !== "open") return;
   s.status = status;

@@ -94,8 +94,13 @@ describe("backward soundness: PutGet fuzz over random anchor-style DAGs", () => 
         const derived = r() < 0.5;
         const node = derived ? derivedMirror(sources[srcIdx]!, int(r, 1, 3)) : sources[srcIdx]!;
         const declared = derived ? r() < 0.5 : r() < 0.6;
-        const readVia: "param" | "closure" =
-          !declared ? "closure" : derived ? "closure" : r() < 0.5 ? "param" : "closure";
+        const readVia: "param" | "closure" = !declared
+          ? "closure"
+          : derived
+            ? "closure"
+            : r() < 0.5
+              ? "param"
+              : "closure";
         terms.push({ node, srcIdx, declared, readVia });
       }
 
@@ -146,7 +151,9 @@ describe("backward soundness: PutGet fuzz over random anchor-style DAGs", () => 
       if (!held) {
         fails++;
         if (firstFail.length < 1) {
-          firstFail.push(`iter=${iter} m=${m} terms=${terms.length} gamma=${gamma} target=${target}`);
+          firstFail.push(
+            `iter=${iter} m=${m} terms=${terms.length} gamma=${gamma} target=${target}`,
+          );
         }
       }
     }

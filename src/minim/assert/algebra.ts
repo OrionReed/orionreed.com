@@ -1,14 +1,9 @@
-// Bool-signal primitives. The whole claim algebra is built from
-// these three functions plus signal arithmetic.
+// Bool-signal primitives. The claim algebra is these three plus signal
+// arithmetic; compose with `and` / `or` / `not`.
 //
-//   intervals(scope)   — convert a Scope (factory / span / bool sig)
-//                        to a single bool signal: "is this open now?".
-//   latch(p, init, sc) — invariant/liveness latch with auto re-arm
-//                        on `sc` rising edges.
-//   firstOf(...e)      — generalized event ordering over bool sigs.
-//
-// All return `Read<boolean>` (or, for `firstOf`, `Read<{first,at}>`).
-// Composition with `and` / `or` / `not` is just signal algebra.
+//   intervals(scope)   — Scope → "is this open now?" bool signal.
+//   latch(p, init, sc) — invariant/liveness latch, auto re-arm on `sc`.
+//   firstOf(...e)      — event ordering over bool signals.
 
 import { derive, effect, type Read, signal } from "@minim/signals";
 import { activeRecorder } from "./record";
@@ -20,10 +15,8 @@ export type Scope = Scoped<any> | Span | Read<boolean>;
 
 const ALWAYS_TRUE: Read<boolean> = derive(() => true);
 
-/** "Is this scope open right now?" — one converter for the whole
- *  parameter zoo. Spans become a one-shot interval (closed-and-stays-
- *  closed); scoped factories become class-quantified ("any open
- *  invocation"); bool signals pass through. */
+/** "Is this scope open right now?" Spans → one-shot interval; scoped
+ *  factories → "any open invocation"; bool signals pass through. */
 export function intervals(s: Scope): Read<boolean> {
   if (isScoped(s)) return s.alive;
   if (isSpan(s)) {
@@ -37,19 +30,9 @@ export function always(): Read<boolean> {
   return ALWAYS_TRUE;
 }
 
-/** Latch a predicate. Returns a Read<boolean> whose value:
- *
- *    init = true:   stays true until `pred` is observed false within
- *                   `scope`; flips to false and stays. Re-arms (back
- *                   to true) on each `scope` rising edge.
- *
- *    init = false:  stays false until `pred` is observed true within
- *                   `scope`; flips to true and stays. Re-arms on
- *                   each `scope` rising edge.
- *
- *  Outside `scope`, `pred` is not consulted — the latch holds at
- *  its current value. With `scope = always()`, the latch is forever-
- *  evaluated. */
+/** Latch a predicate. Holds at `init` until `pred` is observed `!init`
+ *  within `scope`, then flips and stays; re-arms on each `scope` rising
+ *  edge. Outside `scope`, `pred` isn't consulted (latch holds). */
 export function latch(
   pred: Read<boolean>,
   init: boolean,
@@ -60,7 +43,7 @@ export function latch(
 
   effect(() => {
     const inScope = scope.value;
-    // Force-track pred.value before any short-circuit so deps stay live.
+    // Track pred.value before any short-circuit so deps stay live.
     const pv = pred.value;
     if (inScope && !prevScope) {
       held.value = init;
@@ -75,13 +58,8 @@ export function latch(
   return held;
 }
 
-/** First event to fire wins. Each input is a `Read<boolean>` treated
- *  as an event whose "fire" is the false→true edge.
- *
- *  Returns `{ first, at }` where `first` is the index of the winner
- *  and `at` is the timestamp from the recorder clock — or undefined
- *  if no input has fired yet. Decision is sticky: once decided,
- *  ignores further edges. */
+/** First false→true edge wins. Returns `{ first, at }` (winner index +
+ *  recorder-clock time), or undefined until one fires. Sticky once decided. */
 export function firstOf(
   ...events: Read<boolean>[]
 ): Read<{ first: number; at: number } | undefined> {
@@ -107,8 +85,6 @@ export function firstOf(
 
   return result;
 }
-
-// ─── helpers ────────────────────────────────────────────────────
 
 function isScoped(v: unknown): v is Scoped<any> {
   return typeof v === "function" && "alive" in (v as object) && "last" in (v as object);

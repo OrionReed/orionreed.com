@@ -1,34 +1,20 @@
-// propagator.ts — Propagator type + helpers. PROTOTYPE.
+// propagator.ts — Propagator type + helpers.
 //
-// A propagator is a triple: which signals it reads, which it writes,
-// and a step() function that does the work. The network uses `reads`
-// to subscribe (via `.value` reads inside step) and to determine
-// when to re-run via freshness propagation; it uses `writes` to
-// detect changes via peek-comparison.
+// A propagator is a triple: `reads`, `writes`, and `step()`. The
+// network subscribes to `reads` and freshness-gates on them, and
+// detects output changes by peek-comparing `writes`.
 //
-// Crucial design choice: propagators are PLAIN OBJECTS with simple
-// arrays of signals, not classes. This is the non-coloring entry
-// point — any existing `Writable<Num>`, `Writable<Vec>`, lensed
-// signal, or custom signal type can be a propagator participant
-// without adopting any new type. The propagator wraps the operation;
-// the signals stay as they are.
+// Propagators are plain objects over plain signal arrays (not
+// classes) — the non-coloring entry point: any existing signal can
+// participate without adopting a new type.
 
 import type { Signal, Writable } from "../signals";
 
-/** The propagator interface. Plain object, no new types required.
+/** Plain object, no new types required: `reads`/`writes` declare the
+ *  topology, `step()` does the work.
  *
- *  - `reads`: signals the propagator reads. Used by the network for
- *    subscription and freshness gating. Reading these inside `step()`
- *    via `.value` subscribes the network as a side-effect.
- *  - `writes`: signals the propagator writes. Used by the network for
- *    change detection (peek-based comparison around `step()`).
- *  - `step()`: imperative body. Reads inputs (typically via .value),
- *    computes, writes outputs (typically via .value =).
- *
- *  `Signal<any>` (not `Signal<unknown>`) so that variant subtypes
- *  (`Writable<Num>`, `Writable<Vec>`, lensed signals, …) all assign
- *  in cleanly without intermediate casts. The framework only uses
- *  identity / `peek()` on these references, never their type. */
+ *  `Signal<any>` (not `unknown`) lets variant subtypes assign without
+ *  casts; the framework only uses identity / `peek()`, never the type. */
 export interface Propagator {
   // biome-ignore lint/suspicious/noExplicitAny: heterogeneous topology
   readonly reads: readonly Signal<any>[];
@@ -37,9 +23,7 @@ export interface Propagator {
   step(): void;
 }
 
-/** Convenience constructor. Signals can be of any type — the
- *  declaration doesn't constrain value classes, just the read/write
- *  topology. */
+/** Convenience constructor. */
 // biome-ignore lint/suspicious/noExplicitAny: see header
 export function propagator(
   reads: readonly Signal<any>[],

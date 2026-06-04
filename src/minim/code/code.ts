@@ -1,28 +1,18 @@
 // CodeShape — a monospace code substrate.
 //
-// One concept: a `Part` is a single-line span absolutely-positioned in
-// the wrapper, with reactive `position` (Vec), `opacity` (Num), and
-// `rotation` (Num), plus an optional `key` for identity.
+// A `Part` is a single-line span, absolutely positioned with reactive
+// `position` / `opacity` / `rotation` and an optional `key`. A
+// `CodeShape` is a flat list of parts at `(col·charW, row·lineH)` — no
+// line containers, no flow layout; monospace makes layout pure
+// multiplication. Animation is just writes to part signals.
 //
-// A `CodeShape` is a flat list of parts. No "line element" container,
-// no flow layout — every part sits at `(col·charW, row·lineH)` via a
-// CSS transform. Monospace means layout is pure multiplication.
+// Substrate ops: `cut` (split a part at offsets), `uncut` (merge
+// contiguous same-row parts), `group(key)` (parts sharing a key — a
+// multi-line region).
 //
-// Three operations on the substrate:
-//   `cut(part, [offsets])` — split a part at character offsets into
-//                            N+1 sub-parts on the same row.
-//   `uncut(parts)`         — merge adjacent same-row contiguous parts
-//                            back into one.
-//   `group(key)`           — query: all parts sharing `key`.
-//
-// Animation is just writes to part signals (`part.position.to(...)`,
-// `part.opacity.to(...)`). A multi-line region is a group of parts
-// sharing a key; "animate the region" broadcasts writes to all members.
-//
-// Syntax colour is CSS Custom Highlights painted over Range objects
-// inside part text nodes. `paint()` tokenises each row's joined text
-// and routes typed tokens to the part containing them. Independent of
-// part structure — adding cuts doesn't change the colours.
+// Syntax colour: CSS Custom Highlights over Ranges in part text nodes.
+// `paint()` tokenises each row and routes typed tokens to the
+// containing part — independent of cut structure.
 
 import type { Animator, Easing } from "@minim/core";
 import { Shape, type ShapeOpts } from "@minim/shapes";
@@ -55,20 +45,19 @@ const DEFAULT_FONT = "ui-monospace, SFMono-Regular, Menlo, 'Cascadia Code', mono
 
 const partCss = "position:absolute;left:0;top:0;white-space:pre;will-change:transform";
 
-/** A single-line span placed absolutely. Position, opacity, and rotation
- *  are signals — write or `.to(...)` them to move/fade/spin. */
+/** A single-line span placed absolutely; `position` / `opacity` /
+ *  `rotation` are animatable signals. */
 export class Part {
   readonly el: HTMLSpanElement;
-  /** Current text content. Use `setText` to update (instant). */
+  /** Current text. Use `setText` to update (instant). */
   text: string;
-  /** Top-left in user units. Animatable via `.to(targetVec, dur)`. */
+  /** Top-left in user units. */
   readonly position: Writable<Vec>;
-  /** [0..1]. Animatable. */
+  /** [0..1]. */
   readonly opacity: Writable<NumSignal>;
-  /** Radians around the part's centre. Animatable. */
+  /** Radians around the part's centre. */
   readonly rotation: Writable<NumSignal>;
-  /** Optional identity tag. Multiple parts can share a key (multi-line
-   *  regions); `c.group(key)` returns the group. */
+  /** Optional identity tag; shared keys form a `c.group(key)`. */
   key?: string;
   #disposers: Array<() => void> = [];
 
@@ -98,8 +87,7 @@ export class Part {
     );
   }
 
-  /** Instant text update — for reactive content, animate around it
-   *  rather than tweening text itself. */
+  /** Instant text update (text itself doesn't tween — animate around it). */
   setText(t: string): void {
     if (this.text === t) return;
     this.text = t;
@@ -133,11 +121,9 @@ export class CodeShape extends Shape {
   readonly width: Writable<Signal<number>>;
   readonly height: Writable<Signal<number>>;
   readonly language: string;
-  /** Wrapper that hosts all parts. `position: relative` so parts'
-   *  `position: absolute` resolves against it. */
+  /** Host wrapper (`position: relative`) for the absolute parts. */
   readonly wrapper: HTMLDivElement;
-  /** Flat parts list. Order isn't load-bearing (positions are signals);
-   *  morph re-sorts by (row, col) on completion for indexability. */
+  /** Flat parts list; morph re-sorts by (row, col) on completion. */
   readonly parts: Part[] = [];
   /** Monospace char width and line height in CSS pixels. */
   readonly charW: number;
@@ -145,9 +131,8 @@ export class CodeShape extends Shape {
 
   /** When true, the auto-rebuild effect bails — morph owns the parts. */
   #inMorph = false;
-  /** Syntax-highlight Ranges we own; cleared on each `paint`. User-
-   *  added highlight Ranges in other CSS.highlights buckets aren't
-   *  tracked here and survive repaints. */
+  /** Syntax Ranges we own; cleared each `paint`. Other CSS.highlights
+   *  buckets (user highlights) survive repaints. */
   readonly #syntaxRanges: Range[] = [];
 
   constructor(initial: Val<string>, opts: CodeOpts = {}) {
@@ -208,9 +193,8 @@ export class CodeShape extends Shape {
     );
   }
 
-  /** Full rebuild — dispose existing parts, create one per source line
-   *  at (0, row·lineH). Triggered on initial mount and any external
-   *  write to `source`; morph bypasses this via `#inMorph`. */
+  /** Full rebuild: one part per source line at (0, row·lineH). Runs on
+   *  mount and external `source` writes; morph bypasses via `#inMorph`. */
   #render(src: string): void {
     for (const p of this.parts) p.dispose();
     this.parts.length = 0;
@@ -224,10 +208,8 @@ export class CodeShape extends Shape {
     this.paint();
   }
 
-  /** Recompute wrapper width/height from the parts' bounding extents.
-   *  Absolute children don't contribute to parent size naturally, so we
-   *  reflect the extents into the `width` / `height` signals (which
-   *  drive the foreignObject's attributes). */
+  /** Reflect the parts' extents into `width` / `height` (absolute children
+   *  don't size their parent; these drive the foreignObject attrs). */
   #syncSize(): void {
     let maxW = 0;
     let maxH = 0;
@@ -242,11 +224,9 @@ export class CodeShape extends Shape {
     if (maxH !== this.height.peek()) this.height.value = maxH;
   }
 
-  /** Paint syntax-colour highlights. Groups parts by row, tokenises
-   *  the joined text of each row, routes each typed token to a Range
-   *  in the part text node that contains it. Re-entrant — clears prior
-   *  syntax Ranges first; user-added highlights in other buckets
-   *  (pulse, underline) are untouched. */
+  /** Paint syntax highlights: tokenise each row's joined text, route
+   *  each typed token to a Range in its containing part. Re-entrant
+   *  (clears prior syntax Ranges; leaves other buckets untouched). */
   paint(): void {
     this.#clearSyntaxRanges();
     if (typeof CSS === "undefined" || !("highlights" in CSS)) return;
@@ -292,7 +272,7 @@ export class CodeShape extends Shape {
                   h.add(r);
                   this.#syntaxRanges.push(r);
                 } catch {
-                  // Defensive: skip on weird offsets.
+                  // Skip on bad offsets.
                 }
               }
               break;
@@ -316,11 +296,9 @@ export class CodeShape extends Shape {
     this.#syntaxRanges.length = 0;
   }
 
-  /** Split `part` at character offsets into N+1 sub-parts on the same
-   *  row. Offsets are 0-based char positions within `part.text`; 0 and
-   *  `text.length` are implicit. Sub-parts inherit `part.key`; re-key
-   *  any of them after if you want different identities. Returns the
-   *  sub-parts in left-to-right order. */
+  /** Split `part` at char offsets into N+1 same-row sub-parts (0 and
+   *  `text.length` implicit). Sub-parts inherit `part.key`; returned
+   *  left-to-right. */
   cut(part: Part, offsets: readonly number[]): Part[] {
     const idx = this.parts.indexOf(part);
     if (idx < 0) throw new Error("cut: part not in this CodeShape");
@@ -349,10 +327,8 @@ export class CodeShape extends Shape {
     return subs;
   }
 
-  /** Merge `parts` (must be on the same row, contiguous in column
-   *  order — each part's right edge equals the next's left edge) back
-   *  into a single part. The merged part inherits the leftmost's key.
-   *  No-op for a single part; throws for empty input. */
+  /** Merge same-row contiguous `parts` into one (inherits the leftmost's
+   *  key). Single part is a no-op; empty throws. */
   uncut(parts: readonly Part[]): Part {
     if (parts.length === 0) throw new Error("uncut: no parts");
     if (parts.length === 1) return parts[0];
@@ -382,10 +358,8 @@ export class CodeShape extends Shape {
     return morph(this, target, dur, ease);
   }
 
-  /** @internal — morph calls this on completion to commit `src` to
-   *  the source signal (with the auto-rebuild effect suppressed),
-   *  sort parts back into row/col order for indexable lookup, and
-   *  refresh size + highlights. */
+  /** @internal Morph's on-completion commit: set `source` (rebuild
+   *  suppressed), re-sort parts row/col, refresh size + highlights. */
   _finalize(src: string): void {
     this.#inMorph = true;
     try {
@@ -407,9 +381,8 @@ export class CodeShape extends Shape {
 export const code = (source: Val<string>, opts?: CodeOpts): CodeShape =>
   new CodeShape(source, opts);
 
-/** Styling for Prism token classes via CSS Custom Highlights. Drop
- *  into a `Diagram.styles` block via the `css` tag so the rules land
- *  in the Diagram's shadow root where the wrapper lives. */
+/** Prism token-class colours via CSS Custom Highlights. Drop into a
+ *  `Diagram.styles` block so the rules reach the shadow root. */
 export const codeStyles = `
   ::highlight(keyword),
   ::highlight(rule) { color: var(--prettylights-keyword, #cf222e); }

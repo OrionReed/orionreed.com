@@ -26,16 +26,8 @@ export interface HandleOpts {
   cursor?: string;
 }
 
-/** Draggable circular handle with observable drag state.
- *
- *  `Handle` IS a `Circle` — same DOM, same Shape semantics — plus a
- *  `dragging: Signal<boolean>` that flips true on pointerdown and
- *  false on pointerup/cancel. Use it in `at(...)`, `when(...)`, etc.
- *  to coordinate animations with user interaction:
- *
- *      const h = s(handle(target));
- *      anim.start(spring(target, REST, { rate: () => h.dragging.value ? 0 : 1 }));
- */
+/** Draggable circular handle. A `Circle` plus a `dragging` signal (true
+ *  between pointerdown and pointerup/cancel) for coordinating animations. */
 export class Handle extends Circle {
   readonly dragging: Writable<Signal<boolean>>;
   constructor(target: Writable<Vec>, opts: HandleOpts = {}) {
@@ -70,11 +62,9 @@ const anchor = (
   opts?: HandleOpts,
 ): Handle => handleFn(shape.at(u, v), opts);
 
-/** Drag handle at the centroid of N shapes' visual centers — drags
- *  translate every shape by the same delta, so the group moves rigidly
- *  while preserving the original triangle/quad/whatever shape. Reads
- *  give the actual centroid of the visible positions (not of translate
- *  deltas — see `centroid` in `shape.ts` for that variant). */
+/** Drag handle at the centroid of N shapes' visual centers; drags translate
+ *  all shapes rigidly. Reads the centroid of visible positions (cf. `centroid`
+ *  in `shape.ts`, which works on translate deltas). */
 const centroidHandle = (...shapes: (AnyShape & Has<"translate">)[]): Handle =>
   handleFn(centroidLens(shapes.map(s => s.center)));
 
@@ -83,22 +73,20 @@ const centroidHandle = (...shapes: (AnyShape & Has<"translate">)[]): Handle =>
 const midpoint = (a: Writable<Vec>, b: Writable<Vec>, opts?: HandleOpts): Handle =>
   handleFn(midpointLens(a, b), opts);
 
-/** Rotation knob orbiting the shape's center at `radius`. The knob
- *  position is `center + (r cos θ, r sin θ)` for `θ = shape.rotate`;
- *  drag the knob to write θ. */
+/** Rotation knob orbiting the shape's center at `radius`; drag to write
+ *  `shape.rotate`. */
 const rotate = (shape: AnyShape & Has<"rotate">, radius = 40, opts?: HandleOpts): Handle => {
-  // Built directly on `polar` with the `circular` policy — c and r
-  // are fixed; writes only update θ.
+  // `polar` with `circular` policy: c and r fixed, writes only update θ.
   return handleFn(polarLens(shape.center, radius, shape.rotate, "circular"), {
     cursor: "grab",
     ...opts,
   });
 };
 
-/** Uniform-scale knob — sits along +x from the shape's center at
- *  `radius * scale.x`. Drag x-distance writes both scale axes. */
+/** Uniform-scale knob along +x at `radius * scale.x`; drag x-distance writes
+ *  both scale axes. */
 const scaleHandle = (shape: AnyShape & Has<"scale">, radius = 40, opts?: HandleOpts): Handle => {
-  // 2-input lens: reads `center` and `scale`; writes only `scale`.
+  // Reads center and scale; writes only scale.
   const pos = Vec.lens(
     [shape.center, shape.scale] as const,
     vals => ({ x: vals[0].x + radius * vals[1].x, y: vals[0].y }),
@@ -110,9 +98,8 @@ const scaleHandle = (shape: AnyShape & Has<"scale">, radius = 40, opts?: HandleO
   return handleFn(pos, { cursor: "ew-resize", ...opts });
 };
 
-/** Handle constrained to slide along a Path. Drag the handle and the
- *  pointer is projected onto the path; `t` is set to the nearest
- *  parameter. Re-projects every drag step, so works on animated paths. */
+/** Handle constrained to a Path: each drag projects the pointer onto the path
+ *  and sets `t` to the nearest parameter (re-projects, so animated paths work). */
 const tOnPath = (p: Path, t: Signal<number>, opts?: HandleOpts & { samples?: number }): Handle => {
   const N = opts?.samples ?? 64;
   const project = (target: { x: number; y: number }) => {
@@ -137,8 +124,7 @@ const tOnPath = (p: Path, t: Signal<number>, opts?: HandleOpts & { samples?: num
   return handleFn(pos, opts);
 };
 
-/** `handle(point)` is the atom; `handle.move(shape)`, `handle.centroid
- *  (...shapes)`, etc. are sugar. All return a Shape mountable via `s(...)`. */
+/** `handle(point)` is the atom; `.move`, `.centroid`, etc. are sugar. */
 export const handle = Object.assign(handleFn, {
   move,
   anchor,

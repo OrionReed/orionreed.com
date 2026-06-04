@@ -1,21 +1,14 @@
 // Pointer-drag helpers for rigid bodies.
 //
-// Plain `drag(shape, vec)` from `@minim/shapes` reads the cursor through
-// `shape.toLocal()`, which composes the shape's local transform. That's
-// wrong for rigid bodies whose render rect rotates with `body.angle` —
-// the cursor would track a rotating frame. Both helpers here read the
-// cursor through `shape.svgRoot.getScreenCTM()` instead, so world-space
-// coords are stable regardless of the shape's rotation.
+// These read the cursor in world space (via `shape.toWorld`) rather
+// than the shape's local frame, which would track a rotating frame
+// for bodies whose render rect rotates with `body.angle`.
 //
 // Two flavours:
-//   `dragBody`         — hard-pin via `world.addWhile(dragging, body.pin())`.
-//                        Cell goes kinematic; body teleports to cursor.
-//                        Use when you want the body to lead absolutely.
-//   `dragBodyAnchored` — soft-pin via a `BodyAnchor` relation. The body
-//                        keeps its mass and reacts to contacts, so a
-//                        blocked body lags behind the cursor instead of
-//                        punching through. Use when you want contacts
-//                        to push back on the drag.
+//   `dragBody`         — hard-pin (kinematic, teleports to cursor);
+//                        the body leads absolutely.
+//   `dragBodyAnchored` — soft-pin via `BodyAnchor`; the body keeps
+//                        its mass so contacts push back on the drag.
 
 import type { AnyShape } from "@minim/shapes";
 import { type Signal, signal, type Vec, type Writable } from "@minim/signals";
@@ -23,11 +16,9 @@ import { type Body, type BodyAnchor, bodyAnchor } from "./rigid";
 import type { World } from "./world";
 
 interface DragHandle {
-  /** True while the user is mid-drag. Mirrors the `Handle.dragging`
-   *  shape so callers can wire animator `rate` / cluster gating. */
+  /** True while mid-drag; for wiring animator `rate` / cluster gating. */
   readonly dragging: Signal<boolean>;
-  /** Tear down event listeners (and remove the soft anchor, if any).
-   *  Idempotent. */
+  /** Tear down listeners (and the soft anchor, if any). Idempotent. */
   dispose(): void;
 }
 
@@ -38,10 +29,8 @@ interface PointerDragCore {
   onStop(): void;
 }
 
-/** Shared pointer wiring: fires `onStart` on pointerdown with world
- *  coords, `onMove` each pointermove, `onStop` on pointerup/cancel.
- *  Reads cursor via `shape.toWorld(...)` so rotating shapes still give
- *  stable world coords. */
+/** Shared pointer wiring: `onStart`/`onMove`/`onStop` with cursor in
+ *  world coords (via `shape.toWorld`, stable under rotation). */
 function bindPointerDrag(core: PointerDragCore): {
   dragging: Writable<Signal<boolean>>;
   dispose(): void;
@@ -87,16 +76,10 @@ function bindPointerDrag(core: PointerDragCore): {
   };
 }
 
-/** Hard-pin drag for a rigid body. While the pointer is down, `body`
- *  becomes kinematic (mass → 0) via `body.pin()` and its `position` is
- *  written directly from the cursor in world coords. Release restores
- *  the body's diagonal mass `(m, m, I)`.
- *
- *  Use when the dragged body should lead absolutely (rope tips, chain
- *  links, gear knobs). For "body keeps its mass and reacts to contacts"
- *  drag, use `dragBodyAnchored` instead.
- *
- *  Sets `shape.el.style.cursor = "grab"` by default. */
+/** Hard-pin drag: while down, `body` goes kinematic (`body.pin()`)
+ *  and tracks the cursor exactly; release restores its mass. Use when
+ *  the body should lead absolutely; for contact-reactive drag use
+ *  `dragBodyAnchored`. Defaults `shape.el.style.cursor = "grab"`. */
 export function dragBody(shape: AnyShape, world: World, body: Body): DragHandle {
   if (!shape.el.style.cursor) shape.el.style.cursor = "grab";
 
@@ -128,13 +111,10 @@ export function dragBody(shape: AnyShape, world: World, body: Body): DragHandle 
   };
 }
 
-/** Soft-pin drag for a rigid body via `BodyAnchor`. The body keeps its
- *  finite mass and a finite-stiffness anchor pulls its translation
- *  toward the cursor. Blocked bodies lag behind the cursor rather than
- *  punching through neighbours.
- *
- *  `stiffness` is the anchor's pull strength (default `5e4`). Sets
- *  `shape.el.style.cursor = "grab"` by default. */
+/** Soft-pin drag via `BodyAnchor`: the body keeps its mass while a
+ *  finite-`stiffness` anchor (default `5e4`) pulls it toward the
+ *  cursor, so blocked bodies lag instead of punching through.
+ *  Defaults `shape.el.style.cursor = "grab"`. */
 export function dragBodyAnchored(
   shape: AnyShape,
   world: World,

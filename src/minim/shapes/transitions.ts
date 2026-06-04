@@ -1,9 +1,6 @@
-// Bounded transitions. Pose writes happen synchronously at the call
-// boundary; the returned value is the *time-varying part only*. Single-
-// axis transitions return a `Tween` (an Animator); multi-axis transitions
-// return a `Yieldable[]` (a parallel array). In both cases callers do
-// `yield transitionName(s)` — the engine handles arrays natively, and a
-// Tween is yield-able by virtue of being an Animator.
+// Bounded transitions. Initial pose is written synchronously; the return value
+// is the time-varying part only — a `Tween` (single-axis) or `Yieldable[]`
+// (multi-axis). Either way callers `yield transitionName(s)`.
 
 import { type Easing, easeIn, easeInOut, easeOut, type Yieldable } from "@minim/core";
 import { Dir, type Inner, tween, type Val, type Vec } from "@minim/signals";

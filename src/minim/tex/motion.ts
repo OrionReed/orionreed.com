@@ -6,8 +6,7 @@ import { effect, num } from "@minim/signals";
 import type { Part, PartMarker } from "./parts";
 import type { TexShape } from "./tex";
 
-/** Wildcard TexShape — accepts any `Names` union, so cross-cycle
- *  morphs (`TexShape<"a"|"b">` ↔ `TexShape<"f"|"x">`) typecheck. */
+/** Wildcard TexShape so cross-cycle morphs (differing `Names`) typecheck. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyTex = TexShape<any>;
 
@@ -21,10 +20,9 @@ export function* highlight(part: Part, dt = 0.6): Animator {
   }
 }
 
-/** Reveal an eq left-to-right via a clip-path sweep. Clip-path is
- *  applied to the inner HTML wrapper, not the outer `<g>` —
- *  Chromium drops composite invalidation for foreignObject content
- *  under animated clip-path on `<g>`, causing tearing. */
+/** Reveal an eq left-to-right via a clip-path sweep on the inner HTML
+ *  wrapper. (Animated clip-path on the outer `<g>` tears foreignObject
+ *  content in Chromium.) */
 export function* write(eq: AnyTex, dt = 0.6, ease: Easing = easeOut): Animator {
   const target = clipTarget(eq);
   const progress = num(0);
@@ -39,8 +37,7 @@ export function* write(eq: AnyTex, dt = 0.6, ease: Easing = easeOut): Animator {
   }
 }
 
-/** Reverse of `write`. After completion the eq is hidden
- *  (`opacity: 0`) and clip-path is cleared, ready for a future `write`. */
+/** Reverse of `write`; ends hidden (`opacity: 0`, clip-path cleared). */
 export function* writeOut(eq: AnyTex, dt = 0.4, ease: Easing = easeOut): Animator {
   const target = clipTarget(eq);
   const progress = num(1);
@@ -56,8 +53,7 @@ export function* writeOut(eq: AnyTex, dt = 0.4, ease: Easing = easeOut): Animato
   }
 }
 
-/** Inner wrapper div (HTML) inside the foreignObject; falls back to
- *  the outer `<g>` if not yet mounted. */
+/** Inner HTML wrapper inside the foreignObject; falls back to `<g>`. */
 const clipTarget = (eq: AnyTex): HTMLElement | SVGGElement => {
   const fo = eq.intrinsic as SVGForeignObjectElement | undefined;
   const wrapper = fo?.firstElementChild;
@@ -81,11 +77,9 @@ const partPose = (part: Part): { x: number; y: number } => {
   return { x: tr.x + a.x, y: tr.y + a.y };
 };
 
-/** A Part lifted out of its TexShape into a free Shape. `translate`
- *  is the matched mrow's TL in parent coords (the cloned wrapper is
- *  CSS-shifted so the mrow lands at our local (0,0)); `scale` pivots
- *  around the same TL. Source's opacity is zeroed for the Plucked's
- *  lifetime; `dispose()` restores it. */
+/** A Part lifted out of its TexShape into a free Shape. `translate` is
+ *  the matched mrow's TL in parent coords; `scale` pivots around it.
+ *  Zeroes the source's opacity until `dispose()`. */
 export class Plucked extends Shape {
   readonly source: Part;
   readonly #sourcePrevOpacity: number;
@@ -119,10 +113,8 @@ export function pluck(part: Part): Plucked {
   const boxLocal = part.box.value;
   const pose = partPose(part);
 
-  // Deep-clone the wrapper, then hide-via-visibility everything
-  // except the matched mrow. `visibility: hidden` (not `display:
-  // none`) preserves layout, so the mrow lands at exactly the same
-  // intra-clone offset as in the source.
+  // Deep-clone, then hide all but the matched mrow via `visibility`
+  // (not `display: none`, which would drop the preserved layout).
   const clonedWrapper = wrapper.cloneNode(true) as HTMLElement;
   const matchedClone = clonedWrapper.querySelector<HTMLElement>(`.minim-part-${part.name}`);
   const mathClone = clonedWrapper.querySelector("math") as HTMLElement | null;
@@ -131,10 +123,8 @@ export function pluck(part: Part): Plucked {
   }
   mathClone.style.visibility = "hidden";
   matchedClone.style.visibility = "visible";
-  // CSS-shift the wrapper so the matched mrow lands at (0, 0) of
-  // our local frame — combined with `Plucked.box = (0,0,w,h)`, this
-  // makes `plucked.translate` semantically equal to "matched mrow TL
-  // in parent coords."
+  // Shift the mrow to local (0, 0); with `Plucked.box = (0,0,w,h)` this
+  // makes `plucked.translate` mean "matched mrow TL in parent coords".
   clonedWrapper.style.transform = `translate(${-boxLocal.x}px, ${-boxLocal.y}px)`;
   clonedWrapper.style.transformOrigin = "0 0";
 
@@ -154,10 +144,8 @@ export function pluck(part: Part): Plucked {
   return plucked;
 }
 
-/** Sugar: animate `plucked` into `target`'s pose (or back to its own
- *  source if no target is given), then dispose. Translates only —
- *  the Plucked keeps its source's natural size. For morph-style
- *  fit-into-target sizing, animate `scale` yourself alongside this. */
+/** Animate `plucked` into `target`'s pose (or back to its source), then
+ *  dispose. Translates only; animate `scale` yourself to fit a target. */
 export function* unpluck(
   plucked: Plucked,
   target?: Part,
@@ -360,8 +348,6 @@ const fanIn = (
   cleanups.push(() => dst.dispose());
 };
 
-// Note: no part-level `swap`. To swap two parts visually, morph
-// between two equations holding them in opposite slots:
-// `morph(tex`${a}${b}`, tex`${b}${a}`)`. The morph machinery
-// exchanges them correctly, and the post-state is right because
-// the destination equation actually exists. See md-tex-demo.
+// No part-level `swap`: to swap two parts visually, morph between two
+// equations holding them in opposite slots — `morph(tex`${a}${b}`,
+// tex`${b}${a}`)`. See md-tex-demo.

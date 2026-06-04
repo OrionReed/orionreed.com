@@ -1,10 +1,8 @@
 // vec.ts — reactive 2D point.
 //
-// Invertibles (`add`, `sub`, `scale`, `offset`, `up`, `down`, `left`,
-// `right`) return `: this` and ride on `Signal#lens(fwd, bwd)`. Chained
-// calls auto-fuse. Field-lens getters use the `field()` helper, whose
-// conditional return type propagates writability from the receiver;
-// `derived()` wraps RO views.
+// Invertibles return `: this` and ride on `Signal#lens(fwd, bwd)`;
+// chained calls auto-fuse. Field-lens getters use `field()` (propagates
+// writability); `derived()` wraps RO views.
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
@@ -30,15 +28,10 @@ export const normalize = (v: V): V => {
 };
 export const perp = (v: V): V => ({ x: v.y, y: -v.x });
 
-/** Tangent point on a circle from an external point.
- *
- *  Given a point `p` outside the circle of radius `r` centred at `c`,
- *  returns the point `T` on the circle where the line `pT` touches it.
- *  Two tangents exist — `side: -1` picks the one CCW from `pc`,
- *  `+1` the CW. (In screen coords with y-down, `-1` is the visually
- *  CW side. Pass whichever makes the rope go the way you want.)
- *
- *  If `p` is inside or on the circle, returns `c` (degenerate). */
+/** Tangent point on the circle (radius `r`, centre `c`) from external
+ *  point `p`. `side: -1` picks the CCW tangent from `pc`, `+1` the CW
+ *  (y-down screen coords flip the visual sense). Returns `c` if `p` is
+ *  inside or on the circle. */
 export function tangentPoint(p: V, c: V, r: number, side: 1 | -1 = -1): V {
   const dx = p.x - c.x;
   const dy = p.y - c.y;
@@ -53,9 +46,8 @@ export function tangentPoint(p: V, c: V, r: number, side: 1 | -1 = -1): V {
 /** Wrap `x` to the half-open interval `(-π, π]`. */
 const wrapToPi = (x: number): number => x - 2 * Math.PI * Math.round(x / (2 * Math.PI));
 
-/** Return the representative of `target` (a cyclic angle in `(-π, π]`)
- *  closest to `current`. Used as the shortest-arc inverse for cyclic
- *  coordinates — see `polar`'s circular / rotate policies. */
+/** Representative of cyclic angle `target` closest to `current`
+ *  (shortest-arc inverse). */
 const nearestAngle = (target: number, current: number): number =>
   current + wrapToPi(target - current);
 
@@ -200,38 +192,29 @@ export class Vec extends Signal<V> {
     return derived(this, "magnitude", Num, v => Math.hypot(v.x, v.y));
   }
 
-  /** Tween-builder, implied by the lerp trait. `this: Writable<Vec>`
-   *  gates the call site to writable receivers — bare RO Vec is
-   *  rejected at compile time. */
+  /** Tween-builder; `this: Writable<Vec>` gates the call to writable
+   *  receivers. */
   to(this: Writable<Vec>, target: V, dur: Val<number>, ease?: Easing): Tween<V> {
     return tween(this, target, dur, ease);
   }
 }
 
-/** @internal — bidirectional 2-input lens over two writable `Num`s.
- *  `vec()` delegates here after lifting literals. Not part of the
- *  public surface; users always go through `vec()`. */
+/** @internal — 2-input lens over two writable `Num`s; `vec()` delegates
+ *  here after lifting literals. */
 function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
-  // Source-independent (`iso`): the view fully reconstructs both axes.
-  return Vec.iso(
+  // The view fully reconstructs both axes (1-arg bwd ⇒ no source read).
+  return Vec.lens(
     [x, y] as const,
     ([xv, yv]) => ({ x: xv, y: yv }),
     v => [v.x, v.y],
   );
 }
 
-/** Writable `Vec` at `(x, y)`. Each axis is either a literal `number`
- *  (lifted to a fresh `Writable<Num>` seed) or an existing
- *  `Writable<Num>` (passed through by identity, writes propagate).
- *
- *  RO sources (computed views, RO field lenses, thunks) are rejected
- *  at the type level. Reach for `Vec.derive(...)` to track an RO source
- *  reactively, or pass `signal.value` to snapshot the current value.
- *
- *  To lock a single axis to a constant inside a writable Vec, pair the
- *  literal axis with the constant-projection primitive:
- *
- *      vec(slider, Num.pin(100))   // x writable, y locked at 100 */
+/** Writable `Vec` at `(x, y)`. Each axis is a literal `number` (lifted
+ *  to a fresh seed) or an existing `Writable<Num>` (identity passthrough).
+ *  RO sources are rejected at the type level — use `Vec.derive(...)` for
+ *  reactive RO tracking, or `signal.value` to snapshot. Lock an axis with
+ *  `Num.pin(c)`: `vec(slider, Num.pin(100))`. */
 export function vec(x: Init<Num> = 0, y: Init<Num> = 0): Writable<Vec> {
   if (typeof x === "number" && typeof y === "number") {
     return new Vec({ x, y }) as Writable<Vec>;
@@ -239,34 +222,26 @@ export function vec(x: Init<Num> = 0, y: Init<Num> = 0): Writable<Vec> {
   return axes(num(x), num(y));
 }
 
-/** Policy for `polar`'s inverse:
+/** Policy for `polar`'s inverse — which inputs absorb a write:
  *
- *  - `rotate`   — c fixed, write r and a so the point lands at target.
- *                 The natural "draggable point orbiting a center" mode.
- *  - `translate` — r and a fixed, shift c by Δ. The "drag the orbit
- *                  by its center" mode.
- *  - `radial`   — c and a fixed, project the drag onto the ray.
- *  - `circular` — c and r fixed, project the drag onto the circle. */
+ *  - `rotate`    — c fixed; write r and a to land on target.
+ *  - `translate` — r and a fixed; shift c by Δ.
+ *  - `radial`    — c and a fixed; project the drag onto the ray.
+ *  - `circular`  — c and r fixed; project the drag onto the circle. */
 export type PolarPolicy = "rotate" | "translate" | "radial" | "circular";
 
 /** Vec at polar offset from `center`: `center + (r·cos a, r·sin a)`.
- *
- *  Bidirectional. Each input is either a literal (lifted to a fresh
- *  writable seed) or an existing writable signal (`Writable<Vec>` for
- *  `center`, `Writable<Num>` for `r` / `a`). RO inputs are rejected at
- *  the type level — use `Vec.derive(...)` for reactive RO tracking.
- *
- *  `policy` selects which inputs absorb writes. To make an input
- *  structurally inert under writes (lock-axis), wrap it in the
- *  constant-projection primitive: `polar(c, Num.pin(100), a)`. */
+ *  Bidirectional; each input is a literal (lifted to a fresh seed) or an
+ *  existing writable signal. RO inputs are rejected at the type level.
+ *  `policy` selects which inputs absorb writes; lock one with
+ *  `Num.pin(c)`: `polar(c, Num.pin(100), a)`. */
 export function polar(
   center: Init<Vec>,
   r: Init<Num>,
   a: Init<Num>,
   policy: PolarPolicy = "rotate",
 ): Writable<Vec> {
-  // Lift literals — all three inputs become unified `Writable<...>`.
-  // Identity passthrough for already-writable inputs.
+  // Lift literals; already-writable inputs pass through by identity.
   const cSig: Writable<Vec> = center instanceof Vec ? center : vec(center.x, center.y);
   const rSig: Writable<Num> = num(r);
   const aSig: Writable<Num> = num(a);
@@ -277,12 +252,10 @@ export function polar(
   });
 
   // Cyclic-coordinate inverse: pick the angle closest to current, not
-  // the (-π, π] representative from atan2. Without this, dragging a
-  // body whose angle has accumulated many revolutions produces large
-  // discontinuous jumps in the angle signal — visually correct
-  // (cos/sin are periodic) but breaks downstream lenses that read the
-  // angle directly (`time = angle * period / τ`). Source-reading lens:
-  // each policy returns per-parent updates over [center, r, a].
+  // atan2's (-π, π] representative — otherwise an accumulated-revolution
+  // angle jumps discontinuously, breaking lenses that read it directly.
+  // Source-reading lens: each policy returns per-parent updates over
+  // [center, r, a].
   type Updates = readonly [V?, number?, number?];
   let bwd: (p: V, vals: readonly [V, number, number]) => Updates;
   switch (policy) {

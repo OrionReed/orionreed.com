@@ -2,14 +2,8 @@
 //
 //   claim(sig, "α").stays.in([0, 1]).during(intro)
 //
-// Desugars to:
-//   makeClaim(latch(inRange(sig, [0,1]), true, intervals(intro)),
-//             "α stays in [0, 1] during intro");
-//
-// The fluent return value (`Claim`) is a `Read<boolean>` plus
-// `.and`, `.or`, `.not`, `.during`, `.labelled`, and `.pred` (the
-// underlying predicate, for users who want to pipe into a custom
-// `latch` shape).
+// The returned `Claim` is a `Read<boolean>` plus `.and` / `.or` /
+// `.not` / `.during` / `.labelled` / `.pred` (the raw predicate).
 
 import type { Box, Vec } from "@minim/signals";
 import { derive, type Inner, type Read } from "@minim/signals";
@@ -31,8 +25,8 @@ export interface Claim extends Read<boolean> {
 
 type Mood = "stays" | "becomes" | "never";
 
-/** Entry point: `claim(sig).stays.in([0,1])` etc. The label flows
- *  through to predicate sub-clauses for richer failure messages. */
+/** Entry point: `claim(sig).stays.in([0,1])`. `label` flows into
+ *  sub-clause failure messages. */
 export function claim<T>(sig: Read<T>, label?: string): SignalClaim<T> {
   return {
     sig,
@@ -58,8 +52,7 @@ export interface SignalClaim<T> {
   readonly never: Predicates<T>;
 }
 
-/** Predicate vocabulary; the type-narrowing on numeric/vector preds
- *  is via `this:` constraints. */
+/** Predicate vocabulary; numeric/vector preds narrow via `this:`. */
 export interface Predicates<T> {
   satisfies(fn: (v: T) => boolean, label?: string): Claim;
   equal(v: T): Claim;
@@ -80,8 +73,8 @@ export interface Predicates<T> {
 function predicates<T>(sig: Read<T>, mood: Mood, lbl: string | undefined): Predicates<T> {
   const build = (pred: Read<boolean>, what: string): Claim => {
     const label = `${lbl ?? "signal"} ${mood} ${what}`;
-    // For "never", the operative predicate is `¬pred`. We carry the
-    // operative predicate AND the operative init through to `during()`.
+    // "never": operative predicate is `¬pred`. Carry operative predicate
+    // and init through to `during()`.
     switch (mood) {
       case "stays":
         return makeClaim(pred, latch(pred, true), true, label);
@@ -129,11 +122,9 @@ function predicates<T>(sig: Read<T>, mood: Mood, lbl: string | undefined): Predi
   } as Predicates<T>;
 }
 
-/** Wrap a (predicate, latched-signal, init, label) tuple into a Claim.
- *  `init` is the original mood's init (true for stays/never, false for
- *  becomes); preserved so `.during(scope)` can rebuild the latch with
- *  scope-gated re-arming.  `pred` is the operative predicate (the one
- *  that's `latch`-ed, with mood semantics already applied). */
+/** Wrap (predicate, latched-signal, init, label) into a Claim. `init`
+ *  (true for stays/never, false for becomes) is kept so `.during()`
+ *  can rebuild the latch; `pred` is the operative (mood-applied) predicate. */
 function makeClaim(
   pred: Read<boolean>,
   latched: Read<boolean>,
@@ -164,7 +155,7 @@ function wrapClaim(pred: Read<boolean>, body: Read<boolean>, init: boolean, labe
       return wrapClaim(pred, next, init, `${label} ∨ ${otherLabel ?? "?"}`);
     },
     not() {
-      // Negation flips init too — invariant becomes liveness and vice versa.
+      // Flipping init too swaps invariant ↔ liveness.
       return wrapClaim(
         pred,
         derive(() => !body.value),
@@ -174,9 +165,8 @@ function wrapClaim(pred: Read<boolean>, body: Read<boolean>, init: boolean, labe
     },
     during(scope) {
       const sc = intervals(scope);
-      // Rebuild the latch with the scope so it auto-rearms on each
-      // rising edge. Outside the scope, gating makes the claim
-      // vacuously satisfied (true for safety, false for liveness).
+      // Rebuild the latch with the scope so it auto-rearms on each rising
+      // edge. Outside the scope the claim is vacuously satisfied.
       const next = latch(pred, init, sc);
       const gated =
         init === true

@@ -1,16 +1,10 @@
 // range.ts — reactive numeric interval `[lo, hi]`.
 //
-// Ranges are the natural home for sliders, scrollbars, clip spans on
-// timelines, and any "value bounded between two endpoints" UX. Field
-// lenses give you start-knob (`.lo`) and end-knob (`.hi`) drag for
-// free; `.start` is the body-drag (read = lo, write shifts both,
-// preserving width); `.slider(t)` is the headline bidirectional
-// `t ∈ ℝ ↔ lo + t·(hi - lo)` iso, the writable generalisation of
-// `Num#affine`.
-//
-// Trait coverage: `linear` (Minkowski-like add: lo+lo, hi+hi),
-// `lerp` (animate between intervals), `equals`, `pack`. Subclasses
-// over a Vec-valued lo/hi could come later; today this is scalar-only.
+// Home for sliders, scrollbars, and timeline clip spans. Field lenses
+// give start-knob (`.lo`) and end-knob (`.hi`) drag; `.start` is the
+// body-drag (shifts both, preserving width); `.slider(t)` is the
+// bidirectional `t ↔ lo + t·(hi - lo)` iso. Traits: `linear`, `lerp`,
+// `equals`, `pack` (scalar-only).
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
@@ -133,10 +127,8 @@ export class Range extends Signal<V> {
   }
 
   // ── body-drag: read = lo, write shifts both, preserves width ───────
-  /** Body-drag handle: read returns `lo`, write shifts the whole range
-   *  so `lo` equals the written value (`hi - lo` preserved). Mirrors
-   *  "drag the clip body by its start"; for "edit the start knob, end
-   *  pinned" use `.lo` instead. */
+  /** Body-drag handle: read returns `lo`; write shifts the range so `lo`
+   *  matches (width preserved). For start-knob editing use `.lo`. */
   get start(): Writable<Num> {
     return Num.lens(
       this,
@@ -150,13 +142,11 @@ export class Range extends Signal<V> {
   sample(t: Val<number>): Num {
     return Num.derive(() => sample(this.value, readNow(t)));
   }
-  /** Bidirectional `t ↔ value` slider. Read: `lo + t·(hi - lo)`. Write:
-   *  solves `t = (v - lo)/(hi - lo)` and writes back through `t` only;
-   *  `lo` and `hi` stay put. Drag-the-thumb UX in one line. Two-input
-   *  source-reading lens over `[this, t]`; the bwd touches only `t`. */
+  /** Bidirectional `t ↔ value` slider. Read `lo + t·(hi - lo)`; write
+   *  solves for `t` and updates `t` only, leaving `lo` / `hi` put. */
   slider(t: Writable<Num>): Writable<Num> {
     // `this as Range` pins the tuple element type (polymorphic `this`
-    // otherwise defeats the mapped-tuple inference on `[this, t]`).
+    // defeats the mapped-tuple inference on `[this, t]`).
     return Num.lens(
       [this as Range, t] as const,
       ([r, tv]) => sample(r, tv),
@@ -168,14 +158,11 @@ export class Range extends Signal<V> {
   }
 
   // ── predicates / clamps ────────────────────────────────────────────
-  /** Membership predicate. Conditional return type: when `v` is a
-   *  writable `Num`, the result is `Writable<Bool>` and flipping the
-   *  view bumps the source — `true` clamps into `[lo, hi]`, `false`
-   *  ejects past the nearest endpoint by `eps`. Literal / RO inputs
-   *  yield a bare RO `Bool`. The 1-D dual of `Box#contains`. */
-  contains<P extends Val<number>>(
-    v: P,
-  ): P extends WritableBrand ? Writable<Bool> : Bool {
+  /** Membership predicate. Conditional return type: a writable `Num`
+   *  yields `Writable<Bool>` and flipping the view bumps the source
+   *  (`true` clamps into `[lo, hi]`, `false` ejects past the nearest
+   *  endpoint by `eps`). Literal / RO inputs yield a bare RO `Bool`. */
+  contains<P extends Val<number>>(v: P): P extends WritableBrand ? Writable<Bool> : Bool {
     if (v instanceof Num) {
       // RO computed Num has no backward path → RO branch. Sources and
       // writable lenses both accept write-back.
@@ -203,16 +190,14 @@ export class Range extends Signal<V> {
     return Num.derive(() => paramOf(this.value, readNow(v)));
   }
 
-  /** Tween-builder, implied by the lerp trait. Animates `{lo, hi}`
-   *  jointly between intervals. */
+  /** Tween-builder; animates `{lo, hi}` jointly. */
   to(this: Writable<Range>, target: V, dur: Val<number>, ease?: Easing): Tween<V> {
     return tween(this, target, dur, ease);
   }
 }
 
-/** @internal — bidirectional 2-input lens over two writable `Num`s.
- *  `range()` delegates here after lifting literals. Not part of the
- *  public surface; users always go through `range()`. */
+/** @internal — 2-input lens over two writable `Num`s; `range()` delegates
+ *  here after lifting literals. */
 function ends(lo: Writable<Num>, hi: Writable<Num>): Writable<Range> {
   return Range.lens(
     [lo, hi] as const,
@@ -222,11 +207,8 @@ function ends(lo: Writable<Num>, hi: Writable<Num>): Writable<Range> {
 }
 
 /** Range over `[at, at + dur]`, parameterised by start + duration. The
- *  natural shape for timeline clips: writes to `.lo` slide the start
- *  knob (preserving `hi`); writes to `.hi` slide the end knob
- *  (preserving `lo`); writes to `.start` body-drag (preserving
- *  width = `dur`). Backed by the existing `at`/`dur` Nums; both stay
- *  writable and consistent. */
+ *  timeline-clip shape: `.lo` slides the start, `.hi` the end, `.start`
+ *  body-drags (preserving width). Backed by the live `at` / `dur` Nums. */
 export function span(at: Writable<Num>, dur: Writable<Num>): Writable<Range> {
   return Range.lens(
     [at, dur] as const,
@@ -235,13 +217,11 @@ export function span(at: Writable<Num>, dur: Writable<Num>): Writable<Range> {
   );
 }
 
-/** Writable `Range` over `[lo, hi]`. Each endpoint is either a literal
- *  `number` (lifted to a fresh `Writable<Num>` seed) or an existing
- *  `Writable<Num>` (passed through by identity, writes propagate).
- *
- *  RO sources are rejected at the type level — use `Range.derive(...)`
- *  for reactive RO tracking, or `signal.value` to snapshot. Lock an
- *  endpoint with `Num.pin(c)`. */
+/** Writable `Range` over `[lo, hi]`. Each endpoint is a literal `number`
+ *  (lifted to a fresh seed) or an existing `Writable<Num>` (identity
+ *  passthrough). RO sources are rejected at the type level — use
+ *  `Range.derive(...)` for reactive RO tracking, or `signal.value` to
+ *  snapshot. Lock an endpoint with `Num.pin(c)`. */
 export function range(lo: Init<Num> = 0, hi: Init<Num> = 1): Writable<Range> {
   if (typeof lo === "number" && typeof hi === "number") {
     return new Range({ lo, hi }) as Writable<Range>;

@@ -1,13 +1,8 @@
 // physics.ts — `physics(opts)` factory.
 //
-// Returns a `Constraints` with a velocity + gravity pipeline and
-// the reactive driver disposed. Use for cloth / chain / particle
-// scenes that need time integration but don't need rigid-body
-// contacts (for those, see `world(opts)`).
-//
-// The pipeline is declared in full (no splice helpers, no
-// "subsystem registration"): it's exactly what runs on each
-// `step(dt)`, top-to-bottom.
+// A `Constraints` with a velocity + gravity pipeline and the reactive
+// driver disposed. For cloth / chain / particle scenes that need time
+// integration but not rigid-body contacts (use `world(opts)` for those).
 
 import { Constraints } from "./cluster";
 import type { Phase } from "./phases";
@@ -15,19 +10,16 @@ import { ensureCapacity, prepare, snapshot, writeback } from "./phases";
 import type { SolverOpts } from "./solver";
 
 export interface PhysicsOpts extends SolverOpts {
-  /** External acceleration (e.g. gravity). Length must be ≥ the
-   *  largest cell dim. Default: zero vector. */
+  /** External acceleration (e.g. gravity); length ≥ largest cell dim.
+   *  Default zero. */
   gravity?: ArrayLike<number>;
-  /** Multiplicative velocity damping per tick. `1` = energy
-   *  conserving (constraint drift absorbs whatever the augmented
-   *  Lagrangian doesn't). `<1` bleeds kinetic energy. Default `1`.
-   *  Cloth / rope-like scenes typically want `0.97`–`0.995`. */
+  /** Multiplicative per-tick velocity damping. `1` conserves energy,
+   *  `<1` bleeds it (cloth/rope want `0.97`–`0.995`). Default `1`. */
   damping?: number;
-  /** Adaptive warm-start (AVBD §3.7): scale the gravity term in
-   *  the position warm-start by how much of last tick's
-   *  acceleration was actually in the gravity direction.
-   *  Kills residual jitter under bodies that are being supported.
-   *  Default `true` whenever gravity is non-zero. */
+  /** Adaptive warm-start (AVBD §3.7): scale the warm-start gravity
+   *  term by how much of last tick's acceleration was in the gravity
+   *  direction — kills jitter under supported bodies. Default `true`
+   *  when gravity is non-zero. */
   adaptiveWarmstart?: boolean;
 }
 
@@ -42,12 +34,9 @@ export interface Physics extends Constraints {
   damping: number;
 }
 
-/** Build a `Constraints` with a physics pipeline:
- *  `[snapshot, prepare, integrate, solveWithVelocity, writeback]`.
- *
- *  The reactive driver is disposed on construction — physics scenes
- *  drive their step explicitly (`c.step(dt)` or via `animate(c)` /
- *  `fixedStep(c, 1/60)`).
+/** Build a physics `Constraints` (`[snapshot, prepare, integrate,
+ *  solveWithVelocity, writeback]`). The reactive driver is disposed —
+ *  drive explicitly via `c.step(dt)` / `animate(c)` / `fixedStep(c)`.
  *
  *    const c = physics({ gravity: [0, 90], damping: 0.997 });
  *    c.add(...springs, pin(grid[0][0]));
@@ -67,11 +56,9 @@ export function physics(opts: PhysicsOpts = {}): Physics {
   const adaptive = (opts.adaptiveWarmstart ?? aExtNormSq > 0) && aExtNormSq > 0;
 
   // ─── Phase: integrate ────────────────────────────────────────────
-  // Runs after `prepare()` (which sets initials = positions =
-  // anchors) and before `solve(dt)`. Overwrites anchors with the
-  // inertial-extrapolation y = x + dt·v + dt²·g, with adaptive
-  // warm-start gating the gravity term in the position warm-start
-  // (but not in the inertia anchor itself).
+  // Between `prepare()` and `solve(dt)`: overwrite anchors with the
+  // inertial extrapolation y = x + dt·v + dt²·g. Adaptive warm-start
+  // gates gravity in the position seed but not in the inertia anchor.
   const integrate: Phase = (c, dt) => {
     if (dt <= 0) return;
     velocities = ensureCapacity(velocities, c.solver.positions.length);
@@ -112,11 +99,9 @@ export function physics(opts: PhysicsOpts = {}): Physics {
   };
 
   // ─── Phase: solve + velocity update ──────────────────────────────
-  // Wraps `solver.solve(dt, …)` with the AVBD-reference
-  // `beforePostStab` hook: compute velocity from `(positions −
-  // initials) / dt` after the regular iterations but BEFORE the
-  // post-stab projection. Folding post-stab into velocity
-  // re-introduces the constraint drift you just projected away.
+  // Read velocity in the `beforePostStab` hook (`(positions −
+  // initials) / dt`), before the post-stab projection — folding that
+  // projection into velocity would re-introduce the drift it removed.
   const solveWithVelocity: Phase = (c, dt) => {
     c.solver.solve(dt, () => {
       if (dt <= 0) return;
@@ -140,8 +125,8 @@ export function physics(opts: PhysicsOpts = {}): Physics {
 
   c.pipeline = [snapshot, prepare, integrate, solveWithVelocity, writeback];
 
-  // Take over the time loop — sketchpad-style reactive solving
-  // would conflict with the per-tick velocity integration.
+  // Take over the time loop — reactive solving would conflict with
+  // per-tick velocity integration.
   c.dispose();
 
   // ─── Public surface (attached to the Constraints) ────────────────

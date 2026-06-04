@@ -1,16 +1,12 @@
-// Custom-element scaffold. Subclasses override `scene(s)` to build
-// the graph; signals drive updates. Owns the SVG element, the
-// viewBox (`view`/`fit`), and the host CSS sizing (`--d-w`/`--d-h`).
+// Custom-element scaffold. Subclasses override `scene(s)`; signals drive
+// updates. Owns the SVG, the viewBox (`view`/`fit`), and host CSS sizing
+// (`--d-w`/`--d-h`).
 //
-// Visibility-gated rAF: the per-instance Anim only ticks while the
-// element is on (or near) the viewport, via IntersectionObserver. Pure
-// signal-driven updates (drag, attribute writes, scroll-progress
-// signals from `ext/waapi`) keep working regardless — only the
-// animator clock pauses. Spring/tween/loop state freezes and resumes
-// on re-entry; `anim.clock` therefore reflects on-screen time, not
-// wall-clock time. Opt out with the `always-animate` boolean
-// attribute; fallback to eager-attach in environments without
-// IntersectionObserver (SSR/tests).
+// Visibility-gated rAF: the per-instance Anim ticks only while near the
+// viewport (IntersectionObserver). Signal-driven updates keep working —
+// only the animator clock pauses and resumes, so `anim.clock` tracks
+// on-screen time. Opt out via `always-animate`; eager-attach when
+// IntersectionObserver is absent (SSR/tests).
 
 import { Anim } from "@minim/core";
 import { ensureArrowMarker, type Mount, mount, Shape, SVG_NS } from "@minim/shapes";
@@ -51,15 +47,15 @@ export class Diagram extends HTMLElement {
   protected svg!: SVGSVGElement;
   /** Scene-graph root. All user-mounted shapes are children of this. */
   protected root!: Shape;
-  /** Callable mount handle passed into `scene(s)`. `s(shape)` adds to root. */
+  /** Callable mount handle for `scene(s)`; `s(shape)` adds to root. */
   protected s!: Mount;
 
-  // Per-instance marker registry. Cleared and repopulated on each
-  // connectedCallback so `<md-tex for="id">` always sees fresh markers.
+  // Per-instance marker registry; recleared each connectedCallback so
+  // `<md-tex for="id">` always sees fresh markers.
   #markers = new Map<string, Marker>();
 
-  /** Register a marker under `id` for this diagram instance. Call in
-   *  `scene()` so prose elements with `for="this-id"` can resolve it. */
+  /** Register a marker for this instance; call in `scene()` so
+   *  `<… for="this-id">` can resolve it. */
   registerMarker(id: string, m: Marker): void {
     this.#markers.set(id, m);
   }
@@ -69,8 +65,8 @@ export class Diagram extends HTMLElement {
     return this.#markers.get(id);
   }
 
-  // Viewport state. `#viewSet` flips on the first explicit `view()`/`fit()`
-  // call; `connectedCallback` auto-fits if it's still false.
+  // `#viewSet` flips on the first `view()`/`fit()`; `connectedCallback`
+  // auto-fits if still false.
   #viewSet = false;
   #viewSig = signal0Box();
   #viewBox = Box.derive(() => this.#viewSig.value);
@@ -104,8 +100,7 @@ export class Diagram extends HTMLElement {
     this.initializeStyles();
   }
 
-  /** Build the scene graph. Runs once per element-connect; signals
-   *  handle dynamic behavior. Override in subclasses. */
+  /** Build the scene graph. Runs once per connect; override in subclasses. */
   protected scene(_s: Mount): void {}
 
   connectedCallback(): void {
@@ -136,10 +131,8 @@ export class Diagram extends HTMLElement {
     this.root?.dispose();
   }
 
-  // Gate rAF on viewport intersection. `rootMargin: "200px 0px"` warms
-  // the loop before the diagram is actually visible so the first
-  // animated frame isn't a cold start. `always-animate` and missing
-  // IntersectionObserver both fall through to eager attach.
+  // Gate rAF on viewport intersection; `rootMargin: "200px 0px"` warms
+  // the loop before visible so the first frame isn't a cold start.
   #startRaf(): void {
     if (this.hasAttribute("always-animate") || typeof IntersectionObserver === "undefined") {
       this.#detachRaf = attachRaf(this.anim);
@@ -159,10 +152,8 @@ export class Diagram extends HTMLElement {
     this.#io.observe(this);
   }
 
-  /** Set the SVG viewBox to `(0, 0, w, h)` (reactive in either input).
-   *  First call wins; subsequent calls (and the auto-fit fallback) are
-   *  no-ops. Returns a Reactive `Box` for layout use (`view.w.value`,
-   *  `view.center`, etc.). */
+  /** Set the viewBox to `(0, 0, w, h)` (reactive inputs). First call
+   *  wins; returns a reactive `Box` for layout. */
   view(w: Val<number>, h: Val<number>): Box {
     if (this.#viewSet) return this.#viewBox;
     const ws = Num.from(w);
@@ -172,8 +163,8 @@ export class Diagram extends HTMLElement {
     return this.#viewBox;
   }
 
-  /** Auto-fit viewBox to the root's bounds + optional padding. Called
-   *  automatically after `scene()` when `view()` wasn't invoked. */
+  /** Fit viewBox to the root's bounds + padding (auto-called after
+   *  `scene()` if `view()` wasn't). */
   fit(padding?: Padding): Box {
     if (this.#viewSet) return this.#viewBox;
     const p = resolvePadding(padding);
@@ -200,8 +191,7 @@ export class Diagram extends HTMLElement {
     this.svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     this.svg.setAttribute("width", String(w));
     this.svg.setAttribute("height", String(h));
-    // Drive host sizing from viewBox: `:host` reads `--d-w` to set
-    // max-width. Authors can override per-element via `style="--d-w: N"`.
+    // `:host` reads `--d-w` for max-width; override via `style="--d-w: N"`.
     this.style.setProperty("--d-w", String(w));
     this.style.setProperty("--d-h", String(h));
   }
@@ -209,18 +199,16 @@ export class Diagram extends HTMLElement {
   private mountSvg(): void {
     this.svg = document.createElementNS(SVG_NS, "svg") as SVGSVGElement;
     this.shadow.appendChild(this.svg);
-    // Named slot lets us project the auto-injected source panel
-    // without picking up incidental light-DOM children (e.g.
-    // `<md-qrtp-protocol>no backchannel</md-qrtp-protocol>` uses
-    // `this.textContent` as data, not display).
+    // Named slot projects the source panel without picking up incidental
+    // light-DOM children that use `textContent` as data, not display.
     const slot = document.createElement("slot");
     slot.name = "source";
     this.shadow.appendChild(slot);
   }
 
-  /** Append a `<details>` with the subclass's `scene()` source as a
-   *  light-DOM child, projected through the shadow's `slot[name=source]`.
-   *  No-op for the base class, for `[no-source]`, or when already added. */
+  /** Append a `<details>` with the subclass's `scene()` source, projected
+   *  through `slot[name=source]`. No-op for the base class / `[no-source]`
+   *  / already-added. */
   #ensureSourcePanel(): void {
     if (this.hasAttribute("no-source")) return;
     if (this.querySelector(":scope > details[slot='source']")) return;
@@ -242,9 +230,8 @@ export class Diagram extends HTMLElement {
 
     details.append(summary, code);
 
-    // `md-syntax.paint()` reads `innerText`, which is empty while the
-    // element is hidden inside a closed `<details>` in some UAs.
-    // Repaint on first open so tokenization always sees the full text.
+    // `md-syntax.paint()` reads `innerText`, empty while hidden in a
+    // closed `<details>` in some UAs; repaint on first open.
     let painted = false;
     details.addEventListener("toggle", () => {
       if (details.open && !painted) {
@@ -271,14 +258,13 @@ export class Diagram extends HTMLElement {
   }
 }
 
-// Helper: a fresh writable Box-valued signal seeded with the zero box.
+// A fresh writable Box signal seeded with the zero box.
 function signal0Box() {
   return new Box({ x: 0, y: 0, w: 0, h: 0 }) as unknown as import("@minim/signals").Writable<Box>;
 }
 
-// `Function.prototype.toString()` on a class method leaves the body
-// indented by the class+method nesting; strip the common leading
-// indent of non-empty lines (line 0 has no indent in method form).
+// Strip the common leading indent that `Function.prototype.toString()`
+// leaves on a class method's body (line 0 has none).
 function dedent(s: string): string {
   const lines = s.split("\n");
   const indents = lines

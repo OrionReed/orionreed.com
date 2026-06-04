@@ -32,8 +32,7 @@ export const lerp = (a: V, b: V, t: number): V => ({
 });
 export const equals = (a: V, b: V) =>
   a === b || (a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a);
-/** L2 distance in RGBA-space. Used by `palette.spread` and any
- *  Metric-trait consumer (color animators, kdtrees over palettes…). */
+/** L2 distance in RGBA-space. */
 export const metric = (a: V, b: V) => Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b, a.a - b.a);
 
 const linearImpl: Linear<V> = { add, sub, scale };
@@ -121,12 +120,10 @@ export class Color extends Signal<V> {
   }
 }
 
-/** Writable `Color` from RGB channels with alpha = 1. Each channel is
- *  either a literal `number` (lifted to a fresh `Writable<Num>` seed)
- *  or an existing `Writable<Num>` (identity-aliased; writes propagate).
- *
- *  All-literal inputs take a single-allocation fast path; mixed inputs
- *  build a 3-input lens so that channel-writes round-trip to source. */
+/** Writable `Color` from RGB channels (alpha = 1). Each channel is a
+ *  literal `number` (lifted to a fresh seed) or an existing `Writable<Num>`
+ *  (identity passthrough). All-literal inputs take a fast path; mixed
+ *  inputs build a lens so channel-writes round-trip to source. */
 export function rgb(r: Init<Num>, g: Init<Num>, b: Init<Num>): Writable<Color> {
   if (typeof r === "number" && typeof g === "number" && typeof b === "number") {
     return new Color({ r, g, b, a: 1 }) as Writable<Color>;

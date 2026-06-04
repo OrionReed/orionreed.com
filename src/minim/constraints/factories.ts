@@ -1,35 +1,24 @@
-// factories.ts — free constraint factories that return `Relation` values.
+// factories.ts — free constraint factories returning `Relation`s.
 //
-// Each factory returns a plain object with a `bind(c)` method (returns
-// a disposer) and any number of `Signal` fields exposing mutable
-// parameters. Pass them to a cluster via `c.add(rel)`:
-//
-//   const c = constraints({ iterations: 24 });
-//   c.add(distance(a, b, 100));
-//   const [r1, r2] = c.add(spring(b, c, 60, 200), gap(a, c, 30));
-//
-// Mutable parameters are exposed as `Signal<number>` fields directly
-// (e.g. `r.rest.value = 50`). Either pass a number (wrapped in a
-// fresh signal) or your own signal (used directly so external
-// mutations and UI bindings flow through):
+// Each returns a plain object with a `bind(c)` (→ disposer) plus
+// `Signal` fields for mutable params. Pass a number (wrapped in a
+// fresh signal) or your own signal (used directly, so UI bindings
+// flow through):
 //
 //   const len = signal(100);
 //   const r = c.add(distance(a, b, len));
-//   len.value = 50;        // ← re-solves with new rest length
-//   r.rest.value = 75;     // ← also works (same underlying signal)
+//   len.value = 50;     // re-solves
+//   r.rest.value = 75;  // same underlying signal
 //
-// The runtime contract on every cell-signal arg is "value class
-// declares the `pack` trait"; checked by `c._bind` when bind runs.
+// Cell-signal args must declare the `pack` trait (checked in `_bind`).
 //
-// Solver caveats:
-//
-// - **Multi-solution constraints can branch-flip** under fast drags
-//   that cross critical points (no branch tracking).
-// - **Infeasible configurations saturate, not explode** (`λ` capped
-//   at `LAMBDA_MAX`).
-// - **Duplicate cells hurt** in `generic` (e.g. `[A, B, B, C]`):
-//   the FD path treats duplicated slots as independent. Use
-//   `rightAngle(A, B, C)` instead of `perpendicular(A, B, B, C)`.
+// Caveats:
+//   - Multi-solution constraints can branch-flip under fast drags (no
+//     branch tracking).
+//   - Infeasible configs saturate, not explode (λ capped at LAMBDA_MAX).
+//   - Duplicate cells in `generic` (e.g. `[A, B, B, C]`) are treated as
+//     independent by the FD path — use `rightAngle(A, B, C)`, not
+//     `perpendicular(A, B, B, C)`.
 
 import { type Signal, signal, type Writable } from "../signals";
 import type { Constraints, Relation } from "./cluster";
@@ -80,21 +69,12 @@ export function eq(a: S, b: S): Relation {
   };
 }
 
-/** Distance constraint `‖b − a‖ = rest`.
- *
- *  Default is HARD (augmented-Lagrangian); pass `stiffness` for a
- *  soft variant — the constraint becomes a Hooke spring with finite
- *  stiffness. Both `rest` and `stiffness` are mutable signals on
- *  the returned relation:
- *
- *    c.add(distance(a, b, 100));                           // hard
- *    const r = c.add(distance(a, b, 100, { stiffness: 200 })); // spring
- *    r.rest.value = 80;                                    // mutate length
- *    r.stiffness?.value = 500;                             // mutate stiffness */
+/** Distance constraint `‖b − a‖ = rest`. Hard by default; pass
+ *  `stiffness` for a Hooke spring. `rest` and `stiffness` are mutable
+ *  signals on the returned relation. */
 export interface DistanceRelation extends Relation {
   readonly rest: Writable<Signal<number>>;
-  /** Only present when the constraint was created with finite
-   *  stiffness (i.e., as a spring). */
+  /** Present only for the spring (finite-stiffness) variant. */
   readonly stiffness?: Writable<Signal<number>>;
 }
 
@@ -113,7 +93,7 @@ export function distance(
     bind(c) {
       const f = new DistanceTerm(c.solver, c._bind(a), c._bind(b), rest_, hard, stiff_);
       c.solver.addTerm(f);
-      // Track reactive params so mutating rest / stiffness fires the network.
+      // Track params so mutating rest / stiffness fires the network.
       c._trackParam(rest_);
       if (stiff_ !== undefined) c._trackParam(stiff_);
       return () => c.solver.removeTerm(f);

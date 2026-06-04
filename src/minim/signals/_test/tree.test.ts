@@ -109,10 +109,7 @@ describe("atPath", () => {
 
   it("indexes children correctly", () => {
     const inner = treeNode(num(99));
-    const tree = treeNode(num(0), [
-      treeNode(num(1), [treeNode(num(11)), inner]),
-      treeNode(num(2)),
-    ]);
+    const tree = treeNode(num(0), [treeNode(num(1), [treeNode(num(11)), inner]), treeNode(num(2))]);
     expect(atPath(tree, [0, 1])).toBe(inner);
     expect(atPath(tree, [0, 1]).value.value).toBe(99);
   });

@@ -1,109 +1,78 @@
 // term.ts — abstract Term base class for AVBD constraints.
 //
-// A Term represents a single term in the augmented Lagrangian — i.e. a
-// constraint binding one or more cells with a residual `C(x)`, a
-// Jacobian `J = ∂C/∂x`, a dual variable `λ`, and a penalty parameter.
-// In the physics reading these are forces; in IK / layout / sketchpad
-// they're just constraints. Solver doesn't pick a side.
+// A Term is one term of the augmented Lagrangian: a constraint over
+// one or more cells with residual `C(x)`, Jacobian `J = ∂C/∂x`, dual
+// `λ`, and penalty. Forces in the physics reading, plain constraints
+// elsewhere — the solver doesn't pick a side. Cells are integer ids
+// into the solver's SOA buffers.
 //
-// Cells are referenced by integer id (`number`) into the solver's
-// SOA buffers. Term methods read positions via
-// `this.solver.positions[this.solver.offsets[id] + k]` and write
-// derivatives into per-cell `J` / `HCols` buffers.
+// The AVBD inner loop calls three methods per term:
 //
-// The AVBD inner loop calls three things on each term:
+//   1. `initialize()` — once per `prepare()`. Cache step-invariants.
+//      Returns `false` to drop the term (zero-stiffness, fractured).
 //
-//   1. `initialize()` — once per `prepare()`. Cache anything that
-//      doesn't change within the step. Returns `false` if the
-//      term should be removed (zero-stiffness, fractured, …).
+//   2. `computeConstraint(alpha)` — every primal/dual update. Writes
+//      `C` from current positions. Hard constraints stabilise:
+//      `C(x) = C*(x) − α · C*(x⁻)`.
 //
-//   2. `computeConstraint(alpha)` — at every primal/dual update.
-//      Writes the m-vector `C` based on current cell positions.
-//      For HARD constraints, applies stabilisation:
-//          C(x) = C*(x) − α · C*(x⁻).
+//   3. `computeDerivatives(cellIdx)` — every primal update. Writes the
+//      Jacobian column `J[cellIdx]` and the geometric-stiffness
+//      Hessian column-norms `HCols[cellIdx]` (L2 norm of each Hessian
+//      block column, for the diagonally-lumped stiffness term).
 //
-//   3. `computeDerivatives(cellIdx)` — at every primal update.
-//      Writes the Jacobian column `J[cellIdx]` (size: rows × dim_i)
-//      and the geometric-stiffness Hessian column-norms
-//      `HCols[cellIdx]`. Each entry of `HCols[i][r * dim_i + k]`
-//      is the L2 norm of column k of the per-row Hessian block —
-//      used in the diagonally-lumped geometric stiffness term.
-//
-// `cellIdx` here means "this cell's index within `term.cells`",
-// not the integer cell id. The Solver caches that index per
-// (cell, term) at adjacency construction.
+// `cellIdx` is the cell's index within `term.cells`, not its integer
+// id; the Solver caches it per (cell, term).
 
 import type { Solver } from "./solver";
 
 export const PENALTY_MIN = 1.0;
 export const PENALTY_MAX = 1e9;
 
-/** Hard cap on the augmented-Lagrangian multiplier `λ` per row.
- *
- *  Without a cap, the dual update `λ ← λ + ρ·C(x)` grows linearly
- *  per iteration whenever `C(x)` stays nonzero — i.e. whenever the
- *  constraint is *infeasible* in the current configuration. With
- *  enough iterations of an infeasible drag (user pulls a 4-bar
- *  joint outside its reachable workspace, two bodies pushed past
- *  each other under conflicting gaps, etc.), `λ` runs to `±∞` and
- *  the rhs in the local Newton solve overwhelms the lhs, sending
- *  positions to infinity within a handful of frames.
- *
- *  Capping at `1e9` (matching `PENALTY_MAX`) bounds the maximum
- *  contribution the constraint can apply, turning unsatisfiable
- *  constraints into a saturation rather than an explosion. The
- *  cap is symmetric (`±LAMBDA_MAX`) so equality constraints stay
- *  reachable from either side. */
+/** Hard symmetric cap on the per-row multiplier `λ`. Without it the
+ *  dual update grows unboundedly while a constraint stays infeasible
+ *  (e.g. a joint dragged outside its workspace), blowing positions to
+ *  infinity. Capping at `1e9` saturates instead of exploding;
+ *  symmetric so equalities stay reachable from either side. */
 export const LAMBDA_MAX = 1e9;
 
 export abstract class Term {
-  /** Solver this term belongs to. Subclasses read positions via
-   *  `solver.positions[off + k]`, with `off` taken from
-   *  `cellOffsets[ci]` (cached at construction). */
+  /** Owning solver. */
   readonly solver: Solver;
-  /** Cell ids this term binds, in the order subclasses expect.
-   *  `cells[ci]` is the cell-index-`ci` cell. */
+  /** Bound cell ids in subclass order; `cells[ci]` is cell-index ci. */
   readonly cells: readonly number[];
-  /** Per-cell-index starting offset into `solver.positions`,
-   *  cached at construction. Solver offsets are append-only —
-   *  once set, never moved — so caching is safe. Subclasses
-   *  read positions as `solver.positions[cellOffsets[ci] + k]`,
-   *  saving one array lookup per inner-loop access. */
+  /** Per-cell-index offset into `solver.positions`, cached (offsets
+   *  are append-only, so caching is safe and saves an inner-loop
+   *  lookup). */
   readonly cellOffsets: readonly number[];
-  /** Per-cell-index dim, cached for the same reason as offsets. */
+  /** Per-cell-index dim, cached like offsets. */
   readonly cellDims: readonly number[];
   /** Number of constraint scalar rows. */
   readonly rows: number;
 
-  /** Current constraint values. Filled by `computeConstraint`. */
+  /** Current constraint values; filled by `computeConstraint`. */
   readonly C: Float64Array;
-  /** Constraint values at start of step — for hard-constraint
-   *  stabilisation. Filled by `prepare()`. */
+  /** Constraint values at start of step (hard-constraint stabilisation). */
   readonly C0: Float64Array;
-  /** Material stiffness per row. Use `Infinity` for a hard
-   *  constraint (uses augmented-Lagrangian path). */
+  /** Per-row stiffness; `Infinity` = hard (augmented-Lagrangian path). */
   readonly stiffness: Float64Array;
-  /** Lower bound on the dual variable λ for each row (default
-   *  `-Infinity`). Used to express one-sided constraints
-   *  (`λ ≥ 0` ↔ `lambdaMin = 0`) and friction-cone clamps. */
+  /** Per-row lower bound on λ (default `-Infinity`). One-sided
+   *  constraints and friction-cone clamps. */
   readonly lambdaMin: Float64Array;
-  /** Upper bound on the dual variable λ for each row (default
-   *  `+Infinity`). */
+  /** Per-row upper bound on λ (default `+Infinity`). */
   readonly lambdaMax: Float64Array;
   /** Fracture threshold: `|λ| > fracture` disables the term. */
   readonly fracture: Float64Array;
-  /** Current penalty parameter (warm-started, ramped via β). */
+  /** Current penalty (warm-started, ramped via β). */
   readonly penalty: Float64Array;
   /** Lagrange multiplier for hard constraints (soft uses 0). */
   readonly lambda: Float64Array;
-  /** Marks the term for removal at the next `solver.prepare()`.
-   *  Set by `dispose()` (user) or by `_dualPass` (fracture). */
+  /** Removal flag, honoured at the next `prepare()`. Set by
+   *  `dispose()` or by fracture in `_dualPass`. */
   disabled = false;
 
-  /** Jacobian per cell-index: `J[ci]` is `rows × dim_{cells[ci]}`
-   *  in row-major order. */
+  /** Per-cell-index Jacobian; `J[ci]` is `rows × dim` row-major. */
   readonly J: Float64Array[];
-  /** Hessian column norms per cell-index. Same shape as `J[ci]`. */
+  /** Per-cell-index Hessian column norms; same shape as `J[ci]`. */
   readonly HCols: Float64Array[];
 
   constructor(solver: Solver, cells: readonly number[], rows: number) {
@@ -132,15 +101,13 @@ export abstract class Term {
   abstract computeConstraint(alpha: number): void;
   abstract computeDerivatives(cellIdx: number): void;
 
-  /** Mark this term for removal. Takes effect on the next solver
-   *  pass (the constraints' network, or an explicit `solver.solve()`). */
+  /** Mark for removal; takes effect on the next solver pass. */
   dispose(): void {
     this.disabled = true;
   }
 
-  /** True iff `stiffness[row]` is `Infinity` — solved via the
-   *  augmented-Lagrangian path rather than penalty weighting.
-   *  Hot paths inline the `=== Infinity` check directly. */
+  /** True iff row `row` is hard (`stiffness === Infinity`). Hot paths
+   *  inline the check. */
   isHard(row: number): boolean {
     return this.stiffness[row]! === Number.POSITIVE_INFINITY;
   }

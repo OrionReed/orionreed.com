@@ -1,18 +1,12 @@
 // curve.ts — reactive piecewise curve with line + elliptic-arc segments.
 //
-// Path's sibling: when polylines aren't enough. Each segment renders as
-// an SVG `d` chunk (native `L` for lines, `A` for elliptic arcs — the
-// browser draws the actual arc, not a sampled approximation) and
-// samples in closed form (`pointAt`, `tangentAt`). Arc-length per
-// segment is exact for lines, 16-sample for ellipse arcs (visually
-// indistinguishable from exact at typical aspect ratios).
+// Path's sibling for when polylines aren't enough. Segments render as native
+// SVG `d` chunks (`L`/`A`) and sample in closed form. Arc length is exact for
+// lines, 16-sample for ellipse arcs.
 //
-// Two construction modes share one class:
-//   • Static — pass an array. `curve()` / fluent `.to(p)` / `.ellipseArc(...)`.
-//   • Reactive — pass a builder fn. Segments recompute when deps change;
-//     fluent methods aren't available (the builder owns the list).
-// The `ellipse(center, a, b, rotation?)` factory uses the reactive form
-// so all four parameters accept `Val<>`.
+// Two modes share one class: static (array; fluent `.to`/`.ellipseArc`) and
+// reactive (builder fn; recomputes on deps, no fluent methods). The `ellipse`
+// factory uses the reactive form so all params accept `Val<>`.
 
 import {
   derive,
@@ -223,10 +217,8 @@ export class Curve<O extends CurveOpts = CurveOpts> extends Shape<O> {
     return this._segments.peek();
   }
 
-  /** Override Shape's default (bounding-rect) for the dashed renderer.
-   *  Lines pass through; circular ellipse-arcs (`a ≈ b`, rotation ≈ 0)
-   *  become native arcs; non-circular ellipse-arcs tessellate into line
-   *  segments so the dasher still has something to chew on. */
+  /** Segments for the dashed renderer: lines pass through, circular arcs
+   *  (`a ≈ b`, rotation ≈ 0) become native arcs, other ellipse arcs tessellate. */
   override segments(): import("./shape").Segment[] {
     const arr = this._segments.value;
     const out: import("./shape").Segment[] = [];

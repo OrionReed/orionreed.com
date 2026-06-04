@@ -1,27 +1,13 @@
 // =====================================================================
-// domain-aggregates.ts — closed-form lenses in non-point domains.
+// domain-aggregates.ts — closed-form lenses beyond point clouds.
 //
-// The point-cluster catalog has rich structure (centroid, rotation,
-// PCA, …). This file pushes the same patterns into:
-//
-//   (1) Generic aggregates over ANY Linear-trait type — colors, poses,
-//       ranges, boxes, all "for free" via the existing `meanLens` /
-//       `centroidLens` / `scaleAbout` building blocks once you let
-//       the engine dispatch on `traits.linear`.
-//
-//   (2) Color-specific aggregates: meanColor, palette (mean + spread
-//       per channel), hue rotation.
-//
-//   (3) Curve / Bezier aggregates: gestalt handles on a cubic Bezier
-//       ({start, end, startTangent, endTangent}) so you can drag the
-//       "shape" of a curve without touching individual control points.
-//
-//   (4) Time-series aggregates: {mean, trend, span} via bestFitLine
-//       on (i, value) pairs — works on any Linear-trait scalar type.
-//
-// All exports are closed-form: exact, idempotent, cross-channel
-// invariant by construction. Same group-action framework as
-// `closed-form-policies.ts`, applied beyond points.
+// The group-action patterns from `closed-form-policies.ts`, applied to:
+//   (1) Generic Linear/Metric-trait aggregates — `meanOf`, `spreadOf`,
+//       `paletteLens` work for colors, poses, ranges, boxes for free.
+//   (2) Color aggregates — `meanColor`.
+//   (3) Bezier gestalt handles ({start, end, startTangent, endTangent}).
+//   (4) Time-series ({mean, slope}) over (i, value) samples.
+// All exact, idempotent, cross-channel invariant by construction.
 // =====================================================================
 
 import {
@@ -36,21 +22,12 @@ import {
 
 // ─── 1. Generic Linear-trait aggregates ────────────────────────────────
 //
-// `meanLens` and `scaleAbout` already work for ANY Linear-trait type.
-// What's missing is an ERGONOMIC entry point: a free function that
-// infers the value class from the first input. This lets users write
-//
-//   const avg = meanOf(colors);
-//
-// instead of
-//
-//   const avg = meanLens(Color, colors);
-//
-// Same engine. Zero new infrastructure.
+// Ergonomic entry points over `meanLens` / `scaleAbout` that infer the
+// value class from the first input (`meanOf(colors)` vs
+// `meanLens(Color, colors)`). Same engine, no new infrastructure.
 // =====================================================================
 
-/** Class-inferring mean: returns a writable of the same class as
- *  `inputs[0]`. Requires the class to declare the `linear` trait. */
+/** Class-inferring mean (writable of `inputs[0]`'s class). Needs `linear`. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
 export function meanOf<S extends Traits<any, "linear">>(
   inputs: readonly Writable<S>[],
@@ -86,9 +63,8 @@ export function meanOf<S extends Traits<any, "linear">>(
   );
 }
 
-/** Generic rigid-translate aggregate over any Linear type. Identical
- *  semantics to `meanOf` (writes shift all inputs by the same delta),
- *  but named for the geometric intent. */
+/** Rigid-translate aggregate over any Linear type. Alias of `meanOf`,
+ *  named for the geometric intent. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
 export function rigidTranslateOf<S extends Traits<any, "linear">>(
   inputs: readonly Writable<S>[],
@@ -100,10 +76,8 @@ export function rigidTranslateOf<S extends Traits<any, "linear">>(
 
 type ColorV = { r: number; g: number; b: number; a: number };
 
-/** Mean (average) color of a palette. Read = mean RGBA; write =
- *  shift every color by the delta to target (rigid translate in RGBA
- *  space). Inherits cross-channel invariance from Linear-trait
- *  `meanOf` via the established framework. */
+/** Mean color of a palette; write shifts every color by the delta
+ *  (rigid translate in RGBA). Via `meanOf`. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
 export function meanColor(
   colors: readonly Writable<Traits<ColorV, "linear">>[],
@@ -111,30 +85,16 @@ export function meanColor(
   return meanOf(colors);
 }
 
-/** Generic "spread" lens: scalar that reads the mean radial distance
- *  from the cluster's centroid (via the `Metric` trait) and on write
- *  scales the cluster's deviations so the new mean matches the
- *  target — preserving the relative distribution.
+/** Mean radial distance from the centroid; write scales the cluster's
+ *  deviations so the new mean matches the target. Trait-driven via
+ *  `Linear` + `Metric`, so it works for any class declaring both (Vec,
+ *  Color, Pose, Box, Range, custom).
  *
- *  Trait-driven via `Linear` (add/sub/scale on deviations) AND
- *  `Metric` (L2 distance from centroid). Works for any value class
- *  declaring both — Vec, Color, Pose, Box, Range, custom.
- *
- *  Symmetric implementation: the complement carries per-input
- *  deviations NORMALIZED by the cluster's current mean radial
- *  distance. Writing `spread = T` places each input at
- *  `centroid + normDev_i * T`. A point that was at 1.5× the mean
- *  radius stays at 1.5× the new mean radius — relative shape is
- *  preserved. When the cluster collapses (spread < eps) the stored
- *  norms survive, so `spread → 0 → T` reinflates the original SHAPE
- *  (not a perfect sphere around the centroid). No epsilon clamping;
- *  `spread = 0` is truly 0; composition does not amplify a floor.
- *
- *  Cross-channel invariance with `meanOf`: writing mean translates the
- *  cluster (spread unchanged); writing spread scales about the current
- *  centroid (mean unchanged). The centroid is recomputed from the
- *  current source on every read & write, so an intervening mean
- *  translate works correctly without staleness. */
+ *  Complement carries per-input deviations normalized by the current mean
+ *  radius, so `spread = T` places each input at `centroid + normDev_i * T`
+ *  and a collapse (spread → 0) reinflates the original SHAPE. Centroid is
+ *  recomputed every read/write, so an intervening mean translate is not
+ *  stale. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
 export function spreadOf<
   T extends NonNullable<unknown>,
@@ -159,10 +119,9 @@ export function spreadOf<
     return lin.scale(acc, inv);
   };
 
-  // Complement: normalized deviations (dev / mean) from the centroid. If
-  // the cluster is fully collapsed, the stored norms hold (additive zeros
-  // initially) until the inputs move and a re-read refreshes them; `bwd`
-  // scales the live deviations (fast path) or reinflates from the norms.
+  // Complement: normalized deviations (dev / mean) from the centroid.
+  // `bwd` scales the live deviations (fast path) or reinflates from the
+  // stored norms when the cluster has collapsed.
   type C = { norms: T[] };
   const meanSpread = (vals: readonly T[], ctr: T): number => {
     let total = 0;
@@ -171,7 +130,7 @@ export function spreadOf<
   };
 
   // biome-ignore lint/suspicious/noExplicitAny: variance escape — spec is checked structurally
-  return (Num as any).statefulLens(inputs as unknown as readonly Writable<Signal<T>>[], {
+  return (Num as any).lens(inputs as unknown as readonly Writable<Signal<T>>[], {
     init: (vals: readonly T[]): C => {
       const ctr = centroid(vals);
       const mean = meanSpread(vals, ctr);
@@ -193,22 +152,19 @@ export function spreadOf<
       const mean = meanSpread(vals, ctr);
       if (mean > 1e-9) {
         const k = target / mean;
-        return { updates: vals.map(v => lin.add(ctr, lin.scale(lin.sub(v, ctr), k))), complement: c };
+        return {
+          updates: vals.map(v => lin.add(ctr, lin.scale(lin.sub(v, ctr), k))),
+          complement: c,
+        };
       }
       return { updates: c.norms.map(nrm => lin.add(ctr, lin.scale(nrm, target))), complement: c };
     },
   }) as Writable<Num>;
 }
 
-/** Palette decomposition: K colors → {mean: Color, spread: Num}.
- *
- *  Composition of `meanOf` (Linear-trait aggregate) and `spreadOf`
- *  (Linear + Metric-trait spread). Now fully trait-driven: works for
- *  any value class that declares Linear + Metric — Vec, Pose, Box,
- *  Range, Color, user-defined types — without code changes.
- *
- *  This is the "centroid + uniform scale about centroid" decomposition,
- *  generalised across domains via the trait system. */
+/** Palette decomposition: K values → {mean, spread}, i.e. centroid +
+ *  uniform scale about it. `meanOf` ∘ `spreadOf`; works for any
+ *  Linear + Metric class. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape on value class
 export function paletteLens<
   T extends NonNullable<unknown>,
@@ -222,31 +178,15 @@ export function paletteLens<
 
 // ─── 3. Bezier curve gestalt ───────────────────────────────────────────
 //
-// A cubic Bezier curve has 4 control points (p0, p1, p2, p3). The
-// "gestalt" view exposes 4 derived handles that match the user's
-// mental model of curve shape:
-//
-//   start         = p0
-//   end           = p3
-//   startTangent  = p1 - p0   (vector from p0 in the direction of p1)
-//   endTangent    = p3 - p2   (vector from p3 in the direction OPPOSITE to p2)
-//
+// Cubic Bezier (p0..p3) → 4 shape handles:
+//   start = p0, end = p3, startTangent = p1−p0, endTangent = p3−p2.
 // Writes:
-//
-//   write start:        translate p0 to target; p1 moves with it
-//                       (preserving startTangent vector).
-//   write end:          translate p3 to target; p2 moves with it
-//                       (preserving endTangent vector).
-//   write startTangent: p1 := p0 + target (target relative to p0).
-//                       p0, p2, p3 unchanged.
-//   write endTangent:   p2 := p3 - target (since tangent points away from p2).
-//                       p0, p1, p3 unchanged.
-//
-// Cross-channel invariance is exact for all six pairs (each write
-// touches only the inputs needed to realise the target; others are
-// genuinely untouched). The forward map is linear in (p0, p1, p2, p3),
-// so this is a square iso lens: M = N (each control point contributes
-// 2 scalars, total 8; each handle contributes 2 scalars, total 8).
+//   start        → translate p0 to target; p1 follows (tangent preserved)
+//   end          → translate p3 to target; p2 follows (tangent preserved)
+//   startTangent → p1 := p0 + target
+//   endTangent   → p2 := p3 − target  (tangent points away from p2)
+// Linear forward, square iso lens (8 = 8); exact cross-channel
+// invariance for all pairs (each write touches only the needed inputs).
 // =====================================================================
 
 type V = { x: number; y: number };
@@ -301,27 +241,14 @@ export function bezierGestaltLens(
 
 // ─── 4. Time-series aggregates ─────────────────────────────────────────
 //
-// A sequence of scalar values, indexed by position. Closed-form
-// decomposition into {mean, slope, span}:
-//
-//   mean  := average value (= rigid-translate; writes shift all values
-//            by the delta).
-//   slope := least-squares slope of (i, value_i). Writes tilt the
-//            whole series about its mean to achieve the new slope.
-//   span  := max(value) - min(value). Writes scale-about-mean to
-//            match the new spread.
-//
-// Cross-channel invariance:
-//   mean ↔ slope: rigid translate preserves slope (line through mean
-//                 has the same slope before and after a y-shift).
-//   mean ↔ span:  rigid translate preserves the (max - min) span.
-//   slope ↔ span: rotation-about-mean changes the y-extent (span)
-//                 unless slope is small. Only approximately invariant
-//                 — documented in tests.
+// Scalar values indexed by position → {mean, slope}:
+//   mean  := average; writes shift all values by the delta.
+//   slope := least-squares slope of (i, value_i); writes tilt about mean.
+// mean and slope are invariant under each other (a y-shift preserves
+// slope; tilting about the mean preserves the mean).
 // =====================================================================
 
-/** Time-series scalar aggregate. Returns 3 writable views over a
- *  sequence of Num values, treating them as (i, value_i) samples. */
+/** Time-series scalar aggregate over Num values as (i, value_i) samples. */
 export function timeSeriesLens(values: readonly Writable<Num>[]): {
   mean: Writable<Num>;
   slope: Writable<Num>;
@@ -345,13 +272,9 @@ export function timeSeriesLens(values: readonly Writable<Num>[]): {
     },
   );
 
-  // For slope, use the least-squares formula:
-  //   slope = Σ (i - īndex) * (v - mean) / Σ (i - īndex)²
-  // (xMean of indices = (N-1)/2; constant)
-  //
-  // Writes: tilt about the mean. For new slope = s, new value_i = mean +
-  // (i - īndex) * s (preserving mean). All other points get the
-  // implied new positions.
+  // Least-squares slope = Σ (i − idxMean)(v − mean) / Σ (i − idxMean)²,
+  // idxMean = (N−1)/2 constant. Write tilts about the mean:
+  // value_i = mean + (i − idxMean)·s.
   const idxMean = (N - 1) / 2;
   let denomSlope = 0;
   for (let i = 0; i < N; i++) {
@@ -373,8 +296,6 @@ export function timeSeriesLens(values: readonly Writable<Num>[]): {
       let valMean = 0;
       for (let i = 0; i < N; i++) valMean += vals[i]!;
       valMean /= N;
-      // New value_i = valMean + (i - īndex) * target. Preserves mean,
-      // changes slope to target.
       return vals.map((_, i) => valMean + (i - idxMean) * target) as never;
     },
   );
@@ -382,44 +303,7 @@ export function timeSeriesLens(values: readonly Writable<Num>[]): {
   return { mean, slope };
 }
 
-// ─── 5. Aside: trait-level surface inventory ───────────────────────────
-//
-// Looking at what we've built:
-//
-//   - `meanOf` / `rigidTranslateOf` work for ANY Linear trait —
-//     numbers, vectors, colors, poses, boxes, ranges. The trait
-//     system already abstracts "addition" cleanly.
-//
-//   - `palette.spread` uses Linear (the centroid via meanOf) AND
-//     hand-rolled L2 norm on RGBA. The norm step is the bit that
-//     doesn't generalise via a current trait — would benefit from
-//     a `Metric<T>` trait usage (Color doesn't currently declare one).
-//
-//   - `bezierGestalt` is point-specific (Vec). No trait benefit:
-//     the operation is "translate Vec / replace Vec component" which
-//     is the trivial Vec.lens / spread-replace path.
-//
-//   - `timeSeries` is Num-specific (scalar). Could generalise to any
-//     Linear type with an index-induced ordering, but the slope
-//     formula is scalar-natural.
-//
-// Missing traits that would unlock more generality:
-//
-//   1. `Metric<T>` is declared but only `Vec` and `Num` use it.
-//      Adding it to Color would make `palette.spread` trait-driven
-//      (compute "average distance from centroid" generically).
-//
-//   2. `Pivotal<T>` — declares the type supports "act about a pivot
-//      point" (translation / rotation / scale). For 2D types this is
-//      a group action of SE(2) × R+; the building blocks like
-//      `rotateAbout`/`scaleAbout` are currently Vec-specific but could
-//      generalise to any Pivotal class (e.g., Pose, which extends Vec
-//      with a rotation component).
-//
-//   3. `Differentiable<T>` — declares an analytical Jacobian for the
-//      forward map. Would let factor() skip FD for trait-using
-//      compositions.
-//
-// These are sketches; concrete trait-extension proposals deferred to
-// a separate exploration.
+// `meanOf` / `rigidTranslateOf` / `spreadOf` are fully trait-driven
+// (Linear, Metric); `bezierGestalt` and `timeSeries` stay value-specific
+// (Vec / Num) since their operations don't benefit from the trait layer.
 // =====================================================================

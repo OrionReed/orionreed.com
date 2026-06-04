@@ -54,10 +54,8 @@ export class Circle<O extends CircleOpts = CircleOpts> extends Shape<O> {
     });
   }
 
-  /** Two half-arcs so each span stays ≤ π (keeps `largeArc` unambiguous).
-   *  Rendered inside the shape's own `<g transform>` so coords are in
-   *  local frame — derived from the Box rather than `this.center`
-   *  (which is now parent-frame). */
+  /** Two half-arcs (each span ≤ π, so `largeArc` stays unambiguous), in
+   *  local frame — derived from the Box, not parent-frame `this.center`. */
   override segments(): Segment[] {
     const cx = () => this.box.value.x + this.box.value.w / 2;
     const cy = () => this.box.value.y + this.box.value.h / 2;

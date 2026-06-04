@@ -1,23 +1,18 @@
-// range.ts — interval cells + interval combinators. PROTOTYPE.
+// range.ts — interval cells + interval combinators.
 //
-// A `Range` cell holds an interval `[lo, hi]` representing partial
-// knowledge about a numeric value. Operations narrow (intersect)
-// rather than replace, so propagators can fire in any order without
-// losing information. Termination is structural: every fire shrinks
-// at least one interval (or no-ops), and intervals form a finite-
-// height lattice when bounded.
+// A `Range` cell holds an interval `[lo, hi]` of partial knowledge.
+// Operations narrow (intersect) rather than replace, so propagators
+// fire in any order without losing info, and termination is
+// structural (a bounded finite-height lattice; every fire shrinks
+// an interval or no-ops).
 //
-// **Non-coloring property preserved.** A Range cell IS just
-// `signal<[number, number]>(...)` with custom equality. No new type,
-// no `Cell<T>` wrapper. The "merge instead of replace" semantic is
-// in the COMBINATOR'S step body — when a propagator wants to
-// contribute info, it merges with the current cell value.
+// A Range cell is just `signal<[number, number]>` with custom
+// equality — no new type. The "merge not replace" semantic lives in
+// each combinator's step body.
 //
-// At the boundary with exact-value cells, you provide trivial
-// adapter combinators (`snap`, `lift`, `pinned`) that link a Range
-// cell to a Num cell. So a layout system can use Range internally
-// for partial-info propagation while exposing exact Num signals to
-// renderers / drag handlers / lens chains.
+// Adapter combinators (`snap`) bridge to exact Num cells, so a
+// system can propagate partial info internally while exposing exact
+// signals to renderers / drag handlers / lens chains.
 
 import { type Signal, signal, type Writable } from "../signals";
 import { type Propagator, propagator } from "./propagator";
@@ -67,8 +62,7 @@ export function rangeCell(
 }
 
 /** Merge `partial` into `cell` via lattice intersection. Throws on
- *  contradiction. The merge IS the write — no separate "contribute"
- *  API is needed because the combinators do this internally. */
+ *  contradiction. */
 export function rangeMerge(cell: RangeCell, partial: Range): void {
   const cur = cell.peek();
   const merged = rangeMeet(cur, partial);
@@ -104,30 +98,23 @@ export function intervalSub(a: Range, b: Range): Range {
 // ─── Interval combinators ───────────────────────────────────────
 
 /** `a + b = c` over interval cells. Three propagators that each
- *  NARROW their output cell — never overwrite. Order-independent:
- *  propagators can fire in any sequence and converge to the same
- *  fixpoint. */
+ *  narrow their output; order-independent. */
 export function intervalAdder(a: RangeCell, b: RangeCell, c: RangeCell): Propagator[] {
   return [
     propagator([a, b], [c], () => {
-      // c narrows to (a + b)
       rangeMerge(c, intervalAdd(a.value, b.value));
     }),
     propagator([a, c], [b], () => {
-      // b narrows to (c - a)
       rangeMerge(b, intervalSub(c.value, a.value));
     }),
     propagator([b, c], [a], () => {
-      // a narrows to (c - b)
       rangeMerge(a, intervalSub(c.value, b.value));
     }),
   ];
 }
 
-/** `a = b` over interval cells. Two propagators each merging the
- *  other's range into ours. Symmetric: order doesn't matter on
- *  initial fire because both directions narrow to the same
- *  intersection. */
+/** `a = b` over interval cells. Each direction narrows to the same
+ *  intersection, so order doesn't matter. */
 export function intervalEq(a: RangeCell, b: RangeCell): Propagator[] {
   return [
     propagator([a], [b], () => rangeMerge(b, a.value)),
@@ -144,12 +131,8 @@ export function constrain(cell: RangeCell, lo: number, hi: number): Propagator {
   });
 }
 
-/** Sum of N range cells = total. Order-independent: any one cell
- *  can be the unknown, or all can be partially known.
- *
- *  N+1 propagators: total derived from sum, plus one per part
- *  derived from total minus sum-of-others. Each NARROWS its output
- *  cell; the network fixpoint collects all the partial info. */
+/** Sum of N range cells = total. N+1 propagators (total from parts,
+ *  each part from total minus the others); order-independent. */
 export function intervalSum(parts: readonly RangeCell[], total: RangeCell): Propagator[] {
   const props: Propagator[] = [];
 
@@ -188,14 +171,10 @@ export function intervalSum(parts: readonly RangeCell[], total: RangeCell): Prop
 
 // ─── Interop with exact-value cells ──────────────────────────────
 
-/** Pin a Num signal to the midpoint of a Range cell. The Num is
- *  read-only-ish from the propagator's perspective — propagators
- *  narrow the Range; the Num always reflects the midpoint. Drag
- *  the Num: bwd writes the EXACT value into the Range as a
- *  singleton (which may contradict an existing narrower bound).
- *
- *  Useful for wiring a Range cell into a UI — renderers read the
- *  exact midpoint, drag handlers write exact values back. */
+/** Bridge a Range cell to an exact Num: the Num reflects the Range's
+ *  midpoint; writing the Num forces the Range to that singleton
+ *  (which may contradict a narrower existing bound). For wiring a
+ *  Range cell into a UI. */
 export function snap(rangeC: RangeCell, exact: Writable<Signal<number>>): Propagator[] {
   return [
     // range → exact midpoint
@@ -212,8 +191,5 @@ export function snap(rangeC: RangeCell, exact: Writable<Signal<number>>): Propag
   ];
 }
 
-// (`lift` is intentionally NOT exported in this prototype — sugar
-// for "create a Range cell and snap to a Num" requires bundling
-// both the cell and the propagators, which doesn't fit the current
-// "combinator returns Propagator[]" pattern. Users wire snap()
-// manually for now; if the pattern recurs, sugar comes later.)
+// No `lift` sugar: bundling a fresh cell + its propagators doesn't
+// fit the "combinator returns Propagator[]" shape. Wire snap() by hand.

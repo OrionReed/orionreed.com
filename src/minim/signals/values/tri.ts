@@ -1,28 +1,14 @@
 // tri.ts — three-valued logical type (Kleene logic).
 //
-// `Tri.value ∈ { true, false, "mixed" }`. The natural sum-type
-// extension of Bool: same involutive `.not()`, but the unknown /
-// mixed state is fixed under negation. Strong-Kleene AND/OR
-// respects the partial-information reading — `mixed AND false` is
-// `false` (the only uncertain branch can't rescue a known false);
-// `mixed AND true` stays `mixed` (still uncertain).
+// `Tri.value ∈ { true, false, "mixed" }` — Bool plus an unknown state
+// fixed under negation. Strong-Kleene AND/OR follow the partial-info
+// reading (`mixed AND false` → `false`, `mixed AND true` → `mixed`).
 //
-// The headline use: aggregate the state of N booleans. `Tri.allOf` /
-// `Tri.anyOf` produce a writable Tri from a `readonly Bool[]`:
-//
-//   - all true  → true        ── "all checked"
-//   - all false → false       ── "none checked"
-//   - any disagreement → "mixed" — "indeterminate"
-//
-// Writing the aggregate broadcasts to every parent (the classical
-// "select all" / "deselect all" UI policy). Writing `"mixed"` is a
-// no-op — partial information cannot be synthesized from agreement.
-//
-// `Tri` is the bridge between Bool and prisms: it's morally
-// `Maybe<Bool>`, the smallest sum type that surfaces the
-// "indeterminate" / "loading" state as a first-class value. Mixed-
-// state checkbox trees, partial selection UIs, SQL-style three-valued
-// logic, and "loading" states for async predicates all reduce to it.
+// Headline use: aggregate N booleans via `Tri.allOf` / `Tri.anyOf`
+// (all-agree → that value, disagreement → `"mixed"`). Writing the
+// aggregate broadcasts to every parent ("select all" / "deselect all");
+// writing `"mixed"` is a no-op. Morally `Maybe<Bool>` — the basis for
+// mixed-state checkbox trees and "loading" predicate states.
 
 import { type Init, Signal, type Writable } from "../signal";
 import type { TraitDict } from "../traits";
@@ -59,30 +45,14 @@ export class Tri extends Signal<V> {
     super(v, { equals });
   }
 
-  /** Kleene negation. Involution on `true` / `false`; fixed at
-   *  `"mixed"`. Chains fuse via the base engine just like `Bool#not`. */
+  /** Kleene negation. Involution; fixed at `"mixed"`. */
   not(): this {
     return this.lens(not, not);
   }
 
-  /** Aggregate over N writable Bools. Reads as Kleene AND collapsed
-   *  to a three-state classifier; writes broadcast the new value to
-   *  every parent.
-   *
-   *  Read:
-   *    - all true  → `true`
-   *    - all false → `false`
-   *    - any disagreement → `"mixed"`
-   *
-   *  Write:
-   *    - `true`    → set every parent to `true`
-   *    - `false`   → set every parent to `false`
-   *    - `"mixed"` → no-op (writing partial information is structurally
-   *                  impossible from a single boolean target).
-   *
-   *  GetPut holds: writing back the read aggregate from an "all-agree"
-   *  state is identity; from a `"mixed"` state the write is a no-op,
-   *  also identity. */
+  /** Aggregate over N writable Bools. Read: all-true → `true`,
+   *  all-false → `false`, disagreement → `"mixed"`. Write: `true` /
+   *  `false` broadcast to every parent; `"mixed"` is a no-op. */
   static allOf(parents: readonly Bool[]): Writable<Tri> {
     return Tri.lens(
       parents as never,
@@ -103,13 +73,8 @@ export class Tri extends Signal<V> {
     );
   }
 
-  /** Dual of `allOf` — Kleene OR's three-state classifier:
-   *    - any true   → `true`
-   *    - all false  → `false`
-   *    - else       → `"mixed"`
-   *
-   *  Write policy is the same broadcast: `true` / `false` set every
-   *  parent; `"mixed"` is a no-op. */
+  /** Dual of `allOf` (Kleene OR): any-true → `true`, all-false →
+   *  `false`, else `"mixed"`. Same broadcast write policy. */
   static anyOf(parents: readonly Bool[]): Writable<Tri> {
     return Tri.lens(
       parents as never,

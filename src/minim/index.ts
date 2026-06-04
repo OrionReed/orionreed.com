@@ -1,6 +1,6 @@
 export * from "./assert";
-// Code re-exports are explicit to avoid name clashes with `tex` (both
-// modules have `Part`). For `Part`, import directly from "minim/code".
+// Explicit re-exports: `code` and `tex` both have `Part` (import it
+// directly from "minim/code").
 export { type CodeOpts, CodeShape, code, codeStyles, type Token, tokenize } from "./code";
 export * from "./core";
 export * from "./ext";

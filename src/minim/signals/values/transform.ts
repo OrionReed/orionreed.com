@@ -1,10 +1,9 @@
 // transform.ts — reactive 2D transform.
 //
 // Invertibles (`add`, `sub`) return `: this` and ride on
-// `Signal#lens(fwd, bwd)`. Chained calls auto-fuse. Field-lens getters
-// use `field()`; `Transform.translate.x.value = 5` works on writable
-// receivers because writability propagates through nested chains via
-// the conditional return.
+// `Signal#lens(fwd, bwd)`; chained calls auto-fuse. Field-lens getters
+// use `field()`, so writability propagates through nested chains
+// (`Transform.translate.x.value = 5` works on writable receivers).
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
@@ -86,9 +85,8 @@ export class Transform extends Signal<V> {
   static traits = { linear: linearImpl, lerp, metric, equals } satisfies TraitDict<V>;
   declare readonly _t: typeof Transform.traits;
 
-  /** Scalar `scale` lives as a Vec field lens (`.scale`), not as an
-   *  invertible eager method — to scalar-multiply a Transform, use
-   *  `Transform.lens(...)` or compose via field writes. */
+  /** Scalar `scale` is the `.scale` Vec field lens, not an eager method;
+   *  scalar-multiply via `Transform.lens(...)` or field writes. */
 
   constructor(v: V = DEFAULT) {
     super(v, { equals });
@@ -136,9 +134,8 @@ export class Transform extends Signal<V> {
 
 export type TransformInit = { [K in keyof V]?: V[K] };
 
-/** Seed a `Writable<Transform>` from literal initial values. For
- *  reactive sources, construct via `Transform.lens(...)` / field-write
- *  composition directly — `transform({ ... })` is the literal seeder. */
+/** Seed a `Writable<Transform>` from literal values. For reactive
+ *  sources, use `Transform.lens(...)` or field-write composition. */
 export function transform(init?: TransformInit): Writable<Transform> {
   const tr = new Transform() as Writable<Transform>;
   if (init) {

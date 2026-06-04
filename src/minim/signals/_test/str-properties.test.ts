@@ -20,6 +20,7 @@
 // don't reduce to the classical three.
 
 import { describe, expect, it } from "vitest";
+import type { Writable } from "../signal";
 import {
   applyCasePattern,
   caseMaskOf,
@@ -28,7 +29,6 @@ import {
   type Str,
   str,
 } from "../values/str";
-import type { Writable } from "../signal";
 import {
   type SourceAndLens,
   verifyGetPut,
@@ -44,8 +44,7 @@ const TRIALS = 100;
 
 // ─── Random generators ───────────────────────────────────────────
 
-const rngInt = (lo: number, hi: number): number =>
-  lo + Math.floor(Math.random() * (hi - lo + 1));
+const rngInt = (lo: number, hi: number): number => lo + Math.floor(Math.random() * (hi - lo + 1));
 
 /** Pick one character at random from a string. */
 const rngChar = (chars: string): string => chars.charAt(rngInt(0, chars.length - 1));
@@ -351,9 +350,7 @@ describe("PROPERTY: lowercase — resourceful (per-word case preserved under str
       // Each source position now contains the lowercased word for
       // that NEW position, cased per the ORIGINAL source word with
       // the matching content.
-      const expectedSource = order
-        .map(i => sourceWords[i]!)
-        .join(" ");
+      const expectedSource = order.map(i => sourceWords[i]!).join(" ");
       expect(s.value).toBe(expectedSource);
     }
   });
@@ -369,10 +366,7 @@ describe("PROPERTY: lowercase — resourceful (per-word case preserved under str
       const splitPos = (() => {
         for (let attempt = 0; attempt < 20; attempt++) {
           const p = rngInt(1, lower.length - 1);
-          if (
-            /[\p{L}\p{N}_'-]/u.test(lower[p - 1]!) &&
-            /[\p{L}\p{N}_'-]/u.test(lower[p]!)
-          ) {
+          if (/[\p{L}\p{N}_'-]/u.test(lower[p - 1]!) && /[\p{L}\p{N}_'-]/u.test(lower[p]!)) {
             return p;
           }
         }

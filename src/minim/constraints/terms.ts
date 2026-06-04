@@ -1,23 +1,13 @@
 // terms.ts — concrete `Term` subclasses (numerical kernel).
 //
-// Each subclass operates on cell ids into the solver's SOA buffers.
-// Subclasses read positions via `solver.positions` / `solver.offsets`,
-// and write Jacobian / Hessian column norms into `J[ci]` / `HCols[ci]`.
+// Each subclass reads positions via `solver.positions`/`offsets` and
+// writes Jacobian / Hessian column norms into `J[ci]` / `HCols[ci]`.
 //
-// **Mutable parameters via signals.** Numeric parameters that the
-// user might want to mutate (rest lengths, bounds, target stiffness,
-// …) are stored as `Signal<number>` and *cached* in `initialize()`
-// — which the AVBD outer loop calls once per `solver.solve()`. The
-// inner per-iteration computeConstraint/computeDerivatives methods
-// use the cached primitive, so the inner loop stays signal-free
-// (no `.value` reads, no subscription bookkeeping, identical perf
-// to the previous fixed-number form).
-//
-// Subscription happens at the cluster layer: `Constraints`'s network
-// body reads each relation's members (including param signals) so
-// mutating `r.rest.value = 50` triggers a re-solve via the normal
-// reactive flow. The term then peeks the new value when
-// `initialize()` runs.
+// Mutable numeric parameters (rest lengths, bounds, …) are held as
+// `Signal<number>` and cached in `initialize()` (called once per
+// `solve()`), so the inner per-iteration methods stay signal-free.
+// Subscription happens at the cluster layer: the network body reads
+// each param signal, so mutating it triggers a re-solve.
 
 import { type Signal, signal, type Writable } from "../signals";
 import type { Solver } from "./solver";
@@ -30,9 +20,7 @@ export const Strength = {
   MEDIUM: 1e3,
   STRONG: 1e6,
   REQUIRED: 1e9,
-  /** True hard constraint: solved via the augmented Lagrangian
-   *  path rather than penalty weighting. The default for the
-   *  `*Term` constructors. */
+  /** True hard constraint (augmented-Lagrangian path); `*Term` default. */
   HARD: Number.POSITIVE_INFINITY,
 } as const;
 
@@ -121,8 +109,7 @@ export class LensNumTerm extends Term {
 // ─── Distance constraint (Vec ↔ Vec) ─────────────────────────────────
 
 export class DistanceTerm extends Term {
-  /** Rest-length signal. Cached once per `solver.solve()` in
-   *  `initialize()` — the inner loop reads only the primitive. */
+  /** Rest-length signal; cached in `initialize()`. */
   readonly rest: Signal<number>;
   /** Optional mutable stiffness signal (only set when `hard=false`). */
   readonly stiffnessSig?: Signal<number>;
@@ -153,12 +140,8 @@ export class DistanceTerm extends Term {
   }
 
   initialize(): boolean {
-    // `.value` (not `.peek()`) — runs inside the cluster's network
-    // body where `activeNetwork` is set, so the read both refreshes
-    // the cache AND subscribes the network to this param signal.
-    // Mutations to `rest` then trigger normal re-fire via the
-    // signal DAG. The inner per-iteration loop reads the cached
-    // primitive only — no signals on the hot path.
+    // `.value` (not `.peek()`): runs in the network body, so the read
+    // both refreshes the cache and subscribes the param signal.
     this._restCached = this.rest.value;
     if (this.stiffnessSig !== undefined) {
       const k = this.stiffnessSig.value;
@@ -240,7 +223,7 @@ export class BoundsTerm extends Term {
   }
 
   initialize(): boolean {
-    // `.value` to subscribe + refresh cache; see DistanceTerm note.
+    // `.value` to subscribe + refresh; see DistanceTerm note.
     this._loCached = this.lo.value;
     this._hiCached = this.hi.value;
     return true;
@@ -307,12 +290,9 @@ export class SoftTargetTerm extends Term {
 // construction for any smooth residual.
 
 export type ResidualFn = (
-  /** Positions of the cells, in order. Each entry is a `Float64Array`
-   *  snapshot of the cell's value (not a live view) — read-only
-   *  within the function. */
+  /** Per-cell position snapshots, in order (read-only). */
   positions: readonly Float64Array[],
-  /** Output buffer of length `rows`. Write residual values here;
-   *  zero means satisfied. */
+  /** Output buffer of length `rows`; write residuals (0 = satisfied). */
   out: Float64Array,
 ) => void;
 

@@ -89,8 +89,7 @@ function bool(default_?: boolean): PropertyDecorator {
 
 export const attr = { str, num, bool };
 
-/** Walk the prototype chain collecting `_attributes`. Used by
- *  `Diagram.observedAttributes` so subclasses see parent decls. */
+/** Collect `_attributes` up the prototype chain (subclasses see parent decls). */
 export function observedAttributesOf(ctor: Function): string[] {
   const acc: string[] = [];
   let c: any = ctor;
@@ -103,9 +102,7 @@ export function observedAttributesOf(ctor: Function): string[] {
   return acc;
 }
 
-/** Push a new HTML-attribute value into its signal, coerced by type.
- *  Lazy-creates the signal if not read yet. Called by
- *  `Diagram.attributeChangedCallback`. */
+/** Push a coerced HTML-attribute value into its signal (lazy-creating it). */
 export function syncAttrSignal(instance: HTMLElement, name: string, raw: string | null): void {
   const ctor = instance.constructor as AttrCtor;
   const type = ctor._attrTypes?.[name];

@@ -1,97 +1,43 @@
-// signal.ts — symmetric bidirectional engine prototype.
+// signal.ts — symmetric bidirectional reactive engine.
 //
-// GOAL
-// ────
-// Compete with alien-signals (the engine canonical is built on) on
-// absolute per-op cost in BOTH directions, while making backward
-// propagation as architecturally first-class as forward — and 100%
-// correct (passes the reactive-framework-test-suite forward).
+// Forward propagation is alien-signals verbatim (link/propagate/
+// checkDirty/shallowPropagate, Dirty/Pending/Recursed flags, lazy pull).
+// Backward is not a second engine: a write "compiles" a view-edit into
+// source-edits by walking up `_bwdParent`, applying each lens's `put` to
+// compute what the source(s) must become, committing via the SAME
+// forward write path. So views are never sticky (a view is always
+// `get(source)`; lossy lenses snap), no-op deltas short-circuit for free
+// via equality, and backward cost ≤ forward cost.
 //
-// DESIGN — the central realization
-// ────────────────────────────────
-// A backward write is NOT a separate propagation mechanism. It is a
-// *compiler* from a view-edit into source-edits. The walk up the
-// `_bwdParent` chain applies each lens's `put` to compute what the
-// SOURCE(s) must become; once committed, the EXACT SAME forward
-// machinery (propagate + equality-pruned checkDirty) refreshes every
-// downstream view. So:
+// Duals:
+//   * merge — N→1 backward aggregation (dual of computed's N→1 forward).
+//     Contributions land in a slot map keyed by contributor identity,
+//     fold via a user policy, reset per settle.
+//   * multi-parent lens — a write that SPLITS across N parents
+//     (`_put(target)` → per-parent update array, `propagateSplit`); the
+//     dual of a getter reading N parents. Covers coupled writables
+//     (N→M, e.g. mean/diff). Info the source can't hold lives in a
+//     stateful-lens complement, not a bespoke engine kind.
 //
-//   * Forward is alien-signals, verbatim. (link/propagate/checkDirty/
-//     shallowPropagate, Dirty/Pending/Recursed flags, lazy pull.)
-//   * Backward = "walk up, put, commit sources, then it's a forward
-//     write." No per-node propagation during the walk, no fusion,
-//     no second propagation engine.
+// Core asymmetry: forward deps are IMPLICIT (auto-tracked reads of
+// `.value` under `activeSub`); backward targets are EXPLICIT (declared
+// at construction in `_bwdParent`). Hence no `activeBwdWrite` global.
 //
-// CONSEQUENCES (all desirable)
-//   * Views are never sticky: a view is always `get(source)`. Writing
-//     `a` through a lens commits `put(a, src)` to the source, and the
-//     view re-reads to `get(put(a, src))`. For well-behaved (PutGet)
-//     lenses that's `a`; for lossy lenses the view "snaps" — the
-//     principled behavior for state-based asymmetric lenses.
-//   * Short-circuit is free and equality-checked: if the source delta
-//     is a no-op, the forward write no-ops, nothing fires. The "furthest
-//     upward changed node" (the pivot) is the source for chains, or a
-//     merge where contributions cancel.
-//   * Backward cost ≤ forward cost: the walk is N puts; the refresh is
-//     the same lazy, equality-checked pull forward already pays. Reads
-//     that don't observe a node never recompute it.
-//
-// MERGE — backward dual of computed
-// ─────────────────────────────────
-// Computed = N→1 forward derivation. Merge = N→1 backward aggregation.
-// Contributions land in a slot map keyed by contributor identity and
-// fold via a user policy. Within one settle a merge re-aggregates only
-// the contributions it received (slots reset per settle); batching
-// (one settle) coalesces multiple writes, last-write-wins per slot.
-//
-// MULTI-PARENT LENS — backward dual of a multi-dep getter
-// ───────────────────────────────────────────────────────
-// A getter reading N parents is a forward multi-dep node. Its backward
-// dual is a write that SPLITS across N parents: `_put(target)` returns a
-// per-parent update array and `propagateBwd` splits into each parent
-// (`propagateSplit`). This one primitive covers coupled writables (N→M,
-// e.g. mean/diff, procrustes). When a lossy write must recover info the
-// source can't hold (a collapsed cluster's directions), the memory lives
-// in a `statefulLens` complement (threaded by `init`/`step`) that `bwd`
-// reads — NOT in a bespoke engine kind. An eager split coalesces its N
-// commits under one flush (shared-ancestor merges still accumulate all
-// contributions first).
-//
-// GET / PUT, TRACKED / DECLARED — the core asymmetry
-// ──────────────────────────────────────────────────
-// Forward and backward are duals but NOT mirror images. A cell `get`s
-// its value forward (the `getter`) and `put`s edits backward (`_put`).
-// The asymmetry that matters:
-//
-//   * Forward dependencies are IMPLICIT — auto-tracked by reading
-//     `.value` under an `activeSub` (link/propagate/`deps`). You never
-//     declare what a getter reads; the engine discovers it each run.
-//   * Backward targets are EXPLICIT — declared at construction
-//     (`_bwdParent`, single or array, or a merge's parent). There is no
-//     `activeBwdWrite` global precisely because backward is structural,
-//     not ambient.
-//
-// MODE TABLE — a cell's role is fully determined by which fields are set
-// (exactly like the forward signal/computed/lens distinction):
-//
+// Mode table — a cell's role is fully determined by which fields are set:
 //   source      getter undefined                 (truth in currentValue)
 //   computed    getter,  no _put, no _mergeNode
 //   lens 1→1    getter + _put + _bwdParent (Signal)
 //   multi-out   getter + _put + _bwdParent (Signal[])  (1→N / N→M bwd)
 //   merge       getter + _mergeNode               (N→1 backward fold)
+// `pendingValue` is dual-keyed off this table: a staged forward write
+// for a source, a deferred backward target for a getter cell (never
+// both on one node).
 //
-// `pendingValue` has a dual role keyed off this table: for a source it
-// is the staged forward write; for a getter cell it is the deferred
-// backward target awaiting the backward pass (the two never coexist on
-// a node).
-//
-// BATCHING
-//   * Outside batch: a write propagates backward eagerly and flushes —
-//     matching alien's synchronous per-write semantics.
-//   * Inside batch / during flush: lens writes deposit their latest
-//     value and queue (last-write-wins via `_queueIdx`); merge folds
-//     defer to the queue drain so all contributors land first. The
-//     flush loop alternates bwd-drain / effect-drain to a fixpoint.
+// Batching: outside a batch a write propagates backward eagerly and
+// flushes (alien's synchronous per-write semantics). Inside batch/flush,
+// lens writes deposit their latest value and queue (last-write-wins via
+// `_queueIdx`) and merge folds defer until all contributors land; the
+// flush loop alternates bwd-drain / effect-drain to a fixpoint.
 
 // ─── Flags (alien-signals v2) ─────────────────────────────────────
 
@@ -116,17 +62,15 @@ let notifyIndex = 0;
 let queuedLength = 0;
 let activeSub: ReactiveNode | undefined;
 let flushing = false;
-/** The `_NetworkNode` currently running its body, if any. Source writes
- *  self-exclude it so a network that reads+writes a signal doesn't
- *  re-trigger itself. `undefined` outside a network body — then writes
- *  behave exactly as the pre-network engine. */
+/** Network running its body, if any. Source writes self-exclude it so a
+ *  network reading+writing a signal doesn't re-trigger itself. */
 let activeNetwork: _NetworkNode | undefined;
 const queued: (Effect | _NetworkNode | undefined)[] = [];
 
 const EMPTY_DIRTY: ReadonlySet<Signal<unknown>> = new Set();
 
-/** Backward worklist. Holds lens cells with deferred writes and merge
- *  cells awaiting fold. Drained (to a fixpoint with effects) by flush. */
+/** Backward worklist: lens cells with deferred writes, merge cells
+ *  awaiting fold. Drained to a fixpoint with effects by flush. */
 const bwdQueue: Signal<unknown>[] = [];
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -157,19 +101,14 @@ interface Stack<T> {
   prev: Stack<T> | undefined;
 }
 
-// ─── Write hook (for assert/record attribution) ───────────────────
-//
-// Fires when a SOURCE commits a value-change (the one place truth
-// mutates). Backward writes reach it via `_writeSource`, so lens edits
-// attribute to the source they resolve to.
+// Fires on every SOURCE value-change (the one place truth mutates).
+// Backward writes reach it via `_writeSource`, attributing lens edits to
+// the source they resolve to.
 
 let writeHook: ((sig: Signal<unknown>) => void) | undefined;
 
-/** Install a hook fired on every source value-change. Returns a restore
- *  function. Used by assert/record to attribute mutations. */
-export function setSignalWriteHook(
-  fn: ((sig: Signal<unknown>) => void) | undefined,
-): () => void {
+/** Install a hook fired on every source value-change; returns a restore fn. */
+export function setSignalWriteHook(fn: ((sig: Signal<unknown>) => void) | undefined): () => void {
   const prev = writeHook;
   writeHook = fn;
   return () => {
@@ -234,10 +173,8 @@ function propagate(start: Link, innerWrite: boolean, excluding?: ReactiveNode): 
   let stack: Stack<Link | undefined> | undefined;
   top: do {
     const sub: ReactiveNode = l!.sub;
-    // `excluding` skips one subscriber from notification — used by
-    // `network()` so a body that writes a signal it subscribes to
-    // doesn't re-trigger itself. The advance/stack-pop logic below runs
-    // unchanged, so other subs are visited normally.
+    // `excluding` skips one subscriber (used by `network()` so a body
+    // writing a signal it subscribes to doesn't re-trigger itself).
     if (sub !== excluding) {
       let flags = sub.flags;
       if (!(flags & (F.RecursedCheck | F.Recursed | F.Dirty | F.Pending))) {
@@ -422,8 +359,7 @@ class MergeNode<T> {
 
 // ─── Public types (writability layer) ─────────────────────────────
 
-/** Plain T or any read-shape. Permissive consumer input — `readNow(v)`
- *  for a snapshot, `reader(v)` for a per-call closure. */
+/** Plain T or any read-shape; snapshot via `readNow`, close via `reader`. */
 export type Val<T> = T | Read<T>;
 
 /** Covariant read-only surface. */
@@ -432,8 +368,7 @@ export interface Read<out T> {
   peek(): T;
 }
 
-/** Brand for writable receivers; the discriminator for conditional
- *  writability-propagating return types. */
+/** Brand discriminating writable receivers in conditional return types. */
 declare const WRITABLE: unique symbol;
 export interface WritableBrand {
   readonly [WRITABLE]: never;
@@ -461,8 +396,8 @@ export function reader<T>(v: Val<T>): () => T {
   return () => v as T;
 }
 
-/** Self-rewriting lazy getter: first call computes + installs an own
- *  non-enumerable property under `key`; later reads shadow this getter. */
+/** Lazy getter: computes once, installs a non-enumerable own prop under
+ *  `key` that shadows this getter on later reads. */
 export function lazy<R>(self: object, key: string | symbol, make: () => R): R {
   const v = make();
   Object.defineProperty(self, key, {
@@ -476,9 +411,7 @@ export function lazy<R>(self: object, key: string | symbol, make: () => R): R {
 
 export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signal;
 
-/** Lens mode: a derived cell that can be written back (has a `put` or
- *  is a merge). The dual-direction analog of the main engine's
- *  getter+setter check. */
+/** Lens mode: a derived cell that can be written back (has `put` or is a merge). */
 export const isLens = (v: unknown): v is Signal<unknown> =>
   v instanceof Signal &&
   v.getter !== undefined &&
@@ -486,19 +419,19 @@ export const isLens = (v: unknown): v is Signal<unknown> =>
 
 /** Computed mode: derived + read-only (no backward path). */
 export const isComputed = (v: unknown): v is Signal<unknown> =>
-  v instanceof Signal && v.getter !== undefined && v._put === undefined && v._mergeNode === undefined;
+  v instanceof Signal &&
+  v.getter !== undefined &&
+  v._put === undefined &&
+  v._mergeNode === undefined;
 
 // ─── Signal class ─────────────────────────────────────────────────
 
 export interface SignalOptions<T = unknown> {
-  /** First subscriber attached (lifecycle: start a spring, attach a
-   *  resource). Fired from `link` when a node gains its first sub. */
+  /** First subscriber attached; fired from `link`. */
   watched?: () => void;
-  /** Last subscriber detached. Fired from `_unwatched`. */
+  /** Last subscriber detached; fired from `_unwatched`. */
   unwatched?: () => void;
-  /** Per-instance value equality; defaults to `Object.is` when omitted.
-   *  Value classes thread their own through `super(v, { equals })`.
-   *  Hot-read on every write/recompute — the engine stays trait-blind. */
+  /** Per-instance value equality; defaults to `Object.is`. */
   equals?: (a: T, b: T) => boolean;
 }
 
@@ -512,83 +445,62 @@ export class Signal<T = unknown> implements ReactiveNode {
   /** Forward derivation (computed/lens/merge). `undefined` ⇒ source. */
   getter: (() => T) | undefined;
 
-  /** Per-instance equality; `Object.is` unless `opts.equals` overrides.
-   *  Always defined (the default is baked in at construction) so the hot
-   *  paths call it unconditionally — no `undefined` branch. */
+  /** Per-instance equality, always defined (defaults to `Object.is` at
+   *  construction) so hot paths call it without an `undefined` branch. */
   _equals: (a: T, b: T) => boolean;
   /** First-subscriber / last-subscriber lifecycle hooks. */
   _watched: (() => void) | undefined;
   _unwatchedHook: (() => void) | undefined;
 
-  /** The node's current value. A node is EITHER a source (uses
-   *  `currentValue` = committed, `pendingValue` = staged write) OR a
-   *  getter cell (uses `currentValue` = last derived cache, and reuses
-   *  `pendingValue` for its deferred backward target — see `set value`).
-   *  The two roles never coexist on one node, so two fields suffice for
-   *  what would naively be four. This reuse is the fwd/bwd duality made
-   *  concrete: "value pending commit" means staged-forward for a source
-   *  and target-pending-backward-pass for a lens. */
+  /** Source: `currentValue` = committed, `pendingValue` = staged write.
+   *  Getter cell: `currentValue` = last derived cache, `pendingValue`
+   *  reused as the deferred backward target (see `set value`). The two
+   *  roles never coexist, so two fields suffice for four. */
   currentValue: T;
   pendingValue: T;
 
-  /** Backward target: the upstream this cell's `put` writes through. One
-   *  field, two shapes:
-   *    • a single `Signal` — a 1→1 lens or a merge's parent.
-   *    • a `Signal[]` — a multi-parent lens whose `_put(target)` returns
-   *      a per-parent update array (the dual of a getter reading N
-   *      parents); the backward pass splits into each parent.
-   *  Any private state a multi-parent `_put` needs is closure-captured
-   *  (params it reads, or a `statefulLens` complement for degeneracy
-   *  memory) — no node, no subs, no bookkeeping. */
+  /** Backward target this cell's `put` writes through. A single `Signal`
+   *  (1→1 lens or merge parent) or a `Signal[]` (multi-parent lens whose
+   *  `_put` returns a per-parent update array; the backward pass splits
+   *  into each). Private `_put` state is closure-captured. */
   _bwdParent: Signal<unknown> | Signal<unknown>[] | undefined;
 
-  /** Lens `put` — the backward derivation (dual of `getter`). For multi-
-   *  output cells, `_put(target)` returns a per-parent update array (the
-   *  peek is baked into the fn). */
+  /** Lens `put` — backward derivation (dual of `getter`). Multi-output:
+   *  `_put(target)` returns a per-parent update array. */
   // biome-ignore lint/suspicious/noExplicitAny: put fn is opaque shape
   _put: ((target: any, current?: any) => any) | undefined;
 
-  /** Put arity, set by the factory (NOT inferred from the `bwd` function):
-   *  `1` for `iso` (source-independent put `(view)=>src`), `2` for `lens`
-   *  (source-reading put `(view, src)=>src`, engine peeks the parent). A
-   *  cached SMI field — branching on it in the backward pass is far cheaper
-   *  than a `_put.length` load. Irrelevant for multi-output cells (the peek
-   *  is baked into `_put`). */
+  /** Put arity, set by the factory: `1` source-independent `(view)=>src`,
+   *  `2` source-reading `(view, src)=>src` (engine peeks the parent). A
+   *  cached SMI — cheaper to branch on than `_put.length`. */
   _putArity: 1 | 2;
 
-  /** Raw forward projection, kept separate from `getter` (which closes
-   *  over `parent.value`) so the backward equality check can evaluate
-   *  this cell's view against CANDIDATE parent value(s) — `_fwd(push)` —
-   *  without committing. Set for plain (1→1) lenses and multi-parent
-   *  lenses (N-ary, over a candidate vals array); undefined for sources /
-   *  computeds / merges. */
+  /** Raw forward projection, separate from `getter` (which closes over
+   *  `parent.value`) so the backward equality check can evaluate the view
+   *  against CANDIDATE parent value(s) without committing. Set for 1→1
+   *  and multi-parent lenses; undefined for sources/computeds/merges. */
   // biome-ignore lint/suspicious/noExplicitAny: fwd fn is opaque shape
   _fwd: ((parentValue: any) => any) | undefined;
 
-  /** Backward aggregation (dual of a multi-dep computed). When set, this
-   *  cell folds contributions via a policy instead of applying a `put`.
-   *  Presence of `_mergeNode` IS the "merge mode" discriminant. */
+  /** Backward aggregation node. Presence IS the merge-mode discriminant:
+   *  the cell folds contributions via a policy instead of applying `put`. */
   _mergeNode: MergeNode<T> | undefined;
 
-  /** Stateful-lens complement: the hidden memory the view discards (a
-   *  case mask under `lowercase`, the unwrapped angle under a principal
-   *  axis). Engine-owned; advanced only by `_step` (forward / on commit).
-   *  `undefined` for every non-stateful cell. */
+  /** Stateful-lens complement: memory the view discards (a case mask
+   *  under `lowercase`, the unwrapped angle under a principal axis).
+   *  Engine-owned, advanced only by `_step`. */
   _complement: unknown;
 
-  /** Stateful-lens complement advance. Presence IS the "stateful mode"
-   *  discriminant. For a stateful cell `_fwd(vals, c)` and `_put(target,
-   *  vals, c)` take the complement; `_step(vals, c, external)` returns the
-   *  next complement (`external` ⇒ the source change came from outside,
-   *  not this lens's own back-write). */
+  /** Stateful-lens complement advance; presence IS the stateful-mode
+   *  discriminant. `_step(vals, c, external)` returns the next complement
+   *  (`external` ⇒ source change came from outside, not this lens's own
+   *  back-write). When set, `_fwd`/`_put` also take the complement. */
   // biome-ignore lint/suspicious/noExplicitAny: opaque step shape
   _step: ((vals: any, complement: any, external: boolean) => any) | undefined;
 
-  /** The source values a stateful cell last wrote back. The next forward
-   *  recompute reports `external === false` while the live sources still
-   *  equal these (the change is the lens's OWN back-write, not an outside
-   *  edit) — robust regardless of when/if the getter re-runs. `undefined`
-   *  until the first back-write. */
+  /** Source values a stateful cell last wrote back. A later recompute
+   *  reports `external === false` while the live sources still equal
+   *  these (the change is the lens's own back-write). */
   _lastBwd: unknown[] | undefined;
 
   /** Index in `bwdQueue` of this cell's LATEST push. The drain skips
@@ -599,8 +511,7 @@ export class Signal<T = unknown> implements ReactiveNode {
   constructor(initial: T, opts?: SignalOptions<T>) {
     this.currentValue = initial;
     this.pendingValue = initial;
-    // Pre-init every optional slot so the V8 hidden class is stable
-    // across signal / computed / lens / merge variants.
+    // Pre-init every optional slot for a stable V8 hidden class across variants.
     this.subs = undefined;
     this.subsTail = undefined;
     this.deps = undefined;
@@ -625,16 +536,11 @@ export class Signal<T = unknown> implements ReactiveNode {
     }
   }
 
-  // ── Forward read / write ──
-  //
-  // The `value` accessor is installed on the prototype via
-  // `Object.defineProperty` after the class body (see below), matching
-  // alien-signals. V8 optimizes the prototype accessor better than a
-  // class `get/set` here — ~5 ns/node on a computed chain.
-  //
+  // The `value` accessor is installed on the prototype after the class
+  // body (V8 JITs a prototype accessor better than a class get/set here).
   // Declared `readonly` so a bare cell is read-only at the TYPE level;
-  // writability is added back only through `Writable<R>` (brand +
-  // settable `value`). The runtime accessor is settable regardless.
+  // writability is added back via `Writable<R>`. The runtime accessor is
+  // settable regardless.
   declare readonly value: T;
 
   _enqueueBwd(): void {
@@ -643,10 +549,8 @@ export class Signal<T = unknown> implements ReactiveNode {
     bwdQueue.push(this as Signal<unknown>);
   }
 
-  /** Source write — alien-signals' signal setter. Self-excludes the
-   *  active network (if any) so a network body writing its own dep
-   *  doesn't re-trigger itself; `activeNetwork` is `undefined` outside a
-   *  network body, so the exclusion is a no-op in the common case. */
+  /** Source write (alien's signal setter). Self-excludes the active
+   *  network so a body writing its own dep doesn't re-trigger itself. */
   _writeSource(next: T): void {
     const prev = this.pendingValue;
     this.pendingValue = next;
@@ -661,7 +565,7 @@ export class Signal<T = unknown> implements ReactiveNode {
 
   _update(): boolean {
     if (this.getter !== undefined) {
-      // Computed / lens / merge: re-run the forward derivation.
+      // Computed/lens/merge: re-run the forward derivation.
       this.depsTail = undefined;
       this.flags = F.Mutable | F.RecursedCheck;
       const prev = activeSub;
@@ -706,42 +610,25 @@ export class Signal<T = unknown> implements ReactiveNode {
     }
   }
 
-  /** Footgun guard: silent coercion to string/number is almost always a bug. */
+  /** Guard: silent coercion to string/number is almost always a bug. */
   [Symbol.toPrimitive](hint: string): never {
     throw new TypeError(`Signal cannot be coerced to ${hint} — use \`.value\``);
   }
 
-  // ── Construction helpers ──
-  //
-  // All build via `new this()` so a subclass static (`Vec.lens(...)`)
-  // yields a `Vec`, inheriting its constructor-set equality. No `_fuse`,
-  // no closure-setter form — every lens has a structural backward target
-  // (`_bwdParent` single/array/merge parent), which is what makes the
-  // backward pass well-defined.
+  // Construction helpers build via `new this()` so a subclass static
+  // (`Vec.lens(...)`) yields a `Vec` with its constructor-set equality.
+  // Every lens has a structural backward target (`_bwdParent`), which is
+  // what makes the backward pass well-defined.
 
-  /** Endomorphic source-independent lens (`iso`): `put` reconstructs the
-   *  source from the view alone. The bread-and-butter chaining primitive
-   *  (`num.add(1).scale(2)`). Cross-type uses static `OtherCls.iso(this, …)`. */
-  iso(this: Signal<T>, fwd: (v: T) => T, bwd: (target: T) => T): this {
-    return buildLens1(
-      this.constructor as SignalCtor<Signal<T>>,
-      this as Signal<unknown>,
-      fwd as (v: unknown) => unknown,
-      bwd as (t: unknown) => unknown,
-      false,
-    ) as this;
-  }
-
-  /** Endomorphic source-reading lens: `put(view, current)` consults the
-   *  current source (to preserve a complement-in-source, e.g. nearest
-   *  representative). Cross-type uses static `OtherCls.lens(this, …)`. */
+  /** Endomorphic lens. A 2-arg `bwd(view, current)` consults the current
+   *  source; a 1-arg `bwd(view)` reconstructs it from the view alone. */
   lens(this: Signal<T>, fwd: (v: T) => T, bwd: (target: T, current: T) => T): this {
     return buildLens1(
       this.constructor as SignalCtor<Signal<T>>,
       this as Signal<unknown>,
       fwd as (v: unknown) => unknown,
       bwd as (t: unknown, s?: unknown) => unknown,
-      true,
+      bwd.length >= 2,
     ) as this;
   }
 
@@ -771,10 +658,17 @@ export class Signal<T = unknown> implements ReactiveNode {
     fn: (v: P) => Inner<InstanceType<C>>,
   ): InstanceType<C>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static derive<C extends new (...args: never[]) => Signal<any>, P extends readonly Read<unknown>[]>(
+  static derive<
+    C extends new (
+      ...args: never[]
+    ) => Signal<any>,
+    P extends readonly Read<unknown>[],
+  >(
     this: C,
     parents: P,
-    fn: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => Inner<InstanceType<C>>,
+    fn: (
+      vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
+    ) => Inner<InstanceType<C>>,
   ): InstanceType<C>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static derive<C extends new (...args: never[]) => Signal<any>>(
@@ -789,11 +683,10 @@ export class Signal<T = unknown> implements ReactiveNode {
     return buildComputed(this, () => fn((parent as Signal<unknown>).value));
   }
 
-  /** Source-reading lens: `put` consults the current source(s). Runtime-
-   *  dispatched on arity:
-   *    Cls.lens(parent,  fwd, bwd)  — 1-input;  bwd `(view, src) => src`.
-   *    Cls.lens(parents, fwd, bwd)  — N-input;  bwd `(view, srcs) => srcs[]`.
-   *  Polymorphic-`this`: `Vec.lens(...)` → `Writable<Vec>`. */
+  /** Writable lens. `Cls.lens(parent, fwd, bwd)` for one input,
+   *  `Cls.lens(parents, fwd, bwd)` for N; a 2-arg `bwd` reads the source,
+   *  a 1-arg `bwd` reconstructs it. `Cls.lens(parent(s), spec)` builds a
+   *  complement-carrying lens from `{ init, step, fwd, bwd }`. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static lens<C extends new (...args: never[]) => Signal<any>, P>(
     this: C,
@@ -805,68 +698,25 @@ export class Signal<T = unknown> implements ReactiveNode {
   static lens<C extends new (...args: never[]) => Signal<any>, P extends readonly Read<unknown>[]>(
     this: C,
     parents: P,
-    fwd: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => Inner<InstanceType<C>>,
+    fwd: (
+      vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
+    ) => Inner<InstanceType<C>>,
     bwd: (
       target: Inner<InstanceType<C>>,
       vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
     ) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
   ): Writable<InstanceType<C>>;
-  // biome-ignore lint/suspicious/noExplicitAny: dispatch
-  static lens(this: any, ...args: any[]): any {
-    const [parent, fwd, bwd] = args;
-    if (Array.isArray(parent)) return buildLensN(this, parent, fwd, bwd, true);
-    return buildLens1(this, parent, fwd, bwd, true);
-  }
-
-  /** Type predicate against this class: `Vec.is(x)` narrows `x` to `Vec`.
-   *  Inherited static; works for any subclass via polymorphic `this`. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static is<C extends new (...args: never[]) => Signal<any>>(
-    this: C,
-    v: unknown,
-  ): v is InstanceType<C> {
-    return v instanceof this;
-  }
-
-  /** Source-independent lens (`iso`): `put` reconstructs the source from
-   *  the view alone — no peek. Runtime-dispatched on arity:
-   *    Cls.iso(parent,  fwd, bwd)  — 1-input;  bwd `(view) => src`.
-   *    Cls.iso(parents, fwd, bwd)  — N-input;  bwd `(view) => srcs[]`.
-   *  Polymorphic-`this`: `Vec.iso(...)` → `Writable<Vec>`. */
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static iso<C extends new (...args: never[]) => Signal<any>, P>(
-    this: C,
-    parent: Read<P>,
-    fwd: (v: P) => Inner<InstanceType<C>>,
-    bwd: (target: Inner<InstanceType<C>>) => P,
-  ): Writable<InstanceType<C>>;
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static iso<C extends new (...args: never[]) => Signal<any>, P extends readonly Read<unknown>[]>(
-    this: C,
-    parents: P,
-    fwd: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => Inner<InstanceType<C>>,
-    bwd: (target: Inner<InstanceType<C>>) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
-  ): Writable<InstanceType<C>>;
-  // biome-ignore lint/suspicious/noExplicitAny: dispatch
-  static iso(this: any, ...args: any[]): any {
-    const [parent, fwd, bwd] = args;
-    if (Array.isArray(parent)) return buildLensN(this, parent, fwd, bwd, false);
-    return buildLens1(this, parent, fwd, bwd, false);
-  }
-
-  /** Complement-carrying lens (`statefulLens`): `put` reads memory the view
-   *  discards. `Cls.statefulLens(parent, spec)` (1-input) or
-   *  `Cls.statefulLens(parents, spec)` (N-input). Polymorphic-`this`:
-   *  `Num.statefulLens(...)` → `Writable<Num>`. */
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static statefulLens<C extends new (...args: never[]) => Signal<any>, P, Cm>(
+  static lens<C extends new (...args: never[]) => Signal<any>, P, Cm>(
     this: C,
     parent: Read<P>,
     spec: StatefulLensSpec<readonly [P], Inner<InstanceType<C>>, Cm>,
   ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static statefulLens<
-    C extends new (...args: never[]) => Signal<any>,
+  static lens<
+    C extends new (
+      ...args: never[]
+    ) => Signal<any>,
     P extends readonly Read<unknown>[],
     Cm,
   >(
@@ -879,13 +729,26 @@ export class Signal<T = unknown> implements ReactiveNode {
     >,
   ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: dispatch
-  static statefulLens(this: any, parent: any, spec: any): any {
-    return buildStateful(this, Array.isArray(parent) ? parent : [parent], spec);
+  static lens(this: any, ...args: any[]): any {
+    const [parent, a, b] = args;
+    if (args.length === 2) return buildStateful(this, Array.isArray(parent) ? parent : [parent], a);
+    const readsSource = (b as (...xs: unknown[]) => unknown).length >= 2;
+    if (Array.isArray(parent)) return buildLensN(this, parent, a, b, readsSource);
+    return buildLens1(this, parent, a, b, readsSource);
   }
 
-  /** Permissive consumer-layer lift — `Val<Inner<Cls>>` → `Cls`.
-   *  Instance → identity; RO signal → tracked `derive`; literal → fresh
-   *  seed. Return type is `Cls` (writability not assumed). */
+  /** Type predicate against this class: `Vec.is(x)` narrows `x` to `Vec`.
+   *  Inherited static; works for any subclass via polymorphic `this`. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static is<C extends new (...args: never[]) => Signal<any>>(
+    this: C,
+    v: unknown,
+  ): v is InstanceType<C> {
+    return v instanceof this;
+  }
+
+  /** Lift `Val<Inner<Cls>>` → `Cls`: instance → identity, RO signal →
+   *  tracked `derive`, literal → fresh seed. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static from<C extends new (...args: never[]) => Signal<any>>(
     this: C,
@@ -901,9 +764,8 @@ export class Signal<T = unknown> implements ReactiveNode {
     ) as InstanceType<C>;
   }
 
-  /** Constant-projection: a `Writable<this>` that always reads `v` and
-   *  absorbs writes (parentless sink lens). The writable-shaped constant
-   *  for APIs demanding bidirectionality. */
+  /** Writable-shaped constant: always reads `v`, absorbs writes
+   *  (parentless sink lens), for APIs demanding bidirectionality. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static pin<C extends new (...args: never[]) => Signal<any>>(
     this: C,
@@ -917,11 +779,9 @@ export class Signal<T = unknown> implements ReactiveNode {
     return cell as unknown as Writable<InstanceType<C>>;
   }
 
-  /** Typed field lens onto `parent.value[key]`. Dispatches on the
-   *  parent's mode: a read-only computed parent yields a RO derive
-   *  view; any writable parent (source / lens / merge / multi-parent) yields
-   *  a bidirectional field lens with spread-replace `put`. Mirrors the
-   *  writability-propagating conditional in `field()`. */
+  /** Typed field lens onto `parent.value[key]`. A read-only computed
+   *  parent yields a RO derive view; any writable parent yields a
+   *  bidirectional field lens with spread-replace `put`. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   static fieldOf<C extends new (...args: never[]) => Signal<any>>(
     // biome-ignore lint/suspicious/noExplicitAny: parent is contravariant on put
@@ -931,9 +791,8 @@ export class Signal<T = unknown> implements ReactiveNode {
   ): InstanceType<C> {
     const ctor = Cls as unknown as SignalCtor<Signal<unknown>>;
     const get = (s: unknown): unknown => (s as Record<string | number | symbol, unknown>)[key];
-    // Read-only ⇔ a computed/derive (getter, no put, no merge). A multi-
-    // parent lens always has `_put`, so the `_put === undefined` clause
-    // already excludes the multi-output case — no need to check `_bwdParent`.
+    // Read-only ⇔ computed (getter, no put, no merge). `_put === undefined`
+    // also excludes multi-output, so no `_bwdParent` check needed.
     const ro =
       parent.getter !== undefined && parent._put === undefined && parent._mergeNode === undefined;
     if (ro) {
@@ -952,9 +811,8 @@ export class Signal<T = unknown> implements ReactiveNode {
 
 // ─── Cell builders ────────────────────────────────────────────────
 //
-// Each `new Cls()` instantiates the right subclass (so `Vec.lens(...)`
-// returns a `Vec` with Vec equality from its constructor), then sets
-// the mode fields. Module-level so the class statics can call them.
+// Each `new Cls()` yields the right subclass (so `Vec.lens(...)` returns
+// a `Vec`), then sets the mode fields. Module-level so statics can call them.
 
 // biome-ignore lint/suspicious/noExplicitAny: variance escape for subclass ctors (contravariant _equals)
 type SignalCtor<C extends Signal<any>> = new (...args: never[]) => C;
@@ -978,7 +836,6 @@ function buildLens1<C extends Signal<any>>(
   const cell = new Cls();
   cell.flags = F.Mutable | F.Dirty;
   cell.getter = (() => fwd(parent.value)) as () => never;
-  cell._fwd = fwd;
   cell._put = bwd;
   cell._putArity = readsSource ? 2 : 1;
   cell._bwdParent = parent;
@@ -1002,7 +859,6 @@ function buildLensN<C extends Signal<any>>(
     return fwd(vals);
   }) as () => never;
   if (bwd === undefined) return cell; // read-only derive-N
-  cell._fwd = fwd as (v: unknown) => unknown; // N-ary projection for the equality check
   cell._bwdParent = parents;
   cell._put = readsSource
     ? (target: unknown): unknown => {
@@ -1015,29 +871,22 @@ function buildLensN<C extends Signal<any>>(
 
 // ─── Stateful lens (complement-carrying) ──────────────────────────────
 //
-// The third writable kind, alongside `iso` (view determines source) and
-// `lens` (put reads the source). A stateful lens carries a COMPLEMENT —
-// memory the source can't hold: the original casing a `lowercase` view
-// discards, the continuous winding a principal-axis angle accumulates.
-//
-//   init(srcs)              → seed the complement from the initial sources
-//   fwd(srcs, c)            → the view (pure)
+// The third writable kind (alongside source-independent `iso` and
+// source-reading `lens`). Carries a COMPLEMENT — memory the source can't
+// hold (the casing a `lowercase` view discards, the winding a principal-
+// axis angle accumulates):
+//   init(srcs)              → seed the complement
+//   fwd(srcs, c)            → the view
 //   step(srcs, c, external) → advance the complement (forward / on commit);
-//                             `external` distinguishes an outside source
-//                             change from this lens's own back-write
-//   bwd(target, srcs, c)    → { updates, complement }: per-parent source
-//                             updates (`undefined` ⇒ leave that parent) and
-//                             the post-write complement
+//                             `external` = outside change vs own back-write
+//   bwd(target, srcs, c)    → { updates, complement }: per-parent updates
+//                             (`undefined` ⇒ leave parent) + new complement
 //
-// All four are pure and side-effect-free (no in-place complement mutation
-// — the equality check evaluates them speculatively); `bwd`/`step` read no
-// signals (the backward pass runs untracked). The engine owns `c`,
-// advancing it only on a real (non-speculative) forward recompute or
-// commit — never during the equality-check short-circuit.
-//
-// GUARANTEE: before `bwd` runs the engine steps `c` to the current sources
-// (a forward recompute), so `bwd` always sees an up-to-date complement and
-// never needs to re-derive it from `srcs`.
+// All four are pure (the equality check evaluates them speculatively);
+// `bwd`/`step` read no signals (backward runs untracked). The engine owns
+// `c`, advancing it only on a real forward recompute or commit. Before
+// `bwd` runs the engine steps `c` to the current sources, so `bwd` always
+// sees an up-to-date complement.
 
 export interface StatefulBwd<S extends readonly unknown[], C> {
   updates: { readonly [K in keyof S]: S[K] | undefined };
@@ -1066,14 +915,13 @@ function buildStateful<C extends Signal<any>>(
   for (let i = 0; i < n; i++) seed[i] = parents[i]!.peek();
   cell._complement = spec.init(seed);
   cell._step = spec.step;
-  // For a stateful cell `_fwd`/`_put` take the complement (see field docs).
   cell._fwd = spec.fwd as (v: unknown) => unknown;
   cell._put = spec.bwd as (t: unknown, c?: unknown) => unknown;
   cell._bwdParent = parents;
   cell.getter = (() => {
     for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
     // External unless the live sources still equal this lens's own last
-    // back-write (then the complement is kept, not re-recorded).
+    // back-write.
     let external = true;
     const lb = cell._lastBwd;
     if (lb !== undefined) {
@@ -1091,9 +939,7 @@ function buildStateful<C extends Signal<any>>(
   return cell;
 }
 
-// Install `value` on the prototype (alien-signals pattern). V8 JITs a
-// prototype accessor noticeably better than a class `get/set value` for
-// this hot path.
+// Install `value` on the prototype (V8 JITs it better than a class get/set).
 Object.defineProperty(Signal.prototype, "value", {
   get(this: Signal<unknown>): unknown {
     const flags = this.flags;
@@ -1147,15 +993,11 @@ Object.defineProperty(Signal.prototype, "value", {
       this._writeSource(next);
       return;
     }
-    // Backward write. Deferred while batching / flushing so repeated
-    // writes coalesce (last-write-wins) and merge folds wait for all
-    // contributors; eager + synchronous otherwise.
-    //
-    // Exception: inside a network body (`activeNetwork` set) writes are
-    // eager so a propagator's synchronous fixpoint loop observes its own
-    // edits via `peek()` between steps — matching the old engine's
-    // synchronous in-network writes. (Coalescing still applies to plain
-    // batches and effects, where `activeNetwork` is undefined.)
+    // Backward write. Deferred while batching/flushing so repeated writes
+    // coalesce (last-write-wins) and merge folds wait for all
+    // contributors; eager + synchronous otherwise. Exception: inside a
+    // network body writes are eager so the body's fixpoint loop observes
+    // its own edits via `peek()` between steps.
     const deferred = (batchDepth > 0 || flushing) && activeNetwork === undefined;
     if (this._mergeNode !== undefined) {
       this._mergeNode.receive(DIRECT_SLOT, next);
@@ -1166,17 +1008,14 @@ Object.defineProperty(Signal.prototype, "value", {
     if (this._put === undefined) {
       throw new TypeError("Cannot write to a computed");
     }
-    // Entry-level no-op (GetPut): writing the current view changes
-    // nothing. Sound and O(1) — a concrete comparison of the target to
-    // the live view, no speculation — so the common idempotent re-assert
-    // never starts a backward walk. Deeper no-ops are caught concretely
-    // as the walk reaches each unchanged parent; lossy lenses encode
-    // their own absorption in `put` (return the current source when the
-    // edit re-projects to the current view).
+    // Entry-level no-op (GetPut): writing the current view starts no walk.
+    // O(1), concrete (no speculation). Deeper no-ops are caught as the
+    // walk reaches each unchanged parent; lossy lenses encode their own
+    // absorption in `put`.
     if (this._equals(next, this.peek())) return;
     if (deferred) {
-      // Reuse `pendingValue` (unused by a getter cell's forward path)
-      // as the deferred backward target. Drained by flush.
+      // Reuse `pendingValue` (unused by a getter's forward path) as the
+      // deferred backward target; drained by flush.
       this.pendingValue = next;
       this._enqueueBwd();
     } else {
@@ -1191,19 +1030,14 @@ Object.defineProperty(Signal.prototype, "value", {
 //
 // Walk up `_bwdParent`, applying `put` at each lens / folding at each
 // merge, until a source is committed (via the forward write path) or a
-// parent merge is reached. `deferred` (inside batch / flush) stops at a
-// parent merge after depositing — the merge folds later, once all
-// contributors have landed. Eager folds merges inline.
-//
-// This is NOT a second propagation engine: every path terminates in
-// `_writeSource` (the forward write). Backward "compiles" a view-edit
-// into source-edits; the forward machinery does the rest.
+// parent merge is reached. `deferred` (inside batch/flush) stops at a
+// parent merge after depositing so it folds once all contributors land;
+// eager folds merges inline. Not a second engine: every path terminates
+// in `_writeSource`.
 
-// Backward evaluation runs UNTRACKED: `bwd`/`step`/`fwd` reads (params via
-// `reader`, complement memory) must not establish forward dependencies on
-// whatever `activeSub` happens to be writing (e.g. an effect that writes a
-// lens). All four backward entry points route through here. Recursive
-// re-entry (forkInto → propagateBwd) is already inside the cleared frame.
+// Backward evaluation runs UNTRACKED so `bwd`/`step`/`fwd` reads don't
+// establish forward deps on whatever `activeSub` is writing (e.g. an
+// effect that writes a lens). All backward entry points route through here.
 function bwdUntracked(cell: Signal<unknown>, target: unknown, deferred: boolean): void {
   const prev = activeSub;
   activeSub = undefined;
@@ -1218,11 +1052,8 @@ function propagateBwd(start: Signal<unknown>, target: unknown, deferred: boolean
   let cell = start;
   let v = target;
   while (true) {
-    // Multi-output (multi-parent lens): compute the per-parent update
-    // array and SPLIT the write into each parent. This is the dual of a
-    // getter reading N parents — instead of one upstream value, the
-    // `put` yields N. The recursion handles each branch (source, lens,
-    // merge, or nested multi-parent) uniformly.
+    // Multi-parent lens: SPLIT the write into each parent (dual of a
+    // getter reading N parents — the `put` yields N upstream values).
     const target = cell._bwdParent;
     if (Array.isArray(target)) {
       propagateSplit(cell, v, deferred);
@@ -1240,18 +1071,13 @@ function propagateBwd(start: Signal<unknown>, target: unknown, deferred: boolean
       push = cell._put!(v, parent.peek());
     }
 
-    // Parentless lens (e.g. `pin`): the `put` ran for its effect, but
-    // there is no upstream — the write is absorbed. Terminal sink.
+    // Parentless lens (e.g. `pin`): no upstream, write absorbed. Sink.
     if (parent === undefined) return;
 
-    // CONCRETE NO-OP STOP — the dual of the forward "notify only on
-    // change", but evaluated on a real value, not a prediction. If the
-    // parent already holds `push`, committing it changes nothing upstream,
-    // so the walk stops. This is sound for ANY topology (no speculative
-    // re-projection of a candidate that may read stale derived nodes).
-    // A lossy lens that wants to hide an off-grid edit returns the CURRENT
-    // source from `put`; that lands here as `push === parent` and stops.
-    // Merge parents fold instead, so they skip this check.
+    // Concrete no-op stop: if the parent already holds `push`, committing
+    // changes nothing upstream, so the walk stops. Sound for ANY topology
+    // (no speculation). A lossy lens hides an off-grid edit by returning
+    // the current source from `put`. Merge parents fold instead.
     if (parent._mergeNode === undefined && parent._equals(push, parent.peek())) return;
 
     if (parent._mergeNode !== undefined) {
@@ -1264,7 +1090,7 @@ function propagateBwd(start: Signal<unknown>, target: unknown, deferred: boolean
       continue;
     }
     if (parent.getter === undefined) {
-      // Source: commit + forward-propagate. This IS the forward write.
+      // Source: commit + forward-propagate (the forward write).
       parent._writeSource(push);
       return;
     }
@@ -1275,40 +1101,28 @@ function propagateBwd(start: Signal<unknown>, target: unknown, deferred: boolean
 }
 
 /** Split a multi-parent cell's write across its N parents. `_put(target)`
- *  returns the per-parent update array (`undefined` ⇒ leave parent
- *  untouched); each defined update recurses via `propagateBwd`.
- *
- *  Eager (unbatched) splits coalesce under a single flush: the N source
- *  commits batch into one effect pass, and shared-ancestor merges
- *  accumulate all contributions before folding — same guarantee
- *  `batch()` gives. (A multi-parent cell may be reached eagerly as the
- *  start of a write OR mid-chain from an outer single lens, so the
- *  coalescing must live here, not at the write entry point.) */
+ *  returns the per-parent update array (`undefined` ⇒ leave parent);
+ *  each defined update recurses via `propagateBwd`. Eager splits coalesce
+ *  under one flush (same guarantee as `batch()`); the coalescing lives
+ *  here since such a cell may be reached as a write start or mid-chain. */
 function propagateSplit(cell: Signal<unknown>, target: unknown, deferred: boolean): void {
   const parents = cell._bwdParent as Signal<unknown>[];
   const n = parents.length;
 
-  // STATEFUL lens: `bwd` reads the complement and returns the per-parent
-  // updates plus the post-write complement. No speculation — we commit the
-  // stepped complement and fork the source updates. Absorption (a write
-  // that should leave the cluster put) is the lens's job: its `bwd`
-  // returns `undefined` updates, which fork as no-ops. Real source moves
-  // re-project through the forward pass, which prunes if the view is
-  // unchanged.
+  // STATEFUL lens: `bwd` reads the complement and returns per-parent
+  // updates plus the post-write complement. We commit the stepped
+  // complement and fork the source updates; absorption is the lens's job
+  // (its `bwd` returns `undefined` updates, forked as no-ops).
   if (cell._step !== undefined) {
-    // Bring the complement (and cached view) current with the sources
-    // before the back-write: a source may have changed without the view
-    // being read, leaving `step` un-run. Reading `.value` here runs the
-    // getter (advancing the complement); the backward frame is untracked,
-    // so this establishes no dependency.
+    // Bring the complement current with the sources before the back-write
+    // (a source may have changed without the view being read, leaving
+    // `step` un-run). Untracked, so reading `.value` adds no dependency.
     void cell.value;
     const vals = new Array<unknown>(n);
     for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
-    const res = (cell._put as (t: unknown, s: unknown, c: unknown) => StatefulBwd<unknown[], unknown>)(
-      target,
-      vals,
-      cell._complement,
-    );
+    const res = (
+      cell._put as (t: unknown, s: unknown, c: unknown) => StatefulBwd<unknown[], unknown>
+    )(target, vals, cell._complement);
     const updates = res.updates as ReadonlyArray<unknown>;
     const cand = new Array<unknown>(n);
     let anyWrite = false;
@@ -1324,8 +1138,7 @@ function propagateSplit(cell: Signal<unknown>, target: unknown, deferred: boolea
     const cStep = cell._step(cand, res.complement, false);
     cell._complement = cStep;
     if (!anyWrite) {
-      // Complement-only change (e.g. writing a direction onto a collapsed
-      // cluster): no source moves, so mark dirty for a correct next read.
+      // Complement-only change (no source moves): mark dirty for a correct next read.
       cell.flags = F.Mutable | F.Dirty;
       return;
     }
@@ -1345,11 +1158,9 @@ function propagateSplit(cell: Signal<unknown>, target: unknown, deferred: boolea
 
   const updates = cell._put!(target) as ReadonlyArray<unknown>;
 
-  // No speculative short-circuit: each defined update is forked to its
-  // parent, where `_writeSource`'s equality check prunes a no-op at the
-  // source and the forward pass prunes any view that ends up unchanged.
-  // A multi-parent lens that wants to absorb an off-grid edit returns
-  // `undefined` updates (or the current source values) from its `put`.
+  // No speculation: each defined update forks to its parent, where
+  // `_writeSource`'s equality check prunes no-op sources and the forward
+  // pass prunes unchanged views. Absorption ⇒ `undefined` updates.
   if (deferred) {
     forkInto(parents, updates, n);
     return;
@@ -1362,15 +1173,10 @@ function propagateSplit(cell: Signal<unknown>, target: unknown, deferred: boolea
   }
 }
 
-/** Route each defined update to its parent. A source parent commits
- *  directly (it has no backward chain to walk); a lens / multi-parent /
- *  merge parent re-enters the backward pass. Always called under a
- *  bumped `batchDepth`, so commits coalesce into one flush. */
-function forkInto(
-  parents: Signal<unknown>[],
-  updates: ReadonlyArray<unknown>,
-  n: number,
-): void {
+/** Route each defined update to its parent: a source commits directly, a
+ *  lens/multi-parent/merge re-enters the backward pass. Always called
+ *  under a bumped `batchDepth` so commits coalesce into one flush. */
+function forkInto(parents: Signal<unknown>[], updates: ReadonlyArray<unknown>, n: number): void {
   for (let i = 0; i < n; i++) {
     const u = updates[i];
     if (u === undefined) continue;
@@ -1382,8 +1188,7 @@ function forkInto(
 
 // ─── factories ────────────────────────────────────────────────────
 
-/** Writable source. Passes an existing `Writable` through unchanged so
- *  `signal(maybeSignal)` is idempotent. */
+/** Writable source; passes an existing `Writable` through (idempotent). */
 export function signal<T>(
   initial: T | Writable<Signal<T>>,
   opts?: SignalOptions<T>,
@@ -1399,10 +1204,9 @@ export function computed<T>(fn: () => T): Signal<T> {
   return cell;
 }
 
-// Bare (untyped) factories — the dual of `computed`. These construct a
-// plain `Signal`, so `R` is inferred from the closures (the polymorphic-
-// `this` `Signal.lens` statics return `Signal<unknown>` on the base
-// class, and are meant for typed subclasses like `Vec.lens`).
+// Bare (untyped) factories. Construct a plain `Signal`, inferring `R`
+// from the closures (the polymorphic-`this` statics are for typed
+// subclasses like `Vec.lens`).
 
 const SIGNAL_CTOR = Signal as unknown as SignalCtor<Signal<unknown>>;
 
@@ -1422,8 +1226,9 @@ export function derive(...args: any[]): any {
   return buildComputed(SIGNAL_CTOR, () => fn((parent as Signal<unknown>).value));
 }
 
-/** Untyped source-reading lens (`put` consults the source). Dispatches
- *  like `Signal.lens` but infers `R` from the closures. */
+/** Untyped lens, inferring `R` from the closures. A 2-arg `bwd` reads the
+ *  source, a 1-arg `bwd` reconstructs it; `lens(parent(s), spec)` builds a
+ *  complement-carrying lens. */
 export function lens<P, R>(
   parent: Read<P>,
   fwd: (v: P) => R,
@@ -1437,45 +1242,23 @@ export function lens<P extends readonly Read<unknown>[], R>(
     vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
   ) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
 ): Writable<Signal<R>>;
-// biome-ignore lint/suspicious/noExplicitAny: dispatch
-export function lens(...args: any[]): any {
-  const [parent, fwd, bwd] = args;
-  if (Array.isArray(parent)) return buildLensN(SIGNAL_CTOR, parent, fwd, bwd, true);
-  return buildLens1(SIGNAL_CTOR, parent, fwd, bwd, true);
-}
-
-/** Untyped source-independent lens (`iso`): `put` reconstructs the source
- *  from the view alone. Infers `R` from the closures. */
-export function iso<P, R>(
-  parent: Read<P>,
-  fwd: (v: P) => R,
-  bwd: (target: R) => P,
-): Writable<Signal<R>>;
-export function iso<R>(
-  parents: readonly Read<unknown>[],
-  fwd: (vals: readonly unknown[]) => R,
-  bwd: (target: R) => ReadonlyArray<unknown>,
-): Writable<Signal<R>>;
-// biome-ignore lint/suspicious/noExplicitAny: dispatch
-export function iso(...args: any[]): any {
-  const [parent, fwd, bwd] = args;
-  if (Array.isArray(parent)) return buildLensN(SIGNAL_CTOR, parent, fwd, bwd, false);
-  return buildLens1(SIGNAL_CTOR, parent, fwd, bwd, false);
-}
-
-/** Untyped complement-carrying lens (`statefulLens`): `put` reads memory
- *  the view discards. Infers from the spec closures. */
-export function statefulLens<P, R, C>(
+export function lens<P, R, C>(
   parent: Read<P>,
   spec: StatefulLensSpec<readonly [P], R, C>,
 ): Writable<Signal<R>>;
-export function statefulLens<P extends readonly Read<unknown>[], R, C>(
+export function lens<P extends readonly Read<unknown>[], R, C>(
   parents: P,
   spec: StatefulLensSpec<{ [K in keyof P]: P[K] extends Read<infer V> ? V : never }, R, C>,
 ): Writable<Signal<R>>;
 // biome-ignore lint/suspicious/noExplicitAny: dispatch
-export function statefulLens(parent: any, spec: any): any {
-  return buildStateful(SIGNAL_CTOR, Array.isArray(parent) ? parent : [parent], spec);
+export function lens(...args: any[]): any {
+  const [parent, a, b] = args;
+  if (args.length === 2) {
+    return buildStateful(SIGNAL_CTOR, Array.isArray(parent) ? parent : [parent], a);
+  }
+  const readsSource = (b as (...xs: unknown[]) => unknown).length >= 2;
+  if (Array.isArray(parent)) return buildLensN(SIGNAL_CTOR, parent, a, b, readsSource);
+  return buildLens1(SIGNAL_CTOR, parent, a, b, readsSource);
 }
 
 // ─── Effect (alien-signals verbatim) ──────────────────────────────
@@ -1586,19 +1369,15 @@ export function effect(fn: () => (() => void) | void): () => void {
 // ─── Flush / batch / untracked ────────────────────────────────────
 //
 // Alternates backward-drain and effect-drain to a fixpoint: backward
-// commits source values (which queue effects); effects may write
-// (forward → more effects, or backward → more bwd entries). Loops
-// until both queues are exhausted.
+// commits sources (queuing effects); effects may write (more effects /
+// more bwd entries). Loops until both queues are exhausted.
 
 function flush(): void {
   if (flushing) return;
   flushing = true;
   let bwdIndex = 0;
   try {
-    // Head-checked: when both queues are already drained (the common
-    // case — a source write with no watching subscribers still calls
-    // flush), the loop body never runs. A `do/while` would pay the
-    // empty-drain cost on every write.
+    // Head-checked so the common already-drained case skips the body.
     while (bwdIndex < bwdQueue.length || notifyIndex < queuedLength) {
       while (bwdIndex < bwdQueue.length) {
         const cell = bwdQueue[bwdIndex]!;
@@ -1649,20 +1428,18 @@ export function untracked<R>(fn: () => R): R {
 
 // ─── network() — reactive sub-DAG with self-excluded writes ───────
 //
-// A `_NetworkNode` is a watching node (like an Effect) whose body fires
-// when any SUBSCRIBED dep changes, but whose own writes self-exclude the
-// node (via `activeNetwork` threaded into `propagate`) so it doesn't
-// re-trigger itself. Topology is explicit: the deps array plus later
-// subscribe/unsubscribe — reads inside the body do NOT add deps. This is
-// the building block for constraint networks (fixed topology, structural
-// termination) as opposed to effects (implicit, auto-tracked deps).
+// A watching node (like an Effect) whose body fires when any SUBSCRIBED
+// dep changes, but whose own writes self-exclude the node (via
+// `activeNetwork`) so it doesn't re-trigger itself. Topology is explicit
+// (deps array + later subscribe/unsubscribe; reads in the body add no
+// deps) — the building block for constraint networks vs auto-tracked
+// effects.
 
 /** Handle to a `network` invocation. */
 export interface Network {
   /** Tear down: unsubscribe from every signal, drop internal state. */
   dispose(): void;
-  /** Run the body now (manual mode's only advance mechanism; a no-op in
-   *  auto mode when nothing changed). */
+  /** Run the body now (manual mode's only advance; no-op if unchanged). */
   flush(): void;
   /** Add signals to the topology (idempotent; does NOT fire the body). */
   // biome-ignore lint/suspicious/noExplicitAny: deps come in many flavours
@@ -1748,7 +1525,7 @@ class _NetworkNode implements ReactiveNode {
   }
 
   private _runBody(dirty: ReadonlySet<Signal<unknown>>): void {
-    // RecursedCheck doubles as the "body is running" guard (see flush()).
+    // RecursedCheck doubles as the "body running" guard (see flush()).
     this.flags = F.Watching | F.RecursedCheck;
     const prevSettler = activeNetwork;
     activeNetwork = this;
@@ -1824,18 +1601,12 @@ class _NetworkNode implements ReactiveNode {
   }
 }
 
-/** Build a reactive sub-DAG node with explicit topology.
- *
- *  Promises:
- *  - Body fires when any subscribed dep changes; `dirty` is the subset
- *    that changed since the last fire.
- *  - `signal.value =` writes inside the body self-exclude THIS network
- *    so it doesn't re-trigger itself.
- *  - Body runs inside `batch()`; writes commit atomically.
- *  - Topology is exactly the deps array + later subscribe/unsubscribe —
- *    reads inside the body do NOT add deps.
- *  - `flush()` from inside the body throws (would recurse infinitely).
- *  - `manual: true` defers auto-firing; only `flush()` advances. */
+/** Build a reactive sub-DAG node with explicit topology. The body fires
+ *  when any subscribed dep changes (`dirty` = the changed subset), runs
+ *  inside `batch()`, and self-excludes its own writes. Topology is the
+ *  deps array + later subscribe/unsubscribe (body reads add no deps).
+ *  `flush()` from inside the body throws; `manual: true` defers
+ *  auto-firing so only `flush()` advances. */
 export function network(
   // biome-ignore lint/suspicious/noExplicitAny: deps come in many flavours
   deps: readonly Signal<any>[],

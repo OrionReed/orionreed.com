@@ -18,7 +18,7 @@ describe("stateful lens — single input, identity-ish", () => {
   it("init complement is used for the first read", () => {
     const src = num(7);
     let seenComplement: number | null = null;
-    const view = Num.statefulLens([src], {
+    const view = Num.lens([src], {
       init: () => ({ v: -1 }),
       step: ([_s], c) => {
         seenComplement = c.v;
@@ -34,7 +34,7 @@ describe("stateful lens — single input, identity-ish", () => {
   it("step refreshes the complement on each (dirtying) read", () => {
     const src = num(10);
     let calls = 0;
-    const view = Num.statefulLens([src], {
+    const view = Num.lens([src], {
       init: () => ({ v: 0 }),
       step: ([_s], c) => {
         calls += 1;
@@ -56,7 +56,7 @@ describe("stateful lens — single input, identity-ish", () => {
     // "snap" non-monotonic writes upward (a write below the stored value
     // re-projects to the current view and is stopped by the equality check).
     const src = num(0);
-    const snapped = Num.statefulLens([src], {
+    const snapped = Num.lens([src], {
       init: () => ({ last: 0 }),
       step: ([s]) => ({ last: s }),
       fwd: ([s]) => s,
@@ -113,7 +113,7 @@ describe("stateful lens — multi-input scaling (the trap case)", () => {
   };
 
   const makeSpread = (pts: ReturnType<typeof vec>[]) =>
-    Num.statefulLens(pts, {
+    Num.lens(pts, {
       init: (positions: readonly V[]) => recompute(positions, undefined),
       step: (positions: readonly V[], c: C) => recompute(positions, c),
       fwd: (positions: readonly V[], c: C) => meanRadius(positions, c.centroid),
@@ -237,7 +237,7 @@ describe("same-view back-write short-circuits", () => {
     // to the SAME view (the stored max), so the equality check stops it —
     // the source AND the complement are left untouched.
     const src = num(5);
-    const snapped = Num.statefulLens([src], {
+    const snapped = Num.lens([src], {
       init: () => ({ hi: 0 }),
       step: ([s], c) => (s > c.hi ? { hi: s } : c),
       fwd: ([_s], c) => c.hi,

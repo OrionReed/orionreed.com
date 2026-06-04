@@ -49,18 +49,15 @@ export const contains = (b: V, p: Inner<Vec>): boolean =>
   p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 
 /** Closest point inside `b` to `p`. Already-inside is identity; outside
- *  snaps to the nearest box-boundary point (which is inside under our
- *  inclusive `contains`). Used by `Box#contains` as the bwd's true-side
- *  policy and reusable on its own as an idempotent projection helper. */
+ *  snaps to the nearest boundary point. `Box#contains`'s true-side bwd. */
 export const clampToBox = (p: Inner<Vec>, b: V): Inner<Vec> => ({
   x: Math.max(b.x, Math.min(b.x + b.w, p.x)),
   y: Math.max(b.y, Math.min(b.y + b.h, p.y)),
 });
 
-/** Closest point STRICTLY outside `b` to `p`, displaced past the nearest
- *  edge by `eps`. Already-outside is identity; inside maps to whichever
- *  of the four edges is nearest. The bwd's false-side policy for
- *  `Box#contains`. */
+/** Closest point strictly outside `b` to `p`, displaced past the nearest
+ *  edge by `eps`. Already-outside is identity. `Box#contains`'s
+ *  false-side bwd. */
 export const ejectFromBox = (p: Inner<Vec>, b: V, eps = 1e-6): Inner<Vec> => {
   if (!contains(b, p)) return p;
   const dLeft = p.x - b.x;
@@ -91,8 +88,7 @@ export function union(...bs: V[]): V {
   return { x: xMin, y: yMin, w: xMax - xMin, h: yMax - yMin };
 }
 
-/** Perimeter point on a Box facing `toward`. Used by default
- *  `Shape.boundary`. */
+/** Perimeter point on a Box facing `toward`. Default `Shape.boundary`. */
 export function edgeFrom(b: V, toward: Inner<Vec>): Inner<Vec> {
   const cx = b.x + b.w / 2;
   const cy = b.y + b.h / 2;
@@ -164,27 +160,18 @@ export class Box extends Signal<V> {
   lerp(b: Val<V>, t: Val<number>): Box {
     return Box.derive(() => lerp(this.value, readNow(b), readNow(t)));
   }
-  /** Membership predicate. Conditional return type: when `p` is a
-   *  writable `Vec`, the result is `Writable<Bool>` and clicks on the
-   *  view flip the source — `true` clamps to the nearest in-box point,
-   *  `false` ejects past the nearest edge by `eps`. For literal or RO
-   *  inputs, the result is a bare (RO) `Bool` since there's no source
-   *  to write back to. Both branches are O(1) box geometry — no policy
-   *  beyond "closest point where the predicate becomes target."
-   *
-   *  GetPut, PutGet, PutPut all hold within the view's domain (boolean
-   *  ≈_V = strict; source ≈_S = "same in/out class"). */
-  contains<P extends Val<Inner<Vec>>>(
-    p: P,
-  ): P extends WritableBrand ? Writable<Bool> : Bool {
+  /** Membership predicate. Conditional return type: a writable `Vec`
+   *  yields `Writable<Bool>` and flipping the view moves the source —
+   *  `true` clamps to the nearest in-box point, `false` ejects past the
+   *  nearest edge by `eps`. Literal / RO inputs yield a bare RO `Bool`. */
+  contains<P extends Val<Inner<Vec>>>(p: P): P extends WritableBrand ? Writable<Bool> : Bool {
     if (p instanceof Vec) {
-      // A Vec produced by `derive(...)` (a pure computed) has no backward
-      // path — fall through to the RO branch. Sources and writable lenses
-      // both accept write-back.
+      // A computed Vec has no backward path → RO branch; sources and
+      // writable lenses accept write-back.
       if (!isComputed(p)) {
-        // `.bind(Bool)` preserves the class `this` while the cast steps
-        // past the generic overloads — the mapped-tuple inference over the
-        // full Box/Vec class types otherwise blows the instantiation depth.
+        // `.bind(Bool)` + cast steps past the generic overloads, whose
+        // mapped-tuple inference over the full class types otherwise blows
+        // the instantiation depth.
         const mk = Bool.lens.bind(Bool) as unknown as (
           parents: readonly [Read<V>, Read<Inner<Vec>>],
           fwd: (vals: readonly [V, Inner<Vec>]) => boolean,
@@ -221,16 +208,15 @@ export class Box extends Signal<V> {
     return derived(this, "area", Num, b => b.w * b.h);
   }
 
-  /** Vec at parametric (u, v) within `[0,1]²`. Not memoised — arbitrary
-   *  (u, v) calls otherwise leak a cache entry per pair. Use the named
-   *  edge getters (`.center`, `.top`, …) when you want stable identity. */
+  /** Vec at parametric (u, v) within `[0,1]²`. Not memoised (arbitrary
+   *  pairs would leak a cache entry each) — use the named edge getters
+   *  (`.center`, `.top`, …) for stable identity. */
   at(u: number, v: number): Vec {
     return Vec.derive(this, b => ({ x: b.x + u * b.w, y: b.y + v * b.h }));
   }
-  // Named edges — derived RO views over `at(u, v)`. Memoised under
-  // stable keys for identity (effects subscribing to `b.center` should
-  // always see the same Vec). `lazy()` directly because `at()` already
-  // returns a Vec — no need to `derived(this, …, Vec, fn)` again.
+  // Named edges — RO views over `at(u, v)`, memoised under stable keys
+  // so subscribers always see the same Vec. `lazy()` directly since
+  // `at()` already returns a Vec.
   get center(): Vec {
     return lazy(this, "center", () => this.at(0.5, 0.5));
   }
@@ -253,13 +239,11 @@ export class Box extends Signal<V> {
   }
 }
 
-/** Writable `Box` at `(x, y, w, h)`. Each component is either a literal
- *  `number` (lifted to a fresh `Writable<Num>` seed) or an existing
- *  `Writable<Num>` (passed through by identity, writes propagate).
- *
- *  RO sources are rejected at the type level — use `Box.derive(...)`
- *  for reactive RO tracking, or `signal.value` to snapshot. Lock a
- *  component with `Num.pin(c)`. */
+/** Writable `Box` at `(x, y, w, h)`. Each component is a literal `number`
+ *  (lifted to a fresh seed) or an existing `Writable<Num>` (identity
+ *  passthrough). RO sources are rejected at the type level — use
+ *  `Box.derive(...)` for reactive RO tracking, or `signal.value` to
+ *  snapshot. Lock a component with `Num.pin(c)`. */
 export function box(
   x: Init<Num> = 0,
   y: Init<Num> = 0,
@@ -278,8 +262,8 @@ export function box(
   const yN = num(y);
   const wN = num(w);
   const hN = num(h);
-  // Source-independent (`iso`): the view fully reconstructs all 4 axes.
-  return Box.iso(
+  // The view fully reconstructs all 4 axes (1-arg bwd ⇒ no source read).
+  return Box.lens(
     [xN, yN, wN, hN] as const,
     ([bx, by, bw, bh]) => ({ x: bx, y: by, w: bw, h: bh }),
     v => [v.x, v.y, v.w, v.h],

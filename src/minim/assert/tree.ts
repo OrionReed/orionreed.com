@@ -1,11 +1,8 @@
-// Structural view over `Span[]`. Pure derivation; call from a
-// `derive(() => traceTree(spans.value))` to keep it reactive.
+// Structural view over `Span[]`. Pure; wrap in `derive()` to stay reactive.
 //
-// `parent` is already a back-link on Span, so this module is mostly
-// about producing forward links (children) and grouping siblings into
-// `batches` — siblings sharing the same `start` (i.e. spawned together
-// via `yield [a, b, c]`) are members of one batch; sequential batches
-// under the same parent become separate entries.
+// `parent` is a back-link on Span; this module produces forward links
+// (children) and groups siblings into `batches` — same-`start` siblings
+// (spawned together via `yield [a, b, c]`) share a batch.
 
 import type { Span } from "./span";
 
@@ -39,8 +36,7 @@ interface MutableNode {
   children: TraceNode[];
 }
 
-/** Build a `TraceTree` from a span list. Caller must pass spans in
- *  start-time order; the recorder always does. */
+/** Build a `TraceTree`. Spans must be in start-time order (recorder is). */
 export function traceTree(spans: readonly Span[]): TraceTree {
   const byId = new Map<number, MutableNode>();
   for (const s of spans) {
@@ -58,8 +54,7 @@ export function traceTree(spans: readonly Span[]): TraceTree {
     }
     const parent = byId.get(parentId);
     if (!parent) {
-      // Parent not in this span list (trace started mid-run). Treat
-      // as a root for layout purposes.
+      // Parent outside this list (trace started mid-run): treat as root.
       roots.push(node);
       continue;
     }

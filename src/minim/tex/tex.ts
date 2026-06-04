@@ -5,9 +5,8 @@ import { Box, derive, type Inner, type Signal, signal, type Writable } from "@mi
 import temml from "temml";
 import { Part, type PartList, PartMarker } from "./parts";
 
-/** Anything legal in a `tex\`…\`` interpolation slot. Strings splice
- *  through to the LaTeX source verbatim; PartMarkers wrap content in
- *  `\class{minim-part-N}{…}` so we can re-find them post-render. */
+/** A `tex\`…\`` interpolation slot. Strings splice verbatim; PartMarkers
+ *  wrap content in `\class{minim-part-N}{…}` to be re-found post-render. */
 export type TexInterp = string | PartMarker;
 
 export interface TexOpts extends ShapeOpts {
@@ -18,29 +17,23 @@ export interface TexOpts extends ShapeOpts {
   /** Background tint applied while a part's `highlighted` signal is
    *  true. Default: `tokens.tex.highlightColor`. */
   highlightColor?: string;
-  /** "inline" (default) for inline-math style, "block" for display
-   *  style — bigger fractions, sums with limits above/below, and
-   *  multi-line constructs (`\begin{align}`, `\begin{pmatrix}`, …)
-   *  rendered properly. Equivalent to Temml's `displayMode`. */
+  /** "inline" (default) or "block" display style. Maps to Temml's
+   *  `displayMode` — bigger fractions, limits above/below, `\begin{…}`. */
   display?: "inline" | "block";
 }
 
-/** Extract the union of part names from a tuple of interpolation
- *  values. Plain strings contribute nothing; `PartMarker<N>`s
- *  contribute their literal name `N`. */
+/** Union of `PartMarker` names in an interpolation tuple (strings drop out). */
 export type NamesOf<V extends readonly TexInterp[]> = V extends readonly (infer U)[]
   ? U extends PartMarker<infer N>
     ? N
     : never
   : never;
 
-/** Class on the rendered `<mrow>` — used to re-find Parts in any
- *  cloned subtree without per-shape index maps. */
+/** Class on the rendered `<mrow>`, to re-find Parts in cloned subtrees. */
 const partClass = (name: string): string => `minim-part-${name}`;
 
-/** Build the LaTeX source + PartMarker list in one pass. Reads
- *  `strings.raw` so authors can write single-backslash LaTeX
- *  (`\frac{...}`) without JS eating `\f`, `\t`, etc. */
+/** Build LaTeX source + PartMarker list. Reads `strings.raw` so authors
+ *  write single-backslash LaTeX without JS eating `\f`, `\t`, etc. */
 const compileTemplate = (
   strings: TemplateStringsArray | readonly string[],
   values: readonly TexInterp[],
@@ -69,8 +62,7 @@ const compileTemplate = (
   return { source, markers };
 };
 
-/** Render LaTeX → MathML via Temml. Wraps Temml's options with the
- *  defaults used across the codebase (trust on, lenient errors). */
+/** Render LaTeX → MathML via Temml (trust on, lenient errors). */
 export const renderToMathML = (source: string, opts: { displayMode?: boolean } = {}): string => {
   try {
     return temml.renderToString(source, {
@@ -84,9 +76,8 @@ export const renderToMathML = (source: string, opts: { displayMode?: boolean } =
   }
 };
 
-/** Wrapper CSS — identical between the hidden measurement div and
- *  the live foreignObject child, so measured and live offsets agree
- *  byte-for-byte. */
+/** Wrapper CSS — identical for the measurement div and the live
+ *  foreignObject child, so measured and live offsets agree. */
 const wrapperCss = (fontSize: number, fontFamily: string): string =>
   [
     `font-family:${fontFamily}`,
@@ -99,12 +90,10 @@ const wrapperCss = (fontSize: number, fontFamily: string): string =>
     "display:inline-block",
   ].join(";");
 
-/** Apply font styles directly to the `<math>` element. Browsers
- *  don't reliably inherit `font-family` for MathML, and radical/
- *  fraction thickness comes from the font's OpenType MATH table —
- *  so the font has to live on `<math>` itself for surd and vinculum
- *  to be drawn correctly. Don't touch `display`: MathML Core only
- *  honors `inline math` / `block math`. */
+/** Font styles must live on `<math>` itself: MathML doesn't reliably
+ *  inherit `font-family`, and surd/vinculum thickness comes from the
+ *  font's OpenType MATH table. Never set `display` (MathML Core only
+ *  honors `inline math` / `block math`). */
 const styleMathRoot = (mathEl: HTMLElement, fontSize: number, fontFamily: string): void => {
   mathEl.style.fontFamily = fontFamily;
   mathEl.style.fontSize = `${fontSize}px`;
@@ -114,13 +103,10 @@ const styleMathRoot = (mathEl: HTMLElement, fontSize: number, fontFamily: string
   mathEl.style.fontWeight = "normal";
 };
 
-/** Force a part's internal layout to be context-independent. `<msqrt>`
- *  cascades `math-shift: compact` (cramped style: superscripts shift
- *  ~1–3px less); `<mfrac>` cascades `math-style: compact` (tighter
- *  script spacing). Setting both to `normal` on the part means a
- *  matched mrow renders the same regardless of ambient context, so
- *  morph rides it with a single scale factor — no visible pop at
- *  hand-off. Inherited, so propagates to descendants automatically. */
+/** Force a part's layout to be context-independent so a matched mrow
+ *  renders the same regardless of ambient context — morph rides it with
+ *  one scale factor, no pop. Overrides the `compact` style `<msqrt>` /
+ *  `<mfrac>` cascade; inherited, so propagates to descendants. */
 const stabilizePart = (el: HTMLElement): void => {
   el.style.setProperty("math-shift", "normal");
   el.style.setProperty("math-style", "normal");
@@ -145,9 +131,8 @@ const measureMathML = (mathml: string, fontSize: number, fontFamily: string): Me
   try {
     const root = mathEl ?? (div.firstElementChild as HTMLElement) ?? div;
     const rootRect = root.getBoundingClientRect();
-    // Anchor part rects to the wrapper (the foreignObject's (0,0)),
-    // not to `<math>` — `<mfrac>` can overflow its line-box upward,
-    // so math-relative bounds would be off by that overflow.
+    // Anchor part rects to the wrapper, not `<math>`: `<mfrac>` can
+    // overflow its line-box upward, throwing off math-relative bounds.
     const wrapperRect = div.getBoundingClientRect();
     const rects = new Map<string, Inner<Box>>();
     div.querySelectorAll<HTMLElement>("[class*='minim-part-']").forEach(el => {
@@ -171,8 +156,7 @@ const measureMathML = (mathml: string, fontSize: number, fontFamily: string): Me
  *  and `parts.ts` (Part / PartMarker). */
 export class TexShape<Names extends string = string> extends Shape {
   readonly parts: PartList<Names>;
-  /** Width in local-frame user units (matches the rendered MathML
-   *  bounding rect). */
+  /** Width in local-frame user units (the rendered MathML bounding rect). */
   readonly width: Signal<number>;
   /** Height in local-frame user units. */
   readonly height: Signal<number>;
@@ -211,9 +195,8 @@ export class TexShape<Names extends string = string> extends Shape {
     wrapper.style.cssText = wrapperCss(fontSize, fontFamily);
     fo.appendChild(wrapper);
 
-    // Parts are built up front; `mountInto` populates the wrapper
-    // and binds each Part to its live el. `boxWriters` holds the
-    // writable handles to each part's bounds for re-measure.
+    // Parts built up front; `mountInto` populates the wrapper and binds
+    // each. `boxWriters` holds the writable bounds for re-measure.
     const list: Part[] = [];
     const boxWriters = new Map<string, Writable<Box>>();
     for (const m of markers) {
@@ -226,8 +209,8 @@ export class TexShape<Names extends string = string> extends Shape {
     }
     this.parts = buildPartList(list);
 
-    /** Render `mathml` into the wrapper, push fresh bounds, rebind
-     *  parts. `bounds` lets the initial mount skip re-measuring. */
+    /** Render into the wrapper, push fresh bounds, rebind parts.
+     *  `bounds` lets the initial mount skip re-measuring. */
     const mountInto = (mathml: string, bounds?: Measurement): void => {
       wrapper.innerHTML = mathml;
       const m = wrapper.querySelector("math") as HTMLElement | null;
@@ -262,9 +245,8 @@ export class TexShape<Names extends string = string> extends Shape {
       mountInto(renderToMathML(next.source, { displayMode }));
     });
 
-    // Re-measure once webfonts have loaded — `New CM Math` ships from
-    // a CDN, and synchronous measurement uses fallback metrics until
-    // it arrives. Without this, the first morph pops by 1–3px.
+    // Re-measure once webfonts load: synchronous measurement uses
+    // fallback metrics until the CDN font arrives, else first morph pops.
     const fonts = (document as { fonts?: FontFaceSet }).fonts;
     if (fonts?.ready) {
       void fonts.ready.then(() => {
@@ -297,8 +279,7 @@ export class TexShape<Names extends string = string> extends Shape {
   }
 }
 
-/** Positional array with named keys attached — iterates in template
- *  order, indexable by name. */
+/** Positional array with named keys: template-order iteration, name-indexable. */
 const buildPartList = <Names extends string>(list: readonly Part[]): PartList<Names> => {
   const out = list.slice() as Part[] & Record<string, Part>;
   for (const p of list) (out as Record<string, Part>)[p.name] = p;
@@ -314,8 +295,7 @@ const isTemplateStrings = (v: unknown): v is TemplateStringsArray =>
  *      tex(28)`E = mc^2`                          // size-only shorthand
  *      tex({ size: 28, display: "block" })`...`   // full options
  *
- *  Single-backslash LaTeX works directly — we read `strings.raw`, so
- *  `\frac`, `\dot`, etc. aren't eaten by JS's `\f`/`\t` escapes. */
+ *  Single-backslash LaTeX works directly (reads `strings.raw`). */
 export function tex<V extends readonly TexInterp[]>(
   strings: TemplateStringsArray,
   ...values: V

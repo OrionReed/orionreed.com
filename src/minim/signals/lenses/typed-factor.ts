@@ -1,33 +1,20 @@
 // =====================================================================
 // typed-factor.ts — heterogeneous-output factor lens.
 //
-// Generalises `factorLens` (scalar-in, scalar-out) to typed
-// inputs and outputs via the `Pack` trait:
+// Generalises `factorLens` (scalar-only) to typed inputs/outputs via the
+// `Pack` trait. Inputs and outputs are flat-packed; the Jacobian is the
+// full M×N matrix; writing one channel sends a sparse δy through the LSQ
+// pseudoinverse. Invariance is approximate (the Jacobian path) — use
+// closed-form lenses like `procrustesLens` for exactness.
 //
-//   const { centroid, rotation, scale } = factor(
-//     [v1, v2, v3] as const,                 // Writable<Vec>[]
-//     {                                      // record of named outputs
-//       centroid: { Cls: Vec, fwd: pts => …, fields: ["x", "y"] },
-//       rotation: { Cls: Num, fwd: pts => atan2(…) },
-//       scale:    { Cls: Num, fwd: pts => hypot(…) },
-//     },
-//   );
+//   const { centroid, rotation, scale } = factor([v1, v2, v3] as const, {
+//     centroid: { Cls: Vec, fwd: pts => … },
+//     rotation: { Cls: Num, fwd: pts => atan2(…) },
+//     scale:    { Cls: Num, fwd: pts => hypot(…) },
+//   });
+//   centroid.value = { x: 100, y: 50 };  // typed
 //
-//   centroid.value = { x: 100, y: 50 };   // Writable<Vec> — typed!
-//   rotation.value = Math.PI / 4;
-//   scale.value = 50;
-//
-// Engine work:
-//   - Inputs and outputs are FLAT-packed via Pack traits.
-//   - Jacobian is the full M_flat × N_flat matrix.
-//   - Writing one channel sends a sparse δy (zero except in that
-//     channel's slice) through the LSQ pseudoinverse.
-//   - Cross-channel invariance is approximate (the Jacobian path);
-//     for closed-form, use specialised lenses like `procrustesLens`.
-//
-// 1→M case ("bundle"): just `factor()` applied to a single typed
-// input. Helper `bundle()` is provided for ergonomic single-source
-// authoring.
+// `bundle()` is the 1→M case: `factor()` over a single typed source.
 // =====================================================================
 
 import {
@@ -164,9 +151,8 @@ export function factor<
   const maxIters = opts.maxIters ?? 10;
   const tol = opts.tol ?? 1e-4;
 
-  // ALL-or-nothing analytical Jacobian: skip FD entirely when every
-  // output supplies one. (Mixed mode is possible but complicates code
-  // for marginal benefit on the prototype.)
+  // All-or-nothing analytical Jacobian: skip FD only when every output
+  // supplies one (no mixed mode).
   const useAnalyticalJ = outputSpecs.every(s => s.jacobian !== undefined);
 
   // Shared scratch buffers — safe across the M cells because writes
@@ -191,8 +177,8 @@ export function factor<
       inputPacks[k]!.read(vals[k], flatIn as unknown as Float64Array, inputOffsets[k]!);
     }
 
-    // Working copies for FD: typedScratch[k] gets re-unpacked when its
-    // slice of flatIn is perturbed. Initial value = current.
+    // FD working copies: typedScratch[k] is re-unpacked when its slice of
+    // flatIn is perturbed.
     const typedScratch: unknown[] = vals.slice();
 
     // 2. Base outputs
@@ -206,8 +192,7 @@ export function factor<
     {
       const dim = outputDims[channelIdx]!;
       const baseOff = outputOffsets[channelIdx]!;
-      // Pack target into a scratch slot of flatOutPerturbed, just
-      // reusing existing buffer space so no allocation.
+      // Pack target into flatOutPerturbed (reused buffer, no allocation).
       outputPacks[channelIdx]!.read(
         target as never,
         flatOutPerturbed as unknown as Float64Array,
@@ -311,13 +296,9 @@ export function factor<
     // biome-ignore lint/suspicious/noExplicitAny: typed at facade
     const Cls = spec.Cls as any;
 
-    // ── Auto-converging backward ─────────────────────────────────────
-    // Iterate the single-Newton backward step until the channel's reading
-    // is within tol of target. Linear-fwd cases converge in 1 iter; non-
-    // linear cases in 3-25 depending on geometry. The fixpoint runs INSIDE
-    // `put` on a local copy of the input values (re-evaluating `spec.fwd`
-    // each step), so the engine applies the converged inputs structurally
-    // in one shot — no imperative source writes.
+    // Auto-converging backward: iterate the single-Newton step until the
+    // channel's reading is within tol (1 iter when linear). Runs on a local
+    // copy inside `put`, so the engine applies converged inputs in one shot.
     const outPack = outputPacks[idx]!;
     const outDim = outputDims[idx]!;
     const convergeBwd = (target: unknown, vals: ReadonlyArray<unknown>): ReadonlyArray<unknown> => {
@@ -357,20 +338,8 @@ export function factor<
 // ─── factorTuple: positional API ───────────────────────────────────────
 //
 // Same engine, no names. Outputs are a tuple of specs; the result is a
-// tuple of writables typed via mapped-tuple inference.
-//
-//   const [centroid, rotation, scale] = factorTuple(
-//     [v1, v2, v3] as const,
-//     [
-//       { Cls: Vec, fwd: pts => ({...}) },
-//       { Cls: Num, fwd: pts => Math.atan2(...) },
-//       { Cls: Num, fwd: pts => Math.hypot(...) },
-//     ],
-//   );
-//
-// Trade-off vs named: terser at call sites, destructure feels right
-// for the "factor into N aspects" framing, but loses self-documenting
-// names. Order-sensitive (refactors must re-align destructure).
+// tuple of writables. Terser to destructure, but order-sensitive and
+// loses self-documenting names.
 // =====================================================================
 
 export function factorTuple<
@@ -381,8 +350,7 @@ export function factorTuple<
   outputs: readonly [...T],
   opts: FactorOpts = {},
 ): { [K in keyof T]: Writable<InstanceType<T[K]["Cls"]>> } {
-  // Wrap to named, call factor, unwrap. The named-record construction
-  // is a one-time setup cost; the per-write hot path is identical.
+  // Wrap to named, call factor, unwrap (one-time setup; hot path identical).
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   const named: Record<string, OutputSpec<any>> = {};
   for (let i = 0; i < outputs.length; i++) named[String(i)] = outputs[i]!;
@@ -392,14 +360,9 @@ export function factorTuple<
 
 // ─── bundle: 1→M dual, sugar over factor() with one input ──────────────
 //
-// A single typed source factored into M coupled views. The same engine
-// machinery as factor(); the only restriction is that the input array
-// has length 1, so there's a single source that all views derive from.
-//
-// Coupling: writing view K sends a sparse δy through the Jacobian solve.
-// Since N is small (the source's pack dim), the Jacobian is small and
-// the LSQ tries to land on target_K with minimal perturbation to other
-// channels' projections.
+// A single typed source factored into M coupled views — `factor()` with
+// a length-1 input array. Writing a view sends a sparse δy through the
+// Jacobian solve (small, since N = the source's pack dim).
 // =====================================================================
 
 export function bundle<
@@ -407,9 +370,8 @@ export function bundle<
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   O extends Record<string, OutputSpec<any>>,
 >(source: Writable<Read<T> & Traits<T, "pack">>, views: O, opts: FactorOpts = {}): FactorResult<O> {
-  // Adapt: factor() takes an array of inputs; pass [source]. The view
-  // fwds receive an array `[currentSource]`, so wrap each view's
-  // single-arg fwd into the array form.
+  // factor() takes an input array, so pass [source] and wrap each view's
+  // fwd to receive the single-element array form.
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   const wrapped: Record<string, OutputSpec<any>> = {};
   for (const key of Object.keys(views)) {
@@ -427,16 +389,8 @@ export function bundle<
   return factor([source] as readonly PackedInput[], wrapped as O, opts);
 }
 
-// ─── Bundle convenience: bundle a value-class-typed source as field-like
-//     bundle where each view is just a field of the source.
-//     This is the dual of "independent N→1 ×M" but on a single source —
-//     equivalent to a stack of `field()` calls, except the writes go
-//     through the joint Jacobian solve (so cross-channel coupling is
-//     present when source's structure couples them).
-// =====================================================================
-
-// (no extra API needed — `field()` already does the simple case;
-//  use `bundle()` when you want the coupled-write behaviour.)
+// For field-style bundles, `field()` already covers the independent case;
+// use `bundle()` when you want coupled writes through the Jacobian solve.
 
 // ─── Matrix inverse (Gauss-Jordan with partial pivoting) ───────────────
 
@@ -482,11 +436,9 @@ function invertMatrix(A: Float64Array, M: number, out: Float64Array): boolean {
 
 // ─── Sugar: closed-form Procrustes via factor() typed API ──────────────
 //
-// Just for showcase / comparison: factor() can express Procrustes
-// with typed outputs (centroid is a real Vec, not two Nums) but the
-// bwd is still Jacobian-LSQ. The closed-form `procrustesLens` from
-// `./factor-lens.ts` is faster and exact; this version exists so the
-// typed-output ergonomics can be eyeballed.
+// Procrustes with typed outputs (centroid is a real Vec) but a
+// Jacobian-LSQ bwd — a showcase for the typed ergonomics. The
+// closed-form `procrustesLens` is faster and exact.
 // =====================================================================
 
 export function procrustesTyped(points: readonly PackedInput<Inner<Vec>>[]): {

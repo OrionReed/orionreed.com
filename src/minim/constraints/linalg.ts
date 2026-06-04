@@ -1,31 +1,15 @@
-// linalg.ts — small dense linear algebra for AVBD's per-vertex local
-// Newton solves. Each cell's local system has dimension equal to the
-// cell's DOF: 1 for a Num, 2 for a Vec, 4 for a Box, etc. So we
-// only ever solve `n × n` systems where n is small (typically ≤ 6).
-//
-// For these sizes, an unrolled LDLᵀ factorisation beats anything
-// general-purpose. We provide:
-//
-//   - `solveSPD(A, b, n)`           — SPD solve via in-place LDLᵀ.
-//   - `solve1`, `solve2`, `solve3`, — fast paths for the most common
-//   - `solve4`                       sizes; inlined for speed.
+// linalg.ts — small dense linear algebra for AVBD's per-cell local
+// Newton solves. Systems are `n × n` with n = cell DOF (small, ≤ 6),
+// where unrolled direct solves / LDLᵀ beat anything general-purpose.
 //
 // Convention: matrices are row-major Float64Array of length n*n.
-// LDLᵀ overwrites `A` with the factor; `b` is overwritten with the
-// solution `x` such that `A·x = b` for the original A.
+// Solves are in place: `A` is destroyed, `x` is written into `b`.
 
 const TINY = 1e-14;
 
-/** Solve a symmetric positive (semi-) definite system `A·x = b`
- *  in place. `A` is destroyed. `x` is written into `b`. Returns
- *  `false` if the system is too singular to solve safely (in which
- *  case `b` is left in an undefined state — caller should not use
- *  the result; typically falls back to leaving the cell unchanged).
- *
- *  Implements LDLᵀ with diagonal regularisation: if `D[i] < TINY`
- *  during factorisation, we skip column `i` (effectively pinning
- *  it). This matches AVBD's "skip rank-deficient vertices for this
- *  iteration" strategy. */
+/** Solve an SPD (or semi-definite) system `A·x = b` in place via
+ *  LDLᵀ. Returns `false` if too singular to solve safely (leaving
+ *  `b` undefined — callers typically leave the cell unchanged). */
 export function solveSPD(A: Float64Array, b: Float64Array, n: number): boolean {
   if (n === 1) {
     const a = A[0]!;

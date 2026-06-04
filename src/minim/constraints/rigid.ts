@@ -1,19 +1,16 @@
 // rigid.ts — 2D rigid-body relations + box-box collision.
 //
-// A rigid body is a single 3-DOF cell `(x, y, θ)` with diagonal mass
-// `(m, m, I)` written via `Solver.setMassDiag`. Geometry (size,
-// friction) and bookkeeping (bounding radius for broadphase) live on
-// a `Body` wrapper. Collisions between two boxes generate a
-// `BoxContact` term whose rows encode normal and tangential
-// constraints with feature-pair tracking for static friction.
+// A rigid body is a 3-DOF cell `(x, y, θ)` with diagonal mass
+// `(m, m, I)`. Geometry and broadphase bookkeeping live on a `Body`
+// wrapper. Box-box collisions generate a `BoxContact` term with
+// normal + tangential rows and feature-pair tracking for static
+// friction.
 //
-// `Body`, `Joint`, and `BodyAnchor` are `Relation`s — add them via
-// `c.add(...)` (typically inside a `world()` factory which sets up
-// the broadphase + manifold lifecycle and contact-skip set).
+// `Body`, `Joint`, and `BodyAnchor` are `Relation`s — add via
+// `c.add(...)`, typically inside a `world()` factory.
 //
-// SAT collision detection is a translation of Box2D-Lite's
-// box-box collide (MIT licensed, Erin Catto), the same one the
-// AVBD reference 2D demo uses. See:
+// SAT collision is a port of Box2D-Lite's box-box collide (MIT,
+// Erin Catto), as used by the AVBD 2D reference. See:
 // https://github.com/savant117/avbd-demo2d/blob/main/source/collide.cpp
 
 import {
@@ -50,14 +47,11 @@ export interface BodyInit {
   theta?: number;
 }
 
-/** A 2D rigid body. Implements `Relation`: add via `world.add(body)`.
+/** A 2D rigid body (a `Relation`; add via `world.add(body)`).
  *
- *  Pose lives in a single `Pose` signal (`{ x, y, theta }`).
- *  `position` (Vec) and `angle` (Num) are lenses on that pose, so
- *  renderers / drag handlers / IK targets that only care about
- *  translation or rotation can subscribe to a narrower view. After
- *  `bind`, `cellId` reflects the solver cell this body occupies (-1
- *  before bind). */
+ *  Pose is one `Pose` signal; `position` (Vec) and `angle` (Num) are
+ *  lenses on it for consumers wanting a narrower view. `cellId` is the
+ *  solver cell after `bind` (-1 before). */
 export class Body implements Relation {
   readonly w: number;
   readonly h: number;
@@ -67,20 +61,16 @@ export class Body implements Relation {
   /** Bounding radius for the broadphase. */
   readonly radius: number;
 
-  /** Reactive pose — single source of truth. Sim updates this at the
-   *  end of every tick; renderers, drag handlers, and IK targets all
-   *  read it. */
+  /** Reactive pose — single source of truth, updated each tick. */
   readonly pose: Writable<Pose>;
-  /** `Vec`-shaped lens on `pose` (xy only). Useful for renderers
-   *  that bind translation, drag handlers that mutate it, etc.
-   *  Writes propagate back through `pose`. */
+  /** Vec lens on `pose` (xy); writes propagate back through `pose`. */
   readonly position: Writable<Vec>;
-  /** `Num`-shaped lens on `pose` (theta only). */
+  /** Num lens on `pose` (theta). */
   readonly angle: Writable<Num>;
 
   /** Solver cell id; -1 until `bind` runs. */
   cellId = -1;
-  /** @internal — set on bind so internal force code can read solver state. */
+  /** @internal — set on bind so force code can read solver state. */
   _solver?: Solver;
 
   constructor(opts: BodyOpts, init: BodyInit) {
@@ -116,26 +106,18 @@ export class Body implements Relation {
     if (this.mass === 0) c.solver.setMass(this.cellId, 0);
     else c.solver.setMassDiag(this.cellId, [this.mass, this.mass, this.moment]);
     return () => {
-      // Cells are append-only in the solver; we can't truly free.
-      // On detach, mark kinematic and forget the cellId so the body
-      // could in principle be re-bound to a different cluster.
+      // Solver cells are append-only; can't free. Mark kinematic and
+      // forget cellId so the body could be re-bound elsewhere.
       c.solver.setMass(this.cellId, 0);
       this.cellId = -1;
       this._solver = undefined;
     };
   }
 
-  /** Returns a Relation that pins this body in place (mass → 0,
-   *  cell becomes kinematic) while attached. Restores the body's
-   *  diagonal mass `(m, m, I)` on detach.
-   *
-   *  Composes with `addWhile` for pointer-drag patterns:
-   *
-   *    world.addWhile(dragging, body.pin());
-   *
-   *  When pinned, the body's pose still updates from `body.position`
-   *  / `body.angle` writes — the cell is kinematic, but its position
-   *  is read from the pose signal each tick. */
+  /** Relation that pins this body (mass → 0, kinematic) while
+   *  attached; restores `(m, m, I)` on detach. Composes with
+   *  `addWhile` for drag. The pose still updates from
+   *  `body.position` / `body.angle` writes. */
   pin(): Relation {
     const body = this;
     return {
@@ -153,14 +135,8 @@ export class Body implements Relation {
   }
 }
 
-/** Create a rigid body. Compose with `world.add(...)`:
- *
- *    const a = world.add(body({ size: { w: 40, h: 40 } }, { x: 100, y: 100 }));
- *    const b = world.add(body({ size: { w: 40, h: 40 }, density: 0 }, { x: 200, y: 200 }));
- *    world.add(joint(a, b, { x: 0, y: 0 }, { x: 0, y: 0 }));
- *
- *  `density: 0` produces a static body (mass clamped to 0; cell is
- *  kinematic). */
+/** Create a rigid body (add via `world.add`). `density: 0` is static
+ *  (mass 0, kinematic cell). */
 export function body(opts: BodyOpts, init: BodyInit): Body {
   return new Body(opts, init);
 }
@@ -173,11 +149,9 @@ interface PoseScratch {
   theta: number;
 }
 
-/** @internal — Read live solver buffer state into `out`. The body's
- *  `pose` signal reflects START-of-tick value (snapshot'd in by
- *  sim); the LIVE value during iteration lives in `solver.positions`.
- *  Use this from `Force.computeConstraint` and similar inner-loop
- *  code that runs many times per tick. */
+/** @internal — Read live solver position into `out`. The `pose`
+ *  signal holds the start-of-tick value; the live value during
+ *  iteration is in `solver.positions`. For inner-loop use. */
 function readPose(solver: Solver, cellId: number, out: PoseScratch): void {
   const off = solver.offsets[cellId]!;
   const p = solver.positions;
@@ -224,13 +198,10 @@ function flipFP(fp: number): number {
   return makeFP(inE2, outE2, inE1, outE1);
 }
 
-/** Clip the segment `vIn` against a half-plane `n · v ≤ offset`.
- *  When the plane bisects the segment, the new vertex inherits the
- *  feature pair from whichever vIn endpoint was on the clipped side
- *  and overwrites either the in-edge or out-edge of the *clipping*
- *  axis (edge 1) with `clipEdge`, zeroing the corresponding edge-2
- *  field per Box2D-Lite. Stable feature pairs across frames are
- *  what lets penalty / λ warm-start through sliding contacts. */
+/** Clip segment `vIn` to the half-plane `n · v ≤ offset`. A bisected
+ *  segment's new vertex inherits the clipped endpoint's feature pair,
+ *  overwriting edge-1 with `clipEdge` per Box2D-Lite. Stable feature
+ *  pairs are what let penalty / λ warm-start through sliding contacts. */
 function clipSegmentToLine(
   vOut: ClipVertex[],
   vIn: ClipVertex[],
@@ -378,9 +349,7 @@ function collideBoxes(
   const dBx = cB * dpx + sB * dpy;
   const dBy = -sB * dpx + cB * dpy;
 
-  // C = RotAᵀ · RotB; columns are RotAᵀ · RotB[:, k].
-  // Specifically: C[0,0] = cA*cB + sA*sB,  C[0,1] = cA*-sB + sA*cB
-  //               C[1,0] = -sA*cB + cA*sB, C[1,1] = -sA*-sB + cA*cB
+  // C = RotAᵀ · RotB (relative rotation).
   const c00 = cA * cB + sA * sB;
   const c01 = -cA * sB + sA * cB;
   const c10 = -sA * cB + cA * sB;
@@ -537,13 +506,10 @@ function collideBoxes(
 
 const SCRATCH_CONTACTS: Contact[] = [makeContact(), makeContact()];
 
-/** Up to 2 contact points × 2 rows (normal + tangent) = 4 rows.
- *  Encodes Coulomb friction by clamping the tangential `λ` to the
- *  current friction cone (`fmax = ±μ·|λ_normal|`, updated each
- *  iteration in `computeConstraint`). Uses a truncated Taylor
- *  expansion at `x⁻` (no second-order term — paper §4) so the
- *  derivatives `J` are precomputed in `initialize` and just copied
- *  out by `computeDerivatives`. */
+/** Up to 2 contacts × (normal + tangent) = 4 rows. Coulomb friction
+ *  via clamping tangential `λ` to the cone `±μ·|λ_normal|` (updated
+ *  per iteration). Truncated Taylor at `x⁻` (paper §4), so `J` is
+ *  precomputed in `initialize` and copied out by `computeDerivatives`. */
 export class BoxContact extends Term {
   bodyA: Body;
   bodyB: Body;
@@ -588,11 +554,10 @@ export class BoxContact extends Term {
     const oldLambda = [this.lambda[0]!, this.lambda[1]!, this.lambda[2]!, this.lambda[3]!];
     const oldStick = [oldContacts[0]!.stick, oldContacts[1]!.stick];
 
-    // Re-collide. Returning `true` even with zero contacts keeps the
-    // manifold registered with the solver so warm-start state survives
-    // a brief separation (the world's broadphase still tracks the
-    // pair). When `numContacts == 0` the rows are zeroed in
-    // `computeConstraint`, so the inactive manifold contributes nothing.
+    // Re-collide. Returning `true` with zero contacts keeps the
+    // manifold registered so warm-start survives a brief separation;
+    // the rows are zeroed in `computeConstraint`, so it contributes
+    // nothing while inactive.
     readPose(this.solver, this.bodyA.cellId, this._poseA);
     readPose(this.solver, this.bodyB.cellId, this._poseB);
     const numNew = collideBoxes(SCRATCH_CONTACTS, this._poseA, this.bodyA, this._poseB, this.bodyB);
@@ -775,14 +740,10 @@ export interface JointStiffness {
   angle?: number;
 }
 
-/** Revolute joint connecting body-local anchor `rA` on `bodyA` to
- *  body-local anchor `rB` on `bodyB`. By default the position rows
- *  are hard and the angle row is free (a rope/chain segment hinge);
- *  override with `JointStiffness` for soft springs or rigid welds.
- *  Faithful port of `Joint` from the AVBD 2D reference.
- *
- *  This is the internal Force; user code adds the `Joint` Relation
- *  via `world.add(joint(a, b, rA, rB))`. */
+/** Internal term for a revolute joint (anchors `rA` on `bodyA`, `rB`
+ *  on `bodyB`). Default: hard position rows, free angle (hinge);
+ *  override via `JointStiffness`. Port of the AVBD 2D `Joint`. User
+ *  code uses the `Joint` Relation via `world.add(joint(...))`. */
 export class JointTerm extends Term {
   readonly bodyA: Body;
   readonly bodyB: Body;
@@ -840,9 +801,6 @@ export class JointTerm extends Term {
     this._C0Cache[0]! = aWx - bWx;
     this._C0Cache[1]! = aWy - bWy;
     this._C0Cache[2]! = (poseA.theta - poseB.theta - this.restAngle) * this.torqueArm;
-    // Mirror into solver's C0 buffer too — solver.prepare() also
-    // calls computeConstraint(0) and writes to C0 itself, but we
-    // want our cached value used in computeConstraint via this._Cn.
     return this.stiffness[0]! !== 0 || this.stiffness[1]! !== 0 || this.stiffness[2]! !== 0;
   }
 
@@ -907,20 +865,9 @@ export class JointTerm extends Term {
   }
 }
 
-/** Soft 2-row constraint pulling a body's translation `(x, y)` toward
- *  a moving world-space `target` with finite `stiffness`. Used as the
- *  drag handle on rigid bodies: instead of pinning (mass → 0) and
- *  teleporting positions to the cursor — which makes the dragged box
- *  punch through neighbours, since a static body can't react to a
- *  contact — this lets the body keep its mass. The cursor pulls hard
- *  but contacts can still push back, so the box lags behind the
- *  cursor when blocked rather than mushing through.
- *
- *  Leaves the angle DOF free, so the body still rotates under
- *  gravity / contact torque while you drag it. Update `target` each
- *  pointermove; call `dispose()` on pointerup. */
-/** @internal — BodyAnchor's underlying Force. User code uses
- *  `bodyAnchor(body, target, stiffness?)` and adds via `world.add`. */
+/** @internal — soft 2-row term pulling a body's translation toward
+ *  `target` with finite `stiffness` (angle DOF left free). Backs the
+ *  `BodyAnchor` relation; see `bodyAnchor`. */
 export class BodyAnchorTerm extends Term {
   readonly body: Body;
   /** World-space target signal (mutable). */
@@ -973,15 +920,10 @@ export class BodyAnchorTerm extends Term {
 
 // ─── Joint / weld / bodyAnchor Relations ────────────────────────────
 
-/** Revolute or weld joint between two bodies. Add via `world.add(...)`:
- *
- *    const j = world.add(joint(armA, armB, { x: L/2, y: 0 }, { x: -L/2, y: 0 }));
- *
- *  The default has hard position rows and a free angle row (revolute
- *  hinge — rope/chain segment). For a rigid weld pass `{ angle: Infinity }`,
- *  for a soft hinge pass `{ x, y }` finite. Joints register with their
- *  world's contact-skip set on `bind` (so the broadphase doesn't
- *  generate redundant box-box contacts between the linked pair). */
+/** Revolute or weld joint between two bodies (add via `world.add`).
+ *  Default: hard position rows, free angle (hinge). `{ angle: Infinity }`
+ *  welds; finite `{ x, y }` softens. `world` skips broadphase contacts
+ *  between jointed pairs. */
 export class Joint implements Relation {
   constructor(
     readonly bodyA: Body,
@@ -1011,9 +953,8 @@ export function joint(
   return new Joint(a, b, rA, rB, opts);
 }
 
-/** Rigid weld — same as a joint with all rows hard (`x: Infinity,
- *  y: Infinity, angle: Infinity`). Used to fuse two bodies into one
- *  rigid composite while keeping their independent inertias. */
+/** Rigid weld — a joint with all rows hard; fuses two bodies while
+ *  keeping their independent inertias. */
 export function weld(
   a: Body,
   b: Body,
@@ -1027,19 +968,15 @@ export function weld(
   });
 }
 
-/** Soft constraint that pulls a body's translation toward `target`
- *  with finite stiffness. The canonical "soft drag" handle:
- *  the body keeps its mass (and thus reacts to contacts), so a
- *  dragged box lags behind the cursor when blocked rather than
- *  punching through neighbours. Mutate `r.target.value = {x,y}`
- *  each pointermove; the constraint re-solves automatically.
+/** Soft "drag" handle: pulls a body's translation toward `target`
+ *  with finite stiffness. The body keeps its mass and reacts to
+ *  contacts, so it lags behind the cursor when blocked rather than
+ *  punching through. `target` and `stiffness` are mutable signals.
  *
  *    const a = bodyAnchor(body, body.position.value, 5e4);
  *    world.addWhile(dragging, a);
  *    onPointerMove(p => a.target.value = p);
- *
- *  Both `target` and `stiffness` are mutable signals; pass plain
- *  values for the common "construct, never change stiffness" case. */
+ */
 export class BodyAnchor implements Relation {
   readonly target: Writable<Vec>;
   readonly stiffness: Writable<Num>;

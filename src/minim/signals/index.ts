@@ -26,16 +26,6 @@ export {
 } from "./anim";
 export { transitiveDeps } from "./introspect";
 export * from "./lenses";
-export {
-  allNodes,
-  atPath,
-  isLeaf,
-  leavesOf,
-  node as treeNode,
-  nodeCount,
-  type TreeNode,
-  walkTree,
-} from "./tree";
 export { each, type Lifecycle } from "./network-utils";
 export { reflectionLens } from "./new-primitives";
 export {
@@ -47,7 +37,6 @@ export {
   isComputed,
   isLens,
   isSignal,
-  iso,
   lazy,
   lens,
   type Network,
@@ -59,7 +48,6 @@ export {
   type SignalOptions,
   type StatefulBwd,
   type StatefulLensSpec,
-  statefulLens,
   setSignalWriteHook,
   signal,
   untracked,
@@ -83,6 +71,16 @@ export {
   type TraitDict,
   type Traits,
 } from "./traits";
+export {
+  allNodes,
+  atPath,
+  isLeaf,
+  leavesOf,
+  node as treeNode,
+  nodeCount,
+  type TreeNode,
+  walkTree,
+} from "./tree";
 export { Anchor, Dir } from "./values/anchor";
 export * as BoolMath from "./values/bool";
 export { Bool, bool } from "./values/bool";

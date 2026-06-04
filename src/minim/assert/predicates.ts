@@ -1,7 +1,5 @@
-// Predicate factory functions. Each returns a `Read<boolean>` derived
-// from one or more reactive sources — they're plain `derive()` calls
-// with no special types, so users can compose them with `and` / `or` /
-// `not` / hand-rolled `derive()` interchangeably.
+// Predicate factories. Each returns a plain `derive()`d `Read<boolean>`,
+// composable with `and` / `or` / `not` / hand-rolled `derive()`.
 
 import type { Box, Vec } from "@minim/signals";
 import { derive, type Inner, type Read } from "@minim/signals";

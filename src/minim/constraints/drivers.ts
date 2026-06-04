@@ -1,22 +1,14 @@
 // drivers.ts — animation drivers for `Constraints.step(dt)`.
 //
-// Three free generators that wrap `c.step(dt)` with different
-// rhythms. They're plain `function*` generators, so any animation
-// loop that yields `Tick` objects (`anim.start(...)`) can drive
-// them.
-//
-// All three are <30 lines. Custom drivers (replay scrubbing,
-// pause/resume, externally-clocked) are easy to write — just
-// yield, then call `c.step(dt)` with whatever `dt` makes sense.
+// Generators that wrap `c.step(dt)` with different rhythms. Driven by
+// any `Tick`-yielding animation loop (`anim.start(...)`). Custom
+// drivers (scrubbing, pause/resume) just yield then call `c.step`.
 
 import type { Tick } from "../core/anim";
 import type { Constraints } from "./cluster";
 
-/** Real-time driver: each frame, advance by the actual frame `dt`.
- *  Suitable for sketchpad / IK / layout scenes that just want to
- *  re-solve in step with the animation clock — though for those
- *  the reactive driver fires automatically and you usually don't
- *  need this at all. Most useful for cloth / particle physics. */
+/** Real-time driver: advance by the actual frame `dt`. Mainly for
+ *  cloth / particle physics (reactive scenes self-fire). */
 export function* animate(c: Constraints): Generator<undefined, never, Tick> {
   for (;;) {
     const tick: Tick = yield;
@@ -24,14 +16,11 @@ export function* animate(c: Constraints): Generator<undefined, never, Tick> {
   }
 }
 
-/** Fixed-`dt` sub-stepping. Real frame time accumulates and the
- *  pipeline fires as many fixed-`dt` steps as fit per frame
- *  (capped at `maxSubSteps` to prevent the spiral-of-death).
- *  Production physics engines (Box2D, Bullet, Rapier) all do this
- *  because variable `dt` amplifies jitter — penalty/λ warm-start,
- *  inertial extrapolation, and velocity scale non-uniformly in dt.
- *
- *  Default config (1/60s, 4 max sub-steps) matches the AVBD demo. */
+/** Fixed-`dt` sub-stepping: accumulate frame time and fire as many
+ *  fixed steps as fit (capped at `maxSubSteps` against the
+ *  spiral-of-death). Fixed `dt` avoids the jitter variable `dt`
+ *  causes in warm-start / extrapolation / velocity. Defaults
+ *  (1/60s, 4) match the AVBD demo. */
 export function* fixedStep(
   c: Constraints,
   fixedDt: number,

@@ -1,12 +1,9 @@
 // anim.ts — animator primitives over `Animatable<T, K>` (writable +
-// nominal trait constraint), plus the broader signals↔generators bridge.
+// nominal trait constraint), plus the signals↔generators bridge.
 //
-// All animator signatures read as a sentence:
-//   "spring takes a writable carrying T that has linear+metric."
-// Compile errors:
-//   - `spring(box, …)` — Box doesn't declare `metric` trait.
-//   - `spring(roVec, …)` — bare RO Vec doesn't carry `WritableBrand`.
-//   - `spring(num(0), …)` — works (num() returns Writable<Num>).
+// Signatures read as a sentence ("spring takes a writable carrying T
+// with linear+metric"), so misuse is a compile error: `spring(box, …)`
+// (no metric), `spring(roVec, …)` (not writable).
 
 import {
   type Animator,

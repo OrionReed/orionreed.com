@@ -1,74 +1,54 @@
 // solver.ts — Augmented Vertex Block Descent (AVBD) numerical kernel.
 //
-// SOA layout: per-cell state lives in packed Float64/Uint typed-
-// array buffers indexed by integer cell id. No per-cell heap
-// allocation; the hot loop streams contiguous memory and the JIT
-// keeps hidden classes stable.
+// SOA layout: per-cell state in packed Float64/Uint buffers indexed
+// by integer cell id. No per-cell allocation; the hot loop streams
+// contiguous memory.
 //
-// Signal-free. Cells are integer handles returned by `addCell`.
-// Terms store cell ids and read positions via
-// `positions[offsets[id] + k]`. Reactive integration is layered
-// on top in `cluster.ts`; time evolution and physics-flavored
-// extensions live in factories (`physics`, `world`) that mutate
-// `anchors` between `prepare()` and `solve(dt)`.
+// Signal-free. Cells are integer handles from `addCell`; terms read
+// positions via `positions[offsets[id] + k]`. Reactive integration
+// layers on top in `cluster.ts`; physics factories (`physics`,
+// `world`) mutate `anchors` between `prepare()` and `solve(dt)`.
 //
-// Solver answers: "given an anchor `y` and a set of constraints,
-// find `x` near `y` (weighted by `M/dt²`) that satisfies them."
-//
-// The math is deliberately not specialized to physics:
-//   - `y` (anchors): the regularizer's reference point.
-//     Physics: `x⁻ + dt·v + dt²·g` (inertial extrapolation).
-//     Sketchpad / IK: `x⁻` (just stay where you were).
-//     Adam-flavored opt: `x − lr · m̂ / √v̂`.
-//     Annealing: `x + noise(T)`.
-//   - `M` (masses): per-DOF anchor weight.
-//     Physics: linear + rotational inertia.
-//     Layout: stickiness.
-//     Adam: `1 / √v̂` preconditioner.
-//   - `dt`: scale parameter on the regularizer vs constraints.
-//     dt → 0: hard projection (constraints dominate).
-//     dt → ∞: stay-put (regularizer dominates).
+// Core problem: given anchor `y` and constraints, find `x` near `y`
+// (weighted by `M/dt²`) that satisfies them. The math is generic, not
+// physics-specific:
+//   - `y` (anchors): regularizer reference. Physics: inertial
+//     extrapolation; sketchpad/IK: `x⁻`; Adam: `x − lr·m̂/√v̂`.
+//   - `M` (masses): per-DOF anchor weight. Physics: inertia; layout:
+//     stickiness; Adam: `1/√v̂` preconditioner.
+//   - `dt`: regularizer-vs-constraints scale. dt → 0: hard projection;
+//     dt → ∞: stay-put.
 
 import { clamp, solveSPD } from "./linalg";
 import { LAMBDA_MAX, PENALTY_MAX, PENALTY_MIN, type Term } from "./term";
 
 export interface SolverOpts {
-  /** Number of primal+dual iterations per solve. Default 10. */
+  /** Primal+dual iterations per solve. Default 10. */
   iterations?: number;
-  /** Stabilisation parameter α ∈ [0, 1]. With `postStabilize`
-   *  off, used for every iteration as `C(x) − α·C(x⁻)` and as the
-   *  per-frame λ warm-start factor `α·γ`. With `postStabilize`
-   *  on, the regular iters override α to 1 (don't fight existing
-   *  violation; let the dual step accumulate λ) and the post-stab
-   *  iter uses α = 0 to zero residual exactly; the field still
-   *  controls the inter-frame λ decay. AVBD paper recommends
-   *  `0.99` for physics, `0` for static editing. */
+  /** Stabilisation α ∈ [0, 1]. With `postStabilize` off: applied
+   *  every iteration as `C(x) − α·C(x⁻)` and as the λ warm-start
+   *  factor `α·γ`. With it on: regular iters force α = 1 and the
+   *  post-stab iter uses α = 0, but the field still controls
+   *  inter-frame λ decay. Paper: `0.99` physics, `0` static. */
   alpha?: number;
-  /** Penalty ramp parameter β. Default 1e5 (paper recommends
-   *  [1, 1000]; 1e5 worked for the reference 2D demo). */
+  /** Penalty ramp β. Default 1e5. */
   beta?: number;
   /** Warm-start decay γ ∈ [0, 1). Default 0.99. */
   gamma?: number;
-  /** Run an extra primal-only iteration with `α = 0` at the end
-   *  of each `solve(dt)`. With `postStabilize` on, regular iters
-   *  use `α = 1` (drift-tolerant: lambda still grows when violated,
-   *  but the primal step doesn't actively unwind the existing
-   *  residual), and the post-stab iter zeros the residual exactly.
-   *  This is the AVBD paper's default for physics — strongly
-   *  recommended whenever a physics-flavored factory is in use.
-   *  Default `false` so static `solver.solve()` retains its iter-N
-   *  Newton behaviour. */
+  /** Run a final primal-only `α = 0` iteration per `solve(dt)` (and
+   *  force `α = 1` on the regular iters — drift-tolerant: λ still
+   *  grows when violated but the primal step doesn't unwind existing
+   *  residual). AVBD's physics default. Default `false` so static
+   *  `solve()` keeps its iter-N Newton behaviour. */
   postStabilize?: boolean;
-  /** Initial buffer capacity in scalar slots. Buffers grow by
-   *  doubling when needed; seeding a generous capacity avoids
-   *  the cost of early reallocations. Default 64. */
+  /** Initial buffer capacity in scalar slots; doubles on demand.
+   *  Default 64. */
   initialCapacity?: number;
 }
 
 const TINY = 1e-14;
 
-/** Remove element at `idx` by swapping in the last element. O(1).
- *  Caller must not rely on element ordering. */
+/** O(1) remove-by-swap; does not preserve element ordering. */
 function swapPop<T>(arr: T[], idx: number): void {
   if (idx < 0 || idx >= arr.length) return;
   const last = arr.length - 1;
@@ -84,38 +64,29 @@ export class Solver {
   postStabilize: boolean;
 
   // ─── Per-cell SOA state ──────────────────────────────────────────
-  /** Packed cell positions. `positions[offsets[id] + k]` reads the
-   *  k-th component of cell `id`. Solver writes here directly. */
+  /** Packed positions; `positions[offsets[id] + k]` is component k
+   *  of cell `id`. */
   positions: Float64Array;
-  /** Packed cell positions at start of step (`x⁻`). */
+  /** Positions at start of step (`x⁻`). */
   initials: Float64Array;
-  /** Packed anchor positions (`y`) — the point the regularizer
-   *  pulls `x` toward. Defaults to `initials` after `prepare()`;
-   *  factories (physics, Adam, …) overwrite between `prepare()`
-   *  and `solve(dt)` to install their own warm-start. */
+  /** Anchor positions (`y`) the regularizer pulls toward. Defaults to
+   *  `initials` after `prepare()`; integrating factories overwrite
+   *  before `solve(dt)`. */
   anchors: Float64Array;
-  /** Anchor weight per scalar slot — same length as `positions`.
-   *  In physics this is mass / inertia; in layout it's stickiness;
-   *  in Adam it's the preconditioner. The hot loop reads per slot.
-   *  `0` on the first slot means "pinned" (primal update is
-   *  skipped, value stays put); other slots are ignored when slot
-   *  0 is zero. For uniform-mass cells use `setMass(id, m)`; for
-   *  non-uniform (e.g. a 2D rigid body's `(m, m, I)`) use
-   *  `setMassDiag`. */
+  /** Anchor weight per scalar slot (mass/inertia, stickiness, or
+   *  preconditioner). Slot-0 `0` means pinned (primal update skipped).
+   *  Set via `setMass` (uniform) or `setMassDiag` (per-DOF). */
   masses: Float64Array;
-  /** Per-cell dim. Stored as Uint8 since dims are small. */
+  /** Per-cell dim (Uint8). */
   dims: Uint8Array;
-  /** Start of each cell within `positions`. Cumulative sum of
-   *  `dims`. Stored as Uint32 for size up to 4G slots. */
+  /** Start of each cell in `positions` (cumulative `dims`, Uint32). */
   offsets: Uint32Array;
 
   // ─── Adjacency ───────────────────────────────────────────────────
-  /** Per-cell list of incident terms. Order doesn't matter
-   *  (solver iterates all). */
+  /** Per-cell incident terms. */
   cellTerms: Term[][] = [];
-  /** Parallel array: `cellTermIdx[id][k]` is this cell's index
-   *  within `cellTerms[id][k].cells`. Avoids an O(n) `indexOf`
-   *  per cell-visit-per-iteration. */
+  /** `cellTermIdx[id][k]` = this cell's index within
+   *  `cellTerms[id][k].cells`; avoids an `indexOf` per visit. */
   cellTermIdx: number[][] = [];
 
   // ─── Terms ───────────────────────────────────────────────────────
@@ -160,9 +131,7 @@ export class Solver {
    *  via `init`. Returns the cell's integer id. */
   addCell(dim: number, init?: ArrayLike<number>): number {
     const id = this._cellCount;
-    // Grow per-cell arrays if needed.
     if (id >= this.dims.length) this._growCellArrays();
-    // Grow scalar buffers if needed.
     if (this._totalDof + dim > this._capacity) this._growScalarBuffers(dim);
 
     const off = this._totalDof;
@@ -206,8 +175,7 @@ export class Solver {
     }
   }
 
-  /** @internal — for `Term` constructors to wire the cell ↔ term
-   *  adjacency. Subclasses should not call this directly. */
+  /** @internal — wire cell ↔ term adjacency (from `Term` ctor). */
   _connectTerm(term: Term, cellId: number, cellIndex: number): void {
     this.cellTerms[cellId]!.push(term);
     this.cellTermIdx[cellId]!.push(cellIndex);
@@ -244,21 +212,17 @@ export class Solver {
     for (let k = 0; k < dim; k++) this.masses[off + k] = m;
   }
 
-  /** Set per-DOF mass for cell `id`. Length of `m` must equal the
-   *  cell's dim. Used for rigid bodies whose linear and rotational
-   *  inertia differ — typically `setMassDiag(id, [mass, mass, moment])`
-   *  for a 2D rigid body cell of dim 3. To "pin", pass all zeros
-   *  (or use `setMass(id, 0)` for the same effect). */
+  /** Set per-DOF mass (`m.length` must equal the cell's dim). For
+   *  rigid bodies with differing linear/rotational inertia, e.g.
+   *  `[mass, mass, moment]`. All-zero pins. */
   setMassDiag(id: number, m: ArrayLike<number>): void {
     const off = this.offsets[id]!;
     const dim = this.dims[id]!;
     for (let k = 0; k < dim; k++) this.masses[off + k] = m[k] ?? 0;
   }
 
-  /** Snapshot positions (initials = positions), set anchor =
-   *  positions, and warm-start each term. After this, callers may
-   *  overwrite `anchors` (e.g. physics adds inertial extrapolation)
-   *  before invoking `solve(dt)`. */
+  /** Snapshot `initials = anchors = positions` and warm-start each
+   *  term. Callers may overwrite `anchors` before `solve(dt)`. */
   prepare(): void {
     // Term initialisation + warm-start.
     for (let fi = this._terms.length - 1; fi >= 0; fi--) {
@@ -273,11 +237,10 @@ export class Solver {
       }
       t.computeConstraint(0);
       for (let r = 0; r < t.rows; r++) t.C0[r]! = t.C[r]!;
-      // Lambda + penalty warm-start: AVBD §3.7 "forgetting factor" γ.
-      // Both decay each frame regardless of stabilization mode —
-      // failing to decay λ lets stacked / sliding contacts accumulate
-      // dual impulse forever, which manifests as stack jitter at rest
-      // and oscillation under perturbation.
+      // λ + penalty warm-start with AVBD §3.7 forgetting factor γ.
+      // Must decay every frame regardless of mode: otherwise stacked /
+      // sliding contacts accumulate dual impulse forever (rest jitter,
+      // oscillation under perturbation).
       const ag = this.alpha * this.gamma;
       for (let r = 0; r < t.rows; r++) {
         t.lambda[r]! *= ag;
@@ -294,24 +257,16 @@ export class Solver {
     }
   }
 
-  /** Run the iteration loop using the current `anchors` as the
-   *  warm-start anchor. `dt` scales the regularizer term `M / dt²`
-   *  vs the constraint terms. Default `dt = 1` (static editing).
+  /** Run the iteration loop against the current `anchors`. `dt`
+   *  scales the regularizer `M / dt²` vs the constraints (default 1,
+   *  static editing). With `postStabilize`, regular iters use α = 1
+   *  and a final α = 0 iter zeros the residual; otherwise every iter
+   *  uses `this.alpha`.
    *
-   *  With `postStabilize`, regular iterations use `α = 1`
-   *  (the dual update accumulates λ for any growth in residual,
-   *  but the primal step doesn't actively unwind existing
-   *  violation), and one final iteration with `α = 0` zeros the
-   *  residual at frame end. Without it, every iteration uses
-   *  `this.alpha`.
-   *
-   *  `beforePostStab` runs once at the boundary between the regular
-   *  iterations and the post-stabilization iter — physics uses this
-   *  hook to compute velocity from the *physical* trajectory rather
-   *  than from positions after the post-stab projection (matching
-   *  the AVBD reference; see solver.cpp's `if (it == iterations - 1)`
-   *  block). With `postStabilize` off, the hook fires once after
-   *  the final iteration. */
+   *  `beforePostStab` fires at the regular/post-stab boundary (or
+   *  once after the final iter when post-stab is off). Physics hooks
+   *  it to read velocity from the physical trajectory, before the
+   *  post-stab projection unwinds drift. */
   solve(dt: number = 1, beforePostStab?: () => void): void {
     const inv_dt2 = 1 / (dt * dt);
     if (this.postStabilize) {
@@ -486,10 +441,9 @@ export class Solver {
         }
       }
 
-      // Solve `lhs · delta = -rhs`, write `position -= delta`.
-      // Skip if the local system is rank-deficient (rhs in undefined
-      // state) or if anything went non-finite (would otherwise poison
-      // `positions` with NaN, which propagates everywhere).
+      // Solve `lhs · delta = -rhs`, write `position -= delta`. Skip on
+      // rank-deficiency or non-finite results (would poison positions
+      // with NaN).
       if (!solveSPD(lhs, rhs, dim)) continue;
       if (dim === 2) {
         const r0 = rhs[0]!;

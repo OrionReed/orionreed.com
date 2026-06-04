@@ -5,10 +5,8 @@
 
 import { type Read, Signal, type Writable } from "@minim/signals";
 
-/** Capture current values; return a reset function. Args are signals
- *  (any concrete `T`) or plain records whose signal-valued properties
- *  get flattened. Restoration is type-safe per signal — each is restored
- *  to its own captured value.
+/** Capture current values; return a reset function. Args are signals or
+ *  records whose signal-valued properties get flattened.
  *
  *      const reset = snapshot(score, position);
  *      // … later, on cancel/reset …

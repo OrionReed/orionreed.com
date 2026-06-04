@@ -1,39 +1,21 @@
 // tree.ts — hierarchical structure of (typically reactive) values.
 //
-// A `TreeNode<T>` is a graph node holding a value of type `T` plus a
-// list of child nodes. The "tree" is the structural relationship
-// between values, NOT a single big `Signal<TreeShape>`. Each node's
-// value is typically a Signal subclass instance (Num, Pose, Bool, …)
-// or a compound object containing cells; either way, writes flow
-// through the individual cells with the same O(1) incrementality the
-// engine already provides for field lenses and aggregates.
+// A `TreeNode<T>` is the structural relationship between values, not a
+// single big `Signal<TreeShape>`. Each node's value is typically a
+// Signal subclass or a compound of cells; writes flow through the
+// individual cells with the engine's usual O(1) incrementality.
 //
-// Two canonical bidirectional patterns over a tree-of-cells:
-//
-//   1. AGGREGATE (bottom-up): an internal node's value is a lens
-//      over its descendant leaves — `merge` on read, `redistribute`
-//      on write. Used for sum-trees, AND-trees (via Tri.allOf),
-//      mean-trees, etc.
-//
-//   2. PROPAGATE (top-down): each node carries a LOCAL value; a
-//      derived "world" view at each node is the composition of its
-//      parent's world view with its own local. Writes go to the
-//      local cell. The classical scene-graph / skeletal-armature
-//      shape, parametrised by `compose` / `decompose` for the value
-//      type.
-//
-// `TreeNode<T>` is just the structural container — it has no opinion
-// about which pattern you use. Aggregate / propagate helpers live as
-// free factory functions that wrap the existing `Cls.lens` /
-// `Cls.derive` primitives.
+// Two bidirectional patterns layer on top (as free factory functions):
+//   1. AGGREGATE (bottom-up): an internal node lenses over its leaves —
+//      merge on read, redistribute on write (sum-trees, mean-trees, …).
+//   2. PROPAGATE (top-down): each node carries a local value; its
+//      "world" view composes the parent's with its own. The classical
+//      scene-graph / armature shape, parametrised by compose/decompose.
 
-/** Recursive container: a value of type `T` and zero-or-more children
- *  of the same shape. The value is unconstrained — typically a single
- *  reactive cell, but compound records carrying multiple cells (e.g.,
- *  a bone with both local and world poses) work just as well.
- *  Construction is static; runtime structural edits go through
- *  `network()` (same pattern as `addWhile` for conditional cluster
- *  membership). */
+/** Recursive container: a value plus zero-or-more children of the same
+ *  shape. Value is unconstrained — a single cell or a compound record
+ *  (e.g. a bone with local + world poses). Structural edits go through
+ *  `network()`. */
 export interface TreeNode<T> {
   readonly value: T;
   readonly children: readonly TreeNode<T>[];

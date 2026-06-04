@@ -123,13 +123,10 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
 
   protected disposers: (() => void)[] = [];
 
-  // Signal (vs plain array) so the default group `boxFn` re-unions on
-  // add/remove. Kept private — no external consumer reads `children`
-  // reactively today; if one appears, expose a read-only Signal then.
+  // Signal (not array) so the default group `boxFn` re-unions on add/remove.
   private readonly _children = signal<readonly AnyShape[]>([]);
 
-  /** Back-link set by `add()`; cleared by `dispose()`. Non-reactive —
-   *  reparenting is rare and no consumer needs invalidation today. */
+  /** Back-link set by `add()`; cleared by `dispose()`. Non-reactive. */
   parent: AnyShape | null = null;
 
   constructor(
@@ -148,12 +145,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
       this.el.appendChild(this.intrinsic);
     }
 
-    // Each animatable axis is held directly. Identity passthrough for
-    // an already-writable source; literal seeds a fresh cell;
-    // signal/thunk drives the cell via a disposer-tracked effect (the
-    // one place we tolerate the "stomping mirror" semantic — Shape's
-    // animatable surface needs to expose `Writable<T>` regardless of
-    // input flavour). `localFrame` is a derived matrix below.
+    // Each animatable axis held directly via liftAnimatable; localFrame
+    // is the derived matrix below.
     this.translate = liftAnimatable(
       opts.translate ?? defaults.translate ?? { x: 0, y: 0 },
       Vec,
@@ -173,8 +166,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     this.opacity = liftAnimatable(opts.opacity ?? defaults.opacity ?? 1, Num, this.disposers);
     this.aside = opts.aside ?? defaults.aside ?? false;
 
-    // Group default: union of non-aside children's boxes composed
-    // through their localFrame.
+    // Group default: union of non-aside children's boxes through localFrame.
     const boxSig = Box.derive(
       boxFn ??
         (() => {
@@ -214,10 +206,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   }
 
   #makeAnchor(u: number, v: number): Writable<Vec> {
-    // 3-input lens: reads `box`, `localFrame`, `translate`; writes only
-    // `translate` (other slots `undefined`). The bwd shifts the
-    // translate by the world-space drag delta so the anchor lands at
-    // the target — anchor-drag = body-translate.
+    // Reads box/localFrame/translate; writes only translate, shifted by the
+    // world-space delta so the anchor lands at target (anchor-drag = translate).
     return Vec.lens(
       [this.box, this.localFrame, this.translate] as const,
       vals => {
@@ -351,10 +341,8 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
     };
   }
 
-  /** Map client coords into the SVG root's frame. Stable when this
-   *  shape (or an ancestor) is rotating — `toLocal` goes through the
-   *  local transform, which is the wrong answer for "drop me in world
-   *  coords." Returns `(0, 0)` when no SVG root is present (detached). */
+  /** Map client coords into the SVG root's frame; stable under rotation
+   *  (unlike `toLocal`). Returns `(0, 0)` when detached. */
   toWorld(evt: { clientX: number; clientY: number }): VecValue {
     const root = this.svgRoot;
     const ctm = root?.getScreenCTM();
@@ -422,8 +410,7 @@ export class Shape<O extends ShapeOpts = ShapeOpts> {
   }
 }
 
-// Shape-specific sugar over the N-input lens aggregate primitives —
-// reads return the equal-weight mean, writes distribute the delta
+// Sugar over the N-input aggregate lenses: read the mean, write the delta
 // evenly to all members.
 
 /** Writable centroid of shapes' translates. */
@@ -447,17 +434,10 @@ export function meanScale(...shapes: { scale: Writable<Vec> }[]): Writable<Vec> 
   );
 }
 
-/** Lift a `Val<T>` to a `Writable<Cls<T>>` for the animatable-surface
- *  contract Shape exposes (`translate`, `rotate`, `scale`, …). Identity
- *  passthrough for an existing writable; literal seeds a fresh cell;
- *  signal / thunk inputs drive the cell via a disposer-tracked effect.
- *
- *  This is the *only* place in the library that uses the stomping-
- *  mirror semantic (effect-driven cell mirroring an RO source). It's
- *  tolerated here because Shape's animatable surface must expose
- *  `Writable<T>` for tween / drag / direct write — every other layer
- *  rejects RO inputs at the type level. Internal to shape.ts; not
- *  exported. */
+/** Lift a `Val<T>` to a `Writable<Cls<T>>` for Shape's animatable surface.
+ *  Writable passes through; literal seeds a cell; signal/thunk drives it via
+ *  a disposer-tracked effect. The library's only effect-driven RO mirror,
+ *  tolerated because the surface must stay writable for tween/drag/write. */
 function liftAnimatable<T, C extends Signal<T>>(
   src: Val<T>,
   Cls: new (v?: T) => C,

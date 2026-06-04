@@ -1,64 +1,32 @@
 // =====================================================================
-// factor-lens.ts — N→M lens design exploration.
+// factor-lens.ts — N→M lens prototypes (Vec-specific monoliths).
 //
-// Prototypes for the "missing cell" in the lens table:
-// N inputs → M coupled writable outputs, where each output is a
-// different ASPECT of the joint state and writes to one output
-// preserve the readings of the other M−1 (cross-channel invariance).
+// N inputs → M coupled writable outputs, where writing one output
+// preserves the readings of the other M−1 (cross-channel invariance).
+// Two regimes:
 //
-// Two regimes are explored:
+//   1. Numerical (Jacobian-LSQ): `factorLens` builds an M×N Jacobian by
+//      finite differences and solves `(J W Jᵀ + λI) k = δy` for `k`,
+//      then writes `δx = W Jᵀ k`. δy is sparse (only the written
+//      channel), so the solve leaves other channels near-stationary.
+//      Invariance is approximate, set by the local condition number.
 //
-//   1. Numerical / Jacobian-LSQ   — `factorLens` generalises
-//      `argminVec` to M outputs. The bwd builds an M×N Jacobian by
-//      finite differences and solves `(J W Jᵀ + λI) k = δy` for
-//      Lagrange multipliers `k`, then writes `δx = W Jᵀ k`. δy is
-//      sparse (only the channel being written is non-zero), so the
-//      solve naturally tries to leave the other M−1 channels
-//      stationary. Works for any forward map; quality of cross-
-//      channel invariance depends on the local condition number.
+//   2. Closed-form (geometric): `procrustesLens`, `bboxLens`,
+//      `meanDiffLens` — hand-rolled bwd via the right group action, so
+//      cross-channel invariance is EXACT. Cost: crafted per topology.
 //
-//   2. Closed-form / geometric    — `procrustesLens`, `bboxLens`,
-//      `meanDiffLens`. Hand-rolled bwd that achieves EXACT cross-
-//      channel invariance by constructing the right group action
-//      (rigid translate, rotate-about-centroid, scale-about-centroid,
-//      …). No iteration, no damping, no rank issues. The cost is
-//      that they're hand-crafted per topology.
-//
-// The 1→M dual case (a single source factored into M coupled views,
-// e.g. Pose → {position, rotation, rotateAbout}) is straightforward
-// once the N→M case works — sketched in `bundleLens` below.
-//
-// Property axes the test file probes:
-//   - Forward correctness
-//   - Round-trip identity (write T, read = T)
-//   - Cross-channel invariance (write A, B&C readings stay)
-//   - Idempotence (write T twice = write T once)
-//   - Long-run stability (random writes don't drift)
-//   - Conservation (where applicable)
-//   - Performance (factorLens vs independent N→1 chains)
+// `bundleLens` sketches the 1→M dual (single source → M coupled views).
 // =====================================================================
 
 import { Num, type Signal, Vec, type Writable } from "../index";
 
 // ─── 1. factorLens — generic Jacobian-LSQ N→M ──────────────────────────
 //
-// Returns M writable scalar cells. Writing cell k pushes δy = [0,…,
-// target − current_k, …, 0] through the pseudoinverse of J ∈ R^{M×N},
-// so the LSQ solve tries to land EXACTLY on target_k while moving
-// the other M−1 outputs as little as possible.
-//
-// Costs per write:
-//   - M·N forward evaluations to build J (FD column-by-column)
-//   - M×M Gauss-Jordan inversion (O(M³); M is small, ~1–6)
-//   - M·N scalar multiplies to compute δx
-//
-// Limitations vs. closed-form:
-//   - O(N+1) forward calls per write — fine for K ~ 10 shapes, hot
-//     for K ~ 1000.
-//   - Cross-channel invariance is only approximate (the LSQ minimises
-//     |J δx − δy|² which leaks into other channels when J is ill-
-//     conditioned). Damping makes it bleed more — there's a trade-off.
-//   - Not exact at large δ — Newton step is local.
+// M writable scalars. Writing cell k pushes a sparse δy through the
+// pseudoinverse of J ∈ R^{M×N} to land on target_k while moving the
+// other outputs minimally. Per write: M·N forward evals (FD), an M×M
+// inversion, M·N multiplies. Approximate when J is ill-conditioned and
+// local (Newton step) — see closed-form lenses for the exact path.
 // =====================================================================
 
 export interface FactorLensOpts {
@@ -194,11 +162,9 @@ function invertMatrix(A: readonly number[], M: number, out: number[]): boolean {
 
 // ─── 2. meanDiffLens — M=2 isomorphism baseline ────────────────────────
 //
-// (a, b) → (mean, diff) = ((a+b)/2, a−b). This is a square, full-rank
-// linear lens: M = N = 2. The bwd is the inverse change of basis
-// (rotation by 45° in (a, b) space) — exact, cross-channel invariant
-// by construction. Useful as a sanity baseline for the property tests:
-// any genuine M=2 N→M primitive should match this on the 2-input case.
+// (a, b) → ((a+b)/2, a−b). Square full-rank linear lens; bwd is the
+// inverse change of basis — exact, cross-channel invariant. Sanity
+// baseline for the property tests.
 // =====================================================================
 
 export function meanDiffLens(a: Num, b: Num): { mean: Writable<Num>; diff: Writable<Num> } {
@@ -223,38 +189,17 @@ export function meanDiffLens(a: Num, b: Num): { mean: Writable<Num>; diff: Writa
 
 // ─── 3. procrustesLens — closed-form similarity (the showcase) ─────────
 //
-// K writable Vecs → 3 writable aspects:
-//   centroid : Writable<Vec>  — mean of the points
-//   rotation : Writable<Num>  — angle of point[0] relative to centroid
-//   scale    : Writable<Num>  — distance from centroid to point[0]
-//
-// All three bwd paths are closed-form rigid/similarity transforms
-// of the K points about their centroid:
-//
-//   write centroid c  →  translate every point by (c − old c)
-//   write rotation θ  →  rotate every point about centroid by (θ − old θ)
-//   write scale    s  →  scale every point about centroid by (s / old s)
-//
-// These are commuting actions on the cluster's similarity-group orbit:
-//   - translation preserves centroid by definition? no, REPLACES centroid
-//     with target. Preserves relative positions → rotation/scale unchanged.
-//   - rotation-about-centroid preserves centroid (fixed point) AND
-//     preserves all radial distances → centroid AND scale unchanged.
-//   - scale-about-centroid preserves centroid (fixed point) AND
-//     preserves all angles → centroid AND rotation unchanged.
-//
-// So the three outputs have EXACT cross-channel invariance, by geometry.
-// (Compare: a Jacobian-LSQ on the same forward map only approximates
-// this — see `procrustesJacobianLens` below.)
-//
-// Degenerate configurations:
-//   - K < 2:                  rotation/scale undefined.
-//   - scale → 0 (collapsed):  rotation singular; scale write is no-op
-//                             (no information about direction to inflate).
-//   - target scale = 0:       collapses all points to centroid. Recovery
-//                             requires writing rotation separately to
-//                             re-establish orientation… which is impossible
-//                             because all radii are 0. Caller's problem.
+// K writable Vecs → {centroid, rotation (angle of point[0] about
+// centroid), scale (its distance from centroid)}. Each bwd is a
+// closed-form transform about the centroid:
+//   write centroid → translate every point by (c − old c)
+//   write rotation → rotate every point about centroid by (θ − old θ)
+//   write scale    → scale every point about centroid by (s / old s)
+// These commute on the cluster's similarity orbit, so the three outputs
+// have EXACT cross-channel invariance (cf. `procrustesJacobianLens`'s
+// approximate version). Degenerate: K < 2 leaves rotation/scale
+// undefined; a collapsed cluster (scale → 0) makes rotation singular and
+// scale writes no-ops; target scale = 0 collapses to the centroid.
 // =====================================================================
 
 export function procrustesLens(points: readonly Writable<Vec>[]): {
@@ -335,13 +280,11 @@ export function procrustesLens(points: readonly Writable<Vec>[]): {
     },
   );
 
-  // Stateful scale lens: complement stores per-point deviations from the
-  // centroid at the most recent non-degenerate state. View is point 0's
-  // radial distance; writing target T places each point at `centroid +
-  // k * stored_dev_i` where k = T / |stored_dev_0|. Trap (whole cluster
-  // at centroid) is recoverable from the stored shape. `step` refreshes
-  // each offset from the live source (keeping the last good one for a
-  // collapsed point); `bwd` scales those offsets to the target radius.
+  // Complement: per-point deviations from the centroid at the last
+  // non-degenerate state. View is point 0's radius; writing T places each
+  // point at `centroid + (T/|dev_0|) * dev_i`, so a collapse to the
+  // centroid recovers from the stored shape. `step` refreshes each offset
+  // (keeping the last good one for a collapsed point).
   type C = { devs: V[] };
   const centroidOf = (vals: readonly V[]): V => {
     let sx = 0;
@@ -361,7 +304,7 @@ export function procrustesLens(points: readonly Writable<Vec>[]): {
     });
   };
 
-  const scale = Num.statefulLens(points as readonly Writable<Vec>[], {
+  const scale = Num.lens(points as readonly Writable<Vec>[], {
     init: (vals: readonly V[]): C => {
       const c = centroidOf(vals);
       return { devs: vals.map(v => ({ x: v.x - c.x, y: v.y - c.y })) };
@@ -387,21 +330,12 @@ export function procrustesLens(points: readonly Writable<Vec>[]): {
 
 // ─── 4. bboxLens — closed-form axis-aligned bounding box ───────────────
 //
-// K Vecs → { center: Vec, size: Vec }. Forward uses min/max (which
-// has a piecewise-constant Jacobian — fatal for any FD-based scheme).
-// Closed-form bwd is exact:
-//
-//   write center c  →  translate all points by (c − old c)
-//   write size   s  →  scale all points about center by component-wise
-//                       ratio (s.x / old.x, s.y / old.y)
-//
-// Notes:
-//   - Writing center preserves size (translation is rigid).
-//   - Writing size preserves center (scaling is about center).
-//   - Degenerate axes (old size component = 0): writes that axis are
-//     no-ops (no info about direction to inflate into).
-//   - Negative size: reflects the cluster (component-wise). Some
-//     callers might prefer to clamp at 0 — keep it permissive here.
+// K Vecs → {center, size}. Forward is min/max (piecewise-constant
+// Jacobian — fatal for FD), but the closed-form bwd is exact:
+//   write center → translate all points by (c − old c)
+//   write size   → scale all about center by component-wise ratio
+// Center↔size invariance is exact. Degenerate axes (size = 0) write
+// as no-ops; negative size reflects (kept permissive).
 // =====================================================================
 
 export function bboxLens(points: readonly Writable<Vec>[]): {
@@ -449,12 +383,10 @@ export function bboxLens(points: readonly Writable<Vec>[]): {
     },
   );
 
-  // Stateful: the complement is per-point fractional offsets relative to
-  // the current bbox center/half-size, captured at the last non-
-  // degenerate state. On a write to `size`, points are placed at
-  // `center + frac_i * (target / 2)` from stored fractions — surviving a
-  // per-axis collapse to a line and reinflating cleanly. `step` refreshes
-  // the fractions component-wise (only the currently non-degenerate axes).
+  // Complement: per-point fractions of the bbox half-size at the last
+  // non-degenerate state. A `size` write places points at
+  // `center + frac_i * (target/2)`, surviving a per-axis collapse to a
+  // line. `step` refreshes component-wise on non-degenerate axes.
   type C = { fracs: V[] };
   const refreshFracs = (fracs: V[], vals: readonly V[]): V[] => {
     const b = computeBox(vals);
@@ -466,7 +398,7 @@ export function bboxLens(points: readonly Writable<Vec>[]): {
     }));
   };
 
-  const size = Vec.statefulLens(points as readonly Writable<Vec>[], {
+  const size = Vec.lens(points as readonly Writable<Vec>[], {
     init: (vals: readonly V[]): C => {
       const b = computeBox(vals);
       const halfX0 = b.sx > 1e-12 ? b.sx / 2 : 1;
@@ -497,10 +429,8 @@ export function bboxLens(points: readonly Writable<Vec>[]): {
 
 // ─── 5. procrustesJacobianLens — comparison point ──────────────────────
 //
-// Same forward map as `procrustesLens` but bwd is the generic
-// Jacobian-LSQ from `factorLens` rather than closed-form. Lets us
-// quantify the cost of the generic numerical path vs. hand-crafted
-// geometric one — both in cross-channel invariance and in perf.
+// Same forward map as `procrustesLens` but with the generic Jacobian-LSQ
+// bwd, to quantify the numerical path vs. the closed-form one.
 // =====================================================================
 
 export function procrustesJacobianLens(points: readonly Writable<Vec>[]): {
@@ -567,22 +497,10 @@ export function procrustesJacobianLens(points: readonly Writable<Vec>[]): {
 
 // ─── 6. bundleLens — 1→M dual case (coupled field bundle) ──────────────
 //
-// Given a single source `Pose = {x, y, theta}` and a virtual pivot
-// `rotateAbout: Vec` (a plain ref object, not reactive), expose:
-//
-//   position : Writable<Vec>  — (x, y)
-//   rotation : Writable<Num>  — theta, but rotates around rotateAbout
-//
-// Writing `rotation = θ_new`:
-//   1. compute Δθ = θ_new − pose.theta
-//   2. rotate (x, y) about rotateAbout by Δθ
-//   3. set pose to (newX, newY, θ_new)
-//
-// This is the dual of factorLens: instead of N independent sources
-// folded into M aspects, a single product source split into M views
-// with a coupling invariant on writes. The natural place this lives
-// is "field with side-policy" — `field()` today is independent-bwd;
-// this would be coupled-bwd.
+// A single source `Pose = {x, y, theta}` and a fixed pivot `rotateAbout`
+// → {position: (x,y), rotation: theta but rotating about the pivot}.
+// Writing rotation rotates (x, y) about the pivot by Δθ and sets theta.
+// The dual of factorLens: one product source split into M coupled views.
 // =====================================================================
 
 type PoseV = { x: number; y: number; theta: number };

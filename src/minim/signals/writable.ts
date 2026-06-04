@@ -1,41 +1,20 @@
 // writable.ts — value-class authoring helpers.
 //
-// `field(this, "x", Num)`  — bidirectional field lens. Conditional
-//                            return: writable on writable parent,
-//                            bare on RO parent. Combines `lazy` +
-//                            `Cls.lens` + spread-replace.
-//
-// `derived(this, "k", Cls, fn)` — read-only derived view via
-//                                 `Cls.derive(parent, fn)`. Always
-//                                 returns bare `Cls` (RO).
-//
-// The author's choice between `field()` (bidirectional) and
-// `derived()` (RO) IS the local declaration of writability behaviour
-// at each getter site, mirroring the locality of `: this` invertible
-// method returns.
-//
-// For escape-hatch caching of arbitrary computed views (e.g.
-// `Color.css` building a CSS string), use `lazy()` from "../signal"
-// directly with whatever `make()` body you want.
-//
-// Public type `Writable<R>` lives in `./signal`
-// alongside the brand they ride on.
+// `field(this, "x", Num)` — bidirectional field lens; conditional
+// return (writable on writable parent, bare on RO). `derived(this,
+// "k", Cls, fn)` — read-only derived view via `Cls.derive`. The choice
+// between them IS the local declaration of writability at each getter,
+// mirroring `: this` invertible method returns. For arbitrary cached
+// views, use `lazy()` from "../signal" directly.
 
 import { type Inner, lazy, Signal, type Writable, type WritableBrand } from "./signal";
 
-/** Bidirectional field lens onto `parent.value[key]`. Read returns
- *  the field; write spread-replaces the composite. Cached per
- *  (instance, key) via `lazy()`. Return type is conditional on the
- *  receiver: `Writable<Cls>` when `parent` carries the brand,
- *  bare `Cls` otherwise.
+/** Bidirectional field lens onto `parent.value[key]`; write spread-
+ *  replaces the composite. Cached per (instance, key). Return type is
+ *  conditional: `Writable<Cls>` on a writable parent, bare `Cls` on RO
+ *  (runtime dispatch in `Signal.fieldOf` mirrors this).
  *
- *      get x() { return field(this, "x", Num); }
- *
- *  TS infers the getter's return type from `field()`'s conditional —
- *  no per-getter annotation needed. The runtime dispatch happens in
- *  `Signal.fieldOf`: writable parents get a spread-replace bwd, RO
- *  parents fall through to `_fuse` without bwd. The two arms mirror
- *  the type-level conditional. */
+ *      get x() { return field(this, "x", Num); } */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.lens
 export function field<
   S extends Signal<any>,
@@ -54,9 +33,7 @@ export function field<
 }
 
 /** Read-only derived view via `Cls.derive(parent, fn)`. Cached per
- *  (instance, key). Always returns bare `Cls` (RO) regardless of
- *  parent writability — derived views are RO at runtime, so this is
- *  the honest type.
+ *  (instance, key); always bare `Cls` (RO).
  *
  *      get magnitude() {
  *        return derived(this, "magnitude", Num, v => Math.hypot(v.x, v.y));

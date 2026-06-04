@@ -1,14 +1,13 @@
 // relations.ts — propagator combinators (the solver-role layer).
 //
-// Where lenses define values (`c = a.add(b)` IS the relation), these
-// propagators IMPOSE relations between cells that already exist for
-// other reasons (handles, animation targets, externally-driven
-// signals, etc.). Every combinator returns one or more `Propagator`s
-// that go into a `Propagators` instance via `p.add(...)`.
+// Where lenses define values, these propagators impose relations
+// between cells that already exist for other reasons (handles,
+// animation targets, external signals). Each combinator returns
+// `Propagator`s for `p.add(...)`.
 //
-// Naming: arithmetic combinators dispatch on the value class's
-// `linear` trait, so `add(a, b, c)` works for `Num`, `Vec`, `Box`,
-// `Pose`, anything with `Linear<T>`. The `v` prefix is gone.
+// Arithmetic combinators dispatch on the value class's `linear`
+// trait, so `add(a, b, c)` works for `Num`, `Vec`, `Box`, `Pose`,
+// anything `Linear<T>`.
 
 import type { Num, Signal, Traits, Val, Vec, Writable } from "../signals";
 import { isSignal, reader, requireLinear } from "../signals";
@@ -21,9 +20,7 @@ type LinearW<T> = Writable<Signal<T>> & Traits<T, "linear">;
 
 // ─── Arithmetic (Num + Vec + anything Linear) ──────────────────────
 
-/** `a + b = c`. Three propagators (any two derive the third).
- *  Trait-dispatched on the value class's `linear` trait, so works
- *  for `Num`, `Vec`, and any Linear value type. */
+/** `a + b = c`. Three propagators (any two derive the third). */
 export function add<T>(a: LinearW<T>, b: LinearW<T>, c: LinearW<T>): Propagator[] {
   const L = requireLinear(a);
   return [

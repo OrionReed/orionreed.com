@@ -5,17 +5,11 @@
 //   [angularClamp, broadphase, snapshot, prepare, integrate,
 //    solveWithVelocity, writeback]
 //
-// Tracks bodies (via `c.onAdd`/`c.onRemove`), maintains the box-box
-// contact manifold lifecycle, registers joint-linked pairs to keep
-// the broadphase from generating redundant contact terms between
-// jointed bodies. The reactive driver is disposed on construction —
-// rigid scenes drive their step explicitly (`world.step(dt)`,
-// `animate(world)`, or `fixedStep(world, 1/60)`).
-//
-// The pipeline is declared in full at construction time. To extend
-// (e.g. add a recorder phase), either splice it into `c.pipeline`
-// after construction, or write a new factory that declares the
-// pipeline you want.
+// Tracks bodies (via `onAdd`/`onRemove`), runs the box-box contact
+// manifold lifecycle, and skips joint-linked pairs in the broadphase.
+// The reactive driver is disposed on construction — rigid scenes
+// drive their step explicitly (`world.step(dt)`, `animate(world)`,
+// `fixedStep(world, 1/60)`). Splice `c.pipeline` to extend.
 
 import { Constraints } from "./cluster";
 import { ensureCapacity, type Phase, prepare, snapshot, writeback } from "./phases";
@@ -23,11 +17,9 @@ import type { PhysicsOpts } from "./physics";
 import { Body, BoxContact, Joint } from "./rigid";
 
 export interface WorldOpts extends PhysicsOpts {
-  /** Hard cap on angular speed (rad/s) — matches the reference 2D
-   *  AVBD demo's `±50` rad/s clamp, applied each sub-step before
-   *  the inertial extrapolation. Prevents a body that picked up
-   *  spurious angular impulse during drag or contact transition
-   *  from spinning out of control. Default `50`. */
+  /** Cap on angular speed (rad/s), applied each sub-step before the
+   *  inertial extrapolation. Stops a body that picked up spurious
+   *  spin from running away. Default `50`. */
   maxAngularSpeed?: number;
 }
 
@@ -105,9 +97,7 @@ export function world(opts: WorldOpts = {}): World {
   });
 
   // ─── Phase: angular speed clamp ───────────────────────────────────
-  // Runs first each sub-step. AVBD ref clamps ω at ±maxAngularSpeed
-  // before the inertial extrapolation, preventing a body that picked
-  // up spurious angular impulse from spinning out of control.
+  // Clamps ω to ±maxAngularSpeed first each sub-step.
   const angularClamp: Phase = (c, dt) => {
     if (dt <= 0) return;
     velocities = ensureCapacity(velocities, c.solver.positions.length);
@@ -125,9 +115,9 @@ export function world(opts: WorldOpts = {}): World {
   };
 
   // ─── Phase: broadphase + manifold lifecycle ───────────────────────
-  // O(n²) bounding-radius sweep; creates a `BoxContact` term for
-  // each newly-overlapping body pair, disposes manifolds whose
-  // pairs no longer overlap. Joint-linked pairs are skipped.
+  // O(n²) bounding-radius sweep: creates a `BoxContact` per newly-
+  // overlapping pair, disposes manifolds that no longer overlap.
+  // Joint-linked pairs are skipped.
   const broadphase: Phase = c => {
     const N = bodies.length;
     const positions = c.solver.positions;
@@ -169,9 +159,8 @@ export function world(opts: WorldOpts = {}): World {
   };
 
   // ─── Phase: integrate (inertial extrapolation) ────────────────────
-  // Same shape as `physics()`'s integrate phase. Lives here as a
-  // closure over local `velocities` / `aExt` / `damping` rather
-  // than being shared, to keep the factory self-contained.
+  // Same shape as `physics()`'s integrate; kept local (closing over
+  // `velocities` / `aExt` / `damping`) to stay self-contained.
   const integrate: Phase = (c, dt) => {
     if (dt <= 0) return;
     velocities = ensureCapacity(velocities, c.solver.positions.length);

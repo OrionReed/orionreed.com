@@ -1,11 +1,9 @@
-// aggregates.ts — N→1 aggregate lens primitives, built on
-// `Cls.lens([...], ...)` / `Cls.derive([...], ...)`.
+// aggregates.ts — N→1 aggregate lens primitives over `Cls.lens` /
+// `Cls.derive`.
 //
-// All entries route through the engine's N-input lens path
-// (per-cell scratch buffer, arity-based bwd dispatch, batched
-// writes). Stateless-bwd (`(target) => updates`) skips the peek
-// loop on the hot path; stateful-bwd (`(target, vals) => updates`)
-// reads the scratch.
+// All route through the engine's N-input lens path. Stateless-bwd
+// (`(target) => updates`) skips the peek loop on the hot path;
+// stateful-bwd (`(target, vals) => updates`) reads the scratch.
 
 import type { Signal, Writable } from "./signal";
 import type { Linear } from "./traits";
@@ -16,8 +14,7 @@ type V = { x: number; y: number };
 
 // ─── Linear-aggregate merges (Num + Vec, etc.) ──────────────────────
 
-/** Equal-weight mean of N Linear-trait values, with delta-even
- *  distribution on writes. */
+/** Equal-weight mean of N Linear values; writes distribute the delta evenly. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors Cls.lens
 export function meanLens<T, C extends new (...args: never[]) => Signal<any>>(
   Cls: C,
@@ -111,22 +108,14 @@ export function centroidLens(parents: readonly Signal<V>[]): Writable<Vec> {
 
 // ─── Argmin via the lens primitive (numerical pseudoinverse) ────────
 //
-// Generalised N-input lens via weighted least squares. One Newton-
-// pseudoinverse step per write. Each input is a writable Num;
-// `forward` computes the output from current inputs; `weights`
-// controls which inputs absorb the residual (0 = frozen, 1 = uniform,
-// larger = absorbs more).
+// N-input lens via weighted least squares: one Newton-pseudoinverse
+// step per write. `forward` computes the output; `weights` controls
+// which inputs absorb the residual (0 = frozen, larger = absorbs more).
+// Many policies are just weight choices (polar's four, mean's [1…1],
+// pulley's [1,1], IK over joint angles).
 //
-// Specialisations:
-//   - polar's four policies (rotate / translate / radial / circular)
-//     are weight choices on [cx, cy, r, a].
-//   - mean's even-distribution is weights [1, …, 1] on summed inputs.
-//   - pulley conservation is [1, 1] on `a + b`.
-//   - IK is finite-difference Jacobian on N joint angles → 2D tip.
-//
-// Jacobian is finite-differenced (no autodiff dep). For N inputs the
-// per-write cost is N+1 forward evaluations. Damping (Levenberg-
-// Marquardt) avoids blow-up near rank-deficient configurations.
+// Jacobian is finite-differenced (N+1 forward evals per write);
+// Levenberg-Marquardt damping avoids blow-up near rank-deficiency.
 
 export interface ArgminOpts {
   /** Finite-difference epsilon for the Jacobian. Default 1e-4. */
@@ -139,14 +128,10 @@ export interface ArgminOpts {
   damping?: number;
 }
 
-/** Optional target-shaping for `argminVec`. Lets callers project an
- *  incoming write into the algorithm's reachable workspace BEFORE the
- *  Jacobian step — sidesteps the rank-deficient regime that causes
- *  unbounded swings at the workspace boundary.
- *
- *  For an N-link chain rooted at `R` with total reach `L`, pass
- *  `clampToDisc(R, L)`. The arm reaches the boundary cleanly and stops
- *  trying to extend further. */
+/** Target-shaping for `argminVec`: project a write into the reachable
+ *  workspace before the Jacobian step, sidestepping the rank-deficient
+ *  swings at the boundary. For an N-link chain rooted at `R` with reach
+ *  `L`, pass `clampToDisc(R, L)`. */
 export interface ArgminVecOpts extends ArgminOpts {
   /** Pre-write hook: transform the requested target into one that's
    *  guaranteed solvable. Most useful as a workspace clamp. */
@@ -156,9 +141,8 @@ export interface ArgminVecOpts extends ArgminOpts {
   ) => { x: number; y: number };
 }
 
-/** Project `p` into the closed disc of radius `r` centred on `c`. If
- *  inside, returned unchanged; outside, returned at the boundary. Pass
- *  to `argminVec`'s `clampTarget` as the principled fix for IK
+/** Project `p` into the closed disc of radius `r` centred on `c` (points
+ *  inside pass through). Use as `argminVec`'s `clampTarget` to fix IK
  *  explosion at maximum reach. */
 export function clampToDisc(
   c: { x: number; y: number },
@@ -174,14 +158,10 @@ export function clampToDisc(
   };
 }
 
-/** Scalar-output argmin lens. Reads `forward(inputs)`; writes do one
- *  Newton step against the finite-difference Jacobian, distributing
- *  the residual into inputs by `weights`.
- *
- *  For the typed-output generic case (heterogeneous Vec/Num/Pose
- *  outputs, named records, analytical Jacobian, auto-converge), use
- *  `factor()` from `./lenses`. This M=1 scalar specialization is kept
- *  for its hand-rolled inner loop. */
+/** Scalar-output argmin lens: write does one Newton step against the FD
+ *  Jacobian, distributing the residual by `weights`. For typed/multi-
+ *  output cases use `factor()`; this M=1 path is kept for its hand-rolled
+ *  inner loop. */
 export function argminNum(
   inputs: readonly Num[],
   forward: (xs: readonly number[]) => number,
@@ -194,7 +174,7 @@ export function argminNum(
   const eps = opts.eps ?? 1e-4;
   const damping = opts.damping ?? 1e-6;
   const n = inputs.length;
-  // Pre-allocate J + out to avoid per-write allocations.
+  // Pre-allocated to avoid per-write allocations.
   const J = new Array<number>(n);
   const out = new Array<number | undefined>(n);
   return Num.lens(
@@ -225,11 +205,9 @@ export function argminNum(
   );
 }
 
-/** 2D-output argmin lens. Inputs are scalar Nums; forward returns
- *  `{x, y}`. Suitable for IK arms, multi-input draggable points,
- *  parametric handle projection, etc. Kept specialized for its
- *  hand-rolled 2×2 inverse + the `clampTarget` workspace-projection
- *  hook. For other M values and typed outputs, see `factor()`. */
+/** 2D-output argmin lens (scalar Num inputs, `{x, y}` forward). For IK
+ *  arms, draggable points, handle projection. Kept for its hand-rolled
+ *  2×2 inverse + `clampTarget` hook; see `factor()` for other M. */
 export function argminVec(
   inputs: readonly Num[],
   forward: (xs: readonly number[]) => { x: number; y: number },
@@ -243,7 +221,7 @@ export function argminVec(
   const damping = opts.damping ?? 1e-3;
   const clamp = opts.clampTarget;
   const n = inputs.length;
-  // Pre-allocate Jx, Jy, out to avoid per-write allocations.
+  // Pre-allocated to avoid per-write allocations.
   const Jx = new Array<number>(n);
   const Jy = new Array<number>(n);
   const out = new Array<number | undefined>(n);

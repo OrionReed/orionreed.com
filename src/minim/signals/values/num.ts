@@ -1,9 +1,7 @@
 // num.ts — reactive scalar.
 //
-// All invertible methods (`add`, `sub`, `scale`, `affine`, `clamp`,
-// `quantize`, `cyclic`) ride on the base `Signal#lens(fwd, bwd)` primitive
-// and return `: this` so chains preserve writability of the receiver.
-// Chained calls auto-fuse to a single lens cell.
+// Invertibles return `: this` and ride on `Signal#lens(fwd, bwd)`;
+// chained calls auto-fuse to one cell.
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
@@ -72,10 +70,8 @@ export class Num extends Signal<V> {
       n => n / kf(),
     );
   }
-  /** Affine: `v ↦ k·v + off`. Invertible iff k ≠ 0. Equivalent to
-   *  `.scale(k).add(off)` — the chain auto-fuses to one cell, so this
-   *  is purely a readability alias. Sliders: `t.affine(width, x0)`
-   *  maps `t ∈ [0,1]` to screen coords. */
+  /** Affine `v ↦ k·v + off`. Invertible iff k ≠ 0; readability alias
+   *  for `.scale(k).add(off)`. */
   affine(k: Val<number>, off: Val<number>): this {
     const kf = reader(k);
     const of = reader(off);
@@ -85,11 +81,8 @@ export class Num extends Signal<V> {
     );
   }
 
-  /** Lossy lens that clamps reads to `[lo, hi]` and clamps writes
-   *  before propagating to source. Compliance: PutGet only (read of a
-   *  write outside `[lo, hi]` returns the clamped value, not the
-   *  written one). Use for sliders, gauges, anywhere a value
-   *  shouldn't escape its range. */
+  /** Lossy clamping lens to `[lo, hi]`. PutGet only (a write outside
+   *  the range reads back clamped, not as written). */
   clamp(lo: Val<V>, hi: Val<V>): this {
     const lf = reader(lo);
     const hf = reader(hi);
@@ -98,41 +91,33 @@ export class Num extends Signal<V> {
         h = hf();
       return v < l ? l : v > h ? h : v;
     };
-    // Lossy absorption: a write whose clamped projection matches the
-    // current view leaves the source untouched (the off-range source is
-    // preserved). `s` is the live source value.
+    // A write whose clamped projection matches the current view leaves
+    // the source untouched (off-range source preserved).
     return this.lens(c, (v, s) => {
       const cv = c(v);
       return cv === c(s) ? s : cv;
     });
   }
 
-  /** Lossy lens that snaps reads and writes to the nearest multiple
-   *  of `step`. For knobs with discrete positions. */
+  /** Lossy lens snapping reads/writes to the nearest multiple of `step`. */
   quantize(step: Val<number>): this {
     const sf = reader(step);
     const q = (v: V) => {
       const s = sf();
       return Math.round(v / s) * s;
     };
-    // Lossy absorption: a write that snaps to the current bucket leaves
-    // the source untouched (the off-grid remainder is preserved).
+    // A write that snaps to the current bucket leaves the source
+    // untouched (off-grid remainder preserved).
     return this.lens(q, (v, src) => {
       const qv = q(v);
       return qv === q(src) ? src : qv;
     });
   }
 
-  /** Cyclic-coordinate lens. Reads pass through (the source's
-   *  accumulated value); writes pick the representative closest to
-   *  the current value modulo `period`. Lets you drag an angle a
-   *  small visible amount without jumping a full revolution when the
-   *  source has accumulated many.
-   *
-   *  The 2-arg bwd `(v, s) => …` is arity-detected as stateful by
-   *  the engine, which threads the genuine receiver-input value
-   *  (the current accumulated angle) through `s` even across
-   *  composed chains. No `this.peek()` side-channel needed. */
+  /** Cyclic-coordinate lens. Reads pass through; writes pick the
+   *  representative closest to current modulo `period`, so dragging an
+   *  angle never jumps a full revolution. The 2-arg bwd is arity-detected
+   *  as stateful, threading the accumulated value through `s`. */
   cyclic(period: Val<number>): this {
     const pf = reader(period);
     return this.lens(
@@ -147,21 +132,12 @@ export class Num extends Signal<V> {
 
   // ── Predicate bridges to Bool ────────────────────────────────────
   //
-  // Cross-type quotient lenses: project Num through a boolean
-  // predicate. The bwd policy is the obvious "snap across the
-  // boundary by eps" (for thresholds) or "walk to the nearest
-  // satisfying integer" (for divisibility). The Bool cousins of
-  // `clamp` / `quantize` — same Foster-style ≈_S = "same boolean
-  // class" equivalence.
-  //
-  // Each method has a conditional return type: writable receiver
-  // (Writable<Num>) yields Writable<Bool>; bare RO receiver yields
-  // RO Bool. Mirrors `field()`'s writability-propagating shape.
+  // Cross-type quotient lenses projecting Num through a boolean
+  // predicate. Conditional return type: writable receiver yields
+  // `Writable<Bool>`, RO receiver yields RO `Bool`.
 
-  /** `this > t` as a (writability-propagating) Bool. Flipping the view
-   *  bumps the source across the threshold by `eps`. Cross-type analog
-   *  of `clamp`: a stateful idempotent projection through a 2-element
-   *  quotient. */
+  /** `this > t` as a Bool. Flipping the view bumps the source across
+   *  the threshold by `eps`. */
   greaterThan<T extends Num>(
     this: T,
     t: Val<V>,
@@ -199,20 +175,11 @@ export class Num extends Signal<V> {
     ) as never;
   }
 
-  /** `round(this) ≡ 0 (mod d)`. The source is treated as an integer
-   *  (rounded for the test); pair with `quantize(1)` for clean integer
-   *  sliders.
-   *
-   *  Bwd policy:
-   *   - `true` (currently non-divisible): snap to the nearer of the
-   *     two adjacent multiples of `d`.
-   *   - `false` (currently divisible): bump by `+1` (smallest move
-   *     guaranteed to flip the class).
-   *   - target matches current class: no-op. */
-  divisibleBy<T extends Num>(
-    this: T,
-    d: Val<V>,
-  ): T extends WritableBrand ? Writable<Bool> : Bool {
+  /** `round(this) ≡ 0 (mod d)` as a Bool; pair with `quantize(1)` for
+   *  integer sliders. Bwd: to make divisible, snap to the nearer
+   *  multiple of `d`; to make non-divisible, bump by `+1`; no-op when
+   *  the class already matches. */
+  divisibleBy<T extends Num>(this: T, d: Val<V>): T extends WritableBrand ? Writable<Bool> : Bool {
     const df = reader(d);
     return Bool.lens(
       this,
@@ -243,23 +210,17 @@ export class Num extends Signal<V> {
     return lazy(this, "isOdd", () => (this as Num).divisibleBy(2).not()) as never;
   }
 
-  /** Tween-builder, implied by the lerp trait. The `this:` parameter
-   *  constraint gates the call site to writable receivers — bare RO
-   *  Num is rejected at compile time. */
+  /** Tween-builder; `this: Writable<Num>` gates the call to writable
+   *  receivers. */
   to(this: Writable<Num>, target: V, dur: Val<number>, ease?: Easing): Tween<V> {
     return tween(this, target, dur, ease);
   }
 }
 
-/** Writable `Num`. Strict factory: `number | Writable<Num>` in,
- *  `Writable<Num>` out. Literal seeds a fresh cell; existing
- *  `Writable<Num>` passes through by identity (same reference, no
- *  allocation, no effect).
- *
- *  RO sources (computed views, RO field lenses, thunks) are rejected
- *  at the type level — reach for `Num.derive(...)` to track an RO
- *  source reactively, or `Num.from(...)` for the permissive
- *  consumer-layer lift that handles any `Val<number>`. */
+/** Writable `Num`. Literal seeds a fresh cell; existing `Writable<Num>`
+ *  passes through by identity. RO sources are rejected at the type level —
+ *  use `Num.derive(...)` for reactive RO tracking, or `Num.from(...)` for
+ *  the permissive lift over any `Val<number>`. */
 export function num(v: Init<Num> = 0): Writable<Num> {
   if (v instanceof Num) return v as Writable<Num>;
   return new Num(v) as Writable<Num>;

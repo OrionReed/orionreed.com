@@ -19,9 +19,8 @@ const xAttr = (x: number) => (x <= 0.25 ? "start" : x >= 0.75 ? "end" : "middle"
 const yAttr = (y: number) => (y <= 0.25 ? "hanging" : y >= 0.75 ? "alphabetic" : "central");
 
 export class Label<O extends LabelOpts = LabelOpts> extends Shape<O> {
-  /** The user-supplied anchor point — the position the label is
-   *  attached to (subject to `align`). Distinct from the inherited
-   *  Box `center` / `at(u, v)` which describe the bounding box. */
+  /** The position the label attaches to (subject to `align`); distinct from
+   *  the inherited Box `center` / `at(u, v)`. */
   readonly anchor: Vec;
 
   constructor(anchor: Vec, content: Val<Content>, opts: O = {} as O) {

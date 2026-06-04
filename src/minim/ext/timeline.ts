@@ -15,19 +15,11 @@ import {
   type Writable,
 } from "@minim/signals";
 
-/** A clip on a timeline. `t` extends past the endpoints (0 before,
- *  1 after) so `derive(() => (ease)(clip.t.value))` works without
- *  conditional checks.
- *
- *  Per-field writability is preserved through `ResolvedField`: pass a
- *  literal or `Writable<Num>` and you get back a `Writable<Num>` (drag
- *  the clip's start/duration knobs directly); pass a bare `Num` (e.g.
- *  the RO `at` from `sequential()`) and you get back a bare `Num`.
- *
- *  `span` narrows the same way via `ResolvedSpan<A, D>`: both inputs
- *  writable → `Writable<Range>` (drag `.lo` / `.hi` / `.start` to
- *  scrub the clip in time); either input RO → `Range` (reads compose,
- *  writes wouldn't have anywhere to land). */
+/** A clip on a timeline. `t` clamps to 0 before / 1 after, so
+ *  `derive(() => ease(clip.t.value))` needs no guards. Per-field
+ *  writability flows through `ResolvedField` / `ResolvedSpan`: writable
+ *  inputs yield draggable knobs, RO inputs (e.g. `sequential()`'s `at`)
+ *  stay RO. */
 export type Clip<A = number, D = number> = {
   readonly at: ResolvedField<A>;
   readonly dur: ResolvedField<D>;
@@ -38,10 +30,8 @@ export type Clip<A = number, D = number> = {
   readonly active: Signal<boolean>;
 };
 
-// Per-field writability narrowing. Literal `number` and `Writable<Num>`
-// inputs come back as `Writable<Num>`; bare `Num` (RO) stays RO. Order
-// matters: writable-brand check first since `Writable<Num>` is
-// structurally a `Num`.
+// Writability narrowing: `number`/`Writable<Num>` → `Writable<Num>`,
+// bare `Num` stays RO. Brand check first (`Writable<Num>` is a `Num`).
 type ResolvedField<A> = [A] extends [Writable<Num>]
   ? Writable<Num>
   : [A] extends [number]
@@ -60,8 +50,8 @@ export interface Timeline {
   /** `clock / duration`, clamped to `[0, 1]`. */
   readonly t: Num;
   readonly clips: readonly Clip[];
-  /** `yield* tl` advances `clock` to `duration`. No auto-reset — for
-   *  loops, use `snapshot(tl.clock)`. */
+  /** `yield* tl` advances `clock` to `duration`. No auto-reset (use
+   *  `snapshot(tl.clock)` for loops). */
   [Symbol.iterator](): Animator;
 }
 
@@ -105,9 +95,8 @@ function makeClip(spec: ClipSpec, clock: Num): Clip {
   const at = Num.from(spec.at);
   const dur = Num.from(spec.dur);
   const end = Num.derive(() => at.value + dur.value);
-  // Bidirectional span when both at and dur are writable; RO derive when
-  // either is computed (the sequential-`at` case). Same narrowing the
-  // type system performs via `ResolvedSpan`.
+  // Bidirectional span when both inputs are writable; RO derive when
+  // either is computed. Mirrors `ResolvedSpan`.
   const sp =
     isComputed(at) || isComputed(dur)
       ? Range.derive(() => ({ lo: at.value, hi: at.value + dur.value }))
@@ -127,10 +116,8 @@ function makeClip(spec: ClipSpec, clock: Num): Clip {
   return { at, dur, span: sp, end, t, active } as Clip;
 }
 
-/** Build a timeline from a record of clip specs. `at` and `dur` accept
- *  literal numbers or `Num` cells (writable or RO); clips can overlap
- *  or leave gaps. For cumulative-start sequential clips, see
- *  `sequential()`. */
+/** Build a timeline from clip specs. `at`/`dur` accept numbers or `Num`
+ *  cells; clips may overlap or gap. See `sequential()` for cumulative starts. */
 export function timeline<T extends Record<string, ClipSpec>>(specs: T): TimelineOf<T> {
   const clock = num(0);
   const clips: Clip[] = [];
@@ -147,9 +134,8 @@ export function timeline<T extends Record<string, ClipSpec>>(specs: T): Timeline
 
 type Durations = Record<string, Init<Num>>;
 
-/** Cumulative-start helper. Each clip's `at` is the reactive sum of
- *  prior durations, so editing one duration ripples through. `at` is
- *  RO; use `timeline()` directly for draggable starts.
+/** Cumulative-start helper: each clip's `at` is the reactive sum of
+ *  prior durations (RO). Use `timeline()` directly for draggable starts.
  *
  *      timeline(sequential({ intro: 0.7, hold: 1.2, outro: 0.5 }));
  */

@@ -1,22 +1,18 @@
 // cluster.ts — the `Constraints` holder.
 //
 // Holds a `Solver`, a registry of relations, and a `pipeline` of
-// phases that runs on every `step(dt)`. Default pipeline is
-// reactive (snapshot → prepare → solve → writeback) and a default
-// reactive driver fires on bound-signal changes — so a freshly
-// constructed `Constraints` is a sketchpad-style reactive solver
-// with no further setup.
+// phases run on every `step(dt)`. The default reactive pipeline plus
+// a driver that fires on bound-signal changes make a freshly
+// constructed `Constraints` a sketchpad-style reactive solver with
+// no further setup.
 //
 // Specialised factories (`physics`, `world`, …) overwrite the
-// pipeline wholesale, allocate their own per-cell state, and
-// dispose the reactive driver to take over the time loop.
-// Subsystems are not classes — they're just factory functions
-// that declare their pipeline.
+// pipeline, allocate their own per-cell state, and dispose the
+// reactive driver to take over the time loop.
 //
-// Relation contract: a single `bind(c)` method that registers
-// whatever the relation needs (cell bindings + term) and returns
-// a disposer. `c.add(rel)` calls `bind`; `c.remove(rel)` calls
-// the disposer.
+// Relation contract: `bind(c)` registers what the relation needs and
+// returns a disposer. `c.add(rel)` calls `bind`; `c.remove(rel)`
+// calls the disposer.
 
 import {
   type Lifecycle,
@@ -35,12 +31,8 @@ import { Solver, type SolverOpts } from "./solver";
 
 // ─── Relation interface ────────────────────────────────────────────
 
-/** A constraint relation. `bind(c)` does whatever setup the relation
- *  needs (cell binding, term registration, slot allocation, …) and
- *  returns a disposer that undoes it.
- *
- *  Factories return relations as plain objects; user code passes
- *  them to `c.add(rel)` and tears them down via `c.remove(rel)`. */
+/** A constraint relation. `bind(c)` sets up (cell binding, term
+ *  registration, …) and returns a disposer. */
 export interface Relation {
   bind(c: Constraints): () => void;
 }
@@ -55,34 +47,27 @@ interface Binding {
 // ─── Constraints ───────────────────────────────────────────────────
 
 export class Constraints {
-  /** The numerical solver underneath. Exposed for advanced users
-   *  and for phase functions to read/write its buffers. */
+  /** The numerical solver underneath. Phases read/write its buffers. */
   readonly solver: Solver;
 
-  /** The pipeline of phases to run on each `step(dt)`. Mutable —
-   *  factories declare their pipeline by assignment. The default
-   *  is the reactive pipeline (snapshot/prepare/solve/writeback).
-   *  Read it to debug; reassign it to specialise. */
+  /** Phases run on each `step(dt)`. Mutable — factories specialise by
+   *  reassigning. Defaults to the reactive pipeline. */
   pipeline: Phase[];
 
   // biome-ignore lint/suspicious/noExplicitAny: heterogeneous binding registry
   private readonly _sigToCell = new Map<Signal<any>, number>();
   private readonly _bindings: (Binding | undefined)[] = [];
-  /** Disposers for active relations, keyed by relation reference.
-   *  `add(rel)` stores the disposer here; `remove(rel)` invokes it. */
+  /** Active-relation disposers, keyed by relation reference. */
   private readonly _disposers = new Map<Relation, () => void>();
-  /** Hooks fired when relations are added / removed. Used by
-   *  factories that need to track specific relation kinds (e.g.
+  /** Add / remove hooks for factories tracking relation kinds (e.g.
    *  `world` tracks `Body` instances for the broadphase). */
   private readonly _addHooks: Set<(rel: Relation) => void> = new Set();
   private readonly _removeHooks: Set<(rel: Relation) => void> = new Set();
-  /** Generation counter; bumped on `_bind()`/`remove()` so the
-   *  reactive driver re-fires when structural state changes. */
+  /** Bumped on structural change so the reactive driver re-fires. */
   private readonly _gen: Writable<Signal<number>>;
-  /** Reactive driver — a network that calls `step()` on signal
-   *  change. Lazy-installed on first `_bind`; once `dispose()`d
-   *  (e.g., by `physics()` / `world()` taking over the time loop),
-   *  permanently silenced. */
+  /** Reactive driver: a network calling `step()` on signal change.
+   *  Lazy-installed on first `_bind`; permanently silenced once
+   *  `dispose()`d (e.g. when physics/world take the time loop). */
   private _network?: Network;
   private _networkDisposed = false;
 
@@ -127,9 +112,8 @@ export class Constraints {
 
   // ─── The single advance entry point ──────────────────────────────
 
-  /** Run the pipeline once. `dt` is passed to each phase; defaults
-   *  to `1` (the static-edit / reactive case where the regularizer
-   *  weight is just `M`). Physics callers pass the real frame `dt`. */
+  /** Run the pipeline once. `dt` defaults to `1` (static-edit case);
+   *  physics callers pass the real frame `dt`. */
   step(dt: number = 1): void {
     const p = this.pipeline;
     for (let i = 0; i < p.length; i++) p[i]!(this, dt);
@@ -193,12 +177,10 @@ export class Constraints {
     return () => this._removeHooks.delete(fn);
   }
 
-  /** Tear down the reactive driver. Bound signals retain their
-   *  current values but stop being constraint-driven; further
-   *  `add` / `_bind` calls do NOT re-install it (this is permanent).
-   *  Physics-flavored factories call this to take over the time
-   *  loop — manual `step(dt)` calls are then the only way to
-   *  advance. */
+  /** Tear down the reactive driver, permanently — later `add`/`_bind`
+   *  won't re-install it. Bound signals keep their values but stop
+   *  being constraint-driven; `step(dt)` is the only way to advance.
+   *  Physics-flavored factories call this to take the time loop. */
   dispose(): void {
     if (this._network !== undefined) {
       this._network.dispose();
@@ -214,10 +196,8 @@ export class Constraints {
 
   // ─── Internals (used by Relation implementations and Phases) ────
 
-  /** @internal — bind a signal as a cell. Idempotent: same signal
-   *  returns the same cell id. Cells are append-only; once bound a
-   *  signal stays bound for the cluster's lifetime. Called from
-   *  Relation `bind` implementations. */
+  /** @internal — bind a signal as a cell. Idempotent (same signal →
+   *  same id); cells are append-only for the cluster's lifetime. */
   // biome-ignore lint/suspicious/noExplicitAny: see header
   _bind(sig: Signal<any>): number {
     const existing = this._sigToCell.get(sig);
@@ -230,29 +210,23 @@ export class Constraints {
     if (this._network === undefined && !this._networkDisposed) {
       this._installReactiveDriver();
     } else if (this._network !== undefined) {
-      // Network already running — subscribe to the new cell signal
-      // so writes to it fire the body. (gen-based fire would also
-      // catch it but only because gen changes; subscribing the cell
-      // means later .value mutations trigger a solve.)
+      // Network already running — subscribe the new cell so its later
+      // `.value` mutations fire the body and trigger a solve.
       this._network.subscribe(sig);
     }
     this._gen.value += 1;
     return id;
   }
 
-  /** @internal — register a reactive parameter signal that a Term
-   *  reads inside `step()`. Without this, mutating the parameter
-   *  wouldn't fire the network (its body's reads don't auto-track
-   *  any more). Called from Relation `bind` implementations that
-   *  construct Terms with reactive params (`distance`, `bounds`,
-   *  `softTarget`, etc.). */
+  /** @internal — subscribe a reactive Term parameter. Without this,
+   *  mutating the param wouldn't fire the network (body reads don't
+   *  auto-track). Called from relations with reactive params. */
   // biome-ignore lint/suspicious/noExplicitAny: heterogeneous params
   _trackParam(sig: Signal<any>): void {
     if (this._network !== undefined) this._network.subscribe(sig);
     else this._pendingParamDeps.push(sig);
   }
-  /** Reactive params bound BEFORE the network was installed; folded
-   *  in at install time. */
+  /** Params bound before the network existed; folded in at install. */
   // biome-ignore lint/suspicious/noExplicitAny: same
   private _pendingParamDeps: Signal<any>[] = [];
 
@@ -260,32 +234,27 @@ export class Constraints {
 
   private _installReactiveDriver(): void {
     const gen = this._gen;
-    // Initial deps: gen plus every cell signal already bound, plus
-    // any reactive params registered before the network came up.
+    // Initial deps: gen, every bound cell signal, and params
+    // registered before the network came up.
     const initialDeps: Signal<unknown>[] = [gen as Signal<unknown>];
     for (const [sig] of this._sigToCell) initialDeps.push(sig as Signal<unknown>);
     for (const sig of this._pendingParamDeps) initialDeps.push(sig as Signal<unknown>);
     this._pendingParamDeps.length = 0;
     this._network = network(initialDeps, () => {
-      // Run the pipeline. Snapshot reads cell positions, solve runs,
-      // writeback uses self-exclusion + auto-batch. Reads inside the
-      // body don't subscribe (explicit-deps mode); deps come from the
-      // initial array + later `_network.subscribe(...)` calls in
-      // `_bind` and `_trackParam`.
+      // Explicit-deps mode: body reads don't subscribe; deps come from
+      // the initial array + later `subscribe(...)` in `_bind`/`_trackParam`.
       this.step();
     });
   }
 }
 
-/** Build a fresh `Constraints` holder with the reactive default
- *  pipeline. Canonical entry point for sketchpad / IK / layout
- *  scenes that don't need time integration.
+/** Build a reactive `Constraints` (sketchpad / IK / layout, no time
+ *  integration). For physics use `physics(opts)` or `world(opts)`.
  *
  *    const c = constraints({ iterations: 24 });
  *    c.add(distance(a, b, 100));
  *    c.iterations = 30;
- *
- *  For physics scenes use `physics(opts)` or `world(opts)`. */
+ */
 export function constraints(opts: SolverOpts = {}): Constraints {
   return new Constraints(opts);
 }

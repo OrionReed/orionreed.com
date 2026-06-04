@@ -1,12 +1,9 @@
 // matrix.ts — reactive 2D affine matrix (SVG/Canvas convention).
 //
-// Sparse-trait stress test: only `equals` declared. Matrices have no
-// useful element-wise linear combine and naïve element-wise lerp
-// doesn't decompose, so `spring`/`tween`/`mean` etc. reject Matrix at
-// compile time (no linear/lerp/metric).
-//
-// Two clearly-invertible ops, both `: this` via `Signal#lens`:
-//   - `multiply(b)` — inverse is multiply by `invert(b)`
+// Sparse-trait: only `equals`. Element-wise linear combine / lerp don't
+// decompose for matrices, so `spring`/`tween`/`mean` reject Matrix at
+// compile time. Two invertibles, both `: this` via `Signal#lens`:
+//   - `multiply(b)` — inverse multiplies by `invert(b)`
 //   - `invert()`    — its own inverse
 
 import { type Init, type Inner, reader, Signal, type Val, type Writable } from "../signal";
@@ -147,13 +144,10 @@ export class Matrix extends Signal<V> {
 }
 
 /** Writable `Matrix` with entries `(a, b, c, d, e, f)` (SVG/Canvas order).
- *  Each entry is either a literal `number` (lifted to a fresh `Writable<Num>`
- *  seed) or an existing `Writable<Num>` (passed through by identity, writes
- *  propagate).
- *
- *  RO sources are rejected at the type level — use `Matrix.derive(...)`
- *  for reactive RO tracking, or `signal.value` to snapshot. Lock an entry
- *  with `Num.pin(c)`. */
+ *  Each entry is a literal `number` (lifted to a fresh seed) or an existing
+ *  `Writable<Num>` (identity passthrough). RO sources are rejected at the
+ *  type level — use `Matrix.derive(...)` for reactive RO tracking, or
+ *  `signal.value` to snapshot. Lock an entry with `Num.pin(c)`. */
 export function matrix(
   a: Init<Num> = 1,
   b: Init<Num> = 0,
@@ -178,8 +172,8 @@ export function matrix(
   const dN = num(d);
   const eN = num(e);
   const fN = num(f);
-  // Source-independent (`iso`): the view fully reconstructs all 6 cells.
-  return Matrix.iso(
+  // The view fully reconstructs all 6 cells (1-arg bwd ⇒ no source read).
+  return Matrix.lens(
     [aN, bN, cN, dN, eN, fN] as const,
     ([a, b, c, d, e, f]) => ({ a, b, c, d, e, f }),
     v => [v.a, v.b, v.c, v.d, v.e, v.f],

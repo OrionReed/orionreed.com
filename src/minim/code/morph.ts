@@ -1,32 +1,20 @@
 // morph — animate a CodeShape from its current source to a target.
 //
-// The substrate is glyph-free, line-element-free, and clip-path-free —
-// it's just a flat list of absolutely-positioned `Part`s with signal
-// properties. So morph reduces to: pair old and new lines (LCS over
-// trimmed text), then for each pair / leftover, choose which signals
-// to tween. There is no DOM rebuild, no FLIP capture-then-decay, no
-// drive loop — every animation is a chainable `signal.to(...)` and the
-// whole morph is `yield [...all of them]`.
+// Parts are just absolutely-positioned signal-bearing spans, so morph
+// reduces to: pair old/new lines (LCS over trimmed text), then tween
+// the right signals per pair. No DOM rebuild, no FLIP, no drive loop —
+// every animation is a `signal.to(...)` and the morph is `yield [...]`.
 //
 // Per-line outcomes:
-//   Kept(same text)    — the old part stays; position.y tweens if the
-//                        line moved to a different row.
-//   Kept(text changed) — old part fades to opacity 0 (at its old row);
-//                        a fresh part is created at the new row with
-//                        opacity 0 and fades to 1. Whole-line cross-
-//                        fade. Sub-line token-level diff can layer on
-//                        top later via cut/uncut without changing the
-//                        substrate.
-//   Lost               — old part fades to 0 at its old row, disposed
-//                        on completion.
-//   Gained             — fresh part created at its new row with
-//                        opacity 0, fades to 1.
+//   Kept(same text)    — old part stays; position.y tweens if it moved.
+//   Kept(text changed) — old part fades out at its old row; a fresh
+//                        part fades in at the new row (whole-line cross-fade).
+//   Lost               — old part fades out, disposed on completion.
+//   Gained             — fresh part fades in at its new row.
 
 import { type Animator, type Easing, easeInOut, type Yieldable } from "@minim/core";
 import { vec } from "@minim/signals";
 import { type CodeShape, Part } from "./code";
-
-// ── Line-level LCS + classification ─────────────────────────────────
 
 interface RawMatch {
   kind: "match";
@@ -43,9 +31,8 @@ interface RawIns {
 }
 type RawOp = RawMatch | RawDel | RawIns;
 
-/** LCS over `trimStart`-equal lines. An indent-only change still
- *  matches; the indent shift rides through as a text difference on the
- *  Kept line. */
+/** LCS over `trimStart`-equal lines; indent-only changes still match
+ *  (the shift rides through as a text diff on the Kept line). */
 function lcsLines(oldLines: readonly string[], newLines: readonly string[]): RawOp[] {
   const eq = (a: string, b: string): boolean => a.trimStart() === b.trimStart();
   const m = oldLines.length;
@@ -94,18 +81,15 @@ interface Gained {
 }
 type LineOp = Kept | Lost | Gained;
 
-/** Classify raw LCS ops into Kept/Lost/Gained in one pass.
- *
- *  Pair priority — cross-position SAME-trimmed first, then adjacent.
- *  This is the inverse of the previous package's order: it ensures we
- *  prefer "this line moved" over "this line was modified to that
- *  line's content", which keeps lines visually anchored across moves. */
+/** Classify raw LCS ops into Kept/Lost/Gained. Pairs cross-position
+ *  same-trimmed lines first, then adjacent — prefers "line moved" over
+ *  "line modified", keeping lines anchored across moves. */
 function classify(
   raw: readonly RawOp[],
   oldLines: readonly string[],
   newLines: readonly string[],
 ): LineOp[] {
-  // Pass 1 — cross-position pairing (`del X`, `ins Y` where X.trimStart === Y.trimStart).
+  // Pass 1 — cross-position pairing (del/ins with equal trimStart).
   const delByText = new Map<string, number[]>();
   for (let k = 0; k < raw.length; k++) {
     const op = raw[k];
@@ -165,12 +149,8 @@ function classify(
   return out;
 }
 
-// ── Public entry ────────────────────────────────────────────────────
-
-/** Animate `c` from its current source to `target`. Cancel-safe — the
- *  `finally` clause disposes any transient parts and commits via
- *  `_finalize`, which also re-sorts the parts list into row/col order
- *  for indexable lookup. */
+/** Animate `c` to `target`. Cancel-safe: `finally` disposes transient
+ *  parts and commits via `_finalize` (which re-sorts row/col). */
 export function* morph(
   c: CodeShape,
   target: string,
@@ -184,9 +164,8 @@ export function* morph(
   const newLines = target.split("\n");
   const ops = classify(lcsLines(oldLines, newLines), oldLines, newLines);
 
-  // Snapshot the parts list indexed by oldIdx. We assume parts are
-  // currently in row/col order (the previous render and the previous
-  // morph's `_finalize` both maintain this). One part per old line.
+  // Parts indexed by oldIdx; assumed in row/col order (render and
+  // `_finalize` both maintain this), one part per old line.
   const oldParts = c.parts.slice();
 
   const tweens: Yieldable[] = [];
@@ -204,10 +183,8 @@ export function* morph(
           tweens.push(oldPart.position.to(vec(0, newY).value, dur, ease));
         }
       } else {
-        // Content changed — cross-fade the whole line in place at the
-        // new row. Old part fades out (at its old row); fresh part
-        // fades in (at the new row). Sub-line diff can layer on later
-        // by cut/uncut between these two endpoints.
+        // Content changed — whole-line cross-fade: old part out at its
+        // old row, fresh part in at the new row.
         const fresh = new Part(newText, 0, newY);
         fresh.opacity.value = 0;
         c.wrapper.appendChild(fresh.el);

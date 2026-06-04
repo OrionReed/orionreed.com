@@ -63,9 +63,7 @@ export class AnnularSector<O extends AnnularSectorOpts = AnnularSectorOpts> exte
     });
   }
 
-  /** Rendered inside the shape's own `<g transform>` so coords are
-   *  local-frame — derived from the Box (whose center matches the
-   *  user-supplied center). */
+  /** Local-frame segments, derived from the Box (center = the given center). */
   override segments(): Segment[] {
     const cx = () => this.box.value.x + this.box.value.w / 2;
     const cy = () => this.box.value.y + this.box.value.h / 2;

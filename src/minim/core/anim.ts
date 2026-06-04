@@ -47,10 +47,8 @@ export const isGenerator = (v: unknown): v is Animator =>
 export class Anim {
   private actives: Active[] = [];
   private deads = 0;
-  /** Re-entry guard: true while `step()` is iterating. Calling `step()`
-   *  again from inside a gen body throws. Other ops (start, stop, cancel)
-   *  remain legal from inside step — they only mutate `actives`, which
-   *  the loop handles via index + skip-checks. */
+  /** Re-entry guard: nested `step()` throws. start/stop/cancel stay legal
+   *  (they only mutate `actives`, handled via index + skip-checks). */
   private stepping = false;
   private stepListeners: Set<(dt: number) => void> | null = null;
   private onError: (e: unknown) => void;
@@ -64,10 +62,8 @@ export class Anim {
     this.onError = opts.onError ?? (e => console.error("minim:", e));
   }
 
-  /** Spawn one or more root-level actives. Each Animator becomes an
-   *  independent active; the returned handle cancels all of them. Pass
-   *  an array (`[a, b]`) inside a gen as a single Yieldable to spawn a
-   *  concurrent group with cascading cancel + joined completion. */
+  /** Spawn root-level actives; the returned handle cancels all. (Inside
+   *  a gen, `yield [a, b]` instead for a joined, cascading-cancel group.) */
   start(...gs: Animator<any>[]): () => void {
     if (gs.length === 0) return () => {};
     const actives = gs.map(g => this.spawn(g, null, null));

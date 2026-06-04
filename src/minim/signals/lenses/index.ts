@@ -2,23 +2,14 @@
 // signals/lenses/index.ts — N→M and 1→M bidirectional lens primitives.
 //
 // Three layers:
-//
-//   1. NUMERICAL — `factor`, `factorTuple`, `bundle` — generic
-//      Jacobian-LSQ over typed inputs/outputs via the Pack trait.
-//      The escape hatch when no closed-form policy fits.
-//
+//   1. NUMERICAL — `factor`, `factorTuple`, `bundle`: generic
+//      Jacobian-LSQ, the escape hatch when no closed-form policy fits.
 //   2. CLOSED-FORM POLICIES — `rigidTranslate`, `rotateAbout`,
-//      `scaleAbout`, `scaleAboutXY` — exact group-action primitives,
-//      trait-dispatched via Pivotal where applicable.
-//
+//      `scaleAbout`, `scaleAboutXY`: exact group-action primitives.
 //   3. DECOMPOSITIONS — `procrustesLens`, `bboxLens`, `bestFitLine`,
-//      `bestFitCircle`, `pcaLens`, `totalLens`, `palette`,
-//      `bezierGestalt`, `timeSeries` — composed M-output views built
-//      from the policies and trait-driven aggregates.
+//      etc.: composed M-output views over the policies and aggregates.
 //
-// All exports are exact, idempotent, and cross-channel invariant
-// where the math permits. See BIDIRECTIONAL-LENSES.md for the engine
-// substrate.
+// See BIDIRECTIONAL-LENSES.md for the engine substrate.
 // =====================================================================
 
 // ─── Building-block group actions (trait-dispatched) ───────────────────

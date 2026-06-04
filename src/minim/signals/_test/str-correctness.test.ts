@@ -61,14 +61,7 @@ describe("GetPut: writing back the read value is a no-op on source", () => {
   });
 
   it("words", () => {
-    const cases = [
-      "the quick brown fox",
-      "hello, world!",
-      "a b c",
-      "",
-      "   x   ",
-      "one",
-    ];
+    const cases = ["the quick brown fox", "hello, world!", "a b c", "", "   x   ", "one"];
     for (const init of cases) {
       const s = str(init);
       const w = s.words();
@@ -79,11 +72,7 @@ describe("GetPut: writing back the read value is a no-op on source", () => {
   });
 
   it("sortedUnique", () => {
-    const cases = [
-      "the lazy the dog the",
-      "Hello World",
-      "alpha beta alpha gamma beta",
-    ];
+    const cases = ["the lazy the dog the", "Hello World", "alpha beta alpha gamma beta"];
     for (const init of cases) {
       const s = str(init);
       const u = s.sortedUnique();
@@ -191,14 +180,7 @@ describe("ROUND-TRIP: split / rejoin via lowercase preserves source", () => {
 describe("STABILITY: 5 reads in a row are identical with no source side effects", () => {
   it("trim, lowercase, uppercase, words, sortedUnique, rot13", () => {
     const s = str("  The Quick Brown Fox  ");
-    const lenses = [
-      s.trim(),
-      s.lowercase(),
-      s.uppercase(),
-      s.words(),
-      s.sortedUnique(),
-      s.rot13(),
-    ];
+    const lenses = [s.trim(), s.lowercase(), s.uppercase(), s.words(), s.sortedUnique(), s.rot13()];
     for (const l of lenses) {
       const sourceBefore = s.value;
       const first = l.value;
@@ -481,7 +463,7 @@ describe("AGGRESSIVE: random sequences don't corrupt or diverge", () => {
       );
       // Simpler: insert a space at position 4 + i in lowercase view.
       const lower = "the quick brown fox";
-      const splitView = lower.slice(0, 4 + i) + " " + lower.slice(4 + i);
+      const splitView = `${lower.slice(0, 4 + i)} ${lower.slice(4 + i)}`;
       lo.value = splitView;
       lo.value = lower; // rejoin
       expect(s.value).toBe(original);

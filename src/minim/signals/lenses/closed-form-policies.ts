@@ -1,30 +1,16 @@
 // =====================================================================
 // closed-form-policies.ts — exact group-action lenses for point clouds.
 //
-// The framing: when a bidirectional aggregate lens has a closed-form
-// inverse, it's because the bwd is literally applying a GROUP ELEMENT
-// to the source set. Translation, rotation-about-pivot, and scale-about-
-// pivot are the three building blocks for "rigid body of a cluster"
-// manipulation. Procrustes, best-fit line, best-fit circle, PCA all
-// decompose into combinations of these.
+// When an aggregate lens has a closed-form inverse, its bwd applies a
+// GROUP ELEMENT to the source set. Translation, rotation-about-pivot,
+// and scale-about-pivot are the building blocks; Procrustes, best-fit
+// line/circle, and PCA decompose into combinations of them.
 //
-// The three things this file demonstrates:
-//
-//   1. BUILDING BLOCKS — `rigidTranslate`, `rotateAbout`, `scaleAbout`
-//      as reusable primitives. Each applies one group action; cross-
-//      action invariance is automatic from group commutativity.
-//
-//   2. DECOMPOSITION — `procrustesLens` re-expressed as the composition
-//      of those building blocks. Verify behavioural parity with the
-//      hand-rolled monolith.
-//
-//   3. NEW PRIMITIVES — `bestFitLine`, `bestFitCircle`, `pcaLens`,
-//      `partitionLens` as closed-form M-output decompositions of new
-//      problem shapes. Each is exact, idempotent, and cross-channel
-//      invariant by construction.
-//
-// All exports use the same `Cls.lens` machinery as the existing engine;
-// this is pure code-on-top, no engine changes.
+// Layout: building-block actions (rigidTranslate, rotateAbout,
+// scaleAbout, scaleAboutXY), Procrustes re-expressed via them, then
+// closed-form decompositions (bestFitLine, bestFitCircle, pcaLens,
+// totalLens). All exact, idempotent, cross-channel invariant by
+// construction, on the same `Cls.lens` machinery — no engine changes.
 // =====================================================================
 
 import {
@@ -40,11 +26,7 @@ import {
 
 type V = { x: number; y: number };
 
-// ─── Trait dispatch helper ─────────────────────────────────────────────
-//
-// Pivotal lookup goes through the value class's `static traits.pivotal`
-// slot. Cached per (class, op) at first call.
-//
+// Pivotal trait lookup via the value class's `static traits.pivotal` slot.
 // biome-ignore lint/suspicious/noExplicitAny: dynamic trait lookup
 function pivotalOf<T>(input: Writable<any>): Pivotal<T> {
   // biome-ignore lint/suspicious/noExplicitAny: dynamic class lookup
@@ -59,30 +41,20 @@ function pivotalOf<T>(input: Writable<any>): Pivotal<T> {
 
 // ─── 1. Building-block group actions ───────────────────────────────────
 
-/** Writable centroid that, on write, translates every point by the
- *  delta to target. Identical to the existing `centroidLens`; aliased
- *  here for the "policy" naming. */
+/** Writable centroid; on write, translates every point by the delta.
+ *  Alias of `centroidLens` under the "policy" naming. */
 export function rigidTranslate(points: readonly Writable<Vec>[]): Writable<Vec> {
   return centroidLens(points as never);
 }
 
-/** Writable angle. Read = angle from `pivot` to the position of `points[0]`.
- *  Write rotates every input about `pivot` by (target − current) via the
- *  `Pivotal` trait of the input value class.
+/** Writable angle from `pivot` to `points[0]`; write rotates every input
+ *  about `pivot` by (target − current) via its `Pivotal` trait.
  *
- *  Trait-generic: works for ANY value type that declares `traits.pivotal`.
- *  Vec rotates as a position; Pose rotates BOTH position and orientation;
- *  user-defined geometric types opt in via the trait.
- *
- *  Cross-action invariance: rotation-about-pivot preserves any quantity
- *  defined relative to pivot — including pivot itself (it's the fixed
- *  point), radial distances from pivot (so scale-about-pivot is
- *  unchanged), and any rotation about a *different* pivot is also
- *  preserved up to first order if that other pivot translates with the
- *  cloud (e.g., centroid of a rigid rotation about itself).
- *
- *  `pivot` is reactive — read on every write. Pass `centroidLens(points)`
- *  for a Procrustes-style "rotation about the cluster's own centroid". */
+ *  Trait-generic: Vec rotates position; Pose rotates position AND
+ *  orientation. Rotation-about-pivot fixes the pivot and preserves radial
+ *  distances, so scale-about-pivot reads unchanged. `pivot` is reactive
+ *  (re-read per write); pass `centroidLens(points)` for rotation about
+ *  the cluster's own centroid. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape — T constrained at run by Pivotal lookup
 export function rotateAbout<T extends { x: number; y: number }>(
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
@@ -115,16 +87,14 @@ export function rotateAbout<T extends { x: number; y: number }>(
   );
 }
 
-/** Writable radial distance from pivot to position of `points[0]`. Write
- *  scales every input radially about `pivot`. Negative target reflects.
- *  Cross-channel invariance with `rotateAbout` is exact.
+/** Writable radial distance from pivot to `points[0]`; write scales every
+ *  input radially about `pivot` (negative target reflects). Exact
+ *  cross-channel invariance with `rotateAbout`.
  *
- *  Symmetric implementation: the complement carries per-point offsets
- *  from the pivot at the most recent non-degenerate state. When the
- *  cluster has collapsed onto the pivot (radius ≈ 0), writing a
- *  non-zero target reinflates from the stored shape — the trap is
- *  gone. For Pose inputs, `theta` is preserved across the round-trip
- *  (the complement only stores spatial offset). */
+ *  Complement carries per-point offsets from the pivot at the last
+ *  non-degenerate state, so a collapse onto the pivot (radius ≈ 0)
+ *  reinflates from the stored shape. Pose `theta` survives the round-trip
+ *  (only spatial offset is stored). */
 export function scaleAbout<T extends { x: number; y: number }>(
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
   points: readonly Writable<Traits<T, "pivotal"> & Signal<T>>[],
@@ -132,13 +102,12 @@ export function scaleAbout<T extends { x: number; y: number }>(
 ): Writable<Num> {
   const K = points.length;
   if (K < 1) throw new Error("scaleAbout: need ≥ 1 point");
-  // Pivotal lookup eagerly so an undeclared class fails at construction:
+  // Eager lookup so an undeclared class fails at construction:
   pivotalOf<T>(points[0]!);
 
-  // Complement: per-point offset from the pivot at the most recent non-
-  // degenerate state. `step` refreshes each offset from the live source
-  // (keeping the last good one for any point collapsed onto the pivot);
-  // `bwd` scales those stored offsets to the target radius.
+  // Complement: per-point offset from the pivot at the last non-degenerate
+  // state. `step` refreshes each from the live source (keeping the last
+  // good one for a collapsed point); `bwd` scales them to the target radius.
   type C = { devs: V[] };
   const refresh = (devs: V[], vals: readonly T[], p: V): V[] =>
     devs.map((d, i) => {
@@ -148,7 +117,7 @@ export function scaleAbout<T extends { x: number; y: number }>(
     });
 
   // biome-ignore lint/suspicious/noExplicitAny: variance escape — spec is checked structurally
-  return (Num as any).statefulLens(points as unknown as readonly Writable<Signal<T>>[], {
+  return (Num as any).lens(points as unknown as readonly Writable<Signal<T>>[], {
     init: (vals: readonly T[]): C => {
       const p = pivot.peek();
       return { devs: vals.map(v => ({ x: v.x - p.x, y: v.y - p.y })) };
@@ -168,27 +137,24 @@ export function scaleAbout<T extends { x: number; y: number }>(
       const r0 = Math.hypot(d0.x, d0.y);
       if (r0 < 1e-12) return { updates: vals.map(() => undefined), complement: c };
       const k = target / r0;
-      const out = vals.map((v, i) => ({ ...v, x: p.x + k * c.devs[i]!.x, y: p.y + k * c.devs[i]!.y }));
+      const out = vals.map((v, i) => ({
+        ...v,
+        x: p.x + k * c.devs[i]!.x,
+        y: p.y + k * c.devs[i]!.y,
+      }));
       return { updates: out, complement: c };
     },
   }) as Writable<Num>;
 }
 
-/** Per-axis scale about a pivot. Vec-specific (the Pivotal trait
- *  doesn't currently expose per-axis scaling — it'd require an extra
- *  method; for now the per-axis case stays inline for Vec).
- *
- *  Symmetric: complement carries per-point per-axis fractions of
- *  point 0's offset from pivot, so collapse on either axis is
- *  recoverable (cf. `bboxLens.size`). */
+/** Per-axis scale about a pivot. Vec-specific (Pivotal has no per-axis
+ *  method yet). Complement carries per-point per-axis fractions of
+ *  point 0's offset, so a per-axis collapse is recoverable (cf.
+ *  `bboxLens.size`). */
 export function scaleAboutXY(points: readonly Writable<Vec>[], pivot: Read<V>): Writable<Vec> {
   const K = points.length;
   if (K < 1) throw new Error("scaleAboutXY: need ≥ 1 point");
 
-  // Initial fractions: point i's (x − pivot.x) / (point0.x − pivot.x),
-  // and same for y. Captures the cluster's shape relative to point 0's
-  // own offset, so that writing target=(Tx, Ty) places points at
-  // `pivot + (fx_i*Tx, fy_i*Ty)`.
   // Complement: per-point per-axis fraction of point 0's offset from the
   // pivot, refreshed per non-degenerate axis. `bwd` places point i at
   // `pivot + (fx_i·target.x, fy_i·target.y)`.
@@ -204,7 +170,7 @@ export function scaleAboutXY(points: readonly Writable<Vec>[], pivot: Read<V>): 
     }));
   };
 
-  return Vec.statefulLens(points as readonly Writable<Vec>[], {
+  return Vec.lens(points as readonly Writable<Vec>[], {
     init: (vals: readonly V[]): C => {
       const p = pivot.peek();
       const ox = vals[0]!.x - p.x;
@@ -231,12 +197,8 @@ export function scaleAboutXY(points: readonly Writable<Vec>[], pivot: Read<V>): 
 
 // ─── 2. Decomposed procrustes (refactor via building blocks) ───────────
 
-/** Same semantics as `factor-lens.ts`'s `procrustesLens`, but
- *  decomposed into three building-block lenses sharing a centroid.
- *
- *  This is the proof-of-decomposition: if the building blocks are
- *  correct, this should be behaviourally indistinguishable from the
- *  hand-rolled monolith. */
+/** Same semantics as `factor-lens.ts`'s `procrustesLens`, decomposed
+ *  into three building-block lenses sharing a centroid. */
 export function procrustesViaBuildingBlocks(points: readonly Writable<Vec>[]): {
   centroid: Writable<Vec>;
   rotation: Writable<Num>;
@@ -251,26 +213,15 @@ export function procrustesViaBuildingBlocks(points: readonly Writable<Vec>[]): {
 
 // ─── 3. Best-fit line ──────────────────────────────────────────────────
 //
-// K points → {point: Vec, direction: Num}
-//   point     := centroid of points
-//   direction := principal axis angle (atan2 of dominant eigenvector
-//                of the 2×2 covariance matrix)
-//
-// Writes:
-//   write point     →  rigidTranslate
-//   write direction →  rotate all about centroid so principal axis = direction
-//
-// Cross-channel invariance:
-//   point ←→ direction: principal axis is invariant under translation,
-//                       centroid is invariant under rotation-about-itself.
-//
+// K points → {point: centroid, direction: principal-axis angle}.
+//   write point     → rigidTranslate
+//   write direction → rotate all about centroid to set principal axis
+// Invariance: principal axis is translation-invariant; centroid is
+// invariant under rotation-about-itself.
 // =====================================================================
 
-/** Closed-form 2×2 symmetric eigendecomposition. Returns the angle of
- *  the dominant eigenvector. */
+/** Angle of the dominant eigenvector of symmetric 2×2 [[cxx,cxy],[cxy,cyy]]. */
 function dominantAxisAngle(cxx: number, cxy: number, cyy: number): number {
-  // For symmetric 2×2 matrix [[cxx, cxy], [cxy, cyy]], the dominant
-  // eigenvector has angle θ = (1/2) atan2(2cxy, cxx − cyy).
   return 0.5 * Math.atan2(2 * cxy, cxx - cyy);
 }
 
@@ -293,9 +244,8 @@ function covariance(
   return { cxx: cxx / K, cxy: cxy / K, cyy: cyy / K };
 }
 
-/** Wrap to (-m/2, m/2]; used to choose the representative of an angle
- *  closest to a stored reference, modulo `m`. For axes we use m = π
- *  (axis-angle has period π); for full-vector angles m = 2π. */
+/** Wrap to (-m/2, m/2]. Picks the representative nearest a reference,
+ *  modulo `m` (π for axes, 2π for full-vector angles). */
 const wrapMod = (x: number, m: number): number => x - m * Math.round(x / m);
 
 export function bestFitLineLens(points: readonly Writable<Vec>[]): {
@@ -307,20 +257,17 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
 
   const point = rigidTranslate(points);
 
-  // Stateful: the principal axis is an eigenvector — defined only up to
-  // sign. As the cloud rotates, the "raw" angle from atan2 jumps by π
-  // discontinuously. The complement stores the last-emitted angle; we
-  // wrap the raw value to the representative closest to it (mod π, because
-  // axis ≡ axis + π). Result: a continuous real-valued angle that
-  // monotonically tracks rotation — no jitter at the wrap points. `step`
-  // advances the winding from the source; `bwd` rotates the cloud and
-  // pins the complement to the written angle (and on a collapsed cloud,
-  // where direction is undefined, stores the angle for later with no
-  // source move).
+  // The principal axis is an eigenvector — defined only up to sign, so
+  // raw atan2 jumps by π as the cloud rotates. The complement stores the
+  // last-emitted angle and we unwrap the raw value to the nearest
+  // representative (mod π, since axis ≡ axis + π) for a continuous angle.
+  // On a collapsed cloud (direction undefined) `bwd` stashes the target
+  // with no source move.
   type C = { θ: number };
-  // Centroid + dominant-axis raw angle of a cloud; `degenerate` when the
-  // covariance vanishes (a collapsed cluster carries no direction).
-  const axisOf = (vals: readonly V[]): { cx: number; cy: number; rawθ: number; degenerate: boolean } => {
+  // Centroid + dominant-axis raw angle; `degenerate` when covariance vanishes.
+  const axisOf = (
+    vals: readonly V[],
+  ): { cx: number; cy: number; rawθ: number; degenerate: boolean } => {
     let sx = 0;
     let sy = 0;
     for (let i = 0; i < K; i++) {
@@ -336,7 +283,7 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
   // Unwrap the raw axis angle to the representative nearest the stored θ.
   const unwrap = (rawθ: number, prevθ: number): number => prevθ + wrapMod(rawθ - prevθ, Math.PI);
 
-  const direction = Num.statefulLens(points as readonly Writable<Vec>[], {
+  const direction = Num.lens(points as readonly Writable<Vec>[], {
     init: (vals: readonly V[]): C => {
       const { rawθ, degenerate } = axisOf(vals);
       return { θ: degenerate ? 0 : rawθ };
@@ -352,7 +299,10 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
     bwd: (target: number, vals: readonly V[], c: C) => {
       const { cx, cy, rawθ, degenerate } = axisOf(vals);
       if (degenerate) {
-        return { updates: vals.map(() => undefined) as readonly (V | undefined)[], complement: { θ: target } };
+        return {
+          updates: vals.map(() => undefined) as readonly (V | undefined)[],
+          complement: { θ: target },
+        };
       }
       const dθ = target - unwrap(rawθ, c.θ);
       const cos = Math.cos(dθ);
@@ -372,23 +322,11 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
 
 // ─── 4. Best-fit circle ────────────────────────────────────────────────
 //
-// K points → {center: Vec, radius: Num}
-//   center := mean of points (geometric centroid)
-//   radius := mean Euclidean distance from center
-//
-// Writes:
+// K points → {center: centroid, radius: mean distance from center}.
 //   write center → rigidTranslate
-//   write radius → scale all about center by target/current radius
-//
-// This is the simplest closed-form circle fit. For algebraic least-
-// squares (Pratt / Taubin), the center moves toward where the cloud
-// concentration suggests — but for symmetric clouds those coincide
-// with the mean, and the mean is exact, idempotent, and cheap.
-//
-// Cross-channel invariance:
-//   center ↔ radius: translation preserves all radial distances,
-//                    so radius is invariant under center-write.
-//                    Uniform scale-about-center preserves the center.
+//   write radius → scale all about center by target/current
+// Simplest closed-form fit (mean center). Invariance: translation
+// preserves radii; uniform scale-about-center preserves the center.
 // =====================================================================
 
 export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
@@ -400,17 +338,11 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
 
   const center = rigidTranslate(points);
 
-  // Symmetric: complement = per-point deviations normalized by the
-  // cluster's mean radial distance. Writing `radius = T` places each
-  // point at `centroid + normDev_i * T` — preserving the relative
-  // distribution (a point that was at 1.5× the mean radius stays at
-  // 1.5× the new mean radius). When the cluster collapses to a point
-  // (mean ≈ 0) the stored normalized devs survive and reinflate the
-  // original SHAPE, not a perfect circle.
-  // Complement: per-point deviation from the centroid, normalized by the
-  // cluster's mean radial distance. `step` refreshes the norms while the
-  // cluster is non-degenerate; `bwd` scales the live devs (fast path) or,
-  // when collapsed, reinflates the stored SHAPE.
+  // Complement: per-point deviations normalized by the cluster's mean
+  // radial distance, so writing `radius = T` places each point at
+  // `centroid + normDev_i * T` (relative distribution preserved). `step`
+  // refreshes while non-degenerate; `bwd` scales the live devs (fast path)
+  // or, when collapsed (mean ≈ 0), reinflates the stored SHAPE.
   type C = { norms: V[] };
   const centroidOf = (vals: readonly V[]): V => {
     let sx = 0;
@@ -427,7 +359,7 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
     return sum / K;
   };
 
-  const radius = Num.statefulLens(points as readonly Writable<Vec>[], {
+  const radius = Num.lens(points as readonly Writable<Vec>[], {
     init: (vals: readonly V[]): C => {
       const c = centroidOf(vals);
       const mean = meanRadius(vals, c);
@@ -466,23 +398,13 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
 
 // ─── 5. PCA / affine similarity decomposition ──────────────────────────
 //
-// K points → {mean: Vec, rotation: Num, majorLength: Num, minorLength: Num}
-//
-//   mean        := centroid
-//   rotation    := angle of dominant eigenvector
-//   majorLength := √(λ_major), the std-dev along the major axis
-//   minorLength := √(λ_minor), the std-dev along the minor axis
-//
-// Writes:
+// K points → {mean: centroid, rotation: dominant-eigenvector angle,
+//   majorLength: √λ_major, minorLength: √λ_minor (per-axis std-devs)}.
 //   write mean        → rigidTranslate
-//   write rotation    → rotate all about mean to make principal axis = target
-//   write majorLength → scale along current major axis by target/current
-//   write minorLength → scale along current minor axis by target/current
-//
-// This is the full affine-similarity decomposition: 4 DOF (tx, ty, θ,
-// kMajor, kMinor would be 5 DOF — but uniform scale uses only 1 of them;
-// here we expose both for per-axis scale). Each write is a single group
-// action; cross-channel invariance holds for all pairs.
+//   write rotation    → rotate all about mean to set principal axis
+//   write major/minor → scale along that axis by target/current
+// Each write is a single group action; cross-channel invariance holds
+// for all pairs.
 // =====================================================================
 
 export function pcaLens(points: readonly Writable<Vec>[]): {
@@ -496,9 +418,8 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
 
   const mean = rigidTranslate(points);
 
-  // Helper: 2×2 sym eigendecomp returning {θ_major, λ_major, λ_minor}.
-  // Returns null if the cloud is degenerate (eigenvalues coincide AND
-  // both ≈ 0 — completely collapsed).
+  // 2×2 symmetric eigendecomp → {θ, λ_major, λ_minor}; null when fully
+  // collapsed (λ_major ≈ 0).
   const decompose = (
     vals: readonly V[],
   ): {
@@ -545,9 +466,8 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
     },
   );
 
-  // Scale along an axis given by direction (ux, uy). The cloud is
-  // translated to mean-origin, projected onto (u, u_perp) basis,
-  // scaled by k along u, projected back, translated back to mean.
+  // Scale by k along axis (ux, uy): project each point onto (u, u_perp),
+  // scale the u component, project back. Relative to mean.
   const scaleAlongAxis = (
     vals: readonly V[],
     cx: number,
@@ -556,31 +476,24 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
     uy: number,
     k: number,
   ): V[] => {
-    // The perpendicular axis:
     const vx = -uy;
     const vy = ux;
     const out = new Array<V>(K);
     for (let i = 0; i < K; i++) {
       const rx = vals[i]!.x - cx;
       const ry = vals[i]!.y - cy;
-      // Project onto u and v:
       const a = rx * ux + ry * uy;
       const b = rx * vx + ry * vy;
-      // Scale a by k, leave b unchanged:
       const ap = a * k;
-      // Project back:
       out[i] = { x: cx + ap * ux + b * vx, y: cy + ap * uy + b * vy };
     }
     return out;
   };
 
-  // Symmetric majorLength / minorLength: the complement carries the
-  // axes and per-point projections (normalized by the std-devs) at the
-  // most recent non-degenerate state. When the cluster collapses
-  // along an axis (eigenvalue → 0) the stored basis + projections
-  // reinflate the original geometry. Non-degenerate writes use the
-  // existing fast path (scaleAlongAxis) so the perf parity holds.
-
+  // majorLength / minorLength: complement carries the axis basis and
+  // per-point projections (normalized by the std-devs) at the last
+  // non-degenerate state, so an axis collapse (λ → 0) reinflates from the
+  // stored geometry. Non-degenerate writes take the scaleAlongAxis fast path.
   const buildAxisLens = (which: "major" | "minor") => {
     type AxisC = {
       uX: number;
@@ -593,10 +506,13 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
       projOther: number[]; // dev·v / lenOther, per point
     };
 
-    // Pure refresh: decompose the cluster and rebuild the axis basis +
-    // normalized per-point projections. Returns the prior complement
-    // unchanged when the cluster is fully collapsed (no decomposition).
-    const axisFrom = (d: NonNullable<ReturnType<typeof decompose>>, c: AxisC, vals: readonly V[]): AxisC => {
+    // Decompose and rebuild the axis basis + normalized projections;
+    // returns the prior complement when fully collapsed.
+    const axisFrom = (
+      d: NonNullable<ReturnType<typeof decompose>>,
+      c: AxisC,
+      vals: readonly V[],
+    ): AxisC => {
       const ux = which === "major" ? Math.cos(d.θ) : -Math.sin(d.θ);
       const uy = which === "major" ? Math.sin(d.θ) : Math.cos(d.θ);
       const vx = -uy;
@@ -617,7 +533,7 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
       return { uX: ux, uY: uy, vX: vx, vY: vy, lenThis, lenOther, projThis, projOther };
     };
 
-    return Num.statefulLens(points as readonly Writable<Vec>[], {
+    return Num.lens(points as readonly Writable<Vec>[], {
       init: (vals: readonly V[]): AxisC => {
         const seed: AxisC = {
           uX: 1,
@@ -642,7 +558,8 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
         if (d && c.lenThis > 1e-12) {
           // Lossy magnitude view: a same-magnitude target re-projects to
           // the current axis length and is absorbed (cluster left put).
-          if (Math.abs(target) === c.lenThis) return { updates: vals.map(() => undefined), complement: c };
+          if (Math.abs(target) === c.lenThis)
+            return { updates: vals.map(() => undefined), complement: c };
           // Non-degenerate fast path: scale current cluster along axis.
           const k = target / c.lenThis;
           return { updates: scaleAlongAxis(vals, d.cx, d.cy, c.uX, c.uY, k), complement: c };
@@ -676,38 +593,22 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
 
 // ─── 6. Partition / simplex lens ───────────────────────────────────────
 //
-// K positive nums (parts) → {total: Num, ratios: Vec[K]-ish}
-//
-// Two natural M-output decompositions:
-//
-//   simpleform: K parts → {total: Num} alone (the conservation lens)
-//     - write total → scale all parts proportionally
-//     - (no per-ratio cells; users mutate underlying parts directly)
-//
-//   ratiosForm: K parts → {total: Num, ratios: Num[]}
-//     - write total → scale all parts proportionally (ratios unchanged)
-//     - write ratios[k] → renormalize while preserving total
-//
-// Since ratios on a K-simplex have K−1 DOF, exposing K of them is
-// redundant. For the prototype, we go with the simpler {total} form;
-// extension to per-ratio is straightforward but the API gets gnarlier.
+// K parts → {total}: writing total scales all parts proportionally.
+// (A {total, ratios} form is possible but ratios on a K-simplex have
+// K−1 DOF, so it's left out of this prototype.)
 // =====================================================================
 
-/** Single-output: writable total. Writing total scales all parts
- *  proportionally, preserving the ratios between them.
- *
- *  Symmetric implementation: the complement holds per-part fractions
- *  (`parts[i] / total`) captured at the last non-degenerate state.
- *  When the sum collapses to zero, the stored fractions reinflate the
- *  original distribution on the next non-zero write — no "distribute
- *  evenly" fallback, no information loss. */
+/** Writable total over K parts; write scales all parts proportionally,
+ *  preserving their ratios. Complement holds per-part fractions from the
+ *  last non-degenerate state, so a collapse to zero reinflates the
+ *  original distribution on the next non-zero write. */
 export function totalLens(parts: readonly Writable<Num>[]): Writable<Num> {
   const K = parts.length;
   if (K < 1) throw new Error("totalLens: need ≥ 1 part");
 
   // Complement: per-part fraction of the total at the last non-degenerate
-  // state. `bwd` scales the live parts by `target/sum` (bit-exact); when
-  // the sum has collapsed to zero it reinflates from the stored fractions.
+  // state. `bwd` scales live parts by `target/sum`, or reinflates from the
+  // stored fractions when the sum has collapsed to zero.
   type C = { fracs: number[] };
   const sumOf = (vals: readonly number[]): number => {
     let s = 0;
@@ -715,7 +616,7 @@ export function totalLens(parts: readonly Writable<Num>[]): Writable<Num> {
     return s;
   };
 
-  const sumLens = Num.statefulLens(parts as readonly Writable<Num>[], {
+  const sumLens = Num.lens(parts as readonly Writable<Num>[], {
     init: (vals: readonly number[]): C => {
       const s = sumOf(vals);
       return { fracs: vals.map(v => (s > 1e-12 ? v / s : 1 / K)) };
@@ -737,22 +638,8 @@ export function totalLens(parts: readonly Writable<Num>[]): Writable<Num> {
   return sumLens;
 }
 
-// ─── 7. (Aside) The "policy" framing ───────────────────────────────────
-//
-// Looking at what we've built, every closed-form aggregate lens here
-// is one of three group actions about a pivot:
-//
-//     translate       → centroidLens / rigidTranslate
-//     rotateAbout     → rotateAbout
-//     scaleAbout      → scaleAbout (uniform)
-//     scaleAboutXY    → scaleAboutXY (per-axis)
-//     scaleAlongAxis  → (used internally by pcaLens majorLength/minorLength)
-//
-// The decompositions (procrustes, bestFitLine, bestFitCircle, pcaLens)
-// are *combinations* of these primitive actions, each measured against
-// a derived feature (centroid, principal axis, mean radius).
-//
-// This is the closed-form catalog from the previous reflection,
-// realized: pick the group action + the feature it acts on, get an
-// exact, cross-channel-invariant writable view.
+// Every lens here is a group action about a pivot (translate, rotateAbout,
+// scaleAbout, scaleAboutXY, scaleAlongAxis); the decompositions combine
+// them, each measured against a derived feature (centroid, principal axis,
+// mean radius).
 // =====================================================================

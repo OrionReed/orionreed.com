@@ -1,21 +1,15 @@
 // scope() — wrap a factory so its invocations carry identity.
 //
-// The wrapped factory returns an Animator-shaped wrapper around the
-// inner gen. The wrapper:
-//   - captures parent at *construction time* (`currentSpan` at the
-//     moment the factory is called — that's the call-site span).
-//   - opens the span on first `.next()` (so `start` aligns with the
-//     engine clock, not with construction).
-//   - pushes `currentSpan = self` for the duration of every `.next()`,
-//     `.return()`, and `.throw()`. This makes attribution work through
-//     `yield`, `yield*`, and arbitrary nesting because the parent's
-//     wrapper is on the stack while the parent's body runs (which is
-//     where any child factory call happens).
-//   - closes the span on `done`, cancellation, or error.
+// The wrapped factory returns an Animator-shaped wrapper that:
+//   - captures parent at construction (call-site `currentSpan`).
+//   - opens the span on first `.next()` (start aligns to engine clock).
+//   - pushes `currentSpan = self` around every `.next()`/`.return()`/
+//     `.throw()`, so attribution flows through `yield`, `yield*`, and
+//     nesting (the parent wrapper is on the stack while its body runs).
+//   - closes on done, cancellation, or error.
 //
-// Per-factory queries (`alive`, `last`, `runs`, `duration`,
-// `touched`, `touchedDeep`) hang off the wrapper as lazy signal
-// getters. Allocate on first read; never if untouched.
+// Per-factory queries (`alive`, `last`, `runs`, `duration`, `touched`,
+// `touchedDeep`) hang off the wrapper as lazy signal getters.
 
 import type { Animator, Tick, Yieldable } from "@minim/core";
 import { derive, type Read, type Signal, signal } from "@minim/signals";
@@ -27,20 +21,17 @@ type AnyFactory = (...args: any[]) => Animator<any>;
 /** Bumped by record() on each open/close so derived signals refresh. */
 const traceVersion = signal(0);
 
-/** Scope notifies record() of new spans; record() bumps the version,
- *  which causes `alive` / `last` / `runs` etc. to recompute. */
+/** Bump so `alive` / `last` / `runs` etc. recompute. Called by record(). */
 export function bumpTraceVersion(): void {
   traceVersion.value++;
 }
 
-/** Watch every recent span; subscribers wake on each open/close.
- *  Used to give scoped factories their lazy stat signals. */
+/** Version signal driving the lazy per-factory stat signals. */
 export function traceVersionSignal(): Read<number> {
   return traceVersion;
 }
 
-/** Per-factory live history. `record()` populates this; `stop()`
- *  doesn't clear it (so post-stop queries still work). */
+/** Per-factory live history; survives `stop()` so post-stop queries work. */
 const spansByFactory = new WeakMap<Function, Span[]>();
 export function recordFactorySpan(s: Span): void {
   let arr = spansByFactory.get(s.fn);
@@ -73,15 +64,11 @@ export interface Scoped<F extends AnyFactory> {
 
 /** Wrap `fn` so its invocations open Spans with identity = fn.
  *
- *  Two forms:
- *
  *      const fadeIn = scope("fadeIn", function* () { … });
  *      const fadeIn = scope(function* () { … });
  *
- *  Prefer the name-first form. Without an explicit name, identity is
- *  derived from `fn.name`, which esbuild renames when an inner
- *  `function* fadeIn` collides with an outer `const fadeIn` (rewritten
- *  to `fadeIn2`). The explicit tag survives any bundler transform. */
+ *  Prefer the name-first form: bare `fn.name` gets renamed by bundlers
+ *  when an inner `function* fadeIn` collides with an outer `const fadeIn`. */
 export function scope<F extends AnyFactory>(fn: F): Scoped<F>;
 export function scope<F extends AnyFactory>(name: string, fn: F): Scoped<F>;
 export function scope<F extends AnyFactory>(...args: [F] | [string, F]): Scoped<F> {
@@ -99,12 +86,10 @@ export function scope<F extends AnyFactory>(...args: [F] | [string, F]): Scoped<
     configurable: true,
   });
 
-  // Lazy stat signals. Each property allocates its Computed on first
-  // access and memoizes thereafter. Each query reads `traceVersion`
-  // directly so it dirties on every open/close event — going through
-  // an `allSpans` intermediate broke because spansOf() returns the
-  // same array reference and alien-signals' equality treats that as
-  // "unchanged", short-circuiting downstream propagation.
+  // Lazy stat signals: allocate the Computed on first access, memoize
+  // after. Each reads `traceVersion` directly so it dirties on every
+  // open/close — an `allSpans` intermediate fails because spansOf()
+  // returns a stable array ref that signal equality treats as unchanged.
   const lazy = <T>(make: () => Read<T>): { get(): Read<T> } => {
     let cached: Read<T> | undefined;
     return {
@@ -185,14 +170,12 @@ export function scope<F extends AnyFactory>(...args: [F] | [string, F]): Scoped<
   return factory;
 }
 
-/** Walk descendants of `root` via `parent` back-links across all
- *  recorded spans; collect the union of `touched` sets. Allocations
- *  scale with the descendant count, not with total trace size. */
+/** Union of `touched` over `root` and its descendants (via `parent`
+ *  back-links). */
 function collectTouchedDeep(root: Span): Signal<unknown>[] {
   const out = new Set<Signal<unknown>>(root.touched);
-  // Span.parent is a back-link; we need forward iteration. Walk every
-  // recorded span and check ancestry. Trace size is small in practice.
-  // A child's parent chain is finite; `descends(s, root)` is O(depth).
+  // `parent` is a back-link, so walk every span and test ancestry.
+  // `descends(s, root)` is O(depth); traces are small in practice.
   for (const arr of allFactoryLists()) {
     for (const s of arr) {
       if (s === root) continue;
@@ -213,9 +196,7 @@ function descends(s: Span, ancestor: Span): boolean {
   return false;
 }
 
-/** Iterate every `Span[]` we've ever recorded. WeakMap can't be
- *  iterated, so the recorder stores a parallel `factories` array
- *  it appends to whenever a never-before-seen factory opens a span. */
+/** Parallel list of seen factories — WeakMap isn't iterable. */
 const knownFactories: Function[] = [];
 export function rememberFactory(fn: Function): void {
   if (!spansByFactory.has(fn)) knownFactories.push(fn);
@@ -224,8 +205,8 @@ function* allFactoryLists(): IterableIterator<readonly Span[]> {
   for (const fn of knownFactories) yield spansOf(fn);
 }
 
-/** Build the Animator-shaped wrapper around `inner`. Push/pop the
- *  span on every gen entry; observe lifecycle from inside. */
+/** Animator-shaped wrapper around `inner`: push/pop the span on each
+ *  gen entry, observe lifecycle from inside. */
 function makeWrapper(
   fn: Function,
   name: string,
@@ -239,9 +220,8 @@ function makeWrapper(
     if (!span) {
       rememberFactory(fn);
       span = openSpan(fn, name, args, parent);
-      // Add to per-factory list BEFORE notifying recorders so downstream
-      // computeds (`alive`, `last`, etc.) see the span when they
-      // re-evaluate inside the listener-driven flush.
+      // Record BEFORE notifying so downstream computeds see the span
+      // when they re-evaluate during the listener-driven flush.
       recordFactorySpan(span);
       notifySpanOpen(span);
     }
@@ -251,8 +231,8 @@ function makeWrapper(
   return {
     next(t?: Tick): IteratorResult<Yieldable, any> {
       const s = ensureOpen();
-      // Close *outside* withSpan so the close event's bumpTraceVersion
-      // writes aren't attributed to this span's `touched` set.
+      // Close outside withSpan so the close event's writes aren't
+      // attributed to this span's `touched` set.
       let r: IteratorResult<Yieldable, any>;
       try {
         r = withSpan(s, () => inner.next(t as Tick));
@@ -264,9 +244,8 @@ function makeWrapper(
       return r;
     },
     return(v?: any): IteratorResult<Yieldable, any> {
-      // `.return()` may be called by the engine on cancel without
-      // ever having called `.next()` — skip; an un-resumed span
-      // never "really ran".
+      // Engine may `.return()` on cancel before any `.next()`; an
+      // un-resumed span never really ran, so skip it.
       if (!span) return inner.return(v);
       let r: IteratorResult<Yieldable, any>;
       try {
@@ -296,9 +275,7 @@ function makeWrapper(
   } as Animator<any>;
 }
 
-/** Batch-scope a record of factories; each key becomes the scoped
- *  factory's `name`. Return type preserves the input keys; values are
- *  the wrapped factories which are call-compatible with the input. */
+/** Batch-scope a record of factories; each key becomes the `name`. */
 export function scopeAll<R extends Record<string, AnyFactory>>(
   o: R,
 ): { [K in keyof R]: Scoped<R[K]> } {

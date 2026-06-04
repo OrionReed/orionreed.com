@@ -266,15 +266,10 @@ export interface PathDOpts {
   box?: () => { x: number; y: number; w: number; h: number };
 }
 
-/** Low-level `<path>` driven by a reactive `d` string. Sibling of
- *  `path(...)` (Vec-segments) and `curve(...)` (curve-segments) — use
- *  when you want to construct the `d` attribute directly (dense plots,
- *  hand-rolled curves, custom samplers). One attr-effect drives the
- *  whole path, which is far cheaper than N individual `line` / `rect`
- *  shapes when the geometry is dense.
- *
- *  Pass `box` for auto-fit; otherwise the shape contributes a zero box
- *  and the caller is responsible for the viewBox. */
+/** Low-level `<path>` driven by a reactive `d` string — build the `d`
+ *  attribute directly (dense plots, custom samplers). One attr-effect drives
+ *  the whole path, far cheaper than N shapes for dense geometry. Pass `box`
+ *  for auto-fit; otherwise contributes a zero box (caller owns the viewBox). */
 export function pathD(d: Read<string>, opts: PathDOpts = {}): Shape {
   const sh = new Shape("path", opts.box ?? (() => ({ x: 0, y: 0, w: 0, h: 0 })), {
     opacity: opts.opacity,

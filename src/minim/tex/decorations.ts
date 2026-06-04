@@ -23,8 +23,7 @@ const applyStroke = (s: Shape, opts: DecorationOpts) => {
   });
 };
 
-/** A `<rect>` whose x/y/w/h and Box all computed from the same layout
- *  signal — single source of truth, one re-render per change. */
+/** A `<rect>` whose attrs and Box derive from one layout signal. */
 function rectFromBox(layout: Signal<Inner<Box>>): Shape {
   const s = new Shape("rect", () => layout.value);
   s.attrs({
@@ -43,8 +42,7 @@ interface LineEnds {
   y2: number;
 }
 
-/** A `<line>` whose endpoints (and Box) computed from the same layout
- *  signal. */
+/** A `<line>` whose endpoints and Box derive from one layout signal. */
 function lineFromEnds(layout: Signal<LineEnds>): Shape {
   const s = new Shape("line", () => {
     const e = layout.value;
@@ -107,8 +105,7 @@ export function brace(
   return s;
 }
 
-/** Surrounding rectangle around a part, inset by `gap`. (Named `frame`
- *  to avoid collision with the `box(x, y, w, h)` factory.) */
+/** Rectangle around a part, inset by `gap`. (Not `box`: that factory exists.) */
 export function frame(part: Part, opts: DecorationOpts & { corner?: number } = {}): Shape {
   const gap = opts.gap ?? tokens.decoration.gap;
   const corner = opts.corner ?? tokens.corner;
@@ -136,8 +133,7 @@ export function underline(part: Part, opts: DecorationOpts = {}): Shape {
   return s;
 }
 
-/** Diagonal strikethrough across a part (from bottom-left to
- *  top-right). */
+/** Diagonal strikethrough, bottom-left to top-right. */
 export function cross(part: Part, opts: DecorationOpts = {}): Shape {
   const gap = opts.gap ?? tokens.decoration.crossGap;
   const layout = derive(() => {

@@ -1,21 +1,12 @@
 // bool.ts — reactive boolean.
 //
-// Two writable invertibles ride the plain endo `.lens(fwd, bwd)`:
+// Invertibles ride the plain endo `.lens(fwd, bwd)`: `not()` (involution,
+// `.not().not()` fuses to identity) and `xor(b)` (its own inverse;
+// `a ^ b = c ↔ a = c ^ b`). xor carries Bool's `linear` trait.
 //
-//   `not()` — the canonical involution. The boolean answer to
-//             `Matrix#invert()`. Chained `.not().not()` fuses to identity.
-//
-//   `xor(b)` — the F₂ group operation. Invertible because xor is its
-//              own inverse: `a ^ b = c ↔ a = c ^ b`. The boolean answer
-//              to `Num#add`. Carries Bool's `linear` trait (add = sub
-//              = xor; scale collapses by integer parity).
-//
-// `and` / `or` / `implies` / `eq` / `nand` / `nor` return bare `Bool`
-// (RO). They're lossy fan-ins — writing through `a && b` is ambiguous
-// whenever the source disagrees with the target. Lift to a writable
-// form via `Bool.lens([a, b], fwd, bwd)` with an explicit policy when
-// you need that. Bridges from continuous types (e.g.
-// `Num.greaterThan(t): Bool`) declare the policy in their own bwd.
+// `and` / `or` / `implies` / `eq` / `nand` / `nor` return bare RO `Bool`
+// — lossy fan-ins whose write-back is ambiguous. Lift to writable via
+// `Bool.lens([a, b], fwd, bwd)` with an explicit policy.
 
 import { type Init, reader, Signal, type Val, type Writable } from "../signal";
 import type { Linear, TraitDict } from "../traits";
@@ -28,11 +19,8 @@ export const or = (a: V, b: V): V => a || b;
 export const xor = (a: V, b: V): V => a !== b;
 export const equals = (a: V, b: V) => a === b;
 
-// F₂-linear structure (the only nontrivial vector-space structure on
-// Bool): xor is BOTH addition and subtraction (a ^ a = false), so the
-// group is its own inverse. Scale-by-integer collapses by parity:
-// even-k zeroes the value, odd-k passes it through. Lets Bool
-// participate in generic `Linear` consumers (parity reductions, etc.).
+// F₂-linear structure: xor is both add and sub (a ^ a = false);
+// scale-by-integer collapses by parity (even k → false, odd k → a).
 const linearImpl: Linear<V> = {
   add: xor,
   sub: xor,
@@ -49,7 +37,7 @@ export class Bool extends Signal<V> {
 
   // ── invertibles: return `: this`, propagating writability ─────────
 
-  /** Logical negation. Involution — its own inverse; chains fuse. */
+  /** Logical negation. Involution; chains fuse. */
   not(): this {
     return this.lens(not, not);
   }
@@ -66,9 +54,8 @@ export class Bool extends Signal<V> {
 
   // ── derived (RO) ──────────────────────────────────────────────────
 
-  /** `this && b`. RO: writes aren't unique under fan-in. For a writable
-   *  AND, use `Bool.lens([a, b], ...)` with an explicit redistribution
-   *  policy in the bwd. */
+  /** `this && b`. RO: fan-in write-back isn't unique — use
+   *  `Bool.lens([a, b], ...)` with an explicit policy for a writable AND. */
   and(b: Val<V>): Bool {
     const bf = reader(b);
     return Bool.derive(() => this.value && bf());
@@ -97,12 +84,9 @@ export class Bool extends Signal<V> {
   }
 }
 
-/** Writable `Bool`. Strict factory: `boolean | Writable<Bool>` in,
- *  `Writable<Bool>` out. Literal seeds a fresh cell; existing
- *  `Writable<Bool>` passes through by identity.
- *
- *  RO sources are rejected at the type level — reach for
- *  `Bool.derive(...)` to track them reactively, or `signal.value` to
+/** Writable `Bool`. Literal seeds a fresh cell; existing `Writable<Bool>`
+ *  passes through by identity. RO sources are rejected at the type level —
+ *  use `Bool.derive(...)` for reactive RO tracking, or `signal.value` to
  *  snapshot. */
 export function bool(v: Init<Bool> = false): Writable<Bool> {
   if (v instanceof Bool) return v as Writable<Bool>;

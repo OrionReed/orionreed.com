@@ -1,18 +1,15 @@
 // layout.ts — Box-relational layout combinators.
 //
-// Every combinator takes a `Box` value-type as the spatial primitive
-// (re-exported from `signals/values/box`). Items can be plain
-// `Box`es or tagged `{ box, grow?, shrink?, min?, max? }` for
-// per-item flex behaviour. Numbers OR Num signals are accepted for
-// reactive opts (`gap`, `padding`, …).
+// Every combinator operates on `Box` value-types. Reactive opts
+// (`gap`, `padding`, …) accept a number or a Num signal.
 //
 //   const c = box(0, 0, 300, 200);
 //   const items = [box(), box(), box()];
 //   p.add(hstack(c, items, { gap: 8, align: "stretch" }));
 //
-// `hstack` and `vstack` are CSS-flex-shaped: items can grow/shrink
-// against min/max bounds, slack absorbed by gap, etc. For more
-// rigid edge-to-edge layouts use `attach`, `centerInside`, etc.
+// `hstack` / `vstack` are CSS-flex-shaped (per-item grow/shrink vs
+// min/max). For rigid edge-to-edge layouts use `attach`,
+// `centerInside`, etc.
 
 import {
   type Box,
@@ -38,13 +35,9 @@ function clamp(v: number, lo: number, hi: number): number {
 
 // ─── hstack / vstack ───────────────────────────────────────────────
 
-/** Item in an `hstack` / `vstack` layout. Bare `Box` uses defaults
- *  (grow 1, shrink 1, no min/max). Tag with per-item flex behaviour:
- *
- *    hstack(c, [a, b, { box: c, grow: 2, min: 80 }, ...], opts)
- *
- *  All numbers; reactive per-item opts aren't supported (use
- *  global opts instead). */
+/** Item in an `hstack` / `vstack`. Bare `Box` uses defaults (grow 1,
+ *  shrink 1, no min/max); tag for per-item flex. Per-item opts are
+ *  plain numbers (not reactive). */
 export type StackItem =
   | Box
   | {
@@ -89,10 +82,8 @@ export interface StackOpts {
   mode?: "fit" | "hug";
 }
 
-/** Horizontal stack — distribute items left-to-right inside container.
- *  CSS-flex semantics: per-item `grow` / `shrink` weights, `min` /
- *  `max` clamp. Cross-axis (y, h) handled by `align`. Returns a
- *  single propagator. */
+/** Horizontal CSS-flex stack: per-item grow/shrink/min/max along the
+ *  main axis, cross-axis handled by `align`. */
 export function hstack(c: Box, items: readonly StackItem[], opts: StackOpts = {}): Propagator {
   return _stack(c, items, opts, "horizontal");
 }
