@@ -65,13 +65,13 @@ export class MdRigidRope extends Diagram {
     for (let i = 0; i < links.length; i++) {
       const link = links[i]!;
       const pivot = Vec.lens(
-        () => {
-          const c = Math.cos(link.angle.value);
-          const sn = Math.sin(link.angle.value);
-          const p = link.position.value;
+        [link.angle, link.position] as const,
+        ([angle, p]) => {
+          const c = Math.cos(angle);
+          const sn = Math.sin(angle);
           return { x: p.x + c * (-LINK_W / 2) - sn * 0, y: p.y + sn * (-LINK_W / 2) + c * 0 };
         },
-        () => {},
+        () => [undefined, undefined] as const,
       );
       s(circle(pivot, 1.6, { fill: "#fff", thin: true }));
     }

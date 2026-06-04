@@ -6,52 +6,45 @@
 // inside fwd/bwd, and a few sequencing hazards.
 
 import { describe, expect, it } from "vitest";
-import { derive, effect, Num, num, signal, transform, Vec, vec } from "../index";
+import { derive, effect, lens, Num, num, signal, transform, Vec, vec } from "../index";
 import { Signal } from "../signal";
 import { field } from "../writable";
 
 void vec;
 
-describe("footgun: field on top of manual Signal.install lens", () => {
-  it("fieldOf on manual lens: setter writes through manual.setter", () => {
-    // Manual lens has no _fusedOf, so prior = undefined. Fast path
-    // would set parent = the manual lens itself, and the setter
-    // writes via parent.value = (which goes through the manual
-    // lens's user-supplied setter). Should work.
+describe("footgun: field on top of a structural lens", () => {
+  it("fieldOf on a source-reading lens: put writes through the lens bwd", () => {
+    // The lens projects `root.value.a` and spreads it back on write. A
+    // field on top composes its put into the lens's bwd, which should run
+    // once and land the edit in the root.
     const root = signal({ a: { x: 1, y: 2 } });
-    let setterCalls = 0;
-    const aManual = Signal.install(
-      Vec,
-      () => root.value.a,
-      (v: { x: number; y: number }) => {
-        setterCalls++;
-        root.value = { ...root.value, a: v };
+    let bwdCalls = 0;
+    const aLens = Vec.lens(
+      root,
+      s => s.a,
+      (v, s) => {
+        bwdCalls++;
+        return { ...s, a: v };
       },
     );
 
-    const x = field(aManual, "x", Num);
+    const x = field(aLens, "x", Num);
 
     expect(x.value).toBe(1);
     (x as unknown as { value: number }).value = 99;
-    expect(setterCalls).toBe(1); // manual setter participated
+    expect(bwdCalls).toBe(1); // lens bwd participated
     expect(root.value).toEqual({ a: { x: 99, y: 2 } });
   });
 
-  it("two fields on manual lens: deeper path-fast-path treats manual as root", () => {
-    // manual.x.y — the field-path fast path tags fieldPath=["x"] with
-    // parent=manual. Then .y composes fieldPath=["x","y"] with same
-    // parent=manual. Setter does manual.value = {...manual.peek(), x: {...x_inner, y: v}}.
-    // Then manual's user setter runs.
+  it("two fields on a structural lens: deeper path composes through one bwd", () => {
     const root = signal({ vals: { x: 1, y: 2 } });
-    let setterCalls = 0;
-    const mLens = Signal.install(
-      Signal as new (
-        ...args: never[]
-      ) => Signal<{ x: number; y: number }>,
-      () => root.value.vals,
-      (v: { x: number; y: number }) => {
-        setterCalls++;
-        root.value = { ...root.value, vals: v };
+    let bwdCalls = 0;
+    const mLens = lens(
+      root,
+      s => s.vals,
+      (v: { x: number; y: number }, s) => {
+        bwdCalls++;
+        return { ...s, vals: v };
       },
     );
 
@@ -62,7 +55,7 @@ describe("footgun: field on top of manual Signal.install lens", () => {
     // Test write through the chain
     const y = Signal.fieldOf(mLens, "y", Num);
     (y as unknown as { value: number }).value = 99;
-    expect(setterCalls).toBe(1);
+    expect(bwdCalls).toBe(1);
     expect(root.value).toEqual({ vals: { x: 1, y: 99 } });
   });
 });
@@ -189,5 +182,59 @@ describe("footgun: cyclic computed still throws (engine invariant preserved)", (
     });
     cellRef = cell;
     expect(() => cell.value).toThrow(/Cyclic computed/);
+  });
+});
+
+describe("footgun: multi-parent short-circuit with a DERIVED parent", () => {
+  it("write propagates when an unwritten parent is derived from the written one", () => {
+    // The hazard: a Vec lens lists a DERIVED parent (`frame`, computed
+    // from `translate`) AND the root `translate`; its fwd reads `frame`
+    // but bwd writes `translate`. The view-change short-circuit substitutes
+    // the written `translate` but PEEKS the stale `frame`, so fwd(cand)
+    // looks unchanged and (with Vec's value equality) would wrongly absorb
+    // the write. The engine must detect the derived parent and propagate.
+    // (This is exactly shape.center: write the anchor → shift translate.)
+    const translate = vec(0, 0);
+    const box = signal({ x: 50, y: 70, w: 100, h: 60 });
+    const frame = derive([translate] as const, ([t]) => ({ dx: t.x, dy: t.y }));
+
+    const center = Vec.lens(
+      [box, frame, translate] as const,
+      ([b, f]) => ({ x: b.x + 0.5 * b.w + f.dx, y: b.y + 0.5 * b.h + f.dy }),
+      (target, [b, f, tNow]) => {
+        const cur = { x: b.x + 0.5 * b.w + f.dx, y: b.y + 0.5 * b.h + f.dy };
+        return [
+          undefined,
+          undefined,
+          { x: tNow.x + (target.x - cur.x), y: tNow.y + (target.y - cur.y) },
+        ];
+      },
+    );
+
+    expect(center.value).toEqual({ x: 100, y: 100 }); // realize a clean cache
+    center.value = { x: 250, y: 300 };
+    expect(translate.peek()).toEqual({ x: 150, y: 200 }); // write landed
+    expect(center.value).toEqual({ x: 250, y: 300 });
+  });
+
+  it("still absorbs a true no-op write when all parents are independent sources", () => {
+    // Soundness guard must NOT over-fire: with all-source parents the
+    // short-circuit is valid and a same-view write is still absorbed,
+    // preserving the sub-grid remainder spread across parents.
+    const a = num(3);
+    const b = num(4);
+    // floor-of-sum view loses the fractional remainder of (a+b).
+    const sum = Num.lens(
+      [a, b] as const,
+      ([av, bv]) => Math.floor(av + bv),
+      t => [t - b.peek(), undefined],
+    );
+    expect(sum.value).toBe(7);
+    a.value = 3.4; // a+b = 7.4 → floor still 7 (view unchanged)
+    expect(sum.value).toBe(7);
+    // Writing 7 (the current view) must be absorbed — the 0.4 remainder
+    // in `a` survives rather than being flattened.
+    sum.value = 7;
+    expect(a.peek()).toBe(3.4);
   });
 });

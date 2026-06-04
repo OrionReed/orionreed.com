@@ -130,10 +130,9 @@ const tOnPath = (p: Path, t: Signal<number>, opts?: HandleOpts & { samples?: num
     return bestT;
   };
   const pos = Vec.lens(
-    () => p.pointAt(t.value).value,
-    target => {
-      (t as unknown as { value: number }).value = project(target);
-    },
+    [t] as const,
+    ([tv]) => p.pointAt(tv).value,
+    target => [project(target)],
   );
   return handleFn(pos, opts);
 };

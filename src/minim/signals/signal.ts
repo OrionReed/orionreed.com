@@ -52,7 +52,7 @@
 // (`propagateSplit`). This one primitive covers coupled writables (N→M,
 // e.g. mean/diff, procrustes). When a lossy write must recover info the
 // source can't hold (a collapsed cluster's directions), the memory lives
-// in a `hold` (an eager scan, built from signal + effect) that the `put`
+// in a `statefulLens` complement (threaded by `init`/`step`) that `bwd`
 // reads — NOT in a bespoke engine kind. An eager split coalesces its N
 // commits under one flush (shared-ancestor merges still accumulate all
 // contributions first).
@@ -482,15 +482,11 @@ export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signa
 export const isLens = (v: unknown): v is Signal<unknown> =>
   v instanceof Signal &&
   v.getter !== undefined &&
-  (v._put !== undefined || v._mergeNode !== undefined || v._legacySetter !== undefined);
+  (v._put !== undefined || v._mergeNode !== undefined);
 
 /** Computed mode: derived + read-only (no backward path). */
 export const isComputed = (v: unknown): v is Signal<unknown> =>
-  v instanceof Signal &&
-  v.getter !== undefined &&
-  v._put === undefined &&
-  v._mergeNode === undefined &&
-  v._legacySetter === undefined;
+  v instanceof Signal && v.getter !== undefined && v._put === undefined && v._mergeNode === undefined;
 
 // ─── Signal class ─────────────────────────────────────────────────
 
@@ -542,8 +538,8 @@ export class Signal<T = unknown> implements ReactiveNode {
    *      a per-parent update array (the dual of a getter reading N
    *      parents); the backward pass splits into each parent.
    *  Any private state a multi-parent `_put` needs is closure-captured
-   *  (params it reads, or a `hold` for degeneracy memory) — no node, no
-   *  subs, no bookkeeping. */
+   *  (params it reads, or a `statefulLens` complement for degeneracy
+   *  memory) — no node, no subs, no bookkeeping. */
   _bwdParent: Signal<unknown> | Signal<unknown>[] | undefined;
 
   /** Lens `put` — the backward derivation (dual of `getter`). For multi-
@@ -574,12 +570,26 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  Presence of `_mergeNode` IS the "merge mode" discriminant. */
   _mergeNode: MergeNode<T> | undefined;
 
-  /** @deprecated MIGRATION SHIM — legacy closure-setter (`install` / the
-   *  `lens(getter, setter)` form). Writes run this imperative setter
-   *  instead of the structural backward pass. Being migrated out to
-   *  `iso`/`lens`/`hold`; remove the shim once no call sites remain. */
-  // biome-ignore lint/suspicious/noExplicitAny: opaque setter shape
-  _legacySetter: ((v: any) => void) | undefined;
+  /** Stateful-lens complement: the hidden memory the view discards (a
+   *  case mask under `lowercase`, the unwrapped angle under a principal
+   *  axis). Engine-owned; advanced only by `_step` (forward / on commit).
+   *  `undefined` for every non-stateful cell. */
+  _complement: unknown;
+
+  /** Stateful-lens complement advance. Presence IS the "stateful mode"
+   *  discriminant. For a stateful cell `_fwd(vals, c)` and `_put(target,
+   *  vals, c)` take the complement; `_step(vals, c, external)` returns the
+   *  next complement (`external` ⇒ the source change came from outside,
+   *  not this lens's own back-write). */
+  // biome-ignore lint/suspicious/noExplicitAny: opaque step shape
+  _step: ((vals: any, complement: any, external: boolean) => any) | undefined;
+
+  /** The source values a stateful cell last wrote back. The next forward
+   *  recompute reports `external === false` while the live sources still
+   *  equal these (the change is the lens's OWN back-write, not an outside
+   *  edit) — robust regardless of when/if the getter re-runs. `undefined`
+   *  until the first back-write. */
+  _lastBwd: unknown[] | undefined;
 
   /** Index in `bwdQueue` of this cell's LATEST push. The drain skips
    *  entries whose `_queueIdx` ≠ their position, so each cell propagates
@@ -604,7 +614,9 @@ export class Signal<T = unknown> implements ReactiveNode {
     this._putArity = 1;
     this._fwd = undefined;
     this._mergeNode = undefined;
-    this._legacySetter = undefined;
+    this._complement = undefined;
+    this._step = undefined;
+    this._lastBwd = undefined;
     this._queueIdx = -1;
     if (opts !== undefined) {
       if (opts.equals !== undefined) this._equals = opts.equals;
@@ -799,69 +811,11 @@ export class Signal<T = unknown> implements ReactiveNode {
       vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
     ) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
   ): Writable<InstanceType<C>>;
-  // MIGRATION SHIM — closure-setter form: `Cls.lens(getter, setter)`.
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static lens<C extends new (...args: never[]) => Signal<any>>(
-    this: C,
-    getter: () => Inner<InstanceType<C>>,
-    setter: (v: Inner<InstanceType<C>>) => void,
-  ): Writable<InstanceType<C>>;
-  // MIGRATION SHIM — symmetric-spec form (1-input).
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static lens<C extends new (...args: never[]) => Signal<any>, P, K>(
-    this: C,
-    parent: Read<P>,
-    spec: SymmetricLensSpec1<P, Inner<InstanceType<C>>, K>,
-  ): Writable<InstanceType<C>>;
-  // MIGRATION SHIM — symmetric-spec form (N-input).
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static lens<
-    C extends new (...args: never[]) => Signal<any>,
-    P extends readonly Read<unknown>[],
-    K,
-  >(
-    this: C,
-    parents: P,
-    spec: SymmetricLensSpecN<
-      { [J in keyof P]: P[J] extends Read<infer V> ? V : never },
-      Inner<InstanceType<C>>,
-      K
-    >,
-  ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: dispatch
   static lens(this: any, ...args: any[]): any {
     const [parent, fwd, bwd] = args;
-    // SHIM: closure-setter form `lens(getter, setter)`.
-    if (typeof parent === "function") return Signal.install(this, parent, fwd);
-    // SHIM: symmetric-spec form `lens(parent|parents, spec)`.
-    if (args.length === 2) {
-      return Array.isArray(parent)
-        ? buildSymmetric(this, parent, fwd)
-        : buildSymmetric(this, [parent], _liftSpec1(fwd));
-    }
     if (Array.isArray(parent)) return buildLensN(this, parent, fwd, bwd, true);
     return buildLens1(this, parent, fwd, bwd, true);
-  }
-
-  /** @deprecated MIGRATION SHIM — closure-setter lens. A computed `getter`
-   *  with an imperative `setter` that writes its sources on write-back.
-   *  Being migrated to structural `iso`/`lens`; remove with the shim. */
-  static install<T, C extends Signal<T>>(Cls: new (...args: never[]) => C, getter: () => T): C;
-  static install<T, C extends Signal<T>>(
-    Cls: new (...args: never[]) => C,
-    getter: () => T,
-    setter: (v: T) => void,
-  ): Writable<C>;
-  static install<T, C extends Signal<T>>(
-    Cls: new (...args: never[]) => C,
-    getter: () => T,
-    setter?: (v: T) => void,
-  ): C | Writable<C> {
-    const cell = new Cls();
-    cell.getter = getter;
-    cell.flags = F.Mutable | F.Dirty;
-    if (setter !== undefined) (cell as Signal<T>)._legacySetter = setter;
-    return cell;
   }
 
   /** Type predicate against this class: `Vec.is(x)` narrows `x` to `Vec`.
@@ -898,6 +852,35 @@ export class Signal<T = unknown> implements ReactiveNode {
     const [parent, fwd, bwd] = args;
     if (Array.isArray(parent)) return buildLensN(this, parent, fwd, bwd, false);
     return buildLens1(this, parent, fwd, bwd, false);
+  }
+
+  /** Complement-carrying lens (`statefulLens`): `put` reads memory the view
+   *  discards. `Cls.statefulLens(parent, spec)` (1-input) or
+   *  `Cls.statefulLens(parents, spec)` (N-input). Polymorphic-`this`:
+   *  `Num.statefulLens(...)` → `Writable<Num>`. */
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static statefulLens<C extends new (...args: never[]) => Signal<any>, P, Cm>(
+    this: C,
+    parent: Read<P>,
+    spec: StatefulLensSpec<readonly [P], Inner<InstanceType<C>>, Cm>,
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape
+  static statefulLens<
+    C extends new (...args: never[]) => Signal<any>,
+    P extends readonly Read<unknown>[],
+    Cm,
+  >(
+    this: C,
+    parents: P,
+    spec: StatefulLensSpec<
+      { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
+      Inner<InstanceType<C>>,
+      Cm
+    >,
+  ): Writable<InstanceType<C>>;
+  // biome-ignore lint/suspicious/noExplicitAny: dispatch
+  static statefulLens(this: any, parent: any, spec: any): any {
+    return buildStateful(this, Array.isArray(parent) ? parent : [parent], spec);
   }
 
   /** Permissive consumer-layer lift — `Val<Inner<Cls>>` → `Cls`.
@@ -952,10 +935,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     // parent lens always has `_put`, so the `_put === undefined` clause
     // already excludes the multi-output case — no need to check `_bwdParent`.
     const ro =
-      parent.getter !== undefined &&
-      parent._put === undefined &&
-      parent._mergeNode === undefined &&
-      parent._legacySetter === undefined;
+      parent.getter !== undefined && parent._put === undefined && parent._mergeNode === undefined;
     if (ro) {
       return buildComputed(ctor, () => get(parent.value)) as InstanceType<C>;
     }
@@ -970,7 +950,7 @@ export class Signal<T = unknown> implements ReactiveNode {
   }
 }
 
-// ─── Cell builders (install pattern) ──────────────────────────────
+// ─── Cell builders ────────────────────────────────────────────────
 //
 // Each `new Cls()` instantiates the right subclass (so `Vec.lens(...)`
 // returns a `Vec` with Vec equality from its constructor), then sets
@@ -1033,62 +1013,81 @@ function buildLensN<C extends Signal<any>>(
   return cell;
 }
 
-// ─── MIGRATION SHIM: symmetric (complement-carrying) lens ──────────────
+// ─── Stateful lens (complement-carrying) ──────────────────────────────
 //
-// Re-implements the old `Cls.lens(parent, { missing, putr, putl })` spec
-// on the pivot core. The complement lives in a closure-captured `state`,
-// mutated by `putr` (forward) / threaded through `putl` (backward). This
-// is being migrated to the `hold` + `lens` recipe; remove with the shim.
+// The third writable kind, alongside `iso` (view determines source) and
+// `lens` (put reads the source). A stateful lens carries a COMPLEMENT —
+// memory the source can't hold: the original casing a `lowercase` view
+// discards, the continuous winding a principal-axis angle accumulates.
+//
+//   init(srcs)              → seed the complement from the initial sources
+//   fwd(srcs, c)            → the view (pure)
+//   step(srcs, c, external) → advance the complement (forward / on commit);
+//                             `external` distinguishes an outside source
+//                             change from this lens's own back-write
+//   bwd(target, srcs, c)    → { updates, complement }: per-parent source
+//                             updates (`undefined` ⇒ leave that parent) and
+//                             the post-write complement
+//
+// All four are pure and side-effect-free (no in-place complement mutation
+// — the equality check evaluates them speculatively); `bwd`/`step` read no
+// signals (the backward pass runs untracked). The engine owns `c`,
+// advancing it only on a real (non-speculative) forward recompute or
+// commit — never during the equality-check short-circuit.
+//
+// GUARANTEE: before `bwd` runs the engine steps `c` to the current sources
+// (a forward recompute), so `bwd` always sees an up-to-date complement and
+// never needs to re-derive it from `srcs`.
 
-/** @deprecated MIGRATION SHIM — N-input symmetric lens spec. */
-export interface SymmetricLensSpecN<S extends readonly unknown[], V, C> {
-  missing: C;
-  putr: (sources: S, complement: C) => V;
-  putl: (target: V, sources: S, complement: C) => ReadonlyArray<S[number] | undefined>;
+export interface StatefulBwd<S extends readonly unknown[], C> {
+  updates: { readonly [K in keyof S]: S[K] | undefined };
+  complement: C;
 }
 
-/** @deprecated MIGRATION SHIM — 1-input symmetric lens spec. */
-export interface SymmetricLensSpec1<S, V, C> {
-  missing: C;
-  putr: (source: S, complement: C) => V;
-  putl: (target: V, source: S, complement: C) => S | undefined;
+export interface StatefulLensSpec<S extends readonly unknown[], V, C> {
+  init: (sources: S) => C;
+  step: (sources: S, complement: C, external: boolean) => C;
+  fwd: (sources: S, complement: C) => V;
+  bwd: (target: V, sources: S, complement: C) => StatefulBwd<S, C>;
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: opaque spec shapes
-function _liftSpec1(spec: SymmetricLensSpec1<any, any, any>): SymmetricLensSpecN<any, any, any> {
-  return {
-    missing: spec.missing,
-    putr: (sources, c) => spec.putr(sources[0], c),
-    putl: (target, sources, c) => [spec.putl(target, sources[0], c)],
-  };
-}
-
-// The complement is a closure-captured object the spec mutates in place
-// (never reassigned). `putr` projects forward; `putl` yields per-parent
-// updates (`undefined` = leave that parent). Mirrors the old `_symmetric`.
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
-function buildSymmetric<C extends Signal<any>>(
+function buildStateful<C extends Signal<any>>(
   Cls: SignalCtor<C>,
   parents: Signal<unknown>[],
   // biome-ignore lint/suspicious/noExplicitAny: opaque spec
-  spec: SymmetricLensSpecN<any, any, any>,
+  spec: StatefulLensSpec<any, any, any>,
 ): C {
   const n = parents.length;
   const vals = new Array<unknown>(n);
-  const complement = spec.missing;
   const cell = new Cls();
   cell.flags = F.Mutable | F.Dirty;
+  const seed = new Array<unknown>(n);
+  for (let i = 0; i < n; i++) seed[i] = parents[i]!.peek();
+  cell._complement = spec.init(seed);
+  cell._step = spec.step;
+  // For a stateful cell `_fwd`/`_put` take the complement (see field docs).
+  cell._fwd = spec.fwd as (v: unknown) => unknown;
+  cell._put = spec.bwd as (t: unknown, c?: unknown) => unknown;
+  cell._bwdParent = parents;
   cell.getter = (() => {
     for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
-    return spec.putr(vals, complement);
-  }) as () => never;
-  cell._legacySetter = (v: unknown): void => {
-    for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
-    const updates = spec.putl(v, vals, complement);
-    for (let i = 0; i < n; i++) {
-      if (updates[i] !== undefined) (parents[i] as { value: unknown }).value = updates[i];
+    // External unless the live sources still equal this lens's own last
+    // back-write (then the complement is kept, not re-recorded).
+    let external = true;
+    const lb = cell._lastBwd;
+    if (lb !== undefined) {
+      external = false;
+      for (let i = 0; i < n; i++) {
+        if (vals[i] !== lb[i]) {
+          external = true;
+          break;
+        }
+      }
     }
-  };
+    cell._complement = cell._step!(vals, cell._complement, external);
+    return (cell._fwd as (s: unknown, c: unknown) => unknown)(vals, cell._complement);
+  }) as () => never;
   return cell;
 }
 
@@ -1148,14 +1147,6 @@ Object.defineProperty(Signal.prototype, "value", {
       this._writeSource(next);
       return;
     }
-    // MIGRATION SHIM: legacy closure-setter lens (install / lens(g, s)).
-    // The setter writes its sources imperatively; batch so multi-source
-    // setters coalesce into one settle.
-    if (this._legacySetter !== undefined) {
-      const fn = this._legacySetter;
-      batch(() => fn(next));
-      return;
-    }
     // Backward write. Deferred while batching / flushing so repeated
     // writes coalesce (last-write-wins) and merge folds wait for all
     // contributors; eager + synchronous otherwise.
@@ -1169,7 +1160,7 @@ Object.defineProperty(Signal.prototype, "value", {
     if (this._mergeNode !== undefined) {
       this._mergeNode.receive(DIRECT_SLOT, next);
       if (deferred) this._enqueueBwd();
-      else propagateBwd(this, undefined, false);
+      else bwdUntracked(this, undefined, false);
       return;
     }
     if (this._put === undefined) {
@@ -1186,7 +1177,7 @@ Object.defineProperty(Signal.prototype, "value", {
       this.pendingValue = next;
       this._enqueueBwd();
     } else {
-      propagateBwd(this, next, false);
+      bwdUntracked(this, next, false);
     }
   },
   enumerable: false,
@@ -1204,6 +1195,21 @@ Object.defineProperty(Signal.prototype, "value", {
 // This is NOT a second propagation engine: every path terminates in
 // `_writeSource` (the forward write). Backward "compiles" a view-edit
 // into source-edits; the forward machinery does the rest.
+
+// Backward evaluation runs UNTRACKED: `bwd`/`step`/`fwd` reads (params via
+// `reader`, complement memory) must not establish forward dependencies on
+// whatever `activeSub` happens to be writing (e.g. an effect that writes a
+// lens). All four backward entry points route through here. Recursive
+// re-entry (forkInto → propagateBwd) is already inside the cleared frame.
+function bwdUntracked(cell: Signal<unknown>, target: unknown, deferred: boolean): void {
+  const prev = activeSub;
+  activeSub = undefined;
+  try {
+    propagateBwd(cell, target, deferred);
+  } finally {
+    activeSub = prev;
+  }
+}
 
 function propagateBwd(start: Signal<unknown>, target: unknown, deferred: boolean): void {
   let cell = start;
@@ -1235,15 +1241,15 @@ function propagateBwd(start: Signal<unknown>, target: unknown, deferred: boolean
     // there is no upstream — the write is absorbed. Terminal sink.
     if (parent === undefined) return;
 
-    // BACKWARD EQUALITY CHECK — the dual of the forward one ("a node
-    // notifies only when its value changes"). If committing `push`
-    // upstream would NOT change this lens's own projected view, the
-    // edit is absorbed: the source (and any information the lens hides,
-    // e.g. an off-grid remainder under quantize) is left intact. Reuses
-    // the same equality the forward path uses, evaluated on the
-    // candidate `_fwd(push)`. Plain lenses with a trustworthy (clean)
-    // cache only; merges / multi-parent lenses (no `_fwd`) and dirty
-    // caches fall through and propagate as before.
+    // BACKWARD EQUALITY-CHECK SHORT-CIRCUIT — the dual of the forward one
+    // ("a node notifies only when its value changes"). If committing
+    // `push` upstream would NOT change this lens's own projected view, the
+    // write stops here: the source (and any information the lens hides,
+    // e.g. an off-grid remainder under quantize) is left untouched. Reuses
+    // the same equality the forward path uses, evaluated on the candidate
+    // `_fwd(push)`. Plain lenses with a trustworthy (clean) cache only;
+    // merges / multi-parent lenses (no `_fwd`) and dirty caches fall
+    // through and propagate as before.
     const fwd = cell._fwd;
     if (fwd !== undefined) {
       const cf = cell.flags;
@@ -1267,12 +1273,6 @@ function propagateBwd(start: Signal<unknown>, target: unknown, deferred: boolean
       parent._writeSource(push);
       return;
     }
-    // MIGRATION SHIM: parent is a legacy closure-setter cell — a terminal
-    // sink whose setter writes its own sources imperatively.
-    if (parent._legacySetter !== undefined) {
-      parent._legacySetter(push);
-      return;
-    }
     // Parent is a lens: keep walking, carrying its new view value.
     cell = parent;
     v = push;
@@ -1291,19 +1291,95 @@ function propagateBwd(start: Signal<unknown>, target: unknown, deferred: boolean
  *  coalescing must live here, not at the write entry point.) */
 function propagateSplit(cell: Signal<unknown>, target: unknown, deferred: boolean): void {
   const parents = cell._bwdParent as Signal<unknown>[];
-  const updates = cell._put!(target) as ReadonlyArray<unknown>;
   const n = parents.length;
 
-  // BACKWARD EQUALITY CHECK (multi-parent form) — the dual of the
-  // forward one, generalized over N parents: if applying these updates
-  // would leave this cell's own projected view unchanged, absorb the
-  // whole write. Keeps any per-parent information the projection hides
-  // (the off-grid story, but spread across parents) intact. Same
+  // The candidate-substitution short-circuit below replaces the written
+  // parents and PEEKS the rest. That is sound only when the parents are
+  // independent roots: if an unwritten parent is DERIVED from a written
+  // one (e.g. a shape's `localFrame` computed from `translate`, while the
+  // lens writes `translate`), its peeked value is stale and `fwd(cand)`
+  // mispredicts the post-commit view — wrongly absorbing a real change.
+  // With a derived parent in the mix we can't cheaply predict the view, so
+  // skip the short-circuit and let the write propagate.
+  let allSources = true;
+  for (let i = 0; i < n; i++) {
+    if (parents[i]!.getter !== undefined) {
+      allSources = false;
+      break;
+    }
+  }
+
+  // STATEFUL lens: `bwd` reads the complement and returns the per-parent
+  // updates plus the post-write complement. The equality-check short-
+  // circuit is complement-aware — it predicts the resulting view with the
+  // stepped complement `c'` (so a write that lands back on the current
+  // view stops here, leaving sources and complement untouched). Only on a
+  // real view change do we commit `c'` and the source updates.
+  if (cell._step !== undefined) {
+    // Bring the complement (and cached view) current with the sources
+    // before the back-write: a source may have changed without the view
+    // being read, leaving `step` un-run. Reading `.value` here runs the
+    // getter (advancing the complement); the backward frame is untracked,
+    // so this establishes no dependency.
+    void cell.value;
+    const vals = new Array<unknown>(n);
+    for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
+    const res = (cell._put as (t: unknown, s: unknown, c: unknown) => StatefulBwd<unknown[], unknown>)(
+      target,
+      vals,
+      cell._complement,
+    );
+    const updates = res.updates as ReadonlyArray<unknown>;
+    const cand = new Array<unknown>(n);
+    let anyWrite = false;
+    for (let i = 0; i < n; i++) {
+      const u = updates[i];
+      if (u === undefined) {
+        cand[i] = vals[i];
+      } else {
+        cand[i] = u;
+        anyWrite = true;
+      }
+    }
+    const cStep = cell._step(cand, res.complement, false);
+    const cf = cell.flags;
+    if (allSources && !(cf & (F.Dirty | F.Pending)) && cf !== F.None) {
+      const newView = (cell._fwd as (s: unknown, c: unknown) => unknown)(cand, cStep);
+      if (cell._equals(cell.currentValue, newView)) return;
+    }
+    cell._complement = cStep;
+    if (!anyWrite) {
+      // Complement-only change (e.g. writing a direction onto a collapsed
+      // cluster): no source moves, so mark dirty for a correct next read.
+      cell.flags = F.Mutable | F.Dirty;
+      return;
+    }
+    cell._lastBwd = cand;
+    if (deferred) {
+      forkInto(parents, updates, n);
+      return;
+    }
+    ++batchDepth;
+    try {
+      forkInto(parents, updates, n);
+    } finally {
+      if (!--batchDepth) flush();
+    }
+    return;
+  }
+
+  const updates = cell._put!(target) as ReadonlyArray<unknown>;
+
+  // BACKWARD EQUALITY-CHECK SHORT-CIRCUIT (multi-parent form) — the dual
+  // of the forward one, generalized over N parents: if applying these
+  // updates would leave this cell's own projected view unchanged, the
+  // write stops here. Keeps any per-parent information the projection
+  // hides (the off-grid story, spread across parents) intact. Same
   // trustworthy-cache precondition as the 1→1 form. Effective only when
   // the view's equality can see "unchanged" — scalar views via
   // `Object.is`, structured views (Vec, …) via the cell's `_equals`.
   const fwd = cell._fwd;
-  if (fwd !== undefined) {
+  if (fwd !== undefined && allSources) {
     const cf = cell.flags;
     if (!(cf & (F.Dirty | F.Pending)) && cf !== F.None) {
       const cand = new Array<unknown>(n);
@@ -1403,29 +1479,9 @@ export function lens<P extends readonly Read<unknown>[], R>(
     vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
   ) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
 ): Writable<Signal<R>>;
-// MIGRATION SHIM — closure-setter form `lens(getter, setter)`.
-export function lens<R>(g: () => R, s: (v: R) => void): Writable<Signal<R>>;
-// MIGRATION SHIM — symmetric-spec form (1-input).
-export function lens<P, R, COMP>(
-  parent: Read<P>,
-  spec: SymmetricLensSpec1<P, R, COMP>,
-): Writable<Signal<R>>;
-// MIGRATION SHIM — symmetric-spec form (N-input).
-export function lens<P extends readonly Read<unknown>[], R, COMP>(
-  parents: P,
-  spec: SymmetricLensSpecN<{ [J in keyof P]: P[J] extends Read<infer V> ? V : never }, R, COMP>,
-): Writable<Signal<R>>;
 // biome-ignore lint/suspicious/noExplicitAny: dispatch
 export function lens(...args: any[]): any {
   const [parent, fwd, bwd] = args;
-  // SHIM: closure-setter form `lens(getter, setter)`.
-  if (typeof parent === "function") return Signal.install(SIGNAL_CTOR as any, parent, fwd);
-  // SHIM: symmetric-spec form `lens(parent|parents, spec)`.
-  if (args.length === 2) {
-    return Array.isArray(parent)
-      ? buildSymmetric(SIGNAL_CTOR, parent, fwd)
-      : buildSymmetric(SIGNAL_CTOR, [parent], _liftSpec1(fwd));
-  }
   if (Array.isArray(parent)) return buildLensN(SIGNAL_CTOR, parent, fwd, bwd, true);
   return buildLens1(SIGNAL_CTOR, parent, fwd, bwd, true);
 }
@@ -1447,6 +1503,21 @@ export function iso(...args: any[]): any {
   const [parent, fwd, bwd] = args;
   if (Array.isArray(parent)) return buildLensN(SIGNAL_CTOR, parent, fwd, bwd, false);
   return buildLens1(SIGNAL_CTOR, parent, fwd, bwd, false);
+}
+
+/** Untyped complement-carrying lens (`statefulLens`): `put` reads memory
+ *  the view discards. Infers from the spec closures. */
+export function statefulLens<P, R, C>(
+  parent: Read<P>,
+  spec: StatefulLensSpec<readonly [P], R, C>,
+): Writable<Signal<R>>;
+export function statefulLens<P extends readonly Read<unknown>[], R, C>(
+  parents: P,
+  spec: StatefulLensSpec<{ [K in keyof P]: P[K] extends Read<infer V> ? V : never }, R, C>,
+): Writable<Signal<R>>;
+// biome-ignore lint/suspicious/noExplicitAny: dispatch
+export function statefulLens(parent: any, spec: any): any {
+  return buildStateful(SIGNAL_CTOR, Array.isArray(parent) ? parent : [parent], spec);
 }
 
 // ─── Effect (alien-signals verbatim) ──────────────────────────────
@@ -1554,40 +1625,6 @@ export function effect(fn: () => (() => void) | void): () => void {
   return () => e._unwatched();
 }
 
-// ─── hold — eager scan (stateful-lens memory) ─────────────────────
-//
-// A read-only cell whose value evolves from its own previous value and
-// reactive inputs, recomputed eagerly on every input change. Built from
-// `signal` + `effect` — no engine support. The canonical use is the
-// private memory of a STATEFUL lens: a pure `lens` whose `put` reads a
-// `hold` that retains information the forward projection discards (e.g.
-// the last non-degenerate unit directions when a spread collapses to 0).
-// This is the general "complement" recipe — see the literature on
-// state-based bidirectional transformations: any complement that is a
-// function of source history is a `hold`; the only thing it can't model
-// is structural alignment (edit/delta lenses), which is out of scope.
-//
-// Reads are UNtracked (both `.value` and `peek()` snapshot via `peek`),
-// so reading the memory inside a lens `put` never leaks a dependency.
-
-/** Eager scan: `C` recomputed from `read()` + its own previous value on
- *  every input change. Read-only and untracked. */
-export function hold<O, C>(
-  read: () => O,
-  step: (observed: O, prev: C | undefined) => C,
-): Read<C> {
-  const cell = signal<C>(undefined as never);
-  effect(() => {
-    cell.value = step(read(), cell.peek());
-  });
-  return {
-    get value(): C {
-      return cell.peek();
-    },
-    peek: (): C => cell.peek(),
-  };
-}
-
 // ─── Flush / batch / untracked ────────────────────────────────────
 //
 // Alternates backward-drain and effect-drain to a fixpoint: backward
@@ -1614,9 +1651,9 @@ function flush(): void {
         bwdIndex++;
         cell.flags &= ~F.BwdQueued;
         if (cell._mergeNode !== undefined) {
-          propagateBwd(cell, undefined, true);
+          bwdUntracked(cell, undefined, true);
         } else {
-          propagateBwd(cell, cell.pendingValue, true);
+          bwdUntracked(cell, cell.pendingValue, true);
         }
       }
       while (notifyIndex < queuedLength) {

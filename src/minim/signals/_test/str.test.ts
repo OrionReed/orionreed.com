@@ -508,23 +508,22 @@ describe("Str.sortedUnique()", () => {
   it("writing one entry broadcasts to ALL occurrences with original case", () => {
     const s = str("The quick The brown the");
     const u = s.sortedUnique();
-    u.peek();
-    // Replace "the" everywhere — should arrive as "The", "The", "the".
-    u.value = ["cat", "quick", "brown"].sort().join("\n");
-    // unique sorted alphabetically: brown, cat, quick. Replacing each:
-    //   brown → "quick" (mask of source's "brown")
-    //   cat   → "brown" (replaces "the" with "cat" then mask preserves "The"/"The"/"the")
-    // To make the test deterministic, write each entry explicitly:
-    u.value = "cat\nquick\nbrown";
-    // After sort, the unique list was [brown, quick, the]. Pos 0 → brown
-    // → maps to source word index 3 ("brown"); pos 1 → quick → source[1]
-    // ("quick"); pos 2 → the → source[0,2,4] ("The","The","the").
-    // We wrote ["cat","quick","brown"] in that sorted-list order.
-    // So: source[3]="cat" (mask of "brown" = LLLLL → "cat" lowercase)
-    //     source[1]="quick" (no change), source[0,2,4]: replace "the" →
-    //     "brown" applied with case mask. Source[0]="The"→mask ULL applied
-    //     to "brown" → "Brown". Same for source[2]. Source[4]="the"→"brown".
-    expect(s.value).toBe("Brown quick Brown cat brown");
+    u.peek(); // view: "brown\nquick\nthe"
+    // Respell the third unique entry ("the") to "fox". The deduped SET
+    // changes ({brown,quick,the} → {brown,quick,fox}), so the view changes
+    // and the edit propagates — broadcasting to every "the" occurrence with
+    // that position's original case mask.
+    //
+    // (A permutation that leaves the deduped set unchanged would re-project
+    // to the same sorted view and be stopped by the backward equality
+    // check — same-view writes don't propagate.)
+    u.value = "brown\nquick\nfox";
+    // unique sorted was [brown, quick, the]: pos 0 → source[3] ("brown"),
+    // pos 1 → source[1] ("quick"), pos 2 → source[0,2,4] ("The","The","the").
+    //   source[3]="brown" (unchanged), source[1]="quick" (unchanged),
+    //   source[0]="The" mask ULL → "Fox", source[2] → "Fox", source[4]
+    //   ="the" mask LLL → "fox".
+    expect(s.value).toBe("Fox quick Fox brown fox");
   });
 
   it("preserves separators and per-position case when broadcasting", () => {

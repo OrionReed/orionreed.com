@@ -76,27 +76,22 @@ describe("cyclic correctness — engine-supplied state argument", () => {
     function makeReference(): { a: Num; c: Num } {
       const a = num(0);
       const sLens = Num.lens(
-        () => a.value * 2,
-        v => {
-          a.value = v / 2;
-        },
+        [a] as const,
+        ([av]) => av * 2,
+        v => [v / 2],
       );
       const cLens = Num.lens(
-        () => {
-          const v = sLens.value;
-          return v < 0 ? 0 : v > 100 ? 100 : v;
-        },
-        v => {
-          sLens.value = v < 0 ? 0 : v > 100 ? 100 : v;
-        },
+        [sLens] as const,
+        ([v]) => (v < 0 ? 0 : v > 100 ? 100 : v),
+        v => [v < 0 ? 0 : v > 100 ? 100 : v],
       );
       const yLens = Num.lens(
-        () => cLens.value,
-        v => {
-          const cur = cLens.peek();
+        [cLens] as const,
+        ([cv]) => cv,
+        (v, [cur]) => {
           const p = TAU;
           const delta = v - cur;
-          cLens.value = cur + delta - p * Math.round(delta / p);
+          return [cur + delta - p * Math.round(delta / p)];
         },
       );
       return { a, c: yLens as Num };

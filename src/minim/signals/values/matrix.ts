@@ -9,7 +9,7 @@
 //   - `multiply(b)` — inverse is multiply by `invert(b)`
 //   - `invert()`    — its own inverse
 
-import { batch, type Init, type Inner, reader, Signal, type Val, type Writable } from "../signal";
+import { type Init, type Inner, reader, Signal, type Val, type Writable } from "../signal";
 import type { TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
@@ -178,18 +178,10 @@ export function matrix(
   const dN = num(d);
   const eN = num(e);
   const fN = num(f);
-  return Signal.install(
-    Matrix,
-    () => ({ a: aN.value, b: bN.value, c: cN.value, d: dN.value, e: eN.value, f: fN.value }),
-    v => {
-      batch(() => {
-        aN.value = v.a;
-        bN.value = v.b;
-        cN.value = v.c;
-        dN.value = v.d;
-        eN.value = v.e;
-        fN.value = v.f;
-      });
-    },
+  // Source-independent (`iso`): the view fully reconstructs all 6 cells.
+  return Matrix.iso(
+    [aN, bN, cN, dN, eN, fN] as const,
+    ([a, b, c, d, e, f]) => ({ a, b, c, d, e, f }),
+    v => [v.a, v.b, v.c, v.d, v.e, v.f],
   );
 }

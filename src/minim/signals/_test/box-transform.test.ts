@@ -61,10 +61,9 @@ describe("Box", () => {
     expect(half.value.w).toBe(5);
 
     const lens = Box.lens(
-      () => b.value,
-      v => {
-        b.value = v;
-      },
+      [b] as const,
+      ([v]) => v,
+      v => [v],
     );
     expect(isLens(lens)).toBe(true);
 

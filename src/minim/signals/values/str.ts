@@ -1,7 +1,7 @@
 // str.ts — reactive string with a symmetric lens chain.
 //
 // String projections are the canonical use case for the engine's
-// symmetric-lens primitive (`SymmetricLensSpec1` in signal.ts). Every
+// stateful-lens primitive (`statefulLens` in signal.ts). Every
 // useful view — trim, lowercase, words, sorted-unique — loses
 // information that the engine recovers on write via the per-cell
 // `complement`. Editing through ANY view propagates back to the source
@@ -31,6 +31,35 @@ import { type Init, Signal, type Writable } from "../signal";
 import type { TraitDict } from "../traits";
 
 type V = string;
+
+// ── complement-carrying endo lens ──────────────────────────────────
+//
+// The string projections (trim, case, words, sortedUnique) carry a
+// complement: state recorded forward from the source and consumed on
+// write-back. The complement persists across the lens's OWN writes (so
+// `trim` remembers its padding even after the user collapses the view to
+// empty) and refreshes on EXTERNAL source changes.
+//
+// Built on `statefulLens`: `step` re-records the complement on external
+// source changes and keeps it on the lens's own back-write (the engine
+// supplies the `external` flag — no manual self-write marker).
+
+/** Endo lens backed by a complement recorded from the source. `record`
+ *  rebuilds the complement (kept on the lens's own writes), `project`
+ *  is the forward view, `reconstruct` is the backward source. */
+function complementLens<C>(
+  parent: Str,
+  record: (s: V) => C,
+  project: (s: V) => V,
+  reconstruct: (target: V, complement: C) => V,
+): Writable<Str> {
+  return Str.statefulLens([parent], {
+    init: ([s]) => record(s),
+    step: ([s], c, external) => (external ? record(s) : c),
+    fwd: ([s]) => project(s),
+    bwd: (target, _s, c) => ({ updates: [reconstruct(target, c)], complement: c }),
+  }) as Writable<Str>;
+}
 
 export const equals = (a: V, b: V) => a === b;
 
@@ -262,6 +291,13 @@ function applyCaseComplement(target: V, c: CaseComplement): V {
   return rebuildWords(cased, seps);
 }
 
+/** Build a fresh case complement from a source string. */
+function buildCaseComplement(s: V): CaseComplement {
+  const c: CaseComplement = { wordMasks: [], byContent: new Map() };
+  refreshCaseComplement(s, c);
+  return c;
+}
+
 interface CaseComplement {
   /** Per-word case mask, indexed by word position from `parseWords`.
    *  Used as a fallback for new content the user types — a word added
@@ -277,19 +313,6 @@ interface CaseComplement {
    *  exactly even across structural edits. Per-position fallback
    *  handles purely new content. */
   byContent: Map<string, string[]>;
-  /** The source value we last produced from `putl`. On `putr`, if the
-   *  source equals this, the change came from our own write — keep
-   *  both `wordMasks` and `byContent` intact so the user's structural
-   *  edits in this view round-trip cleanly (split "Quick" → "Q Uick",
-   *  rejoin → "Quick"). When the source differs from our last write,
-   *  an external write happened — refresh everything from the new
-   *  source.
-   *
-   *  Identity-of-value (not a flag) makes the rule robust against
-   *  the case where `putr` doesn't run between our `putl` and an
-   *  external write — a flag would survive stale across a missed
-   *  putr; the value check notices the mismatch and refreshes. */
-  lastWriteResult?: string;
 }
 
 interface WordsComplement {
@@ -340,78 +363,61 @@ export class Str extends Signal<V> {
    *  writes would silently append to the padding complement and grow
    *  unboundedly across edits. Same rule as `words` / `sortedUnique`. */
   trim(): Writable<Str> {
-    return Str.lens(this, {
-      missing: { lead: "", trail: "" } as TrimComplement,
-      putr: (s: V, c: TrimComplement) => {
+    return complementLens<TrimComplement>(
+      this,
+      s => {
         const lead = /^\s*/.exec(s)?.[0] ?? "";
         // Guard against all-whitespace strings where lead consumes the
         // entire input — trail would otherwise overlap with lead.
         const remain = s.slice(lead.length);
         const trail = /\s*$/.exec(remain)?.[0] ?? "";
-        c.lead = lead;
-        c.trail = trail;
+        return { lead, trail };
+      },
+      s => {
+        const lead = /^\s*/.exec(s)?.[0] ?? "";
+        const remain = s.slice(lead.length);
+        const trail = /\s*$/.exec(remain)?.[0] ?? "";
         return remain.slice(0, remain.length - trail.length);
       },
-      putl: (target: V, _s: V, c: TrimComplement) => {
-        const stripped = target.replace(/^\s+/, "").replace(/\s+$/, "");
-        return c.lead + stripped + c.trail;
-      },
-    });
+      // Edge whitespace in the WRITE is dropped — the view's contract is
+      // "no edge whitespace"; the complement restores the original pad.
+      (target, c) => c.lead + target.replace(/^\s+/, "").replace(/\s+$/, "") + c.trail,
+    );
   }
 
-  /** Lowercase view. Word-aware case preservation with sticky mask
-   *  across the user's own structural edits and content-keyed lookup
-   *  for words that survive a rearrangement.
+  /** Lowercase view. Word-aware case recovery: on write, each target
+   *  word recovers its case from the current source.
    *
-   *  Lookup priority in `putl`:
-   *    1. Content match — if `byContent` has the lowercased target
-   *       word, consume its first remaining source mask. Keeps "Jumps"
-   *       capitalised when an unrelated split shifts indices, and
-   *       preserves per-word case across reorderings.
-   *    2. Per-position fallback — `wordMasks[i]` covers new content
-   *       at a known source position (renames "Fox" → "Wolf" → "Wolf"
-   *       because position 3 was title case).
+   *  Lookup priority (in `applyCaseFromSource`):
+   *    1. Content match — if the lowercased target word appears in the
+   *       source, consume its first remaining source mask (FIFO). Keeps
+   *       "Jumps" capitalised when an unrelated split shifts indices,
+   *       and preserves per-word case across reorderings.
+   *    2. Per-position fallback — the source mask at position `i` covers
+   *       new content (renames "Fox" → "Wolf" → "Wolf" because position
+   *       3 was title case).
    *    3. Native — completely new content beyond the source structure
    *       stays as the user typed it.
    *
-   *  Both maps are sticky across the user's own writes via the
-   *  identity-of-value check on `lastWriteResult`; external source
-   *  changes refresh the maps to reflect new content. */
+   *  Round-trips ride on the source: each write recomputes the masks
+   *  from the current source, so split/rejoin restores the original. */
   lowercase(): Writable<Str> {
-    return Str.lens(this, {
-      missing: { wordMasks: [], byContent: new Map() } as CaseComplement,
-      putr: (s: V, c: CaseComplement) => {
-        if (s !== c.lastWriteResult) {
-          refreshCaseComplement(s, c);
-          c.lastWriteResult = s;
-        }
-        return s.toLowerCase();
-      },
-      putl: (target: V, _s: V, c: CaseComplement) => {
-        const result = applyCaseComplement(target, c);
-        c.lastWriteResult = result;
-        return result;
-      },
-    });
+    return complementLens<CaseComplement>(
+      this,
+      s => buildCaseComplement(s),
+      s => s.toLowerCase(),
+      (target, c) => applyCaseComplement(target, c),
+    );
   }
 
-  /** Uppercase view. Dual of `lowercase`; same sticky-mask rule. */
+  /** Uppercase view. Dual of `lowercase`; same per-word case recovery. */
   uppercase(): Writable<Str> {
-    return Str.lens(this, {
-      missing: { wordMasks: [], byContent: new Map() } as CaseComplement,
-      putr: (s: V, c: CaseComplement) => {
-        if (s !== c.lastWriteResult) {
-          refreshCaseComplement(s, c);
-          c.lastWriteResult = s;
-        }
-        return s.toUpperCase();
-      },
-      putl: (target: V, _s: V, c: CaseComplement) => {
-        const result = applyCaseComplement(target, c);
-        c.lastWriteResult = result;
-        return result;
-      },
-    });
+    return complementLens<CaseComplement>(
+      this,
+      s => buildCaseComplement(s),
+      s => s.toUpperCase(),
+      (target, c) => applyCaseComplement(target, c),
+    );
   }
 
   /** Words view, one word per line.
@@ -428,21 +434,18 @@ export class Str extends Signal<V> {
    *  adjacent separator and accumulate across edits. To add punctuation
    *  to the source, edit `Trimmed` / `Lowercased` / `Source` instead. */
   words(): Writable<Str> {
-    return Str.lens(this, {
-      missing: { separators: [] } as WordsComplement,
-      putr: (s: V, c: WordsComplement) => {
-        const { words, seps } = parseWords(s);
-        c.separators = seps;
-        return words.join("\n");
-      },
-      putl: (target: V, _s: V, c: WordsComplement) => {
+    return complementLens<WordsComplement>(
+      this,
+      s => ({ separators: parseWords(s).seps }),
+      s => parseWords(s).words.join("\n"),
+      (target, c) => {
         const words = target
           .split(/\n/)
           .map(stripNonWord)
           .filter(w => w.length > 0);
         return rebuildWords(words, c.separators);
       },
-    });
+    );
   }
 
   /** Sorted unique words, one per line. Case-insensitive uniqueness;
@@ -460,17 +463,10 @@ export class Str extends Signal<V> {
    *  the source update with their original capitalisation preserved"
    *  demo — the moment where the symmetric machinery looks like magic. */
   sortedUnique(): Writable<Str> {
-    return Str.lens(this, {
-      missing: {
-        positions: [],
-        unique: [],
-        separators: [],
-        sourceWords: [],
-      } as SortedUniqueComplement,
-      putr: (s: V, c: SortedUniqueComplement) => {
+    return complementLens<SortedUniqueComplement>(
+      this,
+      s => {
         const { words, seps } = parseWords(s);
-        c.separators = seps;
-        c.sourceWords = words;
         const buckets = new Map<string, Array<{ index: number; sourceCase: string }>>();
         for (let i = 0; i < words.length; i++) {
           const w = words[i]!;
@@ -483,14 +479,15 @@ export class Str extends Signal<V> {
           arr.push({ index: i, sourceCase: w });
         }
         const unique = [...buckets.keys()].sort();
-        c.unique = unique;
-        c.positions = unique.map(k => buckets.get(k)!);
-        return unique.join("\n");
+        return { unique, positions: unique.map(k => buckets.get(k)!), separators: seps, sourceWords: words };
       },
-      putl: (target: V, _s: V, c: SortedUniqueComplement) => {
+      s => {
+        const { words } = parseWords(s);
+        return [...new Set(words.map(w => w.toLowerCase()))].sort().join("\n");
+      },
+      (target, c) => {
         // Non-word characters typed into the view are stripped — same
-        // rule as `words` (sortedUnique's read also drops separators,
-        // so accepting them on write would leak into the complement).
+        // rule as `words` (sortedUnique's read also drops separators).
         const edited = target
           .split(/\n/)
           .map(stripNonWord)
@@ -499,15 +496,14 @@ export class Str extends Signal<V> {
         const n = Math.min(edited.length, c.unique.length);
         for (let i = 0; i < n; i++) {
           const newWord = edited[i]!;
-          const positions = c.positions[i]!;
-          for (const { index, sourceCase } of positions) {
+          for (const { index, sourceCase } of c.positions[i]!) {
             if (index >= sourceWords.length) continue;
             sourceWords[index] = applyCasePattern(newWord, caseMaskOf(sourceCase));
           }
         }
         return rebuildWords(sourceWords, c.separators);
       },
-    });
+    );
   }
 }
 

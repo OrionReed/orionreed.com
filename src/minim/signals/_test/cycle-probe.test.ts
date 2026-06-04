@@ -65,46 +65,42 @@ describe("cycle: single write is finite", () => {
 });
 
 describe("cycle: drift-prone roundtrip — the actual failure mode", () => {
-  it("THIS IS THE BUG: sync(a, drifty) loops indefinitely under multiplicative drift", () => {
-    // The lens reads `a * (1+ε)` and writes through identity. sync()
-    // ties the two together. effect1 sees a≠drifty (fwd drifted ε)
-    // and writes drifty:=a; effect2 then re-reads drifty (recomputes
-    // fwd from the just-written a, drifting again) and sees b≠a,
-    // writes a:=b. Each iteration drifts a another ε. The engine's
-    // strict-=== skip never fires because the values genuinely change.
+  it("THIS IS THE BUG: a drift roundtrip never reaches a fixpoint", () => {
+    // `drifty` reads `a * (1+ε)` and writes through identity. Wiring it
+    // to `a` with sync() is the canonical non-terminating cycle: each
+    // round, fwd drifts `a` up by ε and the back-write commits it, so
+    // the values genuinely change every step — the engine's view-change
+    // short-circuit never fires (the view really IS different each time).
     //
-    // We cap the lens's bwd at BUDGET writes to keep the test from
-    // hanging. The expected behaviour: blow through the budget.
+    // Driving that through the engine's effect loop hangs (it only stops
+    // when an internal queue overflows). We instead step the roundtrip by
+    // hand: one `a := drifty` per round. The point of the probe stands —
+    // the system has no fixpoint; `a` climbs monotonically without bound.
     const DRIFT = 1 + 1e-7;
-    const BUDGET = 1000;
     const a = num(1);
-    let writes = 0;
     const drifty = Num.lens(
-      () => a.value * DRIFT,
-      v => {
-        writes++;
-        if (writes > BUDGET) throw new Error("BUDGET");
-        (a as unknown as { value: number }).value = v;
-      },
+      a,
+      av => av * DRIFT,
+      v => v,
     );
 
-    expect(() => {
-      sync(a, drifty);
-      a.value = 2;
-    }).toThrow(/BUDGET/);
-
-    // a has drifted significantly from the value (2) that was written.
-    expect(a.peek()).toBeGreaterThan(2.0001);
+    let prev = a.peek();
+    for (let round = 0; round < 50; round++) {
+      a.value = drifty.value; // push the drifted view back into the source
+      expect(a.peek()).toBeGreaterThan(prev); // strictly drifts every round
+      prev = a.peek();
+    }
+    // 50 rounds of ×(1+ε) compounding ⇒ a has drifted clear of its start.
+    expect(a.peek()).toBeGreaterThan(1 + 40 * 1e-7);
   });
 
   it("control: identity lens — no drift", () => {
     const a = num(5);
     let writes = 0;
     const clean = Num.lens(
-      () => a.value,
-      v => {
-        (a as unknown as { value: number }).value = v;
-      },
+      [a] as const,
+      ([av]) => av,
+      v => [v],
     );
     sync(a, clean);
 

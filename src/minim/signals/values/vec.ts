@@ -8,7 +8,7 @@
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { batch, type Init, reader, readNow, Signal, type Val, type Writable } from "../signal";
+import { type Init, reader, readNow, Signal, type Val, type Writable } from "../signal";
 import type { Linear, Pack, Pivotal, TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
@@ -212,15 +212,11 @@ export class Vec extends Signal<V> {
  *  `vec()` delegates here after lifting literals. Not part of the
  *  public surface; users always go through `vec()`. */
 function axes(x: Writable<Num>, y: Writable<Num>): Writable<Vec> {
-  return Signal.install(
-    Vec,
-    () => ({ x: x.value, y: y.value }),
-    v => {
-      batch(() => {
-        x.value = v.x;
-        y.value = v.y;
-      });
-    },
+  // Source-independent (`iso`): the view fully reconstructs both axes.
+  return Vec.iso(
+    [x, y] as const,
+    ([xv, yv]) => ({ x: xv, y: yv }),
+    v => [v.x, v.y],
   );
 }
 
@@ -275,58 +271,48 @@ export function polar(
   const rSig: Writable<Num> = num(r);
   const aSig: Writable<Num> = num(a);
 
-  const fwd = (): V => {
-    const c = cSig.value;
-    const rv = rSig.value;
-    const av = aSig.value;
-    return { x: c.x + rv * Math.cos(av), y: c.y + rv * Math.sin(av) };
-  };
+  const project = (c: V, rv: number, av: number): V => ({
+    x: c.x + rv * Math.cos(av),
+    y: c.y + rv * Math.sin(av),
+  });
 
   // Cyclic-coordinate inverse: pick the angle closest to current, not
   // the (-π, π] representative from atan2. Without this, dragging a
   // body whose angle has accumulated many revolutions produces large
   // discontinuous jumps in the angle signal — visually correct
   // (cos/sin are periodic) but breaks downstream lenses that read the
-  // angle directly (`time = angle * period / τ`).
-  let bwd: (p: V) => void;
+  // angle directly (`time = angle * period / τ`). Source-reading lens:
+  // each policy returns per-parent updates over [center, r, a].
+  type Updates = readonly [V?, number?, number?];
+  let bwd: (p: V, vals: readonly [V, number, number]) => Updates;
   switch (policy) {
     case "rotate":
-      bwd = p => {
-        const cv = cSig.peek();
+      bwd = (p, [cv, , av]) => {
         const dx = p.x - cv.x;
         const dy = p.y - cv.y;
-        const targetA = Math.atan2(dy, dx);
-        const currentA = aSig.peek();
-        batch(() => {
-          rSig.value = Math.hypot(dx, dy);
-          aSig.value = nearestAngle(targetA, currentA);
-        });
+        return [undefined, Math.hypot(dx, dy), nearestAngle(Math.atan2(dy, dx), av)];
       };
       break;
     case "translate":
-      bwd = p => {
-        const f = fwd();
-        const cv = cSig.peek();
-        cSig.value = { x: cv.x + (p.x - f.x), y: cv.y + (p.y - f.y) };
+      bwd = (p, [cv, rv, av]) => {
+        const f = project(cv, rv, av);
+        return [{ x: cv.x + (p.x - f.x), y: cv.y + (p.y - f.y) }, undefined, undefined];
       };
       break;
     case "radial":
-      bwd = p => {
-        const cv = cSig.peek();
-        const av = aSig.peek();
+      bwd = (p, [cv, , av]) => {
         const dx = p.x - cv.x;
         const dy = p.y - cv.y;
-        rSig.value = dx * Math.cos(av) + dy * Math.sin(av);
+        return [undefined, dx * Math.cos(av) + dy * Math.sin(av), undefined];
       };
       break;
     case "circular":
-      bwd = p => {
-        const cv = cSig.peek();
-        const targetA = Math.atan2(p.y - cv.y, p.x - cv.x);
-        const currentA = aSig.peek();
-        aSig.value = nearestAngle(targetA, currentA);
-      };
+      bwd = (p, [cv, , av]) => [
+        undefined,
+        undefined,
+        nearestAngle(Math.atan2(p.y - cv.y, p.x - cv.x), av),
+      ];
       break;
   }
-  return Signal.install(Vec, fwd, bwd);
+  return Vec.lens([cSig, rSig, aSig] as const, ([c, rv, av]) => project(c, rv, av), bwd);
 }

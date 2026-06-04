@@ -57,10 +57,9 @@ describe("Num", () => {
   it("Num.lens returns writable", () => {
     const n = num(0);
     const doubled = Num.lens(
-      () => n.value * 2,
-      v => {
-        n.value = v / 2;
-      },
+      [n] as const,
+      ([nv]) => nv * 2,
+      v => [v / 2],
     );
     expect(isLens(doubled)).toBe(true);
     doubled.value = 10;

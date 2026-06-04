@@ -154,10 +154,9 @@ export class MdBoolBridges extends Diagram {
       const above = t2.greaterThan(threshold, 0.06);
       const knobX = t2.clamp(0, 1).affine(trackX1 - trackX0, trackX0);
       const knobPos = Vec.lens(
-        () => ({ x: knobX.value, y: trackY }),
-        p => {
-          knobX.value = p.x;
-        },
+        [knobX] as const,
+        ([x]) => ({ x, y: trackY }),
+        p => [p.x],
       );
       // Threshold tick + shaded "above" band.
       const tx = trackX0 + threshold * (trackX1 - trackX0);
@@ -263,10 +262,9 @@ export class MdBoolBridges extends Diagram {
       const even = snapped.isEven;
       const knobX = snapped.affine((trackX1 - trackX0) / NMAX, trackX0);
       const knobPos = Vec.lens(
-        () => ({ x: knobX.value, y: trackY }),
-        p => {
-          knobX.value = p.x;
-        },
+        [knobX] as const,
+        ([x]) => ({ x, y: trackY }),
+        p => [p.x],
       );
       // Tick marks at each integer, larger/coloured at even positions.
       const ticks = Array.from({ length: NMAX + 1 }, (_, i) => {

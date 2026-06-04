@@ -159,61 +159,43 @@ export function spreadOf<
     return lin.scale(acc, inv);
   };
 
-  // Initial complement: capture normalized deviations (dev / mean) from
-  // peek()ed sources. If the initial cluster is fully collapsed, store
-  // additive zeros — those inputs won't move when spread is written
-  // until they're moved manually and a re-read refreshes the norms.
-  const initVals = inputs.map(s => s.peek() as T);
-  const initCtr = centroid(initVals);
-  const zero = lin.scale(initVals[0]!, 0);
-  let initSum = 0;
-  for (let i = 0; i < K; i++) initSum += met(initVals[i]!, initCtr);
-  const initMean = initSum * inv;
-  const initNorms = initVals.map(v =>
-    initMean > 1e-9 ? lin.scale(lin.sub(v, initCtr), 1 / initMean) : zero,
-  );
-
+  // Complement: normalized deviations (dev / mean) from the centroid. If
+  // the cluster is fully collapsed, the stored norms hold (additive zeros
+  // initially) until the inputs move and a re-read refreshes them; `bwd`
+  // scales the live deviations (fast path) or reinflates from the norms.
   type C = { norms: T[] };
+  const meanSpread = (vals: readonly T[], ctr: T): number => {
+    let total = 0;
+    for (let i = 0; i < K; i++) total += met(vals[i]!, ctr);
+    return total * inv;
+  };
+
   // biome-ignore lint/suspicious/noExplicitAny: variance escape — spec is checked structurally
-  return (Num as any).lens(inputs as unknown as readonly Writable<Signal<T>>[], {
-    missing: { norms: initNorms },
-    putr: (vals: readonly T[], c: C) => {
+  return (Num as any).statefulLens(inputs as unknown as readonly Writable<Signal<T>>[], {
+    init: (vals: readonly T[]): C => {
       const ctr = centroid(vals);
-      let total = 0;
-      for (let i = 0; i < K; i++) total += met(vals[i]!, ctr);
-      const mean = total * inv;
-      if (mean > 1e-9) {
-        const invMean = 1 / mean;
-        for (let i = 0; i < K; i++) {
-          c.norms[i] = lin.scale(lin.sub(vals[i]!, ctr), invMean);
-        }
-      }
-      return mean;
+      const mean = meanSpread(vals, ctr);
+      const zero = lin.scale(vals[0]!, 0);
+      return {
+        norms: vals.map(v => (mean > 1e-9 ? lin.scale(lin.sub(v, ctr), 1 / mean) : zero)),
+      };
     },
-    putl: (target: number, vals: readonly T[], c: C) => {
+    step: (vals: readonly T[], c: C): C => {
       const ctr = centroid(vals);
-      let total = 0;
-      for (let i = 0; i < K; i++) total += met(vals[i]!, ctr);
-      const mean = total * inv;
+      const mean = meanSpread(vals, ctr);
+      if (mean <= 1e-9) return c;
+      const invMean = 1 / mean;
+      return { norms: vals.map(v => lin.scale(lin.sub(v, ctr), invMean)) };
+    },
+    fwd: (vals: readonly T[]): number => meanSpread(vals, centroid(vals)),
+    bwd: (target: number, vals: readonly T[], c: C) => {
+      const ctr = centroid(vals);
+      const mean = meanSpread(vals, ctr);
       if (mean > 1e-9) {
-        // Non-degenerate fast path: scale current deviations by k.
-        // Refresh stored norms as a side effect.
-        const invMean = 1 / mean;
-        const k = target * invMean;
-        const out: T[] = new Array(K);
-        for (let i = 0; i < K; i++) {
-          const dev = lin.sub(vals[i]!, ctr);
-          c.norms[i] = lin.scale(dev, invMean);
-          out[i] = lin.add(ctr, lin.scale(dev, k));
-        }
-        return out;
+        const k = target / mean;
+        return { updates: vals.map(v => lin.add(ctr, lin.scale(lin.sub(v, ctr), k))), complement: c };
       }
-      // Degenerate: reconstruct from stored norms.
-      const out: T[] = new Array(K);
-      for (let i = 0; i < K; i++) {
-        out[i] = lin.add(ctr, lin.scale(c.norms[i]!, target));
-      }
-      return out;
+      return { updates: c.norms.map(nrm => lin.add(ctr, lin.scale(nrm, target))), complement: c };
     },
   }) as Writable<Num>;
 }

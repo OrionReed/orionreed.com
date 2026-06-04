@@ -46,10 +46,11 @@ export class MdPropFlex extends Diagram {
 
     // Right-edge handle for container width.
     const rightEdge = Vec.lens(
-      () => ({ x: c.x.value + c.w.value, y: c.y.value + c.h.value / 2 }),
-      v => {
-        const newW = v.x - c.x.value;
-        if (newW > 60) (c.w as { value: number }).value = newW;
+      [c.x, c.w, c.y, c.h] as const,
+      ([cx, cw, cy, ch]) => ({ x: cx + cw, y: cy + ch / 2 }),
+      (v, [cx]) => {
+        const newW = v.x - cx;
+        return newW > 60 ? [undefined, newW] : [];
       },
     );
 

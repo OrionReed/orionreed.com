@@ -675,10 +675,9 @@ const TESTS: TestCase[] = [
     run: assert => {
       const parent = signal({ a: 1, b: 2 });
       const lensA = Num.lens(
-        () => parent.value.a,
-        n => {
-          parent.value = { ...parent.peek(), a: n };
-        },
+        [parent] as const,
+        ([p]) => p.a,
+        (n, [p]) => [{ ...p, a: n }],
       );
       assert(lensA.value === 1, `read mismatch: ${lensA.value}`);
       lensA.value = 10;
@@ -693,11 +692,11 @@ const TESTS: TestCase[] = [
       const a = signal(0);
       const b = signal(10);
       const avg = Num.lens(
-        () => (a.value + b.value) / 2,
-        n => {
-          const delta = n - (a.peek() + b.peek()) / 2;
-          a.value = a.peek() + delta;
-          b.value = b.peek() + delta;
+        [a, b] as const,
+        ([av, bv]) => (av + bv) / 2,
+        (n, [av, bv]) => {
+          const delta = n - (av + bv) / 2;
+          return [av + delta, bv + delta];
         },
       );
       assert(avg.value === 5, `initial avg: ${avg.value}`);

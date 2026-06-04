@@ -335,75 +335,50 @@ export function procrustesLens(points: readonly Writable<Vec>[]): {
     },
   );
 
-  // Symmetric scale lens: complement stores per-point deviations from
-  // centroid at the most recent non-degenerate read/write. View is
-  // point 0's radial distance; writing target T places each point at
-  // `centroid + k * stored_dev_i` where k = T / |stored_dev_0|. Trap
-  // (whole cluster at centroid) is recoverable from the stored shape.
-  const initVals = points.map(s => s.peek());
-  let csx = 0;
-  let csy = 0;
-  for (const v of initVals) {
-    csx += v.x;
-    csy += v.y;
-  }
-  const ccx = csx / K;
-  const ccy = csy / K;
-  const initDevs = initVals.map(v => ({ x: v.x - ccx, y: v.y - ccy }));
-
+  // Stateful scale lens: complement stores per-point deviations from the
+  // centroid at the most recent non-degenerate state. View is point 0's
+  // radial distance; writing target T places each point at `centroid +
+  // k * stored_dev_i` where k = T / |stored_dev_0|. Trap (whole cluster
+  // at centroid) is recoverable from the stored shape. `step` refreshes
+  // each offset from the live source (keeping the last good one for a
+  // collapsed point); `bwd` scales those offsets to the target radius.
   type C = { devs: V[] };
-  const scale = Num.lens(points as readonly Writable<Vec>[], {
-    missing: { devs: initDevs } as C,
-    putr: (vals: readonly V[], c: C) => {
-      let sx = 0;
-      let sy = 0;
-      for (let i = 0; i < K; i++) {
-        sx += vals[i]!.x;
-        sy += vals[i]!.y;
-      }
-      const cx = sx / K;
-      const cy = sy / K;
-      const devs = c.devs;
-      for (let i = 0; i < K; i++) {
-        const dx = vals[i]!.x - cx;
-        const dy = vals[i]!.y - cy;
-        if (dx * dx + dy * dy > 1e-18) {
-          const d = devs[i]!;
-          d.x = dx;
-          d.y = dy;
-        }
-      }
-      return Math.hypot(vals[0]!.x - cx, vals[0]!.y - cy);
+  const centroidOf = (vals: readonly V[]): V => {
+    let sx = 0;
+    let sy = 0;
+    for (let i = 0; i < K; i++) {
+      sx += vals[i]!.x;
+      sy += vals[i]!.y;
+    }
+    return { x: sx / K, y: sy / K };
+  };
+  const refreshDevs = (devs: V[], vals: readonly V[]): V[] => {
+    const c = centroidOf(vals);
+    return devs.map((d, i) => {
+      const dx = vals[i]!.x - c.x;
+      const dy = vals[i]!.y - c.y;
+      return dx * dx + dy * dy > 1e-18 ? { x: dx, y: dy } : d;
+    });
+  };
+
+  const scale = Num.statefulLens(points as readonly Writable<Vec>[], {
+    init: (vals: readonly V[]): C => {
+      const c = centroidOf(vals);
+      return { devs: vals.map(v => ({ x: v.x - c.x, y: v.y - c.y })) };
     },
-    putl: (target: number, vals: readonly V[], c: C) => {
-      let sx = 0;
-      let sy = 0;
-      for (let i = 0; i < K; i++) {
-        sx += vals[i]!.x;
-        sy += vals[i]!.y;
-      }
-      const cx = sx / K;
-      const cy = sy / K;
-      const devs = c.devs;
-      for (let i = 0; i < K; i++) {
-        const dx = vals[i]!.x - cx;
-        const dy = vals[i]!.y - cy;
-        if (dx * dx + dy * dy > 1e-18) {
-          const d = devs[i]!;
-          d.x = dx;
-          d.y = dy;
-        }
-      }
-      const d0 = devs[0]!;
+    step: (vals: readonly V[], c: C): C => ({ devs: refreshDevs(c.devs, vals) }),
+    fwd: (vals: readonly V[]): number => {
+      const c = centroidOf(vals);
+      return Math.hypot(vals[0]!.x - c.x, vals[0]!.y - c.y);
+    },
+    bwd: (target: number, vals: readonly V[], c: C) => {
+      const cen = centroidOf(vals);
+      const d0 = c.devs[0]!;
       const r0 = Math.hypot(d0.x, d0.y);
-      if (r0 < 1e-12) return vals.map(() => undefined);
+      if (r0 < 1e-12) return { updates: vals.map(() => undefined), complement: c };
       const k = target / r0;
-      const out = new Array<V>(K);
-      for (let i = 0; i < K; i++) {
-        const d = devs[i]!;
-        out[i] = { x: cx + k * d.x, y: cy + k * d.y };
-      }
-      return out;
+      const out = c.devs.map(d => ({ x: cen.x + k * d.x, y: cen.y + k * d.y }));
+      return { updates: out, complement: c };
     },
   });
 
@@ -474,55 +449,46 @@ export function bboxLens(points: readonly Writable<Vec>[]): {
     },
   );
 
-  // Symmetric: the complement is per-point fractional offsets relative
-  // to the current bbox center/half-size, captured at the last non-
-  // degenerate read/write. On a write to `size`, points are placed at
-  // `center + frac_i * (target / 2)` from stored fractions — surviving
-  // a per-axis collapse to a line and reinflating cleanly. Stored
-  // fractions are updated component-wise: only the axes that are
-  // currently non-degenerate get refreshed.
-  const initVals = points.map(s => s.peek());
-  const initBox = computeBox(initVals);
-  const halfX0 = initBox.sx > 1e-12 ? initBox.sx / 2 : 1;
-  const halfY0 = initBox.sy > 1e-12 ? initBox.sy / 2 : 1;
-  const initFracs = initVals.map(v => ({
-    x: initBox.sx > 1e-12 ? (v.x - initBox.cx) / halfX0 : 0,
-    y: initBox.sy > 1e-12 ? (v.y - initBox.cy) / halfY0 : 0,
-  }));
-
+  // Stateful: the complement is per-point fractional offsets relative to
+  // the current bbox center/half-size, captured at the last non-
+  // degenerate state. On a write to `size`, points are placed at
+  // `center + frac_i * (target / 2)` from stored fractions — surviving a
+  // per-axis collapse to a line and reinflating cleanly. `step` refreshes
+  // the fractions component-wise (only the currently non-degenerate axes).
   type C = { fracs: V[] };
-  const size = Vec.lens(points as readonly Writable<Vec>[], {
-    missing: { fracs: initFracs } as C,
-    putr: (vals: readonly V[], c: C) => {
+  const refreshFracs = (fracs: V[], vals: readonly V[]): V[] => {
+    const b = computeBox(vals);
+    const hx = b.sx > 1e-12 ? b.sx / 2 : 0;
+    const hy = b.sy > 1e-12 ? b.sy / 2 : 0;
+    return fracs.map((f, i) => ({
+      x: hx > 0 ? (vals[i]!.x - b.cx) / hx : f.x,
+      y: hy > 0 ? (vals[i]!.y - b.cy) / hy : f.y,
+    }));
+  };
+
+  const size = Vec.statefulLens(points as readonly Writable<Vec>[], {
+    init: (vals: readonly V[]): C => {
       const b = computeBox(vals);
-      const fracs = c.fracs;
-      const hx = b.sx > 1e-12 ? b.sx / 2 : 0;
-      const hy = b.sy > 1e-12 ? b.sy / 2 : 0;
-      for (let i = 0; i < K; i++) {
-        const f = fracs[i]!;
-        if (hx > 0) f.x = (vals[i]!.x - b.cx) / hx;
-        if (hy > 0) f.y = (vals[i]!.y - b.cy) / hy;
-      }
+      const halfX0 = b.sx > 1e-12 ? b.sx / 2 : 1;
+      const halfY0 = b.sy > 1e-12 ? b.sy / 2 : 1;
+      return {
+        fracs: vals.map(v => ({
+          x: b.sx > 1e-12 ? (v.x - b.cx) / halfX0 : 0,
+          y: b.sy > 1e-12 ? (v.y - b.cy) / halfY0 : 0,
+        })),
+      };
+    },
+    step: (vals: readonly V[], c: C): C => ({ fracs: refreshFracs(c.fracs, vals) }),
+    fwd: (vals: readonly V[]): V => {
+      const b = computeBox(vals);
       return { x: b.sx, y: b.sy };
     },
-    putl: (target: V, vals: readonly V[], c: C) => {
+    bwd: (target: V, vals: readonly V[], c: C) => {
       const b = computeBox(vals);
-      const fracs = c.fracs;
-      const hx = b.sx > 1e-12 ? b.sx / 2 : 0;
-      const hy = b.sy > 1e-12 ? b.sy / 2 : 0;
-      for (let i = 0; i < K; i++) {
-        const f = fracs[i]!;
-        if (hx > 0) f.x = (vals[i]!.x - b.cx) / hx;
-        if (hy > 0) f.y = (vals[i]!.y - b.cy) / hy;
-      }
       const halfTx = target.x / 2;
       const halfTy = target.y / 2;
-      const out = new Array<V>(K);
-      for (let i = 0; i < K; i++) {
-        const f = fracs[i]!;
-        out[i] = { x: b.cx + f.x * halfTx, y: b.cy + f.y * halfTy };
-      }
-      return out;
+      const out = c.fracs.map(f => ({ x: b.cx + f.x * halfTx, y: b.cy + f.y * halfTy }));
+      return { updates: out, complement: c };
     },
   });
 

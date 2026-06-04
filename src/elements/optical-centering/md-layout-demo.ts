@@ -29,10 +29,9 @@ export class MdLayoutDemo extends Diagram {
       const h = HEIGHTS[i];
       const handleX = w.clamp(MIN_W, Number.POSITIVE_INFINITY).add(card.translate.x);
       const pos = Vec.lens(
-        () => ({ x: handleX.value, y: card.translate.value.y + h / 2 }),
-        p => {
-          handleX.value = p.x;
-        },
+        [handleX, card.translate] as const,
+        ([hx, t]) => ({ x: hx, y: t.y + h / 2 }),
+        p => [p.x],
       );
       return s(handle(pos, { cursor: "ew-resize", r: 5 }));
     });

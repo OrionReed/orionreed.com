@@ -72,8 +72,9 @@ describe("engine", () => {
       "isSignal(lens)",
       isSignal(
         Num.lens(
-          () => 0,
-          () => {},
+          [signal(0)] as const,
+          ([n]) => n,
+          () => [undefined] as const,
         ),
       ),
     );

@@ -121,13 +121,20 @@ describe("§1 Building blocks", () => {
     expect(vnear(pts[1]!.value, { x: 20, y: 60 })).toBe(true);
   });
 
-  it("scaleAbout: negative target reflects the cluster", () => {
+  it("scaleAbout: a same-magnitude (negative) target is a no-op", () => {
     const pivot = vec(0, 0);
     const pts = mkPoints([10, 0], [0, 10]);
     const r = scaleAbout(pts, pivot);
-    r.value = -10; // scale by -1
-    expect(vnear(pts[0]!.value, { x: -10, y: 0 })).toBe(true);
-    expect(vnear(pts[1]!.value, { x: 0, y: -10 })).toBe(true);
+    // The view is a radius (magnitude ≥ 0). Writing -10 would reflect the
+    // cluster, but the reflected cluster re-projects to the SAME radius 10
+    // — so the backward equality check stops the write (no view change).
+    r.value = -10;
+    expect(vnear(pts[0]!.value, { x: 10, y: 0 })).toBe(true);
+    expect(vnear(pts[1]!.value, { x: 0, y: 10 })).toBe(true);
+    // A genuinely different magnitude still scales as usual.
+    r.value = 20;
+    expect(vnear(pts[0]!.value, { x: 20, y: 0 })).toBe(true);
+    expect(vnear(pts[1]!.value, { x: 0, y: 20 })).toBe(true);
   });
 
   it("rotateAbout works on POSE via Pivotal trait (rotates pos AND theta)", () => {

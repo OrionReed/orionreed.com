@@ -6,10 +6,11 @@
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import {
-  batch,
   type Init,
   type Inner,
+  isComputed,
   lazy,
+  type Read,
   reader,
   readNow,
   Signal,
@@ -177,23 +178,30 @@ export class Box extends Signal<V> {
     p: P,
   ): P extends WritableBrand ? Writable<Bool> : Bool {
     if (p instanceof Vec) {
-      // Detect fused-RO chains: a Vec produced by `derive(...)` or a
-      // computed parent has no bwd path. Fall through to the RO branch.
-      const fused = (p as { _fusedOf?: { bwd?: unknown } })._fusedOf;
-      const isRO = fused !== undefined && fused.bwd === undefined;
-      if (!isRO) {
-        return Bool.lens(
-          [this, p] as never,
-          (vals: readonly [V, Inner<Vec>]) => contains(vals[0], vals[1]),
+      // A Vec produced by `derive(...)` (a pure computed) has no backward
+      // path — fall through to the RO branch. Sources and writable lenses
+      // both accept write-back.
+      if (!isComputed(p)) {
+        // `.bind(Bool)` preserves the class `this` while the cast steps
+        // past the generic overloads — the mapped-tuple inference over the
+        // full Box/Vec class types otherwise blows the instantiation depth.
+        const mk = Bool.lens.bind(Bool) as unknown as (
+          parents: readonly [Read<V>, Read<Inner<Vec>>],
+          fwd: (vals: readonly [V, Inner<Vec>]) => boolean,
+          bwd: (target: boolean, vals: readonly [V, Inner<Vec>]) => readonly [V?, Inner<Vec>?],
+        ) => Writable<Bool>;
+        return mk(
+          [this, p],
+          vals => contains(vals[0], vals[1]),
           (target, vals) => {
-            const [b, v] = vals as readonly [V, Inner<Vec>];
-            if (contains(b, v) === target) return [undefined, undefined] as never;
-            return [undefined, target ? clampToBox(v, b) : ejectFromBox(v, b)] as never;
+            const [b, v] = vals;
+            if (contains(b, v) === target) return [undefined, undefined];
+            return [undefined, target ? clampToBox(v, b) : ejectFromBox(v, b)];
           },
         ) as never;
       }
     }
-    return Bool.derive(() => contains(this.value, readNow(p))) as never;
+    return Bool.derive(() => contains(this.value, readNow<Inner<Vec>>(p))) as never;
   }
 
   // ── field lenses & derived views ──────────────────────────────────
@@ -270,16 +278,10 @@ export function box(
   const yN = num(y);
   const wN = num(w);
   const hN = num(h);
-  return Signal.install(
-    Box,
-    () => ({ x: xN.value, y: yN.value, w: wN.value, h: hN.value }),
-    v => {
-      batch(() => {
-        xN.value = v.x;
-        yN.value = v.y;
-        wN.value = v.w;
-        hN.value = v.h;
-      });
-    },
+  // Source-independent (`iso`): the view fully reconstructs all 4 axes.
+  return Box.iso(
+    [xN, yN, wN, hN] as const,
+    ([bx, by, bw, bh]) => ({ x: bx, y: by, w: bw, h: bh }),
+    v => [v.x, v.y, v.w, v.h],
   );
 }

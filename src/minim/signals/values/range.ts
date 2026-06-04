@@ -16,6 +16,7 @@ import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import {
   type Init,
+  isComputed,
   reader,
   readNow,
   Signal,
@@ -151,19 +152,17 @@ export class Range extends Signal<V> {
   }
   /** Bidirectional `t ↔ value` slider. Read: `lo + t·(hi - lo)`. Write:
    *  solves `t = (v - lo)/(hi - lo)` and writes back through `t` only;
-   *  `lo` and `hi` stay put. Drag-the-thumb UX in one line.
-   *
-   *  Closure-style 2-arg form: deps on `this` and `t` are captured by
-   *  reading them inside the getter; the setter writes only `t`. Same
-   *  semantics as a tuple-fan-in lens, but sidesteps the polymorphic
-   *  `this` inference around `[this, t] as const`. */
+   *  `lo` and `hi` stay put. Drag-the-thumb UX in one line. Two-input
+   *  source-reading lens over `[this, t]`; the bwd touches only `t`. */
   slider(t: Writable<Num>): Writable<Num> {
+    // `this as Range` pins the tuple element type (polymorphic `this`
+    // otherwise defeats the mapped-tuple inference on `[this, t]`).
     return Num.lens(
-      () => sample(this.value, t.value),
-      v => {
-        const r = this.peek();
+      [this as Range, t] as const,
+      ([r, tv]) => sample(r, tv),
+      (v, [r]) => {
         const w = r.hi - r.lo;
-        t.value = w === 0 ? 0 : (v - r.lo) / w;
+        return [undefined, w === 0 ? 0 : (v - r.lo) / w];
       },
     );
   }
@@ -178,9 +177,9 @@ export class Range extends Signal<V> {
     v: P,
   ): P extends WritableBrand ? Writable<Bool> : Bool {
     if (v instanceof Num) {
-      const fused = (v as { _fusedOf?: { bwd?: unknown } })._fusedOf;
-      const isRO = fused !== undefined && fused.bwd === undefined;
-      if (!isRO) {
+      // RO computed Num has no backward path → RO branch. Sources and
+      // writable lenses both accept write-back.
+      if (!isComputed(v)) {
         return Bool.lens(
           [this, v] as never,
           (vals: readonly [V, number]) => contains(vals[0], vals[1]),

@@ -31,7 +31,6 @@
 // =====================================================================
 
 import {
-  batch,
   type Inner,
   Num,
   type Pack,
@@ -311,50 +310,44 @@ export function factor<
     const spec = outputSpecs[idx]!;
     // biome-ignore lint/suspicious/noExplicitAny: typed at facade
     const Cls = spec.Cls as any;
+
+    // ── Auto-converging backward ─────────────────────────────────────
+    // Iterate the single-Newton backward step until the channel's reading
+    // is within tol of target. Linear-fwd cases converge in 1 iter; non-
+    // linear cases in 3-25 depending on geometry. The fixpoint runs INSIDE
+    // `put` on a local copy of the input values (re-evaluating `spec.fwd`
+    // each step), so the engine applies the converged inputs structurally
+    // in one shot — no imperative source writes.
+    const outPack = outputPacks[idx]!;
+    const outDim = outputDims[idx]!;
+    const convergeBwd = (target: unknown, vals: ReadonlyArray<unknown>): ReadonlyArray<unknown> => {
+      const targetBuf = new Float64Array(outDim);
+      const currentBuf = new Float64Array(outDim);
+      outPack.read(target as never, targetBuf as unknown as Float64Array, 0);
+      const cur = vals.slice();
+      for (let it = 0; it < maxIters; it++) {
+        const updates = computeBwd(idx, target, cur);
+        for (let i = 0; i < cur.length; i++) {
+          if (updates[i] !== undefined) cur[i] = updates[i];
+        }
+        outPack.read(spec.fwd(cur as never) as never, currentBuf as unknown as Float64Array, 0);
+        let sumSq = 0;
+        for (let d = 0; d < outDim; d++) {
+          const diff = targetBuf[d]! - currentBuf[d]!;
+          sumSq += diff * diff;
+        }
+        if (Math.sqrt(sumSq) < tol) break;
+      }
+      return cur;
+    };
+
     const cell = Cls.lens(
       inputs as never,
       (vals: ReadonlyArray<unknown>) => spec.fwd(vals as never),
-      (target: unknown, vals: ReadonlyArray<unknown>) => computeBwd(idx, target, vals),
-    ) as Writable<Signal<unknown>> & { setter?: (v: unknown) => void };
-
-    // ── Auto-converge wrapper ────────────────────────────────────────
-    // Iterate the single-Newton backward step until the channel's reading
-    // is within tol of target. Linear-fwd cases converge in 1 iter
-    // (overhead is one re-peek + distance check); non-linear cases
-    // converge in 3-25 depending on geometry. Installed as the cell's
-    // backward sink (`_legacySetter`): it writes the inputs directly each
-    // iteration rather than going through the cell's structural `put`.
-    if (converge) {
-      const outPack = outputPacks[idx]!;
-      const outDim = outputDims[idx]!;
-      const targetBuf = new Float64Array(outDim);
-      const currentBuf = new Float64Array(outDim);
-      // biome-ignore lint/suspicious/noExplicitAny: opaque input cells
-      const inCells = inputs as readonly any[];
-      const step = (target: unknown): void => {
-        const vals = inCells.map(s => s.peek());
-        const updates = computeBwd(idx, target, vals);
-        for (let i = 0; i < inCells.length; i++) {
-          if (updates[i] !== undefined) inCells[i].value = updates[i];
-        }
-      };
-      (cell as { _legacySetter?: (v: unknown) => void })._legacySetter = (target: unknown) => {
-        batch(() => {
-          outPack.read(target as never, targetBuf as unknown as Float64Array, 0);
-          for (let it = 0; it < maxIters; it++) {
-            step(target);
-            const cur = (cell as { peek(): unknown }).peek();
-            outPack.read(cur as never, currentBuf as unknown as Float64Array, 0);
-            let sumSq = 0;
-            for (let d = 0; d < outDim; d++) {
-              const diff = targetBuf[d]! - currentBuf[d]!;
-              sumSq += diff * diff;
-            }
-            if (Math.sqrt(sumSq) < tol) break;
-          }
-        });
-      };
-    }
+      converge
+        ? (target: unknown, vals: ReadonlyArray<unknown>) => convergeBwd(target, vals)
+        : (target: unknown, vals: ReadonlyArray<unknown>) => computeBwd(idx, target, vals),
+    ) as Writable<Signal<unknown>>;
 
     result[key] = cell;
   }

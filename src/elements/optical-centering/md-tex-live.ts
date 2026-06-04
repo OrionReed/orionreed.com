@@ -55,10 +55,9 @@ export class MdTexLive extends Diagram {
     // `t`. No manual lens; just the algebra.
     const knobX = t.clamp(0, 1).affine(trackW, TRACK_X0);
     const knobPos = Vec.lens(
-      () => ({ x: knobX.value, y: TRACK_Y }),
-      p => {
-        knobX.value = p.x;
-      },
+      [knobX] as const,
+      ([x]) => ({ x, y: TRACK_Y }),
+      p => [p.x],
     );
     s(handle(knobPos));
 
