@@ -10,7 +10,7 @@
 // writing `"mixed"` is a no-op. Morally `Maybe<Bool>` — the basis for
 // mixed-state checkbox trees and "loading" predicate states.
 
-import { type Init, Signal, type Writable } from "../signal";
+import { Cell, type Init, type Writable } from "../signal";
 import type { TraitDict } from "../traits";
 import type { Bool } from "./bool";
 
@@ -37,7 +37,7 @@ export const or = (a: V, b: V): V => {
   return "mixed";
 };
 
-export class Tri extends Signal<V> {
+export class Tri extends Cell<V> {
   static traits = { equals } satisfies TraitDict<V>;
   declare readonly _t: typeof Tri.traits;
 

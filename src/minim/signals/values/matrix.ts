@@ -6,7 +6,7 @@
 //   - `multiply(b)` — inverse multiplies by `invert(b)`
 //   - `invert()`    — its own inverse
 
-import { type Init, type Inner, reader, Signal, type Val, type Writable } from "../signal";
+import { Cell, type Init, type Inner, reader, type Val, type Writable } from "../signal";
 import type { TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
@@ -100,7 +100,7 @@ export function compose(t: Inner<Vec>, r: number, s: Inner<Vec>, pivot: Inner<Ve
 
 export const toMatrixString = (m: V): string => `matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`;
 
-export class Matrix extends Signal<V> {
+export class Matrix extends Cell<V> {
   static traits = { equals } satisfies TraitDict<V>;
   declare readonly _t: typeof Matrix.traits;
 

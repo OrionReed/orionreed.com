@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { derive, effect, lens, Num, num, signal, transform, Vec, vec } from "../index";
-import { Signal } from "../signal";
+import { Cell } from "../signal";
 import { field } from "../writable";
 
 void vec;
@@ -49,11 +49,11 @@ describe("footgun: field on top of a structural lens", () => {
     );
 
     // m.value.x via fieldOf, then .y via fieldOf
-    const x = Signal.fieldOf(mLens, "x", Num);
+    const x = Cell.fieldOf(mLens, "x", Num);
     void x; // touch to materialize
 
     // Test write through the chain
-    const y = Signal.fieldOf(mLens, "y", Num);
+    const y = Cell.fieldOf(mLens, "y", Num);
     (y as unknown as { value: number }).value = 99;
     expect(bwdCalls).toBe(1);
     expect(root.value).toEqual({ vals: { x: 1, y: 99 } });

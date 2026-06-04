@@ -5,16 +5,7 @@
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import {
-  derive,
-  type Init,
-  lazy,
-  reader,
-  readNow,
-  Signal,
-  type Val,
-  type Writable,
-} from "../signal";
+import { Cell, derive, type Init, lazy, reader, readNow, type Val, type Writable } from "../signal";
 import type { Linear, Pack, TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
@@ -47,7 +38,7 @@ const packImpl: Pack<V> = {
   write: (a, o) => ({ r: a[o]!, g: a[o + 1]!, b: a[o + 2]!, a: a[o + 3]! }),
 };
 
-export class Color extends Signal<V> {
+export class Color extends Cell<V> {
   static traits = {
     linear: linearImpl,
     lerp,
@@ -102,7 +93,7 @@ export class Color extends Signal<V> {
   get luminance() {
     return derived(this, "luminance", Num, c => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b);
   }
-  get css(): Signal<string> {
+  get css(): Cell<string> {
     return lazy(this, "css", () =>
       derive(() => {
         const c = this.value;

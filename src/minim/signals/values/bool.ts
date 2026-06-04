@@ -8,7 +8,7 @@
 // — lossy fan-ins whose write-back is ambiguous. Lift to writable via
 // `Bool.lens([a, b], fwd, bwd)` with an explicit policy.
 
-import { type Init, reader, Signal, type Val, type Writable } from "../signal";
+import { Cell, type Init, reader, type Val, type Writable } from "../signal";
 import type { Linear, TraitDict } from "../traits";
 
 type V = boolean;
@@ -27,7 +27,7 @@ const linearImpl: Linear<V> = {
   scale: (a, k) => (Math.round(k) % 2 !== 0 ? a : false),
 };
 
-export class Bool extends Signal<V> {
+export class Bool extends Cell<V> {
   static traits = { linear: linearImpl, equals } satisfies TraitDict<V>;
   declare readonly _t: typeof Bool.traits;
 

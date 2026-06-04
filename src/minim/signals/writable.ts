@@ -7,7 +7,7 @@
 // mirroring `: this` invertible method returns. For arbitrary cached
 // views, use `lazy()` from "../signal" directly.
 
-import { type Inner, lazy, Signal, type Writable, type WritableBrand } from "./signal";
+import { Cell, type Inner, lazy, type Writable, type WritableBrand } from "./signal";
 
 /** Bidirectional field lens onto `parent.value[key]`; write spread-
  *  replaces the composite. Cached per (instance, key). Return type is
@@ -17,18 +17,18 @@ import { type Inner, lazy, Signal, type Writable, type WritableBrand } from "./s
  *      get x() { return field(this, "x", Num); } */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.lens
 export function field<
-  S extends Signal<any>,
+  S extends Cell<any>,
   K extends keyof Inner<S>,
   C extends new (
     ...args: never[]
-  ) => Signal<Inner<S>[K]>,
+  ) => Cell<Inner<S>[K]>,
 >(
   parent: S,
   key: K,
   Cls: C,
 ): S extends WritableBrand ? Writable<InstanceType<C>> : InstanceType<C> {
   return lazy(parent, key as string | symbol, () =>
-    Signal.fieldOf(parent as unknown as Signal<unknown>, key as string | symbol, Cls),
+    Cell.fieldOf(parent as unknown as Cell<unknown>, key as string | symbol, Cls),
   ) as never;
 }
 
@@ -39,7 +39,7 @@ export function field<
  *        return derived(this, "magnitude", Num, v => Math.hypot(v.x, v.y));
  *      } */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors Cls.derive
-export function derived<S extends Signal<any>, C extends new (...args: never[]) => Signal<any>>(
+export function derived<S extends Cell<any>, C extends new (...args: never[]) => Cell<any>>(
   parent: S,
   key: string | symbol,
   Cls: C,

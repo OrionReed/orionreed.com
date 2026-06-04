@@ -14,7 +14,7 @@
 //  10. Edge cases & footguns
 
 import { describe, expect, it } from "vitest";
-import { batch, effect, network, signal } from "../signal";
+import { batch, cell, effect, network } from "../signal";
 import { num } from "../values/num";
 
 // ─── 1. Construction ───────────────────────────────────────────────
@@ -592,7 +592,7 @@ describe("explicit-deps: edge cases", () => {
   it("custom-equality signal: writes that don't change value don't fire", () => {
     const eqSet = (a: ReadonlySet<number>, b: ReadonlySet<number>) =>
       a.size === b.size && [...a].every(v => b.has(v));
-    const s = signal<ReadonlySet<number>>(new Set([1, 2]), { equals: eqSet });
+    const s = cell<ReadonlySet<number>>(new Set([1, 2]), { equals: eqSet });
 
     let fires = 0;
     const n = network([s], () => {
@@ -871,7 +871,7 @@ describe("multi-manual: shared deps, varied flush order", () => {
     const x = num(0);
     const seenA: { value: number; dirtyHas: boolean }[] = [];
     const seenB: { value: number; dirtyHas: boolean }[] = [];
-    const xAny = x as unknown as import("../signal").Signal<unknown>;
+    const xAny = x as unknown as import("../signal").Cell<unknown>;
     const a = network(
       [x],
       d => {

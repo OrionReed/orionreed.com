@@ -1,7 +1,7 @@
 // new-primitives.ts — building blocks over the N-input `Cls.lens` /
 // `Cls.derive` forms. All are a few lines on top of the engine.
 
-import type { Signal, Writable } from "./signal";
+import type { Cell, Writable } from "./signal";
 import { Num } from "./values/num";
 import { Vec } from "./values/vec";
 
@@ -11,14 +11,14 @@ type V = { x: number; y: number };
 
 /** Distance between two Vecs. RO — the inverse isn't unique. For a
  *  writable variant see `radialLens`. */
-export function distanceLens(a: Signal<V>, b: Signal<V>): Num {
+export function distanceLens(a: Cell<V>, b: Cell<V>): Num {
   return Num.derive([a, b] as const, vals =>
     Math.hypot(vals[0].x - vals[1].x, vals[0].y - vals[1].y),
   );
 }
 
 /** Angle from `a` to `b`, in radians. RO. */
-export function angleLens(a: Signal<V>, b: Signal<V>): Num {
+export function angleLens(a: Cell<V>, b: Cell<V>): Num {
   return Num.derive([a, b] as const, vals =>
     Math.atan2(vals[1].y - vals[0].y, vals[1].x - vals[0].x),
   );
@@ -28,9 +28,9 @@ export function angleLens(a: Signal<V>, b: Signal<V>): Num {
  *  the reflected position back to `point` (axis unchanged); reflection is
  *  involutive, so the same formula reads and writes. */
 export function reflectionLens(
-  point: Signal<V>,
-  axisStart: Signal<V>,
-  axisEnd: Signal<V>,
+  point: Cell<V>,
+  axisStart: Cell<V>,
+  axisEnd: Cell<V>,
 ): Writable<Vec> {
   const reflect = (p: V, a: V, b: V): V => {
     const dx = b.x - a.x;
@@ -51,7 +51,7 @@ export function reflectionLens(
 
 /** Lerp between two Vecs at parameter `t`. Writing the interpolated point
  *  shifts both endpoints rigidly (preserving t). */
-export function vecLerp(a: Signal<V>, b: Signal<V>, t: Signal<number>): Writable<Vec> {
+export function vecLerp(a: Cell<V>, b: Cell<V>, t: Cell<number>): Writable<Vec> {
   return Vec.lens(
     [a, b, t] as const,
     vals => {
@@ -136,7 +136,7 @@ export function clampedMean(parents: readonly Num[], lo: number, hi: number): Wr
 // ─── Curve primitives (RO) ──────────────────────────────────────────
 
 /** Quadratic Bézier point at parameter `t`. RO. */
-export function bezier2(p0: Signal<V>, p1: Signal<V>, p2: Signal<V>, t: Signal<number>): Vec {
+export function bezier2(p0: Cell<V>, p1: Cell<V>, p2: Cell<V>, t: Cell<number>): Vec {
   return Vec.derive([p0, p1, p2, t] as const, vals => {
     const [a, b, c, tv] = vals;
     const u = 1 - tv;
@@ -148,13 +148,7 @@ export function bezier2(p0: Signal<V>, p1: Signal<V>, p2: Signal<V>, t: Signal<n
 }
 
 /** Cubic Bézier point at parameter `t`. RO. */
-export function bezier3(
-  p0: Signal<V>,
-  p1: Signal<V>,
-  p2: Signal<V>,
-  p3: Signal<V>,
-  t: Signal<number>,
-): Vec {
+export function bezier3(p0: Cell<V>, p1: Cell<V>, p2: Cell<V>, p3: Cell<V>, t: Cell<number>): Vec {
   return Vec.derive([p0, p1, p2, p3, t] as const, vals => {
     const [a, b, c, d, tv] = vals;
     const u = 1 - tv;

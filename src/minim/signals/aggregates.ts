@@ -5,7 +5,7 @@
 // (`(target) => updates`) skips the peek loop on the hot path;
 // stateful-bwd (`(target, vals) => updates`) reads the scratch.
 
-import type { Signal, Writable } from "./signal";
+import type { Cell, Writable } from "./signal";
 import type { Linear } from "./traits";
 import { Num } from "./values/num";
 import { Vec } from "./values/vec";
@@ -16,9 +16,9 @@ type V = { x: number; y: number };
 
 /** Equal-weight mean of N Linear values; writes distribute the delta evenly. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors Cls.lens
-export function meanLens<T, C extends new (...args: never[]) => Signal<any>>(
+export function meanLens<T, C extends new (...args: never[]) => Cell<any>>(
   Cls: C,
-  parents: readonly Signal<T>[],
+  parents: readonly Cell<T>[],
 ): Writable<InstanceType<C>> {
   const lin = ((Cls as unknown as { traits?: { linear?: Linear<T> } }).traits?.linear ??
     (() => {
@@ -52,7 +52,7 @@ export function meanLens<T, C extends new (...args: never[]) => Signal<any>>(
 // ─── Vec aggregates (geometric helpers) ─────────────────────────────
 
 /** Midpoint of two writable Vecs. Drag-translates both endpoints. */
-export function midpointLens(a: Signal<V>, b: Signal<V>): Writable<Vec> {
+export function midpointLens(a: Cell<V>, b: Cell<V>): Writable<Vec> {
   return Vec.lens(
     [a, b] as const,
     vals => {
@@ -72,7 +72,7 @@ export function midpointLens(a: Signal<V>, b: Signal<V>): Writable<Vec> {
 }
 
 /** Centroid of N writable Vecs. Drag-translates all members. */
-export function centroidLens(parents: readonly Signal<V>[]): Writable<Vec> {
+export function centroidLens(parents: readonly Cell<V>[]): Writable<Vec> {
   const n = parents.length;
   const inv = 1 / n;
   return Vec.lens(

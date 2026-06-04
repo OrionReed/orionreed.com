@@ -6,10 +6,10 @@
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
 import {
+  Cell,
   type Init,
   lazy,
   reader,
-  Signal,
   type Val,
   type Writable,
   type WritableBrand,
@@ -35,7 +35,7 @@ const packImpl: Pack<V> = {
   write: (a, o) => a[o]!,
 };
 
-export class Num extends Signal<V> {
+export class Num extends Cell<V> {
   static traits = {
     linear: linearImpl,
     lerp,

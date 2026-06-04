@@ -16,7 +16,7 @@ import {
   type Tick,
   type Yieldable,
 } from "../core";
-import { derive, effect, type Read, reader, Signal, type Val, type Writable } from "./signal";
+import { Cell, derive, effect, type Read, reader, type Val, type Writable } from "./signal";
 import { requireLerp, requireLinear, requireMetric, type TraitKey, type Traits } from "./traits";
 
 const defaultEase = easeOut;
@@ -25,7 +25,7 @@ const defaultEase = easeOut;
  *  class declares the listed traits. Reads as a sentence:
  *
  *      function spring<T>(s: Animatable<T, "linear" | "metric">, …) */
-export type Animatable<T, K extends TraitKey = never> = Writable<Signal<T>> & Traits<T, K>;
+export type Animatable<T, K extends TraitKey = never> = Writable<Cell<T>> & Traits<T, K>;
 
 // ─── Tween chainable builder ────────────────────────────────────────
 
@@ -249,10 +249,7 @@ export function* attract<T>(
 // ─── generator-scoped reactive helpers ────────────────────────────
 
 /** Drive `sig` per frame with a pure function `f(t, initial)`. */
-export function* wave<T>(
-  sig: Writable<Signal<T>>,
-  fn: (t: number, initial: T) => T,
-): Animator<void> {
+export function* wave<T>(sig: Writable<Cell<T>>, fn: (t: number, initial: T) => T): Animator<void> {
   const initial = sig.peek();
   yield* drive((_tick, t) => {
     sig.value = fn(t, initial);
@@ -262,7 +259,7 @@ export function* wave<T>(
 /** Escape hatch: drive sig per frame with `step(dt, t, current)`.
  *  Return `false` to terminate. Use `wave` instead for pure `f(t)`. */
 export function* driven<T>(
-  sig: Writable<Signal<T>>,
+  sig: Writable<Cell<T>>,
   step: (dt: number, t: number, v: T) => T | false,
 ): Animator<void> {
   yield* drive((tick, t) => {
@@ -335,7 +332,7 @@ export function play(p: PlayTrigger | (() => Animator)): Play<unknown> {
 }
 
 function* playableGen(p: PlayTrigger): Animator<unknown> {
-  if (p instanceof Signal) {
+  if (p instanceof Cell) {
     yield* when(p);
     return undefined;
   }
@@ -362,12 +359,12 @@ export function when(sig: Read<unknown>): Animator<void> {
 }
 
 /** Reactive boolean negation as a `Signal<boolean>` (RO). */
-export function not(sig: Read<unknown>): Signal<boolean> {
+export function not(sig: Read<unknown>): Cell<boolean> {
   return derive(() => !sig.value);
 }
 
 /** Wait until `sig` changes; resumes with the new value. */
-export function untilChange<T>(sig: Signal<T>): Animator<T> {
+export function untilChange<T>(sig: Cell<T>): Animator<T> {
   return suspend<T>(wake => {
     const initial = sig.peek();
     let resolved = false;

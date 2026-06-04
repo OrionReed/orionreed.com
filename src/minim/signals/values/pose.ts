@@ -5,7 +5,7 @@
 // IK, and physics all observe the same value. Vec / Num lenses compose
 // for consumers that care only about translation or rotation.
 
-import { type Init, Signal, type Writable } from "../signal";
+import { Cell, type Init, type Writable } from "../signal";
 import type { Linear, Pack, Pivotal, TraitDict } from "../traits";
 
 type V = { x: number; y: number; theta: number };
@@ -65,7 +65,7 @@ const pivotalImpl: Pivotal<V> = {
   }),
 };
 
-export class Pose extends Signal<V> {
+export class Pose extends Cell<V> {
   static traits = {
     linear: linearImpl,
     lerp,

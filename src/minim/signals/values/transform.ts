@@ -7,7 +7,7 @@
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { type Inner, reader, readNow, Signal, type Val, type Writable } from "../signal";
+import { Cell, type Inner, reader, readNow, type Val, type Writable } from "../signal";
 import type { Linear, TraitDict } from "../traits";
 import { field } from "../writable";
 import { Num } from "./num";
@@ -81,7 +81,7 @@ export const metric = (a: V, b: V) =>
 
 const linearImpl: Linear<V> = { add, sub, scale };
 
-export class Transform extends Signal<V> {
+export class Transform extends Cell<V> {
   static traits = { linear: linearImpl, lerp, metric, equals } satisfies TraitDict<V>;
   declare readonly _t: typeof Transform.traits;
 

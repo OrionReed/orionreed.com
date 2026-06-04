@@ -30,6 +30,8 @@ export { each, type Lifecycle } from "./network-utils";
 export { reflectionLens } from "./new-primitives";
 export {
   batch,
+  Cell as Signal,
+  cell as signal,
   derive,
   effect,
   type Init,
@@ -44,12 +46,10 @@ export {
   type Read,
   reader,
   readNow,
-  Signal,
   type SignalOptions,
   type StatefulBwd,
   type StatefulLensSpec,
   setSignalWriteHook,
-  signal,
   untracked,
   type Val,
   type Writable,

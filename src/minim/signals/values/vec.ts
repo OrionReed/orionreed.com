@@ -6,7 +6,7 @@
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
-import { type Init, reader, readNow, Signal, type Val, type Writable } from "../signal";
+import { Cell, type Init, reader, readNow, type Val, type Writable } from "../signal";
 import type { Linear, Pack, Pivotal, TraitDict } from "../traits";
 import { derived, field } from "../writable";
 import { Num, num } from "./num";
@@ -74,7 +74,7 @@ const pivotalImpl: Pivotal<V> = {
   }),
 };
 
-export class Vec extends Signal<V> {
+export class Vec extends Cell<V> {
   static traits = {
     linear: linearImpl,
     lerp,

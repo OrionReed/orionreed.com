@@ -6,20 +6,20 @@
 // safe: it only reads engine state and peeks `.value` to populate deps
 // for lazy Computeds (idempotent).
 
-import type { Signal } from "./signal";
+import type { Cell } from "./signal";
 
 // One node in the engine's dep linked list; we only read `dep`/`nextDep`.
 interface DepLink {
-  dep: Signal<unknown>;
+  dep: Cell<unknown>;
   nextDep: DepLink | undefined;
 }
 
 /** Every signal `s` transitively depends on, including itself. Raw cells
  *  return `{s}`; lens chains return the chain plus all parents. BFS,
  *  peeking each Computed to populate deps; the `seen` set breaks cycles. */
-export function transitiveDeps(s: Signal<unknown>): Set<Signal<unknown>> {
-  const seen = new Set<Signal<unknown>>();
-  const queue: Signal<unknown>[] = [s];
+export function transitiveDeps(s: Cell<unknown>): Set<Cell<unknown>> {
+  const seen = new Set<Cell<unknown>>();
+  const queue: Cell<unknown>[] = [s];
   while (queue.length > 0) {
     const cur = queue.shift()!;
     if (seen.has(cur)) continue;

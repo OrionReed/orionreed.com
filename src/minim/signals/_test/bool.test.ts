@@ -13,7 +13,7 @@
 //   - Edge cases: many-deep fusion, xor with reactive b, xor identity
 
 import { describe, expect, it } from "vitest";
-import { effect, isLens, signal } from "../signal";
+import { cell, effect, isLens } from "../signal";
 import { Bool, bool } from "../values/bool";
 import { box } from "../values/box";
 import { Num, num } from "../values/num";
@@ -443,7 +443,7 @@ describe("Bool — stress", () => {
   it("signal<boolean> can still be wrapped in derive — back-compat with the loose use", () => {
     // Confirms Bool doesn't break the pre-existing Signal<boolean> usage
     // that the codebase already has in many places.
-    const raw = signal(false);
+    const raw = cell(false);
     const b = Bool.derive(() => raw.value);
     expect(b).toBeInstanceOf(Bool);
     expect(b.value).toBe(false);

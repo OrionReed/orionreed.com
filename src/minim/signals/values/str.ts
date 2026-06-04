@@ -17,7 +17,7 @@
 //   words        — separator pattern between words
 //   sortedUnique — source positions + original case per unique word
 
-import { type Init, Signal, type Writable } from "../signal";
+import { Cell, type Init, type Writable } from "../signal";
 import type { TraitDict } from "../traits";
 
 type V = string;
@@ -283,7 +283,7 @@ interface SortedUniqueComplement {
 
 // ── Str class ─────────────────────────────────────────────────────
 
-export class Str extends Signal<V> {
+export class Str extends Cell<V> {
   static traits = { equals } satisfies TraitDict<V>;
   declare readonly _t: typeof Str.traits;
 

@@ -67,11 +67,11 @@ let flushing = false;
 let activeNetwork: _NetworkNode | undefined;
 const queued: (Effect | _NetworkNode | undefined)[] = [];
 
-const EMPTY_DIRTY: ReadonlySet<Signal<unknown>> = new Set();
+const EMPTY_DIRTY: ReadonlySet<Cell<unknown>> = new Set();
 
 /** Backward worklist: lens cells with deferred writes, merge cells
  *  awaiting fold. Drained to a fixpoint with effects by flush. */
-const bwdQueue: Signal<unknown>[] = [];
+const bwdQueue: Cell<unknown>[] = [];
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -105,10 +105,10 @@ interface Stack<T> {
 // Backward writes reach it via `_writeSource`, attributing lens edits to
 // the source they resolve to.
 
-let writeHook: ((sig: Signal<unknown>) => void) | undefined;
+let writeHook: ((sig: Cell<unknown>) => void) | undefined;
 
 /** Install a hook fired on every source value-change; returns a restore fn. */
-export function setSignalWriteHook(fn: ((sig: Signal<unknown>) => void) | undefined): () => void {
+export function setSignalWriteHook(fn: ((sig: Cell<unknown>) => void) | undefined): () => void {
   const prev = writeHook;
   writeHook = fn;
   return () => {
@@ -148,7 +148,7 @@ function link(dep: ReactiveNode, sub: ReactiveNode, version: number): void {
   if (prevSub !== undefined) prevSub.nextSub = newLink;
   else dep.subs = newLink;
   // First-subscriber lifecycle hook (dual: last-sub in `_unwatched`).
-  if (isFirstSub && dep instanceof Signal) {
+  if (isFirstSub && dep instanceof Cell) {
     const hook = dep._watched;
     if (hook !== undefined) hook.call(dep);
   }
@@ -321,13 +321,13 @@ export interface MergePolicy<T> {
 export const DIRECT_SLOT: unique symbol = Symbol("merge:direct-slot");
 
 class MergeNode<T> {
-  readonly parent: Signal<T>;
+  readonly parent: Cell<T>;
   readonly policy: MergePolicy<T>;
   readonly slots: Map<unknown, T> = new Map();
   readonly hasIncrementalAcc: boolean;
   acc: T;
 
-  constructor(parent: Signal<T>, policy: MergePolicy<T>) {
+  constructor(parent: Cell<T>, policy: MergePolicy<T>) {
     this.parent = parent;
     this.policy = policy;
     this.hasIncrementalAcc = policy.remove !== undefined;
@@ -375,24 +375,24 @@ export interface WritableBrand {
 }
 
 /** Value type carried by a reactive read shape. */
-export type Inner<R> = R extends Signal<infer T> ? T : R extends Read<infer T> ? T : never;
+export type Inner<R> = R extends Cell<infer T> ? T : R extends Read<infer T> ? T : never;
 
 /** The writable form of R: adds the brand + a settable `value`. */
 export type Writable<R> = R & WritableBrand & { value: Inner<R> };
 
 /** Strict factory input: a literal, or an existing `Writable<Cls>`. */
 // biome-ignore lint/suspicious/noExplicitAny: variance escape, mirrors `Inner`
-export type Init<C extends Signal<any>> = Inner<C> | Writable<C>;
+export type Init<C extends Cell<any>> = Inner<C> | Writable<C>;
 
 /** Snapshot a `Val<T>` to plain `T` (one-shot, no tracking). */
 export function readNow<T>(v: Val<T>): T {
-  if (v instanceof Signal) return v.value as T;
+  if (v instanceof Cell) return v.value as T;
   return v as T;
 }
 
 /** Resolve a `Val<T>` to a `() => T` closure that unwraps on each call. */
 export function reader<T>(v: Val<T>): () => T {
-  if (v instanceof Signal) return () => v.value as T;
+  if (v instanceof Cell) return () => v.value as T;
   return () => v as T;
 }
 
@@ -409,20 +409,17 @@ export function lazy<R>(self: object, key: string | symbol, make: () => R): R {
   return v;
 }
 
-export const isSignal = (v: unknown): v is Signal<unknown> => v instanceof Signal;
+export const isSignal = (v: unknown): v is Cell<unknown> => v instanceof Cell;
 
 /** Lens mode: a derived cell that can be written back (has `put` or is a merge). */
-export const isLens = (v: unknown): v is Signal<unknown> =>
-  v instanceof Signal &&
+export const isLens = (v: unknown): v is Cell<unknown> =>
+  v instanceof Cell &&
   v.getter !== undefined &&
   (v._put !== undefined || v._mergeNode !== undefined);
 
 /** Computed mode: derived + read-only (no backward path). */
-export const isComputed = (v: unknown): v is Signal<unknown> =>
-  v instanceof Signal &&
-  v.getter !== undefined &&
-  v._put === undefined &&
-  v._mergeNode === undefined;
+export const isComputed = (v: unknown): v is Cell<unknown> =>
+  v instanceof Cell && v.getter !== undefined && v._put === undefined && v._mergeNode === undefined;
 
 // ─── Signal class ─────────────────────────────────────────────────
 
@@ -435,7 +432,7 @@ export interface SignalOptions<T = unknown> {
   equals?: (a: T, b: T) => boolean;
 }
 
-export class Signal<T = unknown> implements ReactiveNode {
+export class Cell<T = unknown> implements ReactiveNode {
   flags: number = F.Mutable;
   subs: Link | undefined;
   subsTail: Link | undefined;
@@ -463,7 +460,7 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  (1→1 lens or merge parent) or a `Signal[]` (multi-parent lens whose
    *  `_put` returns a per-parent update array; the backward pass splits
    *  into each). Private `_put` state is closure-captured. */
-  _bwdParent: Signal<unknown> | Signal<unknown>[] | undefined;
+  _bwdParent: Cell<unknown> | Cell<unknown>[] | undefined;
 
   /** Lens `put` — backward derivation (dual of `getter`). Multi-output:
    *  `_put(target)` returns a per-parent update array. */
@@ -546,7 +543,7 @@ export class Signal<T = unknown> implements ReactiveNode {
   _enqueueBwd(): void {
     this.flags |= F.BwdQueued;
     this._queueIdx = bwdQueue.length;
-    bwdQueue.push(this as Signal<unknown>);
+    bwdQueue.push(this as Cell<unknown>);
   }
 
   /** Source write (alien's signal setter). Self-excludes the active
@@ -556,7 +553,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     this.pendingValue = next;
     if (!this._equals(prev, next)) {
       this.flags = F.Mutable | F.Dirty;
-      if (writeHook !== undefined) writeHook(this as Signal<unknown>);
+      if (writeHook !== undefined) writeHook(this as Cell<unknown>);
       const subs = this.subs;
       if (subs !== undefined) propagate(subs, runDepth > 0, activeNetwork);
       if (batchDepth === 0 && !flushing && subs !== undefined) flush();
@@ -622,10 +619,10 @@ export class Signal<T = unknown> implements ReactiveNode {
 
   /** Endomorphic lens. A 2-arg `bwd(view, current)` consults the current
    *  source; a 1-arg `bwd(view)` reconstructs it from the view alone. */
-  lens(this: Signal<T>, fwd: (v: T) => T, bwd: (target: T, current: T) => T): this {
+  lens(this: Cell<T>, fwd: (v: T) => T, bwd: (target: T, current: T) => T): this {
     return buildLens1(
-      this.constructor as SignalCtor<Signal<T>>,
-      this as Signal<unknown>,
+      this.constructor as SignalCtor<Cell<T>>,
+      this as Cell<unknown>,
       fwd as (v: unknown) => unknown,
       bwd as (t: unknown, s?: unknown) => unknown,
       bwd.length >= 2,
@@ -635,35 +632,30 @@ export class Signal<T = unknown> implements ReactiveNode {
   /** Backward-aggregating node — bwd dual of computed. Forward, the
    *  identity view of its parent; backward, folds contributions from
    *  upstream lenses (slot-keyed) and direct writes (DIRECT_SLOT). */
-  merge(this: Signal<T>, policy: MergePolicy<T>): Signal<T> {
+  merge(this: Cell<T>, policy: MergePolicy<T>): Cell<T> {
     if (this.getter !== undefined && this._put === undefined && this._mergeNode === undefined) {
       throw new TypeError("merge: receiver is read-only");
     }
-    const parent = this as Signal<T>;
-    const cell = new (this.constructor as SignalCtor<Signal<T>>)();
+    const parent = this as Cell<T>;
+    const cell = new (this.constructor as SignalCtor<Cell<T>>)();
     cell.flags = F.Mutable | F.Dirty;
     cell.getter = (): T => parent.value;
-    cell._bwdParent = parent as Signal<unknown>;
+    cell._bwdParent = parent as Cell<unknown>;
     cell._mergeNode = new MergeNode<T>(parent, policy);
-    return cell as Signal<T>;
+    return cell as Cell<T>;
   }
 
   /** Read-only typed view. `Cls.derive(parent, fn)` (1-input),
    *  `Cls.derive(parents, fn)` (N-input), or `Cls.derive(fn)` (closure).
    *  Polymorphic-`this`: `Vec.derive(...)` → `Vec`. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static derive<C extends new (...args: never[]) => Signal<any>, P>(
+  static derive<C extends new (...args: never[]) => Cell<any>, P>(
     this: C,
     parent: Read<P>,
     fn: (v: P) => Inner<InstanceType<C>>,
   ): InstanceType<C>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static derive<
-    C extends new (
-      ...args: never[]
-    ) => Signal<any>,
-    P extends readonly Read<unknown>[],
-  >(
+  static derive<C extends new (...args: never[]) => Cell<any>, P extends readonly Read<unknown>[]>(
     this: C,
     parents: P,
     fn: (
@@ -671,7 +663,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     ) => Inner<InstanceType<C>>,
   ): InstanceType<C>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static derive<C extends new (...args: never[]) => Signal<any>>(
+  static derive<C extends new (...args: never[]) => Cell<any>>(
     this: C,
     fn: () => Inner<InstanceType<C>>,
   ): InstanceType<C>;
@@ -680,7 +672,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     if (args.length === 1) return buildComputed(this, args[0]);
     const [parent, fn] = args;
     if (Array.isArray(parent)) return buildLensN(this, parent, fn, undefined, false);
-    return buildComputed(this, () => fn((parent as Signal<unknown>).value));
+    return buildComputed(this, () => fn((parent as Cell<unknown>).value));
   }
 
   /** Writable lens. `Cls.lens(parent, fwd, bwd)` for one input,
@@ -688,14 +680,14 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  a 1-arg `bwd` reconstructs it. `Cls.lens(parent(s), spec)` builds a
    *  complement-carrying lens from `{ init, step, fwd, bwd }`. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static lens<C extends new (...args: never[]) => Signal<any>, P>(
+  static lens<C extends new (...args: never[]) => Cell<any>, P>(
     this: C,
     parent: Read<P>,
     fwd: (v: P) => Inner<InstanceType<C>>,
     bwd: (target: Inner<InstanceType<C>>, v: P) => P,
   ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static lens<C extends new (...args: never[]) => Signal<any>, P extends readonly Read<unknown>[]>(
+  static lens<C extends new (...args: never[]) => Cell<any>, P extends readonly Read<unknown>[]>(
     this: C,
     parents: P,
     fwd: (
@@ -707,7 +699,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     ) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
   ): Writable<InstanceType<C>>;
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static lens<C extends new (...args: never[]) => Signal<any>, P, Cm>(
+  static lens<C extends new (...args: never[]) => Cell<any>, P, Cm>(
     this: C,
     parent: Read<P>,
     spec: StatefulLensSpec<readonly [P], Inner<InstanceType<C>>, Cm>,
@@ -716,7 +708,7 @@ export class Signal<T = unknown> implements ReactiveNode {
   static lens<
     C extends new (
       ...args: never[]
-    ) => Signal<any>,
+    ) => Cell<any>,
     P extends readonly Read<unknown>[],
     Cm,
   >(
@@ -740,7 +732,7 @@ export class Signal<T = unknown> implements ReactiveNode {
   /** Type predicate against this class: `Vec.is(x)` narrows `x` to `Vec`.
    *  Inherited static; works for any subclass via polymorphic `this`. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static is<C extends new (...args: never[]) => Signal<any>>(
+  static is<C extends new (...args: never[]) => Cell<any>>(
     this: C,
     v: unknown,
   ): v is InstanceType<C> {
@@ -750,12 +742,12 @@ export class Signal<T = unknown> implements ReactiveNode {
   /** Lift `Val<Inner<Cls>>` → `Cls`: instance → identity, RO signal →
    *  tracked `derive`, literal → fresh seed. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static from<C extends new (...args: never[]) => Signal<any>>(
+  static from<C extends new (...args: never[]) => Cell<any>>(
     this: C,
     v: Val<Inner<InstanceType<C>>>,
   ): InstanceType<C> {
     if (v instanceof this) return v as InstanceType<C>;
-    if (v instanceof Signal) {
+    if (v instanceof Cell) {
       // biome-ignore lint/suspicious/noExplicitAny: dispatch
       return (this as any).derive(() => readNow(v)) as InstanceType<C>;
     }
@@ -767,11 +759,11 @@ export class Signal<T = unknown> implements ReactiveNode {
   /** Writable-shaped constant: always reads `v`, absorbs writes
    *  (parentless sink lens), for APIs demanding bidirectionality. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static pin<C extends new (...args: never[]) => Signal<any>>(
+  static pin<C extends new (...args: never[]) => Cell<any>>(
     this: C,
     v: Inner<InstanceType<C>>,
   ): Writable<InstanceType<C>> {
-    const cell = new (this as unknown as SignalCtor<Signal<unknown>>)();
+    const cell = new (this as unknown as SignalCtor<Cell<unknown>>)();
     cell.flags = F.Mutable | F.Dirty;
     cell.getter = (): unknown => v;
     cell._put = (): unknown => undefined; // absorb (no parent → sink)
@@ -783,13 +775,13 @@ export class Signal<T = unknown> implements ReactiveNode {
    *  parent yields a RO derive view; any writable parent yields a
    *  bidirectional field lens with spread-replace `put`. */
   // biome-ignore lint/suspicious/noExplicitAny: variance escape
-  static fieldOf<C extends new (...args: never[]) => Signal<any>>(
+  static fieldOf<C extends new (...args: never[]) => Cell<any>>(
     // biome-ignore lint/suspicious/noExplicitAny: parent is contravariant on put
-    parent: Signal<any>,
+    parent: Cell<any>,
     key: string | number | symbol,
     Cls: C,
   ): InstanceType<C> {
-    const ctor = Cls as unknown as SignalCtor<Signal<unknown>>;
+    const ctor = Cls as unknown as SignalCtor<Cell<unknown>>;
     const get = (s: unknown): unknown => (s as Record<string | number | symbol, unknown>)[key];
     // Read-only ⇔ computed (getter, no put, no merge). `_put === undefined`
     // also excludes multi-output, so no `_bwdParent` check needed.
@@ -801,7 +793,7 @@ export class Signal<T = unknown> implements ReactiveNode {
     // Spread-replace reads the current source ⇒ source-reading (lens) form.
     return buildLens1(
       ctor,
-      parent as Signal<unknown>,
+      parent as Cell<unknown>,
       get,
       (v, s) => ({ ...(s as object), [key]: v }),
       true,
@@ -815,10 +807,10 @@ export class Signal<T = unknown> implements ReactiveNode {
 // a `Vec`), then sets the mode fields. Module-level so statics can call them.
 
 // biome-ignore lint/suspicious/noExplicitAny: variance escape for subclass ctors (contravariant _equals)
-type SignalCtor<C extends Signal<any>> = new (...args: never[]) => C;
+type SignalCtor<C extends Cell<any>> = new (...args: never[]) => C;
 
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
-function buildComputed<C extends Signal<any>>(Cls: SignalCtor<C>, getter: () => unknown): C {
+function buildComputed<C extends Cell<any>>(Cls: SignalCtor<C>, getter: () => unknown): C {
   const cell = new Cls();
   cell.getter = getter as () => never;
   cell.flags = F.Mutable | F.Dirty;
@@ -826,9 +818,9 @@ function buildComputed<C extends Signal<any>>(Cls: SignalCtor<C>, getter: () => 
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
-function buildLens1<C extends Signal<any>>(
+function buildLens1<C extends Cell<any>>(
   Cls: SignalCtor<C>,
-  parent: Signal<unknown>,
+  parent: Cell<unknown>,
   fwd: (v: unknown) => unknown,
   bwd: (t: unknown, s?: unknown) => unknown,
   readsSource: boolean,
@@ -843,9 +835,9 @@ function buildLens1<C extends Signal<any>>(
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
-function buildLensN<C extends Signal<any>>(
+function buildLensN<C extends Cell<any>>(
   Cls: SignalCtor<C>,
-  parents: Signal<unknown>[],
+  parents: Cell<unknown>[],
   fwd: (vals: readonly unknown[]) => unknown,
   bwd: ((target: unknown, vals?: readonly unknown[]) => ReadonlyArray<unknown>) | undefined,
   readsSource: boolean,
@@ -901,9 +893,9 @@ export interface StatefulLensSpec<S extends readonly unknown[], V, C> {
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: variance escape
-function buildStateful<C extends Signal<any>>(
+function buildStateful<C extends Cell<any>>(
   Cls: SignalCtor<C>,
-  parents: Signal<unknown>[],
+  parents: Cell<unknown>[],
   // biome-ignore lint/suspicious/noExplicitAny: opaque spec
   spec: StatefulLensSpec<any, any, any>,
 ): C {
@@ -940,8 +932,8 @@ function buildStateful<C extends Signal<any>>(
 }
 
 // Install `value` on the prototype (V8 JITs it better than a class get/set).
-Object.defineProperty(Signal.prototype, "value", {
-  get(this: Signal<unknown>): unknown {
+Object.defineProperty(Cell.prototype, "value", {
+  get(this: Cell<unknown>): unknown {
     const flags = this.flags;
     if (this.getter !== undefined) {
       if (flags & F.RecursedCheck) {
@@ -988,7 +980,7 @@ Object.defineProperty(Signal.prototype, "value", {
     if (activeSub !== undefined) link(this, activeSub, cycle);
     return this.currentValue;
   },
-  set(this: Signal<unknown>, next: unknown): void {
+  set(this: Cell<unknown>, next: unknown): void {
     if (this.getter === undefined) {
       this._writeSource(next);
       return;
@@ -1038,7 +1030,7 @@ Object.defineProperty(Signal.prototype, "value", {
 // Backward evaluation runs UNTRACKED so `bwd`/`step`/`fwd` reads don't
 // establish forward deps on whatever `activeSub` is writing (e.g. an
 // effect that writes a lens). All backward entry points route through here.
-function bwdUntracked(cell: Signal<unknown>, target: unknown, deferred: boolean): void {
+function bwdUntracked(cell: Cell<unknown>, target: unknown, deferred: boolean): void {
   const prev = activeSub;
   activeSub = undefined;
   try {
@@ -1048,7 +1040,7 @@ function bwdUntracked(cell: Signal<unknown>, target: unknown, deferred: boolean)
   }
 }
 
-function propagateBwd(start: Signal<unknown>, target: unknown, deferred: boolean): void {
+function propagateBwd(start: Cell<unknown>, target: unknown, deferred: boolean): void {
   let cell = start;
   let v = target;
   while (true) {
@@ -1105,8 +1097,8 @@ function propagateBwd(start: Signal<unknown>, target: unknown, deferred: boolean
  *  each defined update recurses via `propagateBwd`. Eager splits coalesce
  *  under one flush (same guarantee as `batch()`); the coalescing lives
  *  here since such a cell may be reached as a write start or mid-chain. */
-function propagateSplit(cell: Signal<unknown>, target: unknown, deferred: boolean): void {
-  const parents = cell._bwdParent as Signal<unknown>[];
+function propagateSplit(cell: Cell<unknown>, target: unknown, deferred: boolean): void {
+  const parents = cell._bwdParent as Cell<unknown>[];
   const n = parents.length;
 
   // STATEFUL lens: `bwd` reads the complement and returns per-parent
@@ -1176,7 +1168,7 @@ function propagateSplit(cell: Signal<unknown>, target: unknown, deferred: boolea
 /** Route each defined update to its parent: a source commits directly, a
  *  lens/multi-parent/merge re-enters the backward pass. Always called
  *  under a bumped `batchDepth` so commits coalesce into one flush. */
-function forkInto(parents: Signal<unknown>[], updates: ReadonlyArray<unknown>, n: number): void {
+function forkInto(parents: Cell<unknown>[], updates: ReadonlyArray<unknown>, n: number): void {
   for (let i = 0; i < n; i++) {
     const u = updates[i];
     if (u === undefined) continue;
@@ -1189,16 +1181,16 @@ function forkInto(parents: Signal<unknown>[], updates: ReadonlyArray<unknown>, n
 // ─── factories ────────────────────────────────────────────────────
 
 /** Writable source; passes an existing `Writable` through (idempotent). */
-export function signal<T>(
-  initial: T | Writable<Signal<T>>,
+export function cell<T>(
+  initial: T | Writable<Cell<T>>,
   opts?: SignalOptions<T>,
-): Writable<Signal<T>> {
-  if (initial instanceof Signal) return initial as Writable<Signal<T>>;
-  return new Signal(initial as T, opts) as Writable<Signal<T>>;
+): Writable<Cell<T>> {
+  if (initial instanceof Cell) return initial as Writable<Cell<T>>;
+  return new Cell(initial as T, opts) as Writable<Cell<T>>;
 }
 
-export function computed<T>(fn: () => T): Signal<T> {
-  const cell = new Signal<T>(undefined as never);
+export function computed<T>(fn: () => T): Cell<T> {
+  const cell = new Cell<T>(undefined as never);
   cell.flags = F.Mutable | F.Dirty;
   cell.getter = fn;
   return cell;
@@ -1208,22 +1200,22 @@ export function computed<T>(fn: () => T): Signal<T> {
 // from the closures (the polymorphic-`this` statics are for typed
 // subclasses like `Vec.lens`).
 
-const SIGNAL_CTOR = Signal as unknown as SignalCtor<Signal<unknown>>;
+const SIGNAL_CTOR = Cell as unknown as SignalCtor<Cell<unknown>>;
 
 /** Untyped read-only view: `derive(parent, fn)`, `derive(parents, fn)`,
  *  or `derive(fn)` (closure). */
-export function derive<P, R>(parent: Read<P>, fn: (v: P) => R): Signal<R>;
+export function derive<P, R>(parent: Read<P>, fn: (v: P) => R): Cell<R>;
 export function derive<P extends readonly Read<unknown>[], R>(
   parents: P,
   fn: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => R,
-): Signal<R>;
-export function derive<R>(fn: () => R): Signal<R>;
+): Cell<R>;
+export function derive<R>(fn: () => R): Cell<R>;
 // biome-ignore lint/suspicious/noExplicitAny: dispatch
 export function derive(...args: any[]): any {
   if (args.length === 1) return buildComputed(SIGNAL_CTOR, args[0]);
   const [parent, fn] = args;
   if (Array.isArray(parent)) return buildLensN(SIGNAL_CTOR, parent, fn, undefined, false);
-  return buildComputed(SIGNAL_CTOR, () => fn((parent as Signal<unknown>).value));
+  return buildComputed(SIGNAL_CTOR, () => fn((parent as Cell<unknown>).value));
 }
 
 /** Untyped lens, inferring `R` from the closures. A 2-arg `bwd` reads the
@@ -1233,7 +1225,7 @@ export function lens<P, R>(
   parent: Read<P>,
   fwd: (v: P) => R,
   bwd: (target: R, v: P) => P,
-): Writable<Signal<R>>;
+): Writable<Cell<R>>;
 export function lens<P extends readonly Read<unknown>[], R>(
   parents: P,
   fwd: (vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never }) => R,
@@ -1241,15 +1233,15 @@ export function lens<P extends readonly Read<unknown>[], R>(
     target: R,
     vals: { [K in keyof P]: P[K] extends Read<infer V> ? V : never },
   ) => { [K in keyof P]?: P[K] extends Read<infer V> ? V : never },
-): Writable<Signal<R>>;
+): Writable<Cell<R>>;
 export function lens<P, R, C>(
   parent: Read<P>,
   spec: StatefulLensSpec<readonly [P], R, C>,
-): Writable<Signal<R>>;
+): Writable<Cell<R>>;
 export function lens<P extends readonly Read<unknown>[], R, C>(
   parents: P,
   spec: StatefulLensSpec<{ [K in keyof P]: P[K] extends Read<infer V> ? V : never }, R, C>,
-): Writable<Signal<R>>;
+): Writable<Cell<R>>;
 // biome-ignore lint/suspicious/noExplicitAny: dispatch
 export function lens(...args: any[]): any {
   const [parent, a, b] = args;
@@ -1443,13 +1435,13 @@ export interface Network {
   flush(): void;
   /** Add signals to the topology (idempotent; does NOT fire the body). */
   // biome-ignore lint/suspicious/noExplicitAny: deps come in many flavours
-  subscribe(...sigs: Signal<any>[]): void;
+  subscribe(...sigs: Cell<any>[]): void;
   /** Remove signals from the topology (idempotent; does NOT fire). */
   // biome-ignore lint/suspicious/noExplicitAny: deps come in many flavours
-  unsubscribe(...sigs: Signal<any>[]): void;
+  unsubscribe(...sigs: Cell<any>[]): void;
 }
 
-type NetworkBody = (dirty: ReadonlySet<Signal<unknown>>, handle: Network) => void;
+type NetworkBody = (dirty: ReadonlySet<Cell<unknown>>, handle: Network) => void;
 
 class _NetworkNode implements ReactiveNode {
   subs: Link | undefined = undefined;
@@ -1460,11 +1452,11 @@ class _NetworkNode implements ReactiveNode {
   body: NetworkBody;
   manual: boolean;
   /** Per-instance last-seen dep values; used to compute `dirty`. */
-  lastValues: Map<Signal<unknown>, unknown> = new Map();
+  lastValues: Map<Cell<unknown>, unknown> = new Map();
   pending = false;
   disposed = false;
   private _ownCycle = 0;
-  private _depsSet: Set<Signal<unknown>> = new Set();
+  private _depsSet: Set<Cell<unknown>> = new Set();
   private _handle!: Network;
 
   constructor(body: NetworkBody, manual: boolean) {
@@ -1473,7 +1465,7 @@ class _NetworkNode implements ReactiveNode {
   }
 
   /** Two-phase init so the body sees its own handle on the first fire. */
-  _initWithHandle(handle: Network, initialDeps: readonly Signal<unknown>[]): void {
+  _initWithHandle(handle: Network, initialDeps: readonly Cell<unknown>[]): void {
     this._handle = handle;
     this._linkBatch(initialDeps);
     this._runBody(EMPTY_DIRTY);
@@ -1513,8 +1505,8 @@ class _NetworkNode implements ReactiveNode {
     }
   }
 
-  private _computeDirty(): ReadonlySet<Signal<unknown>> {
-    let dirty: Set<Signal<unknown>> | undefined;
+  private _computeDirty(): ReadonlySet<Cell<unknown>> {
+    let dirty: Set<Cell<unknown>> | undefined;
     for (const [sig, lastVal] of this.lastValues) {
       if (sig.peek() !== lastVal) {
         if (dirty === undefined) dirty = new Set();
@@ -1524,7 +1516,7 @@ class _NetworkNode implements ReactiveNode {
     return dirty ?? EMPTY_DIRTY;
   }
 
-  private _runBody(dirty: ReadonlySet<Signal<unknown>>): void {
+  private _runBody(dirty: ReadonlySet<Cell<unknown>>): void {
     // RecursedCheck doubles as the "body running" guard (see flush()).
     this.flags = F.Watching | F.RecursedCheck;
     const prevSettler = activeNetwork;
@@ -1545,7 +1537,7 @@ class _NetworkNode implements ReactiveNode {
       this.lastValues.clear();
       let l = this.deps;
       while (l !== undefined) {
-        const sig = l.dep as Signal<unknown>;
+        const sig = l.dep as Cell<unknown>;
         this.lastValues.set(sig, sig.peek());
         l = l.nextDep;
       }
@@ -1564,12 +1556,12 @@ class _NetworkNode implements ReactiveNode {
     this._runBody(this._computeDirty());
   }
 
-  subscribe(sigs: readonly Signal<unknown>[]): void {
+  subscribe(sigs: readonly Cell<unknown>[]): void {
     if (this.disposed) return;
     this._linkBatch(sigs);
   }
 
-  unsubscribe(sigs: readonly Signal<unknown>[]): void {
+  unsubscribe(sigs: readonly Cell<unknown>[]): void {
     if (this.disposed) return;
     const set = this._depsSet;
     for (const s of sigs) {
@@ -1586,7 +1578,7 @@ class _NetworkNode implements ReactiveNode {
     }
   }
 
-  private _linkBatch(sigs: readonly Signal<unknown>[]): void {
+  private _linkBatch(sigs: readonly Cell<unknown>[]): void {
     const set = this._depsSet;
     let tail = this.deps;
     if (tail !== undefined) {
@@ -1609,8 +1601,8 @@ class _NetworkNode implements ReactiveNode {
  *  auto-firing so only `flush()` advances. */
 export function network(
   // biome-ignore lint/suspicious/noExplicitAny: deps come in many flavours
-  deps: readonly Signal<any>[],
-  body: (dirty: ReadonlySet<Signal<unknown>>, handle: Network) => void,
+  deps: readonly Cell<any>[],
+  body: (dirty: ReadonlySet<Cell<unknown>>, handle: Network) => void,
   opts?: { manual?: boolean },
 ): Network {
   const node = new _NetworkNode(body, opts?.manual ?? false);
@@ -1620,6 +1612,6 @@ export function network(
     subscribe: (...sigs) => node.subscribe(sigs),
     unsubscribe: (...sigs) => node.unsubscribe(sigs),
   };
-  node._initWithHandle(handle, deps as readonly Signal<unknown>[]);
+  node._initWithHandle(handle, deps as readonly Cell<unknown>[]);
   return handle;
 }
