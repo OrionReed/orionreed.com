@@ -122,6 +122,18 @@ The codomain can keep growing. `Bool` is two states; push to thirteen and you ge
 
 <md-allen></md-allen>
 
+Add a second axis and the labels multiply. A `Box` is `Rangeₓ × Range_y`, so `(Box, Box) → RCC-8` is two Allen classifications — the 2D relation factors into the per-axis ones. Eight topological relations; click one and B reshapes to realize it:
+
+<md-rcc8></md-rcc8>
+
+Coarsen instead of classify and the same shape is a histogram: `Array<Num> → Array<BinCount>` drops position, keeps counts. The bwd is mass transport — drag a bar and the fewest samples cross the nearest boundary (the aggregate cousin of `quantize`):
+
+<md-histogram></md-histogram>
+
+The 2D version is a heatmap, `Array<Vec> → Grid<Count>` — drag a point to re-bin, click a cell to pull the nearest one in:
+
+<md-heatmap></md-heatmap>
+
 The natural sum-type extension of Bool is `Tri` — three-valued logic with an "indeterminate" state. The UI primitive: a checkbox tree where each folder is the Kleene-AND of its descendants (all → checked, none → unchecked, partial → indeterminate). `Tri.allOf(leaves)` reads the aggregate and broadcasts on write — both halves of the indeterminate checkbox in one cell, the recursion in the data not the rendering:
 
 ```ts
@@ -155,6 +167,10 @@ Propagate: each bone holds a local `pose()`; world pose is `Pose.derive([parent.
 <md-skeletal-rig></md-skeletal-rig>
 
 One primitive, two demos: aggregate is recursive `Num.lens(sum, redistribute)`, propagate is recursive `Pose.derive(compose)` plus decompose. The tree is structure, not a value type.
+
+Both build the tree as a cell graph; the bridge runs the other way. `Array<Box> → Forest` reads a nesting tree *out* of flat geometry — read = smallest containing box. Drag a box in the geometry pane and its subtree travels along, the forest reforming live; drag a node in the forest pane onto another and the bwd rescales that subtree to nest inside the target:
+
+<md-containment-forest></md-containment-forest>
 
 Everything so far rides numeric value types with closed-form or numerical inverses. The engine has a second shape for *unstructured* domains — strings, arrays, sets — where the projection is irrecoverable by any closed form. Each cell carries a private `complement` (Hofmann–Pierce symmetric-lens style) threaded through every `put`; plain `.lens(F, B)` chains fuse on top without breaking it.
 

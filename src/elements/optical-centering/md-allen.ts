@@ -15,6 +15,7 @@ import {
   Cell,
   Diagram,
   derive,
+  drag,
   group,
   handle,
   label,
@@ -149,23 +150,8 @@ export class MdAllen extends Diagram {
 
     // ── Bars ──────────────────────────────────────────────────────
     const bar = (R: Range, y: number, color: string) => {
-      s(
-        rect(
-          derive(() => xOf(Math.min(R.value.lo, R.value.hi))),
-          y - barH / 2,
-          derive(() => Math.abs(xOf(R.value.hi) - xOf(R.value.lo))),
-          barH,
-          { fill: color, corner: 4, stroke: "transparent", opacity: 0.85 },
-        ),
-      );
-      // Endpoint handles (lo, hi) and a body-drag handle at the centre.
-      const endHandle = (which: "lo" | "hi") =>
-        Vec.lens(
-          [R] as const,
-          ([r]) => ({ x: xOf(r[which]), y }),
-          (p, [r]) => [{ ...r, [which]: clampT(vOf(p.x)) }],
-        );
-      const bodyHandle = Vec.lens(
+      // The bar itself drags the whole interval; endpoint handles resize.
+      const body = Vec.lens(
         [R] as const,
         ([r]) => ({ x: xOf((r.lo + r.hi) / 2), y }),
         (p, [r]) => {
@@ -174,8 +160,23 @@ export class MdAllen extends Diagram {
           return [{ lo: c - half, hi: c + half }];
         },
       );
+      const barRect = rect(
+        derive(() => xOf(Math.min(R.value.lo, R.value.hi))),
+        y - barH / 2,
+        derive(() => Math.abs(xOf(R.value.hi) - xOf(R.value.lo))),
+        barH,
+        { fill: color, corner: 4, stroke: "transparent", opacity: 0.85 },
+      );
+      s(barRect);
+      drag(barRect, body);
+      barRect.el.style.cursor = "grab";
+      const endHandle = (which: "lo" | "hi") =>
+        Vec.lens(
+          [R] as const,
+          ([r]) => ({ x: xOf(r[which]), y }),
+          (p, [r]) => [{ ...r, [which]: clampT(vOf(p.x)) }],
+        );
       s(
-        handle(bodyHandle, { fill: color, r: 5 }),
         handle(endHandle("lo"), { fill: "#222", r: 5 }),
         handle(endHandle("hi"), { fill: "#222", r: 5 }),
       );

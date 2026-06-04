@@ -25,6 +25,14 @@ import {
   type Tick,
 } from "../suite/bench/workloads";
 import { batch, type Cell, cell, derive, effect, lens as mlens, type Read, untracked } from "./signal-pp";
+import {
+  batch as bbatch,
+  cell as bcell,
+  derive as bderive,
+  effect as beffect,
+  lens as bmlens,
+  untracked as buntracked,
+} from "./signal-bp";
 
 // ── push-pull adapter (mirrors suite/adapters/minim.ts over the variant) ──
 
@@ -57,6 +65,29 @@ const pp: Reactive = {
   ): View<V> =>
     wrap(
       mlens(
+        sources.map(cellOf),
+        ((vals: readonly unknown[]) => fwd(vals)) as never,
+        ((t: V, vals: readonly unknown[]) => bwd(t, vals)) as never,
+      ) as unknown as Cell<V>,
+    ),
+};
+
+const bp: Reactive = {
+  name: "minim-bp",
+  signal: <T>(initial: T): Source<T> => wrap(bcell(initial) as unknown as Cell<T>),
+  computed: <T>(fn: () => T): Readable<T> => wrap(bderive(fn) as unknown as Cell<T>),
+  effect: (fn) => beffect(fn),
+  batch: (fn) => bbatch(fn),
+  untracked: (fn) => buntracked(fn),
+  lens: <S, V>(source: Source<S>, fwd: (s: S) => V, bwd: (v: V, s: S) => S): View<V> =>
+    wrap(bmlens(cellOf(source) as Read<S>, fwd, (t: V, s: S) => bwd(t, s)) as unknown as Cell<V>),
+  lensN: <V>(
+    sources: readonly Source<unknown>[],
+    fwd: (vals: readonly unknown[]) => V,
+    bwd: (v: V, vals: readonly unknown[]) => readonly Update<unknown>[],
+  ): View<V> =>
+    wrap(
+      bmlens(
         sources.map(cellOf),
         ((vals: readonly unknown[]) => fwd(vals)) as never,
         ((t: V, vals: readonly unknown[]) => bwd(t, vals)) as never,
@@ -101,33 +132,19 @@ function bwdBatchSingle(rx: Reactive): Tick {
 
 // ── groups ──
 
-group("fwd chain 50 (read hot path: drain-check tax?)", () => {
-  reg("eager", fwdChain(minim, 50));
-  reg("push-pull", fwdChain(pp, 50));
-});
-group("fwd fan 50", () => {
-  reg("eager", fwdFan(minim, 50));
-  reg("push-pull", fwdFan(pp, 50));
-});
-group("bwd chain 50 (single eager write)", () => {
-  reg("eager", bwdChain(minim, 50));
-  reg("push-pull", bwdChain(pp, 50));
-});
-group("bwd fan 50 (single eager write)", () => {
-  reg("eager", bwdFan(minim, 50));
-  reg("push-pull", bwdFan(pp, 50));
-});
-group("bwd batch: 1 write/batch", () => {
-  reg("eager", bwdBatchSingle(minim));
-  reg("push-pull", bwdBatchSingle(pp));
-});
-group("bwd batch: 32 writes/batch (coalescing)", () => {
-  reg("eager", bwdBatchRepeat(minim, 32));
-  reg("push-pull", bwdBatchRepeat(pp, 32));
-});
-group("drag fan 50 (live observer)", () => {
-  reg("eager", dragFan(minim, 50));
-  reg("push-pull", dragFan(pp, 50));
-});
+// One engine per PROCESS (ENGINE=eager|pp|bp). Mixing Cell classes makes
+// the `.value` call site megamorphic and taxes every variant unfairly —
+// especially cheap-read workloads — so isolate to compare absolute numbers.
+const which = process.env.ENGINE ?? "eager";
+const rx: Reactive = which === "pp" ? pp : which === "bp" ? bp : minim;
+const tag = rx.name;
+
+group(`[${tag}] fwd chain 50`, () => reg("t", fwdChain(rx, 50)));
+group(`[${tag}] fwd fan 50`, () => reg("t", fwdFan(rx, 50)));
+group(`[${tag}] bwd chain 50 (single eager write)`, () => reg("t", bwdChain(rx, 50)));
+group(`[${tag}] bwd fan 50 (single eager write)`, () => reg("t", bwdFan(rx, 50)));
+group(`[${tag}] bwd batch: 1 write`, () => reg("t", bwdBatchSingle(rx)));
+group(`[${tag}] bwd batch: 32 writes (coalescing)`, () => reg("t", bwdBatchRepeat(rx, 32)));
+group(`[${tag}] drag fan 50`, () => reg("t", dragFan(rx, 50)));
 
 await run({ format: "mitata" });
