@@ -45,7 +45,6 @@ import {
 } from "../../minim";
 
 type PoseV = Inner<Pose>;
-type VecV = Inner<Vec>;
 
 // ─── Pose composition (parent frame ∘ local frame → world frame) ──
 

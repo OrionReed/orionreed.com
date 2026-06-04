@@ -58,7 +58,6 @@ const INK = "var(--text-color, #333)";
 // `height = hKnob.x - SLIDER_OFFSET`, where SLIDER_OFFSET = TRACK_LO - H_MIN
 // so the visible track endpoints map cleanly to the clamp bounds.
 const H_MIN = 30;
-const H_MAX = 180;
 const H_INIT = 95;
 const TRACK_LO = 125; // 200 − (H_MAX − H_MIN) / 2
 const TRACK_HI = 275; // 200 + (H_MAX − H_MIN) / 2

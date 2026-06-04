@@ -118,7 +118,6 @@ export class MdBoolBridges extends Diagram {
     const CELL_W = 140;
     const cellCx = (i: number) => 10 + CELL_W * i + CELL_W / 2;
     const CANVAS_Y = 50;
-    const CANVAS_H = 100;
     const IND_Y = 175;
     const LABEL_Y = 205;
 

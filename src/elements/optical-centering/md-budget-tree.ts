@@ -279,7 +279,6 @@ export class MdBudgetTree extends Diagram {
         (vals: readonly [number, number, number]) => {
           const [va, vb, leftI1] = vals;
           const sumAB = va + vb;
-          const totalNow = sumAB === 0 ? 1 : sumAB;
           // Compute the boundary x given current cells.
           // boundary = leftI1 + (va / total_row) * w. We don't directly
           // know total_row here; but we know widthOf(i-1) = (va / total_row) * w.

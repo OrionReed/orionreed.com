@@ -330,7 +330,7 @@ const CARD_BG = "var(--bg-color, white)";
 export class MdPropTypes extends Diagram {
   protected scene(s: Mount): void {
     const view = this.view(720, 480);
-    const { x: cx, y: cy } = view.center.value;
+    const { x: cx } = view.center.value;
 
     // Pre-build each expression. They coexist; visibility gates which
     // is on screen this cycle.

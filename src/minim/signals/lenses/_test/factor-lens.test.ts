@@ -234,7 +234,7 @@ describe("§3 Cross-channel invariance", () => {
     // Jacobian-LSQ leaks because (J W Jᵀ + λI)⁻¹ couples channels
     // proportional to off-diagonal of A.
     const pts = mkPoints([5, 0], [3, 4], [-2, 1]);
-    const { centroidX, centroidY, rotation, scale } = procrustesJacobianLens(pts);
+    const { centroidX, rotation, scale } = procrustesJacobianLens(pts);
     const r0 = rotation.value;
     const s0 = scale.value;
     centroidX.value = 50;

@@ -30,15 +30,6 @@ const vnear = (a: { x: number; y: number }, b: { x: number; y: number }, tol = 1
 
 const mkPoints = (...pts: [number, number][]): Writable<Vec>[] => pts.map(([x, y]) => vec(x, y));
 
-// Pseudo-RNG for reproducible stress tests.
-function rng(seed: number): () => number {
-  let s = seed >>> 0;
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 0x100000000;
-  };
-}
-
 function iter<T>(cell: Writable<{ value: T; peek(): T }>, target: T, n = 8): void {
   // Iterate writes to converge non-linear Newton-step bwds.
   for (let i = 0; i < n; i++) (cell as unknown as { value: T }).value = target;
