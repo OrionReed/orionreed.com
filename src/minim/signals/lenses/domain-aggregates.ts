@@ -15,7 +15,10 @@ import {
   type Linear,
   type Metric,
   Num,
+  type Read,
+  reader,
   type Traits,
+  type Val,
   Vec,
   type Writable,
 } from "../index";
@@ -70,6 +73,100 @@ export function rigidTranslateOf<S extends Traits<any, "linear">>(
   inputs: readonly Writable<S>[],
 ): Writable<S> {
   return meanOf(inputs);
+}
+
+// ─── Weighted blend (the mix simplex) ──────────────────────────────────
+//
+// `mix` is `meanOf` with the uniform-weight assumption lifted: the read
+// is the normalized weighted sum `Σ wᵢ·aᵢ`, the write is the minimum-norm
+// delta `daᵢ = wᵢ·δ / Σwⱼ²` (the pseudoinverse of `wᵀ·da = δ`), so a
+// zero-weight branch is left untouched. Weights are read-only controls —
+// the bwd never writes them, keeping the blend fixed while the delta flows
+// into the branches.
+//
+// The control lives on the K-simplex: a one-hot vertex is `select`
+// (the live branch absorbs everything), a `(1−t, t)` edge is `crossfade`,
+// uniform weights recover `meanOf`. Reactive weights are dynamically
+// tracked (read via `.value` inside fwd), so flipping a Bool or sliding a
+// Num re-reads with no extra wiring.
+
+/** Weighted blend of K branches over any `Linear` type. See module note. */
+// biome-ignore lint/suspicious/noExplicitAny: variance escape
+export function mix<S extends Traits<any, "linear">>(
+  weights: readonly Val<number>[],
+  branches: readonly Writable<S>[],
+): Writable<S> {
+  const K = branches.length;
+  if (K < 1) throw new Error("mix: need ≥ 1 branch");
+  if (weights.length !== K) throw new Error("mix: weights/branches length mismatch");
+  // biome-ignore lint/suspicious/noExplicitAny: dynamic class lookup
+  const Cls = (branches[0] as any).constructor as new (...args: never[]) => Cell<any>;
+  // biome-ignore lint/suspicious/noExplicitAny: dynamic trait lookup
+  const lin = (Cls as any).traits?.linear as Linear<any> | undefined;
+  if (!lin) throw new Error(`mix: ${(Cls as { name?: string }).name ?? "?"} has no traits.linear`);
+  const wf = weights.map(w => reader(w));
+
+  // Normalized weights + Σw². Degenerate (all-zero) weights fall back to
+  // uniform so the read stays defined.
+  const readW = (): { w: number[]; sumSq: number } => {
+    const raw = wf.map(f => f());
+    let sum = 0;
+    for (const x of raw) sum += x;
+    const w = Math.abs(sum) > 1e-12 ? raw.map(x => x / sum) : raw.map(() => 1 / K);
+    let sumSq = 0;
+    for (const x of w) sumSq += x * x;
+    return { w, sumSq };
+  };
+
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.lens
+  const combine = (vals: any[], w: number[]) => {
+    let acc = lin.scale(vals[0], w[0]);
+    for (let i = 1; i < K; i++) acc = lin.add(acc, lin.scale(vals[i], w[i]));
+    return acc;
+  };
+
+  // biome-ignore lint/suspicious/noExplicitAny: variance escape on Cls.lens
+  return (Cls as any).lens(
+    branches as never,
+    // biome-ignore lint/suspicious/noExplicitAny: variance escape
+    (vals: any) => combine(vals, readW().w),
+    // biome-ignore lint/suspicious/noExplicitAny: variance escape
+    (target: any, vals: any) => {
+      const { w, sumSq } = readW();
+      const delta = lin.sub(target, combine(vals, w));
+      if (sumSq < 1e-12) return vals.map(() => undefined) as never;
+      const inv = 1 / sumSq;
+      return vals.map((v: unknown, i: number) =>
+        w[i] === 0 ? undefined : lin.add(v, lin.scale(delta, w[i]! * inv)),
+      ) as never;
+    },
+  );
+}
+
+/** Two-branch router (mix simplex *vertex*): reads the live branch, writes
+ *  flow entirely to it, the other is left put. Flipping `cond` snaps the
+ *  output to the other branch's stored value. */
+// biome-ignore lint/suspicious/noExplicitAny: variance escape
+export function select<S extends Traits<any, "linear">>(
+  cond: Read<boolean>,
+  whenFalse: Writable<S>,
+  whenTrue: Writable<S>,
+): Writable<S> {
+  return mix(
+    [Num.derive(() => (cond.value ? 0 : 1)), Num.derive(() => (cond.value ? 1 : 0))],
+    [whenFalse, whenTrue],
+  );
+}
+
+/** Two-branch crossfade (mix simplex *edge*): `lerp(a, b, t)`. Writing
+ *  keeps `t` fixed and splits the delta by influence. */
+// biome-ignore lint/suspicious/noExplicitAny: variance escape
+export function crossfade<S extends Traits<any, "linear">>(
+  t: Read<number>,
+  a: Writable<S>,
+  b: Writable<S>,
+): Writable<S> {
+  return mix([Num.derive(() => 1 - t.value), Num.derive(() => t.value)], [a, b]);
 }
 
 // ─── 2. Color aggregates ───────────────────────────────────────────────

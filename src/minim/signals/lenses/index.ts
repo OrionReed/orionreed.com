@@ -27,10 +27,13 @@ export {
 // ─── Trait-driven aggregates + domain primitives ───────────────────────
 export {
   bezierGestaltLens,
+  crossfade,
   meanColor,
   meanOf,
+  mix,
   paletteLens,
   rigidTranslateOf,
+  select,
   spreadOf,
   timeSeriesLens,
 } from "./domain-aggregates";

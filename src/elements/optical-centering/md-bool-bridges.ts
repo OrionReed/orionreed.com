@@ -1,10 +1,10 @@
-// md-bool-bridges.ts — five Bool-bridging lenses across continuous and
+// md-bool-bridges.ts — six Bool-bridging lenses across continuous and
 // discrete value types. Each mini-demo exposes a writable `Bool` that's
 // the projection of one or more source signals; clicking the indicator
 // flips the bool and the lens's bwd projects the source(s) into a
 // state consistent with the new boolean.
 //
-// The five panels cover distinct lens shapes that all flow through the
+// The six panels cover distinct lens shapes that all flow through the
 // same `Bool.lens(parents, fwd, bwd)` primitive:
 //
 //   1. Point in box        — Vec → Bool         (spatial clamp)
@@ -12,11 +12,13 @@
 //   3. Two points coincide — (Vec, Vec) → Bool  (equality relation)
 //   4. All N inside        — Array<Vec> → Bool  (aggregate fan-in)
 //   5. Even                — Num → Bool         (discrete classifier)
+//   6. Boxes overlap       — (Box, Box) → Bool  (collision relation)
 //
 // (1) and (2) are the clamp family (idempotent projection across the
-// type boundary). (3) introduces a TWO-source relation whose bwd writes
-// both parents. (4) is N-aggregate — one bool over many sources. (5) is
-// a discrete classifier over an integer-quantised slider.
+// type boundary). (3) and (6) are TWO-source relations whose bwd reshapes
+// a parent (coincidence; min-translation collision resolve). (4) is
+// N-aggregate — one bool over many sources. (5) is a discrete classifier
+// over an integer-quantised slider.
 
 import {
   Anchor,
@@ -37,7 +39,7 @@ import {
   type Writable,
 } from "../../minim";
 
-const W = 720;
+const W = 860;
 const H = 250;
 
 type V = { x: number; y: number };
@@ -296,6 +298,50 @@ export class MdBoolBridges extends Diagram {
       );
       boolIndicator(s, cx, IND_Y, even, "even", "odd");
       s(label(vec(cx, LABEL_Y), "Num#isEven", { size: 10, opacity: 0.6 }));
+    }
+
+    // ─── Demo 6: Boxes overlap ((Box, Box) → Bool) ─────────────
+    {
+      const cx = cellCx(5);
+      const HW = 16;
+      const HH = 13;
+      const EPS = 1;
+      const a6 = vec(cx - 14, CANVAS_Y + 42);
+      const b6 = vec(cx + 16, CANVAS_Y + 56);
+      const overlapping = (pa: V, pb: V) =>
+        Math.abs(pa.x - pb.x) < 2 * HW && Math.abs(pa.y - pb.y) < 2 * HH;
+      const overlap = Bool.lens(
+        [a6, b6] as const,
+        ([pa, pb]) => overlapping(pa, pb),
+        (target, [pa, pb]) => {
+          if (overlapping(pa, pb) === target) return [undefined, undefined];
+          const dx = pb.x - pa.x;
+          const dy = pb.y - pa.y;
+          if (target) {
+            // Pull B in: clamp each axis so the boxes overlap minimally.
+            const nx = Math.abs(dx) >= 2 * HW ? pa.x + Math.sign(dx || 1) * (2 * HW - EPS) : pb.x;
+            const ny = Math.abs(dy) >= 2 * HH ? pa.y + Math.sign(dy || 1) * (2 * HH - EPS) : pb.y;
+            return [undefined, { x: nx, y: ny }];
+          }
+          // Push B out along the min-penetration axis.
+          const penX = 2 * HW - Math.abs(dx);
+          const penY = 2 * HH - Math.abs(dy);
+          if (penX <= penY) {
+            return [undefined, { x: pa.x + Math.sign(dx || 1) * (2 * HW + EPS), y: pb.y }];
+          }
+          return [undefined, { x: pb.x, y: pa.y + Math.sign(dy || 1) * (2 * HH + EPS) }];
+        },
+      );
+      const boxRect = (c: typeof a6, fill: string, stroke: string) =>
+        rect(c, 2 * HW, 2 * HH, { thin: true, fill, stroke, corner: 3 });
+      s(
+        boxRect(a6, "rgba(91,141,239,0.16)", "#5b8def"),
+        boxRect(b6, "rgba(245,166,35,0.18)", "#f5a623"),
+        handle(a6, { fill: "#5b8def", r: 6 }),
+        handle(b6, { fill: "#e07d0a", r: 6 }),
+      );
+      boolIndicator(s, cx, IND_Y, overlap, "overlap", "disjoint");
+      s(label(vec(cx, LABEL_Y), "(Box, Box) → Bool", { size: 10, opacity: 0.6 }));
     }
   }
 }
