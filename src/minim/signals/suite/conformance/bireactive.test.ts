@@ -12,13 +12,14 @@ import type { Reactive, Source, View } from "../adapters/types";
 import { orderIndependent } from "../laws/confluence";
 import { backwardDiamond } from "../laws/glitch";
 import { getPut, type LensSpec, putGet, putPut } from "../laws/lens-laws";
+import { lossyChainAbsorbsNoop, lossyChainInRange } from "../laws/lossy";
 import {
   chainScaling,
   chainWriteCost,
   noopWriteCost,
   reconvergeWriteCost,
 } from "../laws/minimality";
-import { chainNoLostWrite, faninNoLostWrite } from "../laws/soundness";
+import { chainNoLostWrite, faninNoLostWrite, treeNoLostWrite } from "../laws/soundness";
 
 const RUNS = { numRuns: 200 } as const;
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
@@ -120,6 +121,15 @@ describe("confluence", () => {
 describe("backward soundness (no lost writes)", () => {
   it("random affine chains read back exactly", () => fc.assert(chainNoLostWrite(minim), RUNS));
   it("random fan-ins read back exactly", () => fc.assert(faninNoLostWrite(minim), RUNS));
+  it("random mixed trees read back exactly", () => fc.assert(treeNoLostWrite(minim), RUNS));
+});
+
+// ─── Lossy composition ──────────────────────────────────────────────
+
+describe("lossy composition (clamp chain)", () => {
+  it("in-range writes survive the chain", () => fc.assert(lossyChainInRange(minim), RUNS));
+  it("settled re-write commits no source change", () =>
+    fc.assert(lossyChainAbsorbsNoop(minim), RUNS));
 });
 
 // Keep the adapter types referenced for readers of this file.

@@ -20,25 +20,13 @@ const DIVERGED = new Set<string>([
   "#210 multiple inner effects all cleaned when outer re-runs",
 ]);
 
-// Divergences the lift SURFACES (not design choices). minim defers a
-// view's backward write to flush, so inside a batch these forward
-// guarantees do not hold when the write enters through a view — even
-// though they hold for direct source writes (forward.test.ts passes all
-// of these). The failures cluster on one root cause: batched view writes
-// are not write-then-read consistent and don't collapse no-ops/reverts
-// (#131 even loses a revert: 5→0 lands 5). Encoded as `it.fails` so the
-// suite stays green AND a future engine fix turns these red, prompting
-// promotion back to `it`.
-const LIFTED_OPEN = new Set<string>([
-  "#67 signals readable with updated value inside batch",
-  "#123 repeated no-op batches don't re-trigger effects",
-  "#125 batch: source reverts → computed not notified",
-  "#128 reading computed in batch forces upstream evaluation",
-  "#131 derived-of-derived: source reverts in batch",
-  "#132 batch: computed not recomputed if dep reverts",
-  "#147 computed not recomputed in batch if dep reverts",
-  "#182 computed side effect + batch: writes visible after flush",
-]);
+// The entire batching cluster now passes through a write-through view —
+// including net-zero revert coalescing. A single-parent lens writes
+// through eagerly inside a batch (`_writeSource` stages the source and
+// defers only the flush), and the backward pass's internal no-op checks
+// read staged sources WITHOUT committing them (`settled`), so a revert
+// (`a=1; a=0`) leaves the source untouched and downstream un-fired —
+// identical to a direct source write.
 
 describe("lifted conformance (RFTS through a write-through view)", () => {
   for (const section of testSuite) {
@@ -46,7 +34,6 @@ describe("lifted conformance (RFTS through a write-through view)", () => {
     describe(section.section, () => {
       for (const [name, fn] of Object.entries(section.cases)) {
         if (isBehavioral || DIVERGED.has(name)) it.skip(name, () => fn(fw));
-        else if (LIFTED_OPEN.has(name)) it.fails(name, () => fn(fw));
         else it(name, () => fn(fw));
       }
     });

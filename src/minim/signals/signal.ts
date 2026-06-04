@@ -25,13 +25,13 @@
 //
 // Mode table — a cell's role is fully determined by which fields are set:
 //   source      getter undefined                 (truth in currentValue)
-//   computed    getter,  no _put, no _mergeNode
-//   lens 1→1    getter + _put + _bwdParent (Cell)
-//   multi-out   getter + _put + _bwdParent (Cell[])  (1→N / N→M bwd)
-//   merge       getter + _mergeNode               (N→1 backward fold)
-// `pendingValue` is dual-keyed off this table: a staged forward write
-// for a source, a deferred backward target for a getter cell (never
-// both on one node).
+//   computed    getter, no _bwd                   (read-only derived)
+//   lens 1→1    getter + _bwd{ put, parent: Cell }
+//   multi-out   getter + _bwd{ put, parent: Cell[] }   (1→N / N→M bwd)
+//   merge       getter + _bwd{ merge }            (N→1 backward fold)
+// A cell is writable iff `_bwd !== undefined` (the backward sidecar; see
+// `BwdSpec`). `pendingValue` is dual-keyed: a staged forward write for a
+// source, a deferred backward target for a getter cell (never both).
 //
 // Batching: outside a batch a write propagates backward eagerly and
 // flushes (alien's synchronous per-write semantics). Inside batch/flush,
@@ -357,6 +357,45 @@ class MergeNode<T> {
   }
 }
 
+// ─── BwdSpec — the backward sidecar ───────────────────────────────
+//
+// Every cell carries the forward fields (links, getter, value cache).
+// Only a WRITABLE derived cell — 1→1 lens, multi-output lens, merge,
+// stateful lens, or `pin` — needs a backward target and the closures to
+// drive it. Those nine fields live here, off a single `_bwd` pointer,
+// rather than inline on `Cell`, so a source/computed stays lean: the
+// forward hot path never touches them, and a plain node drops ~64 B
+// (9 slots → 1). The cost is one pointer hop on the backward/write path
+// and ~88 B for the sidecar on each writable node. A cell is writable
+// iff `_bwd !== undefined`.
+class BwdSpec {
+  /** Backward target(s): one `Cell` (1→1 / merge) or `Cell[]` (multi-out). */
+  parent: Cell<unknown> | Cell<unknown>[] | undefined = undefined;
+  /** Lens `put` — backward derivation (dual of `getter`). Multi-output:
+   *  returns a per-parent update array. */
+  // biome-ignore lint/suspicious/noExplicitAny: put fn is opaque shape
+  put: ((target: any, current?: any) => any) | undefined = undefined;
+  /** `put` arity: `1` source-independent `(view)=>src`, `2` source-reading
+   *  `(view, src)=>src`. A cached SMI, cheaper to branch on than `.length`. */
+  putArity: 1 | 2 = 1;
+  /** Stateful: raw forward projection over `(vals, complement)`. */
+  // biome-ignore lint/suspicious/noExplicitAny: fwd fn is opaque shape
+  fwd: ((parentValue: any) => any) | undefined = undefined;
+  /** Backward aggregation node; presence IS the merge-mode discriminant. */
+  merge: MergeNode<unknown> | undefined = undefined;
+  /** Stateful-lens complement: memory the view discards. Engine-owned. */
+  complement: unknown = undefined;
+  /** Stateful complement advance; presence IS the stateful-mode
+   *  discriminant. `step(vals, c, external)` returns the next complement. */
+  // biome-ignore lint/suspicious/noExplicitAny: opaque step shape
+  step: ((vals: any, complement: any, external: boolean) => any) | undefined = undefined;
+  /** Source values a stateful cell last wrote back (own-vs-external test). */
+  lastBwd: unknown[] | undefined = undefined;
+  /** Index in `bwdQueue` of this cell's latest push; the drain skips stale
+   *  entries so each cell propagates backward once per flush, last-write. */
+  queueIdx = -1;
+}
+
 // ─── Public types (writability layer) ─────────────────────────────
 
 /** Plain T or any read-shape; snapshot via `readNow`, close via `reader`. */
@@ -411,15 +450,13 @@ export function lazy<R>(self: object, key: string | symbol, make: () => R): R {
 
 export const isCell = (v: unknown): v is Cell<unknown> => v instanceof Cell;
 
-/** Lens mode: a derived cell that can be written back (has `put` or is a merge). */
+/** Lens mode: a derived cell that can be written back (has a backward sidecar). */
 export const isLens = (v: unknown): v is Cell<unknown> =>
-  v instanceof Cell &&
-  v.getter !== undefined &&
-  (v._put !== undefined || v._mergeNode !== undefined);
+  v instanceof Cell && v.getter !== undefined && v._bwd !== undefined;
 
 /** Computed mode: derived + read-only (no backward path). */
 export const isComputed = (v: unknown): v is Cell<unknown> =>
-  v instanceof Cell && v.getter !== undefined && v._put === undefined && v._mergeNode === undefined;
+  v instanceof Cell && v.getter !== undefined && v._bwd === undefined;
 
 // ─── Cell class ─────────────────────────────────────────────────
 
@@ -456,54 +493,11 @@ export class Cell<T = unknown> implements ReactiveNode {
   currentValue: T;
   pendingValue: T;
 
-  /** Backward target this cell's `put` writes through. A single `Cell`
-   *  (1→1 lens or merge parent) or a `Cell[]` (multi-parent lens whose
-   *  `_put` returns a per-parent update array; the backward pass splits
-   *  into each). Private `_put` state is closure-captured. */
-  _bwdParent: Cell<unknown> | Cell<unknown>[] | undefined;
-
-  /** Lens `put` — backward derivation (dual of `getter`). Multi-output:
-   *  `_put(target)` returns a per-parent update array. */
-  // biome-ignore lint/suspicious/noExplicitAny: put fn is opaque shape
-  _put: ((target: any, current?: any) => any) | undefined;
-
-  /** Put arity, set by the factory: `1` source-independent `(view)=>src`,
-   *  `2` source-reading `(view, src)=>src` (engine peeks the parent). A
-   *  cached SMI — cheaper to branch on than `_put.length`. */
-  _putArity: 1 | 2;
-
-  /** Raw forward projection, separate from `getter` (which closes over
-   *  `parent.value`) so the backward equality check can evaluate the view
-   *  against CANDIDATE parent value(s) without committing. Set for 1→1
-   *  and multi-parent lenses; undefined for sources/computeds/merges. */
-  // biome-ignore lint/suspicious/noExplicitAny: fwd fn is opaque shape
-  _fwd: ((parentValue: any) => any) | undefined;
-
-  /** Backward aggregation node. Presence IS the merge-mode discriminant:
-   *  the cell folds contributions via a policy instead of applying `put`. */
-  _mergeNode: MergeNode<T> | undefined;
-
-  /** Stateful-lens complement: memory the view discards (a case mask
-   *  under `lowercase`, the unwrapped angle under a principal axis).
-   *  Engine-owned, advanced only by `_step`. */
-  _complement: unknown;
-
-  /** Stateful-lens complement advance; presence IS the stateful-mode
-   *  discriminant. `_step(vals, c, external)` returns the next complement
-   *  (`external` ⇒ source change came from outside, not this lens's own
-   *  back-write). When set, `_fwd`/`_put` also take the complement. */
-  // biome-ignore lint/suspicious/noExplicitAny: opaque step shape
-  _step: ((vals: any, complement: any, external: boolean) => any) | undefined;
-
-  /** Source values a stateful cell last wrote back. A later recompute
-   *  reports `external === false` while the live sources still equal
-   *  these (the change is the lens's own back-write). */
-  _lastBwd: unknown[] | undefined;
-
-  /** Index in `bwdQueue` of this cell's LATEST push. The drain skips
-   *  entries whose `_queueIdx` ≠ their position, so each cell propagates
-   *  backward once per flush in last-write order. */
-  _queueIdx: number;
+  /** Backward sidecar: target(s) + lens closures + queue slot, or
+   *  `undefined` for a read-only cell (source or computed). Allocated only
+   *  for writable derived cells, keeping the common node lean. Writability
+   *  is exactly `_bwd !== undefined`. See `BwdSpec`. */
+  _bwd: BwdSpec | undefined;
 
   constructor(initial: T, opts?: CellOptions<T>) {
     this.currentValue = initial;
@@ -517,15 +511,7 @@ export class Cell<T = unknown> implements ReactiveNode {
     this._equals = Object.is;
     this._watched = undefined;
     this._unwatchedHook = undefined;
-    this._bwdParent = undefined;
-    this._put = undefined;
-    this._putArity = 1;
-    this._fwd = undefined;
-    this._mergeNode = undefined;
-    this._complement = undefined;
-    this._step = undefined;
-    this._lastBwd = undefined;
-    this._queueIdx = -1;
+    this._bwd = undefined;
     if (opts !== undefined) {
       if (opts.equals !== undefined) this._equals = opts.equals;
       if (opts.watched !== undefined) this._watched = opts.watched;
@@ -542,7 +528,7 @@ export class Cell<T = unknown> implements ReactiveNode {
 
   _enqueueBwd(): void {
     this.flags |= F.BwdQueued;
-    this._queueIdx = bwdQueue.length;
+    this._bwd!.queueIdx = bwdQueue.length;
     bwdQueue.push(this as Cell<unknown>);
   }
 
@@ -614,7 +600,7 @@ export class Cell<T = unknown> implements ReactiveNode {
 
   // Construction helpers build via `new this()` so a subclass static
   // (`Vec.lens(...)`) yields a `Vec` with its constructor-set equality.
-  // Every lens has a structural backward target (`_bwdParent`), which is
+  // Every lens has a structural backward target (`_bwd.parent`), which is
   // what makes the backward pass well-defined.
 
   /** Endomorphic lens. A 2-arg `bwd(view, current)` consults the current
@@ -633,15 +619,16 @@ export class Cell<T = unknown> implements ReactiveNode {
    *  identity view of its parent; backward, folds contributions from
    *  upstream lenses (slot-keyed) and direct writes (DIRECT_SLOT). */
   merge(this: Cell<T>, policy: MergePolicy<T>): Cell<T> {
-    if (this.getter !== undefined && this._put === undefined && this._mergeNode === undefined) {
+    if (this.getter !== undefined && this._bwd === undefined) {
       throw new TypeError("merge: receiver is read-only");
     }
     const parent = this as Cell<T>;
     const cell = new (this.constructor as CellCtor<Cell<T>>)();
     cell.flags = F.Mutable | F.Dirty;
     cell.getter = (): T => parent.value;
-    cell._bwdParent = parent as Cell<unknown>;
-    cell._mergeNode = new MergeNode<T>(parent, policy);
+    const b = (cell._bwd = new BwdSpec());
+    b.parent = parent as Cell<unknown>;
+    b.merge = new MergeNode<T>(parent, policy) as MergeNode<unknown>;
     return cell as Cell<T>;
   }
 
@@ -766,8 +753,8 @@ export class Cell<T = unknown> implements ReactiveNode {
     const cell = new (this as unknown as CellCtor<Cell<unknown>>)();
     cell.flags = F.Mutable | F.Dirty;
     cell.getter = (): unknown => v;
-    cell._put = (): unknown => undefined; // absorb (no parent → sink)
-    cell._putArity = 1;
+    const b = (cell._bwd = new BwdSpec());
+    b.put = (): unknown => undefined; // absorb (no parent → sink)
     return cell as unknown as Writable<InstanceType<C>>;
   }
 
@@ -783,10 +770,8 @@ export class Cell<T = unknown> implements ReactiveNode {
   ): InstanceType<C> {
     const ctor = Cls as unknown as CellCtor<Cell<unknown>>;
     const get = (s: unknown): unknown => (s as Record<string | number | symbol, unknown>)[key];
-    // Read-only ⇔ computed (getter, no put, no merge). `_put === undefined`
-    // also excludes multi-output, so no `_bwdParent` check needed.
-    const ro =
-      parent.getter !== undefined && parent._put === undefined && parent._mergeNode === undefined;
+    // Read-only ⇔ computed: a getter with no backward sidecar.
+    const ro = parent.getter !== undefined && parent._bwd === undefined;
     if (ro) {
       return buildComputed(ctor, () => get(parent.value)) as InstanceType<C>;
     }
@@ -828,9 +813,10 @@ function buildLens1<C extends Cell<any>>(
   const cell = new Cls();
   cell.flags = F.Mutable | F.Dirty;
   cell.getter = (() => fwd(parent.value)) as () => never;
-  cell._put = bwd;
-  cell._putArity = readsSource ? 2 : 1;
-  cell._bwdParent = parent;
+  const b = (cell._bwd = new BwdSpec());
+  b.put = bwd;
+  b.putArity = readsSource ? 2 : 1;
+  b.parent = parent;
   return cell;
 }
 
@@ -851,8 +837,9 @@ function buildLensN<C extends Cell<any>>(
     return fwd(vals);
   }) as () => never;
   if (bwd === undefined) return cell; // read-only derive-N
-  cell._bwdParent = parents;
-  cell._put = readsSource
+  const b = (cell._bwd = new BwdSpec());
+  b.parent = parents;
+  b.put = readsSource
     ? (target: unknown): unknown => {
         for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
         return bwd(target, vals);
@@ -903,19 +890,20 @@ function buildStateful<C extends Cell<any>>(
   const vals = new Array<unknown>(n);
   const cell = new Cls();
   cell.flags = F.Mutable | F.Dirty;
+  const b = (cell._bwd = new BwdSpec());
   const seed = new Array<unknown>(n);
   for (let i = 0; i < n; i++) seed[i] = parents[i]!.peek();
-  cell._complement = spec.init(seed);
-  cell._step = spec.step;
-  cell._fwd = spec.fwd as (v: unknown) => unknown;
-  cell._put = spec.bwd as (t: unknown, c?: unknown) => unknown;
-  cell._bwdParent = parents;
+  b.complement = spec.init(seed);
+  b.step = spec.step;
+  b.fwd = spec.fwd as (v: unknown) => unknown;
+  b.put = spec.bwd as (t: unknown, c?: unknown) => unknown;
+  b.parent = parents;
   cell.getter = (() => {
     for (let i = 0; i < n; i++) vals[i] = parents[i]!.value;
     // External unless the live sources still equal this lens's own last
     // back-write.
     let external = true;
-    const lb = cell._lastBwd;
+    const lb = b.lastBwd;
     if (lb !== undefined) {
       external = false;
       for (let i = 0; i < n; i++) {
@@ -925,8 +913,8 @@ function buildStateful<C extends Cell<any>>(
         }
       }
     }
-    cell._complement = cell._step!(vals, cell._complement, external);
-    return (cell._fwd as (s: unknown, c: unknown) => unknown)(vals, cell._complement);
+    b.complement = b.step!(vals, b.complement, external);
+    return (b.fwd as (s: unknown, c: unknown) => unknown)(vals, b.complement);
   }) as () => never;
   return cell;
 }
@@ -990,29 +978,39 @@ Object.defineProperty(Cell.prototype, "value", {
     // contributors; eager + synchronous otherwise. Exception: inside a
     // network body writes are eager so the body's fixpoint loop observes
     // its own edits via `peek()` between steps.
+    const b = this._bwd;
+    if (b === undefined) {
+      throw new TypeError("Cannot write to a computed");
+    }
     const deferred = (batchDepth > 0 || flushing) && activeNetwork === undefined;
-    if (this._mergeNode !== undefined) {
-      this._mergeNode.receive(DIRECT_SLOT, next);
+    if (b.merge !== undefined) {
+      b.merge.receive(DIRECT_SLOT, next);
       if (deferred) this._enqueueBwd();
       else bwdUntracked(this, undefined, false);
       return;
     }
-    if (this._put === undefined) {
-      throw new TypeError("Cannot write to a computed");
-    }
-    // Entry-level no-op (GetPut): writing the current view starts no walk.
-    // O(1), concrete (no speculation). Deeper no-ops are caught as the
-    // walk reaches each unchanged parent; lossy lenses encode their own
-    // absorption in `put`.
-    if (this._equals(next, this.peek())) return;
-    if (deferred) {
-      // Reuse `pendingValue` (unused by a getter's forward path) as the
-      // deferred backward target; drained by flush.
+    if (deferred && (Array.isArray(b.parent) || b.step !== undefined)) {
+      // Multi-parent / stateful: defer to flush so a split coalesces, a
+      // merge folds after all contributors land, and a complement steps
+      // once. Reuse `pendingValue` (unused by a getter's forward path) as
+      // the deferred backward target; drained by flush. Entry no-op vs the
+      // current view (GetPut) skips the walk.
+      if (this._equals(next, this.peek())) return;
       this.pendingValue = next;
       this._enqueueBwd();
-    } else {
-      bwdUntracked(this, next, false);
+      return;
     }
+    // Single-parent lens: run the walk now. Inside a batch `_writeSource`
+    // stages the source (Dirty + pending) and defers only the flush, so
+    // the view reads back consistently and a later write supersedes via
+    // the source's pending value — last-write-wins, no queue, no lost
+    // revert. We must NOT peek the view here when batching: that would
+    // commit the source's pending value and break net-zero revert
+    // coalescing — `propagateBwd`'s `settled` no-op stop prunes a true
+    // no-op without committing. Outside a batch, the O(1) GetPut check is
+    // safe (no source is staged) and worth keeping.
+    if (!deferred && this._equals(next, this.peek())) return;
+    bwdUntracked(this, next, deferred);
   },
   enumerable: false,
   configurable: false,
@@ -1040,27 +1038,39 @@ function bwdUntracked(cell: Cell<unknown>, target: unknown, deferred: boolean): 
   }
 }
 
+/** A cell's current value for the backward pass's internal no-op checks,
+ *  WITHOUT side effects. A source staged earlier in this batch reads its
+ *  pending value directly; reading it via `peek` would COMMIT the pending
+ *  value (`_update`: currentValue = pendingValue), so a later net-zero
+ *  revert would look like a real change and over-fire downstream. A
+ *  non-source (lens/computed) has no such hazard and recomputes via peek. */
+function settled(cell: Cell<unknown>): unknown {
+  return cell.getter === undefined && (cell.flags & F.Dirty) !== 0
+    ? cell.pendingValue
+    : cell.peek();
+}
+
 function propagateBwd(start: Cell<unknown>, target: unknown, deferred: boolean): void {
   let cell = start;
   let v = target;
   while (true) {
     // Multi-parent lens: SPLIT the write into each parent (dual of a
     // getter reading N parents — the `put` yields N upstream values).
-    const target = cell._bwdParent;
-    if (Array.isArray(target)) {
+    const cb = cell._bwd!;
+    const parent = cb.parent;
+    if (Array.isArray(parent)) {
       propagateSplit(cell, v, deferred);
       return;
     }
-    const parent = target;
     let push: unknown;
-    if (cell._mergeNode !== undefined) {
-      const node = cell._mergeNode;
+    if (cb.merge !== undefined) {
+      const node = cb.merge;
       push = node.fold();
       node.reset();
-    } else if (cell._putArity === 1 || parent === undefined) {
-      push = cell._put!(v);
+    } else if (cb.putArity === 1 || parent === undefined) {
+      push = cb.put!(v);
     } else {
-      push = cell._put!(v, parent.peek());
+      push = cb.put!(v, settled(parent));
     }
 
     // Parentless lens (e.g. `pin`): no upstream, write absorbed. Sink.
@@ -1069,11 +1079,15 @@ function propagateBwd(start: Cell<unknown>, target: unknown, deferred: boolean):
     // Concrete no-op stop: if the parent already holds `push`, committing
     // changes nothing upstream, so the walk stops. Sound for ANY topology
     // (no speculation). A lossy lens hides an off-grid edit by returning
-    // the current source from `put`. Merge parents fold instead.
-    if (parent._mergeNode === undefined && parent._equals(push, parent.peek())) return;
+    // the current source from `put`. Merge parents fold instead. `settled`
+    // reads a batched source's pending value WITHOUT committing it, so a
+    // net-zero revert leaves the source unchanged and downstream un-fired.
+    const pb = parent._bwd;
+    const parentMerge = pb !== undefined ? pb.merge : undefined;
+    if (parentMerge === undefined && parent._equals(push, settled(parent))) return;
 
-    if (parent._mergeNode !== undefined) {
-      parent._mergeNode.receive(cell, push);
+    if (parentMerge !== undefined) {
+      parentMerge.receive(cell, push);
       if (deferred) {
         if (!(parent.flags & F.BwdQueued)) parent._enqueueBwd();
         return;
@@ -1098,23 +1112,26 @@ function propagateBwd(start: Cell<unknown>, target: unknown, deferred: boolean):
  *  under one flush (same guarantee as `batch()`); the coalescing lives
  *  here since such a cell may be reached as a write start or mid-chain. */
 function propagateSplit(cell: Cell<unknown>, target: unknown, deferred: boolean): void {
-  const parents = cell._bwdParent as Cell<unknown>[];
+  const b = cell._bwd!;
+  const parents = b.parent as Cell<unknown>[];
   const n = parents.length;
 
   // STATEFUL lens: `bwd` reads the complement and returns per-parent
   // updates plus the post-write complement. We commit the stepped
   // complement and fork the source updates; absorption is the lens's job
   // (its `bwd` returns `undefined` updates, forked as no-ops).
-  if (cell._step !== undefined) {
+  if (b.step !== undefined) {
     // Bring the complement current with the sources before the back-write
     // (a source may have changed without the view being read, leaving
     // `step` un-run). Untracked, so reading `.value` adds no dependency.
     void cell.value;
     const vals = new Array<unknown>(n);
     for (let i = 0; i < n; i++) vals[i] = parents[i]!.peek();
-    const res = (
-      cell._put as (t: unknown, s: unknown, c: unknown) => StatefulBwd<unknown[], unknown>
-    )(target, vals, cell._complement);
+    const res = (b.put as (t: unknown, s: unknown, c: unknown) => StatefulBwd<unknown[], unknown>)(
+      target,
+      vals,
+      b.complement,
+    );
     const updates = res.updates as ReadonlyArray<unknown>;
     const cand = new Array<unknown>(n);
     let anyWrite = false;
@@ -1127,14 +1144,14 @@ function propagateSplit(cell: Cell<unknown>, target: unknown, deferred: boolean)
         anyWrite = true;
       }
     }
-    const cStep = cell._step(cand, res.complement, false);
-    cell._complement = cStep;
+    const cStep = b.step(cand, res.complement, false);
+    b.complement = cStep;
     if (!anyWrite) {
       // Complement-only change (no source moves): mark dirty for a correct next read.
       cell.flags = F.Mutable | F.Dirty;
       return;
     }
-    cell._lastBwd = cand;
+    b.lastBwd = cand;
     if (deferred) {
       forkInto(parents, updates, n);
       return;
@@ -1148,7 +1165,7 @@ function propagateSplit(cell: Cell<unknown>, target: unknown, deferred: boolean)
     return;
   }
 
-  const updates = cell._put!(target) as ReadonlyArray<unknown>;
+  const updates = b.put!(target) as ReadonlyArray<unknown>;
 
   // No speculation: each defined update forks to its parent, where
   // `_writeSource`'s equality check prunes no-op sources and the forward
@@ -1370,13 +1387,14 @@ function flush(): void {
     while (bwdIndex < bwdQueue.length || notifyIndex < queuedLength) {
       while (bwdIndex < bwdQueue.length) {
         const cell = bwdQueue[bwdIndex]!;
-        if (cell._queueIdx !== bwdIndex || !(cell.flags & F.BwdQueued)) {
+        const cb = cell._bwd!;
+        if (cb.queueIdx !== bwdIndex || !(cell.flags & F.BwdQueued)) {
           bwdIndex++;
           continue;
         }
         bwdIndex++;
         cell.flags &= ~F.BwdQueued;
-        if (cell._mergeNode !== undefined) {
+        if (cb.merge !== undefined) {
           bwdUntracked(cell, undefined, true);
         } else {
           bwdUntracked(cell, cell.pendingValue, true);

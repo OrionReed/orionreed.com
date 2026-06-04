@@ -24,3 +24,38 @@ export const permutation = (n: number): fc.Arbitrary<number[]> =>
   fc
     .constant(Array.from({ length: n }, (_unused, i) => i))
     .chain(xs => fc.shuffledSubarray(xs, { minLength: n, maxLength: n }));
+
+// ─── Random sound topologies ────────────────────────────────────────
+//
+// A serializable description of a write-through DAG, built only from
+// operations that preserve PutGet so a write of any reachable target
+// reads back exactly: invertible affine 1→1 steps (k ∈ {-1, 1}, no float
+// drift) and even-split N→1 fan-ins. Every subtree owns fresh sources,
+// so the result is a tree (no shared source / diamond) — the case where
+// read-back is unambiguous. Shared-source soundness, which depends on a
+// designated-anchor `bwd` and isn't expressible through the generic
+// adapter, is covered by `_test/bwd-soundness.test.ts`.
+
+export type TreePlan =
+  | { t: "leaf" }
+  | { t: "affine"; k: 1 | -1; b: number; child: TreePlan }
+  | { t: "sum"; kids: TreePlan[] };
+
+/** Random PutGet-preserving write-through tree, depth-bounded. */
+export const treePlan = (maxDepth = 4): fc.Arbitrary<TreePlan> =>
+  fc.letrec<{ node: TreePlan }>(tie => ({
+    node: fc.oneof(
+      { maxDepth, depthIdentifier: "tree" },
+      fc.constant<TreePlan>({ t: "leaf" }),
+      fc.record({
+        t: fc.constant<"affine">("affine"),
+        k: fc.constantFrom<1 | -1>(1, -1),
+        b: fc.integer({ min: -1000, max: 1000 }),
+        child: tie("node"),
+      }),
+      fc.record({
+        t: fc.constant<"sum">("sum"),
+        kids: fc.array(tie("node"), { minLength: 2, maxLength: 4 }),
+      }),
+    ),
+  })).node;

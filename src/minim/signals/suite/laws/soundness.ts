@@ -1,13 +1,22 @@
 // Backward soundness — no lost writes across topologies. A write of a
 // reachable target to a well-behaved view must read back exactly that
 // target, whatever the graph between the view and its sources. This is
-// the executable definition the backward engine must satisfy; it
-// replaces the hand-seeded `bwd-soundness` fuzz with shrinking property
-// tests over randomly generated chains and fan-ins.
+// the executable definition the backward engine must satisfy, phrased as
+// shrinking property tests over randomly generated chains, fan-ins, and
+// mixed trees.
+//
+// Scope: these cover graphs the *generic adapter* can express — affine
+// 1→1 and even-split N→1, every subtree owning disjoint sources (no
+// shared source / diamond). The shared-source case, where read-back
+// hinges on a designated-anchor `bwd` reading nodes outside the declared
+// parent set, isn't expressible through `lens`/`lensN`; it lives in the
+// minim-specific `_test/bwd-soundness.test.ts`.
 
 import fc from "fast-check";
 import type { Reactive, Source, View } from "../adapters/types";
+import { type TreePlan, treePlan } from "../harness/arbitraries";
 import { countBwd, countFwd, newCounters } from "../harness/counters";
+import { buildTree } from "../harness/graphs";
 
 /** Random invertible affine chain of generated depth; a view write reads
  *  back as itself (PutGet) and the backward walk visits each step once. */
@@ -53,6 +62,22 @@ export function faninNoLostWrite(rx: Reactive): fc.IPropertyWithHooks<[number, n
           return nums.map(x => x + delta);
         },
       );
+      view.write(target);
+      return Math.abs(view.read() - target) < 1e-6;
+    },
+  );
+}
+
+/** Random mixed tree (affine chains + even-split fan-ins, arbitrary depth
+ *  and shape): a write to the root view reads back exactly. Generalizes
+ *  the chain and fan-in cases to compositions of both. */
+export function treeNoLostWrite(rx: Reactive): fc.IPropertyWithHooks<[TreePlan, number]> {
+  return fc.property(
+    treePlan(4),
+    fc.double({ min: -1e4, max: 1e4, noNaN: true, noDefaultInfinity: true }),
+    (plan, target) => {
+      const c = newCounters();
+      const { view } = buildTree(rx, plan, c);
       view.write(target);
       return Math.abs(view.read() - target) < 1e-6;
     },
