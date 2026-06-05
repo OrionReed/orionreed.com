@@ -22,6 +22,7 @@ import { type Tween, tween } from "../anim";
 import { Cell, reader, type Val, type Writable } from "../signal";
 import type { Linear, TraitDict } from "../traits";
 import { derived } from "../writable";
+import { Bool } from "./bool";
 import { Color } from "./color";
 import { Vec } from "./vec";
 
@@ -46,6 +47,9 @@ export const stamp = (data: Uint8ClampedArray, w: number, h: number): V => ({
 });
 
 export const equals = (a: V, b: V): boolean => a.epoch === b.epoch;
+
+/** Van-Cittert iterations for `blur`'s backward (deconvolution) pass. */
+const DECONV_ITERS = 24;
 
 // ── luma / chroma ───────────────────────────────────────────────────
 const LR = 0.299;
@@ -589,10 +593,14 @@ export class Canvas extends Cell<V> {
     }) as Writable<Canvas>;
   }
 
-  /** Gaussian blur (reactive `radius`). Writable: editing the blurred view
-   *  injects the high-frequency difference back into the source (an
-   *  unsharp/Van-Cittert step, gain `lambda`) — approximate deconvolution.
-   *  PutGet, not exact GetPut: the forward is genuinely lossy. */
+  /** Gaussian blur (reactive `radius`). Writable: the backward direction
+   *  runs an iterated Van-Cittert deconvolution — find a source whose blur
+   *  matches the edited target. Seeding from the current source means
+   *  untouched regions stay fixed (their residual is zero) while a stroke
+   *  back-solves to the sharp pre-image that explains it, gain `lambda` per
+   *  step over `DECONV_ITERS` iterations. PutGet, not exact GetPut: the
+   *  forward genuinely discards high frequencies, so push the gain and it
+   *  rings — the honest signature of the inverse problem. */
   blur(radius: Val<number>, lambda: Val<number> = 1): this {
     const rf = reader(radius);
     const lf = reader(lambda);
@@ -606,19 +614,21 @@ export class Canvas extends Cell<V> {
         return stamp(out, v.w, v.h);
       },
       (target, v) => {
-        const bl = stmp(v.data.length);
-        gaussInto(v.data, v.w, v.h, rf(), bl);
-        const out = sb(v.data.length);
         const g = lf();
+        const r = rf();
         const t = target.data;
-        const s = v.data;
-        for (let i = 0; i < s.length; i += 4) {
-          out[i] = s[i]! + g * (t[i]! - bl[i]!);
-          out[i + 1] = s[i + 1]! + g * (t[i + 1]! - bl[i + 1]!);
-          out[i + 2] = s[i + 2]! + g * (t[i + 2]! - bl[i + 2]!);
-          out[i + 3] = s[i + 3]!;
+        const x = sb(v.data.length); // running estimate (clamped each step)
+        x.set(v.data);
+        const bl = stmp(v.data.length);
+        for (let it = 0; it < DECONV_ITERS; it++) {
+          gaussInto(x, v.w, v.h, r, bl);
+          for (let i = 0; i < x.length; i += 4) {
+            x[i] = x[i]! + g * (t[i]! - bl[i]!);
+            x[i + 1] = x[i + 1]! + g * (t[i + 1]! - bl[i + 1]!);
+            x[i + 2] = x[i + 2]! + g * (t[i + 2]! - bl[i + 2]!);
+          }
         }
-        return stamp(out, v.w, v.h);
+        return stamp(x, v.w, v.h);
       },
     );
   }
@@ -780,6 +790,43 @@ export class Canvas extends Cell<V> {
   /** Dimensions `(w, h)` as a read-only `Vec`. */
   get dimensions(): Vec {
     return derived(this, "dimensions", Vec, v => ({ x: v.w, y: v.h }));
+  }
+
+  /** A 1-bit projection: is the mean luma ≥ reactive `threshold` (0–255)?
+   *  Writable — flipping the bit auto-exposes, scaling RGB so the mean
+   *  lands just across the threshold (a rigid gain, like `meanColor` but
+   *  collapsed to a predicate). The raster→`Bool` analog of a comparator. */
+  brighterThan(threshold: Val<number>): Writable<Bool> {
+    const tf = reader(threshold);
+    const self: Canvas = this;
+    const meanLumaBuf = (d: Uint8ClampedArray): number => {
+      let s = 0;
+      for (let i = 0; i < d.length; i += 4) s += luma(d[i]!, d[i + 1]!, d[i + 2]!);
+      return s / (d.length / 4);
+    };
+    return Bool.lens(
+      self,
+      v => meanLumaBuf(v.data) >= tf(),
+      (target, v) => {
+        // iterate the gain because clipping caps a single step short of the
+        // line; converges to all-255 / all-0 if the bound is unreachable.
+        const t = tf();
+        const want = target ? t + 8 : t - 8;
+        const out = new Uint8ClampedArray(v.data);
+        for (let it = 0; it < 40; it++) {
+          const Y = meanLumaBuf(out);
+          if (target ? Y >= t : Y < t) break;
+          const k = Y > 0.5 ? want / Y : target ? 2 : 0;
+          if (Math.abs(k - 1) < 1e-3) break;
+          for (let i = 0; i < out.length; i += 4) {
+            out[i] = out[i]! * k;
+            out[i + 1] = out[i + 1]! * k;
+            out[i + 2] = out[i + 2]! * k;
+          }
+        }
+        return stamp(out, v.w, v.h);
+      },
+    ) as Writable<Bool>;
   }
 
   // ── animation ─────────────────────────────────────────────────────

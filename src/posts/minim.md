@@ -153,25 +153,15 @@ One source string feeds five live projections. Editing any pane updates the sour
 
 Each badge names the lens: `trim` stores the padding, `lowercase` a case mask, `words` the separator runs, `sortedUnique` a map from key to positions and case (so one edit fans out to every occurrence), and `rot13` is the involution baseline.
 
-The same complement mechanism scales to rasters. A `Canvas` value carries its pixels as a mutable buffer behind a small header — the reactive graph compares a monotonic `epoch`, so propagation never touches a pixel. One source flows through `brightness(k) → grayscale → invert`; the grayscale lens is the image twin of `lowercase`, storing per-pixel chroma so editing the luma view recolours the source. Paint on any panel and the edit routes backward through the chain; the knob drives it forward:
+The same complement mechanism scales to rasters. A `Canvas` value carries its pixels as a mutable buffer behind a small header — the reactive graph compares a monotonic `epoch`, so propagation never touches a pixel. That makes a whole lens DAG cheap to keep live, which is the easiest way to see the whole story at once. Below, the tip-less curves *are* the lenses. A source forks four ways: a transform spine (`brightness(k) → blur(r) → grayscale → invert`, where `grayscale` is the image twin of `lowercase`, storing per-pixel chroma), a `flipH`, a region branch (`crop → meanColor`), and a 1-bit projection (`brighterThan`). Turn a knob and the change flows down. Paint any canvas (one global brush), drag the box-in-box crop param, flip the exposure bit, or pick the mean colour — every edit flows up through the inverses. Pick a mean colour for the cropped patch and watch it land back in just that region of the source:
 
-<md-canvas-lenses></md-canvas-lenses>
+<md-canvas-graph></md-canvas-graph>
 
-The lens family is large, spanning the same tiers as the scalar types: geometric (`crop`, `flipH`), photometric (`hueRotate`, `gamma`, `quantize`), spatial (`blur`, `edges`), and multiscale (`downsample`). All read reactive cells, so a single source fans out into a live gallery:
+Every tier stacks in that one graph. Photometric complements (`grayscale` chroma). Reactive-parameter invertibles (`brightness`, the `blur` knob). Spatial deconvolution: painting the blurred node runs an iterated Van-Cittert solve in the backward direction, seeded from the current source so untouched regions stay fixed while a stroke back-solves to the sharp pre-image that explains it — PutGet, not exact GetPut, so pushing the gain rings. A cross-type chain: `meanColor` is a writable `Color` whose RGB field-lenses rigidly shift every pixel — a lens of a lens, edited through `crop`. And a cross-type *predicate*: `brighterThan(t)` projects the image to a `Bool` (is the mean luma over threshold?), and flipping that bit auto-exposes — a rigid gain that pushes the mean just across the line and flows back through `brightness` to the source.
 
-<md-canvas-lab></md-canvas-lab>
-
-The bidirectional ones are where it gets strange. `downsample` projects to a thumbnail; its complement is the Laplacian residual, so painting the coarse thumbnail reconstructs full-resolution detail underneath the edit — coarse structure and fine texture are independently editable:
+The multiscale case earns its own panel. `downsample` projects to a thumbnail; its complement is the Laplacian residual, so painting the coarse thumbnail reconstructs full-resolution detail underneath the edit — coarse structure and fine texture stay independently editable:
 
 <md-canvas-pyramid></md-canvas-pyramid>
-
-`blur` is writable too. Its backward injects the high-frequency difference back into the source, an approximate deconvolution: edit the blurred output and the source sharpens to explain your stroke. It is PutGet, not exact GetPut — the forward genuinely discards detail — so it recovers a plausible source, and pushing the gain too hard rings, the honest signature of the inverse problem:
-
-<md-canvas-deblur></md-canvas-deblur>
-
-Lenses cross types in both directions. `pixel(x,y)` is a writable `Color` at a reactive coordinate; `meanColor()` is a writable `Color` whose RGB field-lenses each rigidly shift every pixel — a lens of a lens:
-
-<md-canvas-pick></md-canvas-pick>
 
 None of this needs the pixels to live on the CPU. Because the value is a handle, the payload can sit in GPU textures and the graph still only moves headers. Here per-pixel spring state lives in float textures and never leaves the card; each pixel is an independent damped oscillator chasing the target image. Stiffness and damping are reactive cells pushed into the integrator; click a target to retarget:
 

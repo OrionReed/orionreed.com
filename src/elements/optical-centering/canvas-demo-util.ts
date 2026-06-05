@@ -122,7 +122,8 @@ export function discPaint(
 export interface PaintOpts {
   /** Brush colour, evaluated once per stroke. */
   color: () => [number, number, number];
-  radius?: number;
+  /** Brush radius in source pixels; a function is re-read per stroke. */
+  radius?: number | (() => number);
 }
 
 /** Bind pointer painting to a 2D canvas backed by a writable cell. */
@@ -131,9 +132,11 @@ export function bindPaint(
   cell: Writable<Canvas>,
   opts: PaintOpts,
 ): () => void {
-  const radius = opts.radius ?? 14;
+  const radiusOf = (): number =>
+    typeof opts.radius === "function" ? opts.radius() : (opts.radius ?? 14);
   let drawing = false;
   let color: [number, number, number] = [255, 255, 255];
+  let radius = 14;
   const at = (e: PointerEvent): [number, number] => {
     const r = cv.getBoundingClientRect();
     const v = cell.value;
@@ -149,6 +152,7 @@ export function bindPaint(
       cv.setPointerCapture(e.pointerId);
     } catch {}
     color = opts.color();
+    radius = radiusOf();
     stroke(e);
   };
   const move = (e: PointerEvent): void => {
