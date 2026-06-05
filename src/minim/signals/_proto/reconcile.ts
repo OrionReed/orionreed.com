@@ -19,8 +19,12 @@
 //   * Last-write-wins is overwrite; net-zero is "resolve == current" caught by
 //     the root's ordinary equality check — no special net-zero handling.
 //   * Eager vs batched is just "flush now vs at batch end" — one code path.
-//   * Lossy snap, multi-out split, merge fold, and the stateful complement are
-//     all RESOLUTIONS (complement = an auxiliary root). No bespoke kinds.
+//   * Lossy snap, multi-out split, merge fold are all RESOLUTIONS. No bespoke
+//     kinds. (NOTE: this file models a stateful lens's complement as an
+//     auxiliary root for simplicity — but that is a reframe, not the truth.
+//     State genuinely lives at roots AND on stateful lenses; a write can stop
+//     partway, moving only a complement, with NO root touched. The honest
+//     recursive model with complement-on-lens is in reconcile-multi.ts.)
 //
 // Backward no-op = PER-HOP, the dual of forward memoization: walk up the put-
 // chain and STOP at the first node (root OR lens) whose value is unchanged.

@@ -7,10 +7,11 @@
 import { group } from "mitata";
 import { alien, preact } from "../adapters/forward";
 import { minim } from "../adapters/minim";
+import { reconcile } from "../adapters/reconcile";
 import { reg } from "./runner";
 import { fwdChain, fwdFan } from "./workloads";
 
-const engines = [minim, alien, preact] as const;
+const engines = [minim, reconcile, alien, preact] as const;
 
 group("forward chain (depth 50)", () => {
   for (const rx of engines) reg(rx.name, fwdChain(rx, 50));

@@ -327,3 +327,5 @@ console.log("push-pull backward — does drain-on-read subsume the patches?\n");
 }
 
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}`);
+
+export {};

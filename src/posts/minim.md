@@ -180,6 +180,25 @@ One source string, five live projections. Edit any pane; the source updates with
 
 Each badge names the lens kind: `trim` stores padding, `lowercase` a case mask, `words` the separator runs, `sortedUnique` a `(key → [position, case]+)` map (one edit fans out to every occurrence), `rot13` the involution baseline. Chains compose into one cell with a composed complement.
 
+A unit is itself a tiny value type: `(factor, dim)` — an SI scale and a vector of seven dimension exponents. Units form a vector space under multiplication, so `times`/`div` add and subtract dimension vectors and `pow` scales them. The whole zoo is composition, not a lookup table:
+
+```ts
+const km     = meter.scaled(1000);                       // prefix
+const knot   = nmi.div(hour);                            // compound
+const litre  = meter.pow(3).scaled(0.001);               // m³ → L
+const newton = kilogram.times(meter).div(second.pow(2)); // kg·m·s⁻²
+const joule  = newton.times(meter);                      // energy
+const watt   = joule.div(second);                        // power
+```
+
+Two quantities are interconvertible exactly when their dimension vectors match — build a compound and the name and compatible units fall out:
+
+<md-unit-algebra></md-unit-algebra>
+
+A converter is then N lenses onto one canonical SI-base cell: `field = si.lens(u.fromBase, u.toBase)`. No master field, no swap button — edit any field and every sibling re-derives. Temperature is the affine case (`factor·v + offset`, leaves of the algebra that don't compose); speed/area/volume are compound:
+
+<md-units></md-units>
+
 ## Fixpoint Networks
 
 Some relationships aren't function-shaped — a four-bar linkage, a cloth, a sudoku have no source end. The lens model bottoms out and the *cluster* owns the solve. Two flavours, same `network()`: constraint clusters that project onto a manifold, propagators that narrow to a fixpoint.

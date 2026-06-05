@@ -77,6 +77,8 @@ import { MdTrails } from "./optical-centering/md-trails";
 import { MdTraitsCrossDomain } from "./optical-centering/md-traits-cross-domain";
 import { MdTransitions } from "./optical-centering/md-transitions";
 import { MdTriTree } from "./optical-centering/md-tri-tree";
+import { MdUnitAlgebra } from "./optical-centering/md-unit-algebra";
+import { MdUnits } from "./optical-centering/md-units";
 import { MdWaapiDemo } from "./optical-centering/md-waapi-demo";
 
 DarkModeToggle.define();
@@ -110,6 +112,8 @@ MdRcc8.define();
 MdContainmentForest.define();
 MdHistogram.define();
 MdHeatmap.define();
+MdUnits.define();
+MdUnitAlgebra.define();
 MdBudgetTree.define();
 MdSkeletalRig.define();
 MdTraitsCrossDomain.define();

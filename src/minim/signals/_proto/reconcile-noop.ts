@@ -125,3 +125,5 @@ console.log("backward no-op semantics\n");
 }
 
 console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} FAILURE(S)`}`);
+
+export {};
