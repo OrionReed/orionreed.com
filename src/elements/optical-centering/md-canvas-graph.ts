@@ -22,8 +22,8 @@ import { bindPaint, blit, scene } from "./canvas-demo-util";
 
 const SIZE = 160;
 const NS = 104;
-const VW = 680;
-const VH = 772;
+const VW = 700;
+const VH = 732;
 const SETTLE_EPS = 2e-6;
 
 interface Box {
@@ -110,9 +110,10 @@ export class MdCanvasGraph extends HTMLElement {
       svg.edges { position: absolute; inset: 0; width: ${VW}px; height: ${VH}px; pointer-events: none; overflow: visible; color: var(--text-color); }
       .node { position: absolute; }
       .node canvas { width: ${NS}px; height: ${NS}px; display: block; border-radius: 6px; background: #0002; cursor: crosshair; touch-action: none; box-shadow: 0 0 0 1px #fff2; }
+      .node canvas.crisp { image-rendering: pixelated; }
       .nlabel { margin-top: 4px; font: 10.5px var(--font, system-ui); color: var(--text-color); opacity: 0.66; text-align: center; }
       /* slim param card */
-      .param { background: color-mix(in srgb, var(--text-color) 6%, transparent); border: 1px solid #fff2; border-radius: 6px; padding: 3px 7px 4px; }
+      .param { box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; background: color-mix(in srgb, var(--text-color) 6%, transparent); border: 1px solid #fff2; border-radius: 6px; padding: 3px 9px; }
       .param label { display: flex; flex-direction: column; gap: 1px; font: 9.5px var(--font, system-ui); color: var(--text-color); }
       .param .top { display: flex; justify-content: space-between; opacity: 0.7; }
       .param input[type=range] { width: 100%; height: 10px; margin: 1px 0 0; accent-color: var(--text-color); }
@@ -122,10 +123,10 @@ export class MdCanvasGraph extends HTMLElement {
       .swatch::-webkit-color-swatch-wrapper { padding: 0; }
       .cropframe { position: relative; }
       .cropframe canvas { width: 100%; height: 100%; display: block; border-radius: 6px; box-shadow: 0 0 0 1px #fff2; opacity: 0.85; }
-      .croprect { position: absolute; border: 1.5px solid #fff; box-shadow: 0 0 0 1px #0008; cursor: move; border-radius: 2px; }
+      .croprect { position: absolute; box-sizing: border-box; border: 1.5px solid #fff; box-shadow: 0 0 0 1px #0008; cursor: move; border-radius: 2px; }
       .crophandle { position: absolute; right: -4px; bottom: -4px; width: 9px; height: 9px; background: #fff; border-radius: 50%; cursor: nwse-resize; box-shadow: 0 0 0 1px #0008; }
-      .readout { position: absolute; border: 1px dashed #fff8; pointer-events: none; border-radius: 1px; }
-      .bool { display: flex; align-items: center; gap: 8px; padding: 0 6px; height: 100%; cursor: pointer; user-select: none; }
+      .readout { position: absolute; box-sizing: border-box; border: 1px dashed #fff8; pointer-events: none; border-radius: 1px; }
+      .bool { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
       .bool .led { width: 16px; height: 16px; border-radius: 50%; background: #444; box-shadow: inset 0 0 0 1px #fff3; transition: background 0.15s, box-shadow 0.15s; flex: 0 0 auto; }
       .bool .led.on { background: #5be08a; box-shadow: 0 0 8px #5be08a, inset 0 0 0 1px #fff6; }
       .bool .btxt { font: 10.5px var(--font, system-ui); color: var(--text-color); opacity: 0.72; }
@@ -138,30 +139,39 @@ export class MdCanvasGraph extends HTMLElement {
     const d = this.disposers;
     const src = this.source;
     const bright = src.brightness(this.k);
-    const blurred = bright.blur(this.radius, 1);
+    const blurred = bright.blur(this.radius);
     const gray = blurred.grayscale();
     const inv = gray.invert();
     const flipped = src.flipH();
+    const lumaOnly = flipped.grayscale();
+    const chromaOnly = flipped.chroma();
     const down = src.downsample(4);
     const crop = src.crop(this.cropX, this.cropY, this.cropW, this.cropW);
     const mean = crop.meanColor();
     const lit = gray.brighterThan(num(0.5));
 
-    const spineX = 138;
+    // Aligned grid: spine (cx 202) holds S→B→Bl→G→I; rows at y 8/150/300/450/600.
+    // Left param cards (k, r, luma) are vertically centred on their spine row so
+    // their wires run dead level into the boxes.
+    const spineX = 150;
+    const rightX = 580;
+    const cen = (rowY: number, h: number): number => rowY + NS / 2 - h / 2;
     const boxes: Record<string, Box> = {
-      S: { x: 328, y: 8, w: NS, h: NS },
+      S: { x: spineX, y: 8, w: NS, h: NS },
       B: { x: spineX, y: 150, w: NS, h: NS },
       Bl: { x: spineX, y: 300, w: NS, h: NS },
       G: { x: spineX, y: 450, w: NS, h: NS },
       I: { x: spineX, y: 600, w: NS, h: NS },
-      Lu: { x: 6, y: 470, w: 108, h: 46 },
-      F: { x: 263, y: 172, w: NS, h: NS },
-      Ds: { x: 388, y: 172, w: NS, h: NS },
-      CB: { x: 513, y: 30, w: NS, h: NS },
-      Cr: { x: 513, y: 176, w: NS, h: NS },
-      Mc: { x: 513, y: 344, w: NS, h: 58 },
-      K: { x: 6, y: 172, w: 96, h: 40 },
-      R: { x: 6, y: 322, w: 96, h: 40 },
+      F: { x: 300, y: 150, w: NS, h: NS },
+      Ds: { x: 440, y: 150, w: NS, h: NS },
+      Ly: { x: 300, y: 300, w: NS, h: NS },
+      Ch: { x: 440, y: 300, w: NS, h: NS },
+      CB: { x: rightX, y: 8, w: NS, h: NS },
+      Cr: { x: rightX, y: 150, w: NS, h: NS },
+      Mc: { x: rightX, y: 300, w: NS, h: 58 },
+      K: { x: 6, y: cen(150, 40), w: 104, h: 40 },
+      R: { x: 6, y: cen(300, 40), w: 104, h: 40 },
+      Lu: { x: 6, y: cen(450, 46), w: 104, h: 46 },
     };
 
     const toolbar = this.buildToolbar(src);
@@ -189,11 +199,13 @@ export class MdCanvasGraph extends HTMLElement {
     edge(botC(boxes.S!), topC(boxes.B!), false);
     edge(botC(boxes.S!), topC(boxes.F!), false);
     edge(botC(boxes.S!), topC(boxes.Ds!), false);
-    edge(rightC(boxes.S!), topC(boxes.Cr!), false);
+    edge(botC(boxes.F!), topC(boxes.Ly!), false);
+    edge(botC(boxes.F!), topC(boxes.Ch!), false);
+    edge(rightC(boxes.S!), leftC(boxes.CB!), true);
     edge(botC(boxes.B!), topC(boxes.Bl!), false);
     edge(botC(boxes.Bl!), topC(boxes.G!), false);
     edge(botC(boxes.G!), topC(boxes.I!), false);
-    edge(leftC(boxes.G!), topC(boxes.Lu!), false);
+    edge(leftC(boxes.G!), rightC(boxes.Lu!), true);
     edge(botC(boxes.CB!), topC(boxes.Cr!), false);
     edge(botC(boxes.Cr!), topC(boxes.Mc!), false);
     edge(rightC(boxes.K!), leftC(boxes.B!), true);
@@ -212,16 +224,21 @@ export class MdCanvasGraph extends HTMLElement {
       label: string,
       cell: Canvas | Writable<Canvas>,
       paint: boolean,
+      crisp = false,
     ): HTMLCanvasElement => {
       const n = document.createElement("div");
       n.className = "node";
       place(n, b);
       const cv = document.createElement("canvas");
+      if (crisp) cv.classList.add("crisp");
       const ctx = cv.getContext("2d", { alpha: true })!;
-      const cap = document.createElement("div");
-      cap.className = "nlabel";
-      cap.textContent = label;
-      n.append(cv, cap);
+      n.append(cv);
+      if (label) {
+        const cap = document.createElement("div");
+        cap.className = "nlabel";
+        cap.textContent = label;
+        n.append(cap);
+      }
       stage.append(n);
       d.push(effect(() => blit((cell as Canvas).value, ctx)));
       if (paint)
@@ -229,13 +246,15 @@ export class MdCanvasGraph extends HTMLElement {
       return cv;
     };
 
-    const srcCv = canvasNode(boxes.S!, "source", src, true);
+    const srcCv = canvasNode(boxes.S!, "", src, true);
     canvasNode(boxes.B!, "brightness(k)", bright, true);
     canvasNode(boxes.Bl!, "blur(r) · paint = deconv", blurred, true);
     canvasNode(boxes.G!, "grayscale", gray, true);
     canvasNode(boxes.I!, "invert", inv, true);
     canvasNode(boxes.F!, "flipH", flipped, true);
-    canvasNode(boxes.Ds!, "downsample", down, true);
+    canvasNode(boxes.Ly!, "luma (Y)", lumaOnly, true);
+    canvasNode(boxes.Ch!, "chroma (C)", chromaOnly, true);
+    canvasNode(boxes.Ds!, "downsample", down, true, true);
     canvasNode(boxes.Cr!, "crop", crop, true);
 
     // crop readout on the source (non-interactive)
@@ -302,7 +321,7 @@ export class MdCanvasGraph extends HTMLElement {
     });
 
     this.sliderNode(stage, boxes.K!, "k", 0.3, 2, 0.01, this.k, d, v => `${v.toFixed(2)}×`);
-    this.sliderNode(stage, boxes.R!, "blur r", 0, 6, 0.1, this.radius, d, v => v.toFixed(1));
+    this.sliderNode(stage, boxes.R!, "blur r", 0, 10, 0.1, this.radius, d, v => v.toFixed(1));
 
     const hint = document.createElement("div");
     hint.className = "hint";
@@ -514,6 +533,7 @@ export class MdCanvasGraph extends HTMLElement {
     n.style.left = `${b.x}px`;
     n.style.top = `${b.y}px`;
     n.style.width = `${b.w}px`;
+    n.style.height = `${b.h}px`;
     const label = document.createElement("label");
     const top = document.createElement("div");
     top.className = "top";

@@ -61,8 +61,8 @@ export const stamp = (tex: WebGLTexture, w: number, h: number): V => ({
 
 export const equals = (a: V, b: V): boolean => a.epoch === b.epoch;
 
-const DECONV_ITERS = 24;
-const MAXR = 8;
+const DECONV_ITERS = 18;
+const MAXR = 10;
 const LUMA_W = "vec3(0.299, 0.587, 0.114)";
 
 // ── shaders ─────────────────────────────────────────────────────────
@@ -95,6 +95,22 @@ const RECOLOR = `${HEAD}
 uniform sampler2D u_t; uniform sampler2D u_c;
 void main() { float y = texture(u_t, v_uv).r; vec4 c = texture(u_c, v_uv); o = vec4(y + c.rgb, c.a); }`;
 
+// chroma() view: (r−Y, g−Y, b−Y) lifted by +0.5 so it shows on a mid-grey
+// base; complement is the luma Y, recovered by DELUMA on write-back.
+const CHROMA_VIEW = `${HEAD}
+uniform sampler2D u_s;
+void main() { vec4 c = texture(u_s, v_uv); float y = dot(c.rgb, ${LUMA_W}); o = vec4(c.rgb - y + 0.5, c.a); }`;
+
+const DELUMA = `${HEAD}
+uniform sampler2D u_t; uniform sampler2D u_c;
+void main() {
+  vec4 t = texture(u_t, v_uv);
+  vec3 cv = t.rgb - 0.5;
+  cv -= dot(cv, ${LUMA_W});          // strip any luma the painted chroma carries
+  float y = texture(u_c, v_uv).r;    // restore the source's luma exactly
+  o = vec4(cv + y, t.a);
+}`;
+
 const CROP_FWD = `${HEAD}
 uniform sampler2D u_s; uniform vec2 u_off; uniform vec2 u_csize; uniform vec2 u_ssize;
 void main() { vec2 sp = (u_off + v_uv * u_csize) / u_ssize; o = texture(u_s, sp); }`;
@@ -122,11 +138,22 @@ void main() {
   o = vec4(acc / wsum, a);
 }`;
 
-const VC_STEP = `${HEAD}
-uniform sampler2D u_x; uniform sampler2D u_t; uniform sampler2D u_bl; uniform float u_lambda;
+// Richardson–Lucy step. RL_RATIO forms target / blur(estimate) (guarded);
+// RL_MUL multiplies the estimate by blur(ratio) and clamps to [0,1]. Both
+// the non-negativity clamp and the multiplicative form keep ringing far
+// below an additive Van-Cittert iteration.
+const RL_RATIO = `${HEAD}
+uniform sampler2D u_t; uniform sampler2D u_est;
 void main() {
-  vec4 x = texture(u_x, v_uv); vec3 t = texture(u_t, v_uv).rgb; vec3 bl = texture(u_bl, v_uv).rgb;
-  o = vec4(x.rgb + u_lambda * (t - bl), x.a);
+  vec4 t = texture(u_t, v_uv); vec3 e = texture(u_est, v_uv).rgb;
+  o = vec4(t.rgb / max(e, vec3(1e-3)), t.a);
+}`;
+
+const RL_MUL = `${HEAD}
+uniform sampler2D u_x; uniform sampler2D u_c;
+void main() {
+  vec4 x = texture(u_x, v_uv); vec3 c = texture(u_c, v_uv).rgb;
+  o = vec4(clamp(x.rgb * c.rgb, 0.0, 1.0), x.a);
 }`;
 
 const BOXDOWN = `${HEAD}
@@ -276,6 +303,38 @@ export class Canvas extends Cell<V> {
     }) as Writable<Canvas>;
   }
 
+  /** Chroma view (the dual of `grayscale`): `(r−Y, g−Y, b−Y)` on a mid-grey
+   *  base, complement is the luma `Y`. Editing the colour re-lights nothing —
+   *  it rewrites hue while keeping the original brightness. */
+  chroma(): Writable<Canvas> {
+    const sc = scratch();
+    const sf = scratch();
+    const sb = scratch();
+    const lumaOf = (v: V): Tex => {
+      const c = sc(v.w, v.h);
+      pass(LUMA, c, s => s.tex("u_s", 0, v.tex));
+      return c;
+    };
+    const self: Canvas = this;
+    return Canvas.lens([self], {
+      init: ([s]) => lumaOf(s),
+      step: ([s], c, external) => (external ? lumaOf(s) : c),
+      fwd: ([s]) => {
+        const out = sf(s.w, s.h);
+        pass(CHROMA_VIEW, out, x => x.tex("u_s", 0, s.tex));
+        return stamp(out.tex, s.w, s.h);
+      },
+      bwd: (target, [s], c) => {
+        const out = sb(s.w, s.h);
+        pass(DELUMA, out, x => {
+          x.tex("u_t", 0, target.tex);
+          x.tex("u_c", 1, c.tex);
+        });
+        return { updates: [stamp(out.tex, s.w, s.h)], complement: c };
+      },
+    }) as Writable<Canvas>;
+  }
+
   // ── geometric & spatial lenses ────────────────────────────────────
 
   /** Sub-rectangle view (reactive `x,y,w,h`). Editing the crop composites
@@ -378,19 +437,22 @@ export class Canvas extends Cell<V> {
   }
 
   /** Gaussian blur (reactive `radius`). Writable: the backward direction
-   *  runs an iterated Van-Cittert deconvolution seeded from the source, so
-   *  untouched regions stay fixed while a stroke back-solves to the sharp
-   *  pre-image that explains it. PutGet, not exact GetPut — push `lambda`
-   *  and it rings, the honest signature of the inverse problem. */
-  blur(radius: Val<number>, lambda: Val<number> = 1): this {
+   *  runs an iterated Richardson–Lucy deconvolution seeded from the source.
+   *  Each step is `x ← x · H(target / H(x))`, non-negative and multiplicative,
+   *  so untouched regions stay fixed (their ratio is 1) while a stroke
+   *  back-solves to a sharp pre-image with far less ringing than an additive
+   *  solve. PutGet, not exact GetPut — the residual is the honest signature
+   *  of an ill-posed inverse. */
+  blur(radius: Val<number>): this {
     const rf = reader(radius);
-    const lf = reader(lambda);
     const fTmp = scratch();
     const fOut = scratch();
     const xa = scratch();
     const xb = scratch();
-    const bTmp = scratch();
-    const bBl = scratch();
+    const gTmp = scratch();
+    const est = scratch();
+    const ratio = scratch();
+    const corr = scratch();
     return this.lens(
       v => {
         const tmp = fTmp(v.w, v.h);
@@ -404,17 +466,20 @@ export class Canvas extends Cell<V> {
         let cur = v.tex === A.tex ? B : A;
         let other = cur === A ? B : A;
         copy(v.tex, cur);
-        const g = lf();
         const r = rf();
         for (let it = 0; it < DECONV_ITERS; it++) {
-          const tmp = bTmp(v.w, v.h);
-          const bl = bBl(v.w, v.h);
-          gauss(cur.tex, v.w, v.h, r, tmp, bl);
-          pass(VC_STEP, other, s => {
+          const e = est(v.w, v.h);
+          gauss(cur.tex, v.w, v.h, r, gTmp(v.w, v.h), e);
+          const ra = ratio(v.w, v.h);
+          pass(RL_RATIO, ra, s => {
+            s.tex("u_t", 0, target.tex);
+            s.tex("u_est", 1, e.tex);
+          });
+          const co = corr(v.w, v.h);
+          gauss(ra.tex, v.w, v.h, r, gTmp(v.w, v.h), co);
+          pass(RL_MUL, other, s => {
             s.tex("u_x", 0, cur.tex);
-            s.tex("u_t", 1, target.tex);
-            s.tex("u_bl", 2, bl.tex);
-            s.f("u_lambda", g);
+            s.tex("u_c", 1, co.tex);
           });
           const t = cur;
           cur = other;

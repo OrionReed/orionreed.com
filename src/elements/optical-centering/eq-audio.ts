@@ -1,12 +1,15 @@
 // eq-audio.ts — the data plane for the bireactive EQ demo.
 //
-// Native WebAudio only (no worklet): a synthesized chord loop streams through
-// a cascade of peaking BiquadFilters into an AnalyserNode. The reactive graph
-// owns the control plane — it pushes solved gains onto `setGain` and reads the
-// live spectrum via `spectrum`. `responseDb` is the closed-form model the
-// inverse solve factors over; it matches the BiquadFilter cascade exactly
-// (cascaded magnitudes multiply ⇒ dB add), so the drawn curve and the measured
-// curve agree.
+// Native WebAudio only (no worklet): whatever Clip the reactive source cell
+// holds streams through a cascade of peaking BiquadFilters into an AnalyserNode.
+// The reactive graph owns the control plane — it pushes solved gains onto
+// `setGain`, points playback at a clip via `setSource` (an `effect` over an
+// `Audio` value), and reads the live spectrum via `spectrum`. `responseDb` is
+// the closed-form model the inverse solve factors over; it matches the
+// BiquadFilter cascade exactly (cascaded magnitudes multiply ⇒ dB add), so the
+// drawn curve and the measured curve agree.
+
+import { audioStamp as stamp, type AudioClip as Clip } from "../../minim";
 
 /** One peaking band: center frequency (Hz) + quality factor. Gain is a
  *  reactive control, not stored here. */
@@ -53,21 +56,19 @@ export function responseDb(f: number, gains: readonly number[], bands: readonly 
   return db;
 }
 
-/** Render a seamless looping chord pad into a mono buffer. Additive saw-ish
+/** A seamless looping chord pad as a context-free mono `Clip`. Additive saw-ish
  *  partials over a few notes — broadband (so EQ is audible) and musical. Note
  *  frequencies are snapped to whole cycles per buffer so the loop is click-free. */
-function renderChord(ctx: AudioContext, seconds: number): AudioBuffer {
-  const fs = ctx.sampleRate;
-  const n = Math.floor(seconds * fs);
-  const buf = ctx.createBuffer(1, n, fs);
-  const d = buf.getChannelData(0);
+export function renderChordClip(sampleRate: number, seconds: number): Clip {
+  const n = Math.floor(seconds * sampleRate);
+  const d = new Float32Array(n);
   // A2 · E3 · A3 · E4, each snapped to integer cycles per buffer (seamless loop).
   const notes = [110, 164.81, 220, 329.63].map(f => Math.round(f * seconds) / seconds);
   for (const f0 of notes) {
     const K = Math.min(40, Math.floor(8000 / f0));
     for (let k = 1; k <= K; k++) {
       const amp = 0.6 / k / notes.length;
-      const w = (2 * Math.PI * k * f0) / fs;
+      const w = (2 * Math.PI * k * f0) / sampleRate;
       for (let i = 0; i < n; i++) d[i]! += amp * Math.sin(w * i);
     }
   }
@@ -78,26 +79,36 @@ function renderChord(ctx: AudioContext, seconds: number): AudioBuffer {
   }
   const g = max > 0 ? 0.9 / max : 1;
   for (let i = 0; i < n; i++) d[i]! *= g;
-  return buf;
+  return stamp([d], sampleRate);
 }
 
-/** Live native-WebAudio EQ graph: source → peaking cascade → master →
- *  analyser → destination. The reactive layer drives `setGain` and reads
- *  `spectrum`; this object never touches the reactive graph itself. */
-export class AudioEqGraph {
+/** Fetch + decode a URL into a context-free `Clip` (channels copied out of the
+ *  decoded buffer so the value owns its PCM). Needs CORS on the source. */
+export async function loadClip(ctx: AudioContext, url: string): Promise<Clip> {
+  const resp = await fetch(url);
+  const bytes = await resp.arrayBuffer();
+  const buf = await ctx.decodeAudioData(bytes);
+  const pcm: Float32Array[] = [];
+  for (let c = 0; c < buf.numberOfChannels; c++) pcm.push(buf.getChannelData(c).slice());
+  return stamp(pcm, buf.sampleRate);
+}
+
+/** Live native-WebAudio engine: source → peaking cascade → master → analyser →
+ *  destination. The reactive layer drives `setGain`, points playback at a clip
+ *  via `setSource`, and reads `spectrum`. */
+export class AudioEngine {
   readonly ctx: AudioContext;
   private readonly master: GainNode;
   private readonly analyser: AnalyserNode;
   private readonly filters: BiquadFilterNode[];
-  private readonly buffer: AudioBuffer;
   private source: AudioBufferSourceNode | null = null;
+  private clip: Clip | null = null;
   playing = false;
 
   constructor(bands: readonly EqBand[]) {
     // biome-ignore lint/suspicious/noExplicitAny: webkit-prefixed fallback
     const Ctx: typeof AudioContext = window.AudioContext ?? (window as any).webkitAudioContext;
     this.ctx = new Ctx();
-    this.buffer = renderChord(this.ctx, 3);
 
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.6;
@@ -119,9 +130,46 @@ export class AudioEqGraph {
     this.analyser.connect(this.ctx.destination);
   }
 
-  /** Push a solved band gain (dB) onto the live filter (smoothed). */
+  /** Push a solved band gain (dB) onto the live filter (smoothed, clamped so
+   *  macro solves can't blow up the output). */
   setGain(i: number, db: number): void {
-    this.filters[i]?.gain.setTargetAtTime(db, this.ctx.currentTime, 0.02);
+    const c = db < -24 ? -24 : db > 24 ? 24 : db;
+    this.filters[i]?.gain.setTargetAtTime(c, this.ctx.currentTime, 0.02);
+  }
+
+  /** Point playback at a clip; rebuilds the live source if already playing. The
+   *  reactive layer calls this from an `effect` over an `Audio` cell. */
+  setSource(clip: Clip): void {
+    this.clip = clip;
+    if (this.playing) this.restart();
+  }
+
+  private toBuffer(clip: Clip): AudioBuffer {
+    const len = clip.pcm[0]?.length ?? 1;
+    const buf = this.ctx.createBuffer(Math.max(1, clip.pcm.length), len, clip.sampleRate);
+    for (let c = 0; c < clip.pcm.length; c++) buf.copyToChannel(clip.pcm[c]! as Float32Array<ArrayBuffer>, c);
+    return buf;
+  }
+
+  private stopSource(): void {
+    try {
+      this.source?.stop();
+      this.source?.disconnect();
+    } catch {
+      /* already stopped */
+    }
+    this.source = null;
+  }
+
+  private restart(): void {
+    this.stopSource();
+    if (!this.clip || this.clip.pcm.length === 0) return;
+    const s = this.ctx.createBufferSource();
+    s.buffer = this.toBuffer(this.clip);
+    s.loop = true;
+    s.connect(this.filters[0]!);
+    s.start();
+    this.source = s;
   }
 
   get binCount(): number {
@@ -140,24 +188,13 @@ export class AudioEqGraph {
   }
   play(): void {
     if (this.playing) return;
-    const s = this.ctx.createBufferSource();
-    s.buffer = this.buffer;
-    s.loop = true;
-    s.connect(this.filters[0]!);
-    s.start();
-    this.source = s;
     this.playing = true;
+    this.restart();
   }
   pause(): void {
     if (!this.playing) return;
-    try {
-      this.source?.stop();
-      this.source?.disconnect();
-    } catch {
-      /* already stopped */
-    }
-    this.source = null;
     this.playing = false;
+    this.stopSource();
   }
   dispose(): void {
     try {

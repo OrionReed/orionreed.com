@@ -424,11 +424,13 @@ export class Spring {
     g.clear(g.COLOR_BUFFER_BIT);
   }
 
-  /** Snap position + target to `srcTex`, zero the velocity. */
+  /** Snap position + target to `srcTex`, zero the velocity. `srcTex` may
+   *  alias one of our own position textures (the host feeds `current()` back
+   *  as the root value), so skip any copy that would read and write the same
+   *  texture — illegal GL feedback, and a no-op anyway. */
   seed(srcTex: WebGLTexture): void {
-    copy(srcTex, { tex: this.pos[0], w: this.w, h: this.h });
-    copy(srcTex, { tex: this.pos[1], w: this.w, h: this.h });
-    copy(srcTex, { tex: this.targetTex, w: this.w, h: this.h });
+    for (const tex of [this.pos[0], this.pos[1], this.targetTex])
+      if (srcTex !== tex) copy(srcTex, { tex, w: this.w, h: this.h });
     this.clearTex(this.vel[0]);
     this.clearTex(this.vel[1]);
     this.cur = 0;

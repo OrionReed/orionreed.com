@@ -82,6 +82,7 @@ export {
   walkTree,
 } from "./tree";
 export { Anchor, Dir } from "./values/anchor";
+export { Audio, audio, type AudioClip, stamp as audioStamp } from "./values/audio";
 export * as BoolMath from "./values/bool";
 export { Bool, bool } from "./values/bool";
 export * as BoxMath from "./values/box";
