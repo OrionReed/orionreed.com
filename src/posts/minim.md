@@ -153,6 +153,10 @@ One source string feeds five live projections. Editing any pane updates the sour
 
 Each badge names the lens: `trim` stores the padding, `lowercase` a case mask, `words` the separator runs, `sortedUnique` a map from key to positions and case (so one edit fans out to every occurrence), and `rot13` is the involution baseline.
 
+The same complement mechanism scales to rasters. A `Canvas` value carries its pixels as a mutable buffer behind a small header — the reactive graph compares a monotonic `epoch`, so propagation never touches a pixel. One source flows through `brightness(k) → grayscale → invert`; the grayscale lens is the image twin of `lowercase`, storing per-pixel chroma so editing the luma view recolours the source. Paint on any panel and the edit routes backward through the chain; the knob drives it forward:
+
+<md-canvas-lenses></md-canvas-lenses>
+
 ## Solvers
 
 When the inverse has no closed form, the backward direction runs a solver. It is still a single pass from the outside — the cluster doesn't own the state, the edge just works harder. An N-link arm is a `Vec.lens` whose backward direction runs inverse kinematics on every write:
