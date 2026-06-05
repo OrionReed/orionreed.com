@@ -1,12 +1,18 @@
-// canvas-demo-util.ts — shared helpers for the raster-lens demos.
+// canvas-demo-util.ts — shared helpers for the GPU raster-lens demo.
+//
+// Pixels live in GPU textures (see minim/signals/values/gpu.ts). Painting is
+// a GPU brush pass with a feedback-safe ping-pong, display is a GPU blit into
+// each node's own 2D canvas — no CPU pixel loops, no readbacks.
 
 import {
   type Canvas,
   canvas,
   canvasStamp,
-  effect,
-  type Num,
+  gpuBlit,
+  gpuBrush,
+  gpuScratch2,
   type Raster,
+  type Tex,
   type Writable,
 } from "../../minim";
 
@@ -28,29 +34,34 @@ export function hsv(h: number, s: number, v: number): [number, number, number] {
   return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
 }
 
-/** A rich test scene (gradient, discs, fine grid, label) — gives blur,
- *  edges, and downsample something legible to chew on. */
-export function scene(size: number, label = "minim"): Writable<Canvas> {
+/** A rich test scene (gradient, discs, fine grid, label), uploaded once to a
+ *  GPU texture. `palette` shifts the hues so spring targets read distinctly. */
+export function scene(size: number, label = "minim", hueShift = 0): Writable<Canvas> {
   const c = document.createElement("canvas");
   c.width = size;
   c.height = size;
   const x = c.getContext("2d")!;
   const g = x.createLinearGradient(0, 0, size, size);
-  g.addColorStop(0, "#15294d");
-  g.addColorStop(0.55, "#3a1d57");
-  g.addColorStop(1, "#5c1f3a");
+  const rot = (deg: number): string => {
+    const [r, gg, b] = hsv(deg + hueShift, 0.6, 0.42);
+    return `rgb(${r | 0},${gg | 0},${b | 0})`;
+  };
+  g.addColorStop(0, rot(220));
+  g.addColorStop(0.55, rot(285));
+  g.addColorStop(1, rot(340));
   x.fillStyle = g;
   x.fillRect(0, 0, size, size);
-  const discs: Array<[number, number, number, string]> = [
-    [0.3, 0.32, 0.16, "#ffd34e"],
-    [0.68, 0.38, 0.12, "#4ec9ff"],
-    [0.55, 0.7, 0.18, "#54e08a"],
-    [0.22, 0.72, 0.09, "#ff6f91"],
+  const discs: Array<[number, number, number, number]> = [
+    [0.3, 0.32, 0.16, 45],
+    [0.68, 0.38, 0.12, 200],
+    [0.55, 0.7, 0.18, 140],
+    [0.22, 0.72, 0.09, 340],
   ];
-  for (const [cx, cy, r, fill] of discs) {
+  for (const [cx, cy, r, hue] of discs) {
+    const [rr, gg, bb] = hsv(hue + hueShift, 0.85, 1);
     x.beginPath();
     x.arc(cx * size, cy * size, r * size, 0, Math.PI * 2);
-    x.fillStyle = fill;
+    x.fillStyle = `rgb(${rr | 0},${gg | 0},${bb | 0})`;
     x.fill();
   }
   x.strokeStyle = "rgba(255,255,255,0.10)";
@@ -76,57 +87,20 @@ export function scene(size: number, label = "minim"): Writable<Canvas> {
   });
 }
 
-/** Draw a raster to a 2D canvas, resizing to match. */
-export function blit(r: Raster, cv: HTMLCanvasElement, ctx: CanvasRenderingContext2D): void {
-  if (cv.width !== r.w || cv.height !== r.h) {
-    cv.width = r.w;
-    cv.height = r.h;
-  }
-  const img = ctx.createImageData(r.w, r.h);
-  img.data.set(r.data);
-  ctx.putImageData(img, 0, 0);
-}
-
-/** Soft round brush blending toward `(br,bg,bb)`; copy-on-write per step. */
-export function discPaint(
-  v: Raster,
-  cx: number,
-  cy: number,
-  radius: number,
-  br: number,
-  bg: number,
-  bb: number,
-): Raster {
-  const data = new Uint8ClampedArray(v.data);
-  const { w, h } = v;
-  const x0 = Math.max(0, Math.floor(cx - radius));
-  const x1 = Math.min(w - 1, Math.ceil(cx + radius));
-  const y0 = Math.max(0, Math.floor(cy - radius));
-  const y1 = Math.min(h - 1, Math.ceil(cy + radius));
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const d = Math.hypot(x - cx, y - cy);
-      if (d > radius) continue;
-      const f = 1 - d / radius;
-      const a = f * f * 0.9;
-      const i = (y * w + x) * 4;
-      data[i] = data[i]! * (1 - a) + br * a;
-      data[i + 1] = data[i + 1]! * (1 - a) + bg * a;
-      data[i + 2] = data[i + 2]! * (1 - a) + bb * a;
-      data[i + 3] = 255;
-    }
-  }
-  return canvasStamp(data, w, h);
+/** Blit a GPU raster into a 2D canvas (GPU draw + drawImage; no readback). */
+export function blit(r: Raster, ctx: CanvasRenderingContext2D): void {
+  gpuBlit({ tex: r.tex, w: r.w, h: r.h }, ctx);
 }
 
 export interface PaintOpts {
-  /** Brush colour, evaluated once per stroke. */
+  /** Brush colour (0–255), evaluated once per stroke. */
   color: () => [number, number, number];
   /** Brush radius in source pixels; a function is re-read per stroke. */
   radius?: number | (() => number);
 }
 
-/** Bind pointer painting to a 2D canvas backed by a writable cell. */
+/** Bind pointer painting to a node canvas backed by a writable cell. Each
+ *  stamp is a GPU brush pass into a feedback-safe ping-pong texture. */
 export function bindPaint(
   cv: HTMLCanvasElement,
   cell: Writable<Canvas>,
@@ -134,8 +108,9 @@ export function bindPaint(
 ): () => void {
   const radiusOf = (): number =>
     typeof opts.radius === "function" ? opts.radius() : (opts.radius ?? 14);
+  const ping = gpuScratch2();
   let drawing = false;
-  let color: [number, number, number] = [255, 255, 255];
+  let color: [number, number, number] = [1, 1, 1];
   let radius = 14;
   const at = (e: PointerEvent): [number, number] => {
     const r = cv.getBoundingClientRect();
@@ -143,15 +118,19 @@ export function bindPaint(
     return [((e.clientX - r.left) / r.width) * v.w, ((e.clientY - r.top) / r.height) * v.h];
   };
   const stroke = (e: PointerEvent): void => {
-    const [x, y] = at(e);
-    cell.value = discPaint(cell.value, x, y, radius, color[0], color[1], color[2]);
+    const [px, py] = at(e);
+    const v = cell.value;
+    const dst = ping(v.w, v.h, v.tex) as Tex;
+    gpuBrush(v.tex, dst, px, py, radius, color);
+    cell.value = canvasStamp(dst.tex, v.w, v.h);
   };
   const down = (e: PointerEvent): void => {
     drawing = true;
     try {
       cv.setPointerCapture(e.pointerId);
     } catch {}
-    color = opts.color();
+    const [r, g, b] = opts.color();
+    color = [r / 255, g / 255, b / 255];
     radius = radiusOf();
     stroke(e);
   };
@@ -172,93 +151,3 @@ export function bindPaint(
     cv.removeEventListener("pointercancel", up);
   };
 }
-
-/** A labeled panel rendering `cell` reactively; optional painting. */
-export function panel(
-  cell: Canvas | Writable<Canvas>,
-  caption: string,
-  disposers: Array<() => void>,
-  paint?: PaintOpts,
-): HTMLElement {
-  const wrap = document.createElement("div");
-  wrap.className = "panel";
-  const cv = document.createElement("canvas");
-  const ctx = cv.getContext("2d", { alpha: true })!;
-  const cap = document.createElement("div");
-  cap.className = "cap";
-  cap.textContent = caption;
-  wrap.append(cv, cap);
-  disposers.push(
-    effect(() => {
-      blit((cell as Canvas).value, cv, ctx);
-    }),
-  );
-  if (paint) disposers.push(bindPaint(cv, cell as Writable<Canvas>, paint));
-  return wrap;
-}
-
-/** Labelled range slider bound to a writable `Num`. */
-export function slider(
-  labelText: string,
-  min: number,
-  max: number,
-  step: number,
-  cell: Writable<Num>,
-  disposers: Array<() => void>,
-  fmt: (v: number) => string = v => v.toFixed(2),
-): HTMLElement {
-  const label = document.createElement("label");
-  const name = document.createElement("span");
-  name.textContent = labelText;
-  const input = document.createElement("input");
-  input.type = "range";
-  input.min = String(min);
-  input.max = String(max);
-  input.step = String(step);
-  input.value = String(cell.peek());
-  const val = document.createElement("span");
-  val.className = "val";
-  input.addEventListener("input", () => {
-    cell.value = Number(input.value);
-  });
-  disposers.push(
-    effect(() => {
-      val.textContent = fmt((cell as Num).value);
-    }),
-  );
-  label.append(name, input, val);
-  return label;
-}
-
-/** Shared CSS for the demo elements. */
-export const PANEL_CSS = `
-  :host { display: block; margin: 1.25rem auto; max-width: 700px; }
-  .row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .panel { flex: 1 1 150px; max-width: 200px; }
-  canvas {
-    display: block; width: 100%; aspect-ratio: 1; border-radius: 6px;
-    background: #0001; cursor: crosshair; touch-action: none;
-  }
-  .cap {
-    margin-top: 6px; font: 11px/1.3 var(--font, system-ui);
-    color: var(--text-color); opacity: 0.62; text-align: center;
-  }
-  .controls {
-    display: flex; align-items: center; gap: 10px; justify-content: center;
-    flex-wrap: wrap; margin: 14px auto 4px; font: 12px var(--font, system-ui);
-    color: var(--text-color);
-  }
-  .controls label { display: inline-flex; align-items: center; gap: 6px; }
-  .controls input[type=range] { width: 130px; }
-  .controls .val { font-variant-numeric: tabular-nums; opacity: 0.7; min-width: 3ch; }
-  button {
-    font: 12px var(--font, system-ui); padding: 3px 10px; border-radius: 5px;
-    border: 1px solid var(--text-color); background: transparent;
-    color: var(--text-color); cursor: pointer; opacity: 0.8;
-  }
-  button:hover { opacity: 1; }
-  .hint {
-    text-align: center; margin: 10px auto 0; max-width: 92%;
-    font: 10px/1.5 var(--font, system-ui); color: var(--text-color); opacity: 0.45;
-  }
-`;

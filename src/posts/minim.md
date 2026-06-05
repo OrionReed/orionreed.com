@@ -53,6 +53,10 @@ The same one-canonical-cell pattern covers a change of basis. A waveform and its
 
 <md-fourier></md-fourier>
 
+The same idea runs live and audible. A cascade of EQ filters is a forward DSP graph — gains in, sound out. Make it a lens and you get the direction no DSP graph has: drag the *response you want* and `factor` solves the band gains that fit it, in real time, pushing them onto native Web Audio filters (the curve behind is the live measured spectrum). Press play, then drag a point:
+
+<md-bireactive-eq></md-bireactive-eq>
+
 ## Aggregates
 
 A residual edge loses information too, but the lost part stays in the source, so the backward direction can read it back. The familiar case is an aggregate: a centroid reads as the average of its points, and writing to it moves the points with it, splitting the change evenly.
@@ -153,19 +157,13 @@ One source string feeds five live projections. Editing any pane updates the sour
 
 Each badge names the lens: `trim` stores the padding, `lowercase` a case mask, `words` the separator runs, `sortedUnique` a map from key to positions and case (so one edit fans out to every occurrence), and `rot13` is the involution baseline.
 
-The same complement mechanism scales to rasters. A `Canvas` value carries its pixels as a mutable buffer behind a small header — the reactive graph compares a monotonic `epoch`, so propagation never touches a pixel. That makes a whole lens DAG cheap to keep live, which is the easiest way to see the whole story at once. Below, the tip-less curves *are* the lenses. A source forks four ways: a transform spine (`brightness(k) ⇌ blur(r) ⇌ grayscale ⇌ invert`, where `grayscale` is the image twin of `lowercase`, storing per-pixel chroma), a `flipH`, a region branch (`crop ⇌ meanColor`), and a 1-bit projection (`brighterThan`). Turn a knob and the change flows down. Paint any canvas (one global brush), drag the box-in-box crop param, flip the exposure bit, or pick the mean colour — every edit flows up through the inverses. Pick a mean colour for the cropped patch and watch it land back in just that region of the source:
+The same complement mechanism scales to rasters, and there's no reason the pixels need to live on the CPU. A `Canvas` value carries its pixels as an RGBA float texture in one shared WebGL2 context, behind a small header — the reactive graph compares a monotonic `epoch`, so propagation never touches a pixel and nothing crosses the bus but handles. Every lens is a shader pass into a per-lens scratch texture; every backward pass is the inverse pass. That makes a whole DAG cheap to keep live on the card, which is the easiest way to see the whole story at once. Below, the lines *are* the lenses. A source forks five ways: a transform spine (`brightness(k) ⇌ blur(r) ⇌ grayscale ⇌ invert`, where `grayscale` is the image twin of `lowercase`, storing per-pixel chroma), a `flipH`, a `downsample` thumbnail, a region branch (`crop ⇌ meanColor`), and a 1-bit projection (`brighterThan`). Turn a knob and the change flows down. Paint any canvas (one global brush), drag the box-in-box crop param, flip the exposure bit, or pick the mean colour — every edit flows up through the inverses. Pick a mean colour for the cropped patch and watch it land back in just that region of the source:
 
 <md-canvas-graph></md-canvas-graph>
 
-Every tier stacks in that one graph. Photometric complements (`grayscale` chroma). Reactive-parameter invertibles (`brightness`, the `blur` knob). Spatial deconvolution: painting the blurred node runs an iterated Van-Cittert solve in the backward direction, seeded from the current source so untouched regions stay fixed while a stroke back-solves to the sharp pre-image that explains it — PutGet, not exact GetPut, so pushing the gain rings. A cross-type chain: `meanColor` is a writable `Color` whose RGB field-lenses rigidly shift every pixel — a lens of a lens, edited through `crop`. And a cross-type *predicate*: `brighterThan(t)` projects the image to a `Bool` (is the mean luma over threshold?), and flipping that bit auto-exposes — a rigid gain that pushes the mean just across the line and flows back through `brightness` to the source.
+Every tier stacks in that one graph. Photometric complements (`grayscale` chroma). Reactive-parameter invertibles (`brightness`, the `blur` knob). The multiscale case: `downsample` projects to a thumbnail whose complement is the Laplacian residual, so painting the coarse node reconstructs full-resolution detail underneath the edit — coarse structure and fine texture stay independently editable. Spatial deconvolution: painting the blurred node runs an iterated Van-Cittert solve in the backward direction, seeded from the current source so untouched regions stay fixed while a stroke back-solves to the sharp pre-image that explains it — PutGet, not exact GetPut, so pushing the gain rings. A cross-type chain: `meanColor` is a writable `Color` whose RGB field-lenses rigidly shift every pixel — a lens of a lens, edited through `crop`. And a cross-type *predicate*: `brighterThan(t)` projects the image to a `Bool` (is the mean luma over threshold?), and flipping that bit auto-exposes — a rigid gain that pushes the mean just across the line and flows back to the source.
 
-The multiscale case earns its own panel. `downsample` projects to a thumbnail; its complement is the Laplacian residual, so painting the coarse thumbnail reconstructs full-resolution detail underneath the edit — coarse structure and fine texture stay independently editable:
-
-<md-canvas-pyramid></md-canvas-pyramid>
-
-None of this needs the pixels to live on the CPU. Because the value is a handle, the payload can sit in GPU textures and the graph still only moves headers. Here per-pixel spring state lives in float textures and never leaves the card; each pixel is an independent damped oscillator chasing the target image. Stiffness and damping are reactive cells pushed into the integrator; click a target to retarget:
-
-<md-canvas-spring></md-canvas-spring>
+The root itself can be sprung. Hit *spring root* and per-pixel position/velocity state — float textures that never leave the card — lets every pixel become an independent damped oscillator chasing a target image; the settle metric is a GPU reduction, so even the "are we done?" check stays off the CPU. Because the value is just a handle, the spring drives the root header each frame and the entire DAG re-derives downstream on the GPU until it settles.
 
 ## Solvers
 
