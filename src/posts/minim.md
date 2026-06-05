@@ -157,6 +157,14 @@ One source string feeds five live projections. Editing any pane updates the sour
 
 Each badge names the lens: `trim` stores the padding, `lowercase` a case mask, `words` the separator runs, `sortedUnique` a map from key to positions and case (so one edit fans out to every occurrence), and `rot13` is the involution baseline.
 
+Those views are a fixed, hand-written set. The same render-forward / parse-backward machinery becomes *parametric* once the slots are declared: a `Template` is `lit₀ slot₀ lit₁ … litₙ` — a multi-parent lens over typed slot cells, rendering forward and parsing back. Where the pipeline above is string-as-source, a template is slots-as-source, so the same cells can drive several renderings at once. Below, two templates share one pool of typed cells; edit a control, either rendered line, or either template's *structure* and everything stays in sync — the template string is itself parsed into holes, one meta level up. `{name}` is a string hole, `{#name}` a typed int hole (a non-number in its place is rejected):
+
+<md-madlibs></md-madlibs>
+
+Each slot carries a `string ⇄ T` codec — the textual dual of the `pack` codec that lets `factor` solve numeric inverses. The same idea with one editable pattern is just routing: `:name`/`#name` holes parse a URL into typed params, each side editable, and editing the pattern itself reshapes the route live:
+
+<md-route-params></md-route-params>
+
 The same complement mechanism scales to rasters, and there's no reason the pixels need to live on the CPU. A `Canvas` value carries its pixels as an RGBA float texture in one shared WebGL2 context, behind a small header — the reactive graph compares a monotonic `epoch`, so propagation never touches a pixel and nothing crosses the bus but handles. Every lens is a shader pass into a per-lens scratch texture; every backward pass is the inverse pass. That makes a whole DAG cheap to keep live on the card, which is the easiest way to see the whole story at once. Below, the lines *are* the lenses. A source forks five ways: a transform spine (`brightness(k) ⇌ blur(r) ⇌ grayscale ⇌ invert`, where `grayscale` is the image twin of `lowercase`, storing per-pixel chroma), a `flipH` that itself forks into dual projections (`grayscale` keeps luma and stores chroma; `chroma` keeps colour and stores luma), a `downsample` thumbnail, a region branch (`crop ⇌ meanColor`), and a 1-bit projection (`brighterThan`). Turn a knob and the change flows down. Paint any canvas (one global brush), drag the box-in-box crop param, flip the exposure bit, or pick the mean colour — every edit flows up through the inverses. Pick a mean colour for the cropped patch and watch it land back in just that region of the source:
 
 <md-canvas-graph></md-canvas-graph>

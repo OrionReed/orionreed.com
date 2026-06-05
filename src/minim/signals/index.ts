@@ -82,7 +82,7 @@ export {
   walkTree,
 } from "./tree";
 export { Anchor, Dir } from "./values/anchor";
-export { Audio, audio, type AudioClip, stamp as audioStamp } from "./values/audio";
+export { Audio, type AudioClip, audio, stamp as audioStamp } from "./values/audio";
 export * as BoolMath from "./values/bool";
 export { Bool, bool } from "./values/bool";
 export * as BoxMath from "./values/box";
@@ -124,6 +124,17 @@ export * as RangeMath from "./values/range";
 export { Range, range, span } from "./values/range";
 export * as StrMath from "./values/str";
 export { Str, str } from "./values/str";
+export {
+  type Codec,
+  enumCodec,
+  numCodec,
+  route,
+  type Slot,
+  slot,
+  strCodec,
+  template,
+  tpl,
+} from "./values/template";
 export * as TransformMath from "./values/transform";
 export { Transform, type TransformInit, transform } from "./values/transform";
 export * as TriMath from "./values/tri";
