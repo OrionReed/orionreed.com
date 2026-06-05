@@ -5,7 +5,7 @@ description: Reactive programming where every edge runs both ways.
 
 <md-coreactive></md-coreactive>
 
-Reactive values flow one way: write an input and everything derived from it updates. A *bireactive* edge also runs backward — write the derived value and the input adjusts to match. No cell is fixed as input or output; either end can be driven.[^edge]
+Reactive values flow one way: write an input and everything derived from it updates. A *bireactive* edge also runs backward — write the derived value and the input adjusts to match. We write such an edge `a ⇌ b`, reserving `a → b` for an ordinary one-way derive. No cell is fixed as input or output; either end can be driven.[^edge]
 
 The diagram above is the whole idea. Each edge carries a forward map and an inverse, so a change at any node travels both down to its readers and back up to its source.
 
@@ -65,7 +65,7 @@ A backward function is a closure, so it can read other cells. A midpoint that re
 
 <md-multitouch></md-multitouch>
 
-Aggregates needn't collapse to a single value. An N→M decomposition gives several coupled views, each a group action on the cluster. A bounding box is `{center, size}`, so a corner scales the box about its center:
+Aggregates needn't collapse to a single value. An N-to-M decomposition gives several coupled views, each a group action on the cluster. A bounding box is `{center, size}`, so a corner scales the box about its center:
 
 <md-bbox-handles></md-bbox-handles>
 
@@ -73,7 +73,7 @@ Two decompositions can share a centroid — a best-fit line as `{point, directio
 
 <md-best-fit></md-best-fit>
 
-The decomposition is dispatched by trait, so `paletteLens(inputs) → {mean, spread}` works for any type that is linear with a metric. Vectors, colours, and poses all run through the one primitive:
+The decomposition is dispatched by trait, so `paletteLens(inputs) ⇌ {mean, spread}` works for any type that is linear with a metric. Vectors, colours, and poses all run through the one primitive:
 
 <md-traits-cross-domain></md-traits-cross-domain>
 
@@ -83,21 +83,21 @@ Until now an edge's two ends shared a type. They needn't — a lens can map betw
 
 <md-bool-bridges></md-bool-bridges>
 
-Six shapes share one `Bool.lens`: two thresholds (`Vec → Bool`, `Num → Bool`), two relations (coincidence and box collision), one aggregate over an array, and one parity classifier — and writing to `inside` moves the point into the region.
+Six shapes share one `Bool.lens`: two thresholds (`Vec ⇌ Bool`, `Num ⇌ Bool`), two relations (coincidence and box collision), one aggregate over an array, and one parity classifier — and writing to `inside` moves the point into the region.
 
-The target type can grow richer. Two states become thirteen and the edge lands on Allen's interval algebra:[^allen] `(Range, Range) → AllenRelation` reads four degrees of freedom as one of thirteen labels. The forward direction classifies; setting a relation reshapes the second interval to realize it:
+The target type can grow richer. Two states become thirteen and the edge lands on Allen's interval algebra:[^allen] `(Range, Range) ⇌ AllenRelation` (classify / realize) reads four degrees of freedom as one of thirteen labels. Setting a relation reshapes the second interval to realize it:
 
 <md-allen></md-allen>
 
-A second axis multiplies the labels. A box is a range on each axis, so `(Box, Box) → RCC-8`[^rcc8] is two Allen classifications, and the 2D relation factors into the per-axis ones:
+A second axis multiplies the labels. A box is a range on each axis, so `(Box, Box) ⇌ RCC-8`[^rcc8] is two Allen classifications, and the 2D relation factors into the per-axis ones:
 
 <md-rcc8></md-rcc8>
 
-Coarsening instead of classifying turns the same shape into a histogram: `Array<Num> → Array<BinCount>` keeps the counts and drops the positions. The backward direction is mass transport, where moving a bar sends the fewest samples across the nearest boundary:
+Coarsening instead of classifying turns the same shape into a histogram: `Array<Num> ⇌ Array<BinCount>` (bin / transport) keeps the counts and drops the positions; transport moves the fewest samples across the nearest boundary:
 
 <md-histogram></md-histogram>
 
-In two dimensions it is a heatmap, `Array<Vec> → Grid<Count>`: moving a point re-bins it, and selecting a cell pulls the nearest point into it:
+In two dimensions it is a heatmap, `Array<Vec> ⇌ Grid<Count>` (bin / pull): moving a point re-bins it, and selecting a cell pulls the nearest point into it:
 
 <md-heatmap></md-heatmap>
 
@@ -139,7 +139,7 @@ In the propagate direction each bone holds a local pose, world pose composes dow
 
 <md-skeletal-rig></md-skeletal-rig>
 
-Both build a tree from cells; a bridge runs the other way, reading a tree *out* of flat geometry. `Array<Box> → Forest` nests each box in the smallest one that contains it. Moving a box carries its subtree along and reforms the forest; dragging a node onto another rescales its subtree to nest inside the target:
+Both build a tree from cells; a bridge runs the other way, reading a tree *out* of flat geometry. `Array<Box> ⇌ Forest` nests each box in the smallest one that contains it. Moving a box carries its subtree along and reforms the forest; dragging a node onto another rescales its subtree to nest inside the target:
 
 <md-containment-forest></md-containment-forest>
 
@@ -153,7 +153,7 @@ One source string feeds five live projections. Editing any pane updates the sour
 
 Each badge names the lens: `trim` stores the padding, `lowercase` a case mask, `words` the separator runs, `sortedUnique` a map from key to positions and case (so one edit fans out to every occurrence), and `rot13` is the involution baseline.
 
-The same complement mechanism scales to rasters. A `Canvas` value carries its pixels as a mutable buffer behind a small header — the reactive graph compares a monotonic `epoch`, so propagation never touches a pixel. That makes a whole lens DAG cheap to keep live, which is the easiest way to see the whole story at once. Below, the tip-less curves *are* the lenses. A source forks four ways: a transform spine (`brightness(k) → blur(r) → grayscale → invert`, where `grayscale` is the image twin of `lowercase`, storing per-pixel chroma), a `flipH`, a region branch (`crop → meanColor`), and a 1-bit projection (`brighterThan`). Turn a knob and the change flows down. Paint any canvas (one global brush), drag the box-in-box crop param, flip the exposure bit, or pick the mean colour — every edit flows up through the inverses. Pick a mean colour for the cropped patch and watch it land back in just that region of the source:
+The same complement mechanism scales to rasters. A `Canvas` value carries its pixels as a mutable buffer behind a small header — the reactive graph compares a monotonic `epoch`, so propagation never touches a pixel. That makes a whole lens DAG cheap to keep live, which is the easiest way to see the whole story at once. Below, the tip-less curves *are* the lenses. A source forks four ways: a transform spine (`brightness(k) ⇌ blur(r) ⇌ grayscale ⇌ invert`, where `grayscale` is the image twin of `lowercase`, storing per-pixel chroma), a `flipH`, a region branch (`crop ⇌ meanColor`), and a 1-bit projection (`brighterThan`). Turn a knob and the change flows down. Paint any canvas (one global brush), drag the box-in-box crop param, flip the exposure bit, or pick the mean colour — every edit flows up through the inverses. Pick a mean colour for the cropped patch and watch it land back in just that region of the source:
 
 <md-canvas-graph></md-canvas-graph>
 
