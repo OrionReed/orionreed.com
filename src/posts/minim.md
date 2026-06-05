@@ -1,140 +1,113 @@
 ---
-title: Coreactive (Bireactive?) Programming
-description: Bidirectional reactive programming with lenses.
+title: Bireactive Programming
+description: Reactive programming where every edge runs both ways.
 ---
-
-Reactive systems are DAGs of cells where edges mean "reads": information flows one way and a cell is permanently input or output. **Coreactivity** keeps the DAG and the acyclicity, but every edge also carries a `put`. A derived cell can be written; the write flows back up the edge the read came down. No cell is permanently anything — drive either end.
-
-Drag any cell on the left; watch the right.
 
 <md-coreactive></md-coreactive>
 
-Each lit edge is a real engine fire: red descends the inverse, blue refreshes the forward cone. Bidirectionality is a property of each edge in isolation, not of the graph — a `put` is one bounded upstream walk, no solver, no fixpoint.
+Reactive values flow one way: write an input and everything derived from it updates. A *bireactive* edge also runs backward — write the derived value and the input adjusts to match. No cell is fixed as input or output; either end can be driven.[^edge]
 
-| Regime            | Edges                         | Termination          |
-| ----------------- | ----------------------------- | -------------------- |
-| Reactive          | one-way                       | acyclicity           |
-| **Coreactive**    | **bidirectional, edge-local** | **acyclicity**       |
-| Constraint system | bidirectional, graph-global   | fixpoint convergence |
+The diagram above is the whole idea. Each edge carries a forward map and an inverse, so a change at any node travels both down to its readers and back up to its source.
 
-The middle row is the unoccupied corner. The rest of this post is what falls out.
-
----
-
-The simplest edges are **invertible** — bijections with a closed-form inverse: reflections, rotations, scales, affines, polar↔cartesian, unit conversions. Every lens law for free.
-
-Reflection across a line is an involution — its own inverse:
-
-<md-mirror></md-mirror>
-
-It generalises to the Poincaré disc: geodesics are circles ⟂ the boundary, reflection is inversion in them. Drag a vertex — sides curve, the three sister triangles reposition, and angle sum + area (π − sum, by Gauss–Bonnet) update live.
-
-<md-conformal-disc></md-conformal-disc>
-
-`polar(c, r, a)` is invertible under a policy choosing which input absorbs a write. Chain those into a solar system deterministic in one scalar — `time` — and dragging *any* body writes back into time; every other body re-derives.
+Here is the same idea in a more familiar setting: a solar system placed entirely by one number, `time`.
 
 <md-solar-system></md-solar-system>
 
-Swap circles for real Kepler ellipses and invertibility survives, because the only transcendental step is on the read path: forward solves `M = E − e·sin E` by Newton, the drag is the closed-form inverse (`dM/dE = 1 − e·cos E > 0`, a bijection). Periapsis speed-up is Kepler's second law, free.
+Each body's position chains polar coordinates off `time`. The chain is invertible, so moving any body runs it backward to a new `time`, and the rest of the system follows from there.
 
-<md-kepler-system></md-kepler-system>
+[^edge]: A write is a single bounded walk up the edge it came down — no global solver, no fixpoint, and the graph stays acyclic. That is what separates it from a constraint system, where relations are bidirectional but global and have to converge to a fixpoint (the subject of a later section).
 
-Meshed gears: `g[i+1] = g[i].scale(−teethᵢ / teethᵢ₊₁)` chained. Drag any gear; the integrator pauses mid-drag.
+## Reversible edges
 
-<md-gears></md-gears>
+The plainest edges are exact bijections: reflections, rotations, scales, affine maps, polar/cartesian, unit conversions. The inverse is closed-form, so the backward direction involves no search.
 
-A pulley conserving rope length is `b = a.affine(−1, L)` — the conservation law written once, read both ways.
+The simplest is a single affine edge. A pulley that conserves rope length is `b = a.affine(−1, L)` — the conservation law written once and read in both directions. Chaining a second pulley composes it: a third weight reads `c = b.affine(−1, L₂)`, so dragging any weight ripples through the rest, the middle one opposing the outer two:
 
 <md-pulley></md-pulley>
 
-**Idempotent** edges have a closed-form projection (`clamp`, `quantize`, `snap`): `put` doesn't reconstruct, it projects (`put∘put = put`). `t.clamp(lo, hi).quantize(0.1)` fuses to one cell, and `lo`/`hi`/`step` are themselves `Val`, so the range can ride another slider:
-
-<md-clamp-quantize></md-clamp-quantize>
-
-**Residual** edges lose information, but the lost part stays live in the source, so `put` reads it back — the classical aggregate.
-
-`Cls.lens([parents], fwd, bwd)` is the N-ary form: reads aggregate, writes split and apply atomically. A centroid is one line — `get` is the mean, `put` distributes the delta evenly; tweening it is a rigid group translate:
-
-```ts
-const c = centroid(a, b, c, d);
-yield* c.to({ x: 200, y: 100 }, 1);
-```
-
-Two independent animations can share one position this way — neither knows the other, and the motion is the per-frame weighted mean:
-
-<md-mix></md-mix>
-
-Expose the weights and `meanOf` becomes `mix(weights, branches)`: read is the weighted sum, write is the min-norm split `daᵢ = wᵢ·δ / Σwⱼ²`, so a zero-weight branch stays put. `select` and `crossfade` are then *one* lens — the control just picks a point on the weight simplex. `Bool × ⟨A, B⟩ → A` sits on a vertex (snaps); `Num × ⟨A, B⟩ → A` slides an edge (blends position, colour and size at once):
-
-<md-select></md-select>
-
-The lens *is* the read/write end of a UI primitive. `handle(point)` wraps a writable point; drop one on a centroid for rigid group dragging:
-
-<md-handles></md-handles>
-
-A bwd is a closure, so it can peek any other cell to decide a write — context-aware, no extra graph. Each handle exposes a `dragging` cell; a midpoint lens reading them follows the gesture — hold one endpoint and drag the midpoint, the held point pins and the free one absorbs:
-
-<md-multitouch></md-multitouch>
-
-Aggregates aren't only N→1. An N→M decomposition gives M coupled writable views, each a group action on the cluster; cross-channel invariance follows from commutativity, exact by construction. A bounding box is `{center, size}` — drag a corner to scale about the center:
-
-<md-bbox-handles></md-bbox-handles>
-
-Two decompositions share a centroid: `bestFitLineLens → {point, direction}`, `bestFitCircleLens → {center, radius}`. Every write a single group action:
-
-<md-best-fit></md-best-fit>
-
-A cubic Bezier as `{start, end, startTangent, endTangent}` — handles on curve shape, not raw control points:
-
-<md-bezier-gestalt></md-bezier-gestalt>
-
-Trait-dispatched: `paletteLens(inputs) → {mean, spread}` works for any `Linear + Metric` class. Vecs, Colors, Poses — three domains, one primitive, wired together by `meanOf` over the normalised spreads:
-
-<md-traits-cross-domain></md-traits-cross-domain>
-
-Any writable point hosts a handle. Anchor points on a shape are derived; animate the shape and they track:
-
-<md-anchors></md-anchors>
-
-`b = a.right(160).up(80)` is two invertible edges chained. Drag either dot:
+Edges chain. `b = a.right(160).up(80)` is two invertible steps composed, and either dot drives the other:
 
 <md-invertible></md-invertible>
 
-Each card's width through a `clamp(MIN_W, ∞)` lens gives width handles bounded below:
+Reflection across a line is its own inverse:
 
-<md-layout-demo></md-layout-demo>
+<md-mirror></md-mirror>
 
-When the inverse isn't closed-form, the bwd runs a solver — still a single-pass `put` from outside. An N-link IK arm is a `Vec.lens([joints], fwd, bwd)` whose bwd runs FABRIK on every write:
+The same construction carries to the Poincaré disc,[^poincare] where geodesics are circles meeting the boundary at right angles and reflection becomes inversion in them. Moving a vertex curves the sides and repositions the sister triangles, and the angle sum and area update with them.[^gaussbonnet]
 
-<md-ik></md-ik>
+<md-conformal-disc></md-conformal-disc>
 
-For a single closed loop, parameterise each bar by angle; the closure `Σ rᵢ · u(θᵢ) = 0` is two scalar equations, Newton-solved from last frame's seed — continuous through the cycle, no branch-tracking:
+Gears branch into a tree, each child meshing through `child = parent.scale(−teethₚ / teeth_c)`, so the speed along any path is the product of its ratios. A compound wheel — two gears on one shaft — makes that product real instead of telescoping away. Turning any gear turns the rest; the integrator pauses while one is held.
 
-<md-loop></md-loop>
+<md-gears></md-gears>
 
-A **bridge lens** drops the same-type constraint: a projection from a large domain onto a tiny codomain, most usefully `X → Bool`. The forward is the predicate (`v > t`, `box.contains(p)`, `a ≈ b`); the inverse nudges the source into the requested half-space — the cross-type cousin of `clamp`/`quantize`/`snap`. Click any indicator; the bwd projects the source into a consistent state:
+Not every edge is a bijection. A projection like `clamp`, `quantize`, or `snap` discards information, but it does so idempotently — applying it twice changes nothing more than once — so the backward direction simply projects again. `t.clamp(lo, hi).quantize(0.1)` fuses into one cell, and the bounds are themselves cells, so the range can ride another control:
+
+<md-clamp-quantize></md-clamp-quantize>
+
+Units are their own small value type — an SI scale paired with a vector of dimension exponents. A converter is several edges onto one canonical SI-base cell, `field = si.lens(u.fromBase, u.toBase)`: no master field and no swap button, so editing any field re-derives the rest. Temperature is the affine case; speed, area, and volume are compound:
+
+<md-units></md-units>
+
+The same one-canonical-cell pattern covers a change of basis. A waveform and its spectrum are one signal in two coordinate systems, and `samples = coeffs.lens(synthesize, analyze)` is a unitary bijection: drag a harmonic to resynthesise the wave, or pick a waveform to analyse it back into harmonics (the square wave's overshoot is Gibbs ringing from the truncated series):
+
+<md-fourier></md-fourier>
+
+## Aggregates
+
+A residual edge loses information too, but the lost part stays in the source, so the backward direction can read it back. The familiar case is an aggregate: a centroid reads as the average of its points, and writing to it moves the points with it, splitting the change evenly.
+
+A lens like this is the read/write end of a UI handle. `handle(point)` wraps a writable point; placed on a centroid, it drags the whole group rigidly:
+
+<md-handles></md-handles>
+
+A backward function is a closure, so it can read other cells. A midpoint that reads each handle's `dragging` cell follows the gesture: holding one endpoint while moving the midpoint pins the held end and lets the free one absorb the difference:
+
+<md-multitouch></md-multitouch>
+
+Aggregates needn't collapse to a single value. An N→M decomposition gives several coupled views, each a group action on the cluster. A bounding box is `{center, size}`, so a corner scales the box about its center:
+
+<md-bbox-handles></md-bbox-handles>
+
+Two decompositions can share a centroid — a best-fit line as `{point, direction}`, a best-fit circle as `{center, radius}` — and each write is a single group action:
+
+<md-best-fit></md-best-fit>
+
+The decomposition is dispatched by trait, so `paletteLens(inputs) → {mean, spread}` works for any type that is linear with a metric. Vectors, colours, and poses all run through the one primitive:
+
+<md-traits-cross-domain></md-traits-cross-domain>
+
+## Crossing types
+
+Until now an edge's two ends shared a type. They needn't — a lens can map between different value types, and because each side is still an ordinary cell, those cross-type edges compose with everything else. The most useful target is a boolean: the forward direction is a predicate — `v > t`, `box.contains(p)`, `a ≈ b` — and the backward direction nudges the source into the state that satisfies it, so a read-only readout becomes writable:
 
 <md-bool-bridges></md-bool-bridges>
 
-Six shapes, one `Bool.lens(parents, fwd, bwd)`: two clamp-family (`Vec → Bool`, `Num → Bool`), two relations (`(Vec, Vec) → Bool` coincidence, `(Box, Box) → Bool` collision via min-translation), one aggregate (`Array<Vec> → Bool` broadcast), one classifier (`Num#isEven`). Predicates that were one-way readouts are now UI primitives — click `inside` and the point teleports.
+Six shapes share one `Bool.lens`: two thresholds (`Vec → Bool`, `Num → Bool`), two relations (coincidence and box collision), one aggregate over an array, and one parity classifier — and writing to `inside` moves the point into the region.
 
-The codomain can keep growing. `Bool` is two states; push to thirteen and you get Allen's interval algebra. `(Range, Range) → AllenRelation` is the bridge at its most structural — four DOF onto thirteen labels. Read classifies; click a relation and the bwd reshapes B to realize it:
+The target type can grow richer. Two states become thirteen and the edge lands on Allen's interval algebra:[^allen] `(Range, Range) → AllenRelation` reads four degrees of freedom as one of thirteen labels. The forward direction classifies; setting a relation reshapes the second interval to realize it:
 
 <md-allen></md-allen>
 
-Add a second axis and the labels multiply. A `Box` is `Rangeₓ × Range_y`, so `(Box, Box) → RCC-8` is two Allen classifications — the 2D relation factors into the per-axis ones. Eight topological relations; click one and B reshapes to realize it:
+A second axis multiplies the labels. A box is a range on each axis, so `(Box, Box) → RCC-8`[^rcc8] is two Allen classifications, and the 2D relation factors into the per-axis ones:
 
 <md-rcc8></md-rcc8>
 
-Coarsen instead of classify and the same shape is a histogram: `Array<Num> → Array<BinCount>` drops position, keeps counts. The bwd is mass transport — drag a bar and the fewest samples cross the nearest boundary (the aggregate cousin of `quantize`):
+Coarsening instead of classifying turns the same shape into a histogram: `Array<Num> → Array<BinCount>` keeps the counts and drops the positions. The backward direction is mass transport, where moving a bar sends the fewest samples across the nearest boundary:
 
 <md-histogram></md-histogram>
 
-The 2D version is a heatmap, `Array<Vec> → Grid<Count>` — drag a point to re-bin, click a cell to pull the nearest one in:
+In two dimensions it is a heatmap, `Array<Vec> → Grid<Count>`: moving a point re-bins it, and selecting a cell pulls the nearest point into it:
 
 <md-heatmap></md-heatmap>
 
-The natural sum-type extension of Bool is `Tri` — three-valued logic with an "indeterminate" state. The UI primitive: a checkbox tree where each folder is the Kleene-AND of its descendants (all → checked, none → unchecked, partial → indeterminate). `Tri.allOf(leaves)` reads the aggregate and broadcasts on write — both halves of the indeterminate checkbox in one cell, the recursion in the data not the rendering:
+Crossing types also gives combinators. `mix(weights, branches)` reads as a weighted sum and writes a change back split by weight; `select` and `crossfade` are the same lens with the control picking a point on the weight simplex, so a boolean snaps between branches and a number blends them — position, colour, and size at once:
+
+<md-select></md-select>
+
+## Trees
+
+Extending boolean to a sum type gives `Tri`, three-valued logic with an indeterminate state. A checkbox tree is its natural home: each folder is the Kleene-AND of its descendants — all checked, none checked, or partial. `Tri.allOf(leaves)` reads the aggregate and broadcasts on write, so both halves of the indeterminate checkbox live in one cell:
 
 ```ts
 const leaf = (label, init = false) =>
@@ -142,7 +115,7 @@ const leaf = (label, init = false) =>
 
 const folder = (label, children) => ({
   kind: "folder", label, children,
-  checked: Tri.allOf(collectLeaves(children)), // ← cascade + indeterminate, free
+  checked: Tri.allOf(collectLeaves(children)),
 });
 
 const tree = folder("Tasks", [
@@ -154,60 +127,90 @@ const tree = folder("Tasks", [
 
 <md-tri-tree></md-tri-tree>
 
-Every folder is a cell of the same shape as a leaf, so rendering is a uniform loop — no per-render aggregate walk, no `useEffect` for `indeterminate`. Click a folder; the Tri's bwd broadcasts to every descendant in one batched pass.
+Every folder is a cell of the same shape as a leaf, so rendering is one uniform loop with no separate aggregate pass. Setting a folder broadcasts down to its descendants in a single batch.
 
-The pattern generalises to `TreeNode<T>`: a graph of cells with behaviour layered via `Cls.lens` / `Cls.derive`. There's no `Cell<TreeShape>` — the tree value *is* the cell graph, so writes are O(1) field-lens, not O(N) tree-copy. Two directions: AGGREGATE (bottom-up, redistribute) and PROPAGATE (top-down, compose).
+This generalizes to `TreeNode<T>`: the tree value is the cell graph itself, so a write is a field update rather than a copy of the whole tree. Two directions read out of it — aggregate (bottom-up) and propagate (top-down).
 
-Aggregate: each category is `Num.lens([children], sum, redistribute)`, the root sums categories. Drag any boundary and siblings, the parent total, and downstream rows update — `Σ leaves = Σ categories = total`, no manual recompute:
+In the aggregate direction each category sums its children and the root sums the categories. Moving a boundary adjusts the siblings, the parent total, and the rows downstream, with the sums kept consistent throughout:
 
 <md-budget-tree></md-budget-tree>
 
-Propagate: each bone holds a local `pose()`; world pose is `Pose.derive([parent.world, this.local], compose)`, and the joint handle is a `Vec.lens` that decomposes a world target back into local. The tree structure isolates branches — drag a hand and only that arm moves; drag the root and the whole figure translates:
+In the propagate direction each bone holds a local pose, world pose composes down the chain, and the joint handle decomposes a world target back into the local frame. Branches stay isolated: moving a hand bends one arm, moving the root translates the whole figure:
 
 <md-skeletal-rig></md-skeletal-rig>
 
-One primitive, two demos: aggregate is recursive `Num.lens(sum, redistribute)`, propagate is recursive `Pose.derive(compose)` plus decompose. The tree is structure, not a value type.
-
-Both build the tree as a cell graph; the bridge runs the other way. `Array<Box> → Forest` reads a nesting tree *out* of flat geometry — read = smallest containing box. Drag a box in the geometry pane and its subtree travels along, the forest reforming live; drag a node in the forest pane onto another and the bwd rescales that subtree to nest inside the target:
+Both build a tree from cells; a bridge runs the other way, reading a tree *out* of flat geometry. `Array<Box> → Forest` nests each box in the smallest one that contains it. Moving a box carries its subtree along and reforms the forest; dragging a node onto another rescales its subtree to nest inside the target:
 
 <md-containment-forest></md-containment-forest>
 
-Everything so far rides numeric value types with closed-form or numerical inverses. The engine has a second shape for *unstructured* domains — strings, arrays, sets — where the projection is irrecoverable by any closed form. Each cell carries a private `complement` (Hofmann–Pierce symmetric-lens style) threaded through every `put`; plain `.lens(F, B)` chains fuse on top without breaking it.
+## Text
 
-One source string, five live projections. Edit any pane; the source updates with the discarded detail recovered from the complement — padding, per-word case, separator runs, duplicate positions. Foster/Pierce case-preserving find-and-replace, live:
+Everything so far rides numeric types with closed-form or numerical inverses. Unstructured domains — strings, arrays, sets — need a different mechanism, because the discarded detail can't be recovered from the result alone. Each cell carries a private complement[^lens] threaded through every write, and ordinary lens chains compose on top of it.
+
+One source string feeds five live projections. Editing any pane updates the source, with the detail each projection dropped — padding, per-word case, separator runs, duplicate positions — restored from the complement:
 
 <md-string-pipeline></md-string-pipeline>
 
-Each badge names the lens kind: `trim` stores padding, `lowercase` a case mask, `words` the separator runs, `sortedUnique` a `(key → [position, case]+)` map (one edit fans out to every occurrence), `rot13` the involution baseline. Chains compose into one cell with a composed complement.
+Each badge names the lens: `trim` stores the padding, `lowercase` a case mask, `words` the separator runs, `sortedUnique` a map from key to positions and case (so one edit fans out to every occurrence), and `rot13` is the involution baseline.
 
-A unit is itself a tiny value type: `(factor, dim)` — an SI scale and a vector of seven dimension exponents. Units form a vector space under multiplication, so `times`/`div` add and subtract dimension vectors and `pow` scales them. The whole zoo is composition, not a lookup table:
+## Solvers
+
+When the inverse has no closed form, the backward direction runs a solver. It is still a single pass from the outside — the cluster doesn't own the state, the edge just works harder. An N-link arm is a `Vec.lens` whose backward direction runs inverse kinematics on every write:
+
+<md-ik></md-ik>
+
+A closed loop parameterizes each bar by angle and solves `Σ rᵢ · u(θᵢ) = 0` from the previous frame's seed, staying continuous as it travels around the cycle:
+
+<md-loop></md-loop>
+
+## Fixpoint networks
+
+Some relationships have no source end at all — a four-bar linkage, a cloth, a sudoku. The lens model bottoms out and the cluster owns the solve. Both flavours share one `network()`: propagators narrow to a fixpoint, constraints settle onto a manifold.
+
+### Propagators
+
+A propagator declares which cells it reads and which it writes, and the network runs them to a fixpoint driven by what's stale. Combinators dispatch on type — `centroid(G, A, B, C)` runs both ways, `mid(A, B, M)` is the two-point form — so a triangle's medians stack from a centroid and three midpoints:
 
 ```ts
-const km     = meter.scaled(1000);                       // prefix
-const knot   = nmi.div(hour);                            // compound
-const litre  = meter.pow(3).scaled(0.001);               // m³ → L
-const newton = kilogram.times(meter).div(second.pow(2)); // kg·m·s⁻²
-const joule  = newton.times(meter);                      // energy
-const watt   = joule.div(second);                        // power
+const p = propagators();
+p.add(centroid(G, A, B, C));
+p.add(mid(A, B, Mab));
+p.add(mid(B, C, Mbc));
+p.add(mid(C, A, Mca));
 ```
 
-Two quantities are interconvertible exactly when their dimension vectors match — build a compound and the name and compatible units fall out:
+<md-prop-geom></md-prop-geom>
 
-<md-unit-algebra></md-unit-algebra>
+Layout is one large propagator: `hstack(container, items, opts)` reads the container, gap, and widths and writes positions in a single pass:
 
-A converter is then N lenses onto one canonical SI-base cell: `field = si.lens(u.fromBase, u.toBase)`. No master field, no swap button — edit any field and every sibling re-derives. Temperature is the affine case (`factor·v + offset`, leaves of the algebra that don't compose); speed/area/volume are compound:
+<md-prop-flex></md-prop-flex>
 
-<md-units></md-units>
+The same network narrows sets. A 9×9 sudoku is set-narrowing on `Cell<Set<T>>` — the same `network()` with a different value type and merge rule:
 
-## Fixpoint Networks
+<md-prop-sudoku></md-prop-sudoku>
 
-Some relationships aren't function-shaped — a four-bar linkage, a cloth, a sudoku have no source end. The lens model bottoms out and the *cluster* owns the solve. Two flavours, same `network()`: constraint clusters that project onto a manifold, propagators that narrow to a fixpoint.
+Narrowing on a different lattice is type inference. Each AST node is a cell of candidate types: `+` forces `{Int}`, an application narrows the function to `{Fn}` and unifies its domain with the argument. Unification[^hm] is set intersection lifted to structures:
+
+```ts
+function unify(a: TypeNode, b: TypeNode) {
+  return [
+    propagator([a.tag], [b.tag], () => intersectInto(b.tag, a.tag)),
+    propagator([b.tag], [a.tag], () => intersectInto(a.tag, b.tag)),
+    ...(a.dom && b.dom ? unify(a.dom, b.dom) : []),
+    ...(a.cod && b.cod ? unify(a.cod, b.cod) : []),
+  ];
+}
+```
+
+The demo steps through four expressions one fixpoint wave at a time. The fourth has no consistent typing — `λx. x + 1` forces `x : Int` but is applied to a string — and the contradiction shows up as an empty cell:
+
+<md-prop-types></md-prop-types>
 
 ### Constraints
 
-`Constraints` binds `Cell`s and runs an [Augmented Vertex Block Descent](https://graphics.cs.utah.edu/research/projects/avbd/) solve per write. Factories — `distance`, `perpendicular`, `rightAngle`, `parallel`, `angle`, `onCircle`, `equalDist`, `clamp`, `leq`, plus `generic` — compose, and membership is reactive: `addWhile(flag, rel)` keeps a relation alive only while a cell is truthy.
+`Constraints` binds cells and runs an Augmented Vertex Block Descent[^avbd] solve per write. The factories — `distance`, `perpendicular`, `rightAngle`, `parallel`, `angle`, `onCircle`, `equalDist`, `clamp`, `leq`, and `generic` — compose, and membership is reactive: `addWhile(flag, rel)` keeps a relation alive only while a cell is truthy.
 
-Four side constraints give one internal DOF (the quad flexes); a fifth diagonal on `addWhile` toggles rigidity. Click the diagonal dot:
+Four side constraints leave the quad one internal degree of freedom; a fifth diagonal toggles it rigid:
 
 ```ts
 const braced = cell(true);
@@ -223,125 +226,49 @@ c.addWhile(braced, distance(A, C, diag));
 
 <md-sketchpad></md-sketchpad>
 
-Push further and the sketchpad is the editor: two reactive collections (`cell<Point[]>`, `cell<Constraint[]>`) drive `forEach` blocks that mount and unmount visuals as you click.
+The same parts make an editor. Two reactive collections of points and constraints drive `forEach` blocks that mount and unmount visuals as the sketch is built:
 
 <md-sketchpad-live></md-sketchpad-live>
 
-Constraints describe loci too: `onCircle(P, center, r)`, `collinear(P, A, B)`. The bracket stacks six in one cluster — two incidences, two equal bars, an `equalDist` symmetry, a `rightAngle`:
+Constraints describe loci as well — `onCircle(P, center, r)`, `collinear(P, A, B)`. This bracket stacks six in one cluster: two incidences, two equal bars, a symmetry, and a right angle:
 
 <md-incidence></md-incidence>
 
-Shape + locus constraints give classic mechanisms for free. A slider-crank is two `distance`s and a `collinear` on six cells, four pinned. Drag the crank tip, the piston tracks:
+Shape and locus constraints give classic mechanisms. A slider-crank is two distances and a `collinear` over six cells, four of them pinned, and the piston tracks the crank:
 
 <md-slider-crank></md-slider-crank>
 
-`physics({ gravity })` bakes a time-stepper into the pipeline; `step(dt)` per frame advances the scene. The cloth is a 14×10 grid, ~250 hard distance constraints, top corners pinned — under a millisecond a frame:
+`physics({ gravity })` bakes a time-stepper into the pipeline and `step(dt)` advances it each frame. The cloth is a grid of points held by distance constraints with the top corners pinned:
 
 <md-cloth></md-cloth>
 
-`gap(a, b, d)` keeps two points at least `d` apart, enforced only when violated. Soft edge springs + pairwise `gap` = force-directed layout in two factory calls:
+`gap(a, b, d)` keeps two points at least `d` apart, enforced only when violated. Soft edge springs plus pairwise gaps make a force-directed layout:
 
 <md-graph></md-graph>
 
-Pair `gap` with `inside(P, …)` and gravity: 24 circles fall into a hex packing and shove each other when grabbed — 24 walls + 276 gaps a frame, under a millisecond:
+Gaps with `inside(P, …)` and gravity pack circles into a region, shoving each other aside when one is moved:
 
 <md-particles></md-particles>
 
-Same engine, proper rigid bodies: a 3-DOF `(x, y, θ)` cell with mass `(m, m, I)`. Box-box collisions via SAT become `BoxContact` forces; the tangential clamp is `±μ·|λ_normal|` for Coulomb friction:
+The same engine carries proper rigid bodies: a 3-DOF `(x, y, θ)` cell with mass `(m, m, I)`, box-box collisions via SAT, and a tangential clamp for Coulomb friction:
 
 <md-rigid-stack></md-rigid-stack>
 
-Joints make a chain of bars: each link a rigid body, hinged by a `Joint` whose position rows are hard and angle row free — bars, not beads on a string:
+Joints chain rigid bars — each link a body hinged by a `Joint` whose position rows are hard and angle row free — so they behave like bars rather than beads on a string:
 
 <md-rigid-rope></md-rigid-rope>
 
-Same on a 1D submanifold in 2D: each circle has `P` and `t`, coupled by a `generic` fixing `P = (R·sin t, R·sin 2t / 2)` — the figure-8 map. Near the origin both branches are admissible and the solver may flip:
+The same setup on a 1D submanifold fixes each circle's position to `(R·sin t, R·sin 2t / 2)` by a `generic` constraint. Near the origin both branches are admissible and the solver can flip between them:
 
 <md-figure8></md-figure8>
 
-None of this is geometric. Cells of any dimension over any function of them: the engine that solves a 4-bar solves an equation. Three `Num`s, one `generic` for `a² + b² = c²` — drag any handle, the other two redistribute:
+None of this is specific to geometry. Cells of any dimension over any function of them solve the same way — three numbers and one `generic` for `a² + b² = c²`, where moving any handle redistributes the other two:
 
 <md-equation></md-equation>
 
-### Propagators
-
-AVBD's sweet spot is many soft constraints solved fast. The opposite — few exact relations, instant fixpoint — wants a different traversal on the same `network()`: each propagator declares its read/write topology; the network runs to a freshness-driven fixpoint.
-
-Combinators dispatch on type. `centroid(G, A, B, C)` runs both ways; `mid(A, B, M)` is the two-point form. Stack centroid + three midpoints for a triangle's medians:
-
-```ts
-const p = propagators();
-p.add(centroid(G, A, B, C));
-p.add(mid(A, B, Mab));
-p.add(mid(B, C, Mbc));
-p.add(mid(C, A, Mca));
-```
-
-<md-prop-geom></md-prop-geom>
-
-Layout is one big propagator: `hstack(container, items, opts)` reads container/gap/widths and writes positions in a single flex-style pass. 100 items in 150µs, 1000 in 1.5ms:
-
-<md-prop-flex></md-prop-flex>
-
-It scales down too: set-narrowing on `Cell<Set<T>>` solves a 9×9 sudoku in half a millisecond — same `network()`, different value type and merge rule:
-
-<md-prop-sudoku></md-prop-sudoku>
-
-Narrowing-as-substrate makes type inference the same shape on a different lattice: each AST node a `SetCell<Tag>`, `+` forces `{Int}`, `(f x)` narrows `f` to `{Fn}` and unifies its domain with the argument. Hindley-Milner unification is `allDifferent`'s intersection lifted to structures:
-
-```ts
-function unify(a: TypeNode, b: TypeNode) {
-  return [
-    propagator([a.tag], [b.tag], () => intersectInto(b.tag, a.tag)),
-    propagator([b.tag], [a.tag], () => intersectInto(a.tag, b.tag)),
-    ...(a.dom && b.dom ? unify(a.dom, b.dom) : []),
-    ...(a.cod && b.cod ? unify(a.cod, b.cod) : []),
-  ];
-}
-```
-
-The demo cycles four expressions, one fixpoint wave at a time. The fourth has no consistent typing — `λx. x + 1` forces `x : Int` but is applied to `"hi" : Str`, and the contradiction is the empty cell:
-
-<md-prop-types></md-prop-types>
-
-## Shapes
-
-Every shape property is a Cell, so rendering composes with everything above for free.
-
-`Path` is a reactive polyline; `Curve` is the same with `ellipseArc` segments. `ellipse(center, a, b, rotation?)` takes `Val` on every parameter, so a family of confocal conics falls out of two loops on two draggable foci:
-
-```ts
-const aE = computed(() => (r1.value + r2.value) / 2);
-const bE = computed(() => Math.sqrt(aE.value ** 2 - cDist.value ** 2));
-s(ellipse(center, aE, bE, rot, { stroke: ACCENT }));
-```
-
-<md-confocal></md-confocal>
-
-`` tex`…` `` renders MathML through Temml; `part()` markers become addressable child shapes with their own `translate`/`rotate`/`opacity`/`color`:
-
-```ts
-const eq = tex`E = ${part("M")} c^2`;
-yield* eq.parts.M.translate.to({ x: 0, y: -20 }, 0.4);
-```
-
-<md-tex-demo></md-tex-demo>
-
-<md-tex-live></md-tex-live>
-
-Markers cross diagrams: `marker.register("id")` + `<md-marker sym="id">` share one `marker.active` cell (a derived OR over every binding). Being a `Cell<boolean>`, `yield* play(marker.active)` parks a generator until any rendering activates.
-
-Hover <md-marker sym="osc:gamma">damping</md-marker> for the decay envelope, <md-marker sym="osc:A">amplitude</md-marker> for the bounds, <md-marker sym="osc:omega">frequency</md-marker> for the period ticks:
-
-<md-oscillator></md-oscillator>
-
-`code` is `tex`'s sibling — a reactive `source` in a `<foreignObject>` text wrapper. `c.morphTo(src, dur)` LCS-diffs lines then tokens, wraps the changed ranges, and lerps their size; matched text reflows. Colours via CSS Custom Highlights:
-
-<md-code></md-code>
-
 ## Animation
 
-Minim is still an animation runtime: generators yield control up, the runtime passes `dt` down.
+Underneath all of this, Minim is an animation runtime. Generators yield control up and the runtime passes `dt` back down:
 
 ```ts
 function* fadeOut(opacity, secs) {
@@ -354,11 +281,11 @@ function* fadeOut(opacity, secs) {
 }
 ```
 
-The runtime calls `.next(dt)`; the generator writes wherever values land. Composition is generators calling generators — sequencing, parallelism, time scope all fall out:
+The runtime calls `.next(dt)` and the generator writes wherever its values land. Generators compose by calling each other, which is where sequencing, parallelism, and time scope come from:
 
 <md-transitions></md-transitions>
 
-Any generator can pull `dt` and forward a transformed version. Six lines for half-speed; the same shape covers slow-mo, reverse, pause, jitter:
+A generator can pull `dt` and forward a changed version of it. Halving it is a few lines, and the same shape covers slow motion, reverse, pause, and jitter:
 
 ```ts
 function* halfSpeed<R>(gen: Animator<R>): Animator<R> {
@@ -368,7 +295,7 @@ function* halfSpeed<R>(gen: Animator<R>): Animator<R> {
 }
 ```
 
-To wait on something without a fixed duration, yield `(wake) => dispose`; the runtime parks until `wake(value)` resumes synchronously — call it from a DOM handler and the generator advances re-entrantly:
+To wait on something without a fixed duration, a generator yields `(wake) => dispose`; the runtime parks it until `wake(value)` is called, which can happen straight from a DOM handler:
 
 ```ts
 const event = yield* untilEvent(button, "click");
@@ -385,11 +312,11 @@ const next = yield* untilChange(signal);
 | yield detach(g)   | spawn at root; outlives the yielding parent |
 | yield cut(v)      | from inside a group: settle group with v    |
 
-Sequencing is `yield*`, parallel `yield [a, b, c]`. Cancellation is cooperative `.until(stop)` (resolves clean mid-step, runs a sequel) or hard (walks the tree calling `gen.return()`); `finally` runs either way:
+Sequencing is `yield*` and parallelism is `yield [a, b, c]`. Cancellation is either cooperative through `.until(stop)`, which resolves cleanly mid-step and can run a sequel, or hard, which walks the tree calling `gen.return()`; `finally` runs either way:
 
 <md-cancel></md-cancel>
 
-`cut(v)` is Prolog's `!`: a kid returning `cut(v)` settles its group with `v` and cancels its siblings. `race`, `firstN`, `firstMatching`, `anySuccess`, `allSettled` are each one closure — `race` is six lines:
+`cut(v)` is Prolog's cut:[^cut] a child returning it settles its group with `v` and cancels its siblings. `race`, `firstN`, `firstMatching`, `anySuccess`, and `allSettled` are each a single closure over it:
 
 ```ts
 function* race(...kids) {
@@ -399,22 +326,18 @@ function* race(...kids) {
 
 <md-rand></md-rand>
 
-Time-warp is per-animator: each integrator takes a `rate` multiplying its `dt`. `spring(sig, target, { rate: () => paused.value ? 0 : 1 })` freezes while `paused`:
-
-<md-orbits></md-orbits>
-
-Signals meet generators through a few helpers. Every value signal carries `.to(target, dur, ease?)`, returning a chainable `Tween<T>` that's also an `Animator<void>`:
+Signals meet generators through a few helpers. Every value signal has `.to(target, dur, ease?)`, a chainable tween that is also an animator:
 
 ```ts
 yield* x.to(100, 0.5, easeInOut);
 yield* x.from(0).to(100, 0.5).to(0, 0.5).until(stop);
 ```
 
-`spring`, `toward`, `attract` pull toward a (reactive) target; `wave(sig, (t, initial) => …)` covers closed-form; `driven(sig, (dt, t, cur) => …)` is the escape hatch:
+`spring`, `toward`, and `attract` pull toward a reactive target; `wave` covers closed-form motion and `driven` is the escape hatch:
 
 <md-behaviors></md-behaviors>
 
-Others park until a signal acts: `when(sig)` waits for truthy, `untilChange(sig)` for the next change. `play(p)` lifts any Playable — number, array, generator, suspend-fn, signal — into a subject-first surface:
+Others park until a signal acts — `when(sig)` for truthy, `untilChange(sig)` for the next change. `play(p)` lifts any playable thing — a number, array, generator, suspend function, or signal — into one surface:
 
 ```ts
 spring(w, rest).until(dragging);
@@ -425,11 +348,15 @@ loop(() => fadeInOut(c)).until(done);
 
 <md-circuit></md-circuit>
 
-Rigid group choreography is `centroid + meanRotation + meanScale` animated in parallel — one group-similarity line:
+A row of cards, each width behind a `clamp(MIN_W, ∞)` edge so a handle can't drag it below the minimum:
+
+<md-layout-demo></md-layout-demo>
+
+Rigid group choreography is a centroid, mean rotation, and mean scale animated in parallel:
 
 <md-choreography></md-choreography>
 
-A timeline is a clock plus clips with `(at, dur)` ranges, each exposing `t ∈ [0, 1]`. `yield* tl` advances the clock to total duration:
+A timeline is a clock with clips over `(at, dur)` ranges, each exposing a normalized `t`. `yield* tl` runs the clock to the total duration:
 
 ```ts
 const tl = timeline({
@@ -445,7 +372,7 @@ yield* tl;
 
 <md-timeline-editor></md-timeline-editor>
 
-A `claim` is a labeled `Cell<boolean>` over a predicate — `true` while it holds — composing with `.and`/`.or`/`.not`/`.during`/`.before` because it *is* a cell:
+A `claim` is a labeled boolean over a predicate — true while it holds — and composes with `.and`/`.or`/`.not`/`.during`/`.before` because it is itself a cell:
 
 ```ts
 const fadeIn = scope("fadeIn", function* (s, dur) { /* ... */ });
@@ -456,11 +383,11 @@ const reaches1 = claim(c.opacity).becomes.equal(1).during(fadeIn);
 loop(() => fadeIn(c, 0.3));
 ```
 
-The debugger pairs the trace (gantt of factory invocations, `yield*` calls visible) with `α(t)` coloured by `authorOf` and claim strips on the same axis. The buggy `nudge` overshoots `α=1`; step to see the offender name itself:
+The debugger lays the trace — a gantt of factory invocations — beside `α(t)` coloured by author, with the claim strips on the same axis. A buggy `nudge` overshoots `α = 1`, and stepping through names the offender:
 
 <md-debugger></md-debugger>
 
-`.to` dispatches on traits: `tween`/`spring`/`toward`/`attract` read `linear`/`lerp`/`metric` from each class's `static traits`, knowing nothing of `Vec` or `Color`:
+`.to` dispatches on traits: `tween`, `spring`, `toward`, and `attract` read `linear`, `lerp`, and `metric` from each class's `static traits`, knowing nothing about `Vec` or `Color`:
 
 <md-lerps></md-lerps>
 
@@ -476,28 +403,115 @@ class Polygon extends Cell<PolygonValue> {
 }
 ```
 
-…and `polygon.to(target, dur)` falls out on the same machinery. Add `linear` + `metric` and `spring`/`toward`/`attract` work too:
+and `polygon.to(target, dur)` works on the same machinery; adding `linear` and `metric` brings `spring`, `toward`, and `attract` along too:
 
 <md-morph></md-morph>
 
+The shape types compose the same way. `tex` renders MathML through Temml, and `part()` markers become addressable child shapes with their own transform, opacity, and colour:
+
+```ts
+const eq = tex`E = ${part("M")} c^2`;
+yield* eq.parts.M.translate.to({ x: 0, y: -20 }, 0.4);
+```
+
+<md-tex-demo></md-tex-demo>
+
+<md-tex-live></md-tex-live>
+
+Markers cross diagrams: `marker.register("id")` and `<md-marker sym="id">` share one `marker.active` cell, a derived OR over every binding. Because it is a `Cell<boolean>`, `yield* play(marker.active)` parks a generator until any rendering activates it. Three markers tie this prose to the diagram — <md-marker sym="osc:gamma">damping</md-marker> lights the decay envelope, <md-marker sym="osc:A">amplitude</md-marker> the bounds, <md-marker sym="osc:omega">frequency</md-marker> the period ticks:
+
+<md-oscillator></md-oscillator>
+
+`code` is `tex`'s sibling — a reactive source in a text wrapper. `c.morphTo(src, dur)` diffs lines then tokens, wraps the changed ranges, and interpolates their size while matched text reflows:
+
+<md-code></md-code>
+
 ### Beyond SVG
 
-The `(wake) => dispose` shape carries to native primitives: `untilAnimation(a)` wakes on a WAAPI `finish`, `untilInView(el)` on intersection, `scrollProgress()` is a lazy scroll signal. `native(el, keyframes, opts)` wraps `Element.animate` as an `Animator<void>`, composing with `stagger`/`race`/`try-finally`:
+The `(wake) => dispose` shape carries to native primitives: `untilAnimation(a)` wakes on a WAAPI finish, `untilInView(el)` on intersection, and `scrollProgress()` is a lazy scroll signal. `native(el, keyframes, opts)` wraps `Element.animate` as an animator that composes with `stagger`, `race`, and `try`/`finally`:
 
 <md-waapi-demo></md-waapi-demo>
 
-Nothing here is SVG-specific — the same pipeline drives `<canvas>` with a per-frame loop; the `Shape` graph is just a convenience:
+None of it is SVG-specific. The same pipeline drives a `<canvas>` with a per-frame loop; the shape graph is just a convenience:
 
 <md-canvas-field></md-canvas-field>
 
-A spring over a transform, with phantom poses leaking out as a trail:
+A spring over a transform, with phantom poses trailing behind it:
 
 <md-trails></md-trails>
 
-A geometric construction on a timeline — axis, ticks, labels, bbox, centroid — from the same primitives:
+A geometric construction on a timeline — axis, ticks, labels, bounding box, centroid — from the same primitives:
 
 <md-centering></md-centering>
 
-The runtime test suite runs in-browser on a fresh `Anim` driven by `step(dt)`:
+The runtime's test suite runs in the browser on a fresh `Anim` driven by `step(dt)`:
 
 <md-runtime-tests></md-runtime-tests>
+
+## Misc
+
+Loose demos that may not survive the final cut.
+
+Real Kepler orbits keep the invertibility: the forward direction solves `M = E − e·sin E` numerically on the read path, while the backward direction is the closed-form inverse, so a body stays exact as it moves and the periapsis speed-up comes out on its own.
+
+<md-kepler-system></md-kepler-system>
+
+A confocal family of ellipses is two foci and a derived shape; `ellipse(center, a, b, rotation?)` takes a reactive value on every parameter:
+
+```ts
+const aE = computed(() => (r1.value + r2.value) / 2);
+const bE = computed(() => Math.sqrt(aE.value ** 2 - cDist.value ** 2));
+s(ellipse(center, aE, bE, rot, { stroke: ACCENT }));
+```
+
+<md-confocal></md-confocal>
+
+Because a centroid is an ordinary cell, two independent animations can share one position; the motion is their per-frame weighted mean:
+
+```ts
+const c = centroid(a, b, c, d);
+yield* c.to({ x: 200, y: 100 }, 1);
+```
+
+<md-mix></md-mix>
+
+Any writable point can host a handle, including a derived one. Anchor points on a shape track it as it animates:
+
+<md-anchors></md-anchors>
+
+Units form a vector space under multiplication, so `times`/`div` add and subtract dimension vectors and `pow` scales them; two quantities convert exactly when their vectors match:
+
+```ts
+const km     = meter.scaled(1000);                       // prefix
+const knot   = nmi.div(hour);                            // compound
+const litre  = meter.pow(3).scaled(0.001);               // m³ → L
+const newton = kilogram.times(meter).div(second.pow(2)); // kg·m·s⁻²
+const joule  = newton.times(meter);                      // energy
+const watt   = joule.div(second);                        // power
+```
+
+<md-unit-algebra></md-unit-algebra>
+
+A cubic Bézier reads as `{start, end, startTangent, endTangent}`, putting the handles on the curve's shape rather than its raw control points:
+
+<md-bezier-gestalt></md-bezier-gestalt>
+
+<!-- Pushed further, a cubic is four DOF and every spline basis is just a different coordinate system for the same curve, related by a constant matrix. Each net's handles are a `Vec.lens` onto the shared coefficients, so dragging a handle in any basis remaps the others while the curve stays put: -->
+
+<!-- <md-curve-bases></md-curve-bases> -->
+
+[^poincare]: [Poincaré disc model](https://en.wikipedia.org/wiki/Poincar%C3%A9_disk_model).
+
+[^gaussbonnet]: The area is π minus the angle sum, by the [Gauss–Bonnet theorem](https://en.wikipedia.org/wiki/Gauss%E2%80%93Bonnet_theorem).
+
+[^allen]: [Allen's interval algebra](https://en.wikipedia.org/wiki/Allen%27s_interval_algebra) — thirteen ways two intervals can relate on a line.
+
+[^rcc8]: [Region connection calculus](https://en.wikipedia.org/wiki/Region_connection_calculus), the eight base relations between two regions.
+
+[^lens]: A symmetric lens in the [Hofmann–Pierce–Wagner](https://www.cis.upenn.edu/~bcpierce/papers/symmetric-full.pdf) sense; the case-preserving find-and-replace follows Foster and Pierce's work on bidirectional transformations.
+
+[^hm]: [Hindley–Milner](https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system) type inference, whose unification step is structural set intersection.
+
+[^avbd]: [Augmented Vertex Block Descent](https://graphics.cs.utah.edu/research/projects/avbd/).
+
+[^cut]: [The cut](https://en.wikipedia.org/wiki/Cut_(logic_programming)) in logic programming, which commits to choices made so far and prunes the alternatives.

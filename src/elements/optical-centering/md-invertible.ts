@@ -1,4 +1,4 @@
-import { circle, Diagram, debug, handle, label, line, type Mount, vec } from "../../minim";
+import { circle, Diagram, drag, label, line, type Mount, vec } from "../../minim";
 
 export class MdInvertible extends Diagram {
   protected scene(s: Mount): void {
@@ -12,16 +12,16 @@ export class MdInvertible extends Diagram {
     // `b` is a Writable<Vec> whose writes flow back through to `a`.
     const b = a.right(160).up(80);
 
-    s(line(a, b, { thin: true, dashed: true, opacity: 0.4 }));
-    s(debug.distance(a, b));
+    s(line(a, b));
 
-    s(circle(a, 16, { fill: "#5b8def" }));
-    s(circle(b, 16, { fill: "#e25c5c" }));
-
-    s(handle(a), handle(b));
+    // The shapes themselves are the drag targets — no separate handle dots.
+    const ca = s(circle(a, 16, { fill: "#5b8def" }));
+    const cb = s(circle(b, 16, { fill: "#e25c5c" }));
+    drag(ca, a);
+    drag(cb, b);
 
     s(
-      label(view.top.down(20), "drag either dot — the invertible chain writes both ways"),
+      label(view.top.down(20), "drag either shape — the invertible chain writes both ways"),
       label(view.bottom.up(16), "b = a.right(160).up(80) · same lens read & written", {
         size: 10,
       }),
