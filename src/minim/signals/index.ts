@@ -88,6 +88,7 @@ export * as BoxMath from "./values/box";
 export { Box, box, edgeFrom, union as boxUnion } from "./values/box";
 export * as CanvasMath from "./values/canvas";
 export { Canvas, canvas, type Raster, stamp as canvasStamp } from "./values/canvas";
+export { GpuSpring, type GpuSpringOpts } from "./values/canvas-gpu";
 export * as ColorMath from "./values/color";
 export { Color, rgb, rgba } from "./values/color";
 export * as MatrixMath from "./values/matrix";

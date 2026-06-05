@@ -157,6 +157,26 @@ The same complement mechanism scales to rasters. A `Canvas` value carries its pi
 
 <md-canvas-lenses></md-canvas-lenses>
 
+The lens family is large, spanning the same tiers as the scalar types: geometric (`crop`, `flipH`), photometric (`hueRotate`, `gamma`, `quantize`), spatial (`blur`, `edges`), and multiscale (`downsample`). All read reactive cells, so a single source fans out into a live gallery:
+
+<md-canvas-lab></md-canvas-lab>
+
+The bidirectional ones are where it gets strange. `downsample` projects to a thumbnail; its complement is the Laplacian residual, so painting the coarse thumbnail reconstructs full-resolution detail underneath the edit — coarse structure and fine texture are independently editable:
+
+<md-canvas-pyramid></md-canvas-pyramid>
+
+`blur` is writable too. Its backward injects the high-frequency difference back into the source, an approximate deconvolution: edit the blurred output and the source sharpens to explain your stroke. It is PutGet, not exact GetPut — the forward genuinely discards detail — so it recovers a plausible source, and pushing the gain too hard rings, the honest signature of the inverse problem:
+
+<md-canvas-deblur></md-canvas-deblur>
+
+Lenses cross types in both directions. `pixel(x,y)` is a writable `Color` at a reactive coordinate; `meanColor()` is a writable `Color` whose RGB field-lenses each rigidly shift every pixel — a lens of a lens:
+
+<md-canvas-pick></md-canvas-pick>
+
+None of this needs the pixels to live on the CPU. Because the value is a handle, the payload can sit in GPU textures and the graph still only moves headers. Here per-pixel spring state lives in float textures and never leaves the card; each pixel is an independent damped oscillator chasing the target image. Stiffness and damping are reactive cells pushed into the integrator; click a target to retarget:
+
+<md-canvas-spring></md-canvas-spring>
+
 ## Solvers
 
 When the inverse has no closed form, the backward direction runs a solver. It is still a single pass from the outside — the cluster doesn't own the state, the edge just works harder. An N-link arm is a `Vec.lens` whose backward direction runs inverse kinematics on every write:
