@@ -58,3 +58,10 @@ export {
   type PackedInput,
   procrustesTyped,
 } from "./typed-factor";
+// ─── Path-dependent (stateful-complement) combinators ──────────────────
+export {
+  continuous,
+  type ContinuousOpts,
+  remember,
+  type RememberOpts,
+} from "./memory";

@@ -1,8 +1,8 @@
-// glitch-free.test.ts — diamond-shape glitch-freedom under the new
-// fusion. Effects downstream of a diamond must see consistent
-// snapshots across both branches. alien-signals' two-phase
-// notify-then-pull achieves this; these tests verify the new field-
-// path fast path and law-driven setter dispatch preserve it.
+// glitch-free.test.ts — diamond-shape glitch-freedom. Effects downstream
+// of a diamond must see consistent snapshots across both branches.
+// alien-signals' two-phase notify-then-pull achieves this; these tests
+// verify the new field-path fast path and law-driven setter dispatch
+// preserve it.
 
 import { describe, expect, it } from "vitest";
 import { cell, derive, effect, Num, num, transform } from "../index";
@@ -75,7 +75,7 @@ describe("glitch-free: diamond shapes", () => {
     }
   });
 
-  it("cyclic in diamond: fused chain agrees with sibling read", () => {
+  it("cyclic in diamond: lens chain agrees with sibling read", () => {
     const a = num(10 * Math.PI);
     const c = a.cyclic(2 * Math.PI);
     const observed: Array<{ raw: number; cyclic: number }> = [];

@@ -5,11 +5,11 @@
 // Original implementation: `cyclic` declared `bwdStateless: true` while
 // its bwd captured `this.peek()` to read the receiver. New impl:
 // `cyclic` is declared `"stateful"` and uses the engine-supplied `s`
-// argument. `_fuse` threads `priorFwd(s)` honestly so the bwd sees
+// argument, threaded honestly through the lens chain so the bwd sees
 // the genuine intermediate value at the cyclic layer's input position.
 //
 // These tests assert observational equivalence with a hand-rolled
-// (un-fused) reference implementation across mixed compositions.
+// reference implementation across mixed compositions.
 
 import { describe, expect, it } from "vitest";
 import { Num, num } from "../index";

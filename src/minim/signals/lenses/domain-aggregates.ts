@@ -22,6 +22,7 @@ import {
   Vec,
   type Writable,
 } from "../index";
+import { remember } from "./memory";
 
 // ─── 1. Generic Linear-trait aggregates ────────────────────────────────
 //
@@ -213,48 +214,19 @@ export function spreadOf<
     for (let i = 1; i < K; i++) acc = lin.add(acc, vals[i]!);
     return lin.scale(acc, inv);
   };
-
-  // Complement: normalized deviations (dev / mean) from the centroid.
-  // `bwd` scales the live deviations (fast path) or reinflates from the
-  // stored norms when the cluster has collapsed.
-  type C = { norms: T[] };
   const meanSpread = (vals: readonly T[], ctr: T): number => {
     let total = 0;
     for (let i = 0; i < K; i++) total += met(vals[i]!, ctr);
     return total * inv;
   };
 
-  // biome-ignore lint/suspicious/noExplicitAny: variance escape — spec is checked structurally
-  return (Num as any).lens(inputs as unknown as readonly Writable<Cell<T>>[], {
-    init: (vals: readonly T[]): C => {
-      const ctr = centroid(vals);
-      const mean = meanSpread(vals, ctr);
-      const zero = lin.scale(vals[0]!, 0);
-      return {
-        norms: vals.map(v => (mean > 1e-9 ? lin.scale(lin.sub(v, ctr), 1 / mean) : zero)),
-      };
-    },
-    step: (vals: readonly T[], c: C): C => {
-      const ctr = centroid(vals);
-      const mean = meanSpread(vals, ctr);
-      if (mean <= 1e-9) return c;
-      const invMean = 1 / mean;
-      return { norms: vals.map(v => lin.scale(lin.sub(v, ctr), invMean)) };
-    },
-    fwd: (vals: readonly T[]): number => meanSpread(vals, centroid(vals)),
-    bwd: (target: number, vals: readonly T[], c: C) => {
-      const ctr = centroid(vals);
-      const mean = meanSpread(vals, ctr);
-      if (mean > 1e-9) {
-        const k = target / mean;
-        return {
-          updates: vals.map(v => lin.add(ctr, lin.scale(lin.sub(v, ctr), k))),
-          complement: c,
-        };
-      }
-      return { updates: c.norms.map(nrm => lin.add(ctr, lin.scale(nrm, target))), complement: c };
-    },
-  }) as Writable<Num>;
+  // Mean metric-distance from the centroid is a magnitude `remember`:
+  // writing it scales the cluster's deviations about the centroid, and a
+  // collapse (spread → 0) reinflates the remembered shape.
+  return remember(inputs, {
+    anchor: (vals: readonly T[]) => centroid(vals),
+    feature: (vals: readonly T[], ctr: T) => meanSpread(vals, ctr),
+  });
 }
 
 /** Palette decomposition: K values → {mean, spread}, i.e. centroid +

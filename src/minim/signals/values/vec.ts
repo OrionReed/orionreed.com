@@ -1,8 +1,8 @@
 // vec.ts — reactive 2D point.
 //
 // Invertibles return `: this` and ride on `Cell#lens(fwd, bwd)`;
-// chained calls auto-fuse. Field-lens getters use `field()` (propagates
-// writability); `derived()` wraps RO views.
+// chained calls compose into a lens chain. Field-lens getters use
+// `field()` (propagates writability); `derived()` wraps RO views.
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";

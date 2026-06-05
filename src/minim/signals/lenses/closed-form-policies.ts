@@ -23,6 +23,7 @@ import {
   Vec,
   type Writable,
 } from "../index";
+import { continuous, remember } from "./memory";
 
 type V = { x: number; y: number };
 
@@ -240,10 +241,6 @@ function covariance(
   return { cxx: cxx / K, cxy: cxy / K, cyy: cyy / K };
 }
 
-/** Wrap to (-m/2, m/2]. Picks the representative nearest a reference,
- *  modulo `m` (π for axes, 2π for full-vector angles). */
-const wrapMod = (x: number, m: number): number => x - m * Math.round(x / m);
-
 export function bestFitLineLens(points: readonly Writable<Vec>[]): {
   point: Writable<Vec>;
   direction: Writable<Num>;
@@ -253,13 +250,11 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
 
   const point = rigidTranslate(points);
 
-  // The principal axis is an eigenvector — defined only up to sign, so
-  // raw atan2 jumps by π as the cloud rotates. The complement stores the
-  // last-emitted angle and we unwrap the raw value to the nearest
-  // representative (mod π, since axis ≡ axis + π) for a continuous angle.
-  // On a collapsed cloud (direction undefined) `bwd` stashes the target
-  // with no source move.
-  type C = { θ: number };
+  // The principal axis is an eigenvector — defined only up to sign, so the
+  // raw atan2 jumps by π as the cloud rotates. `continuous` lifts it to its
+  // universal cover (period π, since axis ≡ axis + π), tracking the last
+  // emitted angle so the direction stays continuous; a collapsed cloud has
+  // no axis (`defined: false`), so it freezes and stashes the target.
   // Centroid + dominant-axis raw angle; `degenerate` when covariance vanishes.
   const axisOf = (
     vals: readonly V[],
@@ -276,31 +271,16 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
     if (cxx + cyy < 1e-18) return { cx, cy, rawθ: 0, degenerate: true };
     return { cx, cy, rawθ: dominantAxisAngle(cxx, cxy, cyy), degenerate: false };
   };
-  // Unwrap the raw axis angle to the representative nearest the stored θ.
-  const unwrap = (rawθ: number, prevθ: number): number => prevθ + wrapMod(rawθ - prevθ, Math.PI);
 
-  const direction = Num.lens(points as readonly Writable<Vec>[], {
-    init: (vals: readonly V[]): C => {
+  const direction = continuous(points as readonly Writable<Vec>[], {
+    period: Math.PI,
+    raw: (vals: readonly V[]) => {
       const { rawθ, degenerate } = axisOf(vals);
-      return { θ: degenerate ? 0 : rawθ };
+      return { value: rawθ, defined: !degenerate };
     },
-    step: (vals: readonly V[], c: C): C => {
-      const { rawθ, degenerate } = axisOf(vals);
-      return degenerate ? c : { θ: unwrap(rawθ, c.θ) };
-    },
-    fwd: (vals: readonly V[], c: C): number => {
-      const { rawθ, degenerate } = axisOf(vals);
-      return degenerate ? c.θ : unwrap(rawθ, c.θ);
-    },
-    bwd: (target: number, vals: readonly V[], c: C) => {
-      const { cx, cy, rawθ, degenerate } = axisOf(vals);
-      if (degenerate) {
-        return {
-          updates: vals.map(() => undefined) as readonly (V | undefined)[],
-          complement: { θ: target },
-        };
-      }
-      const dθ = target - unwrap(rawθ, c.θ);
+    apply: (target: number, vals: readonly V[], current: number) => {
+      const { cx, cy } = axisOf(vals);
+      const dθ = target - current;
       const cos = Math.cos(dθ);
       const sin = Math.sin(dθ);
       const out = new Array<V>(K);
@@ -309,7 +289,7 @@ export function bestFitLineLens(points: readonly Writable<Vec>[]): {
         const ry = vals[i]!.y - cy;
         out[i] = { x: cx + cos * rx - sin * ry, y: cy + sin * rx + cos * ry };
       }
-      return { updates: out as readonly (V | undefined)[], complement: { θ: target } };
+      return out;
     },
   });
 
@@ -334,12 +314,9 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
 
   const center = rigidTranslate(points);
 
-  // Complement: per-point deviations normalized by the cluster's mean
-  // radial distance, so writing `radius = T` places each point at
-  // `centroid + normDev_i * T` (relative distribution preserved). `step`
-  // refreshes while non-degenerate; `bwd` scales the live devs (fast path)
-  // or, when collapsed (mean ≈ 0), reinflates the stored SHAPE.
-  type C = { norms: V[] };
+  // Radius = mean distance from the centroid; writing it scales the cluster
+  // about the centroid, and a collapse (mean → 0) reinflates the remembered
+  // shape — exactly `remember`'s magnitude view, anchored at the centroid.
   const centroidOf = (vals: readonly V[]): V => {
     let sx = 0;
     let sy = 0;
@@ -355,38 +332,9 @@ export function bestFitCircleLens(points: readonly Writable<Vec>[]): {
     return sum / K;
   };
 
-  const radius = Num.lens(points as readonly Writable<Vec>[], {
-    init: (vals: readonly V[]): C => {
-      const c = centroidOf(vals);
-      const mean = meanRadius(vals, c);
-      return {
-        norms: vals.map(v =>
-          mean > 1e-9 ? { x: (v.x - c.x) / mean, y: (v.y - c.y) / mean } : { x: 0, y: 0 },
-        ),
-      };
-    },
-    step: (vals: readonly V[], c: C): C => {
-      const ctr = centroidOf(vals);
-      const mean = meanRadius(vals, ctr);
-      if (mean <= 1e-9) return c;
-      const inv = 1 / mean;
-      return { norms: vals.map(v => ({ x: (v.x - ctr.x) * inv, y: (v.y - ctr.y) * inv })) };
-    },
-    fwd: (vals: readonly V[]): number => meanRadius(vals, centroidOf(vals)),
-    bwd: (target: number, vals: readonly V[], c: C) => {
-      const ctr = centroidOf(vals);
-      const mean = meanRadius(vals, ctr);
-      // Lossy magnitude view: a same-magnitude target re-projects to the
-      // current mean radius and is absorbed (the cluster is left put).
-      if (Math.abs(target) === mean) return { updates: vals.map(() => undefined), complement: c };
-      if (mean > 1e-9) {
-        const k = target / mean;
-        const out = vals.map(v => ({ x: ctr.x + (v.x - ctr.x) * k, y: ctr.y + (v.y - ctr.y) * k }));
-        return { updates: out, complement: c };
-      }
-      const out = c.norms.map(n => ({ x: ctr.x + n.x * target, y: ctr.y + n.y * target }));
-      return { updates: out, complement: c };
-    },
+  const radius = remember(points, {
+    anchor: (vals: readonly V[]) => centroidOf(vals),
+    feature: (vals: readonly V[], c: V) => meanRadius(vals, c),
   });
 
   return { center, radius };
@@ -595,47 +543,26 @@ export function pcaLens(points: readonly Writable<Vec>[]): {
 // =====================================================================
 
 /** Writable total over K parts; write scales all parts proportionally,
- *  preserving their ratios. Complement holds per-part fractions from the
- *  last non-degenerate state, so a collapse to zero reinflates the
- *  original distribution on the next non-zero write. */
+ *  preserving their ratios. A `remember` anchored at zero with a signed
+ *  sum feature: a collapse to zero reinflates the stored ratios, seeded
+ *  uniform so an all-zero start splits evenly. */
 export function totalLens(parts: readonly Writable<Num>[]): Writable<Num> {
   const K = parts.length;
   if (K < 1) throw new Error("totalLens: need ≥ 1 part");
-
-  // Complement: per-part fraction of the total at the last non-degenerate
-  // state. `bwd` scales live parts by `target/sum`, or reinflates from the
-  // stored fractions when the sum has collapsed to zero.
-  type C = { fracs: number[] };
-  const sumOf = (vals: readonly number[]): number => {
-    let s = 0;
-    for (let i = 0; i < K; i++) s += vals[i]!;
-    return s;
-  };
-
-  const sumLens = Num.lens(parts as readonly Writable<Num>[], {
-    init: (vals: readonly number[]): C => {
-      const s = sumOf(vals);
-      return { fracs: vals.map(v => (s > 1e-12 ? v / s : 1 / K)) };
+  return remember(parts, {
+    anchor: () => 0,
+    feature: (vals: readonly number[]) => {
+      let s = 0;
+      for (let i = 0; i < K; i++) s += vals[i]!;
+      return s;
     },
-    step: (vals: readonly number[], c: C): C => {
-      const s = sumOf(vals);
-      return s > 1e-12 ? { fracs: vals.map(v => v / s) } : c;
-    },
-    fwd: (vals: readonly number[]): number => sumOf(vals),
-    bwd: (target: number, vals: readonly number[], c: C) => {
-      const s = sumOf(vals);
-      if (s > 1e-12) {
-        const k = target / s;
-        return { updates: vals.map(v => v * k), complement: c };
-      }
-      return { updates: c.fracs.map(f => f * target), complement: c };
-    },
+    magnitude: false,
+    seed: () => parts.map(() => 1 / K),
   });
-  return sumLens;
 }
 
 // Every lens here is a group action about a pivot (translate, rotateAbout,
-// scaleAbout, scaleAboutXY, scaleAlongAxis); the decompositions combine
-// them, each measured against a derived feature (centroid, principal axis,
-// mean radius).
+// scaleAbout, scaleAboutXY, scaleAlongAxis) or a `remember`/`continuous`
+// shape-memory; the decompositions combine them, each measured against a
+// derived feature (centroid, principal axis, mean radius).
 // =====================================================================

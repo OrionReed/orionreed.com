@@ -8,7 +8,7 @@
 //   - words() — symmetric: separator pattern preserved
 //   - sortedUnique() — symmetric: multi-position broadcast w/ case mask
 //   - Chained symmetric lenses: trim().lowercase().words()...
-//   - Lens-on-symmetric fusion: trim().rot13() rides _fuseOnSymmetric
+//   - Lens-on-symmetric: trim().rot13() chains an endo lens onto a symmetric one
 //   - Multiple lenses sharing a parent — independent complements
 //   - Effect tracking through symmetric chains
 //   - Pathological / Unicode / empty / very-long inputs
@@ -596,7 +596,7 @@ describe("Chained symmetric lenses", () => {
     expect(s.value).toBe("  The Slow Fox The  ");
   });
 
-  it("rot13 fuses on top of trim (lens-on-symmetric)", () => {
+  it("rot13 composes on top of trim (lens-on-symmetric)", () => {
     const s = str("  Hello  ");
     const r = s.trim().rot13();
     r.peek();
@@ -605,7 +605,7 @@ describe("Chained symmetric lenses", () => {
     expect(s.value).toBe("  Hello  "); // unchanged: PutGet via complement
   });
 
-  it("reverse fuses on top of lowercase", () => {
+  it("reverse composes on top of lowercase", () => {
     const s = str("Hello");
     const r = s.lowercase().reverse();
     r.peek();
@@ -1054,7 +1054,7 @@ describe("Stress: try to break the symmetric chain", () => {
     expect(s.value).toBe("  Hello World  ");
   });
 
-  it("rot13 fused on a symmetric receiver — round-trip exact", () => {
+  it("rot13 composed on a symmetric receiver — round-trip exact", () => {
     const s = str("  Hello  ");
     const r = s.trim().rot13();
     r.peek();

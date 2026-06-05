@@ -639,7 +639,7 @@ describe("PROPERTY: chained lenses — laws compose", () => {
     );
   });
 
-  it("trim ▶ rot13 (lens-on-symmetric fusion): GetPut", () => {
+  it("trim ▶ rot13 (lens-on-symmetric composition): GetPut", () => {
     verifyGetPut(
       () => {
         const s = str(rngSentence());

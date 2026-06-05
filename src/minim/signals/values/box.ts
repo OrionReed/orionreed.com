@@ -1,7 +1,7 @@
 // box.ts — reactive axis-aligned rectangle.
 //
 // Invertibles (`add`, `sub`, `scale`, `expand`) return `: this` and ride
-// on `Cell#lens(fwd, bwd)`. Chained calls auto-fuse.
+// on `Cell#lens(fwd, bwd)`. Chained calls compose into a lens chain.
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";

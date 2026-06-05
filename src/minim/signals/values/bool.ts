@@ -1,7 +1,7 @@
 // bool.ts — reactive boolean.
 //
 // Invertibles ride the plain endo `.lens(fwd, bwd)`: `not()` (involution,
-// `.not().not()` fuses to identity) and `xor(b)` (its own inverse;
+// `.not().not()` round-trips to identity) and `xor(b)` (its own inverse;
 // `a ^ b = c ↔ a = c ^ b`). xor carries Bool's `linear` trait.
 //
 // `and` / `or` / `implies` / `eq` / `nand` / `nor` return bare RO `Bool`
@@ -37,7 +37,7 @@ export class Bool extends Cell<V> {
 
   // ── invertibles: return `: this`, propagating writability ─────────
 
-  /** Logical negation. Involution; chains fuse. */
+  /** Logical negation. Involution; chains compose. */
   not(): this {
     return this.lens(not, not);
   }

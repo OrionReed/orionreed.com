@@ -8,7 +8,7 @@
 // demo).
 //
 // `reverse()` and `rot13()` are involutions on the plain endo
-// `.lens(fwd, bwd)` — no complement, and they fuse like any endo lens.
+// `.lens(fwd, bwd)` — no complement; they chain like any endo lens.
 // Everything else is `Str.lens(parent, spec)` with a complement:
 //
 //   trim         — leading + trailing whitespace

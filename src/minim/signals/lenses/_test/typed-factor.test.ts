@@ -399,7 +399,7 @@ describe("§7 Probe: chaining factor outputs", () => {
     expect(centroid.y.value).toBeCloseTo(2, 9);
   });
 
-  it("centroid.add(...) returns a fused lens that round-trips", () => {
+  it("centroid.add(...) returns a composed lens that round-trips", () => {
     const pts = mkPoints([0, 0], [10, 0], [0, 6]);
     const { centroid } = procrustesTyped(pts);
     const shifted = centroid.add({ x: 100, y: 100 });
@@ -1120,7 +1120,7 @@ describe("§12 Subsumption: factor vs existing aggregates", () => {
   });
 });
 
-describe("§10 Broader probe: factor with fused-lens inputs", () => {
+describe("§10 Broader probe: factor with composed-lens inputs", () => {
   it("inputs that are themselves field lenses still work", () => {
     // Build field lenses explicitly via `field()` since Pose doesn't
     // expose them as auto-getters. The field lenses are Writable<Num>

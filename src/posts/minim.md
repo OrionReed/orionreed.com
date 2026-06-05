@@ -41,7 +41,7 @@ Gears branch into a tree, each child meshing through `child = parent.scale(−te
 
 <md-gears></md-gears>
 
-Not every edge is a bijection. A projection like `clamp`, `quantize`, or `snap` discards information, but it does so idempotently — applying it twice changes nothing more than once — so the backward direction simply projects again. `t.clamp(lo, hi).quantize(0.1)` fuses into one cell, and the bounds are themselves cells, so the range can ride another control:
+Not every edge is a bijection. A projection like `clamp`, `quantize`, or `snap` discards information, but it does so idempotently — applying it twice changes nothing more than once — so the backward direction simply projects again. `t.clamp(lo, hi).quantize(0.1)` composes into a lens chain, and the bounds are themselves cells, so the range can ride another control:
 
 <md-clamp-quantize></md-clamp-quantize>
 
@@ -80,6 +80,10 @@ Two decompositions can share a centroid — a best-fit line as `{point, directio
 The decomposition is dispatched by trait, so `paletteLens(inputs) ⇌ {mean, spread}` works for any type that is linear with a metric. Vectors, colours, and poses all run through the one primitive:
 
 <md-traits-cross-domain></md-traits-cross-domain>
+
+Those aggregates run one write outward across a cluster. The dual runs the other way: many independent contributors fold into one source. A `merge` cell is the backward twin of a computed — forward it is the identity view of its source, backward it collects each contributor by identity and folds them through a policy, so writers that reconverge on one cell combine instead of clobbering, in any order. The policy is just a monoid, and its algebra fixes the behaviour — an idempotent meet, a last-writer join, tri-state bus resolution, or a sum with an inverse:
+
+<md-merge></md-merge>
 
 ## Crossing types
 
@@ -132,6 +136,10 @@ const tree = folder("Tasks", [
 <md-tri-tree></md-tri-tree>
 
 Every folder is a cell of the same shape as a leaf, so rendering is one uniform loop with no separate aggregate pass. Setting a folder broadcasts down to its descendants in a single batch.
+
+The same `Tri.allOf` aggregate shows up packed flat instead of nested. A `Flags` value is a single integer whose bits are named at construction; `flag(name)` is a `Bool` lens that sets or clears one bit through the packed value. Unix file permissions are the canonical case — one integer seen five ways. The 3×3 grid is nine bit lenses, each row an `all`/`none`/`mixed` `Tri` over its triad, and the octal, symbolic, and raw-binary fields are format/parse views of the same cell. Edit any surface and the other four re-derive:
+
+<md-flags></md-flags>
 
 This generalizes to `TreeNode<T>`: the tree value is the cell graph itself, so a write is a field update rather than a copy of the whole tree. Two directions read out of it — aggregate (bottom-up) and propagate (top-down).
 

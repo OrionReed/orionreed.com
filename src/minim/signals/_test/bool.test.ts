@@ -2,7 +2,7 @@
 //
 // Coverage:
 //   - bool() factory, reads / writes / equality
-//   - not() — involution, double-fuse, writability propagation
+//   - not() — involution, double round-trip, writability propagation
 //   - xor(b) — F₂ group operation, writability, dynamic `b`
 //   - Derived RO surfaces (and/or/implies/eq/nand/nor)
 //   - Cross-class via Cls.lens (Bool.lens from arbitrary parents)
@@ -10,7 +10,7 @@
 //   - Effect tracking and dependency propagation
 //   - Bridges: Num → Bool via threshold predicate (validates writability
 //              across class boundaries; Bool participates in chains)
-//   - Edge cases: many-deep fusion, xor with reactive b, xor identity
+//   - Edge cases: many-deep chains, xor with reactive b, xor identity
 
 import { describe, expect, it } from "vitest";
 import { cell, effect, isLens } from "../signal";
@@ -79,7 +79,7 @@ describe("Bool.not()", () => {
     expect(b.value).toBe(false);
   });
 
-  it("double-not fuses to identity behaviour", () => {
+  it("double-not round-trips to identity behaviour", () => {
     const b = bool(false);
     const nn = b.not().not();
     expect(nn.value).toBe(false);
@@ -95,7 +95,7 @@ describe("Bool.not()", () => {
     expect(b.value).toBe(false);
   });
 
-  it("100-deep not chain still works (auto-fusion holds at depth)", () => {
+  it("100-deep not chain still works (composition holds at depth)", () => {
     const b = bool(false);
     // biome-ignore lint/suspicious/noExplicitAny: arbitrary depth chain
     let chain: any = b;
@@ -403,7 +403,7 @@ describe("Bool — stress", () => {
     //   a=false: !false=true, true^true=false, !false=true, true^false=true, !true=false → chain=false
     //   a=true:  !true=false, false^true=true, !true=false, false^false=false, !false=true → chain=true
     // So chain ≡ a (identity by accident). Use it anyway to exercise the
-    // 5-deep fused setter path.
+    // 5-deep chained setter path.
     const chain = a.not().xor(true).not().xor(false).not();
     expect(chain.value).toBe(false);
     chain.value = true;

@@ -1,7 +1,7 @@
 // num.ts — reactive scalar.
 //
 // Invertibles return `: this` and ride on `Cell#lens(fwd, bwd)`;
-// chained calls auto-fuse to one cell.
+// chained calls compose into a lens chain.
 
 import type { Easing } from "../../core";
 import { type Tween, tween } from "../anim";
